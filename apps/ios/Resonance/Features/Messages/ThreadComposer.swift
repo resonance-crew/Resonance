@@ -119,6 +119,7 @@ struct ThreadComposer: View {
                         // A sticker answered: its still alone, no words (the thread's quote is the same); VoiceOver names it.
                         if let sticker {
                             StickerStill(sticker: sticker, side: ComposerMetrics.rowThumb)
+                                .opacity(QuotedReply.stickerFade)
                                 .accessibilityElement()
                                 .accessibilityLabel(L10n.Messages.stickerLabel(name: StickerLibrary.shared.label(sticker)))
                         }

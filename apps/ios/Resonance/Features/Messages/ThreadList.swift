@@ -645,8 +645,9 @@ struct MessageCore: View {
                     .overlay(alignment: mine ? .bottomLeading : .bottomTrailing) {
                         MessageReactions(message: message, mine: mine, model: model, onTap: interactive ? { press(nil, carried: carried) } : nil)
                     }
-                    // A sticker answering stands under the quote, nothing of it over the quote (round 22 v2).
-                    .padding(.top, message.replyTo == nil ? 0 : 4)
+                    // A sticker answering rises over the quote's lower edge, in front of it (round 22 v3: close to what
+                    // it answers); the quote keeps its even padding.
+                    .padding(.top, message.replyTo == nil ? 0 : -QuotedReply.stickerOverlap)
             } else {
             if note {
                 NotedCard(message: message, carried: carried, mine: mine, ctx: ctx, interactive: interactive)
@@ -925,6 +926,10 @@ struct QuotedReply: View {
 
     /// A quoted sticker's side.
     static let stickerSide: CGFloat = 44
+    /// A quoted sticker is drawn faded, as quoted words are muted (round 22 v3) — in the thread and the replying row.
+    static let stickerFade: Double = 0.55
+    /// How far a sticker answering a quote rises over the quote's lower edge.
+    static let stickerOverlap: CGFloat = 18
 
     /// The sticker a quote shows (one this build can draw), or nil: then its words.
     static func quotedSticker(_ quote: ReplyQuote) -> StickerRef? {
@@ -945,7 +950,9 @@ struct QuotedReply: View {
             QuoteBubble(text: Self.words(quote),
                         seed: seedFromId(quote.id, start: 19),
                         // A sticker's quote is its key pose alone, no name beside it (round 22 v2).
-                        lead: Self.quotedSticker(quote).map { AnyView(StickerStill(sticker: $0, side: QuotedReply.stickerSide)) },
+                        lead: Self.quotedSticker(quote).map {
+                            AnyView(StickerStill(sticker: $0, side: QuotedReply.stickerSide).opacity(QuotedReply.stickerFade))
+                        },
                         reservesFoot: !underSticker,
                         onTap: interactive ? { ctx.onQuote(quote.id) } : nil)
                 // VoiceOver still hears which sticker it was.

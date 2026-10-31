@@ -645,9 +645,7 @@ struct ThreadScreen: View {
         switch panels.shown {
         case .stickers:
             StickerPanel(library: StickerLibrary.shared, columns: listWidth >= 600 ? 6 : 4, previewing: previewing,
-                         onTap: { tapSticker($0, model) },
-                         onGrow: panels.expanded ? nil : { withAnimation(.easeOut(duration: 0.25)) { panels.setExpanded(true) } },
-                         onShrink: panels.expanded ? { withAnimation(.easeOut(duration: 0.25)) { panels.setExpanded(false) } } : nil)
+                         onTap: { tapSticker($0, model) }, toScreenEdge: true)
         case .attach:
             attachPanel(model, gripped: true)
         case .none:
@@ -667,7 +665,7 @@ struct ThreadScreen: View {
                             if taller { panels.setExpanded(true) } else if panels.expanded { panels.setExpanded(false) } else { closePanels() }
                         }
                     },
-                    gripped: gripped)
+                    gripped: gripped, toScreenEdge: gripped)
     }
 
     /// The grip let go: far enough (or fast enough) up grows the panel to under the header, down closes it
@@ -733,15 +731,15 @@ struct ThreadScreen: View {
         }
     }
 
-    /// A card picked in the attach panel rides — over pictures riding, once the person says so — and the panel goes.
+    /// A card picked in the attach panel rides — over pictures riding, once the person says so — and nothing else moves.
     private func pickCard(_ card: FeedCard, _ model: ThreadModel) {
         if !model.pendingPictures.isEmpty {
             replacing = .withCard(card)
             return
         }
+        // It rides above the capsule; everything else stays as it is (round 22 v3, as on Android): the panel open,
+        // no keyboard, the focus where it was — another card picked takes its place, a tap on the field writes.
         model.pendingCard = card
-        withAnimation(.easeOut(duration: 0.22)) { closePanels() }
-        if macPopover != nil { closeMacPopover() }
     }
 
     /// ⤢ / ⤡ (round 22 §4.3, option C): the same text view grows over the thread, its top just under the other

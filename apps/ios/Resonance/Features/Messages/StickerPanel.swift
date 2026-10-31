@@ -6,23 +6,21 @@ import SwiftUI
 /// card, no divider: a bar of the packs (each character's head; 🕘 the stickers sent last, first, once there
 /// are any) over one scroll through every pack, each headed by its character's name. The bar follows the
 /// scroll; a tap on a pack goes to it. A tap on a sticker previews it (the screen draws the preview over the
-/// thread's foot), a second tap sends it. Scrolled up while it is short it grows first (`onGrow`); pulled
-/// down at its top once grown it comes back (`onShrink`). On a Mac it is the popover's content (5 columns).
+/// thread's foot), a second tap sends it. Scrolling the grid only scrolls it: the panel grows from the send
+/// segment's ↑ alone (round 22 v3). The grid runs to the screen's foot, under the home indicator, fading out
+/// there (`toScreenEdge`). On a Mac it is the popover's content (5 columns).
 struct StickerPanel: View {
     let library: StickerLibrary
     let columns: Int
     /// The sticker previewed (its cell washed): a second tap sends it.
     let previewing: StickerRef?
     let onTap: (StickerRef) -> Void
-    var onGrow: (() -> Void)?
-    var onShrink: (() -> Void)?
+    /// The grid scrolls on to the screen's foot (the phone's panel), its last row clearing the home indicator.
+    var toScreenEdge = false
     /// Room under the last row (the home indicator's).
     var bottomRoom: CGFloat = 0
     @State private var position = ScrollPosition(idType: String.self)
     @State private var shownSection: String?
-    @State private var growAsked = false
-    /// Whether the person's finger is moving the grid (only that grows or shrinks the panel, never a layout).
-    @State private var dragging = false
 
     static let recentsId = "recents"
 
@@ -69,20 +67,8 @@ struct StickerPanel: View {
             .onScrollTargetVisibilityChange(idType: String.self, threshold: 0.2) { visible in
                 if let first = visible.first, first != shownSection { shownSection = first }
             }
-            .onScrollPhaseChange { _, phase in dragging = phase == .interacting }
-            .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, offset in
-                // Scrolled up by the finger while short: the panel grows first (nested scroll); pulled down at its top
-                // once grown: back. A change of the panel's own height moves the offset too, and does nothing.
-                if offset <= 0 { growAsked = false }
-                guard dragging else { return }
-                if offset > 24, !growAsked, let onGrow {
-                    growAsked = true
-                    onGrow()
-                } else if offset < -56, let onShrink {
-                    growAsked = true
-                    onShrink()
-                }
-            }
+            // Down under the home indicator to the screen's edge (round 22 v3): no band of paper under the grid.
+            .ignoresSafeArea(.container, edges: toScreenEdge ? .bottom : [])
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.Messages.stickers)
