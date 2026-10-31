@@ -136,7 +136,7 @@ fun CardPickerContent(
  * modal holds — your public cards, then your 私人卡 — filling the panel ([modifier]), a tap the pick.
  */
 @Composable
-internal fun CardPickPanel(session: Session, onPick: (FeedCard) -> Unit, modifier: Modifier = Modifier, bottom: Dp = 0.dp) {
+internal fun CardPickPanel(session: Session, onPick: (FeedCard) -> Unit, modifier: Modifier = Modifier, bottom: Dp = 0.dp, chosenId: String? = null) {
     var read by remember { mutableStateOf<PickRead>(PickRead.Loading) }
     var reads by remember { mutableIntStateOf(0) }
     LaunchedEffect(reads) {
@@ -156,6 +156,8 @@ internal fun CardPickPanel(session: Session, onPick: (FeedCard) -> Unit, modifie
             PickRead.Failed -> PickFailed(L10n.Write.Editor.CardModal.failed, L10n.Write.Editor.CardModal.retry) { reads++ }
             is PickRead.Loaded -> CardPickList(
                 r.cards, onPick, privateLabel = L10n.Messages.privateCard, empty = { PickNote(L10n.Messages.pickCardEmpty) },
+                // The card riding with the next message wears the tick on its cover, as a chosen picture its number.
+                choosing = true, selectedId = chosenId,
                 modifier = Modifier.fillMaxSize(),
                 bottom = bottom,
             )

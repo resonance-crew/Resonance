@@ -772,6 +772,7 @@ export function ThreadComposer({
           subtitle={t('pickCardSubtitle')}
           privateLabel={t('privateCard')}
           empty={t('pickCardEmpty')}
+          selectedId={pendingCard?.id ?? null}
           onPick={(card) => {
             setCardModalOpen(false);
             // One of the two: a card in place of pictures — once the viewer says so.

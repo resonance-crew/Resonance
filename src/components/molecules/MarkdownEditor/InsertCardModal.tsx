@@ -27,6 +27,11 @@ export interface InsertCardModalProps {
   privateLabel?: string;
   /** Override the line shown when there is no card to pick. */
   empty?: string;
+  /**
+   * The thread's card already riding with the next message: its row wears the tick, so the viewer sees
+   * which one they chose when they open the picker again. Left out (the editor), a tap is just the pick.
+   */
+  selectedId?: string | null;
 }
 
 /** The author's cards as the picker holds them: being read, read, or a read that failed. */
@@ -43,7 +48,7 @@ type Shelf = { status: 'loading' } | { status: 'ready'; cards: Card[] } | { stat
  * While the cards are read the rows' footprint stands where they will (round 9
  * C2); a read that fails says so, with 再試一次 — never "no cards".
  */
-export function InsertCardModal({ open, onClose, onPick, title, subtitle, privateLabel, empty }: InsertCardModalProps) {
+export function InsertCardModal({ open, onClose, onPick, title, subtitle, privateLabel, empty, selectedId }: InsertCardModalProps) {
   const t = useTranslations('write.editor.cardModal');
   const { user } = useAuth();
   const uid = user?.id;
@@ -90,6 +95,8 @@ export function InsertCardModal({ open, onClose, onPick, title, subtitle, privat
         cards={shelf.status === 'ready' ? shelf.cards : []}
         loading={shelf.status === 'loading'}
         onPick={onPick}
+        selectedId={selectedId}
+        label={selectedId === undefined ? undefined : heading}
         privateLabel={privateLabel}
         empty={
           shelf.status === 'failed' ? (

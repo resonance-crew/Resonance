@@ -1,9 +1,7 @@
 package com.resonance.app.ui
 
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
-import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -128,8 +126,8 @@ internal class PanelRoom(private val scope: CoroutineScope, private val still: B
  * (TalkBack: the grip's actions) — the pictures or the cards, and at its foot the segmented 圖片｜卡片.
  *
  * 圖片 is our own grid of the phone's pictures ([GalleryGrid], §6.2): asked for only once it shows, after
- * a word on why; with some pictures allowed, the rest by 「選擇更多相片」; refused, 「允許讀取相片」 again
- * (or 「前往設定」) and 「改用系統選擇器」, so a picture can always be sent. 卡片 is the viewer's cards
+ * one line and 「允許存取」; with some pictures allowed, the rest by 「選擇更多相片」; refused, the system's
+ * picker instead, so a picture can always be sent. 卡片 is the viewer's cards
  * ([CardPickPanel]).
  */
 @Composable
@@ -144,6 +142,8 @@ internal fun AttachPanel(
     onSystemPicker: () -> Unit,
     onPickCard: (com.resonance.api.models.FeedCard) -> Unit,
     modifier: Modifier = Modifier,
+    /** The card riding with the next message: ticked in 卡片. */
+    chosenCard: String? = null,
     /** The navigation bar under the panel: the grid and the list run on under it to the screen's edge, the bar floats over it. */
     navigation: Dp = 0.dp,
 ) {
@@ -153,7 +153,7 @@ internal fun AttachPanel(
             Box(Modifier.fillMaxWidth().weight(1f)) {
                 when (tab) {
                     AttachTab.Pictures -> GalleryPane(numberOf, onToggle, onSystemPicker, bottom = AttachBarRoom + navigation)
-                    AttachTab.Cards -> CardPickPanel(session, onPickCard, Modifier.fillMaxSize(), bottom = AttachBarRoom + navigation)
+                    AttachTab.Cards -> CardPickPanel(session, onPickCard, Modifier.fillMaxSize(), bottom = AttachBarRoom + navigation, chosenId = chosenCard)
                 }
             }
         }
@@ -224,8 +224,10 @@ private fun PanelGrip(room: PanelRoom, onGrip: (PanelRoom.Stop) -> Unit) {
 }
 
 /**
- * 圖片: the gallery once it may read the phone's pictures, else the word on why with its two ways on. Where
- * the app stands is read again each time the screen comes back (the settings page may have changed it).
+ * 圖片: the gallery once it may read the phone's pictures, else one line and one button ([GalleryPrompt]):
+ * 「允許存取」 asks, and a refusal opens the system's picker straight away — the person tapped it to send a
+ * picture; once the system won't ask again, the button is that picker. Where the app stands is read again
+ * each time the screen comes back (the settings page may have changed it).
  */
 @Composable
 private fun GalleryPane(numberOf: (String) -> Int?, onToggle: (Uri) -> Unit, onSystemPicker: () -> Unit, bottom: Dp) {
@@ -238,10 +240,15 @@ private fun GalleryPane(numberOf: (String) -> Int?, onToggle: (Uri) -> Unit, onS
         reads++
         onPauseOrDispose { }
     }
-    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+    // Asked from the prompt (not 「選擇更多相片」): a refusal goes on to the system's picker.
+    var fromPrompt by remember { mutableStateOf(false) }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         prefs.edit().putBoolean(ASKED_KEY, true).apply()
         asked = true
         reads++
+        // An empty answer is a request cut short (the activity went away), not a refusal.
+        if (fromPrompt && result.isNotEmpty() && result.values.none { it }) onSystemPicker()
+        fromPrompt = false
     }
     val request = { ask.launch(galleryPermissions()) }
     when (access) {
@@ -252,14 +259,15 @@ private fun GalleryPane(numberOf: (String) -> Int?, onToggle: (Uri) -> Unit, onS
             // A permission answer (more pictures chosen) or a return from settings: the pictures allowed may differ.
             access = reads,
         )
-        GalleryAccess.NotAsked, GalleryAccess.Denied -> GalleryPrompt(forever = false, onAllow = request, onSystemPicker = onSystemPicker)
-        GalleryAccess.DeniedForever -> GalleryPrompt(
-            forever = true,
-            onAllow = {
-                context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        GalleryAccess.NotAsked, GalleryAccess.Denied -> GalleryPrompt(
+            forever = false,
+            onAction = {
+                fromPrompt = true
+                request()
             },
-            onSystemPicker = onSystemPicker,
+            bottom = bottom,
         )
+        GalleryAccess.DeniedForever -> GalleryPrompt(forever = true, onAction = onSystemPicker, bottom = bottom)
     }
 }
 

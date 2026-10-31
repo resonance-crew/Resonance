@@ -1080,16 +1080,16 @@ public enum L10n {
         public static var replaceWithPicturesBody: String { Strings.shared.string("messages.replaceWithPicturesBody") }
         /// Use photos
         public static var replaceWithPicturesConfirm: String { Strings.shared.string("messages.replaceWithPicturesConfirm") }
-        /// Allow Resonance to read your photos to pick them right here
+        /// Allow access to pick photos right here
         public static var galleryPrimer: String { Strings.shared.string("messages.galleryPrimer") }
-        /// Allow photo access
+        /// Allow access
         public static var galleryAllow: String { Strings.shared.string("messages.galleryAllow") }
-        /// Use the system picker
-        public static var gallerySystemPicker: String { Strings.shared.string("messages.gallerySystemPicker") }
+        /// Photo access is off
+        public static var galleryOff: String { Strings.shared.string("messages.galleryOff") }
+        /// Choose photos
+        public static var galleryChoose: String { Strings.shared.string("messages.galleryChoose") }
         /// Choose more photos
         public static var galleryMore: String { Strings.shared.string("messages.galleryMore") }
-        /// Open Settings
-        public static var galleryOpenSettings: String { Strings.shared.string("messages.galleryOpenSettings") }
         /// No photos yet
         public static var galleryEmpty: String { Strings.shared.string("messages.galleryEmpty") }
         /// Unsent message: {text}

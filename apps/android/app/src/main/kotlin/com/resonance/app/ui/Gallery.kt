@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -69,7 +70,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.core.content.ContextCompat
 import com.resonance.app.BuildConfig
 import com.resonance.design.AppFonts
-import com.resonance.design.QuietButton
 import com.resonance.design.OrganicButton
 import com.resonance.design.OrganicIcon
 import com.resonance.design.generated.IconName
@@ -349,23 +349,24 @@ private fun MoreTile(onClick: () -> Unit) {
 }
 
 /**
- * The gallery before it can show anything (round 22 §6.2): a short word on why — and 「允許讀取相片」 (the
- * system's question; 「前往設定」 once it won't be asked again) — beside 「改用系統選擇器」, so sending
- * pictures never depends on the permission.
+ * The gallery before it can show anything (the owner's notes, 2026-10-31): one line and one button, centred
+ * in the room above the floating 圖片｜卡片 ([bottom]). 「允許存取」 asks the system, and a refusal goes on to
+ * the system's picker at once (the caller's), so sending pictures never depends on the permission; once
+ * the system won't ask again, the line says access is off and 「挑選相片」 opens that picker.
  */
 @Composable
-internal fun GalleryPrompt(forever: Boolean, onAllow: () -> Unit, onSystemPicker: () -> Unit, modifier: Modifier = Modifier) {
+internal fun GalleryPrompt(forever: Boolean, onAction: () -> Unit, modifier: Modifier = Modifier, bottom: Dp = 0.dp) {
     Column(
-        modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 20.dp),
+        modifier.fillMaxSize().padding(start = 28.dp, end = 28.dp, top = 16.dp, bottom = bottom + 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.Center,
     ) {
-        OrganicIcon(IconName.Image, size = 30.dp, color = Tokens.TextMuted, strokeWidth = Tokens.Ink.value)
+        OrganicIcon(IconName.Image, size = 28.dp, color = Tokens.TextMuted, strokeWidth = Tokens.Ink.value)
         BasicText(
-            L10n.Messages.galleryPrimer,
+            if (forever) L10n.Messages.galleryOff else L10n.Messages.galleryPrimer,
             style = AppFonts.body(14f, lineHeight = 1.55f, color = Tokens.Text).copy(textAlign = TextAlign.Center),
+            modifier = Modifier.padding(top = 12.dp, bottom = 18.dp).widthIn(max = 280.dp),
         )
-        OrganicButton(if (forever) L10n.Messages.galleryOpenSettings else L10n.Messages.galleryAllow, onClick = onAllow)
-        QuietButton(L10n.Messages.gallerySystemPicker, onClick = onSystemPicker)
+        OrganicButton(if (forever) L10n.Messages.galleryChoose else L10n.Messages.galleryAllow, onClick = onAction)
     }
 }

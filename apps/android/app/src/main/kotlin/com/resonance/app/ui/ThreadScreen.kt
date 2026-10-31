@@ -230,6 +230,8 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
         val attach = { model.attachCard(ThreadModel.Attachment(card.id, card.title, card.imageUrl, keptPrivate = card.keptPrivate)) }
         if (model.pictures.isNotEmpty()) replacing = Replace.WithCard(attach) else attach()
     }
+    // 卡片 in the attach panel: the card already riding, tapped again, goes — as a chosen picture does.
+    val toggleCard: (FeedCard) -> Unit = { card -> if (model.pendingCard?.id == card.id) model.pendingCard = null else pickCard(card) }
     // A picture opened whole (the viewer over everything), or null.
     var viewing by remember { mutableStateOf<ChatPictureSource?>(null) }
 
@@ -619,8 +621,9 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                                 ComposerPanel.Attach -> AttachPanel(
                                     session, attachTab, { attachTab = it }, model::pictureNumber, panelRoom,
                                     onGrip = settlePanel, onToggle = togglePicture, onSystemPicker = pickWithSystem,
-                                    onPickCard = pickCard,
+                                    onPickCard = toggleCard,
                                     modifier = Modifier.readableColumn(ComposerMax), navigation = navigation,
+                                    chosenCard = model.pendingCard?.id,
                                 )
                                 else -> {}
                             }

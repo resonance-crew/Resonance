@@ -1082,16 +1082,16 @@ object L10n {
         val replaceWithPicturesBody: String get() = Strings.string("messages.replaceWithPicturesBody")
         /** Use photos */
         val replaceWithPicturesConfirm: String get() = Strings.string("messages.replaceWithPicturesConfirm")
-        /** Allow Resonance to read your photos to pick them right here */
+        /** Allow access to pick photos right here */
         val galleryPrimer: String get() = Strings.string("messages.galleryPrimer")
-        /** Allow photo access */
+        /** Allow access */
         val galleryAllow: String get() = Strings.string("messages.galleryAllow")
-        /** Use the system picker */
-        val gallerySystemPicker: String get() = Strings.string("messages.gallerySystemPicker")
+        /** Photo access is off */
+        val galleryOff: String get() = Strings.string("messages.galleryOff")
+        /** Choose photos */
+        val galleryChoose: String get() = Strings.string("messages.galleryChoose")
         /** Choose more photos */
         val galleryMore: String get() = Strings.string("messages.galleryMore")
-        /** Open Settings */
-        val galleryOpenSettings: String get() = Strings.string("messages.galleryOpenSettings")
         /** No photos yet */
         val galleryEmpty: String get() = Strings.string("messages.galleryEmpty")
         /** Unsent message: {text} */

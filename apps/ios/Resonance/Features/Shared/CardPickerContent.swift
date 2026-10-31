@@ -183,7 +183,7 @@ struct CardPickList<Lead: View, Empty: View>: View {
         .fixedSize(horizontal: false, vertical: !fills)
         .scrollIndicators(.hidden)
         .padding(-Self.ringRoom)
-        .padding(.bottom, choosing ? 18 : 0)
+        .padding(.bottom, choosing && !fills ? 18 : 0)
     }
 
     /// How far a focus ring reaches past a row: the room the list keeps inside its scroll.

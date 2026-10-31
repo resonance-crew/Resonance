@@ -20,15 +20,19 @@ public enum InkTiming {
 public struct OrganicPressStyle: ButtonStyle {
     var inset: CGFloat
     var color: Color
+    var shape: AnyShape?
 
     /// `inset` pulls the wash in from the hit box (a 20pt glyph in a 44pt box washes a 36pt squircle).
-    public init(inset: CGFloat = 4, color: Color = Tokens.terracotta.opacity(0.14)) {
+    /// `shape` gives the wash a fixed outline instead of a fresh wobble each press — the one a control's
+    /// chosen state rests on, so the press grows into the choice (the sticker cells, the packs' tabs).
+    public init(inset: CGFloat = 4, color: Color = Tokens.terracotta.opacity(0.14), shape: AnyShape? = nil) {
         self.inset = inset
         self.color = color
+        self.shape = shape
     }
 
     public func makeBody(configuration: Configuration) -> some View {
-        PressWash(isPressed: configuration.isPressed, inset: inset, color: color) { configuration.label }
+        PressWash(isPressed: configuration.isPressed, inset: inset, color: color, shape: shape) { configuration.label }
     }
 }
 
@@ -36,6 +40,7 @@ private struct PressWash<Label: View>: View {
     let isPressed: Bool
     let inset: CGFloat
     let color: Color
+    let shape: AnyShape?
     @ViewBuilder let label: Label
     @State private var reach: CGFloat = 0
     @State private var ink: Double = 0
@@ -55,7 +60,7 @@ private struct PressWash<Label: View>: View {
                         .fill(color)
                         .frame(width: far * 2 * reach, height: far * 2 * reach)
                         .frame(width: box.width, height: box.height)
-                        .clipShape(OrganicWashShape(seed: seed))
+                        .clipShape(shape ?? AnyShape(OrganicWashShape(seed: seed)))
                         .opacity(ink)
                         .position(x: geo.size.width / 2, y: geo.size.height / 2)
                 }

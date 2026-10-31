@@ -657,7 +657,11 @@ struct ThreadScreen: View {
     private func attachPanel(_ model: ThreadModel, gripped: Bool) -> some View {
         AttachPanel(tab: $attachTab, selection: pickerBinding(model),
                     maxSelection: AlbumRef.maxCount - model.pendingPictures.filter { !Self.fromPicker($0.key) }.count,
-                    onCard: { card in pickCard(card, model) },
+                    onCard: { card in
+                        // The card already riding, tapped again in 卡片, goes — as a chosen picture does.
+                        if model.pendingCard?.id == card.id { model.pendingCard = nil } else { pickCard(card, model) }
+                    },
+                    chosenCard: model.pendingCard?.id,
                     onDrag: { panelDrag = $0 },
                     onDragEnd: { distance, speed in gripLetGo(distance: distance, speed: speed) },
                     onAdjust: { taller in

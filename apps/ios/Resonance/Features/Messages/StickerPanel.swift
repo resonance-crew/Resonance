@@ -95,7 +95,8 @@ struct StickerPanel: View {
                         .background { BareTriggerDisc(open: current, seed: Double(seedFromString(section.id))) }
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(OrganicPressStyle(inset: 2))
+                    // The press spreads inside the very disc the tab in view rests on.
+                    .buttonStyle(OrganicPressStyle(inset: 0, shape: AnyShape(TabDiscShape(seed: Double(seedFromString(section.id))))))
                     .accessibilityLabel(section.title)
                     .accessibilityAddTraits(current ? .isSelected : [])
                 }
@@ -104,6 +105,18 @@ struct StickerPanel: View {
         }
         .scrollIndicators(.hidden)
         .frame(height: 44)
+    }
+}
+
+/// BareTriggerDisc's outline (the tab in view's wash) as a shape, for the press to spread inside.
+private nonisolated struct TabDiscShape: Shape {
+    let seed: Double
+
+    func path(in rect: CGRect) -> Path {
+        let side = min(rect.width, rect.height) * 0.92  // BareTriggerDisc.reach
+        let disc = CGRect(x: rect.midX - side / 2, y: rect.midY - side / 2, width: side, height: side)
+        return WobCircleShape(seed: seed, options: WobCircleOptions(segments: 8, mag: Double(side) / 2 * 2.2 / 46, cpJitter: 0.4))
+            .path(in: disc)
     }
 }
 
@@ -137,6 +150,9 @@ private struct StickerCell: View {
     let selected: Bool
     let onTap: () -> Void
 
+    private static let wash = Tokens.terracottaLight.opacity(0.55)
+    private var shape: WobRectShape { WobRectShape(radius: 16, seed: Double(seedFromString(sticker.id))) }
+
     var body: some View {
         Button(action: onTap) {
             GeometryReader { geo in
@@ -144,13 +160,11 @@ private struct StickerCell: View {
                     .frame(width: geo.size.width, height: geo.size.height)
             }
             .aspectRatio(1, contentMode: .fit)
-            .background {
-                WobRectShape(radius: 16, seed: Double(seedFromString(sticker.id)))
-                    .fill(Tokens.terracottaLight.opacity(selected ? 0.55 : 0))
-            }
+            .background { shape.fill(Self.wash.opacity(selected ? 1 : 0)) }
             .contentShape(Rectangle())
         }
-        .buttonStyle(OrganicPressStyle(inset: 3))
+        // The press spreads the previewed one's wash inside the same outline, so a tap grows into the choice.
+        .buttonStyle(OrganicPressStyle(inset: 0, color: Self.wash, shape: AnyShape(shape)))
         .accessibilityLabel(StickerLibrary.shared.label(sticker))
         .accessibilityHint(selected ? L10n.Messages.stickerPreviewHint : "")
         .accessibilityAddTraits(selected ? .isSelected : [])

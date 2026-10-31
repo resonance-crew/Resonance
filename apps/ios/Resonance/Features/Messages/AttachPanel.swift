@@ -20,6 +20,8 @@ struct AttachPanel: View {
     /// How many the picker may hold (10 less the pictures riding from elsewhere).
     let maxSelection: Int
     let onCard: (FeedCard) -> Void
+    /// The card riding with the next message: ticked in 卡片, as a chosen picture is in 圖片.
+    var chosenCard: String?
     /// The grip dragged (points up are positive) and let go (with the drag's last speed, points per second up).
     var onDrag: (CGFloat) -> Void = { _ in }
     var onDragEnd: (CGFloat, CGFloat) -> Void = { _, _ in }
@@ -48,7 +50,7 @@ struct AttachPanel: View {
                         .photosPickerDisabledCapabilities(.selectionActions)
                         .photosPickerAccessoryVisibility(.hidden, edges: .all)
                     case .cards:
-                        AttachCards(onCard: onCard)
+                        AttachCards(chosenCard: chosenCard, onCard: onCard)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -103,13 +105,15 @@ struct AttachPanel: View {
 /// The attach panel's 卡片: the viewer's cards a thread can share (public ones, then their 私人卡), as the card
 /// picker lists them — on its way, the rows' shapes; unread, the way to ask again.
 private struct AttachCards: View {
+    let chosenCard: String?
     let onCard: (FeedCard) -> Void
     @Environment(SessionStore.self) private var session
     @State private var cards: [FeedCard]?
     @State private var failed = false
 
     var body: some View {
-        CardPickList(cards: cards ?? [], privateLabel: L10n.Messages.privateCard, fills: true, onPick: onCard) {
+        CardPickList(cards: cards ?? [], choosing: true, selectedId: chosenCard, label: L10n.Messages.pickCard,
+                     privateLabel: L10n.Messages.privateCard, fills: true, onPick: onCard) {
             EmptyView()
         } empty: {
             if cards != nil {

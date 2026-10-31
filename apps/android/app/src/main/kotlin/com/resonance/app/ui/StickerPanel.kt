@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.em
 import com.resonance.design.AppFonts
 import com.resonance.design.generated.IconName
 import com.resonance.design.OrganicIcon
+import com.resonance.design.OrganicIndication
 import com.resonance.design.WobRectShape
 import com.resonance.design.generated.Tokens
 import com.resonance.design.paperSheet
@@ -134,13 +135,18 @@ private fun PackBar(sections: List<StickerSection>, current: Int, origin: String
         sections.forEachIndexed { i, section ->
             val chosen = i == current
             val wash = Tokens.ButtonTonal
+            // The press spreads the very wash the tab in view rests on, inside the same outline.
+            val shape = remember(i) { WobRectShape(14.0, 61.0 + i * 7) }
             Box(
                 Modifier
                     .size(44.dp)
                     .drawBehind {
-                        if (chosen) drawOutline(WobRectShape(14.0, 61.0 + i * 7).createOutline(size, layoutDirection, this), wash)
+                        if (chosen) drawOutline(shape.createOutline(size, layoutDirection, this), wash)
                     }
-                    .clickable(role = Role.Tab, onClickLabel = section.title) { onPick(i) }
+                    .clickable(
+                        interactionSource = null, indication = remember(shape, wash) { OrganicIndication(wash, shape = shape) },
+                        role = Role.Tab, onClickLabel = section.title,
+                    ) { onPick(i) }
                     .semantics {
                         contentDescription = section.title
                         selected = chosen
@@ -191,8 +197,12 @@ private fun StickerGrid(
                     Modifier
                         .aspectRatio(1f)
                         .padding(3.dp)
-                        .drawBehind { if (chosen) drawOutline(WobRectShape(16.0, 37.0).createOutline(size, layoutDirection, this), wash) }
-                        .clickable(role = Role.Button, onClickLabel = if (chosen) L10n.Messages.send else name) { onTap(sticker) }
+                        .drawBehind { if (chosen) drawOutline(CellShape.createOutline(size, layoutDirection, this), wash) }
+                        // The press spreads the previewed one's wash inside the same outline, so a tap grows into the choice.
+                        .clickable(
+                            interactionSource = null, indication = remember(wash) { OrganicIndication(wash, shape = CellShape) },
+                            role = Role.Button, onClickLabel = if (chosen) L10n.Messages.send else name,
+                        ) { onTap(sticker) }
                         .semantics { contentDescription = name },
                     contentAlignment = Alignment.Center,
                 ) { StickerPose(sticker, origin, Modifier.fillMaxSize().padding(6.dp)) }
@@ -201,9 +211,12 @@ private fun StickerGrid(
     }
 }
 
+/** A sticker cell's wash: the previewed one rests on it, a press spreads inside it. */
+private val CellShape = WobRectShape(16.0, 37.0)
+
 /**
  * The sticker being previewed (round 22 §4.1): the animated file at [size] on a flat paper sheet over the
- * thread's foot, its name and 「再點一次傳送」 under it — a tap on it sends. Heard by TalkBack as
+ * thread's foot, 「再點一次傳送」 under it (never its name: the art says it) — a tap on it sends. Heard by TalkBack as
  * 「預覽：謝謝，再點一次傳送」 as it comes.
  */
 @Composable
@@ -238,7 +251,7 @@ internal fun StickerPreview(
                 PlayingSticker(s, origin, key = "preview:${s.pack}/${s.id}", size = size, autoplay = true, replays = 0)
             }
             BasicText(
-                "$name · ${L10n.Messages.stickerPreviewHint}",
+                L10n.Messages.stickerPreviewHint,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 style = AppFonts.body(12f, lineHeight = 1.3f, color = Tokens.TextMuted).copy(textAlign = TextAlign.Center),
                 modifier = Modifier.padding(top = 6.dp),
