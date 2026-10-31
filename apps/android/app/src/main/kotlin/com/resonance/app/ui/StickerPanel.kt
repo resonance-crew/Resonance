@@ -54,6 +54,7 @@ import com.resonance.design.OrganicIcon
 import com.resonance.design.WobRectShape
 import com.resonance.design.generated.Tokens
 import com.resonance.design.paperSheet
+import com.resonance.design.edgeFades
 import com.resonance.kit.chat.ChatSticker
 import com.resonance.kit.chat.StickerCatalog
 import com.resonance.kit.l10n.L10n
@@ -113,7 +114,12 @@ internal fun StickerPanel(
                 maxWidth >= 480.dp -> 5
                 else -> 4
             }
-            StickerGrid(sections, columns, grid, origin, previewing, Modifier.fillMaxSize().nestedScroll(nested), onTap)
+            // Its edges fade where more stickers lie beyond (the owner's notes 7, the web's 16): no line, no card.
+            StickerGrid(
+                sections, columns, grid, origin, previewing,
+                Modifier.fillMaxSize().edgeFades({ grid.canScrollBackward }, { grid.canScrollForward }).nestedScroll(nested),
+                onTap,
+            )
         }
     }
 }

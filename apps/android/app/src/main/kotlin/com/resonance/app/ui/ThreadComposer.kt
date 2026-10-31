@@ -1,6 +1,12 @@
 package com.resonance.app.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import com.resonance.design.WobCircleShape
+import com.resonance.geometry.WobCircleOptions
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -98,10 +104,12 @@ import com.resonance.kit.l10n.Strings
  * didn't go. With rows riding the foot starts [ComposerRowsLead] over them (round 11 §3).
  *
  * The field grows to five lines, then scrolls, its words fading at the edge there is more beyond
- * ([composerFades]); from three lines ⤢ stands at its top end. ⤢ grows the same field to the thread
- * ([expandedHeight], option C — the screen works out how far): the capsule's segment becomes a 52 × 48
- * block on its last row, ⤡ brings it back, and sending does too. The caret, the IME's composition and
- * the keyboard are untouched by either: it is the same text field throughout.
+ * ([composerFades]) right to the capsule's pen line. ☺ is there only while the field is empty (the owner's
+ * notes 1: words and a sticker don't go together) — the words take its room. Past one line Send is a 52 × 48
+ * block on the last row, its top start corner rounded; from three lines ⤢ stands in that column at the
+ * capsule's top end, centred over the block ([composerTools]). ⤢ grows the same field to the thread ([expandedHeight],
+ * option C — the screen works out how far), ⤡ (in the same place) brings it back, and sending does too.
+ * The caret, the IME's composition and the keyboard are untouched by either: it is the same text field throughout.
  */
 @Composable
 internal fun Composer(
@@ -123,6 +131,7 @@ internal fun Composer(
     var lines by remember { mutableIntStateOf(1) }
     val role = PanelMachine.segment(panel, model.hasSomethingToSend)
     val expanded = expandedHeight != null
+    val tools = composerTools(model.draft, lines, expanded)
     Column(modifier.fillMaxWidth()) {
         if (rides(model)) {
             Spacer(Modifier.height(ComposerRowsLead))
@@ -147,7 +156,17 @@ internal fun Composer(
                 SegmentRole.Expand -> ComposerSegment.Expand
                 SegmentRole.Collapse -> ComposerSegment.Collapse
             },
-            block = expanded,
+            block = tools.block,
+            // ⤢ from the third line, ⤡ while grown: a square ghost button in the send block's column, at the capsule's top end.
+            overSegment = if (!tools.expand && !tools.collapse) null else { {
+                ToolButton(
+                    icon = if (tools.collapse) IconName.Collapse else IconName.Expand,
+                    label = if (tools.collapse) L10n.Messages.collapseComposer else L10n.Messages.expandComposer,
+                    size = 18.dp,
+                    modifier = Modifier.fillMaxSize(),
+                    onClick = if (tools.collapse) onCollapse else onExpand,
+                )
+            } },
             leading = { AttachButton(open = panel.panel == ComposerPanel.Attach, onClick = onAttach) },
         ) { _ ->
             Box(Modifier.fillMaxWidth()) {
@@ -160,7 +179,7 @@ internal fun Composer(
                 val boxHeight = expandedHeight ?: (line * MAX_LINES + vertical * 2)
                 Box(
                     Modifier
-                        .padding(end = TOOL_WIDTH)
+                        .padding(end = if (tools.sticker) TOOL_WIDTH else 0.dp)
                         .then(if (expanded) Modifier.height(boxHeight) else Modifier.heightIn(max = boxHeight))
                         .composerFades(scroll)
                         .verticalScroll(scroll),
@@ -193,24 +212,17 @@ internal fun Composer(
                             .semantics { contentDescription = L10n.Messages.threadWith(handle) },
                     )
                 }
-                // ⤢ at the field's top end from the third line (⤡ while grown); ☺ on the last line's row, beside Send.
-                if (expanded || lines >= EXPAND_FROM_LINES) {
+                // ☺ on the last line's row, beside Send — only while there are no words (⌨ while its panel shows).
+                if (tools.sticker) {
+                    val stickers = panel.panel == ComposerPanel.Stickers
                     ToolButton(
-                        icon = if (expanded) IconName.Collapse else IconName.Expand,
-                        label = if (expanded) L10n.Messages.collapseComposer else L10n.Messages.expandComposer,
-                        size = 18.dp,
-                        modifier = Modifier.align(Alignment.TopEnd).size(TOOL_WIDTH, 40.dp),
-                        onClick = if (expanded) onCollapse else onExpand,
+                        icon = if (stickers) IconName.Keyboard else IconName.Smile,
+                        label = if (stickers) L10n.Messages.keyboard else L10n.Messages.stickers,
+                        size = 22.dp,
+                        modifier = Modifier.align(Alignment.BottomEnd).size(TOOL_WIDTH, ComposerHeight),
+                        onClick = onStickers,
                     )
                 }
-                val stickers = panel.panel == ComposerPanel.Stickers
-                ToolButton(
-                    icon = if (stickers) IconName.Keyboard else IconName.Smile,
-                    label = if (stickers) L10n.Messages.keyboard else L10n.Messages.stickers,
-                    size = 22.dp,
-                    modifier = Modifier.align(Alignment.BottomEnd).size(TOOL_WIDTH, ComposerHeight),
-                    onClick = onStickers,
-                )
             }
         }
     }
@@ -219,6 +231,20 @@ internal fun Composer(
 /** The composer's words: 16 (× the interface's text size, capped at 1.25), 1.5 apart. */
 private const val COMPOSER_LEADING = 1.5f
 internal val ComposerText: TextStyle @Composable @ReadOnlyComposable get() = AppFonts.body(16f, lineHeight = COMPOSER_LEADING)
+
+/**
+ * Which of the composer's tools show (round 22 §4.3 with the owner's notes 1–2): ☺ only while the field holds no
+ * words and isn't grown; Send a block on the last row past one line (and grown); ⤢ over it from
+ * [EXPAND_FROM_LINES] lines, ⤡ in its place while grown.
+ */
+internal data class ComposerTools(val sticker: Boolean, val block: Boolean, val expand: Boolean, val collapse: Boolean)
+
+internal fun composerTools(text: String, lines: Int, expanded: Boolean): ComposerTools = ComposerTools(
+    sticker = text.isBlank() && !expanded,
+    block = expanded || lines > 1,
+    expand = !expanded && lines >= EXPAND_FROM_LINES,
+    collapse = expanded,
+)
 
 /** The field grows to this many lines, then scrolls (round 22 §4.3). */
 private const val MAX_LINES = 5
@@ -290,57 +316,84 @@ private fun ComposerRows(model: ThreadModel, modifier: Modifier = Modifier) {
 }
 
 /**
- * The pictures riding with the message (round 22 §4.2): their 40 thumbnails in a row in the order chosen
- * (scrolling sideways past what fits), each numbered in its corner, a tap on one letting it go — its ✕
- * for TalkBack; 「3 張圖片」 after them, and the row's ✕ at its end letting them all go.
+ * The pictures riding with the message (round 22 §4.2, the owner's notes 5 — as iOS draws them): their 48
+ * thumbnails in a row in the order chosen, scrolling sideways past what fits, each with its own small round ✕
+ * hanging over its top end corner — the only way to take one back here (the gallery's tap does too). No
+ * numbers, no count, no clear-all.
  */
 @Composable
 private fun PictureStrip(model: ThreadModel) {
-    val count = model.pictures.size
-    val label = if (count == 1) L10n.Messages.attachImage else L10n.Messages.picturesCount(count)
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Bottom,
     ) {
-        // The thumbnails and their count take the row's room, the ✕ its end (over Send, as every riding row's).
-        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-        Row(
-            Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            model.pictures.forEachIndexed { i, picture ->
+        model.pictures.forEachIndexed { i, picture ->
+            // The thumbnail, and room for its ✕ hanging 6 past its corner.
+            Box(Modifier.padding(top = THUMB_X_HANG, end = THUMB_X_HANG)) {
                 Box(
                     Modifier
-                        .size(ComposerLeadSize)
+                        .size(STRIP_THUMB)
                         .clip(ComposerLeadShape)
                         .background(Tokens.CreamDark)
-                        .clickable(role = Role.Button, onClickLabel = L10n.Messages.removeImage) { model.removePicture(picture.key) }
-                        .semantics { contentDescription = "${L10n.Messages.removeImage} ${i + 1}" },
+                        .semantics { contentDescription = "${L10n.Messages.attachImage} ${i + 1}" },
                     contentAlignment = Alignment.Center,
                 ) {
                     val preview = picture.prepared?.preview
                     if (preview != null) Image(preview, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                     else SketchLoader(18.dp)
-                    if (count > 1) NumberBadge(i + 1, Modifier.align(Alignment.TopEnd).padding(2.dp), small = true)
+                }
+                // Its centre 6 inside the thumbnail's corner (iOS's), the circle swinging 4 past it into the room left for it.
+                ThumbRemoveButton(Modifier.align(Alignment.TopEnd).offset(x = THUMB_X_TARGET / 2 - THUMB_X_HANG * 2, y = THUMB_X_HANG * 2 - THUMB_X_TARGET / 2)) {
+                    model.removePicture(picture.key)
                 }
             }
         }
-        BasicText(
-            label, maxLines = 1, softWrap = false,
-            style = AppFonts.body(12f, 600, lineHeight = 1.35f, color = Tokens.Text),
-            modifier = Modifier.padding(start = 10.dp),
-        )
-        }
-        Box(
-            Modifier
-                .size(44.dp)
-                .clickable(interactionSource = null, indication = OrganicIndication(inset = 4.dp), role = Role.Button, onClickLabel = L10n.Messages.removeImage) { model.clearPictures() }
-                .semantics { contentDescription = L10n.Messages.removeImage },
-            contentAlignment = Alignment.Center,
-        ) { OrganicIcon(IconName.Close, size = 16.dp, color = Tokens.TextMuted, strokeWidth = Tokens.Ink.value) }
     }
 }
+
+/** A chosen picture's thumbnail in the strip. */
+private val STRIP_THUMB = 48.dp
+/** Its ✕: 20 across, in a 32 target, its centre 6 inside the thumbnail's corner, the room above and beside the thumbnail 6. */
+private val THUMB_X = 20.dp
+private val THUMB_X_TARGET = 32.dp
+private val THUMB_X_HANG = 6.dp
+
+/**
+ * A thumbnail's ✕ (the owner's notes 5): a neat small round button — the paper inside a hand-drawn circle that
+ * barely wobbles (its swing well under the usual circle's, which read as a blob at this size), the fields' quiet
+ * pen at INK_LIGHT, the close glyph 10 in the text ink.
+ */
+@Composable
+private fun ThumbRemoveButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val paper = Tokens.Cream
+    val pen = Tokens.FieldBorder
+    Box(
+        modifier
+            .size(THUMB_X_TARGET)
+            .clickable(interactionSource = null, indication = null, role = Role.Button, onClickLabel = L10n.Messages.removeImage, onClick = onClick)
+            .semantics { contentDescription = L10n.Messages.removeImage },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier.size(THUMB_X).drawWithCache {
+                val o = WobCircleShape(13.0, NeatCircle).createOutline(size, layoutDirection, this)
+                val line = Stroke(Tokens.InkLight.toPx())
+                onDrawBehind {
+                    drawOutline(o, paper)
+                    drawOutline(o, pen, style = line)
+                }
+            },
+            contentAlignment = Alignment.Center,
+        ) { OrganicIcon(IconName.Close, size = 10.dp, color = Tokens.Text, strokeWidth = Tokens.Ink.value) }
+    }
+}
+
+/** A small round button's circle: ten anchors, a swing of 0.35 (the usual 1.5 makes a 20 circle a blob). */
+private val NeatCircle = WobCircleOptions(segments = 10, mag = 0.35, cpJitter = 0.2)
 
 /**
  * A picture's place in the order chosen (round 22 §4.2): its number on the accent's solid disc in cream,

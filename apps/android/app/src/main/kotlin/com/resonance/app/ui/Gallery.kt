@@ -67,6 +67,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.core.content.ContextCompat
 import com.resonance.app.BuildConfig
 import com.resonance.design.AppFonts
@@ -216,6 +217,8 @@ internal fun GalleryGrid(
      * the observer below never hears of it.
      */
     access: Int = 0,
+    /** What it keeps clear at its foot (the floating 圖片｜卡片 over it). */
+    bottom: Dp = 0.dp,
 ) {
     val context = LocalContext.current
     val resolver = context.contentResolver
@@ -273,7 +276,7 @@ internal fun GalleryGrid(
             GridCells.Fixed(columns),
             Modifier.fillMaxSize().nestedScroll(nested),
             state = grid,
-            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp),
+            contentPadding = PaddingValues(start = 2.dp, end = 2.dp, top = 2.dp, bottom = 2.dp + bottom),
         ) {
             if (partial) item(key = "more", contentType = "more") { MoreTile(onMore) }
             items(photos, key = { it.id }, contentType = { "photo" }) { photo ->

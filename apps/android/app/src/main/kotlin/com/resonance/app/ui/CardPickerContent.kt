@@ -49,6 +49,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.unit.Dp
 import com.resonance.api.apis.DefaultApi.TabGetCardBox
 import com.resonance.api.models.FeedCard
 import com.resonance.app.Session
@@ -134,7 +136,7 @@ fun CardPickerContent(
  * modal holds — your public cards, then your 私人卡 — filling the panel ([modifier]), a tap the pick.
  */
 @Composable
-internal fun CardPickPanel(session: Session, onPick: (FeedCard) -> Unit, modifier: Modifier = Modifier) {
+internal fun CardPickPanel(session: Session, onPick: (FeedCard) -> Unit, modifier: Modifier = Modifier, bottom: Dp = 0.dp) {
     var read by remember { mutableStateOf<PickRead>(PickRead.Loading) }
     var reads by remember { mutableIntStateOf(0) }
     LaunchedEffect(reads) {
@@ -155,6 +157,7 @@ internal fun CardPickPanel(session: Session, onPick: (FeedCard) -> Unit, modifie
             is PickRead.Loaded -> CardPickList(
                 r.cards, onPick, privateLabel = L10n.Messages.privateCard, empty = { PickNote(L10n.Messages.pickCardEmpty) },
                 modifier = Modifier.fillMaxSize(),
+                bottom = bottom,
             )
         }
     }
@@ -188,6 +191,8 @@ internal fun CardPickList(
     footnote: String? = null,
     /** How tall it may grow before it scrolls: half the screen in a modal; a panel gives its own room ([Modifier]). */
     modifier: Modifier = Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.5f).dp),
+    /** Room kept under the last row, scrolling with it (the attach panel's floating 圖片｜卡片). */
+    bottom: Dp = 0.dp,
 ) {
     val scroll = rememberScrollState()
     // Fading at the side it can still move toward, as the modal's own content does.
@@ -209,6 +214,7 @@ internal fun CardPickList(
                 modifier = Modifier.padding(start = 6.dp, end = 6.dp, top = 10.dp, bottom = 2.dp),
             )
         }
+        if (bottom > 0.dp) Spacer(Modifier.height(bottom))
     }
 }
 

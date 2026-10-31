@@ -665,18 +665,27 @@ internal fun noteSpoken(mine: Boolean, handle: String): String =
 
 /** The message a reply quotes, which the reply's bubble lies over; tapping it goes to the original. */
 @Composable
-private fun ReplyQuoteView(message: ChatMessage, mine: Boolean, ctx: ThreadContext, interactive: Boolean) {
+private fun ReplyQuoteView(message: ChatMessage, mine: Boolean, ctx: ThreadContext, interactive: Boolean, underSticker: Boolean = false) {
     val quote = message.replyTo ?: return
     val model = ctx.model
     val spoken = replySpoken(mine, quote.senderId == model.me, model.other?.handle.orEmpty())
-    Column(Modifier.semantics { contentDescription = spoken }, horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
-        val sticker = quote.sticker?.takeIf { !quote.unsent }?.let { com.resonance.app.Stickers.find(it) }
+    // A sticker's quote is its key pose alone (the owner's notes 4: no name beside it); TalkBack still hears the name.
+    val sticker = quote.sticker?.takeIf { !quote.unsent }?.let { com.resonance.app.Stickers.find(it) }
+    val said = if (sticker != null) "$spoken，${quoteWords(quote)}" else spoken
+    Column(Modifier.semantics { contentDescription = said }, horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
         QuoteBubble(
-            // A quote of a message unsent since reads 訊息已收回 (the server scrubbed its words); a sticker's, its name by its key pose.
-            if (quote.unsent) L10n.Messages.unsentQuote else if (quote.sticker != null) quoteWords(quote) else quote.text.ifEmpty { quoteStandIn(quote) },
+            // A quote of a message unsent since reads 訊息已收回 (the server scrubbed its words); a sticker this build can't draw, its fallback words.
+            when {
+                quote.unsent -> L10n.Messages.unsentQuote
+                sticker != null -> ""
+                quote.sticker != null -> quoteWords(quote)
+                else -> quote.text.ifEmpty { quoteStandIn(quote) }
+            },
             seed = seedFromId(quote.id, 19),
             onClick = if (interactive) { { ctx.onQuote(quote.id) } } else null,
-            leading = sticker?.let { s -> { StickerPose(s, ctx.origin, Modifier.size(32.dp)) } },
+            leading = sticker?.let { s -> { StickerPose(s, ctx.origin, Modifier.size(QUOTED_STICKER)) } },
+            // A sticker answering lies over nothing (it has no bubble): the quote keeps no foot for it, its content centred.
+            overlapped = !underSticker,
         )
     }
 }
@@ -771,7 +780,7 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
         horizontalAlignment = if (mine) Alignment.End else Alignment.Start,
     ) {
         if (message.isNote) NoteQuoteView(message, mine, carried, ctx, interactive, press)
-        else if (message.replyTo != null) ReplyQuoteView(message, mine, ctx, interactive)
+        else if (message.replyTo != null) ReplyQuoteView(message, mine, ctx, interactive, underSticker = sticker != null)
         // The reactions it carries hang in the gutter beside the bubble's foot, never under it (round 16 §3) —
         // an album's, every picture's together.
         val members = row.members
@@ -782,9 +791,11 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
         val actions = if (interactive && ctx.reacts && MessageReactions.canReact(message)) reactionActions(message, model.me, ctx) else emptyList()
         // The reply lies over the foot of what it quotes, a note over the card it was left on — a sticker stands a step under its quote.
         val drawnSticker = sticker
+        // The reply lies over the foot of what it quotes, a note over the card it was left on; a sticker answering stands
+        // under its quote, a step apart (the owner's notes: nothing overlaps a quote that kept no foot for it).
         Box(
             when {
-                drawnSticker != null && message.replyTo != null -> Modifier.padding(top = 4.dp)
+                drawnSticker != null && message.replyTo != null -> Modifier.padding(top = STICKER_UNDER_QUOTE)
                 message.replyTo != null || message.isNote -> Modifier.overlapAbove(REPLY_OVERLAP)
                 else -> Modifier
             },
@@ -855,6 +866,12 @@ internal fun mergedChips(each: List<List<ReactionChipItem>>): List<ReactionChipI
     each.flatten().forEach { counts[it.id] = (counts[it.id] ?: 0) + it.count }
     return ReactionOrder.mapNotNull { id -> counts[id]?.let { ReactionChipItem(id, it) } }
 }
+
+/** The step between a quote and the sticker answering it. */
+private val STICKER_UNDER_QUOTE = 4.dp
+
+/** A quoted sticker's key pose (the owner's notes 4: the thumb alone). */
+private val QUOTED_STICKER = 44.dp
 
 /** An album's grid in its bubble (round 22): as wide as this, or the row's widest. */
 private val ALBUM_WIDTH = 280.dp

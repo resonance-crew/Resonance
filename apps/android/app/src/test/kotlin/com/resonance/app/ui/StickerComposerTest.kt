@@ -78,4 +78,17 @@ class StickerComposerTest {
         assertEquals("貼圖", quoteWords(known.copy(text = "")))
         assertEquals("一張圖片", quoteWords(com.resonance.kit.chat.ReplyQuote("m2", "bob", "", image = true)))
     }
+
+    @Test fun stickerButtonOnlyWithoutWordsSendABlockPastOneLineTheGrowToolOverIt() {
+        // One line, nothing typed: ☺ beside a full-height Send.
+        assertEquals(ComposerTools(sticker = true, block = false, expand = false, collapse = false), composerTools("", 1, expanded = false))
+        // Words: no ☺ (words and a sticker don't go together) — white space alone is no words.
+        assertEquals(false, composerTools("嗨", 1, expanded = false).sticker)
+        assertEquals(true, composerTools("  \n", 1, expanded = false).sticker)
+        // Past one line Send is the corner block; ⤢ over it from the third line.
+        assertEquals(ComposerTools(sticker = false, block = true, expand = false, collapse = false), composerTools("a\nb", 2, expanded = false))
+        assertEquals(ComposerTools(sticker = false, block = true, expand = true, collapse = false), composerTools("a\nb\nc", 3, expanded = false))
+        // Grown: ⤡ in ⤢'s place, never ☺ (even emptied).
+        assertEquals(ComposerTools(sticker = false, block = true, expand = false, collapse = true), composerTools("", 1, expanded = true))
+    }
 }
