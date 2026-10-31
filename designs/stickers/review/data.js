@@ -303,11 +303,11 @@ window.STICKERS = [
      "en": "Hi!"
     },
     "durationMs": 2083,
-    "frames": 21,
-    "bytes": 69164,
-    "v": "d763c89306",
+    "frames": 22,
+    "bytes": 72508,
+    "v": "969c66f248",
     "hero": 0.833,
-    "thumbBytes": 7472
+    "thumbBytes": 7054
    },
    {
     "id": "thank-you",

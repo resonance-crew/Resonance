@@ -32,7 +32,7 @@ export const STICKER_ART: Readonly<Record<string, StickerArt>> = {
   "nod/love-this-line": { durationMs: 2583, frames: 23, bytes: 100138, v: "d006876b3e" },
   "nod/hug": { durationMs: 2583, frames: 19, bytes: 119326, v: "b79f02a540" },
   "pip/icon": { durationMs: 0, frames: 1, bytes: 2650, v: "ac1442a809" },
-  "pip/hi": { durationMs: 2083, frames: 21, bytes: 69164, v: "d763c89306" },
+  "pip/hi": { durationMs: 2083, frames: 22, bytes: 72508, v: "969c66f248" },
   "pip/thank-you": { durationMs: 2333, frames: 16, bytes: 98930, v: "c264588994" },
   "pip/beautifully-written": { durationMs: 2583, frames: 19, bytes: 119906, v: "c176a66059" },
   "pip/you-got-this": { durationMs: 2083, frames: 18, bytes: 121642, v: "210f99b93f" },
