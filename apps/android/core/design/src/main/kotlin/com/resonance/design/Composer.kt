@@ -493,6 +493,8 @@ fun ComposerRow(
     closeLabel: String,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Drawn in [detail]'s place, under the label (a replied sticker's key pose: no words). */
+    detailContent: (@Composable () -> Unit)? = null,
     lead: @Composable () -> Unit,
 ) {
     Row(
@@ -502,7 +504,8 @@ fun ComposerRow(
         lead()
         Column(Modifier.weight(1f).padding(start = 10.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             BasicText(label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(12f, 600, lineHeight = 1.35f, color = Tokens.Text))
-            if (!detail.isNullOrEmpty()) BasicText(detail, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(12.5f, lineHeight = 1.35f, color = Tokens.TextMuted))
+            if (detailContent != null) detailContent()
+            else if (!detail.isNullOrEmpty()) BasicText(detail, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(12.5f, lineHeight = 1.35f, color = Tokens.TextMuted))
         }
         Box(
             Modifier
