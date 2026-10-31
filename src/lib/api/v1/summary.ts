@@ -3,6 +3,7 @@ import { mapCard } from '@/lib/db/firestore/mapper';
 import type { Card } from '@/lib/db/types';
 import { excerpt, plainText } from '@/lib/markdown/plainText';
 import { readMinutes } from '@/lib/readTime';
+import { wordless } from '@/lib/cards/blank';
 
 /**
  * A card's list summary — the plain-text excerpt and read time every list
@@ -79,6 +80,21 @@ export function storedSummary(data: DocumentData | undefined): StorySummary | nu
   // A story written since (or an updatedAt that isn't a server stamp) leaves it behind.
   if (updatedAt != null && (!(updatedAt instanceof Timestamp) || later(updatedAt, excerptAt))) return null;
   return { excerpt: text, readMinutes: minutes };
+}
+
+/** What storedSummary reads, with the title: for a read that judges blankness without the story (blankBySummary). */
+export const SUMMARY_FIELDS = ['thoughtCore', 'excerpt', 'readMinutes', 'excerptAt', 'updatedAt'] as const;
+
+/**
+ * Whether a card read with SUMMARY_FIELDS (not its story) is blank
+ * (lib/cards/blank) — no title, or a current stored summary with no words. A
+ * summary its story has outrun says nothing of the story, so such a card
+ * counts as not blank: every server write that publishes or changes a story
+ * stores a new one, so only older builds' writes leave one behind.
+ */
+export function blankBySummary(data: DocumentData | undefined): boolean {
+  const stored = storedSummary(data);
+  return wordless(data?.thoughtCore, stored ? stored.excerpt : 'unknown');
 }
 
 /**

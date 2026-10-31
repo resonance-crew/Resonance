@@ -91,12 +91,14 @@ describe('getFeed', () => {
   it('serves a page around a malformed card, and cuts excerpts between code points', async () => {
     await Promise.all([
       card('ok', 'bob', 1, { story: `${'字'.repeat(95)}🌧️ after the rain` }),
-      // An old document without story, tags or title must not fail the page.
+      // An old document without story, tags or title must not fail the page — it is blank, so it is left out (lib/cards/blank).
       db.doc('cards/old').set({ authorId: 'dana', visibility: 'public', publishedAt: minutesAgo(2) }),
+      // One with words but no tags reads as untagged.
+      db.doc('cards/untagged').set({ authorId: 'dana', thoughtCore: 'untagged', story: 'words', visibility: 'public', publishedAt: minutesAgo(3) }),
     ]);
     const page = await getFeed(db, 'alice', 10);
-    expect(page.cards.map((c) => c.id)).toEqual(['ok', 'old']);
-    expect(page.cards[1]).toMatchObject({ title: '', excerpt: '', tags: [] });
+    expect(page.cards.map((c) => c.id)).toEqual(['ok', 'untagged']);
+    expect(page.cards[1]).toMatchObject({ title: 'untagged', excerpt: 'words', tags: [] });
     const cut = page.cards[0].excerpt;
     expect(cut).toBe(`${'字'.repeat(95)}🌧…`);
     // No lone surrogates: every code unit pairs up.

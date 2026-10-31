@@ -3,6 +3,7 @@ import { createTranslator } from 'next-intl';
 import en from '@/messages/en.json';
 import zhTW from '@/messages/zh-TW.json';
 import { blockedByViewer, blockHides, cardVisible } from '@/lib/api/v1/present';
+import { blankBySummary, SUMMARY_FIELDS } from '@/lib/api/v1/summary';
 import { mapCard } from '@/lib/db/firestore/mapper';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import type { Card, RecommendationItem } from '@/lib/db/types';
@@ -111,8 +112,8 @@ export function cardRoute(card: { id: string; slug?: unknown; anonymous?: unknow
   return `/card/${encodeURIComponent(key)}`;
 }
 
-/** The fields a candidate is judged and pushed by (never its story). */
-const CARD_FIELDS = ['authorId', 'visibility', 'anonymous', 'publishedAt', 'thoughtCore', 'slug'];
+/** The fields a candidate is judged and pushed by (never its story: its stored summary says whether it is blank). */
+const CARD_FIELDS = ['authorId', 'visibility', 'anonymous', 'publishedAt', 'slug', ...SUMMARY_FIELDS];
 
 /** Whether the reader answered this card with a resonance they published (their own cards naming it). */
 async function answered(db: Firestore, uid: string, cardId: string): Promise<boolean> {
@@ -130,10 +131,11 @@ async function chooseCard(db: Firestore, uid: string, items: RecommendationItem[
     db.getAll(...order.map((i) => db.doc(`cards/${i.cardId}`)), { fieldMask: CARD_FIELDS }),
     blockedByViewer(db, uid),
   ]);
-  const byId = new Map(snaps.filter((s) => s.exists).map((s) => [s.id, mapCard(s.id, s.data()!)]));
+  // A blank card (lib/cards/blank) is never pushed: no title, or a story with no words.
+  const byId = new Map(snaps.filter((s) => s.exists && !blankBySummary(s.data())).map((s) => [s.id, mapCard(s.id, s.data()!)]));
   for (const item of order) {
     const card = byId.get(item.cardId);
-    if (!card || card.authorId === uid || !String(card.thoughtCore ?? '').trim()) continue;
+    if (!card || card.authorId === uid) continue;
     // Published and public now — the recommended feed's own filter (cardVisible), for a public card.
     if (card.visibility !== 'public' || !cardVisible(card, uid, () => false)) continue;
     if (blockHides(card, blocked)) continue;

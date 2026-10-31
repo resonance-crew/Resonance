@@ -267,3 +267,17 @@ describe('FirestoreVectorStore.listByAuthor', () => {
     expect(await store.listByAuthor('alice', 'situation')).toEqual([{ cardId: 'a1', vector: [0, 1, 0] }]);
   });
 });
+
+// A blank card (lib/cards/blank) is no reader's candidate.
+describe('indexing a blank card', () => {
+  it('asks the LLM nothing and leaves no vectors — those an earlier version had go too', async () => {
+    expect(await indexCard('live')).toEqual({ indexed: true, channels: 2 });
+    await db.doc('cards/live').update({ story: '  \n\n![](https://img.resonance.channel/a.webp)' });
+    expect(await indexCard('live')).toEqual({ indexed: false, reason: 'blank' });
+    expect(mocks.signed).toBe(1);
+    expect(await vectorsOf('live')).toEqual({});
+    await db.doc('cards/live').update({ thoughtCore: '', story: 'Words again.' });
+    expect(await indexCard('live')).toEqual({ indexed: false, reason: 'blank' });
+    expect(mocks.signed).toBe(1);
+  });
+});

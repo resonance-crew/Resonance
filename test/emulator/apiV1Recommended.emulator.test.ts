@@ -184,7 +184,7 @@ describe('dailyRecommendations', () => {
 
 describe('getRecommendedFeed', () => {
   it("says whether the picks are today's, and a quick pick without a reason has none", async () => {
-    await db.doc('cards/x').set({ authorId: 'bob', thoughtCore: 'x', story: '', visibility: 'public', publishedAt: Timestamp.now() });
+    await db.doc('cards/x').set({ authorId: 'bob', thoughtCore: 'x', story: 'words', visibility: 'public', publishedAt: Timestamp.now() });
     await db.doc('users/bob').set({ handle: 'bob' });
     const stale = await getRecommendedFeed(db, 'alice', async () => ({ items: [item('x', '')], status: 'stale' }));
     expect(stale.status).toBe('stale');

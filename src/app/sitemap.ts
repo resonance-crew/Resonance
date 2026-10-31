@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next';
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { routing } from '@/i18n/routing';
 import { properlyPublished } from '@/lib/api/v1/service';
+import { blankBySummary, SUMMARY_FIELDS } from '@/lib/api/v1/summary';
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import { POLICY_PAGES, SITE_PAGES, SITEMAP_MAX_CARDS } from '@/lib/seo';
 import { siteUrl } from '@/lib/site';
@@ -21,7 +22,7 @@ interface Listed {
  * signed-out reader's card page shows with its story. Nothing else is
  * listed: the query asks for exactly these and each document is checked
  * again, so a card that is private, connections-only, anonymous, a draft,
- * stamped by hand (properlyPublished) or still without a slug never is.
+ * stamped by hand (properlyPublished), still without a slug or blank never is.
  */
 async function listedCards(db: Firestore): Promise<Listed[]> {
   const snap = await db
@@ -30,7 +31,7 @@ async function listedCards(db: Firestore): Promise<Listed[]> {
     .where('anonymous', '==', false)
     .where('publishedAt', '!=', null)
     .orderBy('publishedAt', 'desc')
-    .select('slug', 'visibility', 'anonymous', 'publishedAt', 'updatedAt')
+    .select('slug', 'visibility', 'anonymous', 'publishedAt', ...SUMMARY_FIELDS)
     .limit(SITEMAP_MAX_CARDS)
     .get();
   const now = Date.now();
@@ -38,6 +39,8 @@ async function listedCards(db: Firestore): Promise<Listed[]> {
     const { slug, visibility, anonymous, publishedAt, updatedAt } = d.data();
     if (visibility !== 'public' || anonymous !== false || !properlyPublished(publishedAt, now)) return [];
     if (typeof slug !== 'string' || !slug) return [];
+    // A blank card (lib/cards/blank), by its stored summary: its page is there, nothing to read on it.
+    if (blankBySummary(d.data())) return [];
     // An edit's server stamp, when it is one; the author's own writes can put anything there.
     const edited = updatedAt instanceof Timestamp && updatedAt.toMillis() > publishedAt.toMillis() && updatedAt.toMillis() <= now;
     return [{ slug, lastModified: (edited ? updatedAt : publishedAt).toDate() }];

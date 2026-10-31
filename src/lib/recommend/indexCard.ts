@@ -3,6 +3,7 @@ import { FieldValue, type DocumentData, type DocumentReference } from 'firebase-
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import { extractInsightSignature, signatureText } from '@/lib/ai/tasks';
 import { embed, embedModel, llmModel } from '@/lib/ai/openai';
+import { blankCard } from '@/lib/cards/blank';
 import { isIndexable, signatureToChannelTexts } from './signature';
 import { getVectorStore } from './vectorStore';
 import type { VectorRecord } from './vectorStore/types';
@@ -14,7 +15,7 @@ export interface IndexResult {
    * `unchanged`: what the signature reads is what it was made from — no LLM call, the vectors' visibility synced alone.
    * `over-budget`: `mayCall` refused the LLM call; the card keeps its last signature and vectors (their visibility synced).
    */
-  reason?: 'not-published' | 'not-found' | 'low-insight' | 'unchanged' | 'over-budget';
+  reason?: 'not-published' | 'not-found' | 'low-insight' | 'unchanged' | 'over-budget' | 'blank';
   channels?: number;
 }
 
@@ -127,6 +128,11 @@ export async function indexCard(cardId: string, opts: { force?: boolean; mayCall
 
   const title = String(data.thoughtCore ?? '');
   const story = String(data.story ?? '');
+  // A blank card (lib/cards/blank) is no one's candidate: no LLM call, and any vectors an earlier version had go.
+  if (blankCard({ thoughtCore: title, story })) {
+    await store.deleteByCard(cardId);
+    return { indexed: false, reason: 'blank' };
+  }
   const hash = indexContentHash(title, story);
   if (!opts.force && data.signature?.contentHash === hash) {
     // A change that landed between that read and the write: follow it.

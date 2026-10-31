@@ -1,4 +1,5 @@
 import { Timestamp, type DocumentData, type Firestore, type QueryDocumentSnapshot, type QuerySnapshot } from 'firebase-admin/firestore';
+import { blankFeedCard } from '@/lib/cards/blank';
 import { trashExpired } from '@/lib/cards/trash';
 import { anonymousBySlug, cardByKey, slugHolder, slugShaped } from '@/lib/db/firestore/cardKey';
 import { uidForHandle } from '@/lib/db/firestore/handles';
@@ -258,7 +259,8 @@ export async function getRecommendedFeed(
     blockedByViewer(db, viewerId),
   ]);
   return {
-    cards: await present(db, viewerId, cards.filter((c) => c.publishedAt), { reasons, blocked }),
+    // A blank card (lib/cards/blank) recommended before its vectors went is never shown.
+    cards: (await present(db, viewerId, cards.filter((c) => c.publishedAt), { reasons, blocked })).filter((c) => !blankFeedCard(c)),
     status: loaded.status ?? 'fresh',
   };
 }
@@ -315,7 +317,7 @@ export async function getCardDetail(
     isOwner,
     referenceCard: referenceCard[0] ?? null,
     ...(include.has('resonances') ? { resonances: { cards: resonanceCards } } : {}),
-    ...(include.has('related') ? { related: { cards: relatedCards.slice(0, RELATED_LIMIT) } } : {}),
+    ...(include.has('related') ? { related: { cards: relatedOf(relatedCards) } } : {}),
     ...(include.has('links') ? { links: { cards: linkCards } } : {}),
     ...(include.has('embeds') ? { embeds: { cards: embedCards } } : {}),
     // Pages, never people: an anonymous card's previews name no one.
@@ -349,6 +351,9 @@ function relatedPool(base: Card, recent: ListCard[]): ListCard[] {
   return recent.filter((c) => c.id !== base.id).sort((a, b) => overlap(b) - overlap(a));
 }
 
+/** The related cards a page shows of the presented pool: the first few that aren't blank (lib/cards/blank). */
+const relatedOf = (pool: FeedCardBody[]) => pool.filter((c) => !blankFeedCard(c)).slice(0, RELATED_LIMIT);
+
 /** The cards whose card links point at this one, newest link first. */
 async function cardsLinkingTo(db: Firestore, cardId: string): Promise<ListCard[]> {
   const links = await db.collection('cardLinks').where('targetCardId', '==', cardId).orderBy('createdAt', 'desc').limit(LINK_LIMIT).get();
@@ -364,7 +369,7 @@ export async function getResonances(db: Firestore, viewerId: string, id: string)
 /** A few recent public cards, those sharing the most tags first (the web's getRelatedCards). */
 export async function getRelated(db: Firestore, viewerId: string, id: string): Promise<CardListBody> {
   const [base, snap, blocked] = await Promise.all([visibleCardById(db, viewerId, id), recentPublic(db).get(), blockedByViewer(db, viewerId)]);
-  return { cards: (await present(db, viewerId, relatedPool(base, toCards(snap)), { blocked })).slice(0, RELATED_LIMIT) };
+  return { cards: relatedOf(await present(db, viewerId, relatedPool(base, toCards(snap)), { blocked })) };
 }
 
 /** Cards that link to this one — shown to its author only, as on the web. */

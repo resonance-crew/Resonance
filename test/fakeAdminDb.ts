@@ -1,7 +1,7 @@
 // A tiny in-memory stand-in for the Admin SDK's Firestore, for suites that
 // render server code (pages, route handlers) without the emulator: documents
 // by path, `doc(path).get()` / `.set()`, `getAll(…refs, { fieldMask })`, `collection(name).doc(id)` and
-// queries — `where` (`==`, `!=`, `in`) chained, `orderBy`, `select` (which, as
+// queries — `where` (`==`, `!=`, `in`) chained, `orderBy` (a field, or `FieldPath.documentId()`), `select` (which, as
 // in Firestore, leaves only the named fields in `data()`), `limit`, `get`.
 // Store timestamps as firebase-admin `Timestamp`s so the real mappers convert
 // them. Every read path is recorded in `reads` (a query as
@@ -17,6 +17,9 @@
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
 
 type Data = Record<string, unknown>;
+
+/** The order key `FieldPath.documentId()` stands for. */
+const NAME = '__name__';
 
 export interface FakeAdminDb {
   db: Firestore;
@@ -108,7 +111,9 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
       if (op !== '==' && op !== '!=' && op !== 'in') throw new Error(`fakeAdminDb: unsupported operator ${op}`);
       return query(name, { ...spec, filters: [...spec.filters, { field, op, value }] });
     },
-    orderBy: (field: string, dir: 'asc' | 'desc' = 'asc') => query(name, { ...spec, order: [...spec.order, { field, dir }] }),
+    // `FieldPath.documentId()` orders by the document's id (kept as NAME).
+    orderBy: (field: string | object, dir: 'asc' | 'desc' = 'asc') =>
+      query(name, { ...spec, order: [...spec.order, { field: typeof field === 'string' ? field : NAME, dir }] }),
     select: (...fields: string[]) => query(name, { ...spec, fields }),
     limit: (n: number) => query(name, { ...spec, max: n }),
     get: async () => {
@@ -119,10 +124,11 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
         .filter((p) => p.startsWith(`${name}/`) && p.split('/').length === 2)
         // As in Firestore, a document missing a filtered or ordered field never matches.
         .filter((p) => spec.filters.every((f) => f.field in docs[p] && matches(f, docs[p][f.field])))
-        .filter((p) => spec.order.every((o) => o.field in docs[p]))
+        .filter((p) => spec.order.every((o) => o.field === NAME || o.field in docs[p]))
         .sort((a, b) => {
+          const value = (p: string, field: string) => (field === NAME ? p.split('/')[1] : docs[p][field]);
           for (const o of spec.order) {
-            const c = compare(docs[a][o.field], docs[b][o.field]);
+            const c = compare(value(a, o.field), value(b, o.field));
             if (c) return o.dir === 'desc' ? -c : c;
           }
           return 0;

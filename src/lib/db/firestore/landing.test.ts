@@ -58,4 +58,15 @@ describe('latestForLanding', () => {
     expect(authors.alice).not.toHaveProperty('bio');
     expect(reads.filter((r) => r.startsWith('users/')).sort()).toEqual(['users/alice', 'users/bob']);
   });
+
+  it('leaves blank cards out and fills their places from the next newest', async () => {
+    const { db } = fakeAdminDb({
+      ...docs(),
+      'cards/untitled': card('bob', 10, { thoughtCore: '  ' }),
+      'cards/empty': card('bob', 9, { story: '' }),
+      'cards/picture': card('bob', 8, { story: '![](https://img.resonance.channel/a.webp)' }),
+    });
+    const { cards } = await latestForLanding(db, 3);
+    expect(cards.map((c) => c.id)).toEqual(['masked', 'c3', 'c2']);
+  });
 });

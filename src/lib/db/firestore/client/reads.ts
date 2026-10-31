@@ -12,6 +12,7 @@ import {
   where,
   Timestamp,
 } from './sdk';
+import { blankCard } from '@/lib/cards/blank';
 import type { Card, User } from '@/lib/db/types';
 import type { CardBoxTab } from '@/lib/db/interfaces';
 import type { CardSeed } from '@/lib/data/cardSeed';
@@ -126,7 +127,7 @@ export async function getRelatedCards(cardId: string, limit = 3): Promise<Card[]
   const base = await getDoc(doc(getClientDb(), 'cards', cardId)).catch(() => null);
   const tags = ((base?.data()?.tags ?? []) as string[]).slice(0, 5);
   const pool = await getLatestPublishedFeed(limit + 6);
-  let cards = pool.filter((c) => c.id !== cardId);
+  let cards = pool.filter((c) => c.id !== cardId && !blankCard(c));
   if (tags.length) {
     cards = cards.sort((a, b) => {
       const as = a.tags.filter((tag) => tags.includes(tag)).length;

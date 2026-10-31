@@ -1,5 +1,6 @@
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { getAccountDeletion } from '@/lib/account/deletion';
+import { blankFeedCard } from '@/lib/cards/blank';
 import { ApiFailure } from './http';
 import { pageEnd, pageQuery, type PageStart } from './paging';
 import { blockedByViewer, blockHides, loadAuthors, toFeedCard } from './present';
@@ -70,7 +71,8 @@ export async function getFeed(db: Firestore, viewerId: string | null, limit: num
     .filter((c) => !blockHides(c, blocked));
   const [authors] = await Promise.all([loadAuthors(db, cards), withStories(db, cards)]);
   return {
-    cards: cards.map((c) => toFeedCard(c, authors.get(c.authorId))),
+    // A blank card (lib/cards/blank) is left out after the query, as a blocked author's is: the page may run short, never end early.
+    cards: cards.map((c) => toFeedCard(c, authors.get(c.authorId))).filter((c) => !blankFeedCard(c)),
     ...pageEnd(snap.docs, limit),
   };
 }

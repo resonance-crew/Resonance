@@ -1,7 +1,7 @@
 import { Timestamp } from 'firebase-admin/firestore';
 import { describe, expect, it } from 'vitest';
 import { fakeAdminDb } from '../../../../test/fakeAdminDb';
-import { cardsByKeys, getCardBox } from './reads';
+import { cardsByKeys, getCardBox, getRecommendedFeed, getRelated } from './reads';
 
 // v1 reads against an in-memory Admin Firestore: which documents a read asks
 // for, and in what order (apiV1Reads.emulator.test.ts covers what they answer).
@@ -69,5 +69,47 @@ describe('the draft shelf (GET /me/cards?tab=draft)', () => {
     // One story read per draft shown — none for the five left out (four too old, one in the trash).
     const storyReads = reads.filter((r) => /^cards\/d\d+$/.test(r));
     expect(storyReads.sort()).toEqual(cards.map((c) => `cards/${c.id}`).sort());
+  });
+});
+
+describe('blank cards in the recommended feed and related cards', () => {
+  const card = (ms: number, title: string, story: string) => ({
+    authorId: 'bob',
+    thoughtCore: title,
+    story,
+    tags: ['日常'],
+    visibility: 'public',
+    anonymous: false,
+    publishedAt: at(ms),
+    updatedAt: at(ms),
+    excerpt: story,
+    readMinutes: 1,
+    excerptAt: at(ms),
+  });
+  const docs = () => ({
+    'users/bob': { handle: 'bob' },
+    'cards/base': card(1, 'The card being read', 'its story'),
+    'cards/r1': card(2, 'Real one', 'words'),
+    'cards/empty': card(3, 'My First Story', ''),
+    'cards/untitled': card(4, '', 'words without a title'),
+    'cards/r2': card(5, 'Real two', 'more words'),
+    'cards/r3': card(6, 'Real three', 'and more'),
+  });
+  const item = (cardId: string) => ({ cardId, channel: 'insight' as const, reason: `because ${cardId}`, score: 1 });
+
+  it('never recommends a blank card — not even one picked before its vectors went', async () => {
+    const { db } = fakeAdminDb(docs());
+    const load = async () => ({ items: ['empty', 'r1', 'untitled', 'r2'].map(item), status: 'fresh' as const });
+    const { cards } = await getRecommendedFeed(db, 'alice', load);
+    expect(cards.map((c) => [c.id, c.reason])).toEqual([
+      ['r1', 'because r1'],
+      ['r2', 'because r2'],
+    ]);
+  });
+
+  it('fills the related cards from past the blank ones', async () => {
+    const { db } = fakeAdminDb(docs());
+    const { cards } = await getRelated(db, 'alice', 'base');
+    expect(cards.map((c) => c.id)).toEqual(['r3', 'r2', 'r1']);
   });
 });

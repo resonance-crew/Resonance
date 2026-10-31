@@ -246,6 +246,19 @@ describe('pushPick', () => {
     expect(await pushPick(db, 'alice', sender, { now: NOW })).toMatchObject({ outcome: 'sent', cardId: 'drafted' });
   });
 
+  it('skips a blank card — no title, or no words in its story — by its stored summary, reading no story', async () => {
+    await aliceOptedIn();
+    const summary = (excerpt: string) => ({ excerpt, readMinutes: 1, excerptAt: published, updatedAt: published });
+    await Promise.all([
+      card('empty', 'bob', { story: '', ...summary('') }),
+      card('untitled', 'bob', { thoughtCore: ' ', ...summary('the story') }),
+      card('real', 'carol', summary('the story')),
+      picks('alice', ['empty', 'untitled', 'real']),
+    ]);
+    const { sender } = fakeFcm();
+    expect(await pushPick(db, 'alice', sender, { now: NOW })).toMatchObject({ outcome: 'sent', cardId: 'real' });
+  });
+
   it('keeps a named card from across a block, either way — never an anonymous one', async () => {
     await aliceOptedIn();
     await Promise.all([

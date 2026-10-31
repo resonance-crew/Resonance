@@ -103,6 +103,16 @@ describe('pushConnectionCard', () => {
     expect((await db.doc(`${CONNECTION_CARD_PUSHES}/alice`).get()).data()).toMatchObject({ day: '2026-10-05', cards: ['walk'] });
   });
 
+  it('announces no blank card — no title, or no words in its story (its stored summary says)', async () => {
+    const summary = (excerpt: string) => ({ excerpt, readMinutes: 1, excerptAt: Timestamp.fromMillis(NOW), updatedAt: Timestamp.fromMillis(NOW) });
+    await card('empty', { story: '', ...summary('') });
+    await card('untitled', { thoughtCore: '', ...summary('the story') });
+    const { sender, sent } = fakeFcm();
+    expect(await pushConnectionCard(db, 'empty', sender, { now: NOW })).toMatchObject({ skipped: 'not-announceable' });
+    expect(await pushConnectionCard(db, 'untitled', sender, { now: NOW })).toMatchObject({ skipped: 'not-announceable' });
+    expect(sent).toEqual([]);
+  });
+
   it('goes once per card, and to one person at most three times a day', async () => {
     for (const id of ['c1', 'c2', 'c3', 'c4']) await card(id);
     const { sender, tokens } = fakeFcm();
