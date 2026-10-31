@@ -5,9 +5,11 @@ import UIKit
 import UniformTypeIdentifiers
 
 /// The composer's text (round 22 §4.3), a `UITextView` of its own rather than SwiftUI's field: one line at
-/// rest, growing to five and then scrolling, the box running from the capsule's edge (its padding inside it),
-/// its top and bottom edges fading over 14 pt while there is text beyond them (read from the scroll offset), and — grown over the thread (option C) — the same
-/// view taller, so the caret, its undo, an input method's marked text (zhuyin) and the keyboard all stay.
+/// rest, growing to five and then scrolling — the box running right up to the capsule's pen line (its padding
+/// inside it), its top and bottom edges fading out over 14 pt while there is text beyond them (`onFades`, read
+/// from the scroll offset: the host masks it, so the fade itself is the edge, v2) — and, grown over the thread
+/// (option C), the same view taller, so the caret, its undo, an input method's marked text (zhuyin) and the
+/// keyboard all stay.
 /// Says how many lines it runs to (⤢ shows from the third), sends on a hardware Return (Shift-Return is a new
 /// line; an input method composing keeps its Return), and hands pasted pictures to the composer.
 struct ComposerTextView: UIViewRepresentable {
@@ -21,14 +23,14 @@ struct ComposerTextView: UIViewRepresentable {
     var onLines: (Int) -> Void = { _ in }
     var onReturn: () -> Void = {}
     var onPastePictures: ([Data]) -> Void = { _ in }
+    /// Whether there is text beyond the box's top and its bottom edge (each fades out while there is).
+    var onFades: (Bool, Bool) -> Void = { _, _ in }
 
     static let fade: CGFloat = 14
-    /// The box stops this far inside the capsule's pen line (its wobble swings about 2): the fades end on the
-    /// paper, never over the line. The rest of the capsule's padding is inside the box, where the text scrolls.
-    static let edge: CGFloat = 4
 
-    /// The padding inside the box, above and below the text.
-    static func inset(_ metrics: ComposerText) -> CGFloat { max(0, metrics.padding - edge) }
+    /// The padding inside the box, above and below the text: the capsule's whole padding — the box is the capsule's
+    /// height, so the text scrolls right to the pen line.
+    static func inset(_ metrics: ComposerText) -> CGFloat { metrics.padding }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -37,6 +39,7 @@ struct ComposerTextView: UIViewRepresentable {
         box.textView.delegate = context.coordinator
         box.textView.onReturn = { context.coordinator.parent.onReturn() }
         box.textView.onPastePictures = { context.coordinator.parent.onPastePictures($0) }
+        box.onFades = { top, bottom in context.coordinator.parent.onFades(top, bottom) }
         apply(box, initial: true)
         return box
     }
@@ -146,17 +149,14 @@ struct ComposerTextView: UIViewRepresentable {
     }
 }
 
-/// The text view inside its box: the placeholder over it while it is empty, the fades masking its edges.
+/// The text view inside its box: the placeholder over it while it is empty; it says when there is text beyond an
+/// edge (`onFades`), for the host's mask to fade it out there.
 final class ComposerTextBox: UIView {
     let textView = ComposerUITextView()
     let placeholder = UILabel()
-    /// What the fades lie over: the text and its placeholder (the box itself is SwiftUI's to lay out and clip).
     private let content = UIView()
     var metrics: ComposerText?
-    /// The fades: the capsule's own paper coming on over 14 at each inner edge — on solid paper, the same as the
-    /// text's alpha going out (a layer mask on the text didn't take under SwiftUI's host).
-    private let topFade = CAGradientLayer()
-    private let bottomFade = CAGradientLayer()
+    var onFades: ((Bool, Bool) -> Void)?
     private var shownFades: (top: Bool, bottom: Bool) = (false, false)
     private var sizeWatch: NSKeyValueObservation?
 
@@ -179,29 +179,16 @@ final class ComposerTextBox: UIView {
         placeholder.isAccessibilityElement = false
         placeholder.isUserInteractionEnabled = false
         content.addSubview(placeholder)
-        for fade in [topFade, bottomFade] {
-            fade.startPoint = CGPoint(x: 0.5, y: 0)
-            fade.endPoint = CGPoint(x: 0.5, y: 1)
-            fade.opacity = 0
-            content.layer.addSublayer(fade)
-        }
-        paintFades()
         // The text's own size settles after a layout: the fades follow it (more lines below, or none any more).
         sizeWatch = textView.observe(\.contentSize, options: [.new]) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.updateFades(force: true) }
         }
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (box: ComposerTextBox, _) in
             box.placeholder.textColor = Tokens.UI.textMuted
-            box.paintFades()
         }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        paintFades()
-    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -224,29 +211,34 @@ final class ComposerTextBox: UIView {
         updateFades()
     }
 
-    /// The fade over each inner edge shows only while there is text beyond it.
+    /// The fade over each edge shows only while there is text beyond it: said when that changes.
     func updateFades(force: Bool = false) {
         let offset = textView.contentOffset.y
         let top = offset > 0.5
         let bottom = offset + textView.bounds.height < textView.contentSize.height - 0.5
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        let h = min(ComposerTextView.fade, content.bounds.height / 2)
-        topFade.frame = CGRect(x: 0, y: 0, width: content.bounds.width, height: h)
-        bottomFade.frame = CGRect(x: 0, y: content.bounds.height - h, width: content.bounds.width, height: h)
-        if force || top != shownFades.top || bottom != shownFades.bottom {
-            shownFades = (top, bottom)
-            topFade.opacity = top ? 1 : 0
-            bottomFade.opacity = bottom ? 1 : 0
-        }
-        CATransaction.commit()
+        guard force || top != shownFades.top || bottom != shownFades.bottom else { return }
+        let changed = top != shownFades.top || bottom != shownFades.bottom
+        shownFades = (top, bottom)
+        guard changed else { return }
+        // Not inside SwiftUI's update of the view: the host's state changes after it.
+        DispatchQueue.main.async { [weak self] in self?.onFades?(top, bottom) }
     }
+}
 
-    /// The fades in the capsule's paper, for the scheme it is drawn in.
-    func paintFades() {
-        let paper = Tokens.UI.cream.resolvedColor(with: traitCollection)
-        topFade.colors = [paper.cgColor, paper.withAlphaComponent(0).cgColor]
-        bottomFade.colors = [paper.withAlphaComponent(0).cgColor, paper.cgColor]
+/// The composer text's fades (round 22 v2): an alpha mask over the text box, clear over 14 pt at an edge with
+/// text beyond it, so the words fade out right at the capsule's pen line — never paper laid over them.
+struct ComposerFadeMask: View {
+    let top: Bool
+    let bottom: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                .frame(height: top ? ComposerTextView.fade : 0)
+            Color.black
+            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                .frame(height: bottom ? ComposerTextView.fade : 0)
+        }
     }
 }
 

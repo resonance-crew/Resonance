@@ -64,6 +64,8 @@ struct StickerPanel: View {
             }
             .scrollPosition($position, anchor: .top)
             .scrollIndicators(.hidden)
+            // Its edges fade where more stickers lie beyond them, as the web's picker does (round 22 v2).
+            .scrollEdgeFades()
             .onScrollTargetVisibilityChange(idType: String.self, threshold: 0.2) { visible in
                 if let first = visible.first, first != shownSection { shownSection = first }
             }

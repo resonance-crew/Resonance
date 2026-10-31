@@ -1,3 +1,4 @@
+import DesignSystem
 import Foundation
 import ResonanceKit
 import Testing
@@ -56,6 +57,43 @@ import Testing
         panels.close()
         panels.setExpanded(true)
         #expect(!panels.expanded)
+    }
+
+    // MARK: The composer, v2
+
+    @Test func smileGoesOnceThereAreWordsAndSendBecomesTheCornerBlockPastOneLine() {
+        #expect(ThreadComposer.offersStickers(draft: ""))
+        #expect(ThreadComposer.offersStickers(draft: " \n "))
+        #expect(!ThreadComposer.offersStickers(draft: "嗨"))
+        #expect(!ThreadComposer.sendsFromBlock(lines: 1, expanded: false))
+        #expect(ThreadComposer.sendsFromBlock(lines: 2, expanded: false))
+        #expect(ThreadComposer.sendsFromBlock(lines: 1, expanded: true))
+    }
+
+    @Test func theSendBlocksTopLeftCornerIsRound() {
+        let block = ComposerBlockSeams(seed: 17)
+        let r = ComposerBlockSeams.cornerRadius
+        // The very corner is cut round, not met at a right angle; inside the curve and the block's middle are its.
+        #expect(!block.region.contains(CGPoint(x: 1.5, y: 1.5)))
+        #expect(!block.region.contains(CGPoint(x: r * 0.2, y: r * 0.2)))
+        #expect(block.region.contains(CGPoint(x: r, y: r)))
+        #expect(block.region.contains(CGPoint(x: 26, y: 30)))
+        // Left of its seam and over its top is the text's.
+        #expect(!block.region.contains(CGPoint(x: -4, y: 30)))
+        #expect(!block.region.contains(CGPoint(x: 26, y: -4)))
+    }
+
+    @Test func aQuotedStickerIsItsKeyPoseAloneUnlessThisBuildCantDrawIt() {
+        let sticker = ReplyQuote(id: "s", senderId: "bob", text: "〔貼圖：謝謝〕", sticker: StickerRef(pack: "twine", id: "thanks"))
+        #expect(QuotedReply.quotedSticker(sticker) == StickerRef(pack: "twine", id: "thanks"))
+        #expect(QuotedReply.words(sticker).isEmpty)
+        // One this build doesn't carry, and the site couldn't give: its words, as before.
+        let later = ReplyQuote(id: "l", senderId: "bob", text: "〔貼圖：揮手〕", sticker: StickerRef(pack: "later", id: "wave"))
+        if !StickerLibrary.shared.drawable(StickerRef(pack: "later", id: "wave")) {
+            #expect(QuotedReply.quotedSticker(later) == nil)
+            #expect(QuotedReply.words(later) == "〔貼圖：揮手〕")
+        }
+        #expect(QuotedReply.words(ReplyQuote(id: "w", senderId: "bob", text: "嗨")) == "嗨")
     }
 
     // MARK: Keyboard height
