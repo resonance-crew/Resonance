@@ -91,7 +91,7 @@
      },
      "durationMs": 2333,
      "frames": 19,
-     "v": "f6679f8df5"
+     "v": "554c7106d0"
     },
     {
      "id": "thanks",
@@ -101,7 +101,7 @@
      },
      "durationMs": 2333,
      "frames": 15,
-     "v": "a91b9b355d"
+     "v": "96dca70326"
     },
     {
      "id": "for-you",
@@ -110,8 +110,8 @@
       "en": "This is for you"
      },
      "durationMs": 2583,
-     "frames": 15,
-     "v": "73e5c7bae0"
+     "frames": 12,
+     "v": "e2a32907a2"
     },
     {
      "id": "well-done",
@@ -130,8 +130,8 @@
       "en": "Okay"
      },
      "durationMs": 2583,
-     "frames": 23,
-     "v": "16f361d985"
+     "frames": 22,
+     "v": "fae3cd817b"
     },
     {
      "id": "resonate",
@@ -234,8 +234,8 @@
       "en": "Hi!"
      },
      "durationMs": 2083,
-     "frames": 20,
-     "v": "706fea08a0"
+     "frames": 21,
+     "v": "d763c89306"
     },
     {
      "id": "thank-you",
@@ -316,8 +316,8 @@
       "en": "Teary-eyed"
      },
      "durationMs": 2583,
-     "frames": 22,
-     "v": "20d898a12c"
+     "frames": 20,
+     "v": "183dffc62a"
     },
     {
      "id": "lit-up",
@@ -336,8 +336,8 @@
       "en": "I'm here"
      },
      "durationMs": 2583,
-     "frames": 25,
-     "v": "4b4f3c3b80"
+     "frames": 13,
+     "v": "89cc8e56ff"
     },
     {
      "id": "listening",
@@ -346,8 +346,8 @@
       "en": "I'm listening"
      },
      "durationMs": 2583,
-     "frames": 26,
-     "v": "184cfc0243"
+     "frames": 25,
+     "v": "415aa37b86"
     }
    ]
   }

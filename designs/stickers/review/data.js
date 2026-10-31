@@ -116,10 +116,10 @@ window.STICKERS = [
     },
     "durationMs": 2333,
     "frames": 19,
-    "bytes": 58344,
-    "v": "f6679f8df5",
+    "bytes": 60542,
+    "v": "554c7106d0",
     "hero": 1.083,
-    "thumbBytes": 6874
+    "thumbBytes": 7252
    },
    {
     "id": "thanks",
@@ -129,10 +129,10 @@ window.STICKERS = [
     },
     "durationMs": 2333,
     "frames": 15,
-    "bytes": 80224,
-    "v": "a91b9b355d",
+    "bytes": 80910,
+    "v": "96dca70326",
     "hero": 0.833,
-    "thumbBytes": 8202
+    "thumbBytes": 8134
    },
    {
     "id": "for-you",
@@ -141,11 +141,11 @@ window.STICKERS = [
      "en": "This is for you"
     },
     "durationMs": 2583,
-    "frames": 15,
-    "bytes": 82214,
-    "v": "73e5c7bae0",
-    "hero": 0.833,
-    "thumbBytes": 8136
+    "frames": 12,
+    "bytes": 38146,
+    "v": "e2a32907a2",
+    "hero": 0.75,
+    "thumbBytes": 7282
    },
    {
     "id": "well-done",
@@ -167,11 +167,11 @@ window.STICKERS = [
      "en": "Okay"
     },
     "durationMs": 2583,
-    "frames": 23,
-    "bytes": 49036,
-    "v": "16f361d985",
+    "frames": 22,
+    "bytes": 46184,
+    "v": "fae3cd817b",
     "hero": 1,
-    "thumbBytes": 7364
+    "thumbBytes": 7488
    },
    {
     "id": "resonate",
@@ -303,11 +303,11 @@ window.STICKERS = [
      "en": "Hi!"
     },
     "durationMs": 2083,
-    "frames": 20,
-    "bytes": 76504,
-    "v": "706fea08a0",
+    "frames": 21,
+    "bytes": 69164,
+    "v": "d763c89306",
     "hero": 0.833,
-    "thumbBytes": 8626
+    "thumbBytes": 7472
    },
    {
     "id": "thank-you",
@@ -410,11 +410,11 @@ window.STICKERS = [
      "en": "Teary-eyed"
     },
     "durationMs": 2583,
-    "frames": 22,
-    "bytes": 79346,
-    "v": "20d898a12c",
+    "frames": 20,
+    "bytes": 81692,
+    "v": "183dffc62a",
     "hero": 1.333,
-    "thumbBytes": 9754
+    "thumbBytes": 10142
    },
    {
     "id": "lit-up",
@@ -436,11 +436,11 @@ window.STICKERS = [
      "en": "I'm here"
     },
     "durationMs": 2583,
-    "frames": 25,
-    "bytes": 82356,
-    "v": "4b4f3c3b80",
-    "hero": 0.833,
-    "thumbBytes": 9422
+    "frames": 13,
+    "bytes": 108496,
+    "v": "89cc8e56ff",
+    "hero": 0.75,
+    "thumbBytes": 9440
    },
    {
     "id": "listening",
@@ -449,11 +449,11 @@ window.STICKERS = [
      "en": "I'm listening"
     },
     "durationMs": 2583,
-    "frames": 26,
-    "bytes": 112784,
-    "v": "184cfc0243",
+    "frames": 25,
+    "bytes": 110634,
+    "v": "415aa37b86",
     "hero": 0.667,
-    "thumbBytes": 9538
+    "thumbBytes": 10444
    }
   ]
  }
