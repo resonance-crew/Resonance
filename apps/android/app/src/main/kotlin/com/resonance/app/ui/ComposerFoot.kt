@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -40,6 +41,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.resonance.app.Session
 import com.resonance.design.PanelGripMark
@@ -173,24 +175,36 @@ internal fun AttachPanel(
     gridScroll: NestedScrollConnection,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxSize()) {
-        PanelGrip(room, onGrip)
-        Box(Modifier.fillMaxWidth().weight(1f)) {
-            when (tab) {
-                AttachTab.Pictures -> GalleryPane(numberOf, gridScroll, onToggle, onSystemPicker)
-                AttachTab.Cards -> CardPickPanel(session, onPickCard, Modifier.fillMaxSize())
+    Box(modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            PanelGrip(room, onGrip)
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                when (tab) {
+                    AttachTab.Pictures -> GalleryPane(numberOf, gridScroll, onToggle, onSystemPicker)
+                    AttachTab.Cards -> CardPickPanel(session, onPickCard, Modifier.fillMaxSize(), bottom = AttachBarRoom)
+                }
             }
         }
+        // The halves float over what they show (the owner's notes 6): no band behind them, and a tap beside them is the
+        // grid's or the list's — nothing round the bar takes a touch. Smaller than a full-width bar, so it hides less.
         SegmentedActionBar(
             listOf(
                 tabSegment(AttachTab.Pictures, tab, L10n.Messages.attachImage, IconName.Image, onTab),
                 tabSegment(AttachTab.Cards, tab, L10n.Messages.attachCardShort, IconName.Cards, onTab),
             ),
-            Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 8.dp),
+            Modifier.align(Alignment.BottomCenter).padding(bottom = AttachBarGap).width(AttachBarWidth),
             seed = 79.0,
+            minHeight = AttachBarHeight,
         )
     }
 }
+
+/** The floating 圖片｜卡片: this wide and tall, this far over the panel's foot. */
+private val AttachBarWidth = 232.dp
+private val AttachBarHeight = 40.dp
+private val AttachBarGap = 10.dp
+/** What the grid and the list keep clear at their foot, so their last row can scroll out from under the bar. */
+internal val AttachBarRoom = AttachBarHeight + AttachBarGap * 2
 
 /** The attach panel's two halves. */
 internal enum class AttachTab { Pictures, Cards }
@@ -262,6 +276,7 @@ private fun GalleryPane(numberOf: (String) -> Int?, gridScroll: NestedScrollConn
         GalleryAccess.Full, GalleryAccess.Partial -> GalleryGrid(
             numberOf, partial = access == GalleryAccess.Partial, nested = gridScroll, onToggle = onToggle, onMore = request,
             modifier = Modifier.fillMaxSize(),
+            bottom = AttachBarRoom,
             // A permission answer (more pictures chosen) or a return from settings: the pictures allowed may differ.
             access = reads,
         )

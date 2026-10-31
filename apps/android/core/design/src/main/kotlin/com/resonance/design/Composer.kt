@@ -135,8 +135,13 @@ fun ComposerCapsule(
     seed: Double = 17.0,
     /** What the end segment does (round 22 §4.1): send, or — the sticker panel open with nothing to send — ↑ / ↓. */
     segment: ComposerSegment = ComposerSegment.Send,
-    /** The field grown to the thread (round 22 §4.3, option C): the segment a 52 × 48 block on the last row. */
+    /**
+     * The field past one line, or grown to the thread (round 22 §4.3, the owner's notes 2): the segment a 52 × 48
+     * block on the last row, its top start corner rounded.
+     */
     block: Boolean = false,
+    /** What stands in the block's column at the capsule's top end — the column the full-height strip filled (⤢ / ⤡). */
+    overSegment: (@Composable () -> Unit)? = null,
     leading: @Composable () -> Unit,
     field: @Composable BoxScope.(vertical: Dp) -> Unit,
 ) = CapsuleField(
@@ -150,6 +155,7 @@ fun ComposerCapsule(
     seed = seed,
     segmentEnabled = canSend || segment != ComposerSegment.Send,
     block = block,
+    overSegment = overSegment,
     leading = leading,
     segment = { ink ->
         when (segment) {
@@ -190,8 +196,10 @@ fun CapsuleField(
     seed: Double = 17.0,
     segmentEnabled: Boolean = ready,
     segmentState: String? = null,
-    /** The segment a [segmentWidth] × [ComposerHeight] block on the last row, its wavy seam on its top and start (round 22 §4.3). */
+    /** The segment a [segmentWidth] × [ComposerHeight] block on the last row, its wavy seam round its top start corner (round 22 §4.3). */
     block: Boolean = false,
+    /** Drawn in the block's column at the capsule's top ([block]): the composer's ⤢ / ⤡. */
+    overSegment: (@Composable () -> Unit)? = null,
     leading: (@Composable () -> Unit)? = null,
     segment: @Composable (ink: Color) -> Unit,
     field: @Composable BoxScope.(vertical: Dp) -> Unit,
@@ -259,26 +267,55 @@ fun CapsuleField(
                 // The segment's content on the last line's row, level with ＋, however many lines the field has.
                 Box(Modifier.fillMaxWidth().height(ComposerHeight), contentAlignment = Alignment.Center) { segment(ink) }
             }
+            if (block && overSegment != null) {
+                // In the send column at the capsule's top (the owner: where a finger finds it, and it reads as "the whole
+                // screen"): a square as wide as the block and as tall, inset from the top as the block is from the foot —
+                // its glyph as far from the top pen line as Send's from the bottom one.
+                Box(
+                    Modifier.align(Alignment.TopEnd).width(segmentWidth).height(ComposerHeight),
+                    contentAlignment = Alignment.Center,
+                ) { overSegment() }
+            }
         }
     }
 }
+
+/** The block's top start corner (round 22, the owner's notes 2: it turned too sharply). */
+private const val BLOCK_CORNER = 14.0
 
 /** How long Send takes to turn from its resting face to the verb's. */
 private const val SEND_FADE_MILLIS = 140
 
 /**
- * The end segment as a block on the last row (round 22 §4.3: the field grown, its segment [segW] × [segH] in its
- * bottom end corner): the region it fills (running past the box on its outer sides, for the capsule's outline to
- * end) and its seam — a gentle wave up its start side, then along its top to the capsule's end. All dp in, px out.
+ * The end segment as a block on the last row (round 22 §4.3, the owner's notes 2: the field past one line, or grown;
+ * its segment [segW] × [segH] in its bottom end corner): the region it fills (running past the box on its outer
+ * sides, for the capsule's outline to end) and its seam — a gentle wave up its start side, round a [radius] corner,
+ * then along its top to the capsule's end. All dp in, px out.
  */
-internal fun blockSegment(w: Float, h: Float, segW: Float, segH: Float, seed: Double, pad: Float, density: Float): Pair<Path, Path> {
+internal fun blockSegment(
+    w: Float,
+    h: Float,
+    segW: Float,
+    segH: Float,
+    seed: Double,
+    pad: Float,
+    density: Float,
+    radius: Double = BLOCK_CORNER,
+): Pair<Path, Path> {
     val x0 = (w - segW).toDouble()
     val y0 = (h - segH).toDouble()
-    // Up the start side: a boundary [segH] tall, moved down to the last row (its overshoot above dropped).
-    val side = boundaryPoints(x0, segH.toDouble(), seed + 11, 1.4, pad.toDouble()).drop(1).map { Offset(it.x, (it.y + y0).toFloat()) }
-    // Along the top: a boundary as long as the block is wide, laid on its side (its overshoot before the corner dropped).
-    val top = boundaryPoints(0.0, segW.toDouble(), seed + 23, 1.2, pad.toDouble()).drop(1).map { Offset((x0 + it.y).toFloat(), (y0 + it.x).toFloat()) }
-    val seam = side.reversed() + top.drop(1)
+    val r = radius.coerceIn(0.0, minOf(segW, segH).toDouble() / 2)
+    // Up the start side, from past the foot to where the corner begins (a boundary as tall as that, its overshoot above dropped).
+    val side = boundaryPoints(x0, segH - r, seed + 11, 1.2, pad.toDouble()).drop(1).map { Offset(it.x, (it.y + y0 + r).toFloat()) }
+        .filter { it.y >= y0 + r - 0.01 }
+    // Round the corner: a quarter circle from the side's top to the top's start.
+    val arc = (1 until CORNER_STEPS).map { k ->
+        val a = Math.PI + Math.PI / 2 * k / CORNER_STEPS
+        Offset((x0 + r + r * Math.cos(a)).toFloat(), (y0 + r + r * Math.sin(a)).toFloat())
+    }
+    // Along the top, from the corner's end to past the capsule's end (a boundary laid on its side, its overshoot before the corner dropped).
+    val top = boundaryPoints(0.0, segW - r, seed + 23, 1.0, pad.toDouble()).drop(1).map { Offset((x0 + r + it.y).toFloat(), (y0 + it.x).toFloat()) }
+    val seam = side.reversed() + arc + top
     val region = Path().apply {
         seam.forEachIndexed { i, p -> if (i == 0) moveTo(p.x * density, p.y * density) else lineTo(p.x * density, p.y * density) }
         lineTo((w + pad) * density, (h + pad) * density)
@@ -286,6 +323,35 @@ internal fun blockSegment(w: Float, h: Float, segW: Float, segH: Float, seed: Do
     }
     return region to polylinePath(seam, density)
 }
+
+/** How many straight steps the block's round corner is drawn in. */
+private const val CORNER_STEPS = 8
+
+/**
+ * A list's edges fading where more of it lies beyond (the web's `[data-edge-fade-top]` / `[data-edge-fade-bottom]`,
+ * 16): [top] and [bottom] say whether it can still scroll that way, read while drawing. No line, no card. Put it
+ * outside the scroller, so the mask stays on its viewport.
+ */
+fun Modifier.edgeFades(top: () -> Boolean, bottom: () -> Boolean, edge: Dp = EdgeFade): Modifier =
+    graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
+        drawContent()
+        val up = top()
+        val down = bottom()
+        if (!up && !down) return@drawWithContent
+        val t = kotlin.math.min(edge.toPx(), size.height / 3) / size.height
+        drawRect(
+            Brush.verticalGradient(
+                0f to if (up) Color.Transparent else Color.Black,
+                t to Color.Black,
+                1f - t to Color.Black,
+                1f to if (down) Color.Transparent else Color.Black,
+            ),
+            blendMode = BlendMode.DstIn,
+        )
+    }
+
+/** The web's list edge fade (globals.css): 16. */
+val EdgeFade = 16.dp
 
 /**
  * The composer's text, scrolled in its box (round 22 §4.3): a [ComposerFadeEdge] alpha mask on the box's inner

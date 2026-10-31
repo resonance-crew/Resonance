@@ -318,7 +318,8 @@ fun highlightWash(strong: Boolean): Color = Tokens.Terracotta.copy(alpha = if (s
 /**
  * The message a reply answers, quoted over the reply (Messenger's): a muted bubble of its own on
  * [Tokens.BubbleQuote], no outline, 13.5 text in two lines at most, hugging its words. Its foot is
- * [REPLY_OVERLAP] deeper than its words need: the reply's bubble lies over it there.
+ * [REPLY_OVERLAP] deeper than its words need: the reply's bubble lies over it there — not over a quote a
+ * sticker answers ([overlapped] false: even air above and below).
  */
 @Composable
 fun QuoteBubble(
@@ -326,19 +327,30 @@ fun QuoteBubble(
     seed: Double,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    /** What leads the words (round 22: a quoted sticker's key pose, 32 square). */
+    /** What leads the words (round 22: a quoted sticker's key pose). */
     leading: (@Composable () -> Unit)? = null,
+    /**
+     * A bubble lies over its foot (the reply): [REPLY_OVERLAP] more air there. A sticker answering lies over
+     * nothing — then the foot's air is the top's and what it holds stands in its middle.
+     */
+    overlapped: Boolean = true,
 ) {
     Box(
         modifier
             .bubbleSurface(remember(seed) { MessageBubbleShape(seed, maxRadius = QUOTE_RADIUS) }, Tokens.BubbleQuote)
             .then(if (onClick != null) Modifier.clickable(interactionSource = null, indication = null, role = Role.Button, onClick = onClick) else Modifier)
-            .padding(start = if (leading != null) 8.dp else 13.dp, end = 13.dp, top = 8.dp, bottom = 8.dp + REPLY_OVERLAP),
+            .padding(
+                start = if (leading != null) 8.dp else 13.dp,
+                end = if (leading != null && text.isEmpty()) 8.dp else 13.dp,
+                top = 8.dp,
+                bottom = 8.dp + if (overlapped) REPLY_OVERLAP else 0.dp,
+            ),
     ) {
         if (leading == null) ChatText(text, sizeSp = 13.5f, lineHeight = 1.4f, color = Tokens.TextMuted, maxLines = 2)
         else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             leading()
-            ChatText(text, sizeSp = 13.5f, lineHeight = 1.4f, color = Tokens.TextMuted, maxLines = 2)
+            // No words: what leads is the whole quote (a sticker's key pose).
+            if (text.isNotEmpty()) ChatText(text, sizeSp = 13.5f, lineHeight = 1.4f, color = Tokens.TextMuted, maxLines = 2)
         }
     }
 }
