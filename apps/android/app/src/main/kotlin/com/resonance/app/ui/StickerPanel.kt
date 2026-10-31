@@ -34,8 +34,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.drawOutline
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -87,8 +85,9 @@ internal const val RECENT_KEY = "recent"
  * continuing — no card, no rule. A row of pack icons (🕘 recents first once there are any, then each
  * character's head) over one grid scrolling through every pack, each headed by its character's name; the
  * bar marks the pack in view and a tap on an icon scrolls to its pack. 4 columns on a phone, 5–6 wider.
- * A tap on a sticker previews it ([onTap]: the screen previews, a second tap sends). Scrolling the grid
- * up grows the panel first ([nested]).
+ * A tap on a sticker previews it ([onTap]: the screen previews, a second tap sends). Scrolling the grid only
+ * scrolls it — ↑ is what grows the panel. The grid runs on under the navigation bar to the screen's edge
+ * ([navigation] of room under its last row), its bottom fade at that edge.
  */
 @Composable
 internal fun StickerPanel(
@@ -96,9 +95,9 @@ internal fun StickerPanel(
     recents: List<ChatSticker>,
     origin: String,
     previewing: ChatSticker?,
-    nested: NestedScrollConnection,
     onTap: (StickerCatalog.Sticker) -> Unit,
     modifier: Modifier = Modifier,
+    navigation: Dp = 0.dp,
 ) {
     val language = Strings.language.tag
     val sections = remember(catalog, recents, language) { stickerSections(catalog, recents, language, L10n.Messages.stickerRecent) }
@@ -117,8 +116,8 @@ internal fun StickerPanel(
             // Its edges fade where more stickers lie beyond (the owner's notes 7, the web's 16): no line, no card.
             StickerGrid(
                 sections, columns, grid, origin, previewing,
-                Modifier.fillMaxSize().edgeFades({ grid.canScrollBackward }, { grid.canScrollForward }).nestedScroll(nested),
-                onTap,
+                Modifier.fillMaxSize().edgeFades({ grid.canScrollBackward }, { grid.canScrollForward }),
+                navigation, onTap,
             )
         }
     }
@@ -165,6 +164,7 @@ private fun StickerGrid(
     origin: String,
     previewing: ChatSticker?,
     modifier: Modifier,
+    navigation: Dp,
     onTap: (StickerCatalog.Sticker) -> Unit,
 ) {
     val language = Strings.language.tag
@@ -172,7 +172,7 @@ private fun StickerGrid(
         GridCells.Fixed(columns),
         modifier,
         state = grid,
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 10.dp, end = 10.dp, bottom = 12.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 10.dp, end = 10.dp, bottom = 12.dp + navigation),
     ) {
         sections.forEach { section ->
             item(key = "h:${section.key}", span = { GridItemSpan(maxLineSpan) }, contentType = "heading") {

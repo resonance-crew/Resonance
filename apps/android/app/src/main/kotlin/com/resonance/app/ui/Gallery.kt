@@ -57,8 +57,6 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -207,7 +205,6 @@ private fun Context.findActivity(): Activity? {
 internal fun GalleryGrid(
     numberOf: (String) -> Int?,
     partial: Boolean,
-    nested: NestedScrollConnection,
     onToggle: (Uri) -> Unit,
     onMore: () -> Unit,
     modifier: Modifier = Modifier,
@@ -274,7 +271,7 @@ internal fun GalleryGrid(
         }
         LazyVerticalGrid(
             GridCells.Fixed(columns),
-            Modifier.fillMaxSize().nestedScroll(nested),
+            Modifier.fillMaxSize(),
             state = grid,
             contentPadding = PaddingValues(start = 2.dp, end = 2.dp, top = 2.dp, bottom = 2.dp + bottom),
         ) {

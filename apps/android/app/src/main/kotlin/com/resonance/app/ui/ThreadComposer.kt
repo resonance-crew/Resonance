@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -170,6 +171,8 @@ internal fun Composer(
                 )
             } },
             leading = { AttachButton(open = panel.panel == ComposerPanel.Attach, onClick = onAttach) },
+            // ☺ on the last line's row, beside Send — only while there are no words (⌨ while its panel shows); ＋'s twin.
+            trailing = if (!tools.sticker) null else { { StickerToggle(keyboard = panel.panel == ComposerPanel.Stickers, onClick = onStickers) } },
         ) { _ ->
             Box(Modifier.fillMaxWidth()) {
                 val scroll = rememberScrollState()
@@ -181,7 +184,6 @@ internal fun Composer(
                 val boxHeight = expandedHeight ?: (line * MAX_LINES + vertical * 2)
                 Box(
                     Modifier
-                        .padding(end = if (tools.sticker) TOOL_WIDTH else 0.dp)
                         .then(if (expanded) Modifier.height(boxHeight) else Modifier.heightIn(max = boxHeight))
                         .composerFades(scroll)
                         .verticalScroll(scroll),
@@ -214,17 +216,6 @@ internal fun Composer(
                             .semantics { contentDescription = L10n.Messages.threadWith(handle) },
                     )
                 }
-                // ☺ on the last line's row, beside Send — only while there are no words (⌨ while its panel shows).
-                if (tools.sticker) {
-                    val stickers = panel.panel == ComposerPanel.Stickers
-                    ToolButton(
-                        icon = if (stickers) IconName.Keyboard else IconName.Smile,
-                        label = if (stickers) L10n.Messages.keyboard else L10n.Messages.stickers,
-                        size = 22.dp,
-                        modifier = Modifier.align(Alignment.BottomEnd).size(TOOL_WIDTH, ComposerHeight),
-                        onClick = onStickers,
-                    )
-                }
             }
         }
     }
@@ -252,9 +243,6 @@ internal fun composerTools(text: String, lines: Int, expanded: Boolean): Compose
 private const val MAX_LINES = 5
 /** ⤢ shows from this many lines (round 22 §4.3: "超過 2 行"). */
 internal const val EXPAND_FROM_LINES = 3
-/** The column of the field's tools at its end (☺, ⤢). */
-private val TOOL_WIDTH = 36.dp
-
 /** The last riding row → the capsule. */
 private val ROWS_GAP = 6.dp
 
@@ -302,7 +290,7 @@ private fun ComposerRows(model: ThreadModel, modifier: Modifier = Modifier) {
                         is ReplyDetail.Sticker -> ComposerRow(
                             who, null, L10n.Messages.replyCancel, { model.cancelReply() },
                             detailContent = {
-                                StickerPose(detail.sticker, model.origin, Modifier.size(REPLIED_STICKER).semantics { contentDescription = detail.spoken })
+                                StickerPose(detail.sticker, model.origin, Modifier.size(REPLIED_STICKER).alpha(QUOTED_STICKER_ALPHA).semantics { contentDescription = detail.spoken })
                             },
                         ) { ReplyRule(Modifier.height(32.dp)) }
                     }
@@ -445,7 +433,23 @@ private fun AttachButton(open: Boolean, onClick: () -> Unit) {
     ) { OrganicIcon(IconName.Plus, size = 22.dp, color = if (open) Tokens.Text else Tokens.TextMuted, strokeWidth = Tokens.Ink.value) }
 }
 
-/** A tool inside the field (☺ / ⌨, ⤢ / ⤡): its glyph in the muted ink, the bare press ink round it. */
+/**
+ * ☺ (貼圖) — ⌨ (鍵盤) while its panel shows — the capsule's ghost button at the field's end: ＋'s twin (the owner's:
+ * every tool in the capsule one size), a 48 square, the glyph 22 in the muted ink, the same press ink.
+ */
+@Composable
+private fun StickerToggle(keyboard: Boolean, onClick: () -> Unit) {
+    val label = if (keyboard) L10n.Messages.keyboard else L10n.Messages.stickers
+    Box(
+        Modifier
+            .size(ComposerHeight)
+            .clickable(interactionSource = null, indication = OrganicIndication(inset = 6.dp), role = Role.Button, onClickLabel = label, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) { OrganicIcon(if (keyboard) IconName.Keyboard else IconName.Smile, size = 22.dp, color = Tokens.TextMuted, strokeWidth = Tokens.Ink.value) }
+}
+
+/** A tool inside the capsule (⤢ / ⤡): its glyph in the muted ink, the bare press ink round it. */
 @Composable
 private fun ToolButton(
     label: String,

@@ -75,6 +75,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -683,7 +684,8 @@ private fun ReplyQuoteView(message: ChatMessage, mine: Boolean, ctx: ThreadConte
             },
             seed = seedFromId(quote.id, 19),
             onClick = if (interactive) { { ctx.onQuote(quote.id) } } else null,
-            leading = sticker?.let { s -> { StickerPose(s, ctx.origin, Modifier.size(QUOTED_STICKER)) } },
+            // Faded as quoted words are muted (the owner's): it is what was answered, not what is said.
+            leading = sticker?.let { s -> { StickerPose(s, ctx.origin, Modifier.size(QUOTED_STICKER).alpha(QUOTED_STICKER_ALPHA)) } },
             // A sticker answering lies over nothing (it has no bubble): the quote keeps no foot for it, its content centred.
             overlapped = !underSticker,
         )
@@ -789,17 +791,11 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
             members.map { reactionsSpoken(it.reactions, model.me, model.other?.handle.orEmpty()) }.filter { it.isNotEmpty() }.joinToString("，")
         }
         val actions = if (interactive && ctx.reacts && MessageReactions.canReact(message)) reactionActions(message, model.me, ctx) else emptyList()
-        // The reply lies over the foot of what it quotes, a note over the card it was left on — a sticker stands a step under its quote.
         val drawnSticker = sticker
-        // The reply lies over the foot of what it quotes, a note over the card it was left on; a sticker answering stands
-        // under its quote, a step apart (the owner's notes: nothing overlaps a quote that kept no foot for it).
-        Box(
-            when {
-                drawnSticker != null && message.replyTo != null -> Modifier.padding(top = STICKER_UNDER_QUOTE)
-                message.replyTo != null || message.isNote -> Modifier.overlapAbove(REPLY_OVERLAP)
-                else -> Modifier
-            },
-        ) {
+        // The reply lies over the foot of what it quotes, a note over the card it was left on; a sticker answering comes up
+        // over the quote's lower edge, in front of it (the owner's: close to what it answers, overlapping is fine) — the
+        // quote keeping its even air, the sticker's own transparent margin taking the rest.
+        Box(quoteOverlap(answerIsSticker = drawnSticker != null, quoted = message.replyTo != null || message.isNote)?.let { Modifier.overlapAbove(it) } ?: Modifier) {
         if (drawnSticker != null) {
             StickerFace(drawnSticker, message, ctx, interactive, actions, onLongPress = { press(null) })
         } else MessageBubble(
@@ -867,8 +863,21 @@ internal fun mergedChips(each: List<List<ReactionChipItem>>): List<ReactionChipI
     return ReactionOrder.mapNotNull { id -> counts[id]?.let { ReactionChipItem(id, it) } }
 }
 
-/** The step between a quote and the sticker answering it. */
-private val STICKER_UNDER_QUOTE = 4.dp
+/**
+ * How far what answers lies over the quote above it (none: nothing quoted): a bubble over the quote's foot kept for it
+ * ([REPLY_OVERLAP]); a sticker, which has no bubble, over the lower edge of a quote that kept no foot ([STICKER_OVER_QUOTE]).
+ */
+internal fun quoteOverlap(answerIsSticker: Boolean, quoted: Boolean): Dp? = when {
+    !quoted -> null
+    answerIsSticker -> STICKER_OVER_QUOTE
+    else -> REPLY_OVERLAP
+}
+
+/** A sticker answering comes this far up over its quote's lower edge (the owner's: 16–20; the art's own transparent margin leaves its sparkles just touching). */
+internal val STICKER_OVER_QUOTE = 20.dp
+
+/** A quoted sticker's pose is drawn this faint, as quoted words are muted (the thread's quote and the reply row alike). */
+internal const val QUOTED_STICKER_ALPHA = 0.55f
 
 /** A quoted sticker's key pose (the owner's notes 4: the thumb alone). */
 private val QUOTED_STICKER = 44.dp

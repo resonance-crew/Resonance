@@ -394,7 +394,6 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
             PanelRoom.Stop.Closed -> closePanel()
         }
     }
-    val panelScroll = remember(panelRoom) { panelRoom.nested { settlePanel(it) } }
     BackHandler(enabled = panel.panelOpen) {
         if (previewing != null) previewing = null else closePanel()
     }
@@ -603,22 +602,25 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                                 .clipToBounds()
                                 .layout { measurable, constraints ->
                                     val h = keyboardPlace()
-                                    val content = panelRoom.contentHeight.roundToInt()
+                                    // The panel's content runs on under the navigation bar to the screen's edge (its lists scroll
+                                    // there, their fade at that edge; room under their last row keeps it clear of the bar).
+                                    val content = panelRoom.contentHeight.roundToInt() + navigationBars.getBottom(this)
                                     val placeable = measurable.measure(Constraints.fixed(constraints.maxWidth, content.coerceAtLeast(0)))
                                     layout(constraints.maxWidth, h) { placeable.place(0, 0) }
                                 },
                         ) {
                             val origin = session.config.origin
+                            val navigation = with(density) { navigationBars.getBottom(density).toDp() }
                             when (shownPanel) {
                                 ComposerPanel.Stickers -> StickerPanel(
-                                    stickerCatalog, model.recentStickers, origin, previewing?.ref, panelScroll, tapSticker,
-                                    Modifier.readableColumn(ComposerMax),
+                                    stickerCatalog, model.recentStickers, origin, previewing?.ref, tapSticker,
+                                    Modifier.readableColumn(ComposerMax), navigation = navigation,
                                 )
                                 ComposerPanel.Attach -> AttachPanel(
                                     session, attachTab, { attachTab = it }, model::pictureNumber, panelRoom,
                                     onGrip = settlePanel, onToggle = togglePicture, onSystemPicker = pickWithSystem,
-                                    onPickCard = pickCard, gridScroll = panelScroll,
-                                    modifier = Modifier.readableColumn(ComposerMax),
+                                    onPickCard = pickCard,
+                                    modifier = Modifier.readableColumn(ComposerMax), navigation = navigation,
                                 )
                                 else -> {}
                             }
