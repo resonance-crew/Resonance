@@ -122,7 +122,7 @@ object PushCenter {
         get() = Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
 
-    /** The app asks for the permission itself (Settings → Notifications): the prompt after reaching someone needn't ask again. */
+    /** The system's question is being put now (our ask's 開啟通知, an invite, Settings → Notifications): kept for the record ([permissionAnswered] reads the answer). */
     fun permissionAsked() {
         prefs.edit().putBoolean(ASKED_KEY, true).apply()
     }
@@ -182,35 +182,56 @@ object PushCenter {
         get() = prefs.getString(REGISTRATION_KEY, null)
         set(value) = prefs.edit().apply { if (value == null) remove(REGISTRATION_KEY) else putString(REGISTRATION_KEY, value) }.apply()
 
-    private val _permissionWanted = MutableStateFlow(false)
-    /** The notification permission dialog should show now (MainActivity shows it, then [permissionShown]). */
-    val permissionWanted: StateFlow<Boolean> = _permissionWanted
+    private val _asking = MutableStateFlow<AskKind?>(null)
+    /**
+     * Our own ask for notifications should show (docs/specs/notification-asks.md §2): the shell shows it
+     * over the tabs once nothing else is up ([NotifyAskHost][com.resonance.app.ui.NotifyAskHost]), then [askClosed].
+     */
+    val asking: StateFlow<AskKind?> = _asking
 
     /**
-     * The person just reached someone — a note, a message, a card published: the moment a reply,
-     * a resonance or a note back is worth hearing about, so the moment to ask (once; see
-     * [takePermissionRequest]) — not on first opening the app, before there is anything to be
-     * notified about.
+     * Debug (`--ez askForNotifications false`): reaching someone shows no ask and puts no system question —
+     * the flows' screens stay clear, as iOS's `-askForNotifications NO`.
      */
-    fun reachedOut() {
-        if (::context.isInitialized && takePermissionRequest()) _permissionWanted.value = true
-    }
-
-    fun permissionShown() {
-        _permissionWanted.value = false
-    }
+    var asksEnabled = true
 
     /**
-     * Whether to show the notification permission dialog now: API 33+ only, not granted, and
-     * not asked before (once per install; the system remembers a refusal too, and it stays
-     * reachable in Settings).
+     * The person just reached someone — a note, a message ([AskKind.Reply]), a card published
+     * ([AskKind.Publish]): the moment a reply, a resonance or a note back is worth hearing about. While
+     * the system's question was never put, and 先不要 wasn't said lately ([NotifyAskRules.showsAsk]), our
+     * ask comes first; it leads to the system's question only on 開啟通知. Never two at once.
      */
-    fun takePermissionRequest(): Boolean {
-        if (Build.VERSION.SDK_INT < 33) return false
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return false
-        if (prefs.getBoolean(ASKED_KEY, false)) return false
-        prefs.edit().putBoolean(ASKED_KEY, true).apply()
-        return true
+    fun reachedOut(kind: AskKind) {
+        if (!::context.isInitialized || !asksEnabled || _asking.value != null) return
+        val declines = prefs.getInt(DECLINES_KEY, 0)
+        val last = prefs.getLong(DECLINED_AT_KEY, 0L).takeIf { it > 0L }
+        if (NotifyAskRules.showsAsk(systemQuestion, declines, last, System.currentTimeMillis())) _asking.value = kind
+    }
+
+    /** The ask is gone: [declined] — 先不要, or closed — counts toward [NotifyAskRules]' pause and limit. */
+    fun askClosed(declined: Boolean, now: Long = System.currentTimeMillis()) {
+        _asking.value = null
+        if (declined) prefs.edit().putInt(DECLINES_KEY, prefs.getInt(DECLINES_KEY, 0) + 1).putLong(DECLINED_AT_KEY, now).apply()
+    }
+
+    /** Where the system's notification question stands for this install ([NotifyAskRules.systemQuestion]). */
+    val systemQuestion: SystemQuestion
+        get() = NotifyAskRules.systemQuestion(canNotify, canAskPermission, refusedForGood = prefs.getBoolean(REFUSED_FOR_GOOD_KEY, false))
+
+    /**
+     * A permission request came back (our ask, an invite, Settings → Notifications): [granted], and the
+     * system's rationale before and after it ([NotifyAskRules.afterRequest]). A no is remembered; Back
+     * is not an answer. Returns what the answer was.
+     */
+    fun permissionAnswered(granted: Boolean, rationaleBefore: Boolean, rationaleAfter: Boolean): NotifyAskRules.Answer {
+        val answer = NotifyAskRules.afterRequest(granted, rationaleBefore, rationaleAfter, refusedBefore = prefs.getBoolean(REFUSED_KEY, false))
+        when (answer) {
+            NotifyAskRules.Answer.RefusedOnce -> prefs.edit().putBoolean(REFUSED_KEY, true).apply()
+            NotifyAskRules.Answer.RefusedForGood -> prefs.edit().putBoolean(REFUSED_KEY, true).putBoolean(REFUSED_FOR_GOOD_KEY, true).apply()
+            NotifyAskRules.Answer.Granted -> prefs.edit().remove(REFUSED_KEY).remove(REFUSED_FOR_GOOD_KEY).apply()
+            NotifyAskRules.Answer.Dismissed -> Unit
+        }
+        return answer
     }
 
     /**
@@ -456,4 +477,8 @@ object PushCenter {
     private const val INSTALLATION_KEY = "installationId"
     private const val REGISTRATION_KEY = "registration"
     private const val ASKED_KEY = "permissionAsked"
+    private const val DECLINES_KEY = "notifyAskDeclines"
+    private const val REFUSED_KEY = "permissionRefused"
+    private const val REFUSED_FOR_GOOD_KEY = "permissionRefusedForGood"
+    private const val DECLINED_AT_KEY = "notifyAskDeclinedAt"
 }

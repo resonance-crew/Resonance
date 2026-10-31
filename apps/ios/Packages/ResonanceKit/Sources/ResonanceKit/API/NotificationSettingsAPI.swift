@@ -1,18 +1,19 @@
 import Foundation
 import ResonanceAPI
 
-/// The pushes an account asked for beyond the ones answering it (GET/PATCH
-/// /api/v1/me/notifications): "a card for tonight" (`picks`) and new cards
-/// from the people it is connected with (`connectionCards`). Both are off
-/// until turned on; the server keeps the choice, so it follows the account to
-/// every device. Whether this phone may show them is the system's to say —
-/// ask for that before turning one on.
+/// The pushes an account wants (GET/PATCH /api/v1/me/notifications): messages
+/// and notes sent to it (`messages`, on until turned off — an older server
+/// leaves it out, which means on), and two beyond the ones answering it, off
+/// until turned on: "a card for tonight" (`picks`) and new cards from the
+/// people it is connected with (`connectionCards`). The server keeps the
+/// choice, so it follows the account to every device. Whether this phone may
+/// show them is the system's to say — ask for that before turning one on.
 public struct NotificationSettingsAPI: Sendable {
     public typealias Settings = Components.Schemas.NotificationSettings
 
     /// One switch, as the contract names it.
     public enum Switch: String, CaseIterable, Sendable {
-        case picks, connectionCards
+        case messages, picks, connectionCards
     }
 
     let client: Client
@@ -33,6 +34,7 @@ public struct NotificationSettingsAPI: Sendable {
     /// Answers both as the server has them now.
     public func set(_ name: Switch, _ on: Bool) async throws -> Settings {
         let body = switch name {
+        case .messages: Components.Schemas.UpdateNotificationSettingsRequest(messages: on)
         case .picks: Components.Schemas.UpdateNotificationSettingsRequest(picks: on)
         case .connectionCards: Components.Schemas.UpdateNotificationSettingsRequest(connectionCards: on)
         }
@@ -49,12 +51,14 @@ extension Components.Schemas.NotificationSettings {
     public subscript(_ name: NotificationSettingsAPI.Switch) -> Bool {
         get {
             switch name {
+            case .messages: messages ?? true
             case .picks: picks
             case .connectionCards: connectionCards
             }
         }
         set {
             switch name {
+            case .messages: messages = newValue
             case .picks: picks = newValue
             case .connectionCards: connectionCards = newValue
             }

@@ -104,6 +104,9 @@ final class SessionStore {
     /// The app's one toast (「已移到垃圾桶 · 復原」, 「已還原」): shown over the tabs' foot by the shell
     /// (`MainTabView`'s ToastHost), so it outlives the page that asked for it.
     let toasts = ToastCenter()
+    /// Asking for notifications in context: the reply ask after reaching someone, and the invites on the
+    /// feed and the conversations (this account's memory on this install).
+    let notifyAsks: NotificationAsks
     /// 「已還原 — 這張卡片回來了，但不再與原本那張卡片共振」: a resonance restored from the trash that came
     /// back on its own. Said in a notice the shell draws (it outlives whatever restored the card: the
     /// toast's 復原 after the card's ⋯ left with its card).
@@ -130,13 +133,17 @@ final class SessionStore {
         let client = ResonanceClient.make(configuration, cache: httpCache)
         api = client
         cardReads = CardReads { try await ReadingAPI(client: client).countRead($0) }
-        outboxes = ChatOutboxes(messaging: { MessagingAPI(client: client) }, sent: { PushCenter.shared.reachedOut() })
+        outboxes = ChatOutboxes(messaging: { MessagingAPI(client: client) }, sent: { PushCenter.shared.reachedOut(.reply) })
         chatImages = ChatImageStore { id, size in try await MessagingAPI(client: client).chatImage(id, thumb: size == .thumb) }
         account = AccountAPI(configuration)
         // Emptying the trash waits 70 s for each page's answer, not the app's 30 (round 8 §6.2).
         writing = WritingAPI(client: api, configuration: configuration,
                              slowClient: ResonanceClient.make(configuration, cache: httpCache, session: AppHTTP.slowSession))
         thoughtMap = ThoughtMapStore(api: ReadingAPI(client: api))
+        let settingsAPI = NotificationSettingsAPI(client: client)
+        notifyAsks = NotificationAsks(permission: { await PushCenter.shared.permission() },
+                                      ask: { await PushCenter.shared.askIfUndetermined() },
+                                      fetch: { try await settingsAPI.settings() }, save: { try await settingsAPI.set($0, $1) })
         if let saved = UserDefaults.standard.string(forKey: Self.languageKey), let language = Strings.Language(rawValue: saved) {
             Strings.shared.language = language
         }
@@ -144,6 +151,14 @@ final class SessionStore {
             MainActor.assumeIsolated { self?.apply(user?.uid) }
         }
         push.onToken = { [weak self] _ in Task { await self?.registerPush() } }
+        let (asks, toasts) = (notifyAsks, toasts)
+        push.onReachedOut = { moment in Task { await asks.reachedOut(moment) } }
+        asks.tell = { message, offersSettings in
+            toasts.show(message, action: offersSettings ? ToastCenter.Action(
+                label: L10n.NotifyAsk.openSettings, accessibilityLabel: "\(message) · \(L10n.NotifyAsk.openSettings)") {
+                if let url = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(url) }
+            } : nil)
+        }
         // Someone blocked or unblocked (here or on another device): what a list showed may no longer be theirs to see.
         conversations.onBlocksChange = { [weak self] in
             self?.cardPreviews.clear()
@@ -283,6 +298,7 @@ final class SessionStore {
         kept.removeAll()
         noteDrafts.retainOnly(nil)
         chatDrafts.retainOnly(nil)
+        notifyAsks.use(account: nil)
         httpCache.use(account: nil)
         signedOutForDeletion = true
         signOut()
@@ -326,6 +342,7 @@ final class SessionStore {
         kept.retainOnly(newUID)
         noteDrafts.retainOnly(newUID)
         chatDrafts.retainOnly(newUID)
+        notifyAsks.use(account: newUID)
         StickerLibrary.shared.use(account: newUID)
         if previous != newUID { noteSends.reset() }
         keptBlocked = newUID.flatMap { kept.value(.blocked, uid: $0) }.map(Set.init) ?? []

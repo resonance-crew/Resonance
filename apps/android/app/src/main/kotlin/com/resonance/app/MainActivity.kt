@@ -4,7 +4,6 @@ import com.resonance.design.AppearanceAccent
 import androidx.compose.ui.graphics.toArgb
 import android.os.Build
 import android.graphics.drawable.ColorDrawable
-import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Color
@@ -14,7 +13,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
@@ -41,16 +39,13 @@ import kotlinx.coroutines.launch
  *   --ei feedPicksDelay <s> [--es feedPicks <id,…>]   holds today's picks back that long, and stands those cards in for them
  *   --ez mascots true|false        turns 外觀's 小紙團 on or off; --es mascotJs "mascots.visit({ ledge: 'more', slug: 'tuck' }); mascots.advance(3)"
  *                                  calls the paper puppets' island on screen (answers in Logcat, tag Mascots)
+ *   --es notifyAsk reply|publish     as if a note or a card had just reached someone: the ask, by its rules (notification-asks §2)
+ *   --ez askForNotifications false  reaching someone asks nothing: no ask of ours, no system question (the flows' screens stay clear)
  *   --ez firestoreLog true         Firestore's own debug log in Logcat (tag Firestore: its streams, connectivity, targets)
  */
 class MainActivity : ComponentActivity() {
     private val incomingRoute = mutableStateOf<String?>(null)
     private var session: Session? = null
-    // The answer to the notification permission dialog: the device registers for pushes once they can show.
-    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-        lifecycleScope.launch { session?.registerPush() }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         // The launch's splash (the waves on the paper) before anything else draws; see [Launch].
         val splash = installSplashScreen()
@@ -104,6 +99,11 @@ class MainActivity : ComponentActivity() {
             DebugLaunch.feedPicksDelay = intent.getIntExtra("feedPicksDelay", 0)
             DebugLaunch.feedPicksIds = intent.getStringExtra("feedPicks")?.split(',')?.map(String::trim)?.filter(String::isNotEmpty)
             mascotExtras(intent)
+            // `--ez` from adb, or a string from Maestro's launchApp arguments.
+            if (intent.getStringExtra("askForNotifications") == "false" || !intent.getBooleanExtra("askForNotifications", true)) {
+                PushCenter.asksEnabled = false
+            }
+            notifyAskExtra(intent)
         }
         // A recreated activity (rotation, process restore) still holds the intent it was first started with,
         // and its back stacks come back as they were: the link was opened then and isn't pushed again.
@@ -120,16 +120,8 @@ class MainActivity : ComponentActivity() {
                 if (phase == Session.Phase.SignedIn) PushCenter.fetchToken(config.usesEmulator)
             }
         }
-        // Ask to show notifications (API 33+, once) the first time the person reaches someone — a
-        // note, a message, a card published (PushCenter.reachedOut) — when an answer is worth
-        // hearing about; not on first opening the app.
-        lifecycleScope.launch {
-            PushCenter.permissionWanted.collect { wanted ->
-                if (!wanted) return@collect
-                PushCenter.permissionShown()
-                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
+        // Reaching someone may ask for notifications — our own words first, then the system's question:
+        // the shell does it (NotifyAskHost), over the tabs, once nothing else is up.
     }
 
     /**
@@ -185,9 +177,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (BuildConfig.DEBUG) mascotExtras(intent)
+        if (BuildConfig.DEBUG) {
+            mascotExtras(intent)
+            notifyAskExtra(intent)
+        }
         incomingRoute.value = routeFrom(intent)
         handleExtras(intent)
+    }
+
+    /** Debug: `--es notifyAsk reply|publish` reaches someone, as far as the ask is concerned. */
+    private fun notifyAskExtra(intent: Intent) {
+        val kind = intent.getStringExtra("notifyAsk")?.let { name -> AskKind.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
+        kind?.let(PushCenter::reachedOut)
     }
 
     /** Debug: `--ez mascots true|false` sets 外觀's 小紙團; `--es mascotJs "mascots.visit({…})"` calls the island on screen. */

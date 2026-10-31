@@ -86,7 +86,17 @@ fun ConversationsScreen(session: Session, open: (Route) -> Unit) {
         val end = list.layoutInfo.viewportEndOffset
         if (key == null || key.offset < 0 || key.offset + key.size > end) list.animateScrollToItem(index)
     }
+    // Someone to hear from: their new cards are worth offering (notification-asks §4).
+    val connected by session.conversations.connectedIds.collectAsStateWithLifecycle()
+    val blocked by session.conversations.blockedIds.collectAsStateWithLifecycle()
+    // Someone not blocked (their cards would never reach this account).
+    val someone = connected.orEmpty().any { it !in blocked.orEmpty() }
+    val connectionsInvite = rememberInviteShown(session, NotifyInvite.ConnectionCards, eligible = someone)
+    LaunchedEffect(connectionsInvite && state.loaded) { if (connectionsInvite && state.loaded) list.keepTopInView(before = 1) }
+    // In the rows' column: the page's 16 / 18 and the list pane's own 14.
+    val inviteFrame = Modifier.readableColumn(NotifyInviteMaxWidth + 62.dp).padding(start = 16.dp, end = 18.dp).padding(horizontal = 14.dp).padding(top = 4.dp, bottom = 16.dp)
     TabScreen(L10n.App.Nav.messages, titleInBar = true, tabletAir = false, list = list) {
+        if (connectionsInvite && state.loaded) notifyInviteItem(session, NotifyInvite.ConnectionCards, inviteFrame)
         if (state.loaded && state.conversations.isEmpty() && state.starters.isEmpty() && !twoPane) {
             // Nothing yet: the shared empty state, in the middle of the room between the bar and the tab bar.
             item {

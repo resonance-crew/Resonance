@@ -535,6 +535,29 @@ fun borderedCardOutline(w: Double, h: Double, seed: Double): List<PathCommand> {
     return wobRect(w, h, r, seed, mag, BorderedCardWob)
 }
 
+/**
+ * A bordered card stretched wider than the grid's cards (the feed's wide invite, the owner's
+ * 2026-11-01): its long edges keep a story card's turns per dp — one every [WideCardTurnSpacing], so a
+ * card two or three cards wide has two or three times the turns — and its wobble a story card's
+ * depth (as if its short side were [WideCardWobbleSide] long, within wobRect's own cap). Its short
+ * edges are spaced the same (at least 2): 5–6 turns on a short side at that depth would read as a
+ * bump. [borderedCardOutline], which the story cards draw, is untouched.
+ */
+fun wideCardOutline(w: Double, h: Double, seed: Double): List<PathCommand> {
+    if (w <= 0 || h <= 0) return emptyList()
+    val r = min(22.0, min(w, h) / 2)
+    val mag = max(min(w, h), WideCardWobbleSide) * 0.025
+    val across = max(3.0, kotlin.math.round(w / WideCardTurnSpacing))
+    val down = max(2.0, kotlin.math.round(h / WideCardTurnSpacing))
+    return wobRect(w, h, r, seed, mag, BorderedCardWob.copy(segmentsH = SegValue.Count(across), segmentsV = SegValue.Count(down)))
+}
+
+/** How far apart a grid story card's long-edge turns lie: 3–4 across a card some 400–480 wide. */
+const val WideCardTurnSpacing = 125.0
+
+/** The short side a grid story card has, roughly: what sets its wobble's depth (2.5 % of it). */
+private const val WideCardWobbleSide = 420.0
+
 /** StoryCard.tsx's desktop outline: 3–4 turns across, 5–6 down, gentle curves, corners drifting 4 (the share card's too). */
 internal val BorderedCardWob = WobRectOptions(
     curve = 0.55, cornerJitter = 0.7, cornerOffset = 4.0, segmentsH = SegValue.Range(3, 4), segmentsV = SegValue.Range(5, 6),

@@ -34,10 +34,13 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.CompositionLocalProvider
 import com.resonance.design.LocalMascotMarks
 import com.resonance.design.LocalWindowLayout
+import com.resonance.design.generated.Tokens
+import com.resonance.design.gridUnderBar
 import com.resonance.design.MascotMarks
 import com.resonance.design.TabBarHeight
 import com.resonance.design.brandBarHeight
 import com.resonance.design.mascotMark
+import com.resonance.app.NotifyAskRules
 import com.resonance.app.Session
 import com.resonance.design.CardPalette
 import com.resonance.design.FeedEndMark
@@ -167,6 +170,14 @@ fun FeedScreen(session: Session, open: (Route) -> Unit) {
     val tabsBelow = if (LocalWindowLayout.current.topTabs) 0.dp else TabBarHeight
     val footInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + tabsBelow
 
+    // Five card pages opened: the evening card is worth offering (notification-asks §3).
+    val cardOpens by session.cardPageOpens.collectAsStateWithLifecycle()
+    val picksInvite = rememberInviteShown(session, NotifyInvite.Picks, eligible = cardOpens >= NotifyAskRules.CARD_OPENS_FOR_PICKS)
+    val gridUnderBar = LocalWindowLayout.current.gridUnderBar
+    // Come above a reader at the top: they see it (the list would otherwise keep the first card where it was).
+    LaunchedEffect(picksInvite) {
+        if (picksInvite) list.keepTopInView(before = if (feed.state.value.refreshFailure == null) 1 else 2)
+    }
     // No page title: the brand bar is the feed's only heading, and the first card starts right under its wave.
     CompositionLocalProvider(LocalMascotMarks provides marks) {
     TabScreen(
@@ -206,8 +217,21 @@ fun FeedScreen(session: Session, open: (Route) -> Unit) {
                     }
                 } else {
                     refreshNote(state.refreshFailure, underBar = true)
+                    // The evening card offered to a reader (notification-asks §3), where the refresh note sits.
+                    // Banded: a band of its own between the bar's line and the first card's wave; the grid: one wide card over its columns.
+                    if (picksInvite) notifyInviteItem(
+                        session, NotifyInvite.Picks,
+                        if (layout.isGrid) {
+                            Modifier.padding(horizontal = layout.gridInset)
+                                .padding(top = if (state.refreshFailure == null) gridUnderBar else 0.dp, bottom = Tokens.FeedGap.dp)
+                        } else {
+                            Modifier.padding(horizontal = layout.inset)
+                                .padding(top = if (state.refreshFailure == null) HeaderEdgeHeight + 20.dp else 0.dp, bottom = 20.dp)
+                        },
+                        look = if (layout.isGrid) InviteLook.WideCard else InviteLook.Band,
+                    )
                     // A note over the cards parts the first one from the bar: it keeps its own top rule then.
-                    storyCards(cards, open, firstUnderBar = state.refreshFailure == null, layout = layout, leading = leading, entering = entrance)
+                    storyCards(cards, open, firstUnderBar = state.refreshFailure == null && !picksInvite, layout = layout, leading = leading, entering = entrance)
                     item(key = FEED_FOOT) {
                         Column(Modifier.fillMaxWidth().padding(top = 48.dp, start = 20.dp, end = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             // While more can load, only the way on (no sentence); the end mark in its place once nothing more can.

@@ -120,24 +120,33 @@ final class PushCenter {
 
     /// Signed in: with notifications already allowed, registers with APNs (each
     /// launch; FCM hands back its token through `tokenChanged`). It doesn't ask —
-    /// that waits for `reachedOut()`, or a switch turned on in settings.
+    /// that waits for `reachedOut(_:)`'s ask, an invite, or a switch turned on in settings.
     func registerIfAllowed() async {
         guard await permission() == .allowed else { return }
         UIApplication.shared.registerForRemoteNotifications()
     }
 
-    /// The person just reached someone — a note, a message, a card published:
-    /// the moment a reply, a resonance or a note back is worth hearing about,
-    /// so the moment to ask (once; the system remembers the answer) — not on
-    /// first opening the app, before there is anything to be notified about.
-    func reachedOut() {
+    /// The person just reached someone — a note or a message (`reply`), a card published (`publish`):
+    /// the moment a reply, a resonance or a note back is worth hearing about, so the moment to ask —
+    /// not at signup, before there is anything to be notified about. Our own ask comes first, saying
+    /// why (``NotificationAsks``, drawn by the shell), and only its 開啟通知 puts the system's question.
+    func reachedOut(_ moment: NotificationAsks.Moment) {
+        guard Self.mayAsk, let onReachedOut else { return }
+        onReachedOut(moment)
+    }
+
+    /// The session's ask (``NotificationAsks/reachedOut(_:)``), set while it lives.
+    @ObservationIgnored var onReachedOut: ((NotificationAsks.Moment) -> Void)?
+
+    /// Whether the app may put the system's question at all: always, except under the debug flag
+    /// `-askForNotifications NO` (the interaction flows: the question would cover the screen a flow
+    /// is checking, in a language its driver can't answer).
+    static var mayAsk: Bool {
         #if DEBUG
-        // `-askForNotifications NO` (the interaction flows): the system's question would cover the
-        // screen a flow is checking, in a language its driver can't answer.
         if UserDefaults.standard.object(forKey: "askForNotifications") != nil,
-           !UserDefaults.standard.bool(forKey: "askForNotifications") { return }
+           !UserDefaults.standard.bool(forKey: "askForNotifications") { return false }
         #endif
-        Task { _ = await askIfUndetermined() }
+        return true
     }
 
     /// Asks the system's question when it was never asked (a switch turned on in settings, or

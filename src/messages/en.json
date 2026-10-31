@@ -976,6 +976,26 @@
     "termsLink": "Terms of Use",
     "privacyLink": "Privacy Policy"
   },
+  "notifyAsk": {
+    "replyTitle": "Hear when they reply?",
+    "replyBody": "Turn on notifications to know as soon as someone answers your note or message",
+    "publishTitle": "Hear when someone responds?",
+    "publishBody": "Know as soon as someone resonates with your card or leaves you a note",
+    "turnOn": "Turn on notifications",
+    "later": "Not now",
+    "changeLater": "You can change this in Settings → Notifications",
+    "picksTitle": "One more card in the evening?",
+    "picksBody": "Up to three evenings a week, around 8 pm Taiwan time: one card picked for you",
+    "connectionCardsTitle": "Hear when your connections publish?",
+    "connectionCardsBody": "A notification when someone you're connected with publishes a public card under their pen name",
+    "yes": "Yes, notify me",
+    "no": "No thanks",
+    "turnedOn": "Notifications on",
+    "picksOn": "Done — a card will come some evenings",
+    "connectionCardsOn": "Done — you'll hear when your connections publish",
+    "systemOff": "Notifications are off in your device settings",
+    "openSettings": "Open Settings"
+  },
   "settings": {
     "title": "Settings",
     "sections": {
@@ -1026,6 +1046,8 @@
       "picksHint": "Up to three evenings a week, around 8 pm Taiwan time: one card picked for you that we haven't sent you before",
       "connectionCards": "New cards from people you're connected with",
       "connectionCardsHint": "When someone you're connected with publishes a public card under their pen name",
+      "messages": "Messages and notes",
+      "messagesHint": "When someone messages you or leaves a note on one of your cards",
       "permissionDenied": "Notifications for Resonance are off in your device settings. Turn them on there first.",
       "openSettings": "Open Settings",
       "saveError": "Couldn't save that — try again",

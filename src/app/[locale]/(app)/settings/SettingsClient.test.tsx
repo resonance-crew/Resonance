@@ -351,6 +351,7 @@ describe('SettingsClient notifications', () => {
   };
   const picks = () => screen.getByRole('switch', { name: 'A card for you in the evening' });
   const fromConnections = () => screen.getByRole('switch', { name: "New cards from people you're connected with" });
+  const messages = () => screen.getByRole('switch', { name: 'Messages and notes' });
 
   it('shows both switches as the server has them, each explained by its hint', async () => {
     callApi.mockResolvedValue({ picks: false, connectionCards: true });
@@ -366,7 +367,7 @@ describe('SettingsClient notifications', () => {
     callApi.mockResolvedValue({ picks: false, connectionCards: false });
     await open();
     expect(screen.getByText('These notifications go to the Resonance app on your phone')).toBeInTheDocument();
-    for (const control of [picks(), fromConnections()]) {
+    for (const control of [messages(), picks(), fromConnections()]) {
       expect(control).toHaveAccessibleDescription(/ These notifications go to the Resonance app on your phone$/);
     }
     await waitFor(() => expect(picks()).toBeEnabled());
@@ -391,6 +392,19 @@ describe('SettingsClient notifications', () => {
     expect(callApi).toHaveBeenCalledWith(PATH, { method: 'PATCH', body: { picks: true } });
     await waitFor(() => expect(picks()).toHaveAttribute('aria-checked', 'true'));
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('shows messages and notes on when the server leaves the switch out (an older server), and turns it off', async () => {
+    callApi.mockImplementation(async (_path: string, init?: { method?: string }) =>
+      init?.method === 'PATCH' ? { picks: false, connectionCards: false, messages: false } : { picks: false, connectionCards: false },
+    );
+    const u = await open();
+    await waitFor(() => expect(messages()).toBeEnabled());
+    expect(messages()).toHaveAttribute('aria-checked', 'true');
+    expect(messages()).toHaveAccessibleDescription(/leaves a note on one of your cards/);
+    await u.click(messages());
+    expect(callApi).toHaveBeenCalledWith(PATH, { method: 'PATCH', body: { messages: false } });
+    await waitFor(() => expect(messages()).toHaveAttribute('aria-checked', 'false'));
   });
 
   it("undoes a flip that didn't save, and says so", async () => {

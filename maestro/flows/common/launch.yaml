@@ -34,8 +34,8 @@ appId: com.resonance.stories
             -appLanguage: zh-TW
             -AppleLanguages: (zh-Hant)
             -AppleLocale: zh_TW
-            # Never the system's notification question (asked after a first note, message or card):
-            # it would cover the screen, and Maestro answers it only in English.
+            # Never our notification ask nor the system's question (after a first note, message or card):
+            # either would cover the screen, and Maestro answers the system's only in English.
             -askForNotifications: "NO"
             -email: ${ACCOUNT}@resonance.test
             -password: ${PASSWORD}
@@ -52,6 +52,8 @@ appId: com.resonance.stories
             emulatorFirestorePort: ${FIRESTORE_PORT}
             emulatorApiPort: ${API_PORT}
             mascots: false
+            # Never our notification ask nor the system's question (after a first note, message or card).
+            askForNotifications: false
             email: ${ACCOUNT}@resonance.test
             password: ${PASSWORD}
             route: ${ROUTE}

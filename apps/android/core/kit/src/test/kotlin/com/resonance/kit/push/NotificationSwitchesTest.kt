@@ -157,4 +157,26 @@ class NotificationSwitchesTest {
         assertFalse(switches.state.value.loadFailed)
         assertTrue(switches.state.value.settings!!.picks)
     }
+
+    @Test fun turningMessagesOffUndoesWhenItDoesntSave() = runBlocking {
+        // Absent on the server's answer: on.
+        val switches = NotificationSwitches(this, { off }) { _, _ -> throw ApiFailure("internal", "HTTP 500", 500) }
+        switches.load()
+        assertTrue(switches.state.value.settings!![NotificationSwitch.Messages])
+        switches.set(NotificationSwitch.Messages, false)?.join()
+        // Back to on, the server's last word.
+        assertTrue(switches.state.value.settings!![NotificationSwitch.Messages])
+        assertTrue(switches.state.value.saveFailed)
+    }
+
+    /** A new account starts with messages on and the other two off: only a choice otherwise needs sending. */
+    @Test fun onlyChoicesOtherThanANewAccountsAreSent() {
+        val defaults = NotificationSwitch.entries.associateWith { it.default }
+        assertEquals(emptyMap(), changedFromDefaults(defaults))
+        assertEquals(
+            mapOf(NotificationSwitch.Messages to false, NotificationSwitch.ConnectionCards to true),
+            changedFromDefaults(defaults + mapOf(NotificationSwitch.Messages to false, NotificationSwitch.ConnectionCards to true)),
+        )
+        assertEquals(mapOf(NotificationSwitch.Picks to true), changedFromDefaults(mapOf(NotificationSwitch.Picks to true, NotificationSwitch.Messages to true)))
+    }
 }

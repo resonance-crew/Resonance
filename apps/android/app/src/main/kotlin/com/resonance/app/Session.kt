@@ -22,6 +22,7 @@ import com.resonance.kit.api.HttpCaching
 import com.resonance.kit.api.ChatPicturesApi
 import com.resonance.kit.api.MessagingApi
 import com.resonance.kit.api.NotificationSettingsApi
+import com.resonance.api.models.NotificationSettings
 import com.resonance.kit.api.ProfileApi
 import com.resonance.kit.api.PushApi
 import com.resonance.kit.api.ReadingApi
@@ -33,6 +34,7 @@ import com.resonance.kit.chat.KeyboardHeights
 import com.resonance.kit.chat.StickerRecents
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
+import com.resonance.kit.push.NotificationSwitch
 import com.resonance.kit.push.NotificationSwitches
 import com.resonance.kit.reading.ApiCache
 import com.resonance.kit.reading.CardCache
@@ -273,7 +275,7 @@ class Session(
     fun launch(work: suspend kotlinx.coroutines.CoroutineScope.() -> Unit): Job = scope.launch(block = work)
 
     /** Messages on their way, per conversation: they outlive the thread screen (see [ChatOutboxes]). */
-    val outboxes = ChatOutboxes(scope, messaging, pictures) { PushCenter.reachedOut() }
+    val outboxes = ChatOutboxes(scope, messaging, pictures) { PushCenter.reachedOut(AskKind.Reply) }
 
     /**
      * Whom the person has blocked: live once Firestore has said, until then as last read. Lists
@@ -315,6 +317,11 @@ class Session(
             val forgetting = previous?.let(::forget)
             chatDrafts.start(next)
             _keptBlocks.value = emptySet()
+            // The invites' memory (spec §3–4) is the account's, on this install.
+            notifySettingsRead?.cancel()
+            _notifySettings.value = null
+            _cardPageOpens.value = next?.let { prefs.getInt(cardOpensKey(it), 0) } ?: 0
+            _invitesAnswered.value = next?.let { who -> NotificationSwitch.entries.filter { prefs.getBoolean(inviteKey(who, it), false) }.toSet() } ?: emptySet()
             meReadAt = 0L
             _profile.value = Profile.Unknown
             // A profile this device has already seen lets the tabs open at once; otherwise wait for /me.
@@ -385,7 +392,8 @@ class Session(
         PushCenter.lastRegistration = null
         // Its pushes stop here even when the unregister never reached the server.
         scope.launch(NonCancellable) { PushCenter.forgetToken(config.usesEmulator) }
-        prefs.edit().remove(profileKey(who)).apply()
+        prefs.edit().remove(profileKey(who)).remove(cardOpensKey(who))
+            .apply { NotificationSwitch.entries.forEach { remove(inviteKey(who, it)) } }.apply()
         // Firestore's own copy of it: messages, notifications, drafts, writes not yet sent.
         return scope.launch { withContext(NonCancellable) { AppFirebase.clearLocalData() } }
     }
@@ -597,7 +605,71 @@ class Session(
      * the session's scope, so leaving the section right after it doesn't drop it.
      */
     fun notificationSwitches(): NotificationSwitches =
-        NotificationSwitches(scope, notificationSettings::get, notificationSettings::set)
+        NotificationSwitches(
+            scope,
+            read = { notificationSettings.get().also(::knowNotifySettings) },
+            write = { switch, on -> notificationSettings.set(switch, on).also(::knowNotifySettings) },
+        )
+
+    // Invites (docs/specs/notification-asks.md §3–4)
+
+    private val _notifySettings = MutableStateFlow<NotificationSettings?>(null)
+    /** The push switches as last read or written this session (null until read): what the invites go by. */
+    val notifySettings: StateFlow<NotificationSettings?> = _notifySettings
+    private var notifySettingsRead: Job? = null
+
+    private fun knowNotifySettings(settings: NotificationSettings) {
+        _notifySettings.value = settings
+    }
+
+    /** Reads the switches once a session, when an invite's reason first holds (a failure tries again next time it is asked). */
+    fun readNotifySettingsOnce() {
+        val who = uid ?: return
+        if (_notifySettings.value != null || notifySettingsRead?.isActive == true) return
+        notifySettingsRead = scope.launch {
+            try {
+                val settings = notificationSettings.get()
+                if (uid == who) knowNotifySettings(settings)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w("Session", "notification settings not read", e)
+            }
+        }
+    }
+
+    /** An invite's 好，通知我: [switch] on, saved (a failure throws; the invite stays). */
+    suspend fun turnOnPush(switch: NotificationSwitch) {
+        val who = uid
+        val saved = notificationSettings.update(mapOf(switch to true))
+        if (uid == who) knowNotifySettings(saved)
+    }
+
+    private val _cardPageOpens = MutableStateFlow(0)
+    /** How many card pages this account has opened on this install (§3: the evening card is offered from [NotifyAskRules.CARD_OPENS_FOR_PICKS]). */
+    val cardPageOpens: StateFlow<Int> = _cardPageOpens
+
+    /** A card page opened (any card): counted, up to the number the invite needs. */
+    fun cardPageOpened() {
+        val who = uid ?: return
+        val now = _cardPageOpens.value
+        if (now >= NotifyAskRules.CARD_OPENS_FOR_PICKS) return
+        _cardPageOpens.value = now + 1
+        prefs.edit().putInt(cardOpensKey(who), now + 1).apply()
+    }
+
+    private val _invitesAnswered = MutableStateFlow<Set<NotificationSwitch>>(emptySet())
+    /** The invites this account has answered on this install — 不用了, or turned on: they never show again. */
+    val invitesAnswered: StateFlow<Set<NotificationSwitch>> = _invitesAnswered
+
+    fun answerInvite(switch: NotificationSwitch) {
+        val who = uid ?: return
+        _invitesAnswered.value = _invitesAnswered.value + switch
+        prefs.edit().putBoolean(inviteKey(who, switch), true).apply()
+    }
+
+    private fun cardOpensKey(uid: String) = "cardPageOpens:$uid"
+    private fun inviteKey(uid: String, switch: NotificationSwitch) = "notifyInvite:$uid:${switch.name}"
 
     // Account deletion
 

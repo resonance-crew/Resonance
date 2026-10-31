@@ -5,6 +5,7 @@ import en from '@/messages/en.json';
 import zhTW from '@/messages/zh-TW.json';
 import { NOTE_PREVIEW_CHARS } from '@/lib/api/v1/conversations';
 import { deviceLocale, type DeviceLocale } from './devices';
+import { wantsMessagePushes } from './settings';
 
 /** What sends the push; `getAdminMessaging()` in production, a fake in tests. */
 export interface PushSender {
@@ -213,6 +214,8 @@ export async function pushNotification(db: Firestore, id: string, sender: PushSe
   let payload: Payload = claimed.payload ?? {};
   const from = str(payload.fromUserId);
   if (!to || !TEXT_KEY[type]) return null;
+  // A note's bell (one on an anonymous card: a named card's rings as a message) follows Settings → 通知 → 私訊與小紙條.
+  if (type === 'note' && !(await wantsMessagePushes(db, to))) return null;
   // Read beside the blocks and the sender: only read early, never sent to before the blocks are asked.
   const devicesRead = db.collection('devices').where('userId', '==', to).get();
   devicesRead.catch(() => {});

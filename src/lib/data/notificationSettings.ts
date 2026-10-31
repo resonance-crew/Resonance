@@ -8,6 +8,11 @@ import type { NotificationSettingsBody } from '@/lib/api/v1/schemas';
 
 export type NotificationSwitch = keyof NotificationSettingsBody;
 
+/** Whether `name` is on: `messages` unless said off (an older server leaves it out), the others only once turned on. */
+export function isOn(data: NotificationSettingsBody | undefined, name: NotificationSwitch): boolean {
+  return name === 'messages' ? data?.messages !== false : data?.[name] === true;
+}
+
 const PATH = '/api/v1/me/notifications';
 
 export interface NotificationSettingsState {
@@ -40,7 +45,7 @@ export function useNotificationSettings(): NotificationSettingsState {
       setSaveFailed(false);
       try {
         await mutate(() => callApi<NotificationSettingsBody>(PATH, { method: 'PATCH', body: { [name]: on } }), {
-          optimisticData: (current) => ({ picks: false, connectionCards: false, ...current, [name]: on }),
+          optimisticData: (current) => ({ picks: false, connectionCards: false, messages: true, ...current, [name]: on }),
           rollbackOnError: true,
           populateCache: true,
           revalidate: false,

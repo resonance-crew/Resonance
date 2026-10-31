@@ -145,7 +145,7 @@ struct NoteComposer: View {
                 if let uid, drafts.text(uid: uid, cardId: cardId)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? words == words {
                     drafts.clear(uid: uid, cardId: cardId)
                 }
-                PushCenter.shared.reachedOut()
+                PushCenter.shared.reachedOut(.reply)
             } catch {
                 let failure = NoteFailure(error)
                 if failure.refused { sends.refused(cardId, words: words, message: failure.message) }

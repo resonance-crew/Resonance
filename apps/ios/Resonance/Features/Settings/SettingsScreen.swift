@@ -407,33 +407,26 @@ private struct PrivacySettings: View {
     }
 }
 
-/// Notifications (NotificationsSection): the two pushes beyond the ones answering you, each a
-/// label with its hint under it and the switch at the row's end, between wavy rules — both off
-/// until turned on (NotificationSettingsModel). When the system keeps the app's notifications
+/// Notifications (NotificationsSection): messages and notes, then the two pushes beyond the ones
+/// answering you, each a label with its hint under it and the switch at the row's end, between
+/// wavy rules — messages on until turned off, the other two off until turned on
+/// (NotificationSettingsModel). When the system keeps the app's notifications
 /// off, a line says so with the way to them in Settings; back from there, it looks again.
 private struct NotificationSettings: View {
     @Environment(SessionStore.self) private var session
-    @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @State private var model: NotificationSettingsModel?
 
-    /// In the interface's language of the moment (a static list would keep the first one's).
-    private var rows: [(name: NotificationSettingsModel.Switch, label: String, hint: String, seed: Double)] {
-        [(.picks, L10n.Settings.Notifications.picks, L10n.Settings.Notifications.picksHint, 83),
-         // 91, not the web's 89: that seed's track pinched at its middle (a peanut, QA r4).
-         (.connectionCards, L10n.Settings.Notifications.connectionCards, L10n.Settings.Notifications.connectionCardsHint, 91)]
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(rows.enumerated()), id: \.element.name) { i, row in
-                if i > 0 { WavyDivider(seed: row.seed + 2).padding(.vertical, 2) }
-                switchRow(row.name, label: row.label, hint: row.hint, seed: row.seed)
+            ForEach(Array(NotificationSettingsModel.Switch.allCases.enumerated()), id: \.element) { i, name in
+                if i > 0 { WavyDivider(seed: name.row.seed + 2).padding(.vertical, 2) }
+                switchRow(name)
                     .padding(.top, i == 0 ? 0 : 14)
                     .padding(.bottom, 14)
             }
             if let model {
-                if model.permissionDenied { denied.padding(.top, 10) }
+                if model.permissionDenied { NotificationsDeniedNotice().padding(.top, 10).transition(.opacity) }
                 if model.saveFailed {
                     ModalError(L10n.Settings.Notifications.saveError).padding(.top, 14)
                 } else if model.loadFailed {
@@ -447,7 +440,10 @@ private struct NotificationSettings: View {
         }
         .animation(.easeOut(duration: 0.2), value: model?.permissionDenied)
         .task {
-            if model == nil { model = NotificationSettingsModel(api: session.notificationSettings, push: session.push) }
+            if model == nil {
+                let asks = session.notifyAsks
+                model = NotificationSettingsModel(api: session.notificationSettings, push: session.push) { asks.settingsChanged($0) }
+            }
             await model?.load()
         }
         // Back from Settings, where notifications may have been turned on (or off).
@@ -457,35 +453,13 @@ private struct NotificationSettings: View {
         }
     }
 
-    private func switchRow(_ name: NotificationSettingsModel.Switch, label: String, hint: String, seed: Double) -> some View {
-        HStack(alignment: .top, spacing: 20) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(label).font(AppFonts.body(16)).foregroundStyle(Tokens.text)
-                    .fixedSize(horizontal: false, vertical: true)
-                CSSText(hint, font: AppFonts.scaledUIFont(.body, size: Tokens.hintSize), lineHeight: 1.55, color: Tokens.UI.textMuted)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityHidden(true)
-            OrganicToggle(isOn: Binding(get: { model?.isOn(name) ?? false },
-                                        set: { on in Task { await model?.set(name, on) } }),
-                          label: label, seed: seed)
-                .accessibilityHint(hint)
-                .padding(.top, 1)
-                // Held back, the switch fades itself (OrganicToggleSpec.disabledOpacity, as the web's).
-                .disabled(model?.isHeld(name) ?? true)
-        }
-    }
-
-    /// The system keeps notifications off: only Settings can turn them on again.
-    private var denied: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            CSSText(L10n.Settings.Notifications.permissionDenied, font: AppFonts.scaledUIFont(.body, size: 14), lineHeight: 1.55,
-                    color: Tokens.UI.textMuted)
-            OrganicButton(L10n.Settings.Notifications.openSettings, variant: .tonal, size: .sm) {
-                if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
-            }
-        }
-        .transition(.opacity)
+    private func switchRow(_ name: NotificationSettingsModel.Switch) -> some View {
+        let row = name.row
+        return NotificationSwitchRow(label: row.label, hint: row.hint, seed: row.seed,
+                                     isOn: Binding(get: { model?.isOn(name) ?? false },
+                                                   set: { on in Task { await model?.set(name, on) } }))
+            // Held back, the switch fades itself (OrganicToggleSpec.disabledOpacity, as the web's).
+            .disabled(model?.isHeld(name) ?? true)
     }
 }
 

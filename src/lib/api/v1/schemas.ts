@@ -594,15 +594,21 @@ export const NotificationSettings = named(
     picks: z.boolean(),
     /** A push when someone you're connected with publishes a new public card under their pen name. */
     connectionCards: z.boolean(),
+    /**
+     * Pushes of messages and notes sent to you. On until turned off; older
+     * servers leave it out, and its absence means on.
+     */
+    messages: z.boolean().optional(),
   }),
   'NotificationSettings',
-  'The pushes you asked for beyond the ones answering you (resonances, notes, messages). Both are off until turned on.',
+  'Which pushes you want. picks and connectionCards go beyond the ones answering you and are off until turned on; messages (messages and notes) is on until turned off. Resonances always ring.',
 );
 
 export const UpdateNotificationSettingsRequest = named(
   z.object({
     picks: z.boolean().nullish(),
     connectionCards: z.boolean().nullish(),
+    messages: z.boolean().nullish(),
   }),
   'UpdateNotificationSettingsRequest',
   'Only the switches sent change; turning one on records when you agreed to it.',

@@ -72,6 +72,8 @@ import UIKit
     /// Whether the card still had a pending edit when it was applied (false: applied or dropped elsewhere).
     var applyFound = true
     var restoreAlone = false
+    /// Times the writer said a card reached readers (the moment for the notifications ask).
+    var reached = 0
     /// Holds a publish until the test lets it go.
     var publishGate: Gate<Void>?
 
@@ -91,7 +93,7 @@ import UIKit
         }, restore: { [self] id in
             restored.append(id)
             return restoreAlone
-        })
+        }, reachedOut: { [self] in reached += 1 })
     }
 }
 
@@ -620,6 +622,26 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(server.applied == ["card-1"])
         #expect(store.writes.last?.kind == .edit)
         #expect(!live.hasPendingEdit)
+    }
+
+    @Test func aCardReachingReadersIsTheMomentToAskAboutNotifications() async {
+        // Published for the first time.
+        let server = ServerCalls()
+        let model = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: server.calls, opened: card())
+        #expect(await model.publish() == "a-walk")
+        #expect(server.reached == 1)
+        // A revision of a card readers already see: no new moment.
+        let live = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: server.calls, opened: card(published: true))
+        live.values.story += " Revised."
+        #expect(await live.applyEdit() == "a-walk")
+        #expect(server.reached == 1)
+        // A published 私人卡 made public through its edit: published to readers, so asked as publishing is.
+        let shared = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: server.calls,
+                                opened: card(published: true, visibility: "private"))
+        shared.choose(.public)
+        #expect(shared.publishes)
+        #expect(await shared.applyEdit() == "a-walk")
+        #expect(server.reached == 2)
     }
 
     @Test func aPublishThatDidntGoSaysWhyInTheWritersWords() async {

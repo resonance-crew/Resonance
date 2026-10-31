@@ -44,9 +44,12 @@ native/fixtures/            golden files the web and both apps' tests read alike
   next account's listeners start, and clears delivered notifications, the badge, the push memo and the
   profile mark. Android backup / device transfer keeps only `settings.xml`.
 - **Push**: the registration (with the device's IANA time zone) is sent again only when the uid, token,
-  language, app version or time zone changes, or after 24 h, never twice at once. Notification permission is asked after the first note, message or
-  published card (`PushCenter.reachedOut()`): before that nobody can reach the account — or when a
-  Settings → Notifications switch is turned on while notifications can't show. The iOS
+  language, app version or time zone changes, or after 24 h, never twice at once. Notification permission is asked in context, never at signup
+  (docs/specs/notification-asks.md): after the first note, message or published card
+  (`PushCenter.reachedOut(.reply | .publish)`) our own dialog says why, and its 開啟通知 puts the system's
+  question (先不要: again after 3 days, never after 3); the home feed's picks invite (after 5 card pages)
+  and the conversations list's connection-cards invite ask too; and a Settings → Notifications switch
+  turned on while notifications can't show. The iOS
   installation id is tied to the phone (`identifierForVendor`), so a restored backup gets its own.
 - **Live lists** use `LiveListeners`: a failed listener re-attaches on the next foreground or a retry
   button; only permission-denied / not-found means "gone". With nothing loaded yet, a screen shows a retry.

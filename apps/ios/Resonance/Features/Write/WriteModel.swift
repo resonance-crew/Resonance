@@ -60,7 +60,7 @@ struct WriterCalls {
             try await writing.insight(title: title, story: story)
         }, restore: { id in
             try await writing.restoreCard(id).droppedResonance
-        }, reachedOut: { PushCenter.shared.reachedOut() }, privateShares: { id in
+        }, reachedOut: { PushCenter.shared.reachedOut(.publish) }, privateShares: { id in
             try await writing.privateShares(id)
         })
     }
@@ -1012,6 +1012,8 @@ final class WriteModel {
         pending = true
         publishError = nil
         defer { pending = false }
+        // Taken before the card changes under it: a 私人卡 going to readers is a card published.
+        let publishing = publishes
         do {
             // Only the server's yes to this very write counts as the buffer holding what is on screen.
             lastSaved = nil
@@ -1031,6 +1033,8 @@ final class WriteModel {
             }
             wrote = true
             hasPendingEdit = false
+            // Made public through the edit (a published 私人卡 shared): the moment to ask, as publishing is.
+            if publishing { calls.reachedOut() }
             return result.slug ?? slug ?? id
         } catch {
             // The buffer's write was refused for the trash: the writer says so already.

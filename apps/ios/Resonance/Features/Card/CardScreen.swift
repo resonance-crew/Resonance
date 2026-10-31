@@ -205,6 +205,8 @@ struct CardScreen: View {
         }
         .task {
             if model == nil {
+                // A card page opened: counted toward tonight's card's invite (notification-asks §3).
+                session.notifyAsks.cardOpened()
                 let previews = session.cardPreviews
                 let model = CardModel(key: key, api: session.reading, origin: session.config.origin, placeholder: previews.card(for: key))
                 model.onLoaded = { previews.remember($0) }

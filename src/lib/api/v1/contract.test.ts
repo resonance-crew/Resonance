@@ -273,6 +273,7 @@ describe('round-4 request shapes', () => {
   it('takes each notification switch as a boolean, null or nothing', async () => {
     const { UpdateNotificationSettingsRequest } = await import('./schemas');
     expect(UpdateNotificationSettingsRequest.parse({ picks: true, connectionCards: null })).toEqual({ picks: true, connectionCards: null });
+    expect(UpdateNotificationSettingsRequest.parse({ messages: false })).toEqual({ messages: false });
     expect(UpdateNotificationSettingsRequest.parse({})).toEqual({});
     expect(UpdateNotificationSettingsRequest.safeParse({ picks: 'on' }).success).toBe(false);
   });

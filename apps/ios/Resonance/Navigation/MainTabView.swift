@@ -203,6 +203,24 @@ struct MainTabView: View {
     private static var openedLaunchWriter = false
     #endif
 
+    /// The reply ask's words while it shows and closes (kept as it goes, so its title never changes then).
+    @State private var askMoment = NotificationAsks.Moment.reply
+
+    /// What the reply ask waits for (``NotificationAsks/pending``).
+    private struct AskGate: Equatable {
+        let waiting: Bool
+        let modalUp: Bool
+        let writing: Bool
+        let toast: Bool
+        let active: Bool
+    }
+
+    /// The writer is the page on show (its publish hasn't landed on the card page yet).
+    private var writerOnTop: Bool {
+        if case .write? = paths[tab]?.last { return true }
+        return false
+    }
+
     /// The header's tabs and pen over the current tab: its root only.
     private var topTabs: Bool { TabChrome.headerTabs(window.layoutClass, pushed: path(tab).wrappedValue) }
 
@@ -386,6 +404,27 @@ struct MainTabView: View {
         // A resonance restored from the trash that came back on its own says so, wherever it was restored from.
         .organicNotice(isPresented: $session.restoredAloneNotice, title: L10n.Me.Actions.restored,
                        message: L10n.Me.Actions.restoredAloneBody, closeLabel: L10n.Safety.Report.close, seed: 17)
+        // The reply ask (notification-asks §2): after a note, a message or a card published, our words before the
+        // system's question — 先不要, or a tap beside it, puts it away for a while.
+        .organicModal(isPresented: Binding(get: { session.notifyAsks.showing != nil },
+                                           set: { if !$0 { session.notifyAsks.putAway() } }),
+                      seed: 29, maxWidth: 420, closeLabel: L10n.NotifyAsk.later) {
+            NotificationAskDialog(moment: askMoment, onLater: { session.notifyAsks.putAway() },
+                                  onTurnOn: { Task { await session.notifyAsks.turnOn() } })
+        }
+        .onChange(of: session.notifyAsks.showing) { _, moment in if let moment { askMoment = moment } }
+        // Shown once whatever triggered it has closed: no modal up (the note composer's), the writer gone (its
+        // publish lands on the card page), no toast showing (「小紙條已送出」), the app in front — a moment after,
+        // so a closing cover has gone.
+        .task(id: AskGate(waiting: session.notifyAsks.pending != nil, modalUp: ModalBackdrop.shared.isUp,
+                          writing: writerOnTop, toast: session.toasts.current != nil, active: scenePhase == .active)) {
+            guard session.notifyAsks.pending != nil, !ModalBackdrop.shared.isUp, !writerOnTop, session.toasts.current == nil,
+                  scenePhase == .active
+            else { return }
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
+            session.notifyAsks.present()
+        }
         .animation(.easeOut(duration: 0.12), value: bottomBar)
         .background(Tokens.cream)
         .environment(writer)
@@ -422,6 +461,9 @@ struct MainTabView: View {
             }
         }
         #if DEBUG
+        // `-notifyAsk reply|publish` puts the reply ask up at launch, `-notifyInvite picks|connectionCards|all`
+        // shows those invites whatever their reasons (screen checks; NotificationAsks.debugLaunch).
+        .task { session.notifyAsks.debugLaunch() }
         // `-debugToast "…"` shows the shell's toast at launch (screen checks), with `-debugToastVerb "…"`
         // as an undo that shows 「已還原」 when tapped.
         .task {

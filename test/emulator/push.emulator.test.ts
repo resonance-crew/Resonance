@@ -8,6 +8,7 @@ import { PUSH_BODY_CHARS, pushMessage, pushUnsend } from '@/lib/push/chat';
 import { unsendMessage } from '@/lib/api/v1/messageActions';
 import { MAX_DEVICES, registerDevice, unregisterDevice } from '@/lib/push/devices';
 import { MESSAGES_CHANNEL, MULTICAST_MAX, pushNotification, type PushSender } from '@/lib/push/send';
+import { updateNotificationSettings } from '@/lib/push/settings';
 
 // Push against the Firestore emulator with a fake FCM: the device registry,
 // what a push says and where it leads, and that it rings once, never across a
@@ -154,6 +155,16 @@ describe('pushNotification', () => {
     expect(byToken['bob-en'].data).toEqual({ notificationId, type: 'note', route: '/card/masked' });
     expect(byToken['bob-en'].android?.notification?.channelId).toBe('activity');
     expect((await db.doc(`notifications/${notificationId}`).get()).get('pushedAt')).toBeInstanceOf(Timestamp);
+  });
+
+  it("keeps a note's bell off a phone whose owner turned message pushes off — a resonance's still rings", async () => {
+    await updateNotificationSettings(db, 'bob', { messages: false });
+    const { notificationId } = await sendNote(db, 'alice', { cardId: 'masked', text: '雨後的散步' });
+    const fcm = fakeFcm();
+    expect(await pushNotification(db, notificationId!, fcm.sender)).toBeNull();
+    expect(fcm.sent).toHaveLength(0);
+    // The row is the record: the bell list still shows it.
+    expect((await db.doc(`notifications/${notificationId}`).get()).exists).toBe(true);
   });
 
   it('opens the card for a resonance on an anonymous card too; a named one opens the thread as before', async () => {
@@ -488,6 +499,18 @@ describe('pushMessage', () => {
     expect(fcm.sent).toHaveLength(0);
   });
 
+  it('stays silent for someone who turned message pushes off, and rings again once they turn them back on', async () => {
+    const push = await send('hello');
+    await updateNotificationSettings(db, 'bob', { messages: false });
+    const fcm = fakeFcm();
+    expect(await pushMessage(db, push, fcm.sender)).toBeNull();
+    expect(fcm.sent).toHaveLength(0);
+    // Only the recipient's switch counts: the sender's says nothing about what bob hears.
+    await updateNotificationSettings(db, 'bob', { messages: true });
+    await updateNotificationSettings(db, 'alice', { messages: false });
+    expect(await pushMessage(db, push, fcm.sender)).toMatchObject({ sent: 5 });
+  });
+
   it("rings when only the sender muted the connection, or the mute is not one we know", async () => {
     const push = await send('hello');
     for (const muted of [[{ by: 'alice' }], [], true, null, [{ by: 7 }, 'bob', null]]) {
@@ -665,6 +688,10 @@ describe('pushUnsend (round 16: a message unsent after its push went out)', () =
     await db.doc('connections/alice_bob').update({ muted: [{ by: 'bob' }] });
     expect(await pushUnsend(db, push, fcm.sender)).toBeNull();
     await db.doc('connections/alice_bob').update({ muted: [] });
+    // Message pushes off: no notification of it is showing to take back.
+    await updateNotificationSettings(db, 'bob', { messages: false });
+    expect(await pushUnsend(db, push, fcm.sender)).toBeNull();
+    await updateNotificationSettings(db, 'bob', { messages: true });
 
     const kept = await sendMessage(db, 'alice', { to: 'bob', text: 'still here' });
     expect(await pushUnsend(db, kept.push!, fcm.sender)).toBeNull();

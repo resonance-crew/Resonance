@@ -542,6 +542,8 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
             ToastHost(toasts, Modifier.align(Alignment.BottomCenter), bottom = toastBottom)
             // A restored resonance that came back on its own says so here, whatever restored it.
             RestoredAloneNotice(trash)
+            // After reaching someone: our ask for notifications, once the composer or the writer has gone (notification-asks §2).
+            NotifyAskHost(session, blocked = stack.lastOrNull() is Route.Write)
         }
     }
 }

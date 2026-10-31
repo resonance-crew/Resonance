@@ -1783,6 +1783,44 @@ public enum L10n {
         /// Privacy Policy
         public static var privacyLink: String { Strings.shared.string("auth.privacyLink") }
     }
+    public enum NotifyAsk {
+        /// Hear when they reply?
+        public static var replyTitle: String { Strings.shared.string("notifyAsk.replyTitle") }
+        /// Turn on notifications to know as soon as someone answers your note or message
+        public static var replyBody: String { Strings.shared.string("notifyAsk.replyBody") }
+        /// Hear when someone responds?
+        public static var publishTitle: String { Strings.shared.string("notifyAsk.publishTitle") }
+        /// Know as soon as someone resonates with your card or leaves you a note
+        public static var publishBody: String { Strings.shared.string("notifyAsk.publishBody") }
+        /// Turn on notifications
+        public static var turnOn: String { Strings.shared.string("notifyAsk.turnOn") }
+        /// Not now
+        public static var later: String { Strings.shared.string("notifyAsk.later") }
+        /// You can change this in Settings → Notifications
+        public static var changeLater: String { Strings.shared.string("notifyAsk.changeLater") }
+        /// One more card in the evening?
+        public static var picksTitle: String { Strings.shared.string("notifyAsk.picksTitle") }
+        /// Up to three evenings a week, around 8 pm Taiwan time: one card picked for you
+        public static var picksBody: String { Strings.shared.string("notifyAsk.picksBody") }
+        /// Hear when your connections publish?
+        public static var connectionCardsTitle: String { Strings.shared.string("notifyAsk.connectionCardsTitle") }
+        /// A notification when someone you're connected with publishes a public card under their pen name
+        public static var connectionCardsBody: String { Strings.shared.string("notifyAsk.connectionCardsBody") }
+        /// Yes, notify me
+        public static var yes: String { Strings.shared.string("notifyAsk.yes") }
+        /// No thanks
+        public static var no: String { Strings.shared.string("notifyAsk.no") }
+        /// Notifications on
+        public static var turnedOn: String { Strings.shared.string("notifyAsk.turnedOn") }
+        /// Done — a card will come some evenings
+        public static var picksOn: String { Strings.shared.string("notifyAsk.picksOn") }
+        /// Done — you'll hear when your connections publish
+        public static var connectionCardsOn: String { Strings.shared.string("notifyAsk.connectionCardsOn") }
+        /// Notifications are off in your device settings
+        public static var systemOff: String { Strings.shared.string("notifyAsk.systemOff") }
+        /// Open Settings
+        public static var openSettings: String { Strings.shared.string("notifyAsk.openSettings") }
+    }
     public enum Settings {
         /// Settings
         public static var title: String { Strings.shared.string("settings.title") }
@@ -1873,6 +1911,10 @@ public enum L10n {
             public static var connectionCards: String { Strings.shared.string("settings.notifications.connectionCards") }
             /// When someone you're connected with publishes a public card under their pen name
             public static var connectionCardsHint: String { Strings.shared.string("settings.notifications.connectionCardsHint") }
+            /// Messages and notes
+            public static var messages: String { Strings.shared.string("settings.notifications.messages") }
+            /// When someone messages you or leaves a note on one of your cards
+            public static var messagesHint: String { Strings.shared.string("settings.notifications.messagesHint") }
             /// Notifications for Resonance are off in your device settings. Turn them on there first.
             public static var permissionDenied: String { Strings.shared.string("settings.notifications.permissionDenied") }
             /// Open Settings

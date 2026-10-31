@@ -1,8 +1,9 @@
 import Observation
 import ResonanceKit
 
-/// Settings → 通知 (the web's NotificationsSection and useNotificationSettings): the two pushes
-/// beyond the ones answering you, each its own switch, both off until turned on. The server keeps
+/// Settings → 通知 (the web's NotificationsSection and useNotificationSettings): messages and notes
+/// (on until turned off), then the two pushes beyond the ones answering you, each its own switch,
+/// both off until turned on. The server keeps
 /// the choice (`GET/PATCH /api/v1/me/notifications`); whether this phone may show them is the
 /// system's to say. So turning one on asks the system first — its question when it was never
 /// asked; when the answer was no, the switch stays off and the section says where to turn
@@ -47,8 +48,13 @@ final class NotificationSettingsModel {
         self.register = register
     }
 
-    convenience init(api: NotificationSettingsAPI, push: PushCenter) {
-        self.init(fetch: { try await api.settings() }, save: { try await api.set($0, $1) },
+    /// `saved` hears the switches as the server has them after each save (the invites follow them).
+    convenience init(api: NotificationSettingsAPI, push: PushCenter, saved: @escaping @MainActor @Sendable (Settings) -> Void = { _ in }) {
+        self.init(fetch: { try await api.settings() }, save: { name, on in
+                      let settings = try await api.set(name, on)
+                      await saved(settings)
+                      return settings
+                  },
                   permission: { await push.permission() }, ask: { await push.askIfUndetermined() },
                   register: { await push.registerIfAllowed() })
     }
@@ -56,7 +62,7 @@ final class NotificationSettingsModel {
     /// The notice that the system keeps this app's notifications off, with the way to Settings:
     /// shown once a switch is on (nothing it asks for can arrive) or was just turned on in vain.
     var permissionDenied: Bool {
-        permission == .denied && (refused || settings.map { $0.picks || $0.connectionCards } == true)
+        permission == .denied && (refused || settings.map { s in Switch.allCases.contains { s[$0] } } == true)
     }
 
     /// Whether a switch can be flipped now: read, and no other flip on its way.

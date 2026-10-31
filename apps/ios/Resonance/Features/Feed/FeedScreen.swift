@@ -18,6 +18,7 @@ struct FeedScreen: View {
     @Environment(WriteLauncher.self) private var writer
     @Environment(\.window) private var window
     @Environment(\.isSelectedTab) private var onSelectedTab
+    @Environment(\.scenePhase) private var scenePhase
     @State private var model: FeedModel?
     /// The list rests at its top (as TabScreen tells it).
     @State private var atTop = true
@@ -32,7 +33,9 @@ struct FeedScreen: View {
     @State private var enterFrom: Int?
 
     var body: some View {
-        TabScreen("", head: model?.cards.first?.id, toTopRequests: upRequests, onAtTop: reachedTop, hidesTabBar: true,
+        // The invite, come in above the cards (its switches read late, a cold start's kept feed showing),
+        // is the list's head: a reader at the top keeps the top in view, and so sees it.
+        TabScreen("", head: inviting ? "notifyInvite" : model?.cards.first?.id, toTopRequests: upRequests, onAtTop: reachedTop, hidesTabBar: true,
                   onNearEnd: { nearFoot = $0 }, hostsMascots: true) {
             content
         }
@@ -69,6 +72,13 @@ struct FeedScreen: View {
             if model == nil { model = makeModel() }
             if model?.phase == .idle { await model?.load() }
         }
+        // Tonight's card's invite (notification-asks §3): the system's word read again on each visit and
+        // back from Settings, the switches once a session.
+        .task { await session.notifyAsks.refresh() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await session.notifyAsks.refresh() } }
+        }
+        .animation(.easeOut(duration: 0.2), value: inviting)
         // Back after a while: the feed asks again behind what it shows.
         .onChange(of: session.awayRefreshes) {
             Task { await model?.revalidate() }
@@ -94,6 +104,14 @@ struct FeedScreen: View {
                 tellPicks()
             }
         }
+    }
+
+    /// Tonight's card's invite shows above the cards.
+    private var inviting: Bool { session.notifyAsks.shows(.picks) }
+
+    /// The cards lie in a bordered grid (a window wide enough for columns).
+    private var gridded: Bool {
+        LayoutClass.feedColumns(window.layoutClass, contentWidth: LayoutClass.feedContentWidth(window: window.contentWidth)) > 1
     }
 
     /// The feed is on show: the top of its stack, on the tab chosen.
@@ -125,7 +143,7 @@ struct FeedScreen: View {
         case .failed:
             return nil
         case .loaded:
-            guard let model, !model.isEmpty, model.refreshFailure == nil,
+            guard let model, !model.isEmpty, model.refreshFailure == nil, !inviting,
                   let first = StoryCardList.families(model.cards, splitAt: splitAt(model)).first else { return nil }
             return CardPalette(index: first)
         }
@@ -184,8 +202,23 @@ struct FeedScreen: View {
                     // (the first card then starts below it, with its own top rule).
                     RefreshNote(text: failure.message).padding(.top, 28)
                 }
+                if inviting {
+                    // Tonight's card offered to a reader (notification-asks §3), above the cards where the refresh
+                    // note sits: a band of its own over a phone's bands (the first card then starts with its own top
+                    // wave), one wide card over a tablet's grid, inset as the grid's cards are.
+                    if gridded {
+                        PicksInvite(wide: true)
+                            .padding(.horizontal, window.pad)
+                            .frame(maxWidth: 1200)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, model.refreshFailure != nil ? 0 : HeaderChrome.contentTop(width: window.width))
+                            .padding(.bottom, Tokens.feedGap - 4)
+                    } else {
+                        PicksInvite(wide: false)
+                    }
+                }
                 // The scroll anchors on the cards, so picks put on top of them never move the one being read.
-                StoryCardList(cards: model.cards, underBar: model.refreshFailure == nil, anchorsScroll: true,
+                StoryCardList(cards: model.cards, underBar: model.refreshFailure == nil && !inviting, anchorsScroll: true,
                               splitAt: splitAt(model), enterFrom: enterFrom)
                 footer(model)
             }

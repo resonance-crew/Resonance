@@ -1,6 +1,8 @@
 package com.resonance.app.ui
 
 import com.resonance.api.models.NotificationSettings
+import com.resonance.app.PushCenter
+import com.resonance.kit.push.NotificationSwitch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -32,7 +34,7 @@ class SettingsSectionTest {
     }
 
     @Test fun theNoticeShowsWhileNotificationsAreOffAndSomethingWantsThem() {
-        val off = NotificationSettings(picks = false, connectionCards = false)
+        val off = NotificationSettings(picks = false, connectionCards = false, messages = false)
         // Refused just now.
         assertTrue(showsPermissionNotice(off, canNotify = false, refused = true))
         // A switch on whose pushes can't reach this phone.
@@ -42,5 +44,24 @@ class SettingsSectionTest {
         assertFalse(showsPermissionNotice(null, canNotify = false, refused = false))
         // Notifications on: never.
         assertFalse(showsPermissionNotice(off.copy(picks = true), canNotify = true, refused = true))
+    }
+
+    /** Messages are on unless turned off: with the app's notifications off, they alone bring the notice. */
+    @Test fun messagesOnBringTheNoticeWhileTheAppsNotificationsAreOff() {
+        val quiet = NotificationSettings(picks = false, connectionCards = false)
+        // Absent (an older server): on, so the notice shows.
+        assertTrue(showsPermissionNotice(quiet, canNotify = false, refused = false))
+        assertTrue(showsPermissionNotice(quiet.copy(messages = true), canNotify = false, refused = false))
+        // Only the picks' channel off: messages still show, nothing to say for them.
+        assertFalse(showsPermissionNotice(quiet, canNotify = false, refused = false, appCanNotify = true))
+        assertFalse(showsPermissionNotice(quiet.copy(messages = false), canNotify = false, refused = false))
+    }
+
+    /** Messages need only the app's notifications; the two beyond, the picks' channel too. */
+    @Test fun whatEachSwitchNeedsToShow() {
+        assertTrue(canShow(NotificationSwitch.Messages, PushCenter.PicksBlock.Channel))
+        assertFalse(canShow(NotificationSwitch.Picks, PushCenter.PicksBlock.Channel))
+        assertFalse(canShow(NotificationSwitch.Messages, PushCenter.PicksBlock.App))
+        NotificationSwitch.entries.forEach { assertTrue(canShow(it, PushCenter.PicksBlock.None)) }
     }
 }

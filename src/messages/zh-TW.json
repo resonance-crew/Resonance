@@ -976,6 +976,26 @@
     "termsLink": "服務條款",
     "privacyLink": "隱私權政策"
   },
+  "notifyAsk": {
+    "replyTitle": "對方回覆時通知你？",
+    "replyBody": "開啟通知，對方回覆你的小紙條或訊息時，你會第一時間知道",
+    "publishTitle": "有人回應時通知你？",
+    "publishBody": "有人和你的卡片共振，或留小紙條給你時，第一時間讓你知道",
+    "turnOn": "開啟通知",
+    "later": "先不要",
+    "changeLater": "之後可以在「設定 → 通知」調整",
+    "picksTitle": "晚上也想讀一張嗎？",
+    "picksBody": "每週最多三晚，台灣時間晚上八點左右，送你一張為你挑選的卡片",
+    "connectionCardsTitle": "有連結的人發表新卡片時通知你？",
+    "connectionCardsBody": "和你有連結的人用筆名公開發表新卡片時，送一則通知給你",
+    "yes": "好，通知我",
+    "no": "不用了",
+    "turnedOn": "已開啟通知",
+    "picksOn": "好，有推薦的晚上會送一張給你",
+    "connectionCardsOn": "好，他們發表新卡片時會通知你",
+    "systemOff": "通知在系統設定裡關閉了",
+    "openSettings": "打開設定"
+  },
   "settings": {
     "title": "設定",
     "sections": {
@@ -1026,6 +1046,8 @@
       "picksHint": "每週最多三次，台灣時間晚上八點左右，送一張為你挑選、還沒推播給你過的卡片",
       "connectionCards": "有連結的人發表新卡片",
       "connectionCardsHint": "和你有連結的人用筆名公開發表新卡片時通知你",
+      "messages": "私訊與小紙條",
+      "messagesHint": "有人傳私訊給你，或在你的卡片留下小紙條時通知你",
       "permissionDenied": "Resonance 的通知在系統設定裡關閉了，請先到系統設定開啟",
       "openSettings": "打開系統設定",
       "saveError": "沒有存好，再試一次",

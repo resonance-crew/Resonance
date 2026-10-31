@@ -39,6 +39,18 @@ struct NotificationSettingsAPITests {
         #expect(second["picks"] as? Bool == false)
     }
 
+    @Test func messagesAreOnUnlessSaidOff() async throws {
+        // An older server leaves the switch out: on.
+        let older = try await api(StubTransport(body: #"{"picks":false,"connectionCards":false}"#)).settings()
+        #expect(older[.messages])
+        let transport = StubTransport(body: #"{"picks":false,"connectionCards":false,"messages":false}"#)
+        let saved = try await api(transport).set(.messages, false)
+        #expect(!saved[.messages])
+        let sent = try #require(transport.sentJSON.first ?? nil)
+        #expect(sent.count == 1)
+        #expect(sent["messages"] as? Bool == false)
+    }
+
     @Test func aRefusalIsAFailure() async throws {
         let transport = StubTransport(status: .badRequest, body: #"{"error":{"code":"invalid_request","message":"picks: Expected boolean"}}"#)
         await #expect(throws: APIFailure.self) { try await api(transport).set(.picks, true) }

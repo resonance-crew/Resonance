@@ -288,6 +288,14 @@ class CardPageModel(private val session: Session, private val key: String, previ
 @Composable
 fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) -> Unit, popToRoot: () -> Unit, back: () -> Unit) {
     val model = viewModel { CardPageModel(session, key, preview) }
+    // Every card page opened counts toward offering the evening card (notification-asks §3), once per page (not per rotation).
+    var counted by rememberSaveable(key) { mutableStateOf(false) }
+    LaunchedEffect(key) {
+        if (!counted) {
+            counted = true
+            session.cardPageOpened()
+        }
+    }
     val placeholder = model.placeholder
     val phase = model.phase
     val detail = model.detail

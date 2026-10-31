@@ -576,13 +576,15 @@ export function buildOpenApi(): Json {
       '/me/notifications': {
         get: {
           operationId: 'getNotificationSettings',
-          summary: 'Which pushes beyond the ones answering you this account asked for',
-          description: 'Both switches are off until turned on (an account that never set them reads both off).',
+          summary: 'Which pushes this account wants',
+          description:
+            '`picks` and `connectionCards` are off until turned on; `messages` (messages and notes) is on until turned off ' +
+            '(an account that never set them reads those two off and messages on).',
           responses: { '200': { description: 'OK', ...json(ref('NotificationSettings')) }, ...errors(401) },
         },
         patch: {
           operationId: 'updateNotificationSettings',
-          summary: 'Turn "a card for tonight" or "new cards from your connections" on or off',
+          summary: 'Turn "a card for tonight", "new cards from your connections" or message pushes on or off',
           description:
             'Only the switches sent change (`null` or absent leaves one as it is); turning one on records when. ' +
             'Answers the settings as they are now. Ask for the OS permission before turning one on: the server ' +

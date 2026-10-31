@@ -4,18 +4,26 @@ import { Fragment, useId } from 'react';
 import { useTranslations } from 'next-intl';
 import { Divider } from '@/components/atoms/Divider/Divider';
 import { ToggleSwitch } from '@/components/atoms/ToggleSwitch/ToggleSwitch';
-import { useNotificationSettings, type NotificationSwitch } from '@/lib/data/notificationSettings';
+import { isOn, useNotificationSettings, type NotificationSwitch } from '@/lib/data/notificationSettings';
 import styles from './NotificationsSection.module.css';
 
-const SWITCHES: { name: NotificationSwitch; label: 'picks' | 'connectionCards'; hint: 'picksHint' | 'connectionCardsHint'; seed: number }[] = [
+const SWITCHES: {
+  name: NotificationSwitch;
+  label: 'messages' | 'picks' | 'connectionCards';
+  hint: 'messagesHint' | 'picksHint' | 'connectionCardsHint';
+  seed: number;
+}[] = [
+  { name: 'messages', label: 'messages', hint: 'messagesHint', seed: 79 },
   { name: 'picks', label: 'picks', hint: 'picksHint', seed: 83 },
   // 91, as the apps: 89's track pinched at its middle (QA r4).
   { name: 'connectionCards', label: 'connectionCards', hint: 'connectionCardsHint', seed: 91 },
 ];
 
 /**
- * Settings → 通知: the pushes beyond the ones answering you, each its own
- * switch, both off until turned on. They reach the person's phones (the
+ * Settings → 通知: messages and notes (on until turned off), then the pushes
+ * beyond the ones answering you, each its own switch, both off until turned
+ * on (`readNotificationSettings`; an older server leaves `messages` out, which
+ * means on). They reach the person's phones (the
  * apps); the web only keeps the choice — which the line above the switches
  * says, for someone who reads Resonance on the web alone (each switch is
  * described by it too). A flip shows at once and is undone, with a line
@@ -44,9 +52,9 @@ export function NotificationsSection() {
             </div>
             <div className={styles.switch}>
               <ToggleSwitch
-                checked={data?.[name] ?? false}
+                checked={isOn(data, name)}
                 disabled={!data}
-                onChange={() => data && void set(name, !data[name])}
+                onChange={() => data && void set(name, !isOn(data, name))}
                 ariaLabel={t(label)}
                 describedBy={`${id}-${name} ${id}-apps`}
                 seed={seed}

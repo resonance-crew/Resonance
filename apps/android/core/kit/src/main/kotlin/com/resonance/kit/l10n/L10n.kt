@@ -1785,6 +1785,44 @@ object L10n {
         /** Privacy Policy */
         val privacyLink: String get() = Strings.string("auth.privacyLink")
     }
+    object NotifyAsk {
+        /** Hear when they reply? */
+        val replyTitle: String get() = Strings.string("notifyAsk.replyTitle")
+        /** Turn on notifications to know as soon as someone answers your note or message */
+        val replyBody: String get() = Strings.string("notifyAsk.replyBody")
+        /** Hear when someone responds? */
+        val publishTitle: String get() = Strings.string("notifyAsk.publishTitle")
+        /** Know as soon as someone resonates with your card or leaves you a note */
+        val publishBody: String get() = Strings.string("notifyAsk.publishBody")
+        /** Turn on notifications */
+        val turnOn: String get() = Strings.string("notifyAsk.turnOn")
+        /** Not now */
+        val later: String get() = Strings.string("notifyAsk.later")
+        /** You can change this in Settings → Notifications */
+        val changeLater: String get() = Strings.string("notifyAsk.changeLater")
+        /** One more card in the evening? */
+        val picksTitle: String get() = Strings.string("notifyAsk.picksTitle")
+        /** Up to three evenings a week, around 8 pm Taiwan time: one card picked for you */
+        val picksBody: String get() = Strings.string("notifyAsk.picksBody")
+        /** Hear when your connections publish? */
+        val connectionCardsTitle: String get() = Strings.string("notifyAsk.connectionCardsTitle")
+        /** A notification when someone you're connected with publishes a public card under their pen name */
+        val connectionCardsBody: String get() = Strings.string("notifyAsk.connectionCardsBody")
+        /** Yes, notify me */
+        val yes: String get() = Strings.string("notifyAsk.yes")
+        /** No thanks */
+        val no: String get() = Strings.string("notifyAsk.no")
+        /** Notifications on */
+        val turnedOn: String get() = Strings.string("notifyAsk.turnedOn")
+        /** Done — a card will come some evenings */
+        val picksOn: String get() = Strings.string("notifyAsk.picksOn")
+        /** Done — you'll hear when your connections publish */
+        val connectionCardsOn: String get() = Strings.string("notifyAsk.connectionCardsOn")
+        /** Notifications are off in your device settings */
+        val systemOff: String get() = Strings.string("notifyAsk.systemOff")
+        /** Open Settings */
+        val openSettings: String get() = Strings.string("notifyAsk.openSettings")
+    }
     object Settings {
         /** Settings */
         val title: String get() = Strings.string("settings.title")
@@ -1875,6 +1913,10 @@ object L10n {
             val connectionCards: String get() = Strings.string("settings.notifications.connectionCards")
             /** When someone you're connected with publishes a public card under their pen name */
             val connectionCardsHint: String get() = Strings.string("settings.notifications.connectionCardsHint")
+            /** Messages and notes */
+            val messages: String get() = Strings.string("settings.notifications.messages")
+            /** When someone messages you or leaves a note on one of your cards */
+            val messagesHint: String get() = Strings.string("settings.notifications.messagesHint")
             /** Notifications for Resonance are off in your device settings. Turn them on there first. */
             val permissionDenied: String get() = Strings.string("settings.notifications.permissionDenied")
             /** Open Settings */

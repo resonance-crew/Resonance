@@ -223,14 +223,49 @@ struct BorderedCardChrome: View {
 
 /// The bordered card's outline: `wobRect(w, h, 22, seed, mag = min(w, h) × 0.025, {segmentsH [3, 4],
 /// segmentsV [5, 6], curve 0.55, cornerJitter 0.7, cornerOffset 4})`.
+///
+/// `alongLength` (a card far wider than a story card — the feed's wide invite over a tablet's grid): its
+/// long top and bottom edges turn as often per point as a story card's do (one turn about every
+/// ``turnSpacing``, so twice the width has twice the turns), with a story card's swing (`mag` from
+/// ``storyWidth``, still bounded by the card's height), and its short sides at the same spacing. Off (the
+/// default), the outline is exactly the story card's, whatever the size.
 public nonisolated struct CardOutlineShape: Shape {
     public var seed: Double
+    public var alongLength: Bool
 
-    public init(seed: Double) { self.seed = seed }
+    /// About how far apart a grid story card's top edge turns (460 wide, three or four turns).
+    public static let turnSpacing: Double = 130
+    /// A grid story card's width, whose swing a long edge keeps.
+    public static let storyWidth: Double = 460
+
+    public init(seed: Double, alongLength: Bool = false) {
+        self.seed = seed
+        self.alongLength = alongLength
+    }
+
+    /// How many turns a top or bottom edge `w` long gets along its length (at least a story card's 3–4).
+    public static func turns(_ w: Double) -> SegValue {
+        let n = max(3, Int((w / turnSpacing).rounded()))
+        return .range(n, n + 1)
+    }
+
+    /// A short side's turns at the same spacing: a story card's 5–6 down its 640, two on a band ~100 tall
+    /// (five crowded into one, at the long edges' swing, kinked it).
+    public static func sideTurns(_ h: Double) -> SegValue {
+        let n = max(2, Int((h / turnSpacing).rounded()))
+        return .range(n, n + 1)
+    }
 
     public func path(in rect: CGRect) -> Path {
         let w = Double(rect.width), h = Double(rect.height)
         guard w > 0, h > 0 else { return Path() }
+        if alongLength {
+            return GeometryCache.shared.path(key: "card-long|\(w)|\(h)|\(seed)") {
+                wobRect(w, h, min(22, min(w, h) / 2), seed: seed, mag: min(w, Self.storyWidth) * 0.025, options: WobRectOptions(
+                    curve: 0.55, cornerJitter: 0.7, cornerOffset: 4, segmentsH: Self.turns(w), segmentsV: Self.sideTurns(h)))
+            }
+            .path(offsetX: Double(rect.minX), offsetY: Double(rect.minY))
+        }
         return GeometryCache.shared.path(key: "card|\(w)|\(h)|\(seed)") {
             wobRect(w, h, min(22, min(w, h) / 2), seed: seed, mag: min(w, h) * 0.025, options: WobRectOptions(
                 curve: 0.55, cornerJitter: 0.7, cornerOffset: 4, segmentsH: .range(3, 4), segmentsV: .range(5, 6)))

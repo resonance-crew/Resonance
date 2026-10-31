@@ -2,15 +2,18 @@ import { createHash } from 'node:crypto';
 import { FieldPath, FieldValue, type DocumentData, type Firestore } from 'firebase-admin/firestore';
 
 /**
- * `notificationSettings/{uid}`: which pushes beyond the ones answering the
- * person (resonances, notes, messages — always on) they asked for. Both are
- * off until turned on (explicit opt-in: App Store 4.5.4), and each turn-on
- * records when (`picksConsentAt`, `connectionCardsConsentAt` — the last time
- * consent was given; turning a switch off keeps it, the switch says it's off).
+ * `notificationSettings/{uid}`: which pushes the person wants. Two go beyond
+ * the ones answering them and are off until turned on (explicit opt-in: App
+ * Store 4.5.4), each turn-on recording when (`picksConsentAt`,
+ * `connectionCardsConsentAt` — the last time consent was given; turning a
+ * switch off keeps it, the switch says it's off). The third, `messages`,
+ * answers them — messages and notes — and is on unless turned off (stored
+ * only as `messages: false`; no consent to record). Resonances always ring.
  *
  * Server-only (firestore.rules deny every client access): read and written
  * through GET/PATCH /api/v1/me/notifications, read by the senders
- * (lib/push/picks, lib/push/connectionCards). Purged with the account.
+ * (lib/push/picks, lib/push/connectionCards, lib/push/chat and a note's bell
+ * in lib/push/send). Purged with the account.
  */
 export const NOTIFICATION_SETTINGS = 'notificationSettings';
 
@@ -19,22 +22,43 @@ export interface NotificationSettings {
   picks: boolean;
   /** A new public, named card from someone they're connected with (lib/push/connectionCards). */
   connectionCards: boolean;
+  /** Messages and notes sent to them (lib/push/chat, a note's bell): on until turned off. */
+  messages: boolean;
 }
 
 export type NotificationSwitch = keyof NotificationSettings;
-export const NOTIFICATION_SWITCHES: readonly NotificationSwitch[] = ['picks', 'connectionCards'];
+export const NOTIFICATION_SWITCHES: readonly NotificationSwitch[] = ['picks', 'connectionCards', 'messages'];
 
 /** The switches sent; null or absent leaves one as it is (Kotlin clients send null). */
 export type NotificationSettingsPatch = { [K in NotificationSwitch]?: boolean | null };
 
-const CONSENT_AT: Record<NotificationSwitch, string> = {
+/** The opt-in switches, whose turning on is consent given (`messages` is on from the start: it records none). */
+const CONSENT_AT: Partial<Record<NotificationSwitch, string>> = {
   picks: 'picksConsentAt',
   connectionCards: 'connectionCardsConsentAt',
 };
 
-/** A stored document as the switches it holds: anything but `true` is off (a missing document is both off). */
+/**
+ * A stored document as the switches it holds: the opt-in ones are on only as
+ * `true`, `messages` is off only as `false` (a missing document is the two off
+ * and messages on).
+ */
 export function readNotificationSettings(data: DocumentData | undefined): NotificationSettings {
-  return { picks: data?.picks === true, connectionCards: data?.connectionCards === true };
+  return { picks: data?.picks === true, connectionCards: data?.connectionCards === true, messages: data?.messages !== false };
+}
+
+/**
+ * Whether `uid` wants messages and notes pushed to them (a missing document
+ * says yes). A failed read says yes too: the push it guards answers someone
+ * who wrote to them, and staying silent on a hiccup would lose it.
+ */
+export async function wantsMessagePushes(db: Firestore, uid: string): Promise<boolean> {
+  try {
+    return (await db.doc(`${NOTIFICATION_SETTINGS}/${uid}`).get()).get('messages') !== false;
+  } catch (e) {
+    console.error('[push] notification settings', uid, e);
+    return true;
+  }
 }
 
 export async function getNotificationSettings(db: Firestore, uid: string): Promise<NotificationSettings> {
@@ -57,9 +81,10 @@ export async function updateNotificationSettings(db: Firestore, uid: string, pat
       const want = patch[key];
       if (typeof want !== 'boolean' || want === before[key]) continue;
       after[key] = want;
-      if (want) write[CONSENT_AT[key]] = FieldValue.serverTimestamp();
+      const consent = CONSENT_AT[key];
+      if (want && consent) write[consent] = FieldValue.serverTimestamp();
     }
-    // Nothing to change (a missing document already reads as both off): nothing written.
+    // Nothing to change (a missing document already reads as the defaults): nothing written.
     if (!NOTIFICATION_SWITCHES.some((k) => after[k] !== before[k])) return after;
     tx.set(
       ref,
@@ -104,7 +129,7 @@ export function dailyWalkStart(now: number): string {
  */
 export async function* optedIn(
   db: Firestore,
-  key: NotificationSwitch,
+  key: 'picks' | 'connectionCards',
   opts: { from?: string; pageSize?: number } = {},
 ): AsyncGenerator<string[]> {
   const pageSize = opts.pageSize ?? OPTED_IN_PAGE;

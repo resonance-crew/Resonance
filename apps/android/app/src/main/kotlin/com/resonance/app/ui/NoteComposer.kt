@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import com.resonance.app.AskKind
 import com.resonance.app.PushCenter
 import com.resonance.app.Session
 import com.resonance.design.AppFonts
@@ -165,7 +166,7 @@ internal fun sendNoteOnward(session: Session, toasts: Toasts, cardId: String, wo
         try {
             sends.attempt(cardId).send(cardId, words) { clientId -> session.messaging.sendNote(cardId, words, clientId) }
             if (drafts?.text(cardId)?.trim() == words) drafts.clear(cardId)
-            PushCenter.reachedOut()
+            PushCenter.reachedOut(AskKind.Reply)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

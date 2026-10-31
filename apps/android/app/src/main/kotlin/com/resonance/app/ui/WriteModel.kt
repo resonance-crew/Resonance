@@ -15,6 +15,7 @@ import com.resonance.api.models.RestoredCard
 import com.resonance.app.DraftService
 import com.resonance.app.DraftStore
 import com.resonance.app.DraftValues
+import com.resonance.app.AskKind
 import com.resonance.app.PushCenter
 import com.resonance.kit.api.ApiFailure
 import com.resonance.kit.api.WritingApi
@@ -183,8 +184,8 @@ class WriteModel(
     /** The step it opens on (the screen keeps it across a restored process); a new card always writes first. */
     initialStep: WriterStep = WriterStep.Write,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
-    /** Someone may now reach the account: the notification permission may be asked. */
-    private val reachedOut: () -> Unit = { PushCenter.reachedOut() },
+    /** Someone may now reach the account: the shell may ask for notifications ([AskKind.Publish]). */
+    private val reachedOut: () -> Unit = { PushCenter.reachedOut(AskKind.Publish) },
     /** The UI's language, a new card's. */
     private val locale: () -> String = { Strings.language.tag },
     /** How long ✓ waits for the server to take a new draft ([NEXT_WAIT_MS]; shorter under test). */

@@ -9,13 +9,23 @@ struct ConversationsScreen: View {
     @Environment(SessionStore.self) private var session
     /// Beside the conversation in two panes: the empty state is the detail pane's to show.
     @Environment(\.chosenThread) private var chosen
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         let store = session.conversations
         ScrollViewReader { proxy in
         // Its panes are fixed: the list keeps its place under the bar on a tablet too (round 5 E2).
-        TabScreen(L10n.App.Nav.messages, titleInBar: true, tabletGap: false) {
+        // The invite, come in above the rows once its switches are read, is the list's head: at the top, the top stays in view.
+        TabScreen(L10n.App.Nav.messages, titleInBar: true, tabletGap: false,
+                  head: session.notifyAsks.shows(.connectionCards, connected: connected) ? "notifyInvite" : nil) {
             VStack(alignment: .leading, spacing: 0) {
+                if store.loaded {
+                    // A connection's new cards offered (notification-asks §4): atop the list, once there is someone —
+                    // in the rows' column, 16 above the first row.
+                    NotificationInvite(invite: .connectionCards, connected: connected)
+                        .padding(.top, 4)
+                        .padding(.bottom, 16)
+                }
                 if chosen == nil, store.loaded, store.conversations.isEmpty, store.starters.isEmpty {
                     OrganicEmptyState(title: L10n.Messages.emptyTitle, message: L10n.Messages.empty, icon: .chat, seed: 23, fills: true)
                         // Centred on the page, not on the list's inset column.
@@ -57,11 +67,24 @@ struct ConversationsScreen: View {
         }
         // Two panes: a conversation chosen from elsewhere (a bell, a profile) has its row brought into
         // view, once the list has it (round 5 E3).
+        // The invite's reasons: the system's word on each visit and back from Settings, the switches once a session.
+        .task(id: connected) { await session.notifyAsks.refresh(connected: connected) }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await session.notifyAsks.refresh(connected: connected) } }
+        }
+        .animation(.easeOut(duration: 0.2), value: session.notifyAsks.shows(.connectionCards, connected: connected))
         .onChange(of: chosenRow, initial: true) { _, id in
             guard let id else { return }
             withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(id) }
         }
         }
+    }
+
+    /// Connected with someone (not blocked): a letter waiting is no connection.
+    private var connected: Bool {
+        let store = session.conversations
+        guard let ids = store.connectedIds else { return false }
+        return !ids.subtracting(store.blockedIds ?? []).isEmpty
     }
 
     /// The row of the conversation in the detail pane, when the list holds it.

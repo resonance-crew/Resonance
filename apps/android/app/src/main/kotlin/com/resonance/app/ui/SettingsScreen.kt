@@ -20,7 +20,6 @@ import com.resonance.design.Segment
 import com.resonance.design.AppearanceScheme
 import com.resonance.design.AppearanceAccent
 import com.resonance.app.AppearanceStore
-import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ScrollState
@@ -347,6 +346,7 @@ private data class PushSwitchRow(val switch: NotificationSwitch, val label: Stri
 
 private val pushSwitchRows: List<PushSwitchRow>
     get() = listOf(
+        PushSwitchRow(NotificationSwitch.Messages, L10n.Settings.Notifications.messages, L10n.Settings.Notifications.messagesHint, 79.0),
         PushSwitchRow(NotificationSwitch.Picks, L10n.Settings.Notifications.picks, L10n.Settings.Notifications.picksHint, 83.0),
         PushSwitchRow(NotificationSwitch.ConnectionCards, L10n.Settings.Notifications.connectionCards, L10n.Settings.Notifications.connectionCardsHint, 91.0), // 91, as the web and iOS: 89's track pinched at its middle
     )
@@ -374,22 +374,82 @@ internal fun turnOn(canNotify: Boolean, canAskPermission: Boolean): TurnOn = whe
 
 /**
  * Whether the notice that notifications are off in the system settings shows: while they are, after
- * a switch was refused for it — or with a switch on whose pushes can't reach this phone.
+ * a switch was refused for it — or with a switch on whose pushes can't reach this phone. [canNotify]
+ * is for the picks' pushes (their channel counts too); [appCanNotify], the app's notifications as a
+ * whole, is what messages need (they come on a channel of their own).
  */
-internal fun showsPermissionNotice(settings: NotificationSettings?, canNotify: Boolean, refused: Boolean): Boolean =
-    !canNotify && (refused || (settings != null && (settings.picks || settings.connectionCards)))
+internal fun showsPermissionNotice(
+    settings: NotificationSettings?,
+    canNotify: Boolean,
+    refused: Boolean,
+    appCanNotify: Boolean = canNotify,
+): Boolean =
+    !canNotify && (
+        refused || (
+            settings != null &&
+                (settings.picks || settings.connectionCards || (!appCanNotify && settings[NotificationSwitch.Messages]))
+            )
+        )
+
+/** Whether [switch]'s pushes can show now: messages need the app's notifications, the others the picks' channel too ([block]). */
+internal fun canShow(switch: NotificationSwitch, block: PushCenter.PicksBlock): Boolean =
+    if (switch == NotificationSwitch.Messages) block != PushCenter.PicksBlock.App else block == PushCenter.PicksBlock.None
 
 /**
- * Notifications: the pushes beyond the ones answering you, each its own switch with its hint, both
- * off until turned on (the web's NotificationsSection). A flip shows at once and is undone, with a
- * line saying so, when it doesn't save. Turning one on while notifications can't show asks for the
- * permission first (API 33+), and saves once it is given; refused — or switched off in the system
- * settings, the app's or only the "picks" channel these pushes come on ([PushCenter.picksBlock]) —
- * the switch stays off and a notice leads to the app's notification settings (that channel's, when only it is off).
+ * The push switches as Settings → Notifications lists them (messages and notes, tonight's card, a
+ * connection's new card), each its label, its hint and its [OrganicToggle] under wavy rules — also
+ * the new account's notification step. The whole row — its words, its hint and the air around them
+ * — is the one switch (the web's <label>), named by the words and described by the hint.
+ */
+@Composable
+internal fun PushSwitchList(isOn: (NotificationSwitch) -> Boolean, enabled: Boolean, onFlip: (NotificationSwitch, Boolean) -> Unit) {
+    Column {
+        pushSwitchRows.forEachIndexed { i, row ->
+            if (i > 0) WavyDivider(seed = row.seed + 2, modifier = Modifier.padding(vertical = 2.dp))
+            val on = isOn(row.switch)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .toggleRow(on, enabled = enabled) { onFlip(row.switch, it) }
+                    .padding(top = if (i == 0) 0.dp else 14.dp, bottom = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    BasicText(row.label, style = AppFonts.body(16f, lineHeight = 1.45f))
+                    BasicText(row.hint, style = AppFonts.body(Tokens.HintSize, lineHeight = 1.55f, color = Tokens.TextMuted))
+                }
+                // Level with the label's first line.
+                Box(Modifier.padding(top = 1.dp)) {
+                    OrganicToggle(on, seed = row.seed, enabled = enabled)
+                }
+            }
+        }
+    }
+}
+
+/** The line that notifications are off in the system settings, and the way there ([block]: the app's page, or the picks channel's). */
+@Composable
+internal fun PermissionNotice(block: PushCenter.PicksBlock, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        BasicText(L10n.Settings.Notifications.permissionDenied, style = AppFonts.body(14f, lineHeight = 1.55f, color = Tokens.TextMuted))
+        OrganicButton(L10n.Settings.Notifications.openSettings, variant = ButtonVariant.Tonal, small = true) {
+            runCatching { context.startActivity(PushCenter.notificationSettingsIntent(context, block)) }
+        }
+    }
+}
+
+/**
+ * Notifications: messages and notes (on until turned off), then the pushes beyond the ones answering
+ * you, both off until turned on — each its own switch with its hint (the web's NotificationsSection).
+ * A flip shows at once and is undone, with a line saying so, when it doesn't save. Turning one on
+ * while its pushes can't show asks for the permission first (API 33+), and saves once it is given;
+ * refused — or switched off in the system settings, the app's or (for the two beyond) only the
+ * "picks" channel they come on ([PushCenter.picksBlock], [canShow]) — the switch stays off and a
+ * notice leads to the app's notification settings (that channel's, when only it is off).
  */
 @Composable
 private fun NotificationSettings(session: Session) {
-    val context = LocalContext.current
     val switches = remember(session.uid) { session.notificationSwitches() }
     val state by switches.state.collectAsStateWithLifecycle()
     var block by remember { mutableStateOf(PushCenter.picksBlock) }
@@ -411,15 +471,16 @@ private fun NotificationSettings(session: Session) {
         update(PushCenter.picksBlock)
         onPauseOrDispose {}
     }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+    // The answer is read with the system's rationale around it (Back is no answer: notification-asks).
+    val askPermission = rememberNotificationPermission {
         val switch = asking?.let { name -> NotificationSwitch.entries.firstOrNull { it.name == name } }
         asking = null
         // Asked because the app's notifications were off (so a yes registers this install, whatever the channel says).
         block = PushCenter.PicksBlock.App
         update(PushCenter.picksBlock)
-        if (block == PushCenter.PicksBlock.None) {
-            switch?.let { switches.set(it, true) }
-        } else {
+        if (switch != null && canShow(switch, block)) {
+            switches.set(switch, true)
+        } else if (block != PushCenter.PicksBlock.None) {
             refused = true
         }
     }
@@ -431,12 +492,11 @@ private fun NotificationSettings(session: Session) {
         // Read afresh: the "picks" channel can be turned off from the shade with this screen still resumed.
         val now = PushCenter.picksBlock
         update(now)
-        when (turnOn(now == PushCenter.PicksBlock.None, PushCenter.canAskPermission)) {
+        when (turnOn(canShow(switch, now), PushCenter.canAskPermission)) {
             TurnOn.Save -> switches.set(switch, true)
             TurnOn.Ask -> {
                 asking = switch.name
-                PushCenter.permissionAsked()
-                permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                askPermission()
             }
             TurnOn.Refused -> refused = true
         }
@@ -448,34 +508,11 @@ private fun NotificationSettings(session: Session) {
     }
     val settings = state.settings
     Column {
-        pushSwitchRows.forEachIndexed { i, row ->
-            if (i > 0) WavyDivider(seed = row.seed + 2, modifier = Modifier.padding(vertical = 2.dp))
-            // The whole row — its words, its hint and the air around them — is the one switch (the
-            // web's <label>), named by the words and described by the hint; dimmed until the switches are read.
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .toggleRow(settings?.get(row.switch) ?: false, enabled = settings != null) { flip(row.switch, it) }
-                    .padding(top = if (i == 0) 0.dp else 14.dp, bottom = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
-            ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    BasicText(row.label, style = AppFonts.body(16f, lineHeight = 1.45f))
-                    BasicText(row.hint, style = AppFonts.body(Tokens.HintSize, lineHeight = 1.55f, color = Tokens.TextMuted))
-                }
-                // Level with the label's first line.
-                Box(Modifier.padding(top = 1.dp)) {
-                    OrganicToggle(settings?.get(row.switch) ?: false, seed = row.seed, enabled = settings != null)
-                }
-            }
-        }
-        if (showsPermissionNotice(settings, canNotify = block == PushCenter.PicksBlock.None, refused)) {
-            Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                BasicText(L10n.Settings.Notifications.permissionDenied, style = AppFonts.body(14f, lineHeight = 1.55f, color = Tokens.TextMuted))
-                OrganicButton(L10n.Settings.Notifications.openSettings, variant = ButtonVariant.Tonal, small = true) {
-                    runCatching { context.startActivity(PushCenter.notificationSettingsIntent(context, block)) }
-                }
-            }
+        // Dimmed until the switches are read.
+        PushSwitchList({ settings?.get(it) ?: false }, enabled = settings != null, onFlip = ::flip)
+        val canNotify = block == PushCenter.PicksBlock.None
+        if (showsPermissionNotice(settings, canNotify, refused, appCanNotify = block != PushCenter.PicksBlock.App)) {
+            PermissionNotice(block, Modifier.padding(top = 14.dp))
         }
         if (state.saveFailed) {
             BasicText(L10n.Settings.Notifications.saveError, style = AppFonts.body(13f, color = Tokens.Danger), modifier = Modifier.padding(top = 14.dp))

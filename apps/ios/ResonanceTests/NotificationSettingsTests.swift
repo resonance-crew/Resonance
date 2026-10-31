@@ -4,7 +4,7 @@ import ResonanceKit
 import Testing
 @testable import Resonance
 
-/// Settings → 通知: two switches, both off until turned on. Turning one on asks the system first
+/// Settings → 通知: messages and notes (on until turned off), then two switches, both off until turned on. Turning one on asks the system first
 /// (its question only when never asked); without a yes the switch stays off and the section says
 /// where notifications are turned on. A flip shows at once and goes back, saying so, when the
 /// server refuses it.
@@ -18,7 +18,8 @@ import Testing
         var answersYes = true
         var asked = 0
         var registered = 0
-        var stored = Settings(picks: false, connectionCards: false)
+        /// Messages off here, so the opt-in switches alone decide what the cases below check.
+        var stored = Settings(picks: false, connectionCards: false, messages: false)
         var readFails = false
         var saveFails = false
         /// Holds a save's answer back until the test opens it.
@@ -162,7 +163,7 @@ import Testing
     @Test func aSwitchOnWhileTheSystemSaysNoIsShownWithTheWayToSettings() async {
         let world = World()
         world.permission = .denied
-        world.stored = Settings(picks: true, connectionCards: false)
+        world.stored = Settings(picks: true, connectionCards: false, messages: false)
         let model = model(world)
         await model.load()
         // Turned on elsewhere (the web, another phone): nothing it asks for can show here.
@@ -171,6 +172,21 @@ import Testing
         await model.set(.picks, false)
         #expect(world.asked == 0 && world.saves == ["picks=false"])
         #expect(!model.isOn(.picks) && !model.permissionDenied)
+    }
+
+    @Test func messagesAreOnUntilTurnedOffAndCountForTheWayToSettings() async {
+        let world = World()
+        world.permission = .denied
+        // An account that never touched the switch (or an older server that leaves it out).
+        world.stored = Settings(picks: false, connectionCards: false)
+        let model = model(world)
+        await model.load()
+        #expect(model.isOn(.messages) && !model.isOn(.picks))
+        // Messages are on, and the system keeps them off this phone: say where to turn them on.
+        #expect(model.permissionDenied)
+        await model.set(.messages, false)
+        #expect(world.asked == 0 && world.saves == ["messages=false"])
+        #expect(!model.permissionDenied)
     }
 
     @Test func aFailedReadSaysSoAndNothingCanBeFlipped() async {

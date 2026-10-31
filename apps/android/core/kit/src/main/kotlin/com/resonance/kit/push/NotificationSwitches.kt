@@ -11,8 +11,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** The two pushes a person can ask for beyond the ones answering them (Settings → Notifications). */
+/**
+ * The push switches of Settings → Notifications: messages and notes (on until turned off), and the
+ * two pushes a person can ask for beyond the ones answering them (off until turned on).
+ */
 enum class NotificationSwitch {
+    /** Messages and notes left on their cards: on unless turned off (a server without the switch rings them all). */
+    Messages,
+
     /** "A card for tonight": one of their picks, some evenings. */
     Picks,
 
@@ -21,14 +27,28 @@ enum class NotificationSwitch {
 }
 
 operator fun NotificationSettings.get(switch: NotificationSwitch): Boolean = when (switch) {
+    // Absent: a server from before the switch, which rings every message.
+    NotificationSwitch.Messages -> messages ?: true
     NotificationSwitch.Picks -> picks
     NotificationSwitch.ConnectionCards -> connectionCards
 }
 
 fun NotificationSettings.with(switch: NotificationSwitch, on: Boolean): NotificationSettings = when (switch) {
+    NotificationSwitch.Messages -> copy(messages = on)
     NotificationSwitch.Picks -> copy(picks = on)
     NotificationSwitch.ConnectionCards -> copy(connectionCards = on)
 }
+
+/**
+ * What a new account's server holds before anyone flips a switch: messages on, the other two off.
+ * The onboarding's notification step sends only the switches chosen otherwise ([changedFromDefaults]).
+ */
+val NotificationSwitch.default: Boolean
+    get() = this == NotificationSwitch.Messages
+
+/** Of [chosen], the switches that differ from what a new account starts with: all an onboarding PATCH needs to say. */
+fun changedFromDefaults(chosen: Map<NotificationSwitch, Boolean>): Map<NotificationSwitch, Boolean> =
+    chosen.filter { (switch, on) -> on != switch.default }
 
 /**
  * Settings → Notifications' switches as the screen shows them (the twin of the web's

@@ -8,6 +8,7 @@ import { STICKER_RUN_MS, continuesStickerRun, messageAlbumOf, messageStickerOf }
 import { stickerName, type StickerRef } from '@/lib/stickers/catalog';
 import { storageKeyOf } from '@/lib/storage/publicUrl';
 import type { DeviceLocale } from './devices';
+import { wantsMessagePushes } from './settings';
 import {
   MESSAGES_CHANNEL,
   deviceTargets,
@@ -128,8 +129,9 @@ function epochMillis(value: unknown): number {
 /**
  * Push `conversations/{pair}/messages/{id}` to its recipient's devices. Never
  * throws into a writer (it runs after the response) and returns null when
- * nothing may ring: no such message from that sender, a block either way, or
- * the recipient muted the connection.
+ * nothing may ring: no such message from that sender, a block either way,
+ * the recipient muted the connection, or turned message pushes off
+ * (`notificationSettings/{uid}.messages`, lib/push/settings).
  *
  * - A device registered with `chat-push` (Android) gets a data-only,
  *   high-priority message with everything its notification needs
@@ -162,15 +164,18 @@ export async function pushMessage(db: Firestore, push: MessagePush, sender: Push
   const { conversationId, messageId, from, to } = push;
   if (![conversationId, messageId, from, to].every((v) => DOC_ID.test(v)) || from === to || conversationId !== pairOf(from, to)) return null;
 
-  const [message, blockedByRecipient, blockedBySender, connection, author, devices] = await Promise.all([
+  const [message, blockedByRecipient, blockedBySender, connection, author, devices, wanted] = await Promise.all([
     db.doc(`conversations/${conversationId}/messages/${messageId}`).get(),
     db.doc(`users/${to}/blocks/${from}`).get(),
     db.doc(`users/${from}/blocks/${to}`).get(),
     db.doc(`connections/${conversationId}`).get(),
     db.doc(`users/${from}`).get(),
     db.collection('devices').where('userId', '==', to).get(),
+    wantsMessagePushes(db, to),
   ]);
   if (!message.exists || message.get('senderId') !== from) return null;
+  // Settings → 通知 → 私訊與小紙條 turned off: the thread and its unread count say it, the phone doesn't.
+  if (!wanted) return null;
   // Unsent before its push went out: nothing to say (pushUnsend tells the phone instead).
   if (message.get('unsentAt') != null) return null;
   // An album rings once, for its first picture.
@@ -276,7 +281,7 @@ export async function pushUnsend(db: Firestore, push: MessagePush, sender: PushS
   const { conversationId, messageId, from, to } = push;
   if (![conversationId, messageId, from, to].every((v) => DOC_ID.test(v)) || from === to || conversationId !== pairOf(from, to)) return null;
 
-  const [message, convo, blockedByRecipient, blockedBySender, connection, author, devices] = await Promise.all([
+  const [message, convo, blockedByRecipient, blockedBySender, connection, author, devices, wanted] = await Promise.all([
     db.doc(`conversations/${conversationId}/messages/${messageId}`).get(),
     db.doc(`conversations/${conversationId}`).get(),
     db.doc(`users/${to}/blocks/${from}`).get(),
@@ -284,8 +289,11 @@ export async function pushUnsend(db: Firestore, push: MessagePush, sender: PushS
     db.doc(`connections/${conversationId}`).get(),
     db.doc(`users/${from}`).get(),
     db.collection('devices').where('userId', '==', to).get(),
+    wantsMessagePushes(db, to),
   ]);
   if (!message.exists || message.get('senderId') !== from || message.get('unsentAt') == null) return null;
+  // Message pushes turned off: no notification of it is showing to take back.
+  if (!wanted) return null;
   if (blockedByRecipient.exists || blockedBySender.exists) return null;
   if (mutedBy(connection.get('muted'), to)) return null;
   if (devices.empty) return { sent: 0, pruned: 0 };

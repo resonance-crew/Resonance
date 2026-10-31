@@ -2594,8 +2594,8 @@
     "/me/notifications": {
       "get": {
         "operationId": "getNotificationSettings",
-        "summary": "Which pushes beyond the ones answering you this account asked for",
-        "description": "Both switches are off until turned on (an account that never set them reads both off).",
+        "summary": "Which pushes this account wants",
+        "description": "`picks` and `connectionCards` are off until turned on; `messages` (messages and notes) is on until turned off (an account that never set them reads those two off and messages on).",
         "responses": {
           "200": {
             "description": "OK",
@@ -2621,7 +2621,7 @@
       },
       "patch": {
         "operationId": "updateNotificationSettings",
-        "summary": "Turn \"a card for tonight\" or \"new cards from your connections\" on or off",
+        "summary": "Turn \"a card for tonight\", \"new cards from your connections\" or message pushes on or off",
         "description": "Only the switches sent change (`null` or absent leaves one as it is); turning one on records when. Answers the settings as they are now. Ask for the OS permission before turning one on: the server cannot tell whether this install may show notifications.",
         "requestBody": {
           "required": true,
@@ -3760,13 +3760,16 @@
           },
           "connectionCards": {
             "type": "boolean"
+          },
+          "messages": {
+            "type": "boolean"
           }
         },
         "required": [
           "picks",
           "connectionCards"
         ],
-        "description": "The pushes you asked for beyond the ones answering you (resonances, notes, messages). Both are off until turned on."
+        "description": "Which pushes you want. picks and connectionCards go beyond the ones answering you and are off until turned on; messages (messages and notes) is on until turned off. Resonances always ring."
       },
       "UpdateNotificationSettingsRequest": {
         "type": "object",
@@ -3776,6 +3779,10 @@
             "type": "boolean"
           },
           "connectionCards": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "messages": {
             "nullable": true,
             "type": "boolean"
           }
