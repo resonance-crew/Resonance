@@ -1,5 +1,6 @@
 import type { Firestore } from 'firebase-admin/firestore';
-import { blankCard } from '@/lib/cards/blank';
+import { blankCard, unlistedCard } from '@/lib/cards/blank';
+import { LISTING_FIELDS } from '@/lib/api/v1/summary';
 import type { Card, User } from '../types';
 import { mapCard, mapUser } from './mapper';
 import { isReservedId } from './reservedId';
@@ -31,6 +32,7 @@ export const LANDING_CARD_FIELDS = [
   'anonymous',
   'linkPreviews',
   'trashedAt',
+  ...LISTING_FIELDS,
 ] as const;
 
 /** How many cards past `limit` the landing page reads, to stand in for blank ones. */
@@ -52,14 +54,15 @@ export async function latestForLanding(db: Firestore, limit: number): Promise<{ 
     .where('publishedAt', '!=', null)
     .orderBy('publishedAt', 'desc')
     .select(...LANDING_CARD_FIELDS)
-    // A few more than it shows, so a blank card (lib/cards/blank) left out doesn't leave a gap.
+    // A few more than it shows, so a blank or unlisted card (lib/cards/blank) left out doesn't leave a gap.
     .limit(limit + LANDING_SPARE)
     .get();
   const cards = snap.docs
     .map((d) => mapCard(d.id, d.data()))
-    .filter((card) => !blankCard(card))
+    .filter((card) => !blankCard(card) && !unlistedCard(card))
     .slice(0, limit)
-    .map((card) => (card.anonymous ? { ...card, authorId: '' } : card));
+    // What decided it stays here: the page's HTML holds only what a card surface draws.
+    .map(({ thin: _thin, signature: _signature, ...card }) => (card.anonymous ? { ...card, authorId: '' } : card));
   const authorIds = [...new Set(cards.map((c) => c.authorId))].filter((id) => id && !id.includes('/') && !isReservedId(id));
   const profiles = authorIds.length ? await db.getAll(...authorIds.map((id) => db.doc(`users/${id}`)), { fieldMask: BYLINE_FIELDS }) : [];
   const authors: Record<string, User> = {};

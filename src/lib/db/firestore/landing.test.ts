@@ -69,4 +69,16 @@ describe('latestForLanding', () => {
     const { cards } = await latestForLanding(db, 3);
     expect(cards.map((c) => c.id)).toEqual(['masked', 'c3', 'c2']);
   });
+
+  it('leaves out cards the server marked as not for lists, and puts neither mark in the page', async () => {
+    const { db } = fakeAdminDb({
+      ...docs(),
+      'cards/thin': card('bob', 10, { thoughtCore: '測試', story: '測試', thin: true }),
+      'cards/placeholder': card('bob', 9, { signature: { coreInsight: 'x', insightScore: 0, placeholder: true } }),
+      'cards/kept': card('bob', 8, { signature: { coreInsight: 'x', insightScore: 0.9, placeholder: false } }),
+    });
+    const { cards } = await latestForLanding(db, 3);
+    expect(cards.map((c) => c.id)).toEqual(['kept', 'masked', 'c3']);
+    for (const c of cards) for (const field of ['thin', 'signature']) expect(c, field).not.toHaveProperty(field);
+  });
 });

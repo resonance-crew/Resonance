@@ -212,6 +212,15 @@ describe('applyCardEdit', () => {
     await expect(applyCardEdit(db, 'alice', 'live')).resolves.toMatchObject({ applied: true });
   });
 
+  it('stamps the card thin as a revision cuts it to too few words, and takes the stamp back as one gives it words', async () => {
+    await buffer({ thoughtCore: '測試', story: '測試' });
+    await expect(applyCardEdit(db, 'alice', 'live')).resolves.toMatchObject({ applied: true });
+    expect((await db.doc('cards/live').get()).get('thin')).toBe(true);
+    await buffer({ thoughtCore: '雨天', story: '學會一個人吃飯，也學會不急著回家' });
+    await expect(applyCardEdit(db, 'alice', 'live')).resolves.toMatchObject({ applied: true });
+    expect((await db.doc('cards/live').get()).get('thin')).toBeUndefined();
+  });
+
   it('applies a revision to a card already blank and public (from before the rule)', async () => {
     await db.doc('cards/live').update({ story: '', visibility: 'public' });
     await buffer({ story: '', visibility: 'public', thoughtCore: '新標題' });

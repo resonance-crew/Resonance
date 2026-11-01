@@ -49,6 +49,13 @@ export interface Card {
    */
   signature?: InsightSignature;
   /**
+   * Too little to read for a stranger (lib/cards/blank: thinCard), stamped by
+   * the server whenever it saves a published card's story (publish, applied
+   * edits) — server-only, the rules take it from no client. Lists leave such
+   * a card out (unlistedCard) without reading its story.
+   */
+  thin?: boolean;
+  /**
    * Published without attribution (ux §6). Rendering-level anonymity: every
    * card surface hides the byline and the card never appears on the author's
    * public profile; notes/resonance notifications still reach the author
@@ -107,6 +114,13 @@ export interface InsightSignature {
    * recommendation candidate pool.
    */
   insightScore: number;
+  /**
+   * The model read it as a test or placeholder (「測試」, lorem ipsum, keys
+   * mashed, a word repeated): kept out of every list that picks cards for
+   * readers, as a thin one is (lib/cards/blank: unlistedCard). Absent on
+   * signatures made before it was asked.
+   */
+  placeholder?: boolean;
 }
 
 export interface User {

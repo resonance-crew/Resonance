@@ -112,4 +112,23 @@ describe('blank cards in the recommended feed and related cards', () => {
     const { cards } = await getRelated(db, 'alice', 'base');
     expect(cards.map((c) => c.id)).toEqual(['r3', 'r2', 'r1']);
   });
+
+  const marked = () => ({
+    ...docs(),
+    'cards/thin': { ...card(7, '測試', '測試'), thin: true },
+    'cards/placeholder': { ...card(8, 'asdf', 'asdf asdf asdf asdf asdf asdf asdf asdf asdf asdf asdf asdf'), signature: { placeholder: true } },
+  });
+
+  it('never recommends a card marked thin or a placeholder, picked before the mark came', async () => {
+    const { db } = fakeAdminDb(marked());
+    const load = async () => ({ items: ['thin', 'r1', 'placeholder', 'r2'].map(item), status: 'fresh' as const });
+    const { cards } = await getRecommendedFeed(db, 'alice', load);
+    expect(cards.map((c) => c.id)).toEqual(['r1', 'r2']);
+  });
+
+  it('fills the related cards from past the marked ones', async () => {
+    const { db } = fakeAdminDb(marked());
+    const { cards } = await getRelated(db, 'alice', 'base');
+    expect(cards.map((c) => c.id)).toEqual(['r3', 'r2', 'r1']);
+  });
 });

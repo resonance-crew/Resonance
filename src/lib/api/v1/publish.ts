@@ -5,7 +5,7 @@ import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { ApiFailure } from './http';
 import { refuseInTrash } from './inTrash';
 import { reachable, tryReachResonance } from './resonate';
-import { summaryFields } from './summary';
+import { listingFields, summaryFields } from './summary';
 
 /** How long publishing waits for the slug (an LLM call) before answering without it. */
 export const SLUG_WAIT_MS = 8_000;
@@ -94,6 +94,8 @@ export async function publishCard(
         updatedAt: FieldValue.serverTimestamp(),
         // What lists show of it, so they needn't read its story (./summary).
         ...summaryFields(snap.get('story')),
+        // Whether lists may show it (lib/cards/blank: thin), judged here, as it is saved.
+        ...listingFields(snap.data()!),
       },
       { merge: true },
     );

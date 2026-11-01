@@ -3,7 +3,7 @@ import { FieldValue, type DocumentData, type DocumentReference } from 'firebase-
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import { extractInsightSignature, signatureText } from '@/lib/ai/tasks';
 import { embed, embedModel, llmModel } from '@/lib/ai/openai';
-import { blankCard } from '@/lib/cards/blank';
+import { blankCard, thinCard } from '@/lib/cards/blank';
 import { isIndexable, signatureToChannelTexts } from './signature';
 import { getVectorStore } from './vectorStore';
 import type { VectorRecord } from './vectorStore/types';
@@ -15,7 +15,7 @@ export interface IndexResult {
    * `unchanged`: what the signature reads is what it was made from — no LLM call, the vectors' visibility synced alone.
    * `over-budget`: `mayCall` refused the LLM call; the card keeps its last signature and vectors (their visibility synced).
    */
-  reason?: 'not-published' | 'not-found' | 'low-insight' | 'unchanged' | 'over-budget' | 'blank';
+  reason?: 'not-published' | 'not-found' | 'low-insight' | 'unchanged' | 'over-budget' | 'blank' | 'thin';
   channels?: number;
 }
 
@@ -23,10 +23,10 @@ export interface IndexResult {
 export const EMBED_TIMEOUT_MS = 10_000;
 
 /** Bumped when the signature's or the vectors' recipe changes, so every card is made again at its next save. */
-const INDEX_VERSION = 1;
+const INDEX_VERSION = 2;
 
 /** What indexing reads of the card first: whether it is published, what the signature reads, whose it is, who may read it. */
-const INDEX_FIELDS = ['publishedAt', 'thoughtCore', 'story', 'authorId', 'visibility', 'trashedAt', 'signature.contentHash'];
+const INDEX_FIELDS = ['publishedAt', 'thoughtCore', 'story', 'authorId', 'visibility', 'trashedAt', 'thin', 'signature.contentHash'];
 /** What the vectors' visibility is decided by (vectorVisibility), for the reads that only follow it. */
 const VISIBILITY_FIELDS = ['visibility', 'trashedAt'];
 
@@ -56,7 +56,7 @@ export function indexContentHash(title: string, story: string): string {
     .digest('base64url');
 }
 
-const SIGNATURE_KEYS = ['coreInsight', 'intent', 'situation', 'lifeDomain', 'emotionalRegister', 'insightScore'] as const;
+const SIGNATURE_KEYS = ['coreInsight', 'intent', 'situation', 'lifeDomain', 'emotionalRegister', 'insightScore', 'placeholder'] as const;
 const sameSignature = (stored: unknown, made: InsightSignature) =>
   !!stored && typeof stored === 'object' && SIGNATURE_KEYS.every((k) => (stored as Record<string, unknown>)[k] === made[k]);
 
@@ -74,6 +74,22 @@ async function markIndexed(ref: DocumentReference, hash: string, signature: Insi
     if (indexContentHash(String(now.get('thoughtCore') ?? ''), String(now.get('story') ?? '')) !== hash) return;
     if (!sameSignature(now.get('signature'), signature)) return;
     tx.update(ref, { 'signature.contentHash': hash });
+  });
+}
+
+/**
+ * Stamp `thin` (lib/cards/blank) as the card's words are now, in a
+ * transaction: for a card the save didn't stamp — published before it did,
+ * or changed by an older build's client write, which the rules let take no
+ * `thin` of its own. The saves (publish, an applied edit) stamp it in their
+ * own write, so this runs only when what indexing read disagrees.
+ */
+async function syncThin(ref: DocumentReference): Promise<void> {
+  await ref.firestore.runTransaction(async (tx) => {
+    const [now] = await tx.getAll(ref, { fieldMask: ['thoughtCore', 'story', 'thin'] });
+    if (!now.exists) return;
+    const thin = thinCard({ thoughtCore: now.get('thoughtCore'), story: now.get('story') });
+    if ((now.get('thin') === true) !== thin) tx.update(ref, { thin: thin ? true : FieldValue.delete() });
   });
 }
 
@@ -132,6 +148,13 @@ export async function indexCard(cardId: string, opts: { force?: boolean; mayCall
   if (blankCard({ thoughtCore: title, story })) {
     await store.deleteByCard(cardId);
     return { indexed: false, reason: 'blank' };
+  }
+  // A thin card (lib/cards/blank) is no list's either: no LLM call for it, and no vectors.
+  const thin = thinCard({ thoughtCore: title, story });
+  if ((data.thin === true) !== thin) await syncThin(ref);
+  if (thin) {
+    await store.deleteByCard(cardId);
+    return { indexed: false, reason: 'thin' };
   }
   const hash = indexContentHash(title, story);
   if (!opts.force && data.signature?.contentHash === hash) {

@@ -57,6 +57,24 @@ function compare(a: unknown, b: unknown): number {
 }
 const same = (a: unknown, b: unknown) => rank(a) === rank(b) && compare(a, b) === 0;
 
+/** A document with only the masked fields — a dotted one (`signature.placeholder`) keeps that nested field alone, as Firestore's does. */
+function masked(whole: Data, fields: string[]): Data {
+  const out: Data = {};
+  for (const field of fields) {
+    const [head, ...rest] = field.split('.');
+    if (!(head in whole)) continue;
+    if (!rest.length) {
+      out[head] = whole[head];
+      continue;
+    }
+    const inner = whole[head];
+    if (!inner || typeof inner !== 'object' || Array.isArray(inner)) continue;
+    const picked = masked(inner as Data, [rest.join('.')]);
+    if (Object.keys(picked).length) out[head] = { ...((out[head] as Data | undefined) ?? {}), ...picked };
+  }
+  return out;
+}
+
 export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOptions = {}): FakeAdminDb {
   const reads: string[] = [];
   const held = async (read: string) => {
@@ -66,7 +84,7 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
   const writes: string[] = [];
   const snap = (path: string, fields?: string[]) => {
     const whole = docs[path];
-    const data = whole && fields ? Object.fromEntries(fields.filter((f) => f in whole).map((f) => [f, whole[f]])) : whole;
+    const data = whole && fields ? masked(whole, fields) : whole;
     return {
       id: path.split('/').pop()!,
       exists: data !== undefined,

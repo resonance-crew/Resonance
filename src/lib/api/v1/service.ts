@@ -1,6 +1,6 @@
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { getAccountDeletion } from '@/lib/account/deletion';
-import { blankFeedCard } from '@/lib/cards/blank';
+import { blankFeedCard, unlistedCard } from '@/lib/cards/blank';
 import { ApiFailure } from './http';
 import { pageEnd, pageQuery, type PageStart } from './paging';
 import { blockedByViewer, blockHides, loadAuthors, toFeedCard } from './present';
@@ -68,7 +68,8 @@ export async function getFeed(db: Firestore, viewerId: string | null, limit: num
   const cards = snap.docs
     .filter((d) => properlyPublished(d.get('publishedAt')))
     .map((d) => listCard(d.id, d.data()))
-    .filter((c) => !blockHides(c, blocked));
+    // A card the server marked as not for lists (lib/cards/blank: thin, a placeholder) goes as a blocked author's does.
+    .filter((c) => !blockHides(c, blocked) && !unlistedCard(c));
   const [authors] = await Promise.all([loadAuthors(db, cards), withStories(db, cards)]);
   return {
     // A blank card (lib/cards/blank) is left out after the query, as a blocked author's is: the page may run short, never end early.

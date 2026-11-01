@@ -2,7 +2,8 @@ import { FieldValue, type DocumentData, type DocumentReference, type Firestore }
 import { createTranslator } from 'next-intl';
 import en from '@/messages/en.json';
 import zhTW from '@/messages/zh-TW.json';
-import { blankBySummary, SUMMARY_FIELDS } from '@/lib/api/v1/summary';
+import { blankBySummary, LISTING_FIELDS, SUMMARY_FIELDS } from '@/lib/api/v1/summary';
+import { unlistedCard } from '@/lib/cards/blank';
 import { getAdminMessaging } from '@/lib/db/firestore/admin';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { recommendationDay } from '@/lib/recommend/stored';
@@ -53,11 +54,11 @@ function mutedBy(muted: unknown, uid: string): boolean {
 }
 
 /** What announcing reads of the card (never its story: its stored summary says whether it is blank), at the start and again before each push. */
-const ANNOUNCE_FIELDS = ['authorId', 'publishedAt', 'visibility', 'anonymous', 'slug', 'referenceCardId', ...SUMMARY_FIELDS] as const;
+const ANNOUNCE_FIELDS = ['authorId', 'publishedAt', 'visibility', 'anonymous', 'slug', 'referenceCardId', ...SUMMARY_FIELDS, ...LISTING_FIELDS] as const;
 
 /** A card that may be announced: published, public, named, and not blank (lib/cards/blank) — a title and words in its story. */
 function announceable(data: DocumentData | undefined): boolean {
-  return !!data && data.publishedAt != null && data.visibility === 'public' && data.anonymous !== true && !blankBySummary(data);
+  return !!data && data.publishedAt != null && data.visibility === 'public' && data.anonymous !== true && !blankBySummary(data) && !unlistedCard(data);
 }
 
 /** The push's words in one language: who wrote a new card, then its title. */

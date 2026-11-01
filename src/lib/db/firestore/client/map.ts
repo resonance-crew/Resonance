@@ -43,6 +43,8 @@ export function mapCard(id: string, data: Raw): Card {
     // (`coreInsight`); insightScore stays server-side policy — never shown.
     signature: data.signature as InsightSignature | undefined,
     anonymous: data.anonymous === true,
+    // Not for lists (lib/cards/blank: unlistedCard), as the server stamped it.
+    ...(data.thin === true ? { thin: true } : {}),
     // The server's previews of the story's standalone links, each checked before it is drawn.
     ...withPreviews(data.linkPreviews),
     // In the trash (its author's read alone: the card is private while there).

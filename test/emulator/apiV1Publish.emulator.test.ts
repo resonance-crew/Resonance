@@ -147,6 +147,17 @@ describe('publishCard', () => {
     expect((await publishCard(db, 'alice', 'kept', slugBase)).firstPublish).toBe(true);
   });
 
+  it('stamps a card too thin for lists as it publishes it (lib/cards/blank), and none with words enough', async () => {
+    await draft('test', { thoughtCore: '測試', story: '測試' });
+    await publishCard(db, 'alice', 'test', slugBase);
+    expect((await db.doc('cards/test').get()).get('thin')).toBe(true);
+    await draft('real', { thoughtCore: '雨天', story: '學會一個人吃飯，也學會不急著回家' });
+    await publishCard(db, 'alice', 'real', slugBase);
+    const real = await db.doc('cards/real').get();
+    expect(real.get('publishedAt')).not.toBeNull();
+    expect(real.get('thin')).toBeUndefined();
+  });
+
   describe('a resonance', () => {
     const notifications = () => db.collection('notifications').where('userId', '==', 'bob').get();
 

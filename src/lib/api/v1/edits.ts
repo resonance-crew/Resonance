@@ -6,7 +6,7 @@ import { ApiFailure } from './http';
 import { refuseInTrash } from './inTrash';
 import { readTakeBack, takeBack } from './origins';
 import { becameReachable, hiddenResonance } from './resonate';
-import { summaryFields } from './summary';
+import { listingFields, summaryFields } from './summary';
 import { visibilityOf } from './present';
 import type { Visibility } from '@/lib/db/types';
 
@@ -85,6 +85,8 @@ export async function applyCardEdit(db: Firestore, uid: string, id: string): Pro
       ...content,
       // What lists show of the new story, so they needn't read it (./summary).
       ...summaryFields(story),
+      // Whether lists may show it (lib/cards/blank: thin), judged on the new words as they are saved.
+      ...listingFields(content),
       ...editedAudience(e, snap.data()!),
       media: content.media ?? FieldValue.delete(),
       updatedAt: FieldValue.serverTimestamp(),

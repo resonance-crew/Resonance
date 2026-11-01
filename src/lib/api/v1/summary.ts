@@ -3,7 +3,7 @@ import { mapCard } from '@/lib/db/firestore/mapper';
 import type { Card } from '@/lib/db/types';
 import { excerpt, plainText } from '@/lib/markdown/plainText';
 import { readMinutes } from '@/lib/readTime';
-import { wordless } from '@/lib/cards/blank';
+import { thinCard, wordless } from '@/lib/cards/blank';
 
 /**
  * A card's list summary — the plain-text excerpt and read time every list
@@ -43,6 +43,22 @@ export function summaryFields(story: unknown): StorySummary & { excerptAt: Field
 }
 
 /**
+ * What says a card is not for lists (lib/cards/blank: unlistedCard): the
+ * save's `thin` and the index's `signature.placeholder`. A field mask that
+ * picks cards for readers carries these beside the rest.
+ */
+export const LISTING_FIELDS = ['thin', 'signature.placeholder'] as const;
+
+/**
+ * Whether lists may show a card, as the server stamps it in the same write
+ * that saves a published story (publish, an applied edit): `thin` when its
+ * words are too few (thinCard), else the field removed.
+ */
+export function listingFields(card: { thoughtCore?: unknown; story?: unknown }): { thin: true | FieldValue } {
+  return { thin: thinCard(card) ? true : FieldValue.delete() };
+}
+
+/**
  * Everything a list needs of a card: the FeedCard's fields, what visibility,
  * blocks and a shared slug are decided on, the drafts' order — and the stored
  * summary in place of the story.
@@ -65,6 +81,8 @@ export const LIST_FIELDS = [
   // A card in the trash: left out of lists by code (the owner's shelves, ?keys=), shown on the trash shelf.
   'trashedAt',
   'trashedFrom',
+  // Whether lists may show it at all (lib/cards/blank: unlistedCard).
+  ...LISTING_FIELDS,
 ] as const;
 
 /** a > b, to the nanosecond (Date would drop the microseconds). */

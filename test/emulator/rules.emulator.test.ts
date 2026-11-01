@@ -702,6 +702,23 @@ describe('cards: what the author may write', () => {
     for (const data of bad) await assertFails(setDoc(doc(collection(db, 'cards')), data));
   });
 
+  it("takes no mark of whether lists may show a card from a client — not on a draft, not set or cleared on the author's published card", async () => {
+    const ID = 'tttttttttttttttttttt';
+    await seed(async (db) => {
+      await setDoc(doc(db, 'cards', ID), publishedCard('alice', { thoughtCore: '測試', story: '測試', thin: true, signature: { coreInsight: 'x', insightScore: 0, placeholder: true } }));
+    });
+    const db = as('alice');
+    await assertFails(setDoc(doc(collection(db, 'cards')), draft('alice', { thin: false })));
+    await assertFails(setDoc(doc(collection(db, 'cards')), draft('alice', { signature: { placeholder: false } })));
+    const ref = doc(db, 'cards', ID);
+    await assertFails(setDoc(ref, { thin: false, updatedAt: serverTimestamp() }, { merge: true }));
+    await assertFails(setDoc(ref, { thin: deleteField(), updatedAt: serverTimestamp() }, { merge: true }));
+    await assertFails(setDoc(ref, { signature: { placeholder: false }, updatedAt: serverTimestamp() }, { merge: true }));
+    await assertFails(setDoc(ref, { 'signature.placeholder': false, updatedAt: serverTimestamp() }, { merge: true }));
+    // Its words stay the author's to edit; the server stamps again at the next save or index.
+    await assertSucceeds(setDoc(ref, { story: '測試測試', updatedAt: serverTimestamp() }, { merge: true }));
+  });
+
   it('counts a title as JavaScript does (UTF-16 units, not bytes): 200 Chinese characters fit, 101 emoji do not', async () => {
     const db = as('alice');
     await assertSucceeds(setDoc(doc(collection(db, 'cards')), draft('alice', { thoughtCore: '共'.repeat(200) })));

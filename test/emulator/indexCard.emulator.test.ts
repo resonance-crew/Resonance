@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   whileSigning: null as (() => Promise<unknown>) | null,
   /** How many signatures were asked of the LLM. */
   signed: 0,
+  /** What the stand-in model answers beside its fixed signature. */
+  signature: {} as Partial<InsightSignature>,
 }));
 vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => mocks.db }));
 vi.mock('@/lib/recommend/vectorStore', () => ({ getVectorStore: () => mocks.store }));
@@ -40,6 +42,8 @@ vi.mock('@/lib/ai/tasks', async (original) => ({
     lifeDomain: '日常',
     emotionalRegister: 'quiet',
     insightScore: 0.9,
+    placeholder: false,
+    ...mocks.signature,
   }),
 }));
 vi.mock('@/lib/ai/openai', async (original) => ({
@@ -78,6 +82,7 @@ beforeEach(async () => {
   mocks.beforeUpsert = null;
   mocks.whileSigning = null;
   mocks.signed = 0;
+  mocks.signature = {};
   await Promise.all([
     db.doc('users/alice').set({ handle: 'alice', handleLower: 'alice', initials: 'a', accentColor: 'x' }),
     db.doc('cards/live').set({
@@ -211,7 +216,7 @@ describe('indexing a card whose text has not changed', () => {
 
   it('gives the vectors the card\'s visibility before the LLM is asked', async () => {
     await indexCard('live');
-    await db.doc('cards/live').update({ story: 'Another story.', visibility: 'private' });
+    await db.doc('cards/live').update({ story: 'Another story, of the drawer I cleared tonight.', visibility: 'private' });
     let during: Record<string, unknown> | null = null;
     mocks.whileSigning = async () => void (during = await vectorsOf('live'));
     await indexCard('live');
@@ -236,7 +241,7 @@ describe('indexing a card whose text has not changed', () => {
   it('keeps no hash for a text that changed while its signature was being made: the next save makes it again', async () => {
     mocks.whileEmbedding = async () => {
       mocks.whileEmbedding = null;
-      await db.doc('cards/live').update({ story: 'Saved again while indexing.' });
+      await db.doc('cards/live').update({ story: 'Saved again while the index was being made tonight.' });
     };
     await indexCard('live');
     expect((await db.doc('cards/live').get()).get('signature.contentHash')).toBeUndefined();
@@ -279,5 +284,34 @@ describe('indexing a blank card', () => {
     await db.doc('cards/live').update({ thoughtCore: '', story: 'Words again.' });
     expect(await indexCard('live')).toEqual({ indexed: false, reason: 'blank' });
     expect(mocks.signed).toBe(1);
+  });
+});
+
+// A thin card or a placeholder (lib/cards/blank) is no list's: no vectors, and the card says so.
+describe('indexing a thin card or a placeholder', () => {
+  it('asks the LLM nothing for a thin card, drops its vectors and stamps it — and takes the stamp back once it has words', async () => {
+    expect(await indexCard('live')).toEqual({ indexed: true, channels: 2 });
+    // An older build's client write: the story changed, no stamp with it.
+    await db.doc('cards/live').update({ thoughtCore: '測試', story: '測試' });
+    expect(await indexCard('live')).toEqual({ indexed: false, reason: 'thin' });
+    expect(mocks.signed).toBe(1);
+    expect(await vectorsOf('live')).toEqual({});
+    expect((await db.doc('cards/live').get()).get('thin')).toBe(true);
+
+    await db.doc('cards/live').update({ thoughtCore: 'A drawer', story: 'I cleared out the drawer tonight, and kept one letter.' });
+    expect(await indexCard('live')).toEqual({ indexed: true, channels: 2 });
+    expect(mocks.signed).toBe(2);
+    const card = await db.doc('cards/live').get();
+    expect(card.get('thin')).toBeUndefined();
+    expect(card.get('signature.placeholder')).toBe(false);
+  });
+
+  it("keeps the model's placeholder on the signature and gives the card no vectors, however it scored", async () => {
+    expect(await indexCard('live')).toEqual({ indexed: true, channels: 2 });
+    await db.doc('cards/live').update({ story: 'lorem ipsum dolor sit amet lorem ipsum dolor sit amet' });
+    mocks.signature = { placeholder: true };
+    expect(await indexCard('live')).toEqual({ indexed: false, reason: 'low-insight' });
+    expect(await vectorsOf('live')).toEqual({});
+    expect((await db.doc('cards/live').get()).get('signature.placeholder')).toBe(true);
   });
 });

@@ -51,4 +51,22 @@ describe('getFeed', () => {
     const storyReads = reads.filter((r) => /^cards\/[\w-]+$/.test(r)).sort();
     expect(storyReads).toEqual(['cards/edited-empty', 'cards/edited-real']);
   });
+
+  it('leaves out a card the server marked as not for lists — thin at its save, or a placeholder to the index — reading no story for it', async () => {
+    const { db, reads } = fakeAdminDb({
+      ...docs(),
+      'cards/thin': card(6, '測試', '測試', { thin: true }),
+      'cards/placeholder': card(7, 'Lorem ipsum', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit', {
+        signature: { coreInsight: 'x', insightScore: 0, placeholder: true },
+      }),
+      'cards/said': card(8, 'A real card again', 'with words', { signature: { coreInsight: 'x', insightScore: 0.8, placeholder: false } }),
+    });
+    const page = await getFeed(db, null, 8);
+    expect(page.cards.map((c) => c.id)).toEqual(['said', 'edited-real', 'real']);
+    expect(page.nextPageToken).not.toBeNull();
+    // Nothing about why reaches the answer.
+    for (const c of page.cards) for (const field of ['thin', 'signature']) expect(c, field).not.toHaveProperty(field);
+    expect(reads).not.toContain('cards/thin');
+    expect(reads).not.toContain('cards/placeholder');
+  });
 });

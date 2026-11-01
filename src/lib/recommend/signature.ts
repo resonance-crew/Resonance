@@ -44,15 +44,17 @@ export function parseSignature(raw: unknown): InsightSignature {
     lifeDomain: str(r.life_domain ?? r.lifeDomain),
     emotionalRegister: str(r.emotional_register ?? r.emotionalRegister),
     insightScore: clamp01(r.insight_score ?? r.insightScore),
+    // Only a plain `true` hides a card from lists: anything else the model says reads as false.
+    placeholder: r.placeholder === true,
   };
 }
 
 /**
  * Whether a signature qualifies for the candidate pool: it must carry a real
- * core insight and clear the score threshold.
+ * core insight, clear the score threshold, and not be a placeholder.
  */
 export function isIndexable(sig: InsightSignature): boolean {
-  return sig.coreInsight.length > 0 && sig.insightScore >= INSIGHT_INDEX_THRESHOLD;
+  return sig.coreInsight.length > 0 && sig.insightScore >= INSIGHT_INDEX_THRESHOLD && sig.placeholder !== true;
 }
 
 /**

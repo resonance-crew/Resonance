@@ -1,5 +1,5 @@
 import { Timestamp, type DocumentData, type Firestore, type QueryDocumentSnapshot, type QuerySnapshot } from 'firebase-admin/firestore';
-import { blankFeedCard } from '@/lib/cards/blank';
+import { blankFeedCard, unlistedCard } from '@/lib/cards/blank';
 import { trashExpired } from '@/lib/cards/trash';
 import { anonymousBySlug, cardByKey, slugHolder, slugShaped } from '@/lib/db/firestore/cardKey';
 import { uidForHandle } from '@/lib/db/firestore/handles';
@@ -259,8 +259,8 @@ export async function getRecommendedFeed(
     blockedByViewer(db, viewerId),
   ]);
   return {
-    // A blank card (lib/cards/blank) recommended before its vectors went is never shown.
-    cards: (await present(db, viewerId, cards.filter((c) => c.publishedAt), { reasons, blocked })).filter((c) => !blankFeedCard(c)),
+    // A blank, thin or placeholder card (lib/cards/blank) recommended before its vectors went is never shown.
+    cards: (await present(db, viewerId, cards.filter((c) => c.publishedAt && !unlistedCard(c)), { reasons, blocked })).filter((c) => !blankFeedCard(c)),
     status: loaded.status ?? 'fresh',
   };
 }
@@ -348,7 +348,7 @@ const recentPublic = (db: Firestore) =>
 function relatedPool(base: Card, recent: ListCard[]): ListCard[] {
   const tags = (base.tags ?? []).slice(0, 5);
   const overlap = (c: Card) => (c.tags ?? []).filter((t) => tags.includes(t)).length;
-  return recent.filter((c) => c.id !== base.id).sort((a, b) => overlap(b) - overlap(a));
+  return recent.filter((c) => c.id !== base.id && !unlistedCard(c)).sort((a, b) => overlap(b) - overlap(a));
 }
 
 /** The related cards a page shows of the presented pool: the first few that aren't blank (lib/cards/blank). */

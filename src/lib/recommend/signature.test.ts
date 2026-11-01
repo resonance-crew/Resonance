@@ -42,6 +42,11 @@ describe('parseSignature', () => {
     expect(parseSignature({ insight_score: 'oops' }).insightScore).toBe(0);
   });
 
+  it('reads only a plain true as a placeholder', () => {
+    expect(parseSignature({ placeholder: true }).placeholder).toBe(true);
+    for (const said of [false, 'true', 1, null, undefined]) expect(parseSignature({ placeholder: said }).placeholder).toBe(false);
+  });
+
   it('returns an empty-but-valid signature for junk input', () => {
     expect(parseSignature(null).coreInsight).toBe('');
     expect(parseSignature('nonsense').insightScore).toBe(0);
@@ -53,6 +58,10 @@ describe('isIndexable', () => {
     expect(isIndexable(parseSignature({ core_insight: 'x', insight_score: INSIGHT_INDEX_THRESHOLD }))).toBe(true);
     expect(isIndexable(parseSignature({ core_insight: 'x', insight_score: 0.1 }))).toBe(false);
     expect(isIndexable(parseSignature({ core_insight: '', insight_score: 0.9 }))).toBe(false);
+  });
+
+  it('never takes a placeholder into the pool, whatever its score', () => {
+    expect(isIndexable(parseSignature({ core_insight: 'x', insight_score: 0.95, placeholder: true }))).toBe(false);
   });
 });
 
