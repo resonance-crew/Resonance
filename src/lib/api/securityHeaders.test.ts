@@ -36,11 +36,13 @@ describe('securityHeaders', () => {
     expect(rules[0].source).toBe('/:path*');
     expect(rules[0].headers.map((h) => h.key)).toEqual(securityHeaders(PRODUCTION).map((h) => h.key));
     // beside them only the landing stage's and the stickers' versioned pictures (`?v=` on every URL), kept for good,
-    // and the sticker catalog for an hour; Next applies every rule that matches, so those keep the security headers too
+    // the sticker catalog for an hour, and Apple's Universal Links file said to be JSON; Next applies every rule that
+    // matches, so those keep the security headers too
     expect(rules.slice(1)).toEqual([
       { source: '/mascots/:path*', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] },
       { source: '/stickers/catalog.json', headers: [{ key: 'Cache-Control', value: 'public, max-age=3600' }] },
       { source: '/stickers/:pack/:file', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] },
+      { source: '/.well-known/apple-app-site-association', headers: [{ key: 'Content-Type', value: 'application/json' }] },
     ]);
   });
 
@@ -67,6 +69,8 @@ describe('reportOnlyPolicy', () => {
     expect(d['style-src']).toContain('https://fonts.googleapis.com');
     expect(d['font-src']).toEqual(expect.arrayContaining(['https://fonts.gstatic.com', 'https://cdn.jsdelivr.net']));
     expect(d['object-src']).toEqual(["'none'"]);
+    // The site's own web manifest (src/app/manifest.ts, round 23 §6), nothing else's.
+    expect(d['manifest-src']).toEqual(["'self'"]);
     expect(d['report-uri']).toEqual(['/api/csp-report']);
     // Nothing development-only, no preview toolbar, no reCAPTCHA unless phone sign-in is on.
     expect(reportOnlyPolicy(PRODUCTION)).not.toMatch(/unsafe-eval|127\.0\.0\.1|vercel\.live|recaptcha/);

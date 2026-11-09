@@ -75,6 +75,9 @@ const nextConfig: NextConfig = {
       // catalog itself, which a build that bundles an older one reads for the packs it lacks.
       { source: '/stickers/catalog.json', headers: [{ key: 'Cache-Control', value: 'public, max-age=3600' }] },
       { source: '/stickers/:pack/:file', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] },
+      // iOS Universal Links (round 23 §7): Apple reads this extensionless file as JSON only — served from public/
+      // without a redirect on both hosts (vercel.json spares /.well-known; src/lib/site.test.ts).
+      { source: '/.well-known/apple-app-site-association', headers: [{ key: 'Content-Type', value: 'application/json' }] },
     ];
   },
 };

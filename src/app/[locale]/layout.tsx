@@ -39,8 +39,9 @@ export async function generateMetadata({
     title,
     description,
     applicationName: 'Resonance',
-    // No web-app manifest and no Apple standalone mode: the site isn't offered as an
-    // installable app — the iOS and Android apps are (GetTheApp, the Smart App Banner).
+    // The site isn't offered as an installable app — the iOS and Android apps are (GetTheApp, the Smart App
+    // Banner): no Apple standalone mode, and the web manifest every page links (src/app/manifest.ts, the root
+    // segment's) is `display: browser`, naming the Android app for Chrome's own install prompt instead.
     icons: {
       icon: [
         { url: '/icon.svg', type: 'image/svg+xml' },
