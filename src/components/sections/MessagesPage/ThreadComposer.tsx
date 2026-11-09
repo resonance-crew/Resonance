@@ -268,7 +268,10 @@ export function ThreadComposer({
   const [focused, setFocused] = useState(false);
   useRememberKeyboardHeight(focused && desktop === false);
 
+  // The keyboard's going once the panel is laid out (a frame later): a close before that frame keeps the field.
+  const keyboardAway = useRef(0);
   const closeStickers = useCallback((focusField: boolean) => {
+    window.cancelAnimationFrame(keyboardAway.current);
     setStickers('closed');
     setPanelTall(false);
     if (focusField) inputRef.current?.focus({ preventScroll: true });
@@ -288,7 +291,7 @@ export function ThreadComposer({
     // Laid out at the keyboard's height first, then the keyboard goes: the capsule doesn't dip between the two.
     setPanelBase(rememberedKeyboardHeight());
     setStickers('panel');
-    window.requestAnimationFrame(() => inputRef.current?.blur());
+    keyboardAway.current = window.requestAnimationFrame(() => inputRef.current?.blur());
   }
 
   // Grown, the panel reaches to just under the thread's header (the capsule rides up with it) — measured again

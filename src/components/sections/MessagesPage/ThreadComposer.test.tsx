@@ -275,8 +275,8 @@ describe('several pictures', () => {
     // No numbers, no count, no ✕ for them all (round 22, the owner's notes).
     expect(riding().textContent).toBe('');
     expect(screen.queryByText('3 photos')).toBeNull();
-    expect(screen.getAllByRole('button', { name: /^Remove picture \d$/ })).toHaveLength(3);
-    await userEvent.click(screen.getByRole('button', { name: 'Remove picture 2' }));
+    expect(screen.getAllByRole('button', { name: /^Remove photo \d$/ })).toHaveLength(3);
+    await userEvent.click(screen.getByRole('button', { name: 'Remove photo 2' }));
     expect(thumbs()).toHaveLength(2);
 
     fireEvent.change(field(), { target: { value: 'rain' } });

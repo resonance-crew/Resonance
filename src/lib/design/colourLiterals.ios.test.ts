@@ -25,7 +25,10 @@ const ALLOWED: Record<string, [number, string]> = {
   'Resonance/Features/Write/StoryEditor.swift': [3, 'a mask (alpha only)'],
   'Resonance/Features/ThoughtMap/MapNodeView.swift': [1, 'a mask (alpha only)'],
   'Resonance/Features/Messages/ThreadActions.swift': [2, 'a mask (alpha only): a lifted message too tall for the room fading at its foot'],
-  'Packages/DesignSystem/Sources/DesignSystem/Components/Messages.swift': [4, "a mask (alpha only): a wide pane's paper under the capsule, fading at its sides and top"],
+  'Packages/DesignSystem/Sources/DesignSystem/Components/Messages.swift': [2, "a mask (alpha only): a wide pane's paper under the capsule, fading at its sides"],
+  'Resonance/Features/Messages/ThreadComposer.swift': [3, "a mask (alpha only): the riding pictures' strip fading at its ends (round 23)"],
+  // A debug launch argument's stand-in pictures (`-visualRide replyPictures`: the simulator has no library).
+  'Resonance/Features/Messages/ThreadScreen.swift': [1, "-visualRide replyPictures' stand-in pictures (Debug only)"],
   // The reaction stickers' own colours (generated P3), the same in both schemes as emoji keep theirs; their rim is the palette's.
   'Packages/DesignSystem/Sources/DesignSystem/Components/PressLayer.swift': [1, "the reaction stickers' fixed colours (Generated/Reactions.swift)"],
   // A shape's coverage handed to the grain shader, which draws --grain-ink itself.
