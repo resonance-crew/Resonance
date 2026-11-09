@@ -40,15 +40,15 @@ import UIKit
         #expect(ComposerMetrics.pen(focused: true) != Tokens.terracotta)
     }
 
-    @Test func theFootsPaperFadesInOverItsTopAndTheRowsRideOnIt() {
-        // Round 11 §3 shortened the fade (24 → 12) and what the foot gains over riding rows (24 → 6):
-        // RoundElevenTests holds those numbers. Nothing riding still adds nothing over the capsule.
-        #expect(ComposerMetrics.fadeRoom(riding: false) == 0)
+    @Test func theFootsPaperFadesInOverItsTopAndTheRowsRideInTheCapsule() {
+        // Round 11 §3 shortened the fade (24 → 12); round 23 put the rows inside the capsule, so the foot adds nothing
+        // over it whatever rides. RoundTwentyThreeTests holds the rows' numbers.
+        #expect(ComposerMetrics.ridingHeight(rows: 0, pictures: false) == 0)
         #expect(ComposerMetrics.fade < ComposerMetrics.height / 2)
-        // The rows, in the reply's measures.
-        #expect(ComposerMetrics.rowMinHeight == 52 && ComposerMetrics.rowPadY == 4 && ComposerMetrics.rowStart == 12)
-        #expect(ComposerMetrics.rowLeadGap == 10 && ComposerMetrics.rowThumb == 40 && ComposerMetrics.rowGlyph == 18)
-        #expect(ComposerMetrics.slipGap == 6 && ComposerMetrics.clearance == 20)
+        // The rows, in the reply's measures, round 23's (rows 44, the lead's mark 32 in ＋'s column).
+        #expect(ComposerMetrics.rowHeight == 44 && ComposerMetrics.ridingTop == 6 && ComposerMetrics.leadColumn == ComposerMetrics.attachWidth)
+        #expect(ComposerMetrics.leadMark == 32 && ComposerMetrics.replyMedia == 36 && ComposerMetrics.rowGlyph == 16)
+        #expect(ComposerMetrics.clearance == 20)
     }
 
     @Test func whatRidesWithTheMessageStacksReplyThenAttachmentThenError() {
@@ -59,9 +59,10 @@ import UIKit
     }
 
     @Test func theThreadKeepsClearOfTheWholeFootEvenWithTheKeyboardUp() {
-        // A phone's keyboard (336) with a reply and a picture riding (24 + 52 + 52 + 6 + 48 + 8): the foot covers
-        // 526 of an 812 thread — past the old half-thread cap (406), which left the newest message under the rows.
-        let thread: CGFloat = 812, foot: CGFloat = 336 + 24 + 52 + 52 + 6 + 48 + 8
+        // A phone's keyboard (336) with a reply and pictures riding in the capsule (6 + 44 + 72 + 48, round 23) and its
+        // 8 under it: the foot covers 514 of an 812 thread — past the old half-thread cap (406), which left the newest
+        // message under the rows.
+        let thread: CGFloat = 812, foot: CGFloat = 336 + ComposerMetrics.ridingHeight(rows: 1, pictures: true) + 48 + 8
         #expect(ThreadFoot.room(threadBottom: thread, shownHeight: thread - foot) == foot)
         #expect(ThreadFoot.room(threadBottom: thread, shownHeight: thread - foot) > thread / 2)
     }

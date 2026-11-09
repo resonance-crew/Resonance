@@ -24,7 +24,17 @@ struct ResonanceApp: App {
             RootView()
                 .environment(session)
                 .wearsAppearance(AppearanceStore.shared)
-                .onOpenURL { url in _ = GIDSignIn.sharedInstance.handle(url) }
+                // Every link into the app comes here, a cold launch's too (before the tabs exist): Google's sign-in
+                // callback is Google's; a universal link or the Smart App Banner's 打開 waits for the tabs (round 23 §7).
+                .onOpenURL { url in session.links.receive(url) { GIDSignIn.sharedInstance.handle($0) } }
+                #if targetEnvironment(macCatalyst)
+                // The Mac's universal links should come through onOpenURL as the iPhone's do; should a Mac hand one over
+                // as a browsing activity instead (native macOS SwiftUI apps did), it lands in the same inbox — which
+                // opens one link handed over twice once.
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    if let url = activity.webpageURL { session.links.receive(url) { _ in false } }
+                }
+                #endif
                 #if targetEnvironment(macCatalyst)
                 .background(MacWindowChrome())
                 #endif

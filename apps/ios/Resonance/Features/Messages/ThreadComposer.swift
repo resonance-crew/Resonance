@@ -2,25 +2,22 @@ import DesignSystem
 import ResonanceKit
 import SwiftUI
 
-/// The message being written (round 9 §4, round 10 §3, round 22 §4): a capsule floating over the thread —
-/// ＋ at its start (the attach panel), the text, ☺ (the sticker panel) and Send as its end segment — and, in
-/// rows straight over it, what rides with the message: the reply it carries, the note being answered, a card
-/// or the pictures picked (one or the other), and why the last try didn't go. The rows have no frame: they
-/// sit on the foot's paper (``ComposerBacking``, the screen's), which fades in over the 6 the foot gains above
-/// them and the top 6 of the first row, before its ink (round 11 §3). The capsule keeps its geometry in every
-/// state: 48 for a line of text at any text size, taller only with more lines (up to five, then it scrolls,
-/// its edges fading); from the third line ⤢ grows it over the thread (option C) and ⤡ brings it back.
-/// Sending never holds the composer — a message goes to the outbox and the field is empty for the next one,
-/// with its keyboard still up. The twin of Android's ThreadComposer.
+/// The message being written (round 9 §4, round 10 §3, round 22 §4, round 23 §2): a capsule floating over the
+/// thread — ＋ at its start (the attach panel), the text, ☺ (the sticker panel) and Send as its end segment — and,
+/// inside it over the text line (Telegram's way, the owner's call), what rides with the message: the reply it
+/// carries, the note being answered, a card or the pictures picked (one or the other), and why the last try didn't
+/// go. Its rows run in the capsule's three columns: a mark in ＋'s, the words where the text starts, a ✕ in Send's;
+/// whenever anything rides Send is the block at the foot corner. The capsule keeps its geometry in every state: 48
+/// for a line of text at any text size, taller only with more lines (up to five — three on a short viewport — then
+/// it scrolls, its edges fading) or what rides; from the third line ⤢ grows it over the thread (option C) and ⤡
+/// brings it back. Sending never holds the composer — a message goes to the outbox and the field is empty for the
+/// next one, with its keyboard still up. The twin of Android's ThreadComposer.
 struct ThreadComposer: View {
     @Bindable var model: ThreadModel
     @Binding var composing: Bool
     /// What lies under the capsule (round 22 §4.1): ☺ shows ⌨ while the sticker panel is open, ＋ its open
     /// state while the attach panel is, and the send segment ↑ / ↓ in the sticker panel with nothing to send.
     var panels = ComposerPanels()
-    /// A pane wider than a phone: the column of paper under the capsule starts closer over the rows
-    /// (``ComposerMetrics/wideRideLead``: its fade is its own, ``ComposerColumnPaper``).
-    var widePane = false
     /// Grown over the thread: the text box's height (nil at rest).
     var expandedTextHeight: CGFloat?
     /// ＋ was tapped: where it is on the screen (the Mac's popover hangs from it).
@@ -33,11 +30,20 @@ struct ThreadComposer: View {
     var onExpand: (Bool) -> Void = { _ in }
     /// Pictures were pasted into the field.
     var onPastePictures: ([Data]) -> Void = { _ in }
+    /// The reply's words were tapped: the thread goes to the message it answers (and pulses it).
+    var onJump: (String) -> Void = { _ in }
+    /// A hardware keyboard's Esc in the field: whether the screen took it (else the field's own).
+    var onEscape: () -> Bool = { false }
+    /// The capsule on the screen — what rides in it included — and how tall what rides in it is.
+    var onCapsuleFrame: (CGRect) -> Void = { _ in }
+    var onRidingHeight: (CGFloat) -> Void = { _ in }
     /// How many lines the text runs to (the send block from the second, ⤢ from the third).
     @State private var lines = 1
     /// Text beyond the text box's top and bottom edges: they fade out there.
     @State private var fadeTop = false
     @State private var fadeBottom = false
+    /// A phone on its side: rows of one line, smaller thumbnails, three lines of text (round 23).
+    @Environment(\.verticalSizeClass) private var verticalSize
 
     /// What rides with the message, top to bottom.
     private var rides: [ComposerRide] { Self.rides(model) }
@@ -49,50 +55,55 @@ struct ThreadComposer: View {
 
     var body: some View {
         let rides = rides
+        let short = verticalSize == .compact
         let metrics = ComposerText.current()
         let expanded = model.composerExpanded && expandedTextHeight != nil
         let offersStickers = Self.offersStickers(draft: model.draft)
-        VStack(spacing: 0) {
-            if !rides.isEmpty {
-                VStack(spacing: 0) {
-                    // What the foot gains over its rows: its paper's fade, then solid paper as deep as under them.
-                    Color.clear.frame(height: widePane ? ComposerMetrics.wideRideLead : ComposerMetrics.fadeRoom(riding: true))
-                    ForEach(rides, id: \.self) { ride in row(ride) }
-                        .padding(.leading, widePane ? ComposerMetrics.wideRideInset : 0)
-                        .padding(.trailing, widePane ? ComposerMetrics.wideRideEndInset : 0)
-                }
-                .padding(.bottom, ComposerMetrics.slipGap)
-                .transition(.opacity)
+        ComposerCapsule(
+            focused: composing, canSend: model.canSend, attachOpen: panels.attachOpen, attachLabel: L10n.Messages.attach,
+            sendLabel: L10n.Messages.send,
+            stickers: !offersStickers ? nil
+                : ComposerSideButton(on: panels.stickersOpen, label: panels.stickersOpen ? L10n.Messages.keyboard : L10n.Messages.stickers,
+                                     action: onStickers),
+            corner: lines >= ComposerMetrics.expandAtLines || expanded
+                ? ComposerSideButton(on: expanded, label: expanded ? L10n.Messages.collapseComposer : L10n.Messages.expandComposer,
+                                     action: { onExpand(!expanded) })
+                : nil,
+            sendFace: panels.sendFace(canSend: model.hasSomethingToSend),
+            faceLabel: panels.expanded ? L10n.Messages.stickerPanelCollapse : L10n.Messages.stickerPanelExpand,
+            onFace: onPanelFace, block: Self.sendsFromBlock(lines: lines, expanded: expanded, riding: !rides.isEmpty),
+            steady: true,
+            onAttach: onAttach, onSend: { if model.canSend { model.send() } }
+        ) {
+            ComposerTextView(text: $model.draft, focused: $composing, placeholder: L10n.Messages.placeholder,
+                             accessibilityLabel: L10n.Messages.threadWith(handle: model.displayHandle), metrics: metrics,
+                             expandedHeight: expanded ? expandedTextHeight : nil,
+                             maxLines: ComposerMetrics.maxLines(short: short),
+                             onLines: { lines = $0 },
+                             onReturn: { if model.canSend { model.send() } },
+                             onEscape: onEscape,
+                             onPastePictures: onPastePictures,
+                             onFades: { top, bottom in
+                                 if fadeTop != top { fadeTop = top }
+                                 if fadeBottom != bottom { fadeBottom = bottom }
+                             })
+                .mask { ComposerFadeMask(top: fadeTop, bottom: fadeBottom) }
+        } riding: {
+            // Inside the pen line, over the text line: no divider, the rows touching (round 23 §2). The block is always
+            // there (0 tall with nothing in it) so its height is said when the last row goes too.
+            VStack(spacing: 0) {
+                ForEach(rides, id: \.self) { ride in row(ride, short: short) }
             }
-            ComposerCapsule(
-                focused: composing, canSend: model.canSend, attachOpen: panels.attachOpen, attachLabel: L10n.Messages.attach,
-                sendLabel: L10n.Messages.send,
-                stickers: !offersStickers ? nil
-                    : ComposerSideButton(on: panels.stickersOpen, label: panels.stickersOpen ? L10n.Messages.keyboard : L10n.Messages.stickers,
-                                         action: onStickers),
-                corner: lines >= ComposerMetrics.expandAtLines || expanded
-                    ? ComposerSideButton(on: expanded, label: expanded ? L10n.Messages.collapseComposer : L10n.Messages.expandComposer,
-                                         action: { onExpand(!expanded) })
-                    : nil,
-                sendFace: panels.sendFace(canSend: model.hasSomethingToSend),
-                faceLabel: panels.expanded ? L10n.Messages.stickerPanelCollapse : L10n.Messages.stickerPanelExpand,
-                onFace: onPanelFace, block: Self.sendsFromBlock(lines: lines, expanded: expanded),
-                onAttach: onAttach, onSend: { if model.canSend { model.send() } }
-            ) {
-                ComposerTextView(text: $model.draft, focused: $composing, placeholder: L10n.Messages.placeholder,
-                                 accessibilityLabel: L10n.Messages.threadWith(handle: model.displayHandle), metrics: metrics,
-                                 expandedHeight: expanded ? expandedTextHeight : nil,
-                                 onLines: { lines = $0 },
-                                 onReturn: { if model.canSend { model.send() } },
-                                 onPastePictures: onPastePictures,
-                                 onFades: { top, bottom in
-                                     if fadeTop != top { fadeTop = top }
-                                     if fadeBottom != bottom { fadeBottom = bottom }
-                                 })
-                    .mask { ComposerFadeMask(top: fadeTop, bottom: fadeBottom) }
-            }
+            .padding(.top, rides.isEmpty ? 0 : ComposerMetrics.ridingTop)
+            // A tap anywhere among them gives the field the keyboard — never takes it away (the foot's paper would).
+            .contentShape(Rectangle())
+            .onTapGesture { composing = true }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height.rounded() } action: { onRidingHeight($0) }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(rides.isEmpty ? "" : L10n.Messages.composerRiding)
+            .accessibilityHidden(rides.isEmpty)
         }
-        .animation(.easeOut(duration: 0.16), value: rides)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onCapsuleFrame($0) }
         .onChange(of: model.draft) { _, new in
             if new.utf16.count > ThreadModel.maxLength { model.draft = String(new.utf16.prefix(ThreadModel.maxLength)) ?? new }
         }
@@ -109,110 +120,164 @@ struct ThreadComposer: View {
         draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// Past one line (or grown over the thread) Send is the block on the last row, ⤢ / ⤡ over it (round 22 v2).
-    nonisolated static func sendsFromBlock(lines: Int, expanded: Bool) -> Bool { lines > 1 || expanded }
+    /// Past one line, grown over the thread, or with anything riding (round 23 §2), Send is the block on the last row,
+    /// ⤢ / ⤡ over it (round 22 v2) — a capsule made taller by its rows never paints a tall send strip.
+    nonisolated static func sendsFromBlock(lines: Int, expanded: Bool, riding: Bool = false) -> Bool {
+        lines > 1 || expanded || riding
+    }
 
-    /// One riding thing as its row: lead · words · ✕.
-    @ViewBuilder private func row(_ ride: ComposerRide) -> some View {
+    /// One riding thing as its row: mark · (media) words · ✕.
+    @ViewBuilder private func row(_ ride: ComposerRide, short: Bool) -> some View {
+        let rowHeight = short ? ComposerMetrics.shortRowHeight : ComposerMetrics.rowHeight
+        let mark = short ? rowHeight - 8 : ComposerMetrics.leadMark
         switch ride {
         case .reply:
             if let quote = model.replyingTo {
-                let sticker = QuotedReply.quotedSticker(quote)
                 ComposerRow(label: quote.senderId == model.me ? L10n.Messages.replyingToSelf : L10n.Messages.replyingTo(handle: model.displayHandle),
                             detail: Self.replyDetail(quote),
-                            removeLabel: L10n.Messages.replyCancel, onRemove: { model.cancelReply() }) {
-                    HStack(spacing: ComposerMetrics.rowLeadGap) {
-                        ReplyRule().frame(height: 34)
-                        // A sticker answered: its still alone, no words (the thread's quote is the same); VoiceOver names it.
-                        if let sticker {
-                            StickerStill(sticker: sticker, side: ComposerMetrics.rowThumb)
-                                .opacity(QuotedReply.stickerFade)
-                                .accessibilityElement()
-                                .accessibilityLabel(L10n.Messages.stickerLabel(name: StickerLibrary.shared.label(sticker)))
-                        }
-                    }
+                            removeLabel: L10n.Messages.replyCancel, onRemove: { model.cancelReply() },
+                            // Its words go to the message it answers, pulsed there (the thread's quote does the same).
+                            onTap: { onJump(quote.id) }, short: short) {
+                    ReplyRule().frame(height: rowHeight - 2 * ComposerMetrics.replyRuleInset)
+                } media: {
+                    ReplyMedia(quote: quote, model: model, side: short ? mark : ComposerMetrics.replyMedia)
                 }
             }
         case .note:
-            ComposerRow(label: L10n.Messages.quotedNote, removeLabel: L10n.Messages.removeCard, onRemove: { model.noteRef = nil }) {
-                ComposerRowTile(.glyph(.note))
+            ComposerRow(label: L10n.Messages.quotedNote, removeLabel: L10n.Messages.removeNote, onRemove: { model.noteRef = nil },
+                        onTap: { composing = true }, short: short) {
+                ComposerRowTile(.glyph(.note), side: mark)
             }
         case .card:
             if let card = model.pendingCard {
                 // A 私人卡 says so: the message is what lets them read it.
                 ComposerRow(label: CardScreen.isPrivate(card) ? L10n.Messages.privateCard : L10n.Messages.attachCardShort,
                             detail: card.title, removeLabel: L10n.Messages.removeCard,
-                            onRemove: { model.pendingCard = nil }) {
-                    ComposerRowTile(card.imageUrl.flatMap(URL.init(string:)).map { .cover($0) } ?? .glyph(.cards))
+                            onRemove: { model.pendingCard = nil }, onTap: { composing = true }, short: short) {
+                    ComposerRowTile(card.imageUrl.flatMap(URL.init(string:)).map { .cover($0) } ?? .glyph(.cards), side: mark)
                 }
             }
         case .picture:
-            PictureStrip(model: model)
+            PictureStrip(model: model, short: short)
         case .error:
             if let error = model.error {
-                Text(error).font(AppFonts.body(12)).foregroundStyle(Tokens.terracotta)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.leading, ComposerMetrics.rowStart)
-                    .padding(.vertical, 6)
-                    .allowsHitTesting(false)
+                ComposerErrorRow(text: error)
             }
         }
     }
 }
 
-/// The pictures riding with the next send (round 22 §4.2, v2): their thumbnails in the order picked, straight over
-/// the capsule, each taken off by its own ✕ at its top-right corner (the pen's loader while one is readied) — no
-/// numbers, no count, no clear-all: unpicking is one by one, there or in the attach panel's picker.
-struct PictureStrip: View {
-    @Bindable var model: ThreadModel
+/// Why the last try didn't go (round 23 §2): its small terracotta mark in ＋'s column, its words in terracotta
+/// where the text starts, nothing in Send's column (no ✕: it goes with the next try). At least 32 tall.
+private struct ComposerErrorRow: View {
+    let text: String
 
     var body: some View {
+        HStack(spacing: 0) {
+            WobCircleShape(seed: 37, options: WobCircleOptions(segments: 6, mag: 0.4, cpJitter: 0.2))
+                .fill(Tokens.terracotta)
+                .frame(width: 6, height: 6)
+                .frame(width: ComposerMetrics.leadColumn)
+                .accessibilityHidden(true)
+            Text(text).font(AppFonts.body(ComposerMetrics.errorSize)).foregroundStyle(Tokens.terracotta)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 7)
+            Color.clear.frame(width: ComposerMetrics.sendWidth, height: 1)
+        }
+        .frame(minHeight: ComposerMetrics.errorMinHeight)
+    }
+}
+
+/// A reply's media at the start of its words (round 23, Telegram's photo reply): a quoted sticker's still, faded as
+/// the thread's quote draws it; the picture it answers, from the thread's own copy; or the cover of the card it
+/// carried. Nothing for words alone.
+private struct ReplyMedia: View {
+    let quote: ReplyQuote
+    let model: ThreadModel
+    let side: CGFloat
+    @State private var picture: UIImage?
+
+    var body: some View {
+        if let sticker = QuotedReply.quotedSticker(quote) {
+            // A sticker answered: its still alone, no words (the thread's quote is the same); VoiceOver names it.
+            StickerStill(sticker: sticker, side: side)
+                .opacity(QuotedReply.stickerFade)
+                .accessibilityElement()
+                .accessibilityLabel(L10n.Messages.stickerLabel(name: StickerLibrary.shared.label(sticker)))
+        } else if quote.image, let image = model.message(quote.id)?.image {
+            ComposerRowTile(.picture(picture ?? model.pictures.cached(image.id, .thumb)), side: side)
+                .task(id: image.id) {
+                    if picture == nil, model.pictures.cached(image.id, .thumb) == nil {
+                        picture = await model.pictures.image(image.id, .thumb)
+                    }
+                }
+        } else if let cardRef = quote.cardRef, let cover = model.card(cardRef)?.imageUrl.flatMap(URL.init(string:)) {
+            ComposerRowTile(.cover(cover), side: side)
+        }
+    }
+}
+
+/// The pictures riding with the next send (round 22 §4.2, v2; round 23: inside the capsule), in the order picked,
+/// across the capsule's inner width 8 in from its sides — 8 + 56 + 8 — scrolling sideways with its ends fading
+/// where more lies beyond (a mouse's wheel scrolls it too); each taken off by its own ✕ on its top-right corner (the
+/// pen's loader while one is readied) — no numbers, no count, no clear-all: unpicking is one by one, there or in the
+/// attach panel's picker.
+struct PictureStrip: View {
+    @Bindable var model: ThreadModel
+    var short = false
+
+    var body: some View {
+        let side = short ? ComposerMetrics.shortStripThumb : ComposerMetrics.stripThumb
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
-                ForEach(model.pendingPictures) { picture in
-                    PictureThumb(picture: picture) { model.removePicture(picture.key) }
+                ForEach(Array(model.pendingPictures.enumerated()), id: \.element.id) { i, picture in
+                    PictureThumb(picture: picture, side: side, index: i) { model.removePicture(picture.key) }
                 }
             }
-            .padding(.leading, ComposerMetrics.rowStart)
-            .padding(.trailing, ComposerMetrics.rowStart)
-            .padding(.top, ComposerMetrics.rowPadY)
-            // The thumbnails as far over the strip's foot as under its top, past the ✕'s room (the owner's notes 2026-10-31).
-            .padding(.bottom, ComposerMetrics.rowPadY + PictureThumb.removeRoom)
+            // The last ✕'s swing into the strip's end.
+            .padding(.trailing, PictureThumb.removeOut)
+            .padding(.vertical, ComposerMetrics.stripPad)
+            .background { WheelScrollsSideways() }
         }
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.basedOnSize)
-        .frame(minHeight: ComposerMetrics.rowMinHeight)
+        .sidewaysEdgeFades()
+        .frame(height: ComposerMetrics.stripHeight(short: short))
+        .padding(.horizontal, ComposerMetrics.stripInset)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.Messages.picturesCount(count: model.pendingPictures.count))
     }
 }
 
-/// One picture in the strip: 56 × 56 cover-cropped, a small round ✕ on its top-right corner — a calm circle, its
-/// hand-drawn wobble low (v2: the old one read as a blob).
+/// One picture in the strip: `side` square cover-cropped, a small round ✕ on its top-right corner, its middle 4 in
+/// from the corner so the whole disc stays inside the capsule's pen line — a calm circle, its hand-drawn wobble low
+/// (v2: the old one read as a blob).
 struct PictureThumb: View {
     let picture: RidingPicture
+    var side: CGFloat = ComposerMetrics.stripThumb
+    var index = 0
     let onRemove: () -> Void
 
-    static let side: CGFloat = 56
     /// The ✕'s disc and how little it wobbles.
     static let removeDisc: CGFloat = 20
     static let removeWobble = WobCircleOptions(segments: 8, mag: 0.35, cpJitter: 0.15)
-    /// The room over and beside the thumbnail its ✕ swings into.
-    static let removeRoom: CGFloat = 8
+    /// The disc's middle, in from the thumbnail's top-right corner; how far it swings out past its edges.
+    static let removeIn: CGFloat = 4
+    static var removeOut: CGFloat { removeDisc / 2 - removeIn }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Group {
-                if let image = picture.picked?.preview {
-                    Image(uiImage: image).resizable().scaledToFill()
-                } else {
-                    ComposerRowTile.tonal.overlay { SketchLoader(size: 18) }
-                }
+        Group {
+            if let image = picture.picked?.preview {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                ComposerRowTile.tonal.overlay { SketchLoader(size: 18) }
             }
-            .frame(width: Self.side, height: Self.side)
-            .clipShape(ComposerRowTile.shape)
-            .accessibilityHidden(true)
+        }
+        .frame(width: side, height: side)
+        .clipShape(ComposerRowTile.shape(side: side))
+        .accessibilityHidden(true)
+        .overlay(alignment: .topTrailing) {
             Button(action: onRemove) {
                 ZStack {
                     WobCircleShape(seed: 13, options: Self.removeWobble).fill(Tokens.cream)
@@ -225,17 +290,99 @@ struct PictureThumb: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .offset(x: 10, y: -10)
-            .accessibilityLabel(L10n.Messages.removeImage)
+            // Its middle `removeIn` in from the corner (the 32 room centred on it).
+            .offset(x: 16 - Self.removeIn, y: Self.removeIn - 16)
+            .accessibilityLabel(L10n.Messages.removeImageAt(n: index + 1))
             .disabled(picture.picked == nil)
         }
-        .padding(.top, Self.removeRoom)
-        .padding(.trailing, Self.removeRoom)
     }
 }
 
-/// What rides with the message (round 10 §3.4), in its order over the capsule: the reply, the note it
-/// answers, the card or the picture, then why the last try didn't go.
+/// A sideways scroll's ends fade while there is more beyond them (``ScrollEdgeFades``' sideways twin).
+private struct SidewaysEdgeFades: ViewModifier {
+    @State private var before = false
+    @State private var after = false
+
+    private struct Ends: Equatable {
+        var before: Bool
+        var after: Bool
+    }
+
+    func body(content: Content) -> some View {
+        let length = ScrollEdgeFades.length
+        content
+            .onScrollGeometryChange(for: Ends.self) { geo in
+                let ends = ScrollEdgeFades.edges(offset: geo.contentOffset.x + geo.contentInsets.leading,
+                                                 content: geo.contentSize.width + geo.contentInsets.leading + geo.contentInsets.trailing,
+                                                 visible: geo.containerSize.width)
+                return Ends(before: ends.above, after: ends.below)
+            } action: { _, ends in
+                before = ends.before
+                after = ends.after
+            }
+            .mask {
+                HStack(spacing: 0) {
+                    LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: before ? length : 0)
+                    Color.black
+                    LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: after ? length : 0)
+                }
+                .animation(.easeOut(duration: 0.15), value: before)
+                .animation(.easeOut(duration: 0.15), value: after)
+            }
+    }
+}
+
+extension View {
+    fileprivate func sidewaysEdgeFades() -> some View { modifier(SidewaysEdgeFades()) }
+}
+
+/// A mouse's (or a trackpad's) vertical scroll moves the sideways strip it is in (round 23 §2, a fine pointer: the Mac,
+/// an iPad with a mouse): a pan that takes scroll events only — never a touch — added to the scroll view it sits in.
+private struct WheelScrollsSideways: UIViewRepresentable {
+    func makeUIView(context: Context) -> WheelView { WheelView() }
+    func updateUIView(_ view: WheelView, context: Context) {}
+
+    final class WheelView: UIView, UIGestureRecognizerDelegate {
+        private weak var scroller: UIScrollView?
+        private lazy var wheel: UIPanGestureRecognizer = {
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(scrolled(_:)))
+            pan.allowedScrollTypesMask = .all
+            pan.allowedTouchTypes = []
+            pan.delegate = self
+            return pan
+        }()
+        private var last: CGPoint = .zero
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            var view = superview
+            while let v = view, !(v is UIScrollView) { view = v.superview }
+            guard let found = view as? UIScrollView, found !== scroller else { return }
+            scroller?.removeGestureRecognizer(wheel)
+            scroller = found
+            found.addGestureRecognizer(wheel)
+        }
+
+        @objc private func scrolled(_ pan: UIPanGestureRecognizer) {
+            guard let scroller else { return }
+            let t = pan.translation(in: scroller)
+            if pan.state == .began { last = .zero }
+            let dx = t.x - last.x, dy = t.y - last.y
+            last = t
+            // Only a vertical scroll: a sideways one is the scroll view's own.
+            guard abs(dy) > abs(dx) else { return }
+            let most = max(0, scroller.contentSize.width - scroller.bounds.width)
+            scroller.contentOffset.x = min(most, max(0, scroller.contentOffset.x - dy))
+        }
+
+        func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+    }
+}
+
+/// What rides with the message (round 10 §3.4, round 23 §2), in its order inside the capsule over the text line: the
+/// reply, the note it answers, the card or the picture, then why the last try didn't go.
 nonisolated enum ComposerRide: Hashable {
     case reply, note, card, picture, error
 

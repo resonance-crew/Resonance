@@ -1,5 +1,5 @@
-# alice opens her thread with bob, opens the sticker panel (☺, 貼圖), taps 摺摺's 心暖暖 once to preview it
-# (再點一次傳送) and again to send it: the sticker stands in the thread, no bubble, and the send completes.
+# alice opens her thread with bob, opens the sticker panel (☺, 貼圖) and taps 摺摺's 心暖暖 once: it is sent at
+# once (round 23) and stands in the thread, no bubble; held right away its menu offers 回覆 and 收回, no 複製.
 appId: com.resonance.stories
 name: send-sticker
 tags:
@@ -19,18 +19,25 @@ tags:
 - extendedWaitUntil:
     visible: 心暖暖
     timeout: 10000
+# One tap sends it (round 23: no preview, no second tap); the cell is named by its sticker.
 - tapOn: 心暖暖
-- extendedWaitUntil:
-    visible: 再點一次傳送
-    timeout: 5000
-# The second tap on the same sticker sends it (its preview is named 預覽：…, its cell by its name).
-- tapOn: 預覽：心暖暖，再點一次傳送|心暖暖
-- extendedWaitUntil:
-    notVisible: 再點一次傳送
-    timeout: 5000
 - extendedWaitUntil:
     visible: 貼圖：心暖暖
     timeout: 10000
+# Held at once — while it may still be on its way (傳送中): its menu fills in once it is delivered, the reactions,
+# 回覆 and 收回 (round 23 §1), never 複製 (a sticker's words are only its fallback).
+- longPressOn: 貼圖：心暖暖
+- extendedWaitUntil:
+    visible: 收回
+    timeout: 15000
+- assertVisible: 回覆
+- assertNotVisible: 複製
+- takeScreenshot: send-sticker-held
+- tapOn:
+    point: 50%,15%
+- extendedWaitUntil:
+    notVisible: 收回
+    timeout: 5000
 - extendedWaitUntil:
     notVisible: 傳送中⋯
     timeout: 15000

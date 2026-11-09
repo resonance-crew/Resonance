@@ -18,10 +18,14 @@ struct ComposerTextView: UIViewRepresentable {
     let placeholder: String
     let accessibilityLabel: String
     let metrics: ComposerText
-    /// Grown over the thread: the text box's height (else as tall as its lines, up to five).
+    /// Grown over the thread: the text box's height (else as tall as its lines, up to `maxLines`).
     var expandedHeight: CGFloat?
+    /// The most lines before it scrolls: five, three on a short viewport (round 23).
+    var maxLines = ComposerMetrics.maxLines
     var onLines: (Int) -> Void = { _ in }
     var onReturn: () -> Void = {}
+    /// A hardware keyboard's Esc (no input method composing): whether the composer took it (a reply cancelled).
+    var onEscape: () -> Bool = { false }
     var onPastePictures: ([Data]) -> Void = { _ in }
     /// Whether there is text beyond the box's top and its bottom edge (each fades out while there is).
     var onFades: (Bool, Bool) -> Void = { _, _ in }
@@ -38,6 +42,7 @@ struct ComposerTextView: UIViewRepresentable {
         let box = ComposerTextBox()
         box.textView.delegate = context.coordinator
         box.textView.onReturn = { context.coordinator.parent.onReturn() }
+        box.textView.onEscape = { context.coordinator.parent.onEscape() }
         box.textView.onPastePictures = { context.coordinator.parent.onPastePictures($0) }
         box.onFades = { top, bottom in context.coordinator.parent.onFades(top, bottom) }
         apply(box, initial: true)
@@ -87,7 +92,7 @@ struct ComposerTextView: UIViewRepresentable {
         let lines = Self.lines(height: text, metrics: metrics)
         DispatchQueue.main.async { context.coordinator.report(lines) }
         let shown = expandedHeight.map { max(metrics.lineHeight, $0) }
-            ?? min(text, Self.height(lines: ComposerMetrics.maxLines, metrics: metrics))
+            ?? min(text, Self.height(lines: maxLines, metrics: metrics))
         return CGSize(width: width, height: shown + 2 * inset)
     }
 
@@ -243,10 +248,12 @@ struct ComposerFadeMask: View {
 }
 
 /// The composer's `UITextView`: a hardware Return sends (unless Shift is held, or an input method is
-/// composing), and a picture on the pasteboard is handed to the composer rather than pasted as text.
+/// composing), Esc cancels a reply (round 23; an input method composing keeps its Esc), and a picture on the
+/// pasteboard is handed to the composer rather than pasted as text.
 final class ComposerUITextView: UITextView {
     weak var box: ComposerTextBox?
     var onReturn: () -> Void = {}
+    var onEscape: () -> Bool = { false }
     var onPastePictures: ([Data]) -> Void = { _ in }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
@@ -255,6 +262,7 @@ final class ComposerUITextView: UITextView {
             onReturn()
             return
         }
+        if let key = presses.first?.key, key.keyCode == .keyboardEscape, markedTextRange == nil, onEscape() { return }
         super.pressesBegan(presses, with: event)
     }
 

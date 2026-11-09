@@ -120,6 +120,8 @@ final class SessionStore {
     /// while shows it at once without reading a hundred cards (ThoughtMapStore.open).
     private(set) var thoughtMap: ThoughtMapStore
     let push = PushCenter.shared
+    /// A link into the app (a universal link, the Smart App Banner's 打開) waiting for the tabs to open it.
+    let links = LinkInbox()
     @ObservationIgnored private var listener: AuthStateDidChangeListenerHandle?
     @ObservationIgnored private let apple = AppleSignIn()
 

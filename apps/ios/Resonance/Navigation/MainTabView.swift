@@ -444,7 +444,12 @@ struct MainTabView: View {
             if case .write? = paths[tab]?.last { return }
             paths[tab, default: []].append(.write(request))
         }
-        .onOpenURL(perform: open)
+        // A link into the app (a universal link, the Smart App Banner's 打開): the session held it from the app's root
+        // until the tabs were here — a cold launch's through the restore, a sign-in or onboarding — and it opens once.
+        .onChange(of: session.links.pending, initial: true) { _, pending in
+            guard pending != nil, let url = session.links.take() else { return }
+            open(url)
+        }
         // A tapped push: its page, or the notifications when it has none (also after a cold start).
         .onChange(of: push.opened, initial: true) { _, opened in
             guard let opened else { return }
@@ -535,10 +540,14 @@ struct MainTabView: View {
     }
     #endif
 
-    /// Site links (universal links, shared URLs) open on the current tab.
+    /// Site links (universal links, the Smart App Banner's, shared URLs) open on the current tab; a page the
+    /// association claims that the app can't show opens in the in-app browser.
     private func open(_ url: URL) {
-        guard let route = Route(url: url, origin: session.config.origin) else { return }
-        open(route)
+        switch IncomingLink.of(url, origin: session.config.origin) {
+        case let .route(route): open(route)
+        case let .browser(page): InAppBrowser.open(page)
+        case .none: break
+        }
     }
 
     private func open(_ route: Route) {
@@ -683,6 +692,8 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     @State private var restingTop: CGFloat = 0
     /// What the scroll view shows between its insets (the bar above, the home indicator below).
     @State private var visibleHeight: CGFloat = 0
+    /// The list is being dragged or gliding on: a banded row's press holds off (`listScrolling`, round 23 §4).
+    @State private var scrolling = false
     /// How far the list is drawn down past its top (a pull, or the room a refresh keeps): the banner
     /// rides on the list, below the loader in that gap, never over it.
     private var drawnDown: CGFloat { max(0, -(nearTop + restingTop)) }
@@ -732,6 +743,7 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
             }
             // An empty state fills what is left between the bar's line and the tab bar.
             .environment(\.emptyStateRegion, max(0, visibleHeight - topPadding - bottomRoom))
+            .environment(\.listScrolling, scrolling)
             // --page-pad-top on a phone; with the title in the bar, 16 of air under its line; none
             // without a title (home: the first card is the bar's edge).
             .padding(.top, topPadding)
@@ -781,6 +793,7 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
             barHiding?.scrolled(to: now[0], limit: now[1])
         }
         .onScrollPhaseChange { _, phase, context in
+            if scrolling != phase.isScrolling { scrolling = phase.isScrolling }
             guard phase == .idle else { return }
             let y = context.geometry.contentOffset.y + context.geometry.contentInsets.top
             withAnimation(.easeOut(duration: 0.18)) { hidden = y < travel || hidden < travel / 2 ? 0 : travel }

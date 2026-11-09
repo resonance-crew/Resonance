@@ -74,17 +74,14 @@ import Testing
 
     // MARK: §3 — the foot's paper: a short fade from the top edge of what the foot shows first
 
-    @Test func theFootsPaperFadesInOver12ThenLeavesAsMuchOverTheRowsAsUnderThem() {
+    @Test func theFootsPaperFadesInOver12OverTheCapsulesTopWhateverRidesInIt() {
         #expect(ComposerMetrics.fade == 12)
-        // Nothing riding: the fade lies over the capsule's top 12, solid from there down.
-        #expect(ComposerMetrics.fadeRoom(riding: false) == 0)
-        // Riding (the owner's notes 2026-10-31): the whole fade over the topmost row, then 6 of solid paper —
-        // a 40 picture or tile centred in a 52 row has as much solid paper over it as under it to the capsule.
-        #expect(ComposerMetrics.fadeRoom(riding: true) == 18)
-        let inkInset = (ComposerMetrics.rowMinHeight - ComposerMetrics.rowThumb) / 2
-        let over = ComposerMetrics.fadeRoom(riding: true) - ComposerMetrics.fade + inkInset
-        let under = inkInset + ComposerMetrics.slipGap
-        #expect(over == under)
+        // Round 23: what rides rides inside the capsule — the foot gains no room and no fade over it (the owner's
+        // 「不用做這個漸層」); the fade lies over the capsule's top 12, rows or none.
+        #expect(ComposerMetrics.ridingHeight(rows: 0, pictures: false) == 0)
+        #expect(ComposerMetrics.fade < ComposerMetrics.height / 2)
+        // The rows start 6 under the pen line: past the wobble's reach (autoMag at most 4) and half the pen.
+        #expect(ComposerMetrics.ridingTop >= 4 + Tokens.ink / 2)
     }
 
     // MARK: §7 — the trash: a restore from the shelf says who reads the card now

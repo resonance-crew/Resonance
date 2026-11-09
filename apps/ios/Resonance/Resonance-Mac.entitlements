@@ -18,5 +18,10 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:resonance.channel</string>
+		<string>applinks:resonance-world.vercel.app</string>
+	</array>
 </dict>
 </plist>

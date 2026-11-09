@@ -2,18 +2,19 @@ import DesignSystem
 import ResonanceKit
 import SwiftUI
 
-/// The sticker panel (round 22 §4.1), in the keyboard's place under the capsule on the foot's own paper — no
-/// card, no divider: a bar of the packs (each character's head; 🕘 the stickers sent last, first, once there
-/// are any) over one scroll through every pack, each headed by its character's name. The bar follows the
-/// scroll; a tap on a pack goes to it. A tap on a sticker previews it (the screen draws the preview over the
-/// thread's foot), a second tap sends it. Scrolling the grid only scrolls it: the panel grows from the send
-/// segment's ↑ alone (round 22 v3). The grid runs to the screen's foot, under the home indicator, fading out
-/// there (`toScreenEdge`). On a Mac it is the popover's content (5 columns).
+/// The sticker panel (round 22 §4.1, round 23 §3), in the keyboard's place under the capsule on the foot's own paper —
+/// no card, no divider: a bar of the packs (each character's head; 🕘 the stickers sent last, first, once there are
+/// any — held still while the panel is open) over one scroll through every pack, each headed by its character's name.
+/// The bar follows the scroll; a tap on a pack goes to it. One tap on a sticker sends it — no preview, no second
+/// tap; the cells in view breathe (``StickerBreathing``: each plays, rests on its thumb, plays again; the thumbs
+/// alone under Reduce Motion or Low Power Mode). Scrolling the grid only scrolls it: the panel grows from the send
+/// segment's ↑ alone (round 22 v3). The grid runs to the screen's foot, under the home indicator, fading out there
+/// (`toScreenEdge`). On a Mac it is the popover's content (4 columns across 400).
 struct StickerPanel: View {
     let library: StickerLibrary
     let columns: Int
-    /// The sticker previewed (its cell washed): a second tap sends it.
-    let previewing: StickerRef?
+    /// How many cells play at once (``StickerBreathing/capacity(columns:)``).
+    var maxPlaying = StickerBreathing.phoneCapacity
     let onTap: (StickerRef) -> Void
     /// The grid scrolls on to the screen's foot (the phone's panel), its last row clearing the home indicator.
     var toScreenEdge = false
@@ -23,8 +24,28 @@ struct StickerPanel: View {
     @State private var shownSection: String?
     /// A tab tapped holds the bar for its glide: the packs it scrolls past don't flicker through it on the way.
     @State private var heldUntil: Date?
+    @State private var breathing: StickerBreathingClock
+
+    init(library: StickerLibrary, columns: Int, maxPlaying: Int = StickerBreathing.phoneCapacity,
+         onTap: @escaping (StickerRef) -> Void, toScreenEdge: Bool = false, bottomRoom: CGFloat = 0) {
+        self.library = library
+        self.columns = columns
+        self.maxPlaying = maxPlaying
+        self.onTap = onTap
+        self.toScreenEdge = toScreenEdge
+        self.bottomRoom = bottomRoom
+        _breathing = State(initialValue: StickerBreathingClock(capacity: maxPlaying))
+    }
 
     static let recentsId = "recents"
+    /// The grid's measures, one rule everywhere (round 23 §3): 8 in from the screen's (or the popover's) edges, 4
+    /// between cells, the art 2 inside its cell — a phone's four columns ≈ 93 pt each.
+    static let gridInset: CGFloat = 8
+    static let gap: CGFloat = 4
+    static let cellInset: CGFloat = 2
+    /// Four columns on a phone, six from 600 wide (an iPad's pane); the Mac's popover four.
+    static func columns(width: CGFloat) -> Int { width >= 600 ? 6 : 4 }
+    static let popoverColumns = 4
 
     private var sections: [(id: String, title: String, stickers: [StickerRef])] {
         var list: [(String, String, [StickerRef])] = []
@@ -38,19 +59,22 @@ struct StickerPanel: View {
 
     var body: some View {
         let sections = sections
+        // Each cell's place in the grid, row by row through the sections (a sticker in 🕘 and in its pack is two cells).
+        let starts = sections.indices.map { i in sections.prefix(i).reduce(0) { $0 + $1.stickers.count } }
         VStack(spacing: 0) {
             packBar(sections)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(sections, id: \.id) { section in
+                    ForEach(Array(sections.enumerated()), id: \.element.id) { s, section in
                         VStack(alignment: .leading, spacing: 6) {
                             Text(section.title)
                                 .font(AppFonts.body(12, weight: .semibold)).foregroundStyle(Tokens.textMuted)
                                 .padding(.horizontal, 4)
                                 .accessibilityAddTraits(.isHeader)
-                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: columns), spacing: 6) {
-                                ForEach(section.stickers, id: \.self) { sticker in
-                                    StickerCell(sticker: sticker, selected: previewing == sticker) { onTap(sticker) }
+                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Self.gap), count: columns), spacing: Self.gap) {
+                                ForEach(Array(section.stickers.enumerated()), id: \.element) { i, sticker in
+                                    StickerCell(sticker: sticker, key: "\(section.id)/\(sticker.pack)/\(sticker.id)", order: starts[s] + i,
+                                                breathing: breathing) { onTap(sticker) }
                                 }
                             }
                         }
@@ -59,7 +83,7 @@ struct StickerPanel: View {
                     }
                 }
                 .scrollTargetLayout()
-                .padding(.horizontal, 12)
+                .padding(.horizontal, Self.gridInset)
                 .padding(.bottom, 12 + bottomRoom)
             }
             .scrollPosition($position, anchor: .top)
@@ -70,14 +94,20 @@ struct StickerPanel: View {
                 if let held = heldUntil, held > .now { return }
                 if let first = visible.first, first != shownSection { shownSection = first }
             }
+            // No new start while the grid moves (round 23 §3).
+            .onScrollPhaseChange { _, phase in breathing.scrolling(phase.isScrolling) }
             // Down under the home indicator to the screen's edge (round 22 v3): no band of paper under the grid.
             .ignoresSafeArea(.container, edges: toScreenEdge ? .bottom : [])
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.Messages.stickers)
+        // 🕘 holds still while the panel is open: what is sent shows from the next opening.
+        .onAppear { library.holdRecents() }
+        .onDisappear { library.releaseRecents() }
+        .task { await breathing.run() }
     }
 
-    /// The packs' bar: 🕘 then each character's head, the one the scroll is in washed; a tap goes to it.
+/// The packs' bar: 🕘 then each character's head, the one the scroll is in washed; a tap goes to it.
     private func packBar(_ sections: [(id: String, title: String, stickers: [StickerRef])]) -> some View {
         ScrollView(.horizontal) {
             HStack(spacing: 4) {
@@ -164,10 +194,15 @@ nonisolated struct StickerCellShape: Shape {
     }
 }
 
-/// One sticker in the grid: its key pose, square; the one previewed washed behind. VoiceOver reads its name.
+/// One sticker in the grid (round 23 §3): its key pose, square, 2 in from its cell — breathing while at least 60 % of
+/// it is in view (``StickerBreathing``); one tap sends it, the press washing its cell in the orange of the old choice.
+/// VoiceOver reads its name and that a tap sends it.
 private struct StickerCell: View {
     let sticker: StickerRef
-    let selected: Bool
+    /// The cell's own name (a sticker in 🕘 and in its pack is two cells) and its place in the grid.
+    let key: String
+    let order: Int
+    let breathing: StickerBreathingClock
     let onTap: () -> Void
 
     private static let wash = Tokens.terracottaLight.opacity(0.55)
@@ -176,49 +211,80 @@ private struct StickerCell: View {
     var body: some View {
         Button(action: onTap) {
             GeometryReader { geo in
-                StickerStill(sticker: sticker, side: min(geo.size.width, geo.size.height) - 8)
+                BreathingSticker(sticker: sticker, side: min(geo.size.width, geo.size.height) - 2 * StickerPanel.cellInset,
+                                 playing: breathing.isPlaying(key)) { breathing.ended(key) }
                     .frame(width: geo.size.width, height: geo.size.height)
             }
             .aspectRatio(1, contentMode: .fit)
-            .background { shape.fill(Self.wash.opacity(selected ? 1 : 0)) }
             .contentShape(Rectangle())
         }
-        // The press spreads the previewed one's wash inside the same outline, so a tap grows into the choice.
+        // The press spreads the old choice's wash inside the cell's outline: the feedback of the tap that sends.
         .buttonStyle(OrganicPressStyle(inset: 0, color: Self.wash, shape: AnyShape(shape)))
+        .onScrollVisibilityChange(threshold: 0.6) { visible in
+            if visible { breathing.shown(key, order: order) } else { breathing.hidden(key) }
+        }
+        .onDisappear { breathing.hidden(key) }
         .accessibilityLabel(StickerLibrary.shared.label(sticker))
-        .accessibilityHint(selected ? L10n.Messages.stickerPreviewHint : "")
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityHint(L10n.Messages.stickerSendHint)
     }
 }
 
-/// The sticker previewed (round 22 §4.1): animated at 144 on a paper sheet over the thread's foot, above the
-/// capsule, with 「再點一次傳送」 under it; a tap on it sends it.
-struct StickerPreview: View {
+/// A picker cell's sticker: its still at rest (the thumb, the hero pose), the file's two loops while `playing` —
+/// frame by frame, the still never under the frames — and the still again after (`ended` said once it stops by
+/// itself). A cell scrolled away stops at once.
+private struct BreathingSticker: View {
     let sticker: StickerRef
-    let onSend: () -> Void
-    @State private var play = 0
+    let side: CGFloat
+    let playing: Bool
+    let ended: () -> Void
     @State private var rest: UIImage?
 
     var body: some View {
-        Button(action: onSend) {
-            VStack(spacing: 4) {
-                AnimatedSticker(sticker: sticker, rest: rest, play: play, slot: "preview")
-                    .frame(width: 144, height: 144)
-                Text(L10n.Messages.stickerPreviewHint)
-                    .font(AppFonts.body(12)).foregroundStyle(Tokens.textMuted)
-            }
-            .padding(.horizontal, 18)
-            .padding(.top, 12)
-            .padding(.bottom, 10)
-            // Its edge is its cell's orange wash grown (the owner's notes, 2026-11-01): one shape, read as one.
-            .background { PaperSheet(seed: 47, outline: AnyShape(StickerCellShape(sticker: sticker))) }
-            .contentShape(Rectangle())
+        let library = StickerLibrary.shared
+        PickerStickerPlayer(sticker: sticker, rest: rest ?? library.stillAtHand(sticker, side: side), playing: playing, ended: ended)
+            .frame(width: side, height: side)
+            .task(id: "\(sticker.pack)/\(sticker.id)|\(side)") { rest = await library.still(sticker, side: side) }
+            .accessibilityHidden(true)
+    }
+}
+
+/// ``StickerPlayerView`` driven by a picker's breathing: plays when `playing` turns on, stops when it turns off.
+private struct PickerStickerPlayer: UIViewRepresentable {
+    let sticker: StickerRef
+    let rest: UIImage?
+    let playing: Bool
+    let ended: () -> Void
+
+    func makeUIView(context: Context) -> StickerPlayerView {
+        let view = StickerPlayerView()
+        view.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        view.rest(on: rest)
+        return view
+    }
+
+    func updateUIView(_ view: StickerPlayerView, context: Context) {
+        view.rest(on: rest)
+        context.coordinator.ended = ended
+        if playing, !view.isPlaying {
+            let coordinator = context.coordinator
+            // Its end is said after this update (a stop inside one would change the picker's state mid-draw); a sticker
+            // with no file to play gives its slot back at once.
+            guard let file = StickerLibrary.shared.file(sticker) else { return DispatchQueue.main.async { coordinator.ended() } }
+            view.play(file) { DispatchQueue.main.async { coordinator.ended() } }
+        } else if !playing, view.isPlaying {
+            view.stop()
         }
-        .buttonStyle(OrganicPressStyle(inset: 2))
-        .accessibilityLabel(L10n.Messages.stickerPreviewA11y(name: StickerLibrary.shared.label(sticker)))
-        .task(id: "\(sticker.pack)/\(sticker.id)") {
-            rest = await StickerLibrary.shared.still(sticker, side: 144)
-            play += 1
-        }
+    }
+
+    static func dismantleUIView(_ view: StickerPlayerView, coordinator: Coordinator) {
+        view.stop()
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(ended: ended) }
+
+    final class Coordinator {
+        var ended: () -> Void
+        init(ended: @escaping () -> Void) { self.ended = ended }
     }
 }
