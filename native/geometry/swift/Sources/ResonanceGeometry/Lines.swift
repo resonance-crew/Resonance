@@ -179,9 +179,10 @@ public func arrowHeadPath(tip: Point, angle: Double, size: Double, seed: Double)
 // MARK: - Organic menu rows (src/lib/design/rowMenu.ts)
 
 /// Wavy boundary between two menu rows. Rounded like the web because the
-/// rounded points feed the divider and region paths.
-public func rowBoundary(y: Double, w: Double, seed: Double, amp: Double, pad: Double) -> [Point] {
-    let steps = 4
+/// rounded points feed the divider and region paths. `steps` turns across: a
+/// menu's 4 by default (the fixtures' own); a list's bands, wider, take more
+/// (round 23: one every ~100, so a window-wide band is never nearly straight).
+public func rowBoundary(y: Double, w: Double, seed: Double, amp: Double, pad: Double, steps: Int = 4) -> [Point] {
     var rnd = Prng(seed: seed)
     var pts: [Point] = [(-pad, jsRound2(y))]
     for k in 0...steps {

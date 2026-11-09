@@ -5,32 +5,48 @@ import SwiftUI
 /// Messages (MessagesPage.tsx, phone): your conversations, newest first, then
 /// the people you're connected with but haven't talked to yet. Live: the rows
 /// and the tab's badge follow Firestore as messages arrive.
+///
+/// On a phone (round 23 §5, the owner: 「手機上私訊頁面左右 margin 減少…僅限於手機」) the rows are bands as the
+/// notifications' are (``ListBands``): the screen's width, their content 20 from each edge, the first row 4
+/// under the bar's foot so its face stands 16 down, level with the notifications' first title. An iPad's,
+/// the Mac's and the two panes' keep the page's 16 / 18, the row's 14, the 16 under the bar and the blob
+/// (``ConversationsFrame``).
 struct ConversationsScreen: View {
     @Environment(SessionStore.self) private var session
     /// Beside the conversation in two panes: the empty state is the detail pane's to show.
     @Environment(\.chosenThread) private var chosen
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.window) private var window
 
     var body: some View {
         let store = session.conversations
+        let frame = ConversationsFrame.of(window.layoutClass)
+        // The curve under each row: the next row's key, the starters' label under the last conversation, the list's
+        // end under the last row.
+        let conversationKeys = store.conversations.map { ConversationsFrame.key(conversation: $0.id) }
+        let starterKeys = store.starters.map { ConversationsFrame.key(starter: $0.id) }
+        let conversationsBelow = ListBands.below(conversationKeys, after: starterKeys.isEmpty ? ListBands.endKey : ConversationsFrame.startersKey)
+        let startersBelow = ListBands.below(starterKeys, after: ListBands.endKey)
         ScrollViewReader { proxy in
         // Its panes are fixed: the list keeps its place under the bar on a tablet too (round 5 E2).
         // The invite, come in above the rows once its switches are read, is the list's head: at the top, the top stays in view.
-        TabScreen(L10n.App.Nav.messages, titleInBar: true, tabletGap: false,
+        TabScreen(L10n.App.Nav.messages, titleInBar: true, phoneTop: frame.top, tabletGap: false,
                   head: session.notifyAsks.shows(.connectionCards, connected: connected) ? "notifyInvite" : nil) {
             VStack(alignment: .leading, spacing: 0) {
                 if store.loaded {
                     // A connection's new cards offered (notification-asks §4): atop the list, once there is someone —
-                    // in the rows' column, 16 above the first row.
+                    // in the rows' column, 16 above the first row; on a phone its pen line 16 under the bar's foot,
+                    // where a first row's face would stand, and 20 from the edges, where the rows' content is.
                     NotificationInvite(invite: .connectionCards, connected: connected)
-                        .padding(.top, 4)
+                        .padding(.horizontal, frame.inviteInset)
+                        .padding(.top, frame.inviteTop)
                         .padding(.bottom, 16)
                 }
                 if chosen == nil, store.loaded, store.conversations.isEmpty, store.starters.isEmpty {
                     OrganicEmptyState(title: L10n.Messages.emptyTitle, message: L10n.Messages.empty, icon: .chat, seed: 23, fills: true)
                         // Centred on the page, not on the list's inset column.
-                        .padding(.leading, -16)
-                        .padding(.trailing, -18)
+                        .padding(.leading, -frame.leading)
+                        .padding(.trailing, -frame.trailing)
                 } else if !store.loaded, store.failed {
                     // Nothing read, and a listener failed: a retry rather than an empty page.
                     OrganicEmptyState(message: L10n.Native.loadError, actionTitle: L10n.Native.retry, actionStyle: .outline) {
@@ -38,11 +54,12 @@ struct ConversationsScreen: View {
                     }
                 } else if !store.loaded {
                     // Still reading: the rows' own shapes, so nothing jumps when they arrive.
-                    ConversationsSkeleton()
+                    ConversationsSkeleton(inset: frame.rowInset)
                 }
-                ForEach(store.conversations) { convo in
+                ForEach(Array(store.conversations.enumerated()), id: \.element.id) { i, convo in
                     ConversationRow(person: convo.other, preview: preview(convo), time: convo.sentAt.map { Self.time($0) },
-                                    unread: convo.unread, draft: draft(convo.id))
+                                    unread: convo.unread, draft: draft(convo.id), inset: frame.rowInset,
+                                    band: frame.bands ? (top: conversationKeys[i], bottom: conversationsBelow[i]) : nil)
                         .id(convo.other.id)
                 }
                 if !store.starters.isEmpty {
@@ -51,18 +68,20 @@ struct ConversationsScreen: View {
                         .tracking(11 * 0.08)
                         .foregroundStyle(Tokens.textMuted)
                         .padding(.top, 16)
-                        .padding(.bottom, 4)
-                        .padding(.horizontal, 14)
-                    ForEach(store.starters) { person in
+                        // On a phone, on bare paper clear of the bands' curves under it.
+                        .padding(.bottom, frame.bands ? ListBands.titleToBand : 4)
+                        .padding(.horizontal, frame.rowInset)
+                    ForEach(Array(store.starters.enumerated()), id: \.element.id) { i, person in
                         ConversationRow(person: person, preview: L10n.Messages.noMessagesYet, time: nil, unread: 0,
-                                        draft: session.uid.flatMap { draft(ThreadModel.pairId($0, person.id)) })
+                                        draft: session.uid.flatMap { draft(ThreadModel.pairId($0, person.id)) }, inset: frame.rowInset,
+                                        band: frame.bands ? (top: starterKeys[i], bottom: startersBelow[i]) : nil)
                             .id(person.id)
                     }
                 }
             }
-            // The page's 14 plus the list pane's own 2 / 4.
-            .padding(.leading, 16)
-            .padding(.trailing, 18)
+            // A tablet's: the page's 14 plus the list pane's own 2 / 4. A phone's bands run edge to edge.
+            .padding(.leading, frame.leading)
+            .padding(.trailing, frame.trailing)
             .readableColumn()
         }
         // Two panes: a conversation chosen from elsewhere (a bell, a profile) has its row brought into
@@ -131,7 +150,12 @@ struct ConversationsScreen: View {
 }
 
 /// One row: the avatar, the pen name over the last line, the time and the
-/// unread badge on the right; a faint hand-drawn wash while pressed.
+/// unread badge on the right. On a phone the row is a band — the screen's
+/// width between its curve and the one under it (`band`: its key and the
+/// next's), washed while pressed (round 23 §5, as the notifications are); on
+/// a tablet, the Mac and beside the thread pane, a faint hand-drawn wash while
+/// pressed or under a pointer — and beside the thread pane, the chosen row's
+/// terracotta wash.
 private struct ConversationRow: View {
     let person: Person
     let preview: String
@@ -139,6 +163,10 @@ private struct ConversationRow: View {
     let unread: Int
     /// The words left unsent here (round 22 §4.4): shown in the line's place after a pen, in terracotta, until sent.
     var draft: String?
+    /// The row's own sides inside its column (``ConversationsFrame/rowInset``).
+    var inset: CGFloat = 14
+    /// A phone's band: the row's key and the key of the curve under it.
+    var band: (top: String, bottom: String)?
     @Environment(\.chosenThread) private var chosen
 
     var body: some View {
@@ -148,6 +176,9 @@ private struct ConversationRow: View {
             Button { chosen.choose(route) } label: { label }
                 .buttonStyle(RowWashStyle(seed: Double(seedFromString(person.id)), chosen: chosen.isChosen(person)))
                 .accessibilityAddTraits(chosen.isChosen(person) ? .isSelected : [])
+        } else if let band {
+            NavigationLink(value: route) { label }
+                .buttonStyle(BandWashStyle(top: band.top, bottom: band.bottom))
         } else {
             NavigationLink(value: route) { label }
                 .buttonStyle(RowWashStyle(seed: Double(seedFromString(person.id))))
@@ -180,15 +211,49 @@ private struct ConversationRow: View {
                 }
                 .fixedSize()
             }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 14)
+            .padding(.vertical, ListBands.rowPad)
+            .padding(.horizontal, inset)
             .contentShape(Rectangle())
     }
+}
+
+/// How the conversations list is laid out (round 23 §5): a phone's rows are bands with their content 20 from each
+/// edge, the first row 4 under the bar's foot (its face 16 down, level with the notifications' first title); an
+/// iPad's, the Mac's and the two panes' keep the page's 16 / 18 and the pane's own 14, the 16 under the bar and the
+/// rows' blob. Android's ConversationsFrame.
+nonisolated struct ConversationsFrame: Equatable {
+    /// The rows' column inset from the list's edges (the band's, or the blob's box).
+    let leading: CGFloat
+    let trailing: CGFloat
+    /// Inside it, to the row's content.
+    let rowInset: CGFloat
+    /// Under the bar's foot to the first row (TabScreen's `phoneTop`, which a tablet's fixed panes use too).
+    let top: CGFloat
+    /// Bands (a phone) or the hand-drawn blob (a tablet, the Mac, two panes).
+    let bands: Bool
+
+    static func of(_ layout: LayoutClass) -> ConversationsFrame {
+        layout == .compact
+            ? ConversationsFrame(leading: 0, trailing: 0, rowInset: ListBands.contentInset, top: 4, bands: true)
+            : ConversationsFrame(leading: 16, trailing: 18, rowInset: 14, top: 16, bands: false)
+    }
+
+    /// The invite atop the list: on a phone 20 from the edges with its pen line where the first row's face would
+    /// stand (16 under the bar's foot); a tablet's in the rows' column, 4 under its top.
+    var inviteInset: CGFloat { bands ? ListBands.contentInset : 0 }
+    var inviteTop: CGFloat { bands ? ListBands.rowPad : 4 }
+
+    /// The rows' keys (a curve's seed is its lower row's), and the starters' label's (the band above it ends on it).
+    static func key(conversation id: String) -> String { "c:\(id)" }
+    static func key(starter id: String) -> String { "s:\(id)" }
+    static let startersKey = "starters"
 }
 
 /// The conversations still on their way: six rows in a row's measures — the 40 face, the pen name
 /// over the last line, the time at the end — in the warm shimmer. Android's ConversationsSkeleton.
 private struct ConversationsSkeleton: View {
+    /// The rows' own sides (``ConversationsFrame/rowInset``).
+    var inset: CGFloat = 14
     private static let names: [CGFloat] = [96, 128, 80, 112, 88, 120]
     private static let lines: [CGFloat] = [0.78, 0.56, 0.7, 0.48, 0.64, 0.52]
 
@@ -204,8 +269,8 @@ private struct ConversationsSkeleton: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     SkeletonBlock(width: 30, height: 10)
                 }
-                .padding(.vertical, 12)
-                .padding(.horizontal, 14)
+                .padding(.vertical, ListBands.rowPad)
+                .padding(.horizontal, inset)
             }
         }
         .accessibilityElement(children: .ignore)

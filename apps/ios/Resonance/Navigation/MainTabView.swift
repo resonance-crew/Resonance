@@ -683,6 +683,8 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     @State private var restingTop: CGFloat = 0
     /// What the scroll view shows between its insets (the bar above, the home indicator below).
     @State private var visibleHeight: CGFloat = 0
+    /// The list is being dragged or gliding on: a banded row's press holds off (`listScrolling`, round 23 §4).
+    @State private var scrolling = false
     /// How far the list is drawn down past its top (a pull, or the room a refresh keeps): the banner
     /// rides on the list, below the loader in that gap, never over it.
     private var drawnDown: CGFloat { max(0, -(nearTop + restingTop)) }
@@ -732,6 +734,7 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
             }
             // An empty state fills what is left between the bar's line and the tab bar.
             .environment(\.emptyStateRegion, max(0, visibleHeight - topPadding - bottomRoom))
+            .environment(\.listScrolling, scrolling)
             // --page-pad-top on a phone; with the title in the bar, 16 of air under its line; none
             // without a title (home: the first card is the bar's edge).
             .padding(.top, topPadding)
@@ -781,6 +784,7 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
             barHiding?.scrolled(to: now[0], limit: now[1])
         }
         .onScrollPhaseChange { _, phase, context in
+            if scrolling != phase.isScrolling { scrolling = phase.isScrolling }
             guard phase == .idle else { return }
             let y = context.geometry.contentOffset.y + context.geometry.contentInsets.top
             withAnimation(.easeOut(duration: 0.18)) { hidden = y < travel || hidden < travel / 2 ? 0 : travel }

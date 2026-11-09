@@ -2,10 +2,13 @@ import DesignSystem
 import ResonanceKit
 import SwiftUI
 
-/// Notifications, live (web: NotificationBell, round 21). In parts by time — 今天, 這週, 更早 — the
-/// rows apart by air alone, no rules between them: who did it (their face) on the left, their pen name
+/// Notifications, live (web: NotificationBell, round 21). In parts by time — 今天, 這週, 更早 — each
+/// part's rows touching, parted by hand-drawn curves that show only as the edge of a row's wash (round
+/// 23 §4: ``ListBands``, no rules between them): who did it (their face) on the left, their pen name
 /// and what they did — a note's own words quoted under it in its card's colour — and when, and the
-/// card it is about on the right. Tapping opens where it happened and marks it read.
+/// card it is about on the right. A band runs the screen's width (an iPad's or the Mac's window too),
+/// its content 20 from a phone's edges or in the reading column. Tapping opens where it happened and
+/// marks it read.
 struct NotificationsScreen: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.openRoute) private var openRoute
@@ -30,7 +33,6 @@ struct NotificationsScreen: View {
                 TimelineView(.everyMinute) { timeline in
                     list(store.items, extras: extras, now: timeline.date)
                 }
-                .readableColumn()
                 // Who they are and the cards they are about: asked for once each time the screen shows, for
                 // the ones not read yet; what was read is kept.
                 .task(id: BellExtras.key(store.items)) {
@@ -42,28 +44,54 @@ struct NotificationsScreen: View {
 
     private func list(_ items: [NotificationsStore.Item], extras: BellExtras, now: Date) -> some View {
         LazyVStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(BellTime.parts(items, now: now).enumerated()), id: \.element.id) { i, part in
-                Text(part.group.title)
+            ForEach(Array(Self.bands(BellTime.parts(items, now: now)).enumerated()), id: \.element.part.id) { i, banded in
+                Text(banded.part.group.title)
                     .font(AppFonts.body(13, weight: .semibold))
                     .foregroundStyle(Tokens.textMuted)
                     .accessibilityAddTraits(.isHeader)
-                    .padding(.top, i == 0 ? 0 : 14)
-                    .padding(.bottom, 4)
-                    // Its words start where the rows' faces do.
-                    .padding(.horizontal, Self.gutter + Self.rowPad)
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(part.items) { item in row(item, extras: extras, now: now) }
+                    // On bare paper, clear of the bands' curves above and below it.
+                    .padding(.top, i == 0 ? 0 : Self.partGap)
+                    .padding(.bottom, ListBands.titleToBand)
+                    // Its words start where the rows' faces do: at the reading column's start on a wide window.
+                    .padding(.horizontal, ListBands.contentInset)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .readableColumn()
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(banded.rows) { row in
+                        self.row(row.item, below: row.below, extras: extras, now: now)
+                    }
                 }
             }
         }
     }
 
-    /// The column's own room either side of a row, whose press wash spans it; and the row's inside it,
-    /// so its content keeps the screen's usual 20.
-    static let gutter: CGFloat = 6
-    static let rowPad: CGFloat = 14
+    /// Above a part's title after the first: with the row's own ``ListBands/rowPad``, round 21's 24 from the
+    /// last row's content.
+    static let partGap: CGFloat = 12
 
-    private func row(_ item: NotificationsStore.Item, extras: BellExtras, now: Date) -> some View {
+    /// A part with the key of the curve under each of its rows: the next row's id, else the next part's title,
+    /// else the list's end (``ListBands``: each curve is the lower row's, never a place in the list).
+    struct BandedPart {
+        let part: BellTime.Part
+        let rows: [BandedRow]
+    }
+
+    /// A row and the key of the curve under it.
+    struct BandedRow: Identifiable {
+        let item: NotificationsStore.Item
+        let below: String
+        var id: String { item.id }
+    }
+
+    static func bands(_ parts: [BellTime.Part]) -> [BandedPart] {
+        parts.enumerated().map { i, part in
+            let after = i + 1 < parts.count ? parts[i + 1].group.key : ListBands.endKey
+            let below = ListBands.below(part.items.map(\.id), after: after)
+            return BandedPart(part: part, rows: zip(part.items, below).map { BandedRow(item: $0, below: $1) })
+        }
+    }
+
+    private func row(_ item: NotificationsStore.Item, below: String, extras: BellExtras, now: Date) -> some View {
         Button {
             session.notifications.markRead(item)
             if let route = Self.route(for: item) { openRoute(route) }
@@ -74,10 +102,12 @@ struct NotificationsScreen: View {
                                  face: Self.face(of: item, extras: extras),
                                  card: Self.card(of: item, extras: extras),
                                  when: item.createdAt.map { BellTime.when($0, now: now) } ?? "")
-                .padding(.horizontal, Self.rowPad)
+                // The content 20 from a phone's edges, in the reading column on a wide window; the band the whole width.
+                .padding(.horizontal, ListBands.contentInset)
+                .readableColumn()
+                .contentShape(Rectangle())
         }
-        .buttonStyle(RowWashStyle(seed: Double(seedFromString(item.id) % 97)))
-        .padding(.horizontal, Self.gutter)
+        .buttonStyle(BandWashStyle(top: item.id, bottom: below))
     }
 
     /// A note's own words (a note IS what it says), nothing for any other row.
@@ -147,6 +177,15 @@ nonisolated enum BellTime {
             case .today: L10n.App.Notifications.today
             case .thisWeek: L10n.App.Notifications.thisWeek
             case .earlier: L10n.App.Notifications.earlier
+            }
+        }
+
+        /// Its title's key: the band above the title ends its bottom curve on it (``ListBands``).
+        var key: String {
+            switch self {
+            case .today: "part:today"
+            case .thisWeek: "part:thisWeek"
+            case .earlier: "part:earlier"
             }
         }
     }
@@ -343,7 +382,8 @@ struct NotificationRowLabel: View {
             BellThumbView(card: card)
         }
         .multilineTextAlignment(.leading)
-        .padding(.vertical, 10)
+        // The bands touch: this above and below the row's content, nothing between rows (round 23 §4).
+        .padding(.vertical, ListBands.rowPad)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityValue(unread ? L10n.App.Notifications.unread : "")
@@ -516,12 +556,12 @@ private nonisolated struct BellQuoteRule: Shape {
 }
 
 /// The bell's rows still on their way: six of the new row's measures — a 40 face tile, two lines of
-/// words, and on two of them a 46 card tile — apart by air, no rules. Android's NotificationsSkeleton.
+/// words, and on two of them a 46 card tile — touching as the bands do, no rules. Android's NotificationsSkeleton.
 private struct NotificationsSkeleton: View {
     private static let lines: [CGFloat] = [0.82, 0.64, 0.9, 0.58, 0.76, 0.7]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(0..<6, id: \.self) { i in
                 HStack(alignment: .top, spacing: 12) {
                     SkeletonBlock(width: NotificationRowLabel.faceSize, height: NotificationRowLabel.faceSize, radius: 13)
@@ -535,8 +575,8 @@ private struct NotificationsSkeleton: View {
                         SkeletonBlock(width: NotificationRowLabel.thumbSize, height: NotificationRowLabel.thumbSize, radius: 12)
                     }
                 }
-                .padding(.horizontal, NotificationsScreen.gutter + NotificationsScreen.rowPad)
-                .padding(.vertical, 10)
+                .padding(.horizontal, ListBands.contentInset)
+                .padding(.vertical, ListBands.rowPad)
             }
         }
         .accessibilityElement(children: .ignore)
