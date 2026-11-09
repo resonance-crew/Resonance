@@ -535,6 +535,21 @@ describe('MessagesPage thread', () => {
     await waitFor(() => expect(container.querySelectorAll('[class*="carryThumb"]')).toHaveLength(2));
   });
 
+  // Round 23: the capsule is where pictures show now — one dropped on it, or anywhere on the foot, is taken too.
+  it('takes pictures dropped on the composer and the foot round it', async () => {
+    const { container } = renderPage(<MessagesPage activeHandle="alice" />);
+    const field = await screen.findByRole('textbox', { name: 'Conversation with alice' });
+    const capsule = field.closest('[class*="capsule"]')!;
+    const file = new File(['a'], 'a.jpg', { type: 'image/jpeg' });
+    const over = fireEvent.dragOver(capsule, { dataTransfer: { types: ['Files'], files: [file] } });
+    // Taken (its default refused), so the browser doesn't open the file in the tab.
+    expect(over).toBe(false);
+    fireEvent.drop(capsule, { dataTransfer: { types: ['Files'], files: [file] } });
+    await waitFor(() => expect(container.querySelectorAll('[class*="carryThumb"]')).toHaveLength(1));
+    // Inside the capsule, with the field.
+    expect(capsule.querySelector('[class*="carryThumb"]')).toBeTruthy();
+  });
+
   it('draws a picture message in its bubble, opens it whole, and quotes it as a photo', async () => {
     mockUseAuth.mockReturnValue({ user: viewer, loading: false, sessionReady: true });
     server.messages = [

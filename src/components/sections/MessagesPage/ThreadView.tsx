@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import useSWR, { useSWRConfig } from 'swr';
 import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
@@ -30,6 +30,8 @@ import { collapseAlbums, standingFor } from '@/lib/chat/album';
 import { forgetChatDraft, keepChatDraft, readChatDraft } from '@/lib/data/chatDrafts';
 import { fullMessageTime, timeOfDay } from '@/lib/chat/time';
 import { changeShown, withLocalChange, type LocalChange } from '@/lib/chat/message';
+import { localPicture } from '@/lib/chat/localPictures';
+import { chatImageUrl } from '@/lib/db/firestore/client/messages';
 import { ApiError } from '@/lib/db/firestore/client/api';
 import { isAbsent } from '@/lib/db/firestore/client/errors';
 import type { TextRange } from '@/lib/chat/search';
@@ -289,6 +291,20 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
     const card = summaries.cards.cards.find((c) => c.id === olderNote.cardId);
     return card && !card.anonymous ? olderNote : undefined;
   }, [olderNote, summaries]);
+  // What the message being answered shows, small, in the composer's reply row (round 23): its picture, or its
+  // card's cover (a sticker's key frame is the composer's own).
+  const replyMedia = useMemo(() => {
+    const quote = thread.replyingTo;
+    if (!quote || quote.unsent || quote.sticker) return undefined;
+    const original = thread.find(quote.id);
+    if (quote.image && original?.image) return localPicture(original.image.id) ?? chatImageUrl(original.image.id, 'thumb');
+    if (quote.cardRef && summaries?.status === 'ready') {
+      const card = summaries.cards.cards.find((c) => c.id === quote.cardRef);
+      if (card?.media?.type === 'image') return card.media.url;
+    }
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thread.replyingTo, summaries]);
   // Every card this thread is about — shared, or linked to (the bubbles' own detection) — each once.
   const sharedCardKeys = useMemo(() => (mediaOpen ? threadCardKeys(thread.messages) : []), [mediaOpen, thread.messages]);
   // Links written in messages, each once, for the same list — but a link to one of our cards, which is among
@@ -854,6 +870,19 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
   // (Over a stretch further up, it is always offered: the newest aren't under it.)
   const newBelow = scroll.newBelow || (!tail && !!stretchNewest && newestHeld?.key !== stretchNewest);
   const showPill = !copied && !(searchOpen && listShown) && (!tail || newBelow || (scroll.farUp && !scroll.atBottom));
+  // Pictures dropped anywhere on the thread's pane — the thread, its header, the foot and the capsule in it — ride
+  // the next message (round 22 §4.2; round 23: the capsule is where they show), as picked ones do.
+  const takesDrops = {
+    onDragOver: (e: DragEvent) => {
+      if (composes && e.dataTransfer.types.includes('Files')) e.preventDefault();
+    },
+    onDrop: (e: DragEvent) => {
+      const files = [...e.dataTransfer.files];
+      if (!composes || !files.length) return;
+      e.preventDefault();
+      composerRef.current?.attachFiles(files);
+    },
+  };
 
   return (
     <CardEmbedSourceContext.Provider value={sharedCards}>
@@ -863,7 +892,7 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
             the「⋯」trigger was. Once a match is picked from the list, the
             header steps through the matches. On single-pane phones the app
             header is gone, so a back control leads this row instead. */}
-        <div ref={headerRef} className={pageStyles.threadHeader}>
+        <div ref={headerRef} className={pageStyles.threadHeader} {...takesDrops}>
           <ThreadHeaderChrome under={under} />
           {searchOpen ? (
             <>
@@ -968,20 +997,7 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
           convo === null && notConnected
         ) : (
           <>
-            <div
-              ref={bodyRef}
-              className={styles.body}
-              // Pictures dropped on the thread ride the next message (round 22 §4.2), as picked ones do.
-              onDragOver={(e) => {
-                if (composes && e.dataTransfer.types.includes('Files')) e.preventDefault();
-              }}
-              onDrop={(e) => {
-                const files = [...e.dataTransfer.files];
-                if (!composes || !files.length) return;
-                e.preventDefault();
-                composerRef.current?.attachFiles(files);
-              }}
-            >
+            <div ref={bodyRef} className={styles.body} {...takesDrops}>
               <div
                 ref={(el) => {
                   scrollerRef.current = el;
@@ -1076,6 +1092,7 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
                 dockEl.current = el;
               }}
               className={styles.dock}
+              {...takesDrops}
             >
               {foot === 'awaiting' ? (
                 // Their answer is what connects the two: until it comes, nothing more to write here.
@@ -1103,6 +1120,8 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
                   isUnsent={(id) => !!thread.find(id)?.unsentAt}
                   expandRoom={expandRoom}
                   onExpandedChange={keepTheirsInView}
+                  onJumpToReply={actions.jumpTo}
+                  replyMedia={replyMedia}
                 />
               )}
             </div>

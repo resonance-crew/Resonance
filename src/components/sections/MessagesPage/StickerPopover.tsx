@@ -7,13 +7,18 @@ import { PaperSheet } from '@/components/atoms/PaperSheet/PaperSheet';
 import { placePopover } from '@/lib/chat/menuPlacement';
 import styles from './Thread.module.css';
 
-/** The popover's size (round 22 §4.1): the pack bar and five columns of stickers. */
-export const STICKER_POPOVER_W = 360;
-export const STICKER_POPOVER_H = 420;
+/** The popover's size (round 23): the pack bar and four columns of stickers, each as big as a phone's. */
+export const STICKER_POPOVER_W = 400;
+export const STICKER_POPOVER_H = 460;
 
 export interface StickerPopoverProps {
-  /** The ☺ it hangs from. */
+  /** The ☺ it belongs to: its end lines up with the ☺'s, and a press on it is the ☺'s (a toggle). */
   anchor: HTMLElement;
+  /**
+   * What it hangs over: the capsule, whose top edge — over what rides in it — it stands on (round 23), never on the
+   * rows. Without it, the ☺'s own top.
+   */
+  above?: HTMLElement;
   /** It goes (Escape, a press outside, the ☺ again): the focus goes back to the field. */
   onClose: () => void;
   children: ReactNode;
@@ -22,12 +27,14 @@ export interface StickerPopoverProps {
 /**
  * The stickers on a desktop (round 22 §4.1; a mouse, 768 wide or more): a
  * flat menu sheet (PaperSheet: the menu paper, the grey pen line, no shadow)
- * hanging over the ☺, its end on the ☺'s, about 360 × 420 — the pack bar and
- * the grid. Escape or a press outside puts it away; the ☺ is a toggle. It
- * stays where it opened (the thread scrolling under it leaves it be: it holds
- * what is being written, not a message).
+ * hanging over the capsule's top edge, its end on the ☺'s, 400 × 460 — the
+ * pack bar and four columns (round 23). A sticker tapped goes, and the
+ * popover with it (the field writing again); Escape or a press outside puts
+ * it away; the ☺ is a toggle. It stays where it opened (the thread scrolling
+ * under it leaves it be: it holds what is being written, not a message) —
+ * placed again only when the capsule's height changes.
  */
-export function StickerPopover({ anchor, onClose, children }: StickerPopoverProps) {
+export function StickerPopover({ anchor, above, onClose, children }: StickerPopoverProps) {
   const t = useTranslations('messages');
   const root = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<{ top: number; left: number } | null>(null);
@@ -37,8 +44,9 @@ export function StickerPopover({ anchor, onClose, children }: StickerPopoverProp
   useLayoutEffect(() => {
     const at = () => {
       const r = anchor.getBoundingClientRect();
+      const top = above ? above.getBoundingClientRect().top : r.top;
       const p = placePopover({
-        anchor: r,
+        anchor: { top, bottom: r.bottom, left: r.left, right: r.right },
         width: STICKER_POPOVER_W,
         height: STICKER_POPOVER_H,
         prefer: 'above',
@@ -49,8 +57,13 @@ export function StickerPopover({ anchor, onClose, children }: StickerPopoverProp
     };
     at();
     window.addEventListener('resize', at);
-    return () => window.removeEventListener('resize', at);
-  }, [anchor]);
+    const ro = above && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(at) : null;
+    if (above) ro?.observe(above);
+    return () => {
+      window.removeEventListener('resize', at);
+      ro?.disconnect();
+    };
+  }, [anchor, above]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

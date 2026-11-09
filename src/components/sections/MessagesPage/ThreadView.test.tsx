@@ -64,6 +64,8 @@ vi.mock('@/lib/db/firestore/client/messages', () => ({
   }),
   getOlderMessages: vi.fn(async () => []),
 }));
+/** What the composer says to a screen reader (「回覆 alice」 as a reply is chosen) — not the row that shows it. */
+const SAID = 'script, style, [aria-live]';
 /** The thread's listener hears these messages now. */
 const deliver = (messages: Message[]) => act(() => server.emit!(server.windowOf(messages)));
 /** Wait inside act(), so what settles meanwhile (a glide coming to its end) draws as it would for a reader. */
@@ -524,10 +526,10 @@ describe('Messenger’s thread, drawn by hand', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: 'Reply' }));
-    expect(screen.getByText('Replying to alice')).toBeInTheDocument();
+    expect(screen.getByText('Replying to alice', { ignore: SAID })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Conversation with alice' })).toHaveFocus();
     await user.click(screen.getByRole('button', { name: 'Cancel reply' }));
-    expect(screen.queryByText('Replying to alice')).not.toBeInTheDocument();
+    expect(screen.queryByText('Replying to alice', { ignore: SAID })).not.toBeInTheDocument();
   });
 
   // The thread's pill is the toast's face (atoms/InkPill), but the thread has no toast host to
@@ -565,7 +567,7 @@ describe('Messenger’s thread, drawn by hand', () => {
 
     await user.click(within(menu).getByRole('menuitem', { name: 'Reply' }));
     // Done in the tap itself (iOS raises the keyboard only for a focus a tap gave), then the menu goes.
-    expect(screen.getByText('Replying to alice')).toBeInTheDocument();
+    expect(screen.getByText('Replying to alice', { ignore: SAID })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Conversation with alice' })).toHaveFocus();
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
@@ -590,14 +592,14 @@ describe('Messenger’s thread, drawn by hand', () => {
     fireEvent.click(heart, { detail: 1 });
     await new Promise((r) => setTimeout(r, 200));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.queryByText('Replying to alice')).not.toBeInTheDocument();
+    expect(screen.queryByText('Replying to alice', { ignore: SAID })).not.toBeInTheDocument();
     expect(vi.mocked(callApi).mock.calls.some(([path]) => String(path).includes('/reaction'))).toBe(false);
 
     // A tap of its own on the row (its press, then its click) chooses it.
     fireEvent.pointerDown(reply, { pointerType: 'touch', button: 0 });
     fireEvent.pointerUp(reply, { pointerType: 'touch', button: 0 });
     fireEvent.click(reply, { detail: 1 });
-    expect(screen.getByText('Replying to alice')).toBeInTheDocument();
+    expect(screen.getByText('Replying to alice', { ignore: SAID })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
@@ -836,7 +838,7 @@ describe('notes in a thread', () => {
       </SWRConfig>,
     );
 
-    expect(await screen.findByText('Replying to alice')).toBeInTheDocument();
+    expect(await screen.findByText('Replying to alice', { ignore: SAID })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Conversation with alice' })).toHaveFocus();
     await waitFor(() => expect(scrollTo).toHaveBeenCalled());
     expect(screen.queryByText('In reply to your note')).not.toBeInTheDocument();
@@ -1115,7 +1117,7 @@ describe('a letter: notes between two people who aren’t connected', () => {
     );
     await screen.findByRole('textbox', { name: 'Conversation with alice' });
     await user.click(screen.getAllByRole('button', { name: 'Reply' })[0]);
-    expect(screen.getByText('Replying to alice')).toBeInTheDocument();
+    expect(screen.getByText('Replying to alice', { ignore: SAID })).toBeInTheDocument();
 
     vi.mocked(isConnected).mockResolvedValue(false);
     act(() => refreshed());
@@ -1123,7 +1125,7 @@ describe('a letter: notes between two people who aren’t connected', () => {
     vi.mocked(isConnected).mockResolvedValue(true);
     act(() => refreshed());
     expect(await screen.findByRole('textbox', { name: 'Conversation with alice' })).toBeInTheDocument();
-    expect(screen.queryByText('Replying to alice')).not.toBeInTheDocument();
+    expect(screen.queryByText('Replying to alice', { ignore: SAID })).not.toBeInTheDocument();
   });
 
   it('keeps the messages of a conversation that no longer connects them, with the way to their profile', async () => {
@@ -1158,21 +1160,21 @@ describe('a draft’s reply, asked about again', () => {
     await opened();
     await screen.findByText('and more');
     await settle(20);
-    expect(screen.getByText('Replying to alice')).toBeInTheDocument();
+    expect(screen.getByText('Replying to alice', { ignore: SAID })).toBeInTheDocument();
   });
 
   it('lets it go once its message turns out unsent', async () => {
     server.messages = [{ id: 'm1', senderId: 'alice', text: '', sentAt: new Date('2026-03-01T10:00:00Z'), unsentAt: new Date() }, text('m2', 'and more')];
     draftReplyingTo('m1');
     await opened();
-    await waitFor(() => expect(screen.queryByText('Replying to alice')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText('Replying to alice', { ignore: SAID })).not.toBeInTheDocument());
   });
 
   it('lets it go when the whole conversation is here without its message', async () => {
     server.messages = [text('m2', 'and more')];
     draftReplyingTo('m1');
     await opened();
-    await waitFor(() => expect(screen.queryByText('Replying to alice')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText('Replying to alice', { ignore: SAID })).not.toBeInTheDocument());
     // The words stay.
     expect(screen.getByRole('textbox', { name: 'Conversation with alice' })).toHaveValue('about that');
   });
@@ -1181,7 +1183,7 @@ describe('a draft’s reply, asked about again', () => {
     vi.mocked(getConversation).mockResolvedValue(null);
     draftReplyingTo('m1');
     await opened();
-    await waitFor(() => expect(screen.queryByText('Replying to alice')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText('Replying to alice', { ignore: SAID })).not.toBeInTheDocument());
   });
 });
 
@@ -1542,7 +1544,7 @@ describe('reactions and unsending (round 16)', () => {
     expect(within(overlay).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Reply', 'Report this message']);
     await user.click(within(overlay).getByRole('menuitem', { name: 'Reply' }));
     // The reply's row: the sticker's key frame, no name beside it.
-    const row = (await screen.findByText('Replying to alice')).closest('[class*="carryRow"]')!;
+    const row = (await screen.findByText('Replying to alice', { ignore: SAID })).closest('[class*="carryRow"]')!;
     expect(row.querySelector('img')).toHaveAttribute('src', expect.stringContaining('/stickers/twine/thanks.thumb.webp'));
     expect(row.querySelector('[class*="carryDetail"]')).toBeNull();
   });

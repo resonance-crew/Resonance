@@ -31,7 +31,7 @@ vi.mock('@/components/molecules/MarkdownEditor/InsertCardModal', () => ({
     ) : null,
 }));
 
-import { ThreadComposer, type ThreadComposerHandle } from './ThreadComposer';
+import { STICKER_REPEAT_MS, ThreadComposer, type ThreadComposerHandle } from './ThreadComposer';
 
 mockElementSize(320, 48);
 
@@ -93,38 +93,102 @@ function composer(props: Partial<Parameters<typeof ThreadComposer>[0]> = {}) {
   );
 }
 
-/** The riding row holding `text`, as a list of what is in it from start to end. */
-const rowOf = (text: string) => screen.getByText(text).closest('[class*="carryRow"]') as HTMLElement;
+/** What rides the next message: the rows inside the capsule. */
+const riding = () => screen.getByRole('group', { name: 'Sent with your message' });
+/** The riding row holding `text`. */
+const rowOf = (text: string) => within(riding()).getByText(text).closest('[class*="carryRow"]') as HTMLElement;
 /** The pictures riding: their thumbnails, in order. */
 const thumbs = () => Array.from(document.querySelectorAll<HTMLElement>('[class*="carryThumb"]'));
 const field = () => screen.getByRole('textbox', { name: 'Conversation with alice' });
 const photos = (n: number) => Array.from({ length: n }, (_, i) => new File([String(i)], `p${i}.png`, { type: 'image/png' }));
 const pick = (files: File[]) => fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files } });
 
-// Round 10 §3.4: what rides the next message sits over the capsule as rows in the reply's style, with no frame —
-// what it is at the start, whom or what, and its ✕ at the row's end.
+// Round 23 (the owner's: 「回覆的訊息會在這個整個訊息框的 border 以內」, Telegram's way): what rides the next message
+// lies inside the capsule over the text's line, a row each — its mark over the ＋, its words where the text starts,
+// its ✕ over Send — and Send is the block on the last row whenever anything rides.
 describe('what rides the next message', () => {
-  it('shows a reply as a row, its ✕ at the end, with no slip round it', async () => {
+  it('shows a reply as a row inside the capsule, its ✕ at the end, Send the block on one line', async () => {
     const onCancelReply = vi.fn();
     const { container } = renderWithIntl(
       composer({ replyingTo: { id: 'm1', senderId: 'alice', text: 'See you by the river' }, replyHandle: 'alice', onCancelReply }),
     );
+    const capsule = field().closest('[class*="capsule"]')!;
+    expect(capsule).toContainElement(riding());
+    expect(capsule).toHaveAttribute('data-block');
     const row = rowOf('Replying to alice');
     expect(row).toHaveTextContent('See you by the river');
+    // The three columns: the mark, the words, the ✕.
+    expect(Array.from(row.children).map((c) => c.className.match(/carry(Mark|Words|Remove)/)?.[0])).toEqual(['carryMark', 'carryWords', 'carryRemove']);
     expect(row.lastElementChild).toContainElement(screen.getByRole('button', { name: 'Cancel reply' }));
     expect(container.querySelector('[class*="slip"]')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Cancel reply' }));
     expect(onCancelReply).toHaveBeenCalledTimes(1);
   });
 
-  // Round 22 (the owner's notes): a picture rides as its thumbnail over the capsule, its own ✕ on its corner.
+  it('keeps the field’s focus through a ✕ and through a press on a row', () => {
+    renderWithIntl(composer({ replyingTo: { id: 'm1', senderId: 'alice', text: 'rain' }, replyHandle: 'alice' }));
+    field().focus();
+    // A press anywhere would move the focus; the ✕ and the rows hold it back, so a phone's keyboard stays up.
+    for (const target of [screen.getByRole('button', { name: 'Cancel reply' }), within(riding()).getByText('rain')]) {
+      const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      target.dispatchEvent(down);
+      expect(down.defaultPrevented).toBe(true);
+    }
+    expect(field()).toHaveFocus();
+  });
+
+  it('goes to the message a reply answers when its words are pressed', async () => {
+    const onJumpToReply = vi.fn();
+    renderWithIntl(composer({ replyingTo: { id: 'm1', senderId: 'alice', text: 'rain' }, replyHandle: 'alice', onJumpToReply }));
+    await userEvent.click(within(riding()).getByRole('button', { name: /Replying to alice/ }));
+    expect(onJumpToReply).toHaveBeenCalledWith('m1');
+  });
+
+  it('puts the reply away on Escape while nothing else is open, the field writing on', async () => {
+    asDesktop(false);
+    const onCancelReply = vi.fn();
+    renderWithIntl(composer({ replyingTo: { id: 'm1', senderId: 'alice', text: 'rain' }, replyHandle: 'alice', onCancelReply }));
+    // The sticker panel open: Escape closes it first, the reply stays.
+    await userEvent.click(screen.getByRole('button', { name: 'Stickers' }));
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('toolbar', { name: 'Stickers' })).toBeNull();
+    expect(onCancelReply).not.toHaveBeenCalled();
+    expect(field()).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    expect(onCancelReply).toHaveBeenCalledTimes(1);
+  });
+
+  it('says a reply chosen to a screen reader once, and not one brought back with a draft', () => {
+    const quote = { id: 'm9', senderId: 'alice', text: 'rain' };
+    const view = renderWithIntl(composer({ replyHandle: 'alice' }));
+    const said = () => document.querySelector('[aria-live="polite"]')!;
+    expect(said()).toHaveTextContent('');
+    view.rerender(composer({ replyHandle: 'alice', replyingTo: quote }));
+    expect(said()).toHaveTextContent('Replying to alice');
+    // The focus never left the field for it (nothing was focused).
+    expect(document.activeElement).not.toBe(screen.getByRole('button', { name: 'Cancel reply' }));
+  });
+
+  it('draws a reply’s picture or card cover small before its words', () => {
+    renderWithIntl(
+      composer({ replyingTo: { id: 'p1', senderId: 'alice', text: '', image: true }, replyHandle: 'alice', replyMedia: '/api/v1/chat-images/pic?size=thumb' }),
+    );
+    const row = rowOf('Replying to alice');
+    const media = row.querySelector('[class*="carryWords"] img')!;
+    expect(media).toHaveAttribute('src', '/api/v1/chat-images/pic?size=thumb');
+    expect(media.className).toMatch(/carryMedia/);
+    expect(row).toHaveTextContent('A photo');
+  });
+
+  // Round 22 (the owner's notes): a picture rides as its thumbnail, its own ✕ on its corner — inside the capsule.
   it('shows a pasted picture as its thumbnail, taken back by the ✕ on its corner', async () => {
     renderWithIntl(composer());
-    expect(document.querySelector('[class*="carry"]')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Sent with your message' })).toBeNull();
     const file = new File(['x'], 'photo.png', { type: 'image/png' });
     fireEvent.paste(field(), { clipboardData: { files: [file] } });
 
     await waitFor(() => expect(thumbs()).toHaveLength(1));
+    expect(field().closest('[class*="capsule"]')).toContainElement(thumbs()[0]);
     expect(thumbs()[0].querySelector('img')).toHaveAttribute('src', 'blob:picture');
     const remove = screen.getByRole('button', { name: 'Remove photo' });
     expect(thumbs()[0]).toContainElement(remove);
@@ -140,9 +204,8 @@ describe('what rides the next message', () => {
     renderWithIntl(composer({ replyingTo: { id: 'm1', senderId: 'me', text: 'Mine' }, replyHandle: null }));
     fireEvent.paste(field(), { clipboardData: { files: [new File(['x'], 'p.png', { type: 'image/png' })] } });
     await waitFor(() => expect(thumbs()).toHaveLength(1));
-    const carry = document.querySelector('[class*="carry"]')!;
-    expect(carry.firstElementChild).toHaveTextContent('Replying to yourself');
-    expect(carry.lastElementChild).toContainElement(thumbs()[0]);
+    expect(riding().firstElementChild).toHaveTextContent('Replying to yourself');
+    expect(riding().lastElementChild).toContainElement(thumbs()[0]);
   });
 
   it('quotes a sticker being answered by its key frame alone', () => {
@@ -152,6 +215,11 @@ describe('what rides the next message', () => {
     const row = rowOf('Replying to alice');
     expect(row.querySelector('img')).toHaveAttribute('src', expect.stringContaining('/stickers/twine/thanks.thumb.webp'));
     expect(row).not.toHaveTextContent('Thanks');
+  });
+
+  it('names what each ✕ takes away', async () => {
+    renderWithIntl(composer({ replyNote: { noteId: 'n1', cardId: 'walk' } }));
+    expect(rowOf('In reply to your note').lastElementChild).toContainElement(screen.getByRole('button', { name: 'Remove note' }));
   });
 });
 
@@ -163,10 +231,10 @@ describe('several pictures', () => {
     pick(photos(3));
     await waitFor(() => expect(thumbs()).toHaveLength(3));
     // No numbers, no count, no ✕ for them all (round 22, the owner's notes).
-    expect(document.querySelector('[class*="carry"]')!.textContent).toBe('');
+    expect(riding().textContent).toBe('');
     expect(screen.queryByText('3 photos')).toBeNull();
-    expect(screen.getAllByRole('button', { name: /^Remove photo/ })).toHaveLength(3);
-    await userEvent.click(screen.getByRole('button', { name: 'Remove photo 2' }));
+    expect(screen.getAllByRole('button', { name: /^Remove picture \d$/ })).toHaveLength(3);
+    await userEvent.click(screen.getByRole('button', { name: 'Remove picture 2' }));
     expect(thumbs()).toHaveLength(2);
 
     fireEvent.change(field(), { target: { value: 'rain' } });
@@ -299,42 +367,67 @@ describe('the stickers', () => {
     expect(screen.getByRole('button', { name: 'Collapse stickers' }).querySelector('[class*="sendGlyph"]')).not.toHaveAttribute('data-turned');
   });
 
-  it('previews a sticker, sends it on a second tap with nothing else, and keeps it among the recent', async () => {
+  // Round 23 (the owner's: 「點擊就直接傳送出去，不用點擊兩次，也不用出現上面那個框框」): a tap sends the sticker.
+  it('sends a sticker on one tap with nothing else, the pictures riding staying for their own message', async () => {
     asDesktop(false);
     const send = vi.fn(() => true);
     renderWithIntl(composer({ send, uid: 'me', pairId: 'alice_me' }));
     fireEvent.paste(field(), { clipboardData: { files: photos(1) } });
     await waitFor(() => expect(thumbs()).toHaveLength(1));
     await userEvent.click(screen.getByRole('button', { name: 'Stickers' }));
-    expect(screen.queryByRole('button', { name: 'Recent' })).toBeNull();
-
-    await userEvent.click(screen.getAllByRole('button', { name: 'Thanks' })[0]);
-    const preview = screen.getByRole('button', { name: 'Preview: Thanks, tap again to send' });
-    expect(preview.querySelector('img')).toHaveAttribute('src', expect.stringContaining('/stickers/twine/thanks.webp'));
-    expect(screen.getByRole('status')).toHaveTextContent('Preview: Thanks, tap again to send');
-    expect(send).not.toHaveBeenCalled();
-
-    // Another sticker: previewed in its place. The same one again: it goes.
-    await userEvent.click(screen.getAllByRole('button', { name: 'Hug' })[0]);
-    expect(screen.getByRole('button', { name: 'Preview: Hug, tap again to send' })).toBeInTheDocument();
-    await userEvent.click(screen.getAllByRole('button', { name: 'Hug' })[0]);
-    expect(send).toHaveBeenCalledWith({ text: '', sticker: { pack: 'nod', id: 'hug' } });
-    expect(screen.queryByRole('button', { name: /^Preview:/ })).toBeNull();
-    // The picture riding stays (a sticker is its own message); the sticker leads the recent ones.
+    const thanks = screen.getAllByRole('button', { name: 'Thanks' })[0];
+    // Its name, then what a tap does.
+    expect(thanks).toHaveAccessibleDescription('Send sticker');
+    await userEvent.click(thanks);
+    expect(send).toHaveBeenCalledWith({ text: '', sticker: { pack: 'twine', id: 'thanks' } });
+    expect(screen.queryByText('Tap again to send')).toBeNull();
     expect(thumbs()).toHaveLength(1);
-    expect(screen.getByRole('button', { name: 'Recent' })).toBeInTheDocument();
-
-    // A tap on the preview sends it too.
-    await userEvent.click(screen.getAllByRole('button', { name: 'Hi!' })[0]);
-    await userEvent.click(screen.getByRole('button', { name: 'Preview: Hi!, tap again to send' }));
-    expect(send).toHaveBeenLastCalledWith({ text: '', sticker: { pack: 'pip', id: 'hi' } });
+    // The panel stays (the keyboard's place), for the next one.
+    expect(screen.getByRole('toolbar', { name: 'Stickers' })).toBeInTheDocument();
   });
 
-  it('hangs a sheet over the ☺ with a mouse, which Escape puts away, the field writing again', async () => {
-    asDesktop(true);
-    renderWithIntl(composer());
+  it('sends nothing more for the same sticker tapped again at once, but another goes straight after', async () => {
+    asDesktop(false);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(10_000);
+    const send = vi.fn(() => true);
+    renderWithIntl(composer({ send }));
     await userEvent.click(screen.getByRole('button', { name: 'Stickers' }));
-    const sheet = screen.getByRole('dialog', { name: 'Stickers' });
+    const tap = (name: string) => fireEvent.click(screen.getAllByRole('button', { name })[0]);
+    tap('Thanks');
+    now.mockReturnValue(10_000 + STICKER_REPEAT_MS - 1);
+    tap('Thanks');
+    expect(send).toHaveBeenCalledTimes(1);
+    tap('Hug');
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenLastCalledWith({ text: '', sticker: { pack: 'nod', id: 'hug' } });
+    now.mockReturnValue(10_000 + STICKER_REPEAT_MS * 3);
+    tap('Hug');
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(STICKER_REPEAT_MS).toBe(600);
+  });
+
+  it('holds the recent stickers still while the panel is open, and shows the new order next time', async () => {
+    asDesktop(false);
+    window.localStorage.setItem('resonance:stickers:recent:me', JSON.stringify([{ pack: 'twine', id: 'thanks' }]));
+    renderWithIntl(composer({ uid: 'me', pairId: 'alice_me' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Stickers' }));
+    const recent = () => within(document.querySelector<HTMLElement>('[data-sticker-section="recent"]')!).getAllByRole('button').map((b) => b.getAttribute('data-sticker'));
+    expect(recent()).toEqual(['twine/thanks']);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Hug' })[0]);
+    // Stored at once, shown as it was: the next tap lands where the finger expects.
+    expect(JSON.parse(window.localStorage.getItem('resonance:stickers:recent:me')!)).toEqual([{ pack: 'nod', id: 'hug' }, { pack: 'twine', id: 'thanks' }]);
+    expect(recent()).toEqual(['twine/thanks']);
+    await userEvent.click(screen.getByRole('button', { name: 'Keyboard' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Stickers' }));
+    expect(recent()).toEqual(['nod/hug', 'twine/thanks']);
+  });
+
+  it('hangs a sheet over the capsule with a mouse, which a sticker sent or Escape puts away, the field writing again', async () => {
+    asDesktop(true);
+    const send = vi.fn(() => true);
+    renderWithIntl(composer({ send }));
+    await userEvent.click(screen.getByRole('button', { name: 'Stickers' }));
+    let sheet = screen.getByRole('dialog', { name: 'Stickers' });
     expect(within(sheet).getByRole('toolbar', { name: 'Stickers' })).toBeInTheDocument();
     expect(sheet.querySelector('[data-variant="popover"]')).toBeTruthy();
     // No keyboard to give way to: the ☺ stays the ☺.
@@ -342,7 +435,12 @@ describe('the stickers', () => {
     expect(screen.queryByRole('button', { name: 'Expand stickers' })).toBeNull();
 
     await userEvent.click(within(sheet).getAllByRole('button', { name: 'Thanks' })[0]);
-    expect(within(sheet).getByRole('button', { name: 'Preview: Thanks, tap again to send' })).toBeInTheDocument();
+    expect(send).toHaveBeenCalledWith({ text: '', sticker: { pack: 'twine', id: 'thanks' } });
+    expect(screen.queryByRole('dialog', { name: 'Stickers' })).toBeNull();
+    expect(field()).toHaveFocus();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Stickers' }));
+    sheet = screen.getByRole('dialog', { name: 'Stickers' });
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: 'Stickers' })).toBeNull();
     expect(field()).toHaveFocus();
@@ -362,7 +460,7 @@ describe('a longer message', () => {
   // Round 22 (the owner's notes): from the second line the send segment is the block on the last row; from the
   // third ⤢ stands over it in its column (at the capsule's top-right) — the text keeps the whole width left of it.
   it('turns Send into the block on the last row from the second line, ⤢ over it from the third', () => {
-    renderWithIntl(composer());
+    const view = renderWithIntl(composer());
     const capsule = field().closest('[class*="capsule"]')!;
     expect(capsule).not.toHaveAttribute('data-block');
     fireEvent.change(field(), { target: { value: 'one\ntwo' } });
@@ -378,6 +476,20 @@ describe('a longer message', () => {
     expect(grow.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.change(field(), { target: { value: 'one' } });
     expect(capsule).not.toHaveAttribute('data-block');
+    // One line, a reply riding: the block all the same (round 23).
+    view.rerender(composer({ replyingTo: { id: 'm1', senderId: 'alice', text: 'rain' }, replyHandle: 'alice' }));
+    expect(capsule).toHaveAttribute('data-block');
+  });
+
+  // Round 23: ⤢ stands at the text's top in Send's column — under the rows, never on a row's ✕.
+  it('keeps ⤢ in the text’s own column under what rides', () => {
+    renderWithIntl(composer({ replyingTo: { id: 'm1', senderId: 'alice', text: 'rain' }, replyHandle: 'alice' }));
+    fireEvent.change(field(), { target: { value: 'one\ntwo\nthree' } });
+    const grow = screen.getByRole('button', { name: 'Expand the message field' });
+    expect(riding()).not.toContainElement(grow);
+    const line = field().closest('[class*="fieldLine"]')!;
+    expect(line).toContainElement(grow);
+    expect(riding().compareDocumentPosition(grow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   // A sticker isn't sent with words: the ☺ steps aside while the field holds any, and comes back when it is empty.
@@ -440,6 +552,14 @@ describe('a longer message', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Expand the message field' }));
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     expect(capsule).not.toHaveAttribute('data-expanded');
+  });
+
+  // Round 23: the rows ride inside the capsule, so the grown field leaves them their room (the suite's boxes are 48).
+  it('grows the field less the rows riding over it', async () => {
+    renderWithIntl(composer({ expandRoom: () => 400, replyingTo: { id: 'm1', senderId: 'alice', text: 'rain' }, replyHandle: 'alice' }));
+    fireEvent.change(field(), { target: { value: 'one\ntwo\nthree' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Expand the message field' }));
+    expect(field().style.height).toBe(`${400 - 48}px`);
   });
 });
 

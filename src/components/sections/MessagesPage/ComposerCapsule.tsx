@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
+import { useId, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode, type Ref, type RefObject } from 'react';
 import { BrushWash } from '@/components/atoms/BrushWash/BrushWash';
 import { Icon } from '@/components/atoms/Icon';
 import { ShapeGrain } from '@/components/atoms/ShapeGrain/ShapeGrain';
@@ -21,10 +21,12 @@ const SEED = 23;
  * send segment's region past the seam (reaching out past the outline, which
  * clips it), and the seam itself — one point list for both, as the segmented
  * bar's, so the face's edge lies exactly under the seam. The publish step's
- * tag field is the same shape with its own end (segmentCapsuleShape).
+ * tag field is the same shape with its own end (segmentCapsuleShape). Its
+ * outline is steady (round 23): taller — lines, or what rides along inside it
+ * — only its sides move; its foot and Send's corner stay as at one line.
  */
 export function capsuleShape(w: number, h: number) {
-  return segmentCapsuleShape(w, h, SEND_SEGMENT_W, SEED);
+  return segmentCapsuleShape(w, h, SEND_SEGMENT_W, SEED, { steady: true });
 }
 
 /** How round the send block's top-left turn is (round 22, the owner's: it turned too sharply). */
@@ -39,7 +41,7 @@ export const BLOCK_TURN_R = 16;
  * whose room above the block holds ⤢.
  */
 export function blockCapsuleShape(w: number, h: number): SegmentCapsuleShape | null {
-  const base = segmentCapsuleShape(w, h, SEND_SEGMENT_W, SEED);
+  const base = capsuleShape(w, h);
   if (!base) return null;
   const x = w - SEND_SEGMENT_W;
   const y = Math.max(0, h - CAPSULE_H);
@@ -73,6 +75,17 @@ export type CapsuleSegment = 'send' | 'expand' | 'collapse';
 export interface ComposerCapsuleProps {
   /** The ＋, the file input, the field and the ☺ column, in that order (Send is the capsule's own). */
   children: ReactNode;
+  /**
+   * What rides the next message (round 23, Telegram's way): rows inside the capsule's outline, over the text's line
+   * — none, by default (the tag field shares the shape and has no such rows).
+   */
+  riding?: ReactNode;
+  /** The riding rows' group name (「隨訊息一起送出」). */
+  ridingLabel?: string;
+  /** The riding rows' block, for the composer to measure (the grown field leaves it its room). */
+  ridingRef?: Ref<HTMLDivElement>;
+  /** The capsule itself, for its host (what hangs over its top edge, what a press inside it does). */
+  capsuleRef?: RefObject<HTMLDivElement | null>;
   /** The field is written in: its pen darkens (the field's own darker ink, never another colour). */
   focused: boolean;
   /** There is something to send: the segment takes the verb's solid face. */
@@ -84,7 +97,7 @@ export interface ComposerCapsuleProps {
   onSend: () => void;
   /** The field grown on purpose (option C). */
   expanded?: boolean;
-  /** More than one line (or grown): the send segment a 52 × 48 block on the last row, not a full-height strip. */
+  /** More than one line (or grown, or something riding): the send segment a 52 × 48 block on the last row, not a full-height strip. */
   block?: boolean;
   /** What stands in the send column over the block, at the capsule's top-right: ⤢ / ⤡. */
   aboveSend?: ReactNode;
@@ -103,10 +116,18 @@ export interface ComposerCapsuleProps {
  * the thread, and nothing of a floating thing is see-through. One line is
  * exactly 48 tall; only more lines grow it, up to five — or, grown on purpose
  * (`expanded`), as tall as the thread lets it. From its second line the
- * segment is a block on its last row (`block`), ⤢ over it at the top-right.
+ * segment is a block on its last row (`block`), ⤢ over it in its column at
+ * the text's top. What rides along (`riding`, round 23) lies inside the
+ * outline over the text's line: rows that keep the capsule's three columns —
+ * their mark over the ＋, their words where the text starts, their ✕ over
+ * Send, which is the block whenever anything rides.
  */
 export function ComposerCapsule({
   children,
+  riding,
+  ridingLabel,
+  ridingRef,
+  capsuleRef,
   focused,
   ready,
   segment = 'send',
@@ -118,7 +139,8 @@ export function ComposerCapsule({
 }: ComposerCapsuleProps) {
   const ref = useRef<HTMLDivElement>(null);
   const { w, h } = useElementSize(ref);
-  const asBlock = block || expanded;
+  // Anything riding along makes the send segment the block too (round 23): the rows lie over the text's line.
+  const asBlock = block || expanded || !!riding;
   const shape = useMemo(() => (asBlock ? blockCapsuleShape(w, h) : capsuleShape(w, h)), [w, h, asBlock]);
   const clipId = `composer-clip-${useId().replace(/:/g, '')}`;
   // Send acts only with something to send; ↑ / ↓ always.
@@ -136,12 +158,16 @@ export function ComposerCapsule({
 
   return (
     <div
-      ref={ref}
+      ref={(el) => {
+        ref.current = el;
+        if (capsuleRef) capsuleRef.current = el;
+      }}
       className={`${styles.capsule} res-shape-stand-in`}
       data-focus={focused || undefined}
       data-ready={(segment === 'send' && ready) || undefined}
       data-expanded={expanded || undefined}
       data-block={asBlock || undefined}
+      data-riding={riding ? '' : undefined}
       data-shape-pending={shape ? undefined : ''}
       style={{ '--shape-radius': `${CAPSULE_R}px`, '--shape-ink-width': `${INK}px` } as CSSProperties}
     >
@@ -169,33 +195,42 @@ export function ComposerCapsule({
           </svg>
         </>
       )}
-      {children}
-      {/* The send column: the segment (a strip, or the block on the last row) and, above the block, ⤢. */}
-      <div className={styles.sendColumn}>
-        {aboveSend && <div className={styles.aboveSend}>{aboveSend}</div>}
-        <button
-          type="button"
-          className={styles.send}
-          aria-label={sendLabel}
-          title={sendLabel}
-          aria-disabled={!acts || undefined}
-          aria-expanded={segment === 'send' ? undefined : segment === 'collapse'}
-          data-segment={segment}
-          onClick={() => acts && onSend()}
-          onPointerEnter={(e) => at(e, true)}
-          onPointerLeave={(e) => at(e, false)}
-        >
-          {/* On the last line's row, beside the ＋ — not in the middle of a tall field. */}
-          {/* ↑ / ↓ is one chevron turning (never an arrow, which reads as sending): ˄ to grow, ˅ to bring it back; the
-              plane and the chevron are two spans, so opening the panel never spins it. */}
-          <span
-            key={segment === 'send' ? 'send' : 'chevron'}
-            className={styles.sendGlyph}
-            data-turned={segment === 'expand' || undefined}
+      {/* What rides along: rows over the text's line, inside the outline (round 23). */}
+      {riding && (
+        <div ref={ridingRef} className={styles.riding} role="group" aria-label={ridingLabel}>
+          {riding}
+        </div>
+      )}
+      <div className={styles.fieldLine}>
+        {children}
+        {/* The send column: the segment (a strip, or the block on the last row) and, above the block at the text's
+            top, ⤢. */}
+        <div className={styles.sendColumn}>
+          {aboveSend && <div className={styles.aboveSend}>{aboveSend}</div>}
+          <button
+            type="button"
+            className={styles.send}
+            aria-label={sendLabel}
+            title={sendLabel}
+            aria-disabled={!acts || undefined}
+            aria-expanded={segment === 'send' ? undefined : segment === 'collapse'}
+            data-segment={segment}
+            onClick={() => acts && onSend()}
+            onPointerEnter={(e) => at(e, true)}
+            onPointerLeave={(e) => at(e, false)}
           >
-            <Icon name={segment === 'send' ? 'send' : 'chevron-down'} size={20} color="currentColor" strokeWidth={INK} />
-          </span>
-        </button>
+            {/* On the last line's row, beside the ＋ — not in the middle of a tall field. */}
+            {/* ↑ / ↓ is one chevron turning (never an arrow, which reads as sending): ˄ to grow, ˅ to bring it back; the
+                plane and the chevron are two spans, so opening the panel never spins it. */}
+            <span
+              key={segment === 'send' ? 'send' : 'chevron'}
+              className={styles.sendGlyph}
+              data-turned={segment === 'expand' || undefined}
+            >
+              <Icon name={segment === 'send' ? 'send' : 'chevron-down'} size={20} color="currentColor" strokeWidth={INK} />
+            </span>
+          </button>
+        </div>
       </div>
     </div>
   );

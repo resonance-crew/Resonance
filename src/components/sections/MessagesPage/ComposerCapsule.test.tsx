@@ -5,6 +5,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen } from '@/../test/render';
 import { mockElementSize } from '@/../test/organic';
 import { boundaryPoints, polyline } from '@/components/molecules/SegmentedActionBar/SegmentedActionBar';
+import { segmentCapsuleShape } from '@/components/molecules/SegmentedActionBar/segmentCapsule';
+import { autoSegments } from '@/lib/design/wobAuto';
 import { INK } from '@/lib/design/strokes';
 import { BLOCK_TURN_R, CAPSULE_H, ComposerCapsule, SEND_SEGMENT_W, blockCapsuleShape, capsuleShape } from './ComposerCapsule';
 import { FloatingSlip, floatingPath } from './FloatingSlip';
@@ -60,8 +62,8 @@ describe('the composer capsule (round 9 §4)', () => {
 
   // Round 10 §3.1–3.2, round 11 §3: no paper halo round the pen; the foot's paper behind the whole foot keeps the
   // thread from showing round it — a 12 fade from the thread into it, starting on the foot's top edge (the
-  // capsule's; 6 over the top riding row, where its ink starts), solid from there to the screen's edge —
-  // and nothing of it is a shadow or see-through.
+  // capsule's, whatever rides inside it: round 23), solid from there to the screen's edge — and nothing of it is a
+  // shadow or see-through.
   it('draws no halo round its pen, and lays the foot’s paper behind it with a 12 fade from its top edge', () => {
     const { container } = render(capsule());
     const paths = Array.from(container.querySelectorAll('svg path'));
@@ -76,10 +78,13 @@ describe('the composer capsule (round 9 §4)', () => {
     expect(rule('.dock::after')).toMatch(/top:\s*12px;[\s\S]*bottom:\s*0;[\s\S]*background:\s*var\(--color-cream\)/);
     // The fade lets taps through to the thread; the solid paper takes them.
     expect(rule('.dock::after')).toMatch(/pointer-events:\s*auto/);
-    // Riding rows: the whole fade over them, then 6 of solid paper, as under them to the capsule.
-    expect(rule('.dock:has(.carry)')).toMatch(/padding-top:\s*18px/);
+    // Round 23 (the owner's: 「不用做這個漸層」): nothing rides over the capsule any more, so the foot keeps no room
+    // and no paper of its own for rows over it — none of the rules that made them is left.
+    expect(css).not.toMatch(/:has\(>?\s*\.carry\)/);
+    expect(css).not.toMatch(/\.carry\s*\{/);
+    expect(rule('.dock')).toMatch(/padding:\s*0 14px calc\(8px \+ env\(safe-area-inset-bottom, 0px\)\)/);
     // Not a shadow: a floating thing stays opaque in every state.
-    for (const sel of ['.capsule', '.send', '.slip', '.dock', '.paperFill', '.sendFace', '.carryRow']) {
+    for (const sel of ['.capsule', '.send', '.slip', '.dock', '.paperFill', '.sendFace', '.carryRow', '.riding', '.carryStrip']) {
       expect(rule(sel)).not.toMatch(/opacity|box-shadow|drop-shadow/);
     }
     expect(css).not.toMatch(/\.send\[aria-disabled[^{]*\{[^}]*opacity/);
@@ -140,7 +145,8 @@ describe('the composer capsule (round 9 §4)', () => {
     expect(rule('.send')).toMatch(/width:\s*52px/);
     // From the second line Send is the block on the last row: the column keeps it at its foot, under ⤢ or nothing.
     expect(rule('.sendColumn')).toMatch(/justify-content:\s*flex-end/);
-    // ⤢ / ⤡ stand in the send column, at the capsule's top-right (the owner's: where a finger looks for it).
+    // ⤢ / ⤡ stand in the send column at the text's top — the capsule's top-right, or just under what rides along
+    // (round 23): the column is the text line's, never beside a row's ✕.
     expect(rule('.aboveSend')).toMatch(/align-items:\s*flex-start/);
     expect(rule('.aboveSend')).toMatch(/justify-content:\s*center/);
     expect(rule('.aboveSend')).not.toMatch(/padding/);
@@ -157,6 +163,89 @@ describe('the composer capsule (round 9 §4)', () => {
     // The plane sits on the last line's row, beside the ＋, not in the middle of a tall field.
     expect(rule('.sendGlyph')).toMatch(/bottom:\s*0/);
     expect(rule('.sendGlyph')).toMatch(/height:\s*48px/);
+  });
+});
+
+// Round 23 (the owner's: 「回覆的訊息會在這個整個訊息框的 border 以內」, Telegram's way): what rides the next message
+// lies inside the capsule over the text's line, the capsule's three columns running through its rows.
+describe('what rides inside the capsule (round 23)', () => {
+  it('lays the rows inside the outline over the text’s line, Send the block whenever anything rides', () => {
+    const { container, rerender } = render(capsule());
+    const root = container.firstElementChild as HTMLElement;
+    expect(screen.queryByRole('group')).toBeNull();
+    expect(root).not.toHaveAttribute('data-block');
+
+    rerender(capsule({ riding: <span>Replying to bob</span>, ridingLabel: 'Sent with your message' }));
+    const group = screen.getByRole('group', { name: 'Sent with your message' });
+    // Inside the capsule, before the text's line (the ＋, the field and the send column).
+    expect(root).toContainElement(group);
+    const line = root.querySelector('[class*="fieldLine"]')!;
+    expect(group.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(line).toContainElement(screen.getByRole('textbox', { name: 'Message' }));
+    expect(line).toContainElement(screen.getByRole('button', { name: 'Send' }));
+    // One line, something riding: Send is already the 52 × 48 block on the last row.
+    expect(root).toHaveAttribute('data-block');
+    expect(root).toHaveAttribute('data-riding');
+  });
+
+  it('pins the rows’ numbers: 6 under the pen, 44 a row, the mark in the ＋’s 44, the ✕ in Send’s 52, pictures 8 + 56 + 8', () => {
+    expect(rule('.capsule')).toMatch(/flex-direction:\s*column/);
+    expect(rule('.fieldLine')).toMatch(/align-items:\s*flex-end;[\s\S]*min-height:\s*48px/);
+    expect(rule('.riding')).toMatch(/padding-top:\s*6px/);
+    expect(rule('.riding')).not.toMatch(/gap|border|margin/);
+    expect(rule('.carryRow')).toMatch(/min-height:\s*44px/);
+    expect(rule('.carryRow')).not.toMatch(/padding|margin|gap/);
+    expect(rule('.carryMark')).toMatch(/width:\s*44px/);
+    expect(rule('.plusSlot')).toMatch(/width:\s*44px/);
+    expect(rule('.carryRule')).toMatch(/width:\s*6px;[\s\S]*height:\s*28px/);
+    expect(rule('.carryTile')).toMatch(/width:\s*32px;[\s\S]*height:\s*32px/);
+    expect(rule('.carryMedia')).toMatch(/width:\s*36px;[\s\S]*height:\s*36px/);
+    expect(rule('.carrySticker')).toMatch(/width:\s*36px;[\s\S]*height:\s*36px;[\s\S]*opacity:\s*0\.55/);
+    expect(rule('.carryRemove')).toMatch(/width:\s*52px/);
+    expect(rule('.send')).toMatch(/width:\s*52px/);
+    expect(rule('.carryStrip')).toMatch(/padding:\s*8px/);
+    expect(rule('.carryThumb')).toMatch(/width:\s*56px;[\s\S]*height:\s*56px/);
+    // The words start where the field's text does: nothing between the ＋'s column and either of them.
+    expect(rule('.carryWords')).toMatch(/padding:\s*0/);
+    expect(rule('.composerField')).toMatch(/padding:\s*0 10px 0 0/);
+    // One reply: 6 + 44 + one line's 48.
+    expect(6 + 44 + CAPSULE_H).toBe(98);
+  });
+
+  it('keeps one line of 36 and three lines of text in a short window under a finger', () => {
+    const short = css.slice(css.indexOf('@media (pointer: coarse) and (max-height: 500px)'));
+    const block = short.slice(0, short.indexOf('\n}\n') + 2);
+    expect(block).toMatch(/\.carryRow\s*\{\s*min-height:\s*36px/);
+    expect(block).toMatch(/\.carryText\s*\{\s*flex-direction:\s*row/);
+    expect(block).toMatch(/\.carryThumb\s*\{\s*width:\s*44px;\s*height:\s*44px/);
+    expect(block).toMatch(/textarea\.composerInput\s*\{\s*max-height:\s*calc\(2lh \+ 48px\)/);
+  });
+
+  // Round 23 (the critic's): a row coming or going in one tap must not redraw the whole pen line — the composer's
+  // outline grows from its one-line height moving its sides alone; at one line it is the plain shape.
+  it('grows its outline by its sides alone: the foot and its corners stay, the top only rises', () => {
+    const w = 320;
+    const cubics = (d: string) =>
+      [...d.matchAll(/C ([-\d.]+),([-\d.]+) ([-\d.]+),([-\d.]+) ([-\d.]+),([-\d.]+)/g)].map((m) => m.slice(1).map(Number));
+    const parts = (h: number) => {
+      const c = cubics(capsuleShape(w, h)!.outline);
+      const nH = autoSegments(w);
+      const nV = autoSegments(h);
+      return { top: c.slice(0, nH + 2), foot: c.slice(nH + 2 + nV, nH + 2 + nV + nH + 2) };
+    };
+    // At one line: the plain shape (the tag field's, the slip's), point for point.
+    expect(capsuleShape(w, 48)!.outline).toBe(segmentCapsuleShape(w, 48, SEND_SEGMENT_W, 23)!.outline);
+    const rest = parts(48);
+    for (const h of [98, 170, 240, 400]) {
+      const grown = parts(h);
+      expect(grown.top).toEqual(rest.top);
+      // The foot is the one-line foot, moved down by the growth.
+      const lift = (row: number[]) => row.map((v, i) => (i % 2 ? +(v - (h - 48)).toFixed(2) : v));
+      expect(grown.foot.map(lift)).toEqual(rest.foot);
+    }
+    // The tag field keeps the plain outline, whose foot does move as it grows.
+    const plainFoot = (h: number) => cubics(segmentCapsuleShape(w, h, SEND_SEGMENT_W, 23)!.outline).slice(-autoSegments(h) - autoSegments(w) - 2);
+    expect(plainFoot(240)).not.toEqual(plainFoot(48));
   });
 });
 
