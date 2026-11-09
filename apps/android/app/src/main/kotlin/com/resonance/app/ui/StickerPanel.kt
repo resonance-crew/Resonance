@@ -73,6 +73,9 @@ import com.resonance.geometry.SegValue
 import com.resonance.geometry.WobRectOptions
 import kotlin.math.min
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 
 /** One section of the sticker panel's grid: the 🕘 recents (once there are any), then each pack. */
 internal class StickerSection(val key: String, val title: String, val pack: StickerCatalog.Pack?, val stickers: List<StickerCatalog.Sticker>)
@@ -124,23 +127,25 @@ private suspend fun LazyGridState.glideTo(sections: List<StickerSection>, column
 internal const val RECENT_KEY = "recent"
 
 /**
- * The sticker panel (round 22 §4.1), in the keyboard's place under the capsule: the foot's own paper
+ * The sticker panel (round 22 §4.1, round 23 §3), in the keyboard's place under the capsule: the foot's own paper
  * continuing — no card, no rule. A row of pack icons (🕘 recents first once there are any, then each
  * character's head) over one grid scrolling through every pack, each headed by its character's name; the
- * bar marks the pack in view and a tap on an icon scrolls to its pack. 4 columns on a phone, 5–6 wider.
- * A tap on a sticker previews it ([onTap]: the screen previews, a second tap sends). Scrolling the grid only
- * scrolls it — ↑ is what grows the panel. The grid runs on under the navigation bar to the screen's edge
- * ([navigation] of room under its last row), its bottom fade at that edge.
+ * bar marks the pack in view and a tap on an icon scrolls to its pack. 4 columns on a phone, 5–6 wider, the cells
+ * as big as the width lets them be ([StickerGridInset], [StickerGridGap], [StickerCellInset]). A tap on a sticker sends
+ * it ([onTap]: one tap, the owner's — no preview); the cells in view breathe ([PickerBreath], at most [playing] at
+ * once; still under [still]). Scrolling the grid only scrolls it — ↑ is what grows the panel. The grid runs on under
+ * the navigation bar to the screen's edge ([navigation] of room under its last row), its bottom fade at that edge.
  */
 @Composable
 internal fun StickerPanel(
     catalog: StickerCatalog,
     recents: List<ChatSticker>,
     origin: String,
-    previewing: ChatSticker?,
     onTap: (StickerCatalog.Sticker) -> Unit,
     modifier: Modifier = Modifier,
     navigation: Dp = 0.dp,
+    playing: Int = PICKER_PLAYING_PHONE,
+    still: Boolean = LocalContext.current.let { c -> remember(c) { c.pickerHoldsStill() } },
 ) {
     val language = Strings.language.tag
     val sections = remember(catalog, recents, language) { stickerSections(catalog, recents, language, L10n.Messages.stickerRecent) }
@@ -166,9 +171,9 @@ internal fun StickerPanel(
             Box(Modifier.fillMaxWidth().weight(1f)) {
                 // Its edges fade where more stickers lie beyond (the owner's notes 7, the web's 16): no line, no card.
                 StickerGrid(
-                    sections, columns, grid, origin, previewing,
+                    sections, columns, grid, origin,
                     Modifier.fillMaxSize().edgeFades({ grid.canScrollBackward }, { grid.canScrollForward }),
-                    navigation, onTap,
+                    navigation, onTap, playing, still,
                 )
             }
         }
@@ -212,24 +217,40 @@ private fun PackBar(sections: List<StickerSection>, current: Int, origin: String
     }
 }
 
-/** The grid: every section's heading across the row, then its stickers' key poses; keys stable by pack and id. */
+/**
+ * The grid: every section's heading across the row, then its stickers' key poses; keys stable by pack and id. The
+ * cells at least 60 % in view (under the navigation bar counts as out of it) breathe through [PickerBreath], while the
+ * grid isn't being scrolled.
+ */
 @Composable
 private fun StickerGrid(
     sections: List<StickerSection>,
     columns: Int,
     grid: LazyGridState,
     origin: String,
-    previewing: ChatSticker?,
     modifier: Modifier,
     navigation: Dp,
     onTap: (StickerCatalog.Sticker) -> Unit,
+    playing: Int,
+    still: Boolean,
 ) {
     val language = Strings.language.tag
+    val breath = remember(playing) { PickerBreath(playing) }
+    val density = LocalDensity.current
+    val hidden = with(density) { navigation.roundToPx() }
+    if (!still) LaunchedEffect(breath, grid) {
+        while (true) {
+            breath.step(cellsInView(grid, hidden), grid.isScrollInProgress)
+            delay(PickerBreath.STAGGER_MILLIS)
+        }
+    }
     LazyVerticalGrid(
         GridCells.Fixed(columns),
         modifier,
         state = grid,
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 10.dp, end = 10.dp, bottom = 12.dp + navigation),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(start = StickerGridInset, end = StickerGridInset, bottom = 12.dp + navigation),
+        horizontalArrangement = Arrangement.spacedBy(StickerGridGap),
+        verticalArrangement = Arrangement.spacedBy(StickerGridGap),
     ) {
         sections.forEach { section ->
             item(key = "h:${section.key}", span = { GridItemSpan(maxLineSpan) }, contentType = "heading") {
@@ -237,34 +258,64 @@ private fun StickerGrid(
                     section.title.uppercase(),
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = AppFonts.body(11.5f, 600, lineHeight = 1.3f, color = Tokens.TextMuted).copy(letterSpacing = 0.06.em),
-                    modifier = Modifier.padding(start = 6.dp, top = 10.dp, bottom = 4.dp).semantics { heading() },
+                    // In line with the art (the cell's inset), its air over it.
+                    modifier = Modifier.padding(start = StickerCellInset, top = 10.dp, bottom = 2.dp).semantics { heading() },
                 )
             }
             items(section.stickers, key = { "${section.key}:${it.pack}/${it.id}" }, contentType = { "sticker" }) { sticker ->
-                val chosen = previewing == sticker.ref
+                val key = "${section.key}:${sticker.pack}/${sticker.id}"
                 val wash = Tokens.ButtonTonal
                 val name = sticker.name(language)
                 Box(
                     Modifier
                         .aspectRatio(1f)
-                        .padding(3.dp)
-                        .drawBehind { if (chosen) drawOutline(CellShape.createOutline(size, layoutDirection, this), wash) }
-                        // The press spreads the previewed one's wash inside the same outline, so a tap grows into the choice.
+                        // The press spreads the drawn cell wash inside the cell's outline: the press, never a choice.
                         .clickable(
                             interactionSource = null, indication = remember(wash) { OrganicIndication(wash, shape = CellShape) },
-                            role = Role.Button, onClickLabel = if (chosen) L10n.Messages.send else name,
+                            role = Role.Button, onClickLabel = L10n.Messages.stickerSendHint,
                         ) { onTap(sticker) }
                         .semantics { contentDescription = name },
                     contentAlignment = Alignment.Center,
-                ) { StickerPose(sticker, origin, Modifier.fillMaxSize().padding(6.dp)) }
+                ) {
+                    val art = Modifier.fillMaxSize().padding(StickerCellInset)
+                    if (still) StickerPose(sticker, origin, art)
+                    else BreathingSticker(sticker, origin, playing = breath.plays(key), onEnded = { breath.ended(key) }, modifier = art)
+                }
             }
         }
     }
 }
 
 /**
- * A sticker cell's outline at any size: radius 16 and its own swing at a phone's ~92 across, kept in proportion —
- * so the preview drawn from it is the cell's wash grown, edge for edge (the owner's notes, 2026-11-01).
+ * The sticker cells at least 60 % in view, in reading order (the grid's own: row by row): what [PickerBreath] may play.
+ * [hidden] px at the viewport's foot (under the navigation bar) count as out of view.
+ */
+private fun cellsInView(grid: LazyGridState, hidden: Int): List<String> {
+    val info = grid.layoutInfo
+    val top = info.viewportStartOffset
+    val bottom = info.viewportEndOffset - hidden
+    return info.visibleItemsInfo
+        .filter { it.contentType == "sticker" }
+        .filter { item ->
+            val y0 = item.offset.y
+            val y1 = y0 + item.size.height
+            inViewEnough(item.size.height, (minOf(y1, bottom) - maxOf(y0, top)).coerceAtLeast(0))
+        }
+        .sortedBy { it.index }
+        .map { it.key as String }
+}
+
+/**
+ * The grid's measures (round 23 §3, one rule on every platform, the critique's 7): 8 from the screen's edges, 4 between
+ * cells, the art 2 inside its cell — a 411 phone's four columns ≈ 95 a cell, ≈ 91 of art (from 80).
+ */
+internal val StickerGridInset = 8.dp
+internal val StickerGridGap = 4.dp
+internal val StickerCellInset = 2.dp
+
+/**
+ * A sticker cell's outline at any size: radius 16 and its own swing at a phone's ~92 across, kept in proportion
+ * (the owner's notes, 2026-11-01): the press's wash spreads inside it.
  */
 internal data class StickerCellShape(private val seed: Double = 37.0) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
@@ -275,51 +326,5 @@ internal data class StickerCellShape(private val seed: Double = 37.0) : Shape {
 
 private val CellOptions = WobRectOptions(curve = 1.52, segmentsH = SegValue.Count(2.0), segmentsV = SegValue.Count(2.0))
 
-/** A sticker cell's wash: the previewed one rests on it, a press spreads inside it. */
+/** A sticker cell's wash: a press spreads inside it (round 23: there is no choice to rest on). */
 private val CellShape = StickerCellShape()
-
-/**
- * The sticker being previewed (round 22 §4.1): the animated file at [size] on a flat paper sheet over the
- * thread's foot, 「再點一次傳送」 under it (never its name: the art says it) — a tap on it sends. Heard by TalkBack as
- * 「預覽：謝謝，再點一次傳送」 as it comes.
- */
-@Composable
-internal fun StickerPreview(
-    sticker: StickerCatalog.Sticker?,
-    origin: String,
-    onSend: (StickerCatalog.Sticker) -> Unit,
-    modifier: Modifier = Modifier,
-    size: Dp = 144.dp,
-) {
-    AnimatedVisibility(
-        visible = sticker != null,
-        modifier = modifier,
-        enter = fadeIn(tween(140)) + scaleIn(tween(160), initialScale = 0.92f),
-        exit = fadeOut(tween(100)) + scaleOut(tween(100), targetScale = 0.96f),
-    ) {
-        val s = sticker ?: return@AnimatedVisibility
-        val name = s.name(Strings.language.tag)
-        Column(
-            Modifier
-                .paperSheet(seed = 47.0, outline = CellShape)
-                .clickable(interactionSource = null, indication = null, role = Role.Button, onClickLabel = L10n.Messages.send) { onSend(s) }
-                .semantics {
-                    contentDescription = L10n.Messages.stickerPreviewA11y(name)
-                    liveRegion = LiveRegionMode.Polite
-                }
-                .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            // A new sticker previewed plays from its start (its key under it all).
-            androidx.compose.runtime.key(s.pack, s.id) {
-                PlayingSticker(s, origin, key = "preview:${s.pack}/${s.id}", size = size, autoplay = { true }, replays = 0)
-            }
-            BasicText(
-                L10n.Messages.stickerPreviewHint,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                style = AppFonts.body(12f, lineHeight = 1.3f, color = Tokens.TextMuted).copy(textAlign = TextAlign.Center),
-                modifier = Modifier.padding(top = 6.dp),
-            )
-        }
-    }
-}

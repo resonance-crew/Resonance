@@ -14,17 +14,13 @@ import com.resonance.design.LocalWindowLayout
 import com.resonance.design.readableColumn
 
 import android.net.Uri
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.imeAnimationTarget
-import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.IntOffset
 import com.resonance.api.models.FeedCard
 import com.resonance.app.Stickers
 import com.resonance.design.ComposerHeight
@@ -87,6 +83,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.foundation.layout.RowScope
@@ -243,16 +240,12 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     // The thread's foot's width (px): whether its capsule fills it.
     var footWidth by remember { mutableIntStateOf(0) }
     var attachTab by rememberSaveable { mutableStateOf(AttachTab.Pictures) }
-    // The sticker being previewed (a second tap sends it).
-    var previewing by remember { mutableStateOf<StickerCatalog.Sticker?>(null) }
     val still = remember(context) { context.prefersReducedMotion() }
     val panelRoom = remember { PanelRoom(scope, still) }
     val stickerCatalog by Stickers.catalog.collectAsStateWithLifecycle()
     // The field grown to the thread (round 22 §4.3, option C): what it leaves over itself under the bar (px) —
     // their last message and its air, or only the air — or null. Its height follows the keyboard or a panel under it.
     var expandedReserve by remember { mutableStateOf<Int?>(null) }
-    var expandedExtras by remember { mutableIntStateOf(0) }
-    var capsuleHeight by remember { mutableIntStateOf(0) }
     var screenHeight by remember { mutableIntStateOf(0) }
     var screenWidth by remember { mutableIntStateOf(0) }
 
@@ -315,7 +308,6 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     }
     // A tap on the thread's blank, or on the foot's solid paper, puts the keyboard away (round 11 §2) — and a panel in its place.
     val closePanel: () -> Unit = {
-        previewing = null
         panel = PanelMachine.dismissed(panel)
         panelRoom.animateTo(0f) { if (!panel.keepsRoom) shownPanel = ComposerPanel.None }
     }
@@ -324,10 +316,16 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
         keyboard?.hide()
         if (panel.keepsRoom) closePanel() else panel = PanelState()
     }
+    val view = LocalView.current
     val reply: (ChatMessage) -> Unit = { message ->
         model.reply(message)
         runCatching { composerFocus.requestFocus() }
         keyboard?.show()
+        // Said once as the reply comes into the capsule (round 23 §2); the focus stays in the field.
+        @Suppress("DEPRECATION")
+        view.announceForAccessibility(
+            if (message.senderId == model.me) L10n.Messages.replyingToSelf else L10n.Messages.replyingTo(model.other?.handle ?: handle),
+        )
     }
     // Opened at a note (a bell row, an older push): the note itself — brought to the middle, flashed and
     // set up to be answered — or, for an older one the thread never got, the chip that answers it.
@@ -357,7 +355,6 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     fun openPanel(next: PanelState) {
         val wasUp = imeInsets.getBottom(density) > navigationBars.getBottom(density)
         expandedReserve = null
-        previewing = null
         panel = next
         shownPanel = next.panel
         panelRoom.base = panelBase()
@@ -371,7 +368,6 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     }
     /** The keyboard comes back over the panel's kept room ([PanelState.holding] until it has risen). */
     fun backToKeyboard(next: PanelState) {
-        previewing = null
         panel = next
         runCatching { composerFocus.requestFocus() }
         keyboard?.show()
@@ -385,9 +381,19 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
         if (next.panel == ComposerPanel.Attach) openPanel(next) else backToKeyboard(next)
     }
     val onFieldTap: () -> Unit = { if (panel.panelOpen) backToKeyboard(PanelMachine.keyboardShown(panel)) }
+    // A note's or a card's row tapped: the field, with the keyboard (back over a panel in its place).
+    val focusField: () -> Unit = {
+        if (panel.panelOpen) backToKeyboard(PanelMachine.keyboardShown(panel))
+        else {
+            runCatching { composerFocus.requestFocus() }
+            keyboard?.show()
+        }
+    }
+    // The 🕘 recents as the sticker panel opened: what is sent meanwhile is kept at once, and shown from its next opening
+    // (round 23 §3) — so a quick second tap never lands on a sticker that moved under the finger.
+    val recentsShown = remember { FrozenWhileOpen<List<com.resonance.kit.chat.ChatSticker>>() }
+    val panelRecents = recentsShown.shown(shownPanel == ComposerPanel.Stickers, model.recentStickers)
     val setGrown: (Boolean) -> Unit = { grown ->
-        // Grown to under the header there is no room over the capsule for a preview.
-        if (grown) previewing = null
         panel = PanelMachine.setExpanded(panel, grown)
         panelRoom.max = panelMax()
         panelRoom.animateTo(if (grown) panelRoom.max else panelRoom.base)
@@ -399,9 +405,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
             PanelRoom.Stop.Closed -> closePanel()
         }
     }
-    BackHandler(enabled = panel.panelOpen) {
-        if (previewing != null) previewing = null else closePanel()
-    }
+    BackHandler(enabled = panel.panelOpen) { closePanel() }
     // The keyboard risen over a panel's kept room: the room goes (after a moment at most — a hardware keyboard never rises).
     LaunchedEffect(panel.holding) {
         if (!panel.holding) return@LaunchedEffect
@@ -436,12 +440,19 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
         panelRoom.max = panelMax()
         panelRoom.snapTo(if (panel.expanded) panelRoom.max else panelRoom.base)
     }
-    val sendSticker: (StickerCatalog.Sticker) -> Unit = { sticker ->
-        previewing = null
-        model.sendSticker(sticker.ref)
+    // The composer grown or shrunk with a panel open (a sticker sent as a reply takes the reply's row away, 98 → 48):
+    // a grown panel reaches up to under the header again — measured anew, not only as it opened or grew.
+    LaunchedEffect(room) {
+        snapshotFlow { room.foot }.drop(1).collect {
+            if (!panel.panelOpen || panelRoom.held) return@collect
+            panelRoom.max = panelMax()
+            if (panel.expanded) panelRoom.snapTo(panelRoom.max)
+        }
     }
+    // One tap sends a sticker (round 23 §3); a second tap on the same one in 600 ms is the old two-tap habit, not a second sticker.
+    val stickerTaps = remember { StickerTapGuard() }
     val tapSticker: (StickerCatalog.Sticker) -> Unit = { sticker ->
-        if (previewing?.ref == sticker.ref) sendSticker(sticker) else previewing = sticker
+        if (stickerTaps.take(sticker.ref)) model.sendSticker(sticker.ref)
     }
     // The field grown to the thread (option C): under the other person's last message — or the header, when that is a tall one.
     val expand: () -> Unit = {
@@ -465,7 +476,6 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                     }
                 }
             }
-            expandedExtras = (room.foot - capsuleHeight).coerceAtLeast(0)
             expandedReserve = reserve
             keep?.let {
                 withFrameNanos { }
@@ -473,13 +483,12 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
             }
         }
     }
-    // Grown, the capsule takes what is left between that and the keyboard, a panel or the navigation bar (recomputed
-    // as they move); beside the conversations (a tablet's pane) at most 60 % of the pane; never less than three rows.
+    // Grown, the capsule — what rides in it and the text — takes what is left between that and the keyboard, a panel or
+    // the navigation bar (recomputed as they move); beside the conversations (a tablet's pane) at most 60 % of the pane.
+    // The text takes what the rows leave of it, never less than three rows ([Composer]).
     val expandedHeight: androidx.compose.ui.unit.Dp? = expandedReserve?.let { reserve ->
         val gap = with(density) { ComposerGap.roundToPx() }
-        var capsule = screenHeight - topPx - keyboardPlace() - gap - expandedExtras - reserve
-        if (!phone) capsule = minOf(capsule, (screenHeight * 0.6f).roundToInt())
-        with(density) { capsule.coerceAtLeast((ComposerHeight * 3).roundToPx()).toDp() }
+        with(density) { expandedCapsule(screenHeight - topPx - keyboardPlace() - gap - reserve, screenHeight, phone).toDp() }
     }
     val collapse: () -> Unit = { expandedReserve = null }
     val onSegment: (SegmentRole) -> Unit = { role ->
@@ -490,6 +499,23 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
             }
             SegmentRole.Expand -> setGrown(true)
             SegmentRole.Collapse -> setGrown(false)
+        }
+    }
+    // The release screenshots' composer states (debug builds): a reply and a card riding, or the sticker panel open — once
+    // the thread is read, taken once.
+    if (BuildConfig.DEBUG) LaunchedEffect(model, model.threadReady) {
+        if (!model.threadReady) return@LaunchedEffect
+        if (DebugLaunch.threadRide == "replyCard") {
+            DebugLaunch.threadRide = null
+            rowsNow.lastOrNull { !model.isMine(it.message) && !it.message.isUnsent }?.let { model.reply(it.message) }
+            runCatching { session.reading.cardBox(com.resonance.api.apis.DefaultApi.TabGetCardBox.published) }.getOrNull()
+                ?.let(::publicCards)?.firstOrNull()
+                ?.let { model.attachCard(ThreadModel.Attachment(it.id, it.title, it.imageUrl, keptPrivate = it.keptPrivate)) }
+        }
+        if (DebugLaunch.threadPanel == "stickers") {
+            DebugLaunch.threadPanel = null
+            withFrameNanos { }
+            onStickers()
         }
     }
     // A draft is kept a moment after typing stops, and as the thread is left or covered (round 22 §4.4).
@@ -568,20 +594,17 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                 // shows under or beside it — its fade over the foot's top 12 (round 11 §3), counted in the room it
                 // takes; a tap on its solid part puts the keyboard away, as one on the thread's blank does.
                 // A sticker previewed: a tap anywhere on the thread lets it go (the panel's own taps are its own).
-                if (previewing != null) Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { previewing = null } })
                 Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { footWidth = it.width }) {
                     // A pane the capsule doesn't fill (2026-11-01): the thread beside the capsule, sinking into a fade at the
                     // foot's edge; a panel in the keyboard's place keeps the paper across the pane (it is that paper going on).
                     if (foot != ThreadFoot.Pending) ComposerBacking(
                         Modifier.matchParentSize(), onTap = putKeyboardAway,
                         wide = if (!widePane) null else {
-                            // The column under the capsule starts at the top of what rides with it, else at the
-                            // capsule's middle (it is opaque above that; a slip in its place too).
-                            val riding = foot.composes && rides(model)
+                            // The column under the capsule starts at its middle (it is opaque above that, what rides
+                            // with the message included; a slip in its place too).
                             ComposerWideFoot(
                                 footHeight = with(density) { room.foot.toDp() } + ComposerGap,
-                                columnTop = if (riding) 0.dp else ComposerHeight / 2,
-                                riding = riding,
+                                columnTop = ComposerHeight / 2,
                                 capsuleMax = ComposerMax,
                                 gutter = ComposerGutter,
                             )
@@ -600,8 +623,8 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                                     model, handle, composerFocus, panel,
                                     onStickers = onStickers, onAttach = onAttach, onSegment = onSegment, onFieldTap = onFieldTap,
                                     expandedHeight = expandedHeight, onExpand = expand, onCollapse = collapse,
-                                    onCapsuleHeight = { capsuleHeight = it },
-                                    widePane = widePane,
+                                    onQuote = { id -> jump(id, true) },
+                                    onFocusField = focusField,
                                     modifier = padded,
                                 )
                                 ThreadFoot.Awaiting -> FootNote(L10n.Messages.awaitingReply, padded)
@@ -638,8 +661,9 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                             val navigation = with(density) { navigationBars.getBottom(density).toDp() }
                             when (shownPanel) {
                                 ComposerPanel.Stickers -> StickerPanel(
-                                    stickerCatalog, model.recentStickers, origin, previewing?.ref, tapSticker,
+                                    stickerCatalog, panelRecents, origin, tapSticker,
                                     Modifier.readableColumn(ComposerMax), navigation = navigation,
+                                    playing = if (phone) PICKER_PLAYING_PHONE else PICKER_PLAYING_WIDE,
                                 )
                                 ComposerPanel.Attach -> AttachPanel(
                                     session, attachTab, { attachTab = it }, model::pictureNumber, panelRoom,
@@ -653,12 +677,6 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                         }
                     }
                 }
-                // The sticker previewed stands over the capsule (round 22 §4.1).
-                StickerPreview(
-                    previewing, session.config.origin, sendSticker,
-                    Modifier.align(Alignment.BottomCenter).offset { IntOffset(0, -(room.above + with(density) { 8.dp.roundToPx() })) },
-                    size = if (phone) 144.dp else 160.dp,
-                )
             }
             ThreadModel.Phase.Missing -> {
                 BasicText(
@@ -1157,3 +1175,13 @@ private const val DRAFT_SAVE_MILLIS = 500L
 
 /** Their last message taller than this share of the room (a picture): the field grows to under the header instead (round 22 §4.3, = B). */
 private const val TALL_SHARE = 0.35f
+
+/**
+ * Option C's capsule (px, round 23 §2: the rows riding in it and the text together): what is [free] under the reserve
+ * above it, and beside the conversations (not a [phone]) at most [GROWN_SHARE] of the pane's [screenHeight].
+ */
+internal fun expandedCapsule(free: Int, screenHeight: Int, phone: Boolean): Int =
+    if (phone) free else minOf(free, (screenHeight * GROWN_SHARE).roundToInt())
+
+/** A grown capsule beside the conversations takes at most this share of the pane. */
+private const val GROWN_SHARE = 0.6f

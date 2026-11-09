@@ -65,6 +65,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.isTraversalGroup
 import coil3.compose.AsyncImage
 import com.resonance.design.AppFonts
 import com.resonance.design.ComposerCapsule
@@ -72,11 +75,17 @@ import com.resonance.design.ComposerHeight
 import com.resonance.design.ComposerLeadShape
 import com.resonance.design.ComposerLeadSize
 import com.resonance.design.ComposerRow
-import com.resonance.design.ComposerRowsGap
-import com.resonance.design.ComposerWideRideEndInset
-import com.resonance.design.ComposerWideRideInset
-import com.resonance.design.ComposerWideRideLead
-import com.resonance.design.ComposerRowsLead
+import com.resonance.design.ComposerRowHeight
+import com.resonance.design.ComposerRowsTop
+import com.resonance.design.ComposerShortRowHeight
+import com.resonance.design.ComposerShortThumb
+import com.resonance.design.ComposerShortViewport
+import com.resonance.design.ComposerStripPad
+import com.resonance.design.ComposerStripThumb
+import com.resonance.design.ComposerErrorRow
+import com.resonance.design.ComposerTileFace
+import com.resonance.design.ChatPictureSource
+import com.resonance.design.sideFades
 import com.resonance.design.ComposerSegment
 import com.resonance.design.ComposerTile
 import com.resonance.design.OrganicIcon
@@ -102,21 +111,22 @@ import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
 
 /**
- * The message being written (round 9 §4, round 22 §4): one floating capsule ([ComposerCapsule]) —
+ * The message being written (round 9 §4, round 22 §4, round 23 §2): one floating capsule ([ComposerCapsule]) —
  * `[＋][ field … ☺ ][seam│➤]`: 「＋」 at its start (the attach panel: 圖片｜卡片), the field, ☺ just
  * before the send segment (the sticker panel; ⌨ while it shows), and Send as its end segment — ↑ / ↓
- * while the sticker panel shows with nothing to send ([PanelMachine.segment]). Above it, 6 over the
- * capsule, what rides with the message as rows in the reply's style ([ComposerRows]): the reply, the
- * note answered, the card, the pictures chosen (a strip of numbered thumbnails), why the last one
- * didn't go. With rows riding the foot starts [ComposerRowsLead] over them (round 11 §3).
+ * while the sticker panel shows with nothing to send ([PanelMachine.segment]). Inside its pen line, over the text,
+ * what rides with the message as rows ([ComposerRows], Telegram's way, the owner's): the reply, the note answered,
+ * the card, the pictures chosen (a strip of thumbnails), why the last one didn't go — each row's mark over ＋, its
+ * words where the field's start, its ✕ over Send. Nothing rides above the capsule any more.
  *
- * The field grows to five lines, then scrolls, its words fading at the edge there is more beyond
- * ([composerFades]) right to the capsule's pen line. ☺ is there only while the field is empty (the owner's
- * notes 1: words and a sticker don't go together) — the words take its room. Past one line Send is a 52 × 48
- * block on the last row, its top start corner rounded; from three lines ⤢ stands in that column at the
- * capsule's top end, centred over the block ([composerTools]). ⤢ grows the same field to the thread ([expandedHeight],
- * option C — the screen works out how far), ⤡ (in the same place) brings it back, and sending does too.
- * The caret, the IME's composition and the keyboard are untouched by either: it is the same text field throughout.
+ * The field grows to five lines (three in a short window), then scrolls, its words fading at the edge there is more
+ * beyond ([composerFades]) right to the capsule's pen line. ☺ is there only while the field is empty (the owner's
+ * notes 1: words and a sticker don't go together) — the words take its room. Past one line, or with anything riding,
+ * Send is a 52 × 48 block on the last row, its top start corner rounded; from three lines ⤢ stands in that column at
+ * the text's top, under the rows ([composerTools]). ⤢ grows the capsule to the thread ([expandedHeight], option C —
+ * the screen works out how far, for the whole capsule: the text takes what the rows leave), ⤡ (in the same place)
+ * brings it back, and sending does too. The caret, the IME's composition and the keyboard are untouched by either:
+ * it is the same text field throughout, and nothing in the capsule takes its focus.
  */
 @Composable
 internal fun Composer(
@@ -132,25 +142,22 @@ internal fun Composer(
     onExpand: () -> Unit,
     onCollapse: () -> Unit,
     modifier: Modifier = Modifier,
-    onCapsuleHeight: (Int) -> Unit = {},
-    // A pane the capsule doesn't fill: the column of paper under the capsule starts closer over the rows
-    // ([ComposerWideRideLead]: its fade is its own, [com.resonance.design.ComposerColumnPaper]).
-    widePane: Boolean = false,
+    /** The reply row's words: to the message it answers, pulsed. */
+    onQuote: (String) -> Unit = {},
+    /** A note's or a card's row: the field (the keyboard back over a panel). */
+    onFocusField: () -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
     var lines by remember { mutableIntStateOf(1) }
     val role = PanelMachine.segment(panel, model.hasSomethingToSend)
     val expanded = expandedHeight != null
-    val tools = composerTools(model.draft, lines, expanded)
+    val riding = rides(model)
+    val short = LocalConfiguration.current.screenHeightDp.dp < ComposerShortViewport
+    val tools = composerTools(model.draft, lines, expanded, riding)
+    // How tall the rows are (px): grown, the text takes what they leave of the capsule's height.
+    var header by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
     Column(modifier.fillMaxWidth()) {
-        if (rides(model)) {
-            Spacer(Modifier.height(if (widePane) ComposerWideRideLead else ComposerRowsLead))
-            ComposerRows(model, Modifier.blocksTouches().padding(
-                start = if (widePane) ComposerWideRideInset else 0.dp,
-                end = if (widePane) ComposerWideRideEndInset else 0.dp,
-            ))
-            Spacer(Modifier.height(ComposerRowsGap))
-        }
         val line = lineHeightOf(ComposerText)
         val vertical = composerPadding(line)
         ComposerCapsule(
@@ -163,14 +170,14 @@ internal fun Composer(
             onSend = { onSegment(role) },
             focused = { focused },
             textStyle = ComposerText,
-            modifier = Modifier.blocksTouches().onSizeChanged { onCapsuleHeight(it.height) },
+            modifier = Modifier.blocksTouches(),
             segment = when (role) {
                 SegmentRole.Send -> ComposerSegment.Send
                 SegmentRole.Expand -> ComposerSegment.Expand
                 SegmentRole.Collapse -> ComposerSegment.Collapse
             },
             block = tools.block,
-            // ⤢ from the third line, ⤡ while grown: a square ghost button in the send block's column, at the capsule's top end.
+            // ⤢ from the third line, ⤡ while grown: a square ghost button in the send block's column, at the text's top.
             overSegment = if (!tools.expand && !tools.collapse) null else { {
                 ToolButton(
                     icon = if (tools.collapse) IconName.Collapse else IconName.Expand,
@@ -183,6 +190,9 @@ internal fun Composer(
             leading = { AttachButton(open = panel.panel == ComposerPanel.Attach, onClick = onAttach) },
             // ☺ on the last line's row, beside Send — only while there are no words (⌨ while its panel shows); ＋'s twin.
             trailing = if (!tools.sticker) null else { { StickerToggle(keyboard = panel.panel == ComposerPanel.Stickers, onClick = onStickers) } },
+            header = if (!riding) null else { {
+                ComposerRows(model, short, onQuote, onFocusField, Modifier.onSizeChanged { header = it.height })
+            } },
         ) { _ ->
             Box(Modifier.fillMaxWidth()) {
                 val scroll = rememberScrollState()
@@ -190,8 +200,11 @@ internal fun Composer(
                 LaunchedEffect(source) {
                     source.interactions.collect { if (it is PressInteraction.Release) onFieldTap() }
                 }
-                // Five lines and their air, then it scrolls in place; grown, the height the screen gave it.
-                val boxHeight = expandedHeight ?: (line * MAX_LINES + vertical * 2)
+                // Five lines and their air (three in a short window), then it scrolls in place; grown, what the capsule
+                // the screen gave leaves under the rows — never under three lines.
+                val rowsHeight = if (riding) with(density) { header.toDp() } else 0.dp
+                val boxHeight = expandedHeight?.let { (it - rowsHeight).coerceAtLeast(ComposerHeight * 3) }
+                    ?: (line * (if (short) SHORT_MAX_LINES else MAX_LINES) + vertical * 2)
                 Box(
                     Modifier
                         .then(if (expanded) Modifier.height(boxHeight) else Modifier.heightIn(max = boxHeight))
@@ -219,8 +232,13 @@ internal fun Composer(
                             .padding(vertical = vertical)
                             // A hardware keyboard's Return sends and Shift-Return starts a line, as on the web;
                             // a composition in progress keeps its Return (the IME takes it first), and the soft
-                            // keyboard's Enter is always a new line.
-                            .onPreviewKeyEvent { e -> sendsOnReturn(e).also { if (it && model.canSend) onSegment(SegmentRole.Send) } }
+                            // keyboard's Enter is always a new line. Escape lets the reply go (no panel open).
+                            .onPreviewKeyEvent { e ->
+                                when {
+                                    cancelsReply(e, model.replyingTo != null, panel.panelOpen) -> { model.cancelReply(); true }
+                                    else -> sendsOnReturn(e).also { if (it && model.canSend) onSegment(SegmentRole.Send) }
+                                }
+                            }
                             .focusRequester(focus)
                             .onFocusChanged { focused = it.isFocused }
                             .semantics { contentDescription = L10n.Messages.threadWith(handle) },
@@ -236,21 +254,30 @@ private const val COMPOSER_LEADING = 1.5f
 internal val ComposerText: TextStyle @Composable @ReadOnlyComposable get() = AppFonts.body(16f, lineHeight = COMPOSER_LEADING)
 
 /**
- * Which of the composer's tools show (round 22 §4.3 with the owner's notes 1–2): ☺ only while the field holds no
- * words and isn't grown; Send a block on the last row past one line (and grown); ⤢ over it from
- * [EXPAND_FROM_LINES] lines, ⤡ in its place while grown.
+ * Which of the composer's tools show (round 22 §4.3 with the owner's notes 1–2, round 23 §2): ☺ only while the field
+ * holds no words and isn't grown; Send a block on the last row past one line, grown, or with anything [riding] (the
+ * owner's: the one button at the bottom right, as a message of many lines has it); ⤢ at the text's top from
+ * [EXPAND_FROM_LINES] lines (never sooner because rows ride), ⤡ in its place while grown.
  */
 internal data class ComposerTools(val sticker: Boolean, val block: Boolean, val expand: Boolean, val collapse: Boolean)
 
-internal fun composerTools(text: String, lines: Int, expanded: Boolean): ComposerTools = ComposerTools(
+internal fun composerTools(text: String, lines: Int, expanded: Boolean, riding: Boolean = false): ComposerTools = ComposerTools(
     sticker = text.isBlank() && !expanded,
-    block = expanded || lines > 1,
+    block = expanded || lines > 1 || riding,
     expand = !expanded && lines >= EXPAND_FROM_LINES,
     collapse = expanded,
 )
 
-/** The field grows to this many lines, then scrolls (round 22 §4.3). */
+/**
+ * Whether a key is Escape going down with a reply riding and no panel open: it lets the reply go (round 23 §2; with a
+ * panel open, Escape is the panel's).
+ */
+internal fun cancelsReply(e: KeyEvent, replying: Boolean, panelOpen: Boolean): Boolean =
+    replying && !panelOpen && e.type == KeyEventType.KeyDown && e.key == Key.Escape
+
+/** The field grows to this many lines, then scrolls (round 22 §4.3); in a short window, three (round 23 §2). */
 private const val MAX_LINES = 5
+private const val SHORT_MAX_LINES = 3
 /** ⤢ shows from this many lines (round 22 §4.3: "超過 2 行"). */
 internal const val EXPAND_FROM_LINES = 3
 
@@ -273,77 +300,135 @@ internal fun ridingRows(reply: Boolean, note: Boolean, card: Boolean, picture: B
 }
 
 /**
- * The rows riding with the message (round 10 §3.4), touching, each lead · text · ✕ ([ComposerRow]):
- * the reply (the wavy terracotta rule; whom to over a line of what), the note answered (its glyph on
- * the tonal tile), the card (its cover as a 40 thumbnail, else its glyph on the tile; 卡片 over its
- * title), the pictures chosen (round 22 §4.2: a strip of 40 thumbnails in the order chosen, each
- * numbered with its own ✕, 「3 張圖片」 beside them, the loader on one still being made ready). Why the
- * last message didn't go is a line of its own under them, at the rows' inset.
+ * The rows riding with the message, inside the capsule over the text (round 23 §2), [ComposerRowsTop] under its pen
+ * line, touching, each mark · words · ✕ ([ComposerRow]): the reply (the wavy terracotta rule; whom to over a line of
+ * what — a sticker, a picture or a card it answers as a 36 thumbnail before the words; the words go to the message),
+ * the note answered (its glyph on the tonal tile), the card (its cover on the tile, else its glyph; 卡片 over its
+ * title), the pictures chosen ([PictureStrip]), and why the last message didn't go ([ComposerErrorRow]). One group
+ * for TalkBack: 「隨訊息一起送出」, each ✕ naming what it takes away.
  */
 @Composable
-private fun ComposerRows(model: ThreadModel, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth()) {
+private fun ComposerRows(model: ThreadModel, short: Boolean, onQuote: (String) -> Unit, onFocusField: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(top = ComposerRowsTop)
+            .semantics {
+                isTraversalGroup = true
+                contentDescription = L10n.Messages.composerRiding
+            },
+    ) {
         val reply = model.replyingTo
         val note = model.noteRef
         val card = model.pendingCard
         val error = model.error
+        val rowHeight = if (short) ComposerShortRowHeight else ComposerRowHeight
+        val rule: @Composable () -> Unit = { ReplyRule(Modifier.height(rowHeight - REPLY_RULE_INSET)) }
         ridingRows(reply != null, note != null, card != null, model.pictures.isNotEmpty(), error != null).forEach { row ->
             when (row) {
                 Riding.Reply -> reply?.let { quote ->
                     val toSelf = quote.senderId == model.me
                     val who = if (toSelf) L10n.Messages.replyingToSelf else L10n.Messages.replyingTo(model.other?.handle.orEmpty())
+                    val jump = { onQuote(quote.id) }
                     when (val detail = replyDetail(quote)) {
-                        is ReplyDetail.Words -> ComposerRow(who, detail.text, L10n.Messages.replyCancel, { model.cancelReply() }) { ReplyRule(Modifier.height(32.dp)) }
-                        // A sticker: its key pose alone under whom it answers, no words (the owner's) — its name for TalkBack.
+                        is ReplyDetail.Words -> ComposerRow(
+                            who, detail.text, L10n.Messages.replyCancel, { model.cancelReply() },
+                            short = short, onTap = jump,
+                            media = replyMedia(model, quote),
+                            lead = rule,
+                        )
+                        // A sticker: its key pose alone before whom it answers, no words (the owner's) — its name for TalkBack.
                         is ReplyDetail.Sticker -> ComposerRow(
                             who, null, L10n.Messages.replyCancel, { model.cancelReply() },
-                            detailContent = {
-                                StickerPose(detail.sticker, model.origin, Modifier.size(REPLIED_STICKER).alpha(QUOTED_STICKER_ALPHA).semantics { contentDescription = detail.spoken })
+                            short = short, onTap = jump,
+                            media = {
+                                StickerPose(detail.sticker, model.origin, Modifier.fillMaxSize().alpha(QUOTED_STICKER_ALPHA).semantics { contentDescription = detail.spoken })
                             },
-                        ) { ReplyRule(Modifier.height(32.dp)) }
+                            lead = rule,
+                        )
                     }
                 }
-                Riding.Note -> ComposerRow(L10n.Messages.quotedNote, null, L10n.Messages.removeCard, { model.noteRef = null }) { ComposerTile(IconName.Note) }
+                Riding.Note -> ComposerRow(
+                    L10n.Messages.quotedNote, null, L10n.Messages.removeNote, { model.noteRef = null },
+                    short = short, onTap = onFocusField,
+                ) { ComposerTile(IconName.Note) }
                 Riding.Card -> card?.let { c ->
                     // A 私人卡 says so where 卡片 would: the message is what lets them read it.
-                    ComposerRow(if (c.keptPrivate) L10n.Messages.privateCard else L10n.Messages.attachCardShort, c.title, L10n.Messages.removeCard, { model.pendingCard = null }) {
+                    ComposerRow(
+                        if (c.keptPrivate) L10n.Messages.privateCard else L10n.Messages.attachCardShort, c.title, L10n.Messages.removeCard, { model.pendingCard = null },
+                        short = short, onTap = onFocusField,
+                    ) {
                         ComposerTile(IconName.Cards) {
                             c.cover?.let { AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
                         }
                     }
                 }
-                Riding.Picture -> PictureStrip(model)
-                Riding.Error -> error?.let {
-                    BasicText(it, style = AppFonts.body(12f, lineHeight = 1.3f, color = Tokens.Terracotta), modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 6.dp))
-                }
+                Riding.Picture -> PictureStrip(model, short)
+                Riding.Error -> error?.let { ComposerErrorRow(it) }
             }
         }
     }
 }
 
+/** The reply's rule stands this much shorter than its row (8 clear above and below). */
+private val REPLY_RULE_INSET = 16.dp
+
 /**
- * The pictures riding with the message (round 22 §4.2, the owner's notes 5 — as iOS draws them): their 48
- * thumbnails in a row in the order chosen, scrolling sideways past what fits, each with its own small round ✕
- * hanging over its top end corner — the only way to take one back here (the gallery's tap does too). No
- * numbers, no count, no clear-all.
+ * What a reply answers, as a 36 thumbnail before its words (Telegram's photo reply): the picture it quotes, or the
+ * cover of the card it quotes — as the thread holds that message now; none for words (or a picture not held).
+ */
+private fun replyMedia(model: ThreadModel, quote: ReplyQuote): (@Composable () -> Unit)? {
+    if (quote.unsent) return null
+    val original = model.find(quote.id)
+    val picture = original?.let(model::picture)
+    if (picture != null) return {
+        Box(Modifier.fillMaxSize().clip(ComposerLeadShape).background(Tokens.CreamDark)) {
+            when (picture) {
+                is ChatPictureSource.Local -> Image(picture.preview, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                is ChatPictureSource.Remote -> model.pictureLoader?.let { loader ->
+                    AsyncImage(model = picture.thumb, contentDescription = null, imageLoader = loader, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                }
+            }
+        }
+    }
+    val cover = quote.cardRef?.let { model.cards[it]?.imageUrl }
+    if (cover != null) return {
+        Box(Modifier.fillMaxSize().clip(ComposerLeadShape).background(ComposerTileFace)) {
+            AsyncImage(model = cover, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+    }
+    return null
+}
+
+/**
+ * The pictures riding with the message (round 22 §4.2, the owner's notes 5; round 23 §2: inside the capsule): their
+ * 56 thumbnails ([ComposerStripThumb]; 44 in a short window) in a row in the order chosen across the capsule's inner
+ * width ([ComposerStripPad] in from its pen line), scrolling sideways past what fits and fading at the side more lies
+ * beyond, each with its own small round ✕ over its top end corner — the only way to take one back here (the
+ * gallery's tap does too), named for its place. No numbers, no count, no clear-all.
  */
 @Composable
-private fun PictureStrip(model: ThreadModel) {
+private fun PictureStrip(model: ThreadModel, short: Boolean) {
+    val scroll = rememberScrollState()
+    val thumb = if (short) ComposerShortThumb else ComposerStripThumb
     Row(
         Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            // The thumbnails as far over the strip's foot as under its top, past the ✕'s room (the owner's notes 2026-10-31).
-            .padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 2.dp + THUMB_X_HANG),
+            .height(ComposerStripPad + thumb + ComposerStripPad)
+            .padding(horizontal = ComposerStripPad)
+            .sideFades({ scroll.canScrollBackward }, { scroll.canScrollForward })
+            .horizontalScroll(scroll)
+            // Room at the end for the last ✕'s swing past its thumbnail.
+            .padding(end = THUMB_X_SWING),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.Bottom,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         model.pictures.forEachIndexed { i, picture ->
-            // The thumbnail, and room for its ✕ hanging 6 past its corner.
-            Box(Modifier.padding(top = THUMB_X_HANG, end = THUMB_X_HANG)) {
+            // The thumbnail, and its ✕ swinging past its corner (into the strip's pad above it and the gap beside it).
+            Box(Modifier.size(thumb)) {
                 Box(
                     Modifier
-                        .size(STRIP_THUMB)
+                        .matchParentSize()
                         .clip(ComposerLeadShape)
                         .background(Tokens.CreamDark)
                         .semantics { contentDescription = "${L10n.Messages.attachImage} ${i + 1}" },
@@ -353,21 +438,21 @@ private fun PictureStrip(model: ThreadModel) {
                     if (preview != null) Image(preview, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                     else SketchLoader(18.dp)
                 }
-                // Its centre 6 inside the thumbnail's corner (iOS's), the circle swinging 4 past it into the room left for it.
-                ThumbRemoveButton(Modifier.align(Alignment.TopEnd).offset(x = THUMB_X_TARGET / 2 - THUMB_X_HANG * 2, y = THUMB_X_HANG * 2 - THUMB_X_TARGET / 2)) {
-                    model.removePicture(picture.key)
-                }
+                // Its centre 6 inside the thumbnail's corner (iOS's), the circle swinging 4 past it.
+                ThumbRemoveButton(
+                    L10n.Messages.removeImageAt(i + 1),
+                    Modifier.align(Alignment.TopEnd).offset(x = THUMB_X_TARGET / 2 - THUMB_X_INSET, y = THUMB_X_INSET - THUMB_X_TARGET / 2),
+                ) { model.removePicture(picture.key) }
             }
         }
     }
 }
 
-/** A chosen picture's thumbnail in the strip. */
-private val STRIP_THUMB = 48.dp
-/** Its ✕: 20 across, in a 32 target, its centre 6 inside the thumbnail's corner, the room above and beside the thumbnail 6. */
+/** Its ✕: 20 across, in a 32 target, its centre [THUMB_X_INSET] inside the thumbnail's top end corner, swinging [THUMB_X_SWING] past it. */
 private val THUMB_X = 20.dp
 private val THUMB_X_TARGET = 32.dp
-private val THUMB_X_HANG = 6.dp
+private val THUMB_X_INSET = 6.dp
+private val THUMB_X_SWING = 4.dp
 
 /**
  * A thumbnail's ✕ (the owner's notes 5): a neat small round button — the paper inside a hand-drawn circle that
@@ -375,14 +460,14 @@ private val THUMB_X_HANG = 6.dp
  * pen at INK_LIGHT, the close glyph 10 in the text ink.
  */
 @Composable
-private fun ThumbRemoveButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun ThumbRemoveButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val paper = Tokens.Cream
     val pen = Tokens.FieldBorder
     Box(
         modifier
             .size(THUMB_X_TARGET)
-            .clickable(interactionSource = null, indication = null, role = Role.Button, onClickLabel = L10n.Messages.removeImage, onClick = onClick)
-            .semantics { contentDescription = L10n.Messages.removeImage },
+            .clickable(interactionSource = null, indication = null, role = Role.Button, onClickLabel = label, onClick = onClick)
+            .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
         Box(

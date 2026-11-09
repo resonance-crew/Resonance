@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.heightIn
@@ -70,6 +69,11 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.resonance.design.generated.IconName
+import com.resonance.geometry.PathCommand
+import com.resonance.geometry.Prng
+import com.resonance.geometry.autoCurve
+import com.resonance.geometry.autoMag
+import com.resonance.geometry.autoSegments
 import com.resonance.design.generated.Tokens
 import com.resonance.design.generated.ResonanceColors
 import com.resonance.design.generated.LocalResonanceColors
@@ -92,47 +96,53 @@ val ComposerSendWidth = 52.dp
  */
 val ComposerFade = 12.dp
 
-/** The last riding row → the capsule, and the solid paper over the topmost row ([ComposerRowsLead]). */
-val ComposerRowsGap = 6.dp
-
-/**
- * With rows riding over the capsule, the foot starts this far over the topmost one (round 11 §3, the
- * owner's notes 2026-10-31): the whole [ComposerFade], then [ComposerRowsGap] of solid paper — so the
- * paper over the rows' first ink (the reply's rule, a thumbnail, a card's tile, a label) is as deep as
- * under their last ink down to the capsule, and the thread never shows right down to the ink.
- */
-val ComposerRowsLead = ComposerFade + ComposerRowsGap
-
 /**
  * A pane the capsule doesn't fill (2026-11-01, the owner's notes: it is at its widest, room beside it past the
  * gutter — a tablet): the thread shows beside the capsule and nowhere else — it sinks into a fade this tall at the
  * foot (from 20 over the capsule's foot down past its 8), while a column of paper exactly the capsule's width runs
- * from it (or from [ComposerWideRideLead] over what rides with it) to the screen's edge, its sides fading in over
- * [ComposerWideSideFade] from the capsule's edges, so the clear edge lies on its border ([ComposerBacking]'s
- * `wide`). The web's `.dock` in a pane over 748, iOS's twin.
+ * from the capsule's middle to the screen's edge, its sides fading in over [ComposerWideSideFade] from the capsule's
+ * edges, so the clear edge lies on its border ([ComposerBacking]'s `wide`). The web's `.dock` in a pane over 748,
+ * iOS's twin. What rides with the message is inside the capsule (round 23 §2), so nothing stands over it.
  */
 val ComposerWideFootFade = 28.dp
 val ComposerWideSideFade = 12.dp
 
 /**
- * Over riding rows in a wide pane: the column starts this far over them, its top 10 a fade, its top corners round
- * by 16 inside the side fade; the rows stand [ComposerWideRideInset] further in, their ✕ [ComposerWideRideEndInset]
- * (clear of the fading side).
+ * A wide pane's foot, for its paper: how tall the foot is, where the column under the capsule starts, and the
+ * capsule's column (at most [capsuleMax] wide, [gutter] inside the pane's sides).
  */
-val ComposerWideRideLead = 8.dp
-val ComposerWideRideInset = 4.dp
-val ComposerWideRideEndInset = 12.dp
-private val ComposerWideRideFade = 10.dp
-private val ComposerWideRideRadius = 16.dp
+data class ComposerWideFoot(val footHeight: Dp, val columnTop: Dp, val capsuleMax: Dp, val gutter: Dp)
 
 /**
- * A wide pane's foot, for its paper: how tall the foot is, where the column under the capsule starts, whether rows
- * ride over the capsule, and the capsule's column (at most [capsuleMax] wide, [gutter] inside the pane's sides).
+ * What rides with the message, inside the capsule's pen line over the text (round 23 §2, Telegram's way): three
+ * columns running top to bottom — the lead column (＋'s own, [ComposerLeadColumn]) holding a row's mark, the text
+ * column starting where the field's words start, and Send's [ComposerSendWidth] column holding each row's ✕. The
+ * rows' block starts [ComposerRowsTop] under the pen line; rows touch; the last one meets the text line, whose own
+ * padding is the gap. One reply makes the capsule 6 + 44 + 48 = 98 (the foot was 124 with the rows above it).
  */
-data class ComposerWideFoot(val footHeight: Dp, val columnTop: Dp, val riding: Boolean, val capsuleMax: Dp, val gutter: Dp)
+val ComposerRowsTop = 6.dp
 
-/** A row riding with the message over the capsule ([ComposerRow]): its least height. */
-val ComposerRowHeight = 52.dp
+/** A row riding with the message inside the capsule ([ComposerRow]): its height. */
+val ComposerRowHeight = 44.dp
+
+/** The lead column: ＋'s own width, so a row's mark stands over ＋. */
+val ComposerLeadColumn = ComposerHeight
+
+/** The picture strip riding with the message: [ComposerStripPad] + a [ComposerStripThumb] thumbnail + [ComposerStripPad]. */
+val ComposerStripThumb = 56.dp
+val ComposerStripPad = 8.dp
+val ComposerStripHeight = ComposerStripPad + ComposerStripThumb + ComposerStripPad
+
+/** Why the last message didn't go: a row at least this tall, a small terracotta mark in the lead column. */
+val ComposerErrorRowHeight = 32.dp
+
+/**
+ * A short window (a phone on its side with the keyboard up: under [ComposerShortViewport] tall): every row one line
+ * this tall (label · detail), the strip's thumbnails [ComposerShortThumb], the text at most three lines.
+ */
+val ComposerShortRowHeight = 36.dp
+val ComposerShortThumb = 44.dp
+val ComposerShortViewport = 480.dp
 
 /** The capsule's pen: the field's own (FieldBorder), darker while it is written in — the same colour, never terracotta (round 10 §3.3). */
 fun composerPen(focused: Boolean, palette: ResonanceColors): Color = if (focused) palette.FieldBorderHover else palette.FieldBorder
@@ -174,14 +184,16 @@ fun ComposerCapsule(
     /** What the end segment does (round 22 §4.1): send, or — the sticker panel open with nothing to send — ↑ / ↓. */
     segment: ComposerSegment = ComposerSegment.Send,
     /**
-     * The field past one line, or grown to the thread (round 22 §4.3, the owner's notes 2): the segment a 52 × 48
-     * block on the last row, its top start corner rounded.
+     * The field past one line, grown to the thread (round 22 §4.3, the owner's notes 2), or with something riding
+     * (round 23 §2): the segment a 52 × 48 block on the last row, its top start corner rounded.
      */
     block: Boolean = false,
-    /** What stands in the block's column at the capsule's top end — the column the full-height strip filled (⤢ / ⤡). */
+    /** What stands in the block's column at the text's top end — the column the full-height strip filled (⤢ / ⤡). */
     overSegment: (@Composable () -> Unit)? = null,
     /** A 48 square at the field's end, before Send, on the last line's row — [leading]'s twin (the composer's ☺ / ⌨). */
     trailing: (@Composable () -> Unit)? = null,
+    /** What rides with the message (round 23 §2), inside the pen line over the text, the capsule's whole width ([CapsuleField]'s `header`). */
+    header: (@Composable () -> Unit)? = null,
     leading: @Composable () -> Unit,
     field: @Composable BoxScope.(vertical: Dp) -> Unit,
 ) = CapsuleField(
@@ -197,6 +209,9 @@ fun ComposerCapsule(
     block = block,
     overSegment = overSegment,
     trailing = trailing,
+    header = header,
+    // A row coming or going moves the capsule's sides and top only: its foot, ＋ / ☺ and Send's corner stay put.
+    steadyEdges = true,
     leading = leading,
     segment = { ink ->
         // ˄ / ˅ is one chevron turning as the panel grows (never an arrow, which reads as sending the sticker). Its
@@ -242,11 +257,22 @@ fun CapsuleField(
     segmentState: String? = null,
     /** The segment a [segmentWidth] × [ComposerHeight] block on the last row, its wavy seam round its top start corner (round 22 §4.3). */
     block: Boolean = false,
-    /** Drawn in the block's column at the capsule's top ([block]): the composer's ⤢ / ⤡. */
+    /** Drawn in the block's column at the top of the text ([block]), under [header]: the composer's ⤢ / ⤡. */
     overSegment: (@Composable () -> Unit)? = null,
     /** A square as big as [leading]'s at the field's end, on the last line's row (round 22, the owner's: every tool in the capsule one size). */
     trailing: (@Composable () -> Unit)? = null,
     leading: (@Composable () -> Unit)? = null,
+    /**
+     * Over the text, inside the pen line, the capsule's whole width (round 23 §2: the composer's riding rows, each ✕
+     * in the segment's column). None by default: the publish step's tag field has none.
+     */
+    header: (@Composable () -> Unit)? = null,
+    /**
+     * The outline drawn edge by edge from seeds of their own ([steadyCapsuleOutline]): the foot keeps its wobble
+     * however tall the capsule grows, only the sides and the top changing. Off by default (the tag field's wobble
+     * is the field's own, as it was).
+     */
+    steadyEdges: Boolean = false,
     segment: @Composable (ink: Color) -> Unit,
     field: @Composable BoxScope.(vertical: Dp) -> Unit,
 ) {
@@ -255,7 +281,7 @@ fun CapsuleField(
     val haptic = LocalHapticFeedback.current
     val face by animateColorAsState(if (ready) Tokens.ButtonFill else Tokens.ButtonTonal, tween(SEND_FADE_MILLIS), label = "segmentFace")
     val ink by animateColorAsState(if (ready) Tokens.Cream else Tokens.ButtonOnTonal, tween(SEND_FADE_MILLIS), label = "segmentInk")
-    val shape = remember(seed) { WobRectShape(Tokens.RadiusMd.toDouble(), seed) }
+    val shape = remember(seed, steadyEdges) { if (steadyEdges) SteadyCapsuleShape(Tokens.RadiusMd.toDouble(), seed) else WobRectShape(Tokens.RadiusMd.toDouble(), seed) }
     val vertical = composerPadding(lineHeightOf(textStyle))
     val palette = LocalResonanceColors.current
     // A press on the solid face darkens it as the primary button does; on the tonal one, the accent's wash.
@@ -289,10 +315,26 @@ fun CapsuleField(
                 }
             },
     ) {
-        Row(Modifier.fillMaxWidth().heightIn(min = ComposerHeight).padding(end = segmentWidth), verticalAlignment = Alignment.Bottom) {
-            if (leading != null) Box(Modifier.width(ComposerHeight).height(ComposerHeight), contentAlignment = Alignment.Center) { leading() }
-            Box(Modifier.weight(1f).padding(start = if (leading != null) 0.dp else Tokens.FieldPadX.dp, end = if (trailing != null) 0.dp else 10.dp)) { field(vertical) }
-            if (trailing != null) Box(Modifier.width(ComposerHeight).height(ComposerHeight), contentAlignment = Alignment.Center) { trailing() }
+        Column(Modifier.fillMaxWidth()) {
+            header?.invoke()
+            // The text: ＋, the field and ☺ on its last line's row; ⤢ / ⤡ at its top in the segment's column — under
+            // what rides, never on a row's ✕ (with nothing riding, the capsule's top end as before).
+            Box(Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().heightIn(min = ComposerHeight).padding(end = segmentWidth), verticalAlignment = Alignment.Bottom) {
+                    if (leading != null) Box(Modifier.width(ComposerHeight).height(ComposerHeight), contentAlignment = Alignment.Center) { leading() }
+                    Box(Modifier.weight(1f).padding(start = if (leading != null) 0.dp else Tokens.FieldPadX.dp, end = if (trailing != null) 0.dp else 10.dp)) { field(vertical) }
+                    if (trailing != null) Box(Modifier.width(ComposerHeight).height(ComposerHeight), contentAlignment = Alignment.Center) { trailing() }
+                }
+                if (block && overSegment != null) {
+                    // In the send column at the text's top (the owner: where a finger finds it, and it reads as "the whole
+                    // screen"): a square as wide as the block and as tall, inset from the top as the block is from the foot —
+                    // its glyph as far from the top pen line (or the rows) as Send's from the bottom one.
+                    Box(
+                        Modifier.align(Alignment.TopEnd).width(segmentWidth).height(ComposerHeight),
+                        contentAlignment = Alignment.Center,
+                    ) { overSegment() }
+                }
+            }
         }
         Box(Modifier.matchParentSize()) {
             Box(
@@ -314,17 +356,116 @@ fun CapsuleField(
                 // The segment's content on the last line's row, level with ＋, however many lines the field has.
                 Box(Modifier.fillMaxWidth().height(ComposerHeight), contentAlignment = Alignment.Center) { segment(ink) }
             }
-            if (block && overSegment != null) {
-                // In the send column at the capsule's top (the owner: where a finger finds it, and it reads as "the whole
-                // screen"): a square as wide as the block and as tall, inset from the top as the block is from the foot —
-                // its glyph as far from the top pen line as Send's from the bottom one.
-                Box(
-                    Modifier.align(Alignment.TopEnd).width(segmentWidth).height(ComposerHeight),
-                    contentAlignment = Alignment.Center,
-                ) { overSegment() }
-            }
         }
     }
+}
+
+/**
+ * The composer capsule's outline when it grows (round 23, the critique's 9): [wobRect]'s recipe, but each edge drawn
+ * from a seed of its own and the top and foot with the one-line capsule's wobble whatever the height — so a row coming
+ * or going (or a line) moves the sides and the top only, and the foot under the thumb, ＋, ☺ and Send's corner keep
+ * theirs. The tag field and every other outline keep [WobRectShape].
+ */
+internal data class SteadyCapsuleShape(private val radius: Double, private val seed: Double) : Shape {
+    override fun createOutline(size: androidx.compose.ui.geometry.Size, layoutDirection: androidx.compose.ui.unit.LayoutDirection, density: androidx.compose.ui.unit.Density): Outline {
+        val d = density.density
+        val w = (size.width / d).toDouble()
+        val h = (size.height / d).toDouble()
+        if (w <= 0 || h <= 0) return Outline.Rectangle(androidx.compose.ui.geometry.Rect.Zero)
+        return Outline.Generic(steadyCapsuleOutline(w, h, radius, seed).toPath(d))
+    }
+}
+
+/**
+ * [SteadyCapsuleShape]'s path, in dp: the top edge and its corners from `seed`, the end side from `seed + 101`, the foot
+ * and its corners from `seed + 202`, the start side from `seed + 303`. The top and the foot take their wobble (its swing,
+ * bow and turns) from a capsule [line] tall, the sides from the real height. Pure, for the tests.
+ */
+internal fun steadyCapsuleOutline(w: Double, h: Double, radius: Double, seed: Double, line: Double = ComposerHeight.value.toDouble()): List<PathCommand> {
+    val K = 0.552
+    val hl = kotlin.math.min(h, line)
+    fun perp(edgeH: Double): Double {
+        val m = autoMag(w, edgeH)
+        val curve = autoCurve(w, edgeH)
+        return kotlin.math.min(m * 0.95 * curve, kotlin.math.min(w, edgeH) * 0.032 * kotlin.math.max(1.0, curve))
+    }
+    val perpH = perp(hl)
+    val perpV = perp(h)
+    val segH = autoSegments(w)
+    val segV = autoSegments(h)
+    val top = Prng(seed)
+    val end = Prng(seed + 101)
+    val foot = Prng(seed + 202)
+    val start = Prng(seed + 303)
+    val r = kotlin.math.min(radius, kotlin.math.min(w, hl) / 2)
+    val rVar = kotlin.math.min(r * 0.07, kotlin.math.max(0.0, kotlin.math.min(w, hl) / 2 - r) * 0.4)
+    fun corner(rnd: Prng) = r + (rnd.next() - 0.5) * 2 * rVar
+    val rtl = corner(top)
+    val rtr = corner(top)
+    val rbr = corner(foot)
+    val rbl = corner(foot)
+    fun cubic(p0: Pair<Double, Double>, p1: Pair<Double, Double>, horizontal: Boolean): PathCommand {
+        return if (horizontal) {
+            val k = kotlin.math.abs(p1.first - p0.first) / 3
+            val dir = if (p1.first >= p0.first) 1.0 else -1.0
+            PathCommand.Cubic(p0.first + dir * k, p0.second, p1.first - dir * k, p1.second, p1.first, p1.second)
+        } else {
+            val k = kotlin.math.abs(p1.second - p0.second) / 3
+            val dir = if (p1.second >= p0.second) 1.0 else -1.0
+            PathCommand.Cubic(p0.first, p0.second + dir * k, p1.first, p1.second - dir * k, p1.first, p1.second)
+        }
+    }
+    fun edge(p0: Pair<Double, Double>, p1: Pair<Double, Double>, horizontal: Boolean, segs: Int, amp: Double, rnd: Prng): List<PathCommand> {
+        val len = if (horizontal) kotlin.math.abs(p1.first - p0.first) else kotlin.math.abs(p1.second - p0.second)
+        if (segs < 2 || len < amp * 4) return listOf(cubic(p0, p1, horizontal))
+        val jitter = kotlin.math.min(0.08, 0.4 / segs)
+        val out = ArrayList<PathCommand>(segs)
+        var prev = p0
+        for (i in 1 until segs) {
+            val t = i.toDouble() / segs + (rnd.next() - 0.5) * jitter
+            val x = p0.first + (p1.first - p0.first) * t
+            val y = p0.second + (p1.second - p0.second) * t
+            val a = if (horizontal) x to y + (rnd.next() - 0.5) * 2 * amp else x + (rnd.next() - 0.5) * 2 * amp to y
+            out += cubic(prev, a, horizontal)
+            prev = a
+        }
+        out += cubic(prev, p1, horizontal)
+        return out
+    }
+    // The foot's anchors are laid out from the start, so it reads the same however its points are walked.
+    val footEdge = edge(rbl to h, w - rbr to h, true, segH, perpH, foot)
+    val tla = 0.0 to rtl
+    val tlb = rtl to 0.0
+    val tra = w - rtr to 0.0
+    val trb = w to rtr
+    val bra = w to h - rbr
+    val brb = w - rbr to h
+    val bla = rbl to h
+    val blb = 0.0 to h - rbl
+    val path = ArrayList<PathCommand>()
+    path += PathCommand.Move(tla.first, tla.second)
+    path += PathCommand.Cubic(0.0, tla.second * (1 - K) + tlb.second * K, tlb.first * (1 - K) + tla.first * K, 0.0, tlb.first, tlb.second)
+    path += edge(tlb, tra, true, segH, perpH, top)
+    path += PathCommand.Cubic(tra.first + (w - tra.first) * K, 0.0, w, trb.second * (1 - K), trb.first, trb.second)
+    path += edge(trb, bra, false, segV, perpV, end)
+    path += PathCommand.Cubic(w, bra.second + (h - bra.second) * K, brb.first + (w - brb.first) * K, h, brb.first, brb.second)
+    path += reversedEdge(footEdge, bla)
+    path += PathCommand.Cubic(bla.first * (1 - K), h, 0.0, blb.second + (h - blb.second) * K, blb.first, blb.second)
+    path += edge(blb, tla, false, segV, perpV, start)
+    path += PathCommand.Close
+    return path
+}
+
+/** [cubics] (a run of cubics from some start to its last point) walked backwards, ending at [to]. */
+private fun reversedEdge(cubics: List<PathCommand>, to: Pair<Double, Double>): List<PathCommand> {
+    val cs = cubics.map { it as PathCommand.Cubic }
+    val out = ArrayList<PathCommand>(cs.size)
+    for (i in cs.indices.reversed()) {
+        val c = cs[i]
+        val (sx, sy) = if (i == 0) to else cs[i - 1].let { it.x to it.y }
+        out += PathCommand.Cubic(c.x2, c.y2, c.x1, c.y1, sx, sy)
+    }
+    return out
 }
 
 /** The block's top start corner (round 22, the owner's notes 2: it turned too sharply). */
@@ -494,9 +635,9 @@ private data class FloatingSlip(
  * The paper at the thread's foot, behind the composer (round 10 §3.2, round 11 §3): the page's cream
  * across the whole pane, down to the screen's bottom edge — through the navigation bar, to the
  * keyboard's top when it is up — its top [ComposerFade] a fade from clear paper to opaque, starting
- * on the top edge of what the foot shows first. Laid behind the foot at its size: with nothing
- * riding, the fade covers the capsule's top 12 (solid from there down); with rows riding the foot
- * starts [ComposerRowsLead] over them, the fade ending [ComposerRowsGap] above them. The solid paper takes
+ * on the top edge of what the foot shows first. Laid behind the foot at its size: the fade covers the
+ * capsule's top 12 (solid from there down) — what rides with the message is inside the capsule (round
+ * 23 §2), so there is no fade over rows any more (the owner's: 「不用做這個漸層」). The solid paper takes
  * every touch, so nothing under it can be tapped or dragged — a tap on it ([onTap]) is a tap on the
  * thread's blank (the keyboard goes away); the fade lets touches through to the thread. Not read by
  * TalkBack.
@@ -522,7 +663,6 @@ fun ComposerBacking(modifier: Modifier = Modifier, onTap: () -> Unit = {}, wide:
         }
         val capsule = minOf(maxWidth, wide.capsuleMax) - wide.gutter * 2
         ComposerColumnPaper(
-            riding = wide.riding,
             onTap = onTap,
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -535,18 +675,16 @@ fun ComposerBacking(modifier: Modifier = Modifier, onTap: () -> Unit = {}, wide:
 
 /**
  * The column of paper under a wide pane's capsule ([ComposerBacking]'s `wide`): exactly as wide as the capsule,
- * fading in over [ComposerWideSideFade] from each side; with rows [riding], its top 10 a fade and its top
- * corners round. Its touches are the paper's ([onTap]).
+ * fading in over [ComposerWideSideFade] from each side, from the capsule's middle down (it is opaque above that).
+ * Its touches are the paper's ([onTap]).
  */
 @Composable
-fun ComposerColumnPaper(riding: Boolean, onTap: () -> Unit, modifier: Modifier = Modifier) {
+fun ComposerColumnPaper(onTap: () -> Unit, modifier: Modifier = Modifier) {
     val paper = Tokens.Cream
     val density = LocalDensity.current
     val side = with(density) { ComposerWideSideFade.toPx() }
-    val top = with(density) { ComposerWideRideFade.toPx() }
     Box(
         modifier
-            .clip(if (riding) RoundedCornerShape(topStart = ComposerWideSideFade + ComposerWideRideRadius, topEnd = ComposerWideSideFade + ComposerWideRideRadius) else RectangleShape)
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             .drawWithContent {
                 drawRect(paper)
@@ -555,7 +693,6 @@ fun ComposerColumnPaper(riding: Boolean, onTap: () -> Unit, modifier: Modifier =
                     Brush.horizontalGradient(0f to Color.Transparent, side / w to Color.Black, 1f - side / w to Color.Black, 1f to Color.Transparent),
                     blendMode = BlendMode.DstIn,
                 )
-                if (riding) drawRect(Brush.verticalGradient(0f to Color.Transparent, 1f to Color.Black, startY = 0f, endY = top), blendMode = BlendMode.DstIn)
             }
             .paperTouches(onTap),
     )
@@ -585,11 +722,13 @@ private fun Modifier.paperTouches(onTap: () -> Unit): Modifier {
 }
 
 /**
- * One thing riding with the message over the capsule (round 10 §3.4), in the reply's style: its
- * [lead] (the reply's rule, a 40 thumbnail, a glyph on a tonal tile), 10, its [label] (12 / 600) over
- * one line of [detail] (12.5, muted — none: the label alone, centred), and a 44 ✕ at the row's end,
- * named [closeLabel]. No frame: it lies straight on the foot's paper in the capsule's column, its
- * content 12 from the capsule's start edge and the ✕ over Send. Rows riding together touch.
+ * One thing riding with the message, inside the capsule over the text (round 23 §2, Telegram's way), in three
+ * columns: its [lead] mark (the reply's rule, a glyph or cover on a 32 tile) centred in ＋'s column
+ * ([ComposerLeadColumn]); then — where the field's words start — a reply's [media] (a 36 thumbnail: a sticker's pose,
+ * a picture, a card's cover) and its [label] (12 / 600) over one line of [detail] (12.5, muted; none: the label alone,
+ * centred); and a 44 ✕ in Send's column, named [closeLabel]. [ComposerRowHeight] tall; [short] (a short window) one
+ * line [ComposerShortRowHeight] tall, label · detail. A tap on the words is [onTap] (the reply: to the message it
+ * answers; a note or a card: the field), named [tapLabel]; nothing in a row takes the field's focus away.
  */
 @Composable
 fun ComposerRow(
@@ -598,23 +737,52 @@ fun ComposerRow(
     closeLabel: String,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Drawn in [detail]'s place, under the label (a replied sticker's key pose: no words). */
-    detailContent: (@Composable () -> Unit)? = null,
+    short: Boolean = false,
+    onTap: (() -> Unit)? = null,
+    tapLabel: String? = null,
+    /** At the words' start, before them (a reply's sticker, picture or card cover): [ComposerMediaSize] square. */
+    media: (@Composable () -> Unit)? = null,
     lead: @Composable () -> Unit,
 ) {
+    val height = if (short) ComposerShortRowHeight else ComposerRowHeight
     Row(
-        modifier.fillMaxWidth().heightIn(min = ComposerRowHeight).padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        modifier.fillMaxWidth().height(height).padding(end = ComposerSendWidth / 2 - ComposerCloseSize / 2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        lead()
-        Column(Modifier.weight(1f).padding(start = 10.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            BasicText(label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(12f, 600, lineHeight = 1.35f, color = Tokens.Text))
-            if (detailContent != null) detailContent()
-            else if (!detail.isNullOrEmpty()) BasicText(detail, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(12.5f, lineHeight = 1.35f, color = Tokens.TextMuted))
+        Box(Modifier.width(ComposerLeadColumn).fillMaxHeight(), contentAlignment = Alignment.Center) { lead() }
+        Row(
+            Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .then(if (onTap == null) Modifier else Modifier.clickable(interactionSource = null, indication = null, role = Role.Button, onClickLabel = tapLabel, onClick = onTap)),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (media != null) {
+                Box(Modifier.size(if (short) ComposerShortMediaSize else ComposerMediaSize), contentAlignment = Alignment.Center) { media() }
+                Spacer(Modifier.width(ComposerMediaGap))
+            }
+            val labelStyle = AppFonts.body(if (short) 12.5f else 12f, 600, lineHeight = 1.35f, color = Tokens.Text)
+            val detailStyle = AppFonts.body(12.5f, lineHeight = 1.35f, color = Tokens.TextMuted)
+            if (short) {
+                // One line: label · detail.
+                val line = androidx.compose.ui.text.buildAnnotatedString {
+                    pushStyle(labelStyle.toSpanStyle()); append(label); pop()
+                    if (!detail.isNullOrEmpty()) {
+                        pushStyle(detailStyle.toSpanStyle()); append(" · "); append(detail); pop()
+                    }
+                }
+                BasicText(line, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = labelStyle)
+            } else {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    BasicText(label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = labelStyle)
+                    if (!detail.isNullOrEmpty()) BasicText(detail, maxLines = 1, overflow = TextOverflow.Ellipsis, style = detailStyle)
+                }
+            }
         }
         Box(
             Modifier
-                .size(ComposerCloseSize)
+                .width(ComposerCloseSize)
+                .height(minOf(ComposerCloseSize, height))
                 .clickable(interactionSource = null, indication = OrganicIndication(inset = 4.dp), role = Role.Button, onClickLabel = closeLabel, onClick = onClose)
                 .semantics { contentDescription = closeLabel },
             contentAlignment = Alignment.Center,
@@ -622,11 +790,65 @@ fun ComposerRow(
     }
 }
 
+/**
+ * Why the last message didn't go (the apps' riding line, round 23 §2): no ✕ — it goes with the next try — a small
+ * terracotta mark in the lead column and [text] in 12.5 terracotta where the words start, at least
+ * [ComposerErrorRowHeight] tall.
+ */
+@Composable
+fun ComposerErrorRow(text: String, modifier: Modifier = Modifier) {
+    val ink = Tokens.Terracotta
+    Row(
+        modifier.fillMaxWidth().heightIn(min = ComposerErrorRowHeight).padding(end = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(ComposerLeadColumn), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.size(ComposerErrorMark).clearAndSetSemantics { }.drawWithCache {
+                    val o = WobCircleShape(5.0).createOutline(size, layoutDirection, this)
+                    onDrawBehind { drawOutline(o, ink) }
+                },
+            )
+        }
+        BasicText(text, Modifier.weight(1f).padding(vertical = 6.dp), style = AppFonts.body(12.5f, lineHeight = 1.3f, color = ink))
+    }
+}
+
+/** The error row's mark: a small terracotta dot. */
+private val ComposerErrorMark = 8.dp
+
+/** A reply's media at the words' start (a sticker's pose, a picture, a card's cover); in a short window, smaller. */
+val ComposerMediaSize = 36.dp
+val ComposerShortMediaSize = 28.dp
+private val ComposerMediaGap = 8.dp
+
+/**
+ * A row's sideways strip fading at its start and end where more of it lies beyond ([start] / [end], read while drawing):
+ * [edgeFades] laid on its side. Put it outside the scroller, so the mask stays on its viewport.
+ */
+fun Modifier.sideFades(start: () -> Boolean, end: () -> Boolean, edge: Dp = EdgeFade): Modifier =
+    graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
+        drawContent()
+        val before = start()
+        val after = end()
+        if (!before && !after) return@drawWithContent
+        val t = kotlin.math.min(edge.toPx(), size.width / 3) / size.width
+        drawRect(
+            Brush.horizontalGradient(
+                0f to if (before) Color.Transparent else Color.Black,
+                t to Color.Black,
+                1f - t to Color.Black,
+                1f to if (after) Color.Transparent else Color.Black,
+            ),
+            blendMode = BlendMode.DstIn,
+        )
+    }
+
 /** A riding row's ✕: the bare icon button's hit box. */
 val ComposerCloseSize = 44.dp
 
-/** A riding row's lead when it is a picture or a tile: 40 square. */
-val ComposerLeadSize = 40.dp
+/** A riding row's mark when it is a tile (a note's glyph, a card's cover): 32 square, 8 clear each side in the lead column. */
+val ComposerLeadSize = 32.dp
 
 /** The rounding of a riding row's thumbnail and tile (the attachment chips' 12 / 14). */
 val ComposerLeadShape = RoundedCornerShape(topStart = 12.dp, topEnd = 14.dp, bottomEnd = 12.dp, bottomStart = 14.dp)
@@ -635,13 +857,13 @@ val ComposerLeadShape = RoundedCornerShape(topStart = 12.dp, topEnd = 14.dp, bot
 val ComposerTileFace: Color @Composable @ReadOnlyComposable get() = Tokens.TerracottaLight.copy(alpha = 0.4f).compositeOver(Tokens.Cream)
 
 /**
- * A riding row's lead as a 40 tile: [icon] (18) on the tonal face, and over it [content] (a cover,
- * a picture), clipped to the same rounding, once there is one.
+ * A riding row's mark as a [ComposerLeadSize] tile: [icon] (16) on the tonal face, and over it [content] (a cover),
+ * clipped to the same rounding, once there is one.
  */
 @Composable
 fun ComposerTile(icon: IconName?, modifier: Modifier = Modifier, content: (@Composable BoxScope.() -> Unit)? = null) {
     Box(modifier.size(ComposerLeadSize).clip(ComposerLeadShape).background(ComposerTileFace), contentAlignment = Alignment.Center) {
-        icon?.let { OrganicIcon(it, size = 18.dp, color = Tokens.Text) }
+        icon?.let { OrganicIcon(it, size = 16.dp, color = Tokens.Text) }
         content?.invoke(this)
     }
 }

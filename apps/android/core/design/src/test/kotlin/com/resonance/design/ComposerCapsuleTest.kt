@@ -2,6 +2,7 @@ package com.resonance.design
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
@@ -138,5 +139,87 @@ class ComposerCapsuleTest {
         assertEquals(ComposerHeight.value, (expand.bottom - expand.top).value, 0.5f)
         assertEquals(capsule.top.value, expand.top.value, 0.5f)
         assertEquals(capsule.right.value, expand.right.value, 0.5f)
+    }
+
+    /** Round 23 §2: what rides inside the capsule, over the text — here one reply row, as the thread's composer lays it. */
+    private fun riding(lines: Int = 1, rows: Int = 1, grow: Boolean = lines >= 3) = compose.setContent {
+        Box(Modifier.width(360.dp)) {
+            ComposerCapsule(
+                canSend = true, sendLabel = "傳送", onSend = {}, focused = { false }, textStyle = style,
+                modifier = Modifier.testTag("capsule"),
+                block = true,
+                overSegment = if (grow) { { Box(Modifier.testTag("expand").matchParentSize()) } } else null,
+                header = {
+                    androidx.compose.foundation.layout.Column(Modifier.testTag("rows").fillMaxWidth().padding(top = ComposerRowsTop)) {
+                        repeat(rows) { i ->
+                            ComposerRow("回覆 bob", "那篇雨後散步", "取消回覆 $i", {}) { ReplyRule(Modifier.size(6.dp, 28.dp)) }
+                        }
+                    }
+                },
+                leading = { Box(Modifier.testTag("attach").matchParentSize()) },
+            ) { vertical ->
+                BasicText("字\n".repeat(lines).trimEnd(), style = style, minLines = lines, modifier = Modifier.fillMaxWidth().padding(vertical = vertical))
+            }
+        }
+    }
+
+    @Test fun oneReplyRidingMakesTheCapsule98AndNothingStandsOverIt() {
+        riding()
+        // 6 under the pen line, the 44 row, the 48 text line: the foot was 124 with the row over the capsule.
+        assertEquals((ComposerRowsTop + ComposerRowHeight + ComposerHeight).value, height(), 1f)
+        assertEquals(98f, height(), 1f)
+        val capsule = compose.onNodeWithTag("capsule").getBoundsInRoot()
+        val rows = compose.onNodeWithTag("rows").getBoundsInRoot()
+        assertEquals(capsule.top.value, rows.top.value, 0.5f)
+        // The rows span the capsule's whole width: each ✕ over Send's column.
+        assertEquals((capsule.right - capsule.left).value, (rows.right - rows.left).value, 0.5f)
+        val close = compose.onNodeWithContentDescription("取消回覆 0").getBoundsInRoot()
+        assertEquals((capsule.right - ComposerSendWidth / 2).value, ((close.left + close.right) / 2).value, 0.5f)
+    }
+
+    @Test fun withRowsRidingSendIsTheBottomEndBlockAndPlusStaysOnTheTextLine() {
+        riding()
+        val capsule = compose.onNodeWithTag("capsule").getBoundsInRoot()
+        val send = compose.onNodeWithContentDescription("傳送").getBoundsInRoot()
+        assertEquals(ComposerSendWidth.value, (send.right - send.left).value, 0.5f)
+        assertEquals(ComposerHeight.value, (send.bottom - send.top).value, 0.5f)
+        assertEquals(capsule.bottom.value, send.bottom.value, 0.5f)
+        assertEquals(capsule.right.value, send.right.value, 0.5f)
+        val attach = compose.onNodeWithTag("attach").getBoundsInRoot()
+        assertEquals(capsule.bottom.value, attach.bottom.value, 0.5f)
+    }
+
+    @Test fun theGrowToolStandsUnderTheRowsNeverOnARowsClose() {
+        riding(lines = 3, rows = 2)
+        val rows = compose.onNodeWithTag("rows").getBoundsInRoot()
+        val expand = compose.onNodeWithTag("expand").getBoundsInRoot()
+        val capsule = compose.onNodeWithTag("capsule").getBoundsInRoot()
+        // At the text's top, in Send's column: right under the rows.
+        assertEquals(rows.bottom.value, expand.top.value, 0.5f)
+        assertEquals(capsule.right.value, expand.right.value, 0.5f)
+        val lastClose = compose.onNodeWithContentDescription("取消回覆 1").getBoundsInRoot()
+        assertTrue(expand.top.value >= lastClose.bottom.value - 0.5f)
+        // And clear of Send's block at the foot.
+        val send = compose.onNodeWithContentDescription("傳送").getBoundsInRoot()
+        assertTrue(expand.bottom.value <= send.top.value + 0.5f)
+    }
+
+    @Test fun theCapsulesFootKeepsItsWobbleAsRowsComeAndGo() {
+        // The foot (from the bottom end corner round to the bottom start one) the same at 48 and at 98, moved down by 50;
+        // the top the same too — only the sides change with the height.
+        fun foot(h: Double) = steadyCapsuleOutline(360.0, h, 16.0, 17.0).let { cmds ->
+            val i = cmds.indexOfFirst { it is com.resonance.geometry.PathCommand.Cubic && it.y == h }
+            cmds.drop(i).takeWhile { it is com.resonance.geometry.PathCommand.Cubic && (it as com.resonance.geometry.PathCommand.Cubic).y > h - 20 }
+                .map { (it as com.resonance.geometry.PathCommand.Cubic).let { c -> listOf(c.x1, c.y1 - h, c.x2, c.y2 - h, c.x, c.y - h) } }
+        }
+        val one = foot(48.0)
+        val riding = foot(98.0)
+        assertTrue(one.size >= 3)
+        assertEquals(one.size, riding.size)
+        one.zip(riding).forEach { (a, b) -> a.zip(b).forEach { (x, y) -> assertEquals(x, y, 1e-9) } }
+        fun top(h: Double) = steadyCapsuleOutline(360.0, h, 16.0, 17.0).take(1 + 1 + com.resonance.geometry.autoSegments(360.0))
+        assertEquals(top(48.0), top(98.0))
+        // The sides are drawn for the real height.
+        assertTrue(steadyCapsuleOutline(360.0, 98.0, 16.0, 17.0) != steadyCapsuleOutline(360.0, 48.0, 16.0, 17.0))
     }
 }

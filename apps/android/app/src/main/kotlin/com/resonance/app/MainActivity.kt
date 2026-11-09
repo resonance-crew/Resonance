@@ -94,6 +94,8 @@ class MainActivity : ComponentActivity() {
             DebugLaunch.writeStory = intent.getStringExtra("writeStory")
             DebugLaunch.writeCover = intent.getStringExtra("writeCover")
             DebugLaunch.threadDraft = intent.getStringExtra("threadDraft")
+            DebugLaunch.threadRide = intent.getStringExtra("visualRide")
+            DebugLaunch.threadPanel = intent.getStringExtra("threadPanel")
             DebugLaunch.linkDraft = intent.getStringExtra("linkDraft")
             DebugLaunch.avifDecoder = intent.getBooleanExtra("avifDecoder", false)
             DebugLaunch.feedPicksDelay = intent.getIntExtra("feedPicksDelay", 0)
@@ -258,6 +260,13 @@ object DebugLaunch {
     var writeCover: String? = null
     /** A conversation's composer starts with this text. */
     var threadDraft: String? = null
+    /**
+     * What rides in the next conversation opened (`--es visualRide replyCard`, the release screenshots' `thread-reply`):
+     * a reply to the other person's newest message, with the viewer's newest published card. Taken once.
+     */
+    var threadRide: String? = null
+    /** The next conversation opened opens this panel (`--es threadPanel stickers`, the screenshots' `thread-stickers`). Taken once. */
+    var threadPanel: String? = null
     /** What the writer's link sheet's field starts with when it opens on no link (screen checks: an IME's keys are slow to drive). */
     var linkDraft: String? = null
     /** Pictures in AVIF go through [AvifDecoder] whatever the Android version (its check on a recent emulator). */

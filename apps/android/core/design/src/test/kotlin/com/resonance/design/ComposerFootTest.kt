@@ -37,10 +37,11 @@ import org.robolectric.RuntimeEnvironment
 import java.io.File
 
 /**
- * The composer's foot (round 10 §3): the capsule's pen darker when written in but never another
- * colour; what rides with the message as rows in the reply's style — 52 at least, a label alone
- * centred, the ✕ a 44 square at the row's end; and the paper behind it all, whose 24 of fade let a
- * tap through to the thread while its solid part takes it.
+ * The composer's foot (round 10 §3, round 23 §2): the capsule's pen darker when written in but never another
+ * colour; what rides with the message as rows inside the capsule — 44 tall, the mark over ＋, the words where the
+ * field's start, a reply's media before them, the ✕ a 44 square over Send, one line of 36 in a short window; why the
+ * last one didn't go with no ✕; and the paper behind it all, whose 12 of fade let a tap through to the thread while its
+ * solid part takes it.
  */
 @RunWith(RobolectricTestRunner::class)
 class ComposerFootTest {
@@ -58,31 +59,72 @@ class ComposerFootTest {
         assertNotEquals(Tokens.Terracotta, composerPen(focused = true, Light))
     }
 
-    @Test fun aRowIsAtLeast52WithItsCloseA44SquareAtTheEnd() {
+    @Test fun aRowIs44ItsMarkOverPlusItsWordsWhereTheFieldsStartItsCloseOverSend() {
         var closed = 0
+        var tapped = 0
         compose.setContent {
             Box(Modifier.width(360.dp)) {
-                ComposerRow("回覆 bob", "那篇雨後散步寫得好好", "取消回覆", { closed++ }, Modifier.testTag("row")) { ReplyRule(Modifier.height(32.dp)) }
-            }
-        }
-        compose.onNodeWithTag("row").assertHeightIsAtLeast(ComposerRowHeight)
-        val row = compose.onNodeWithTag("row").getBoundsInRoot()
-        val close = compose.onNodeWithContentDescription("取消回覆").assertWidthIsEqualTo(44.dp).assertHeightIsEqualTo(44.dp)
-        // Trailing, 4 in from the row's end: over Send's middle (52 / 2 = 4 + 44 / 2).
-        assertEquals((row.right - 4.dp).value, close.getBoundsInRoot().right.value, 0.5f)
-        close.performClick()
-        assertEquals(1, closed)
-    }
-
-    @Test fun aLabelAloneIsCentredInA52Row() {
-        compose.setContent {
-            Box(Modifier.width(360.dp)) {
-                ComposerRow("圖片", null, "移除圖片", {}, Modifier.testTag("row")) { ComposerTile(IconName.Image) }
+                ComposerRow(
+                    "回覆 bob", "那篇雨後散步寫得好好", "取消回覆", { closed++ }, Modifier.testTag("row"), onTap = { tapped++ },
+                ) { ReplyRule(Modifier.height(28.dp).testTag("mark")) }
             }
         }
         val row = compose.onNodeWithTag("row").assertHeightIsEqualTo(ComposerRowHeight).getBoundsInRoot()
-        val label = compose.onNodeWithText("圖片").getBoundsInRoot()
+        // The mark centred in ＋'s 48 column.
+        val mark = compose.onNodeWithTag("mark", useUnmergedTree = true).getBoundsInRoot()
+        assertEquals((row.left + ComposerLeadColumn / 2).value, ((mark.left + mark.right) / 2).value, 0.5f)
+        // The words start where the field's do: past ＋'s column.
+        val label = compose.onNodeWithText("回覆 bob").getBoundsInRoot()
+        assertEquals((row.left + ComposerLeadColumn).value, label.left.value, 0.5f)
+        val close = compose.onNodeWithContentDescription("取消回覆").assertWidthIsEqualTo(44.dp).assertHeightIsEqualTo(44.dp)
+        // Centred in Send's 52 column: 4 in from the row's end (52 / 2 = 4 + 44 / 2).
+        assertEquals((row.right - 4.dp).value, close.getBoundsInRoot().right.value, 0.5f)
+        close.performClick()
+        compose.onNodeWithText("回覆 bob").performClick()
+        compose.runOnIdle { assertEquals(1, closed); assertEquals(1, tapped) }
+    }
+
+    @Test fun aLabelAloneIsCentredInA44RowAndAShortWindowsRowIsOneLineOf36() {
+        compose.setContent {
+            Column(Modifier.width(360.dp)) {
+                ComposerRow("小紙條", null, "移除小紙條", {}, Modifier.testTag("row")) { ComposerTile(IconName.Note) }
+                ComposerRow("卡片", "寫給十年前的自己", "移除卡片", {}, Modifier.testTag("short"), short = true) { ComposerTile(IconName.Cards) }
+            }
+        }
+        val row = compose.onNodeWithTag("row").assertHeightIsEqualTo(ComposerRowHeight).getBoundsInRoot()
+        val label = compose.onNodeWithText("小紙條").getBoundsInRoot()
         assertEquals(((row.top + row.bottom) / 2).value, ((label.top + label.bottom) / 2).value, 1f)
+        compose.onNodeWithTag("short").assertHeightIsEqualTo(ComposerShortRowHeight)
+        // Label · detail on one line.
+        compose.onNodeWithText("卡片 · 寫給十年前的自己").assertExists()
+        assertEquals(32.dp, ComposerLeadSize)
+        assertEquals(36.dp, ComposerMediaSize)
+    }
+
+    @Test fun aRepliesMediaStandsAtTheWordsStartAndTheWordsAfterIt() {
+        compose.setContent {
+            Box(Modifier.width(360.dp)) {
+                ComposerRow(
+                    "回覆 bob", null, "取消回覆", {}, Modifier.testTag("row"),
+                    media = { Box(Modifier.fillMaxSize().testTag("media")) },
+                ) { ReplyRule(Modifier.height(28.dp)) }
+            }
+        }
+        val row = compose.onNodeWithTag("row").getBoundsInRoot()
+        val media = compose.onNodeWithTag("media", useUnmergedTree = true).getBoundsInRoot()
+        assertEquals((row.left + ComposerLeadColumn).value, media.left.value, 0.5f)
+        assertEquals(ComposerMediaSize.value, (media.right - media.left).value, 0.5f)
+        val label = compose.onNodeWithText("回覆 bob").getBoundsInRoot()
+        assertEquals((media.right + 8.dp).value, label.left.value, 0.5f)
+    }
+
+    @Test fun theErrorRowIsAtLeast32WithNoClose() {
+        compose.setContent {
+            Box(Modifier.width(360.dp)) { ComposerErrorRow("沒有送出，再試一次", Modifier.testTag("error")) }
+        }
+        compose.onNodeWithTag("error").assertHeightIsAtLeast(ComposerErrorRowHeight)
+        val words = compose.onNodeWithText("沒有送出，再試一次").getBoundsInRoot()
+        assertEquals(ComposerLeadColumn.value, words.left.value, 0.5f)
     }
 
     @Test fun theFadeLetsATapThroughAndTheSolidPaperTakesIt() {
@@ -111,6 +153,5 @@ class ComposerFootTest {
         compose.onNodeWithTag("thread").performTouchInput { click(Offset(centerX, 50.dp.toPx())) }
         compose.runOnIdle { assertEquals(2, taps) }
         assertEquals(12.dp, ComposerFade)
-        assertEquals(18.dp, ComposerRowsLead)
     }
 }

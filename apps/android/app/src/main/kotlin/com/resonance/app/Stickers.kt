@@ -108,12 +108,19 @@ object Stickers {
     /**
      * [sticker]'s animated file, decoded for one sticker on screen: an `AnimatedImageDrawable` whose loop count
      * the file carries (two plays) — or, for a still file (the placeholders before the art lands), a
-     * plain drawable. Null: it can't be read.
+     * plain drawable. Null: it can't be read. [targetPx] decodes its frames at that size (the picker's cells, round 23
+     * §3: about a third of the memory of the 432 px file); none, the file's own.
      */
-    suspend fun animated(sticker: StickerCatalog.Sticker, origin: String): Drawable? = withContext(Dispatchers.IO) {
+    suspend fun animated(sticker: StickerCatalog.Sticker, origin: String, targetPx: Int? = null): Drawable? = withContext(Dispatchers.IO) {
         val source = source(sticker.file, sticker.url, sticker.v, bundledFile = isBundled(sticker), origin = origin) ?: return@withContext null
         try {
-            ImageDecoder.decodeDrawable(source) { decoder, _, _ -> decoder.allocator = ImageDecoder.ALLOCATOR_DEFAULT }
+            ImageDecoder.decodeDrawable(source) { decoder, info, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_DEFAULT
+                val side = maxOf(info.size.width, info.size.height)
+                if (targetPx != null && targetPx in 1 until side) {
+                    decoder.setTargetSize(info.size.width * targetPx / side, info.size.height * targetPx / side)
+                }
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
