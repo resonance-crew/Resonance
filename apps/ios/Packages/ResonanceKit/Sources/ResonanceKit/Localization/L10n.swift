@@ -1048,6 +1048,8 @@ public enum L10n {
         public static var stickerPreviewHint: String { Strings.shared.string("messages.stickerPreviewHint") }
         /// Preview: {name}, tap again to send
         public static func stickerPreviewA11y(name: String) -> String { Strings.shared.format("messages.stickerPreviewA11y", ["name": name]) }
+        /// Send sticker
+        public static var stickerSendHint: String { Strings.shared.string("messages.stickerSendHint") }
         /// Recent
         public static var stickerRecent: String { Strings.shared.string("messages.stickerRecent") }
         /// Sent a sticker

@@ -591,6 +591,7 @@
     "stickerPanelCollapse": "Collapse stickers",
     "stickerPreviewHint": "Tap again to send",
     "stickerPreviewA11y": "Preview: {name}, tap again to send",
+    "stickerSendHint": "Send sticker",
     "stickerRecent": "Recent",
     "stickerShared": "Sent a sticker",
     "stickerLabel": "Sticker: {name}",

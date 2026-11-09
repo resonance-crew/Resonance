@@ -1050,6 +1050,8 @@ object L10n {
         val stickerPreviewHint: String get() = Strings.string("messages.stickerPreviewHint")
         /** Preview: {name}, tap again to send */
         fun stickerPreviewA11y(name: String): String = Strings.format("messages.stickerPreviewA11y", mapOf("name" to name))
+        /** Send sticker */
+        val stickerSendHint: String get() = Strings.string("messages.stickerSendHint")
         /** Recent */
         val stickerRecent: String get() = Strings.string("messages.stickerRecent")
         /** Sent a sticker */
