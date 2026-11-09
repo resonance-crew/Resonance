@@ -104,7 +104,7 @@ export const SCREENS: Screen[] = [
   // The web's bell is a link: a phone follows it to the 通知 page (round 23 §4), wider it opens its dialog over the feed.
   { id: 'notifications', route: '/notifications', as: 'alice',
     web: { route: '/home', click: 'a[aria-label="通知"], a[aria-label="Notifications"]' },
-    expect: "alice's notifications (the web's phone: the 通知 page, its title in the header; wider: the bell's dialog over the feed): carol's letter and bob's note unread with their words, bob's resonance, carol's card link and bob's first message read — the rows touching, no rules or washes between them at rest" },
+    expect: "alice's notifications (the web's phone: the 通知 page, its title in the header; wider: the bell's dialog over the feed): carol's letter, bob's note (both with their words) and bob's resonance unread (dot, the bell's badge 3), carol's card link and bob's first message read — the rows touching, no rules or washes between them at rest" },
   { id: 'settings', route: '/settings', as: 'alice',
     expect: 'Settings: profile, appearance (theme swatches, 小紙團 switch), notifications, account' },
   { id: 'write-new', route: '/write', as: 'dora',

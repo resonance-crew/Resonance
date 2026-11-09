@@ -35,6 +35,9 @@ export interface AppHeaderProps {
   activeKey?: 'home' | 'me' | 'write';
 }
 
+/** A page's name in the brand slot longer than this many characters steps its size down on a phone (AppHeader.module.css). */
+const LONG_TITLE = 10;
+
 export function AppHeader({ user, signedIn = true, authReady = true, activeKey }: AppHeaderProps) {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -54,6 +57,11 @@ export function AppHeader({ user, signedIn = true, authReady = true, activeKey }
   // with the first row, the page's own heading kept for screen readers only.
   // Wider, the page's heading stands over its side nav and the brand stays.
   const onSettings = pathname === '/settings';
+  // A page's own name in the slot, as a phone shows it. A long one (English "Notifications") steps its size down
+  // at a phone's width so the glyphs beside it never move (the module CSS): the slot was drawn for a word of the
+  // brand's own length — 私訊, 通知, Messages and Settings stand as they always have.
+  const pageTitle = onMessages ? tNav('messages') : onNotifications ? tNav('notifications') : onSettings ? tNav('settings') : null;
+  const longTitle = pageTitle != null && [...pageTitle].length > LONG_TITLE;
   // Pages that spread across the whole window (the two panes of Messages, the
   // writer and the thought map's workspace) keep the row at the window's
   // edges; every other page's row keeps to the content's column.
@@ -102,7 +110,7 @@ export function AppHeader({ user, signedIn = true, authReady = true, activeKey }
       <div id={HEADER_OVERLAY_ID} className={styles.overlay} />
 
       <div className={styles.row} style={{ height: HEADER_BODY_H }} data-full-bleed={fullBleed || undefined}>
-        <Link href="/home" className={styles.logo}>
+        <Link href="/home" className={styles.logo} data-long-title={longTitle || undefined}>
           <ResonanceIcon size={38} />
           <span className={styles.brand}>
             {onMessages ? (

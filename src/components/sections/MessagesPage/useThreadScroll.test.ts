@@ -156,6 +156,96 @@ describe('taken up the thread', () => {
 });
 
 
+describe('the foot growing under a reader at the bottom', () => {
+  /**
+   * A thread at its bottom, its foot `dock` tall. The scroller clamps as a browser does; the foot's height
+   * reaches the body only through `writeDock` (useDockInset's ResizeObserver, `--dock-h`).
+   */
+  function atBottom() {
+    const observed: ResizeObserverCallback[] = [];
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(cb: ResizeObserverCallback) {
+          observed.push(cb);
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    const view = 700;
+    const rows = 3000;
+    let dock = 64; // the foot as drawn
+    let written = 64; // the foot as the body knows it (--dock-h)
+    const el = document.createElement('div');
+    // The body is pulled under the foot by --dock-h; the foot takes its own height from the column: the scroller
+    // loses what the foot grew by until --dock-h follows. Its end keeps --dock-h of room under the newest message.
+    const clientHeight = () => view - (dock - written);
+    const scrollHeight = () => rows + written;
+    let top = scrollHeight() - clientHeight();
+    Object.defineProperties(el, {
+      clientHeight: { get: clientHeight },
+      scrollHeight: { get: scrollHeight },
+      scrollTop: { get: () => top, set: (v: number) => (top = Math.max(0, Math.min(v, scrollHeight() - clientHeight()))) },
+    });
+    const below = () => scrollHeight() - top - clientHeight();
+    return {
+      el,
+      below,
+      grow: (by: number) => (dock += by),
+      // The browser's scroll anchoring moving the view (down) as the scroller shrinks, then its scroll event.
+      nudge: (by: number) => {
+        el.scrollTop = top + by;
+        act(() => void el.dispatchEvent(new Event('scroll')));
+      },
+      scrollTo: (to: number) => {
+        el.scrollTop = to;
+        act(() => void el.dispatchEvent(new Event('scroll')));
+      },
+      writeDock: () => {
+        written = dock;
+        act(() => observed.forEach((cb) => cb([], {} as ResizeObserver)));
+      },
+    };
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  // The sticker panel opening on a phone with the field unfocused: ~298 of foot at once, the browser's anchoring
+  // nudging the view 17 down in the scroll event that runs before the foot's height reaches the body.
+  it('keeps the reader at the newest message when the browser scrolls before the foot’s height reaches the body', () => {
+    const t = atBottom();
+    const { result } = renderHook(() => useThreadScroll({ current: t.el }, { firstKey: 'a', lastKey: 'z', lastIsOwn: false }));
+    expect(t.below()).toBe(0);
+    t.grow(298);
+    t.nudge(17);
+    t.writeDock();
+    expect(t.below()).toBe(0);
+    expect(result.current.atBottom).toBe(true);
+    // The panel grown taller (↑), then shorter again, the same way.
+    t.grow(380);
+    t.nudge(20);
+    t.writeDock();
+    expect(t.below()).toBe(0);
+    t.grow(-380);
+    t.scrollTo(t.el.scrollTop); // a shorter foot: the scroller's clamp, no move up the thread
+    t.writeDock();
+    expect(t.below()).toBe(0);
+    expect(result.current.atBottom).toBe(true);
+  });
+
+  it('still lets the reader leave the bottom by scrolling up the thread', () => {
+    const t = atBottom();
+    const { result } = renderHook(() => useThreadScroll({ current: t.el }, { firstKey: 'a', lastKey: 'z', lastIsOwn: false }));
+    t.scrollTo(t.el.scrollTop - 300);
+    expect(result.current.atBottom).toBe(false);
+    // Something below grows meanwhile: they aren't pulled back down.
+    t.grow(298);
+    t.writeDock();
+    expect(t.below()).toBeGreaterThan(80);
+  });
+});
+
 describe('a stretch drawn further up', () => {
   // Gone to a message far back, the thread draws a stretch around it: its foot isn't the bottom.
   function scroller(at: number) {

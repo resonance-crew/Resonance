@@ -87,6 +87,7 @@
 
 .account {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 12px;
 }
@@ -112,6 +113,14 @@
 .brandPhone {
   display: none;
 }
+/* An entry's glyph on its own page (私訊's): the solid twin in the phone's
+   header, as the bell wears on its page; the outline wider. */
+.glyphPhone {
+  display: none;
+}
+.glyphWide {
+  display: flex;
+}
 @media (max-width: 720px) {
   .phoneOnly {
     display: flex;
@@ -123,6 +132,12 @@
     display: inline;
   }
   .brandWide {
+    display: none;
+  }
+  .glyphPhone {
+    display: flex;
+  }
+  .glyphWide {
     display: none;
   }
 }
@@ -153,5 +168,33 @@
   }
   .brand {
     font-size: 18px;
+  }
+}
+
+/* A page's long name in the brand slot (English "Notifications", data-long-title):
+   the glyphs beside it never move — the account cluster keeps its place at the
+   row's padding — and the name steps its size down to the room the row leaves
+   it on a phone. The row is the window there, so that room is the window's
+   width less the row's padding, the mark, the gaps and the four glyphs (280 in
+   all; 230 at 360 and under, where those tighten), over the word's width in ems
+   (Notifications is 5.66 in Playfair, 5.8 kept). Under 14px it is cut with …
+   instead, the last resort. Shorter names (私訊, 通知, Messages) never take this. */
+.logo[data-long-title] {
+  min-width: 0;
+}
+.logo[data-long-title] .brand {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .logo[data-long-title] .brand {
+    font-size: clamp(14px, calc((100vw - 280px) / 5.8), 22px);
+  }
+}
+@media (max-width: 360px) {
+  .logo[data-long-title] .brand {
+    font-size: clamp(14px, calc((100vw - 230px) / 5.8), 18px);
   }
 }

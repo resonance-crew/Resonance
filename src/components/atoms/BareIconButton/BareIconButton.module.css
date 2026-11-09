@@ -118,7 +118,8 @@
 }
 
 /* What the glyph is for. Hover-capable pointers after a short dwell, keyboard
-   focus at once; never after Escape. */
+   focus at once; never after Escape, nor while what the button opened is open
+   (data-dismissed then too). */
 .tip {
   position: absolute;
   z-index: 41;

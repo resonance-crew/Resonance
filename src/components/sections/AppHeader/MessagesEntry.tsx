@@ -1,20 +1,25 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { Link } from '@/i18n/navigation';
+import { Link, usePathname } from '@/i18n/navigation';
 import { Icon } from '@/components/atoms/Icon';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import { useUnreadMessages } from '@/lib/data/hooks';
+import styles from './AppHeader.module.css';
 
 /**
  * Header entry to 私訊: the chat icon beside the notification bell, wearing
  * the same wobbly unread badge: the viewer's unread counters, summed over one
  * live listener on their conversations — the bell stays about events, this
- * badge is about waiting words.
+ * badge is about waiting words. On 私訊 (the list or a conversation) it is the
+ * current page; the phone's header shows it in its solid twin there, as the
+ * bell on its own page — wider headers keep the outline.
  */
 export function MessagesEntry() {
   const t = useTranslations('app.nav');
   const unread = useUnreadMessages();
+  const pathname = usePathname();
+  const onPage = pathname === '/messages' || pathname.startsWith('/messages/');
 
   const badgeH = 18;
   const badgeW = unread > 9 ? 26 : 19;
@@ -23,6 +28,7 @@ export function MessagesEntry() {
     <Link
       href="/messages"
       aria-label={t('messages')}
+      aria-current={onPage ? 'page' : undefined}
       title={t('messages')}
       style={{
         position: 'relative',
@@ -36,7 +42,18 @@ export function MessagesEntry() {
         transform: 'translateY(1.25px)',
       }}
     >
-      <Icon name="chat" size={22} />
+      {onPage ? (
+        <>
+          <span className={styles.glyphPhone}>
+            <Icon name="chat-fill" size={22} />
+          </span>
+          <span className={styles.glyphWide}>
+            <Icon name="chat" size={22} />
+          </span>
+        </>
+      ) : (
+        <Icon name="chat" size={22} />
+      )}
       {unread > 0 && (
         <span
           style={{

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fireEvent, render, renderWithIntl, screen, userEvent } from '@/../test/render';
 import { BareIconButton } from './BareIconButton';
 
@@ -38,6 +40,27 @@ describe('BareIconButton', () => {
     expect(link.getAttribute('href')).toMatch(/\/settings$/);
     expect(link.nextElementSibling).toHaveTextContent('Edit profile');
     expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  // Round 23: the ☺'s 「貼圖」 lingered under the open sticker popover, its corner poking out past the popover's.
+  it('never shows its tooltip while what it opened is open', () => {
+    const css = readFileSync(join(process.cwd(), 'src/components/atoms/BareIconButton/BareIconButton.module.css'), 'utf8');
+    // The tip shows on hover or keyboard focus only when it isn't dismissed.
+    const shown = [...css.matchAll(/([^{}]*\+ \.tip[^{}]*)\{[^}]*opacity:\s*1/g)].map((m) => m[1]);
+    expect(shown).toHaveLength(2);
+    for (const selector of shown) expect(selector).toContain(':not([data-dismissed])');
+
+    const { rerender } = render(<BareIconButton icon="smile" label="Stickers" expanded={false} haspopup="dialog" />);
+    const button = screen.getByRole('button', { name: 'Stickers' });
+    const tip = button.nextElementSibling as HTMLElement;
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(tip).not.toHaveAttribute('data-dismissed');
+    rerender(<BareIconButton icon="smile" label="Stickers" expanded haspopup="dialog" />);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    expect(tip).toHaveAttribute('data-dismissed');
+    // Closed again: the next hover may say what it is.
+    rerender(<BareIconButton icon="smile" label="Stickers" expanded={false} haspopup="dialog" />);
+    expect(tip).not.toHaveAttribute('data-dismissed');
   });
 
   // Round 23: the composer's ✕s — a press leaves the focus in the field being written in (a phone's keyboard stays up).

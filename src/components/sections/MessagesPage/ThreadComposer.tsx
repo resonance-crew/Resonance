@@ -16,7 +16,6 @@ import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import { useLocale, useTranslations } from 'next-intl';
 import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
-import { Divider } from '@/components/atoms/Divider/Divider';
 import { Textarea } from '@/components/atoms/Field/Field';
 import { Icon, type IconName } from '@/components/atoms/Icon';
 import { ConfirmModal } from '@/components/molecules/ConfirmModal/ConfirmModal';
@@ -24,9 +23,11 @@ import { OrganicMenu } from '@/components/molecules/OrganicMenu/OrganicMenu';
 import { useToast } from '@/components/providers/ToastProvider';
 import { preparePicture, UnsupportedImage, type PreparedPicture } from '@/lib/chat/preparePicture';
 import { INK } from '@/lib/design/strokes';
+import { wavyVertical } from '@/lib/design/wavyPath';
 import { wobCircle } from '@/lib/design/wobCircle';
 import { wobRect } from '@/lib/design/wobRect';
 import { useEdgeFades } from '@/lib/hooks/useEdgeFades';
+import { useElementSize } from '@/lib/hooks/useElementSize';
 import { useOpenedOnce } from '@/lib/hooks/useOpenedOnce';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { rememberedKeyboardHeight, useRememberKeyboardHeight } from '@/lib/hooks/useKeyboardHeight';
@@ -895,11 +896,31 @@ function mark(el: HTMLElement, attr: string, on: boolean) {
   } else if (el.hasAttribute(attr)) el.removeAttribute(attr);
 }
 
-/** A reply's mark: a short wavy pen rule in terracotta, over the ＋'s column. */
+/** The reply rule's height before it is measured: the row's 44 less 8 at each end (20 in a short window, the CSS). */
+const CARRY_RULE_H = 28;
+
+/**
+ * A reply's mark: a short wavy pen rule in terracotta, over the ＋'s column — the apps' ReplyRule, drawn over the
+ * box's whole height (the row's less 16): seed 31, swinging 1.1 either side, a turn every 9 or so (3 at least),
+ * one pen (INK) with round ends.
+ */
 function CarryRule() {
+  const ref = useRef<HTMLSpanElement>(null);
+  const { h: measured } = useElementSize(ref);
+  const h = measured || CARRY_RULE_H;
+  const d = useMemo(() => wavyVertical(h, 31, 1.1, Math.max(3, Math.round(h / 9))), [h]);
   return (
-    <span className={styles.carryRule} aria-hidden>
-      <Divider orientation="vertical" seed={31} amplitude={1.1} strokeWidth={INK} color="var(--color-terracotta)" spacing={0} />
+    <span ref={ref} className={styles.carryRule} aria-hidden>
+      <svg viewBox={`-3 0 6 ${h}`} preserveAspectRatio="none" overflow="visible">
+        <path
+          d={d}
+          fill="none"
+          stroke="var(--color-terracotta)"
+          strokeWidth={INK}
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
     </span>
   );
 }

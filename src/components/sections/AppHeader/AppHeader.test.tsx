@@ -4,6 +4,9 @@ import { useEffect } from 'react';
 import { renderWithIntl, screen, userEvent, within } from '@/../test/render';
 import { AppChromeProvider, useAppChrome } from '@/components/providers/AppChrome';
 import { AppHeader } from './AppHeader';
+import zhMessages from '@/messages/zh-TW.json';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 // Navigation + auth boundaries the account controls reach into. The signed-out
 // path renders none of the firestore-backed children, but the modules still
@@ -86,6 +89,50 @@ describe('AppHeader brand slot', () => {
     renderWithIntl(<AppHeader user={user} signedIn authReady />);
     expect(screen.queryByRole('link', { name: /Settings/ })).toBeNull();
     expect(screen.getByRole('link', { name: 'Resonance' })).toBeInTheDocument();
+  });
+
+  // Round 23: English "Notifications" pushed the pen, the messages, the bell and the menu 15 into the row's
+  // padding at 390 (off the screen at 375). The glyphs keep their place; a long name steps its size down.
+  it.each([
+    ['/notifications', 'en', true],
+    ['/notifications', 'zh-TW', false],
+    ['/messages', 'en', false],
+    ['/messages/abc', 'zh-TW', false],
+    ['/settings', 'en', false],
+    ['/home', 'en', false],
+  ])('%s in %s marks its name long: %s', (pathname, locale, long) => {
+    nav.pathname = pathname;
+    renderWithIntl(<AppHeader user={user} signedIn authReady />, locale === 'zh-TW' ? { locale, messages: zhMessages } : undefined);
+    const logo = screen.getAllByRole('link').find((a) => a.getAttribute('href')?.endsWith('/home'))!;
+    expect(logo.hasAttribute('data-long-title')).toBe(long);
+  });
+
+  it('keeps the glyphs at the row’s padding and fits a long name by its size, cut only as a last resort', () => {
+    const css = readFileSync(join(process.cwd(), 'src/components/sections/AppHeader/AppHeader.module.css'), 'utf8');
+    const block = (selector: string, from = css) => {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return [...from.matchAll(new RegExp(`(?:^|\\n)\\s*${escaped}\\s*\\{([^}]*)\\}`, 'g'))].map((m) => m[1]).join('\n');
+    };
+    expect(block('.account')).toMatch(/flex-shrink:\s*0/);
+    expect(block('.logo[data-long-title]')).toMatch(/min-width:\s*0/);
+    const long = block('.logo[data-long-title] .brand');
+    expect(long).toMatch(/overflow:\s*hidden/);
+    expect(long).toMatch(/text-overflow:\s*ellipsis/);
+    expect(long).toMatch(/white-space:\s*nowrap/);
+    const phone = css.slice(css.lastIndexOf('@media (max-width: 720px) {'));
+    expect(phone).toMatch(/\.logo\[data-long-title\] \.brand \{\s*font-size: clamp\(14px, calc\(\(100vw - 280px\) \/ 5\.8\), 22px\);/);
+    const narrow = css.slice(css.lastIndexOf('@media (max-width: 360px) {'));
+    expect(narrow).toMatch(/\.logo\[data-long-title\] \.brand \{\s*font-size: clamp\(14px, calc\(\(100vw - 230px\) \/ 5\.8\), 18px\);/);
+    // Every other name in the slot stands as it was: 22, and 18 at 360 and under.
+    expect(block('.brand')).toMatch(/font-size:\s*22px/);
+    const tight = css.slice(css.indexOf('@media (max-width: 360px) {'), css.lastIndexOf('@media (max-width: 360px) {'));
+    expect(tight).toMatch(/\.brand \{\s*font-size: 18px;/);
+    // At 390 (row 350 inside its padding), the long name's size times its width in ems leaves the glyphs their 280.
+    const at = (vw: number, less: number, max: number) => Math.min(max, Math.max(14, (vw - less) / 5.8));
+    expect(at(390, 280, 22) * 5.664).toBeLessThanOrEqual(390 - 280);
+    expect(at(375, 280, 22) * 5.664).toBeLessThanOrEqual(375 - 280);
+    expect(at(320, 230, 18) * 5.664).toBeLessThanOrEqual(320 - 230);
+    expect(at(430, 280, 22)).toBe(22);
   });
 });
 

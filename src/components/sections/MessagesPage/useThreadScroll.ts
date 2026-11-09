@@ -123,6 +123,8 @@ export function centerRow(scroller: HTMLElement, row: HTMLElement, behavior: Scr
  *   itself (Safari).
  * - A new message at the bottom is followed when it is the viewer's own or
  *   the reader was at the bottom already; otherwise `newBelow` says one came.
+ *   Only a scroll up the thread takes a reader off the bottom: one the browser
+ *   makes as the foot grows under the thread never does.
  * - Coming near the top asks for the next older page — and, in a stretch
  *   drawn further up (`tail` false), coming near its foot for the next newer.
  */
@@ -232,7 +234,23 @@ export function useThreadScroll(ref: RefObject<HTMLElement | null>, opts: Thread
       const moved = row ? offsetIn(scroller, row) - held.offset : 0;
       if (Math.abs(moved) >= 1) scroller.scrollTop += moved;
     };
+    // A reader at the bottom stays there when the window changes size, or the newest messages grow after
+    // they were drawn: a shared card or a preview arriving, a hand-drawn shape measuring itself, a picture loading.
+    const keepBottom = () => {
+      if (atBottomRef.current && performance.now() >= leftUntil.current) scroller.scrollTop = scroller.scrollHeight;
+    };
+    // Where the scroller stood at its last scroll. Only a scroll up the thread takes a reader off the bottom — a
+    // wheel, a finger, a key, the scrollbar (a jump up lets go of it itself, `leaveBottom`). One that doesn't go
+    // up is the browser's: its scroll anchoring as the foot grows under the thread (the sticker panel opening, the
+    // capsule taking a row) moves the view down before the foot's new height reaches the body (useDockInset's
+    // ResizeObserver runs after the scroll event), and the reader is kept at the bottom instead.
+    let lastTop = scroller.scrollTop;
     const onScroll = () => {
+      const wentUp = scroller.scrollTop < lastTop;
+      if (!wentUp && tailRef.current && atBottomRef.current && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > BOTTOM_SLACK) {
+        keepBottom();
+      }
+      lastTop = scroller.scrollTop;
       const below = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
       const bottom = tailRef.current && below <= BOTTOM_SLACK;
       setFarUp(below > scroller.clientHeight * 1.5);
@@ -244,11 +262,6 @@ export function useThreadScroll(ref: RefObject<HTMLElement | null>, opts: Thread
       if (scroller.scrollTop <= TOP_SLACK) onNearTop.current?.();
       if (!tailRef.current && below <= TOP_SLACK) onNearBottom.current?.();
       holdPlace();
-    };
-    // A reader at the bottom stays there when the window changes size, or the newest messages grow after
-    // they were drawn: a shared card or a preview arriving, a hand-drawn shape measuring itself, a picture loading.
-    const keepBottom = () => {
-      if (atBottomRef.current && performance.now() >= leftUntil.current) scroller.scrollTop = scroller.scrollHeight;
     };
     const resized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(keepBottom);
     resized?.observe(scroller);

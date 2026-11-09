@@ -1292,11 +1292,19 @@ button.chips::before {
   width: 44px;
 }
 
-/* A reply's mark: a short wavy pen rule in terracotta, the row's height less 16. */
+/* A reply's mark: a short wavy pen rule in terracotta, the row's height less 16,
+   drawn over all of it (CarryRule, the apps' ReplyRule). */
 .carryRule {
   display: flex;
   width: 6px;
   height: 28px;
+}
+
+.carryRule svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
 /* A note's or a card's mark: the card's cover, cover-cropped — or a glyph on the

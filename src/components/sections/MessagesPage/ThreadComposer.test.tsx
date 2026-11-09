@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { act, fireEvent, renderWithIntl, screen, userEvent, waitFor, within } from '@/../test/render';
 import { mockElementSize } from '@/../test/organic';
 import type { Card, MessageReplyQuote } from '@/lib/db/types';
+import { INK } from '@/lib/design/strokes';
 
 const toast = vi.hoisted(() => ({ show: vi.fn() }));
 vi.mock('@/components/providers/ToastProvider', () => ({ useToast: () => toast }));
@@ -123,6 +124,38 @@ describe('what rides the next message', () => {
     expect(container.querySelector('[class*="slip"]')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Cancel reply' }));
     expect(onCancelReply).toHaveBeenCalledTimes(1);
+  });
+
+  // The reply's mark drew ~18 of its 28, nearly straight (the Divider trims each end and turns twice). The apps'
+  // ReplyRule: over the box's whole height (28; 20 in a short window), seed 31, ±1.1, a turn every 9 or so and 3 at
+  // least, one pen (INK) with round ends, in terracotta.
+  it.each([28, 20])('draws the reply’s rule over its whole box, %i tall, as the apps do', (tall) => {
+    const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')!;
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+      configurable: true,
+      get(this: HTMLElement) {
+        return String(this.className).includes('carryRule') ? tall : 48;
+      },
+    });
+    try {
+      renderWithIntl(composer({ replyingTo: { id: 'm1', senderId: 'alice', text: 'rain' }, replyHandle: 'alice' }));
+      const rule = rowOf('Replying to alice').querySelector('[class*="carryRule"]')!;
+      expect(rule.querySelector('svg')).toHaveAttribute('viewBox', `-3 0 6 ${tall}`);
+      const path = rule.querySelector('svg path')!;
+      const d = path.getAttribute('d')!;
+      // Top to bottom of the box, on its axis at both ends.
+      expect(d.startsWith('M 0,0 ')).toBe(true);
+      expect(d.endsWith(` 0,${tall}`)).toBe(true);
+      expect(d.match(/C/g)).toHaveLength(Math.max(3, Math.round(tall / 9)));
+      const xs = [...d.matchAll(/(-?[\d.]+),(-?[\d.]+)/g)].map((m) => Math.abs(Number(m[1])));
+      expect(Math.max(...xs)).toBeLessThanOrEqual(1.1);
+      expect(Math.max(...xs)).toBeGreaterThan(0.1);
+      expect(path).toHaveAttribute('stroke', 'var(--color-terracotta)');
+      expect(path).toHaveAttribute('stroke-width', String(INK));
+      expect(path).toHaveAttribute('stroke-linecap', 'round');
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', height);
+    }
   });
 
   it('keeps the field’s focus through a ✕ and through a press on a row', () => {

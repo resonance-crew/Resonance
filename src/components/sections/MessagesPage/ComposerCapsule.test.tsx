@@ -198,6 +198,8 @@ describe('what rides inside the capsule (round 23)', () => {
     expect(rule('.carryMark')).toMatch(/width:\s*44px/);
     expect(rule('.plusSlot')).toMatch(/width:\s*44px/);
     expect(rule('.carryRule')).toMatch(/width:\s*6px;[\s\S]*height:\s*28px/);
+    // The reply's rule is drawn over all of its box (CarryRule).
+    expect(rule('.carryRule svg')).toMatch(/width:\s*100%;[\s\S]*height:\s*100%/);
     expect(rule('.carryTile')).toMatch(/width:\s*32px;[\s\S]*height:\s*32px/);
     expect(rule('.carryMedia')).toMatch(/width:\s*36px;[\s\S]*height:\s*36px/);
     expect(rule('.carrySticker')).toMatch(/width:\s*36px;[\s\S]*height:\s*36px;[\s\S]*opacity:\s*0\.55/);

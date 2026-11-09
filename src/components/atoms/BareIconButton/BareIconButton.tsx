@@ -118,8 +118,10 @@ export function BareIconButton({
           {face}
         </button>
       )}
+      {/* Never over what the button opened: while that is open, the tooltip stays away (a hover lingering on
+          the ☺ would show it under the popover, its corner poking out past the popover's). */}
       {tip && (
-        <span className={styles.tip} aria-hidden="true" data-side={tip} data-align={tipAlign} data-dismissed={tipDismissed || undefined}>
+        <span className={styles.tip} aria-hidden="true" data-side={tip} data-align={tipAlign} data-dismissed={tipDismissed || expanded || undefined}>
           {label}
         </span>
       )}
