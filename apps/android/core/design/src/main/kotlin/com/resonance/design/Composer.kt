@@ -361,10 +361,10 @@ fun CapsuleField(
 }
 
 /**
- * The composer capsule's outline when it grows (round 23, the critique's 9): [wobRect]'s recipe, but each edge drawn
- * from a seed of its own and the top and foot with the one-line capsule's wobble whatever the height — so a row coming
- * or going (or a line) moves the sides and the top only, and the foot under the thumb, ＋, ☺ and Send's corner keep
- * theirs. The tag field and every other outline keep [WobRectShape].
+ * The composer capsule's outline when it grows (round 23, the critique's 9): one line is exactly [WobRectShape]'s;
+ * taller, the top and the foot keep the one line's wobble and only the sides are drawn for the height — so a row coming
+ * or going (or a line) moves the sides and the top's place only, and the foot under the thumb, ＋, ☺ and Send's corner
+ * keep theirs. The tag field and every other outline keep [WobRectShape].
  */
 internal data class SteadyCapsuleShape(private val radius: Double, private val seed: Double) : Shape {
     override fun createOutline(size: androidx.compose.ui.geometry.Size, layoutDirection: androidx.compose.ui.unit.LayoutDirection, density: androidx.compose.ui.unit.Density): Outline {
@@ -377,9 +377,11 @@ internal data class SteadyCapsuleShape(private val radius: Double, private val s
 }
 
 /**
- * [SteadyCapsuleShape]'s path, in dp: the top edge and its corners from `seed`, the end side from `seed + 101`, the foot
- * and its corners from `seed + 202`, the start side from `seed + 303`. The top and the foot take their wobble (its swing,
- * bow and turns) from a capsule [line] tall, the sides from the real height. Pure, for the tests.
+ * [SteadyCapsuleShape]'s path, in dp: [wobRect]'s own recipe and seeded stream, laid out for a capsule [line] tall — so
+ * one line is exactly the outline [WobRectShape] draws — with each edge reading the stream from where it would for that
+ * one line: the corners, the top and the foot take their wobble (its swing, bow, turns and jitter) as one line has
+ * them whatever the height, and only the sides are drawn for the real height (from where their part of the stream
+ * starts). Pure, for the tests.
  */
 internal fun steadyCapsuleOutline(w: Double, h: Double, radius: Double, seed: Double, line: Double = ComposerHeight.value.toDouble()): List<PathCommand> {
     val K = 0.552
@@ -389,21 +391,29 @@ internal fun steadyCapsuleOutline(w: Double, h: Double, radius: Double, seed: Do
         val curve = autoCurve(w, edgeH)
         return kotlin.math.min(m * 0.95 * curve, kotlin.math.min(w, edgeH) * 0.032 * kotlin.math.max(1.0, curve))
     }
-    val perpH = perp(hl)
-    val perpV = perp(h)
+    val amp = perp(hl)
     val segH = autoSegments(w)
     val segV = autoSegments(h)
-    val top = Prng(seed)
-    val end = Prng(seed + 101)
-    val foot = Prng(seed + 202)
-    val start = Prng(seed + 303)
+    val segVLine = autoSegments(hl)
     val r = kotlin.math.min(radius, kotlin.math.min(w, hl) / 2)
     val rVar = kotlin.math.min(r * 0.07, kotlin.math.max(0.0, kotlin.math.min(w, hl) / 2 - r) * 0.4)
-    fun corner(rnd: Prng) = r + (rnd.next() - 0.5) * 2 * rVar
-    val rtl = corner(top)
-    val rtr = corner(top)
-    val rbr = corner(foot)
-    val rbl = corner(foot)
+    // The stream as wobRect reads it for the one line: 4 corners, 8 corner offsets (none here, still drawn), then the
+    // top, the end side, the foot and the start side — each split edge two numbers a turn.
+    fun splits(len: Double, segs: Int) = segs >= 2 && len >= amp * 4
+    fun draws(len: Double, segs: Int) = if (splits(len, segs)) (segs - 1) * 2 else 0
+    fun at(n: Int) = Prng(seed).also { rnd -> repeat(n) { rnd.next() } }
+    val corners = Prng(seed)
+    fun corner() = r + (corners.next() - 0.5) * 2 * rVar
+    val rtl = corner()
+    val rtr = corner()
+    val rbr = corner()
+    val rbl = corner()
+    val topLen = w - rtl - rtr
+    val footLen = w - rbr - rbl
+    val topAt = 12
+    val endAt = topAt + draws(topLen, segH)
+    val footAt = endAt + draws(hl - rtr - rbr, segVLine)
+    val startAt = footAt + draws(footLen, segH)
     fun cubic(p0: Pair<Double, Double>, p1: Pair<Double, Double>, horizontal: Boolean): PathCommand {
         return if (horizontal) {
             val k = kotlin.math.abs(p1.first - p0.first) / 3
@@ -415,9 +425,9 @@ internal fun steadyCapsuleOutline(w: Double, h: Double, radius: Double, seed: Do
             PathCommand.Cubic(p0.first, p0.second + dir * k, p1.first, p1.second - dir * k, p1.first, p1.second)
         }
     }
-    fun edge(p0: Pair<Double, Double>, p1: Pair<Double, Double>, horizontal: Boolean, segs: Int, amp: Double, rnd: Prng): List<PathCommand> {
+    fun edge(p0: Pair<Double, Double>, p1: Pair<Double, Double>, horizontal: Boolean, segs: Int, edgeAmp: Double, rnd: Prng): List<PathCommand> {
         val len = if (horizontal) kotlin.math.abs(p1.first - p0.first) else kotlin.math.abs(p1.second - p0.second)
-        if (segs < 2 || len < amp * 4) return listOf(cubic(p0, p1, horizontal))
+        if (segs < 2 || len < edgeAmp * 4) return listOf(cubic(p0, p1, horizontal))
         val jitter = kotlin.math.min(0.08, 0.4 / segs)
         val out = ArrayList<PathCommand>(segs)
         var prev = p0
@@ -425,15 +435,15 @@ internal fun steadyCapsuleOutline(w: Double, h: Double, radius: Double, seed: Do
             val t = i.toDouble() / segs + (rnd.next() - 0.5) * jitter
             val x = p0.first + (p1.first - p0.first) * t
             val y = p0.second + (p1.second - p0.second) * t
-            val a = if (horizontal) x to y + (rnd.next() - 0.5) * 2 * amp else x + (rnd.next() - 0.5) * 2 * amp to y
+            val a = if (horizontal) x to y + (rnd.next() - 0.5) * 2 * edgeAmp else x + (rnd.next() - 0.5) * 2 * edgeAmp to y
             out += cubic(prev, a, horizontal)
             prev = a
         }
         out += cubic(prev, p1, horizontal)
         return out
     }
-    // The foot's anchors are laid out from the start, so it reads the same however its points are walked.
-    val footEdge = edge(rbl to h, w - rbr to h, true, segH, perpH, foot)
+    // The sides: one line's swing up to a line's height, the real height's past it (as wobRect's would grow).
+    val ampV = if (h <= line) amp else perp(h)
     val tla = 0.0 to rtl
     val tlb = rtl to 0.0
     val tra = w - rtr to 0.0
@@ -445,27 +455,15 @@ internal fun steadyCapsuleOutline(w: Double, h: Double, radius: Double, seed: Do
     val path = ArrayList<PathCommand>()
     path += PathCommand.Move(tla.first, tla.second)
     path += PathCommand.Cubic(0.0, tla.second * (1 - K) + tlb.second * K, tlb.first * (1 - K) + tla.first * K, 0.0, tlb.first, tlb.second)
-    path += edge(tlb, tra, true, segH, perpH, top)
+    path += edge(tlb, tra, true, segH, amp, at(topAt))
     path += PathCommand.Cubic(tra.first + (w - tra.first) * K, 0.0, w, trb.second * (1 - K), trb.first, trb.second)
-    path += edge(trb, bra, false, segV, perpV, end)
+    path += edge(trb, bra, false, segV, ampV, at(endAt))
     path += PathCommand.Cubic(w, bra.second + (h - bra.second) * K, brb.first + (w - brb.first) * K, h, brb.first, brb.second)
-    path += reversedEdge(footEdge, bla)
+    path += edge(brb, bla, true, segH, amp, at(footAt))
     path += PathCommand.Cubic(bla.first * (1 - K), h, 0.0, blb.second + (h - blb.second) * K, blb.first, blb.second)
-    path += edge(blb, tla, false, segV, perpV, start)
+    path += edge(blb, tla, false, segV, ampV, at(startAt))
     path += PathCommand.Close
     return path
-}
-
-/** [cubics] (a run of cubics from some start to its last point) walked backwards, ending at [to]. */
-private fun reversedEdge(cubics: List<PathCommand>, to: Pair<Double, Double>): List<PathCommand> {
-    val cs = cubics.map { it as PathCommand.Cubic }
-    val out = ArrayList<PathCommand>(cs.size)
-    for (i in cs.indices.reversed()) {
-        val c = cs[i]
-        val (sx, sy) = if (i == 0) to else cs[i - 1].let { it.x to it.y }
-        out += PathCommand.Cubic(c.x2, c.y2, c.x1, c.y1, sx, sy)
-    }
-    return out
 }
 
 /** The block's top start corner (round 22, the owner's notes 2: it turned too sharply). */

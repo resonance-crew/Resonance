@@ -205,21 +205,31 @@ class ComposerCapsuleTest {
     }
 
     @Test fun theCapsulesFootKeepsItsWobbleAsRowsComeAndGo() {
-        // The foot (from the bottom end corner round to the bottom start one) the same at 48 and at 98, moved down by 50;
-        // the top the same too — only the sides change with the height.
-        fun foot(h: Double) = steadyCapsuleOutline(360.0, h, 16.0, 17.0).let { cmds ->
-            val i = cmds.indexOfFirst { it is com.resonance.geometry.PathCommand.Cubic && it.y == h }
-            cmds.drop(i).takeWhile { it is com.resonance.geometry.PathCommand.Cubic && (it as com.resonance.geometry.PathCommand.Cubic).y > h - 20 }
-                .map { (it as com.resonance.geometry.PathCommand.Cubic).let { c -> listOf(c.x1, c.y1 - h, c.x2, c.y2 - h, c.x, c.y - h) } }
+        val segH = com.resonance.geometry.autoSegments(360.0)
+        // One line is the very outline the field's wobble draws (nothing at rest changes).
+        val r = 16.0
+        val one = steadyCapsuleOutline(360.0, 48.0, r, 17.0)
+        val options = com.resonance.geometry.WobRectOptions(
+            curve = com.resonance.geometry.autoCurve(360.0, 48.0),
+            segmentsH = com.resonance.geometry.SegValue.Count(segH.toDouble()),
+            segmentsV = com.resonance.geometry.SegValue.Count(com.resonance.geometry.autoSegments(48.0).toDouble()),
+        )
+        assertEquals(com.resonance.geometry.wobRect(360.0, 48.0, r, 17.0, com.resonance.geometry.autoMag(360.0, 48.0), options), one)
+        // Taller: the foot (its end corner, its turns, its start corner) is the one line's, moved down; the top is the one line's.
+        fun foot(h: Double): List<List<Double>> {
+            val cmds = steadyCapsuleOutline(360.0, h, r, 17.0)
+            val at = 2 + segH + 1 + com.resonance.geometry.autoSegments(h)
+            return cmds.subList(at, at + 1 + segH + 1).map { c ->
+                (c as com.resonance.geometry.PathCommand.Cubic).let { listOf(it.x1, it.y1 - h, it.x2, it.y2 - h, it.x, it.y - h) }
+            }
         }
-        val one = foot(48.0)
-        val riding = foot(98.0)
-        assertTrue(one.size >= 3)
-        assertEquals(one.size, riding.size)
-        one.zip(riding).forEach { (a, b) -> a.zip(b).forEach { (x, y) -> assertEquals(x, y, 1e-9) } }
-        fun top(h: Double) = steadyCapsuleOutline(360.0, h, 16.0, 17.0).take(1 + 1 + com.resonance.geometry.autoSegments(360.0))
+        for (h in listOf(98.0, 48.0 + 44 + 72, 240.0)) {
+            foot(48.0).zip(foot(h)).forEach { (a, b) -> a.zip(b).forEach { (x, y) -> assertEquals("height $h", x, y, 1e-9) } }
+        }
+        fun top(h: Double) = steadyCapsuleOutline(360.0, h, r, 17.0).take(2 + segH)
         assertEquals(top(48.0), top(98.0))
+        assertEquals(top(48.0), top(240.0))
         // The sides are drawn for the real height.
-        assertTrue(steadyCapsuleOutline(360.0, 98.0, 16.0, 17.0) != steadyCapsuleOutline(360.0, 48.0, 16.0, 17.0))
+        assertTrue(steadyCapsuleOutline(360.0, 98.0, r, 17.0) != one)
     }
 }

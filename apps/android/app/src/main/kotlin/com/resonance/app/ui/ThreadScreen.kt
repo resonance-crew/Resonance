@@ -593,7 +593,6 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                 // (round 10 §3.2) runs the pane's whole width down to the screen's edge, so the thread never
                 // shows under or beside it — its fade over the foot's top 12 (round 11 §3), counted in the room it
                 // takes; a tap on its solid part puts the keyboard away, as one on the thread's blank does.
-                // A sticker previewed: a tap anywhere on the thread lets it go (the panel's own taps are its own).
                 Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { footWidth = it.width }) {
                     // A pane the capsule doesn't fill (2026-11-01): the thread beside the capsule, sinking into a fade at the
                     // foot's edge; a panel in the keyboard's place keeps the paper across the pane (it is that paper going on).
