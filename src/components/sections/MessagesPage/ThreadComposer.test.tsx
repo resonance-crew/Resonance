@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { createRef } from 'react';
+import { createRef, useRef, useState } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, renderWithIntl, screen, userEvent, waitFor, within } from '@/../test/render';
 import { mockElementSize } from '@/../test/organic';
-import type { Card } from '@/lib/db/types';
+import type { Card, MessageReplyQuote } from '@/lib/db/types';
 
 const toast = vi.hoisted(() => ({ show: vi.fn() }));
 vi.mock('@/components/providers/ToastProvider', () => ({ useToast: () => toast }));
@@ -200,15 +200,70 @@ describe('what rides the next message', () => {
     vi.unstubAllGlobals();
   });
 
-  it('says a reply chosen to a screen reader once, and not one brought back with a draft', () => {
+  it('says a reply chosen to a screen reader once, and not one brought back with a draft', async () => {
     const quote = { id: 'm9', senderId: 'alice', text: 'rain' };
     const view = renderWithIntl(composer({ replyHandle: 'alice' }));
     const said = () => document.querySelector('[aria-live="polite"]')!;
     expect(said()).toHaveTextContent('');
     view.rerender(composer({ replyHandle: 'alice', replyingTo: quote }));
-    expect(said()).toHaveTextContent('Replying to alice');
+    await waitFor(() => expect(said()).toHaveTextContent('Replying to alice'));
     // The focus never left the field for it (nothing was focused).
     expect(document.activeElement).not.toBe(screen.getByRole('button', { name: 'Cancel reply' }));
+  });
+
+  // Round 23 review: the region must change for every reply chosen, or a screen reader says nothing.
+  it('says each reply chosen, the same words again too: emptied as one goes or another takes its place', async () => {
+    const said = () => document.querySelector('[aria-live="polite"]')!;
+    const view = renderWithIntl(composer({ replyHandle: 'alice', replyingTo: { id: 'm1', senderId: 'alice', text: 'rain' } }));
+    view.rerender(composer({ replyHandle: 'alice', replyingTo: { id: 'm2', senderId: 'alice', text: 'sun' } }));
+    await waitFor(() => expect(said()).toHaveTextContent('Replying to alice'));
+    // Put away at once: nothing stale stays.
+    view.rerender(composer({ replyHandle: 'alice', replyingTo: null }));
+    expect(said()).toHaveTextContent('');
+    // Another of hers chosen: said again.
+    view.rerender(composer({ replyHandle: 'alice', replyingTo: { id: 'm3', senderId: 'alice', text: 'wind' } }));
+    await waitFor(() => expect(said()).toHaveTextContent('Replying to alice'));
+    // And straight from one to the next: emptied first, then the same words — a change the region announces.
+    view.rerender(composer({ replyHandle: 'alice', replyingTo: { id: 'm4', senderId: 'alice', text: 'snow' } }));
+    expect(said()).toHaveTextContent('');
+    await waitFor(() => expect(said()).toHaveTextContent('Replying to alice'));
+  });
+
+  it('says the reply a draft brought back once it is chosen again after being put away', async () => {
+    const quote: MessageReplyQuote = { id: 'm7', senderId: 'alice', text: 'rain' };
+    window.localStorage.setItem('resonance:draft:me:alice_me', JSON.stringify({ text: 'kept', replyTo: quote, at: Date.now() }));
+    function Host() {
+      const inputRef = useRef<HTMLTextAreaElement>(null);
+      const [reply, setReply] = useState<MessageReplyQuote | null>(null);
+      return (
+        <>
+          <button type="button" onClick={() => setReply(quote)}>
+            reply-m7
+          </button>
+          <ThreadComposer
+            inputRef={inputRef}
+            otherHandle="alice"
+            replyingTo={reply}
+            replyHandle="alice"
+            onCancelReply={() => setReply(null)}
+            onRestoreReply={setReply}
+            send={() => true}
+            ready
+            uid="me"
+            pairId="alice_me"
+          />
+        </>
+      );
+    }
+    const said = () => document.querySelector('[aria-live="polite"]')!;
+    renderWithIntl(<Host />);
+    // Brought back: shown, not news.
+    expect(await screen.findByText('Replying to alice', { ignore: '[aria-live]' })).toBeInTheDocument();
+    await act(() => new Promise((r) => setTimeout(r, 50)));
+    expect(said()).toHaveTextContent('');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel reply' }));
+    await userEvent.click(screen.getByRole('button', { name: 'reply-m7' }));
+    await waitFor(() => expect(said()).toHaveTextContent('Replying to alice'));
   });
 
   it('draws a reply’s picture or card cover small before its words', () => {
@@ -462,6 +517,32 @@ describe('the stickers', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Keyboard' }));
     await userEvent.click(screen.getByRole('button', { name: 'Stickers' }));
     expect(recent()).toEqual(['nod/hug', 'twine/thanks']);
+  });
+
+  // Round 23 review: the sheet goes on the first click, so the old habit's second click, a moment later, must not
+  // fall through to the thread under where it lay (a card, a link, a picture).
+  it('lets the second click of the old two-click habit land on nothing where the sheet lay', async () => {
+    asDesktop(true);
+    const send = vi.fn(() => true);
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      return this.getAttribute('role') === 'dialog' ? new DOMRect(500, 200, 400, 460) : new DOMRect(0, 0, 0, 0);
+    });
+    const underneath = vi.fn();
+    renderWithIntl(<div onClick={underneath}>{composer({ send })}</div>);
+    await userEvent.click(screen.getByRole('button', { name: 'Stickers' }));
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Stickers' })).getAllByRole('button', { name: 'Thanks' })[0]);
+    expect(screen.queryByRole('dialog', { name: 'Stickers' })).toBeNull();
+    expect(field()).toHaveFocus();
+    const catcher = document.querySelector<HTMLElement>('[data-click-catcher]');
+    expect(catcher).not.toBeNull();
+    expect([catcher!.style.top, catcher!.style.left, catcher!.style.width, catcher!.style.height]).toEqual(['200px', '500px', '400px', '460px']);
+    underneath.mockClear();
+    await userEvent.click(catcher!);
+    expect(underneath).not.toHaveBeenCalled();
+    expect(field()).toHaveFocus();
+    expect(send).toHaveBeenCalledTimes(1);
+    // Only for a moment.
+    await waitFor(() => expect(document.querySelector('[data-click-catcher]')).toBeNull(), { timeout: STICKER_REPEAT_MS + 400 });
   });
 
   it('hangs a sheet over the capsule with a mouse, which a sticker sent or Escape puts away, the field writing again', async () => {

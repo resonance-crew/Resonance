@@ -2366,6 +2366,13 @@ button.carryWords:focus-visible {
   height: 460px;
 }
 
+/* Where the popover lay, a moment after a sticker sent from it: the next click lands on nothing (ThreadComposer). */
+.clickCatcher {
+  position: fixed;
+  z-index: 120;
+  background: transparent;
+}
+
 .stickerPopoverBody {
   position: absolute;
   inset: 8px;

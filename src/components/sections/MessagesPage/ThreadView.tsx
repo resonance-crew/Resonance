@@ -23,7 +23,8 @@ import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { hideConversation, useCardSummaries, useMyBlockedIds } from '@/lib/data/hooks';
 import { OLDER_PAGE, useChatThread } from '@/lib/data/thread';
-import { resonanceCardKey, threadCardKeys } from '@/lib/chat/cardLink';
+import { messageCard, resonanceCardKey, threadCardKeys } from '@/lib/chat/cardLink';
+import { carriedOf } from '@/lib/chat/carried';
 import { footComposes, threadFoot } from '@/lib/chat/foot';
 import { threadRows } from '@/lib/chat/rows';
 import { collapseAlbums, standingFor } from '@/lib/chat/album';
@@ -292,19 +293,23 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
     return card && !card.anonymous ? olderNote : undefined;
   }, [olderNote, summaries]);
   // What the message being answered shows, small, in the composer's reply row (round 23): its picture, or its
-  // card's cover (a sticker's key frame is the composer's own).
+  // card's cover (a sticker's key frame is the composer's own). The cover only as the message's bubble draws its
+  // card (carriedOf): someone else's 私人卡 its author no longer shares (停止分享) shows nothing of itself here
+  // either, though the thread read it earlier.
   const replyMedia = useMemo(() => {
     const quote = thread.replyingTo;
     if (!quote || quote.unsent || quote.sticker) return undefined;
     const original = thread.find(quote.id);
     if (quote.image && original?.image) return localPicture(original.image.id) ?? chatImageUrl(original.image.id, 'thumb');
-    if (quote.cardRef && summaries?.status === 'ready') {
-      const card = summaries.cards.cards.find((c) => c.id === quote.cardRef);
-      if (card?.media?.type === 'image') return card.media.url;
+    const shared = original ? messageCard(original) : null;
+    if (quote.cardRef && original && shared?.via === 'cardRef' && summaries?.status === 'ready') {
+      const card = summaries.cards.cards.find((c) => c.id === shared.key);
+      const carried = carriedOf(original, shared, card ? { status: 'ready', card, author: null } : { status: 'error' }, viewerId);
+      if (carried.kind === 'card' && carried.card.media?.type === 'image') return carried.card.media.url;
     }
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thread.replyingTo, summaries]);
+  }, [thread.replyingTo, thread.messages, summaries, viewerId]);
   // Every card this thread is about — shared, or linked to (the bubbles' own detection) — each once.
   const sharedCardKeys = useMemo(() => (mediaOpen ? threadCardKeys(thread.messages) : []), [mediaOpen, thread.messages]);
   // Links written in messages, each once, for the same list — but a link to one of our cards, which is among

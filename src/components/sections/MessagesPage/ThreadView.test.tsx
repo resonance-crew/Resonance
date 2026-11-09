@@ -319,6 +319,34 @@ describe('replies, links and link previews in a thread', () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
+  // Round 23 review: the composer's reply row shows a card's cover only as the message's bubble draws the card —
+  // someone else's 私人卡 its author stopped sharing (停止分享) shows nothing of itself, though the thread read it.
+  it('shows a quoted card’s cover in the reply row only where its bubble may draw the card', async () => {
+    const cover = 'https://img.resonance.channel/cover/2026-03/private.webp';
+    const author = { ...summary('x', '').author!, id: 'alice', handle: 'alice' };
+    server.messages = [
+      text('m1', 'my draft, before', { cardRef: 'priv' }),
+      text('m2', 'my draft, again', { cardRef: 'priv', privateShare: true }),
+    ];
+    vi.mocked(callApi).mockResolvedValue({
+      cards: [summary('priv', 'A thought kept to myself', { visibility: 'private', publishedAt: null, imageUrl: cover, author })],
+    });
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const { container } = renderWithIntl(thread());
+    // The message still sharing it draws it; the one that no longer does, its words alone.
+    expect(await screen.findAllByText('A thought kept to myself')).toHaveLength(1);
+    const replyTo = async (id: string) => {
+      await user.click(within(container.querySelector<HTMLElement>(`[data-message-id="${id}"]`)!).getByRole('button', { name: 'Reply' }));
+      return (await screen.findByText('Replying to alice', { ignore: SAID })).closest('[class*="carryRow"]')!;
+    };
+    let row = await replyTo('m2');
+    expect(row.querySelector('img')).toHaveAttribute('src', cover);
+    await user.click(screen.getByRole('button', { name: 'Cancel reply' }));
+    row = await replyTo('m1');
+    expect(row).toHaveTextContent('my draft, before');
+    expect(row.querySelector('img')).toBeNull();
+  });
+
   // Round 22: a quote of a picture inside an album goes to the album's grid (its row is the first picture's), and
   // washes it.
   // Round 22 (the owner's notes): a bubble answering a quote lies over its foot; a sticker has no bubble, so the

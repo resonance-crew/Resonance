@@ -3,8 +3,12 @@
  * "breathing". A cell mostly in view (the picker says which) plays its file once — the file's two baked loops —
  * then rests on its key frame (its thumb, the pose the file starts and ends on, so the swap never shows) for 1.5 to
  * 3 s, chosen afresh each time, and plays again. At most {@link StickerBreath.max} play at once; cells waiting for a
- * turn take a free one in reading order (`order`), one start every {@link BREATH_STAGGER_MS}, none while the grid is
- * being scrolled (`hold`). A cell leaving the view stops at once and gives its turn up.
+ * turn take a free one first come, first served — the one waiting longest (since it came into view, or since its rest
+ * ended), reading order (`order`) only among those that began waiting at the same moment (the first batch) — one
+ * start every {@link BREATH_STAGGER_MS}, none while the grid is being scrolled (`hold`). A play outlasts the longest
+ * rest, so turns handed out in reading order alone would go round the first cells for ever, the rest never moving. A
+ * play's two loops are timed from when its file is showing (a first fetch may take a while); one that can't be shown
+ * gives its turn up. A cell leaving the view stops at once and gives its turn up.
  *
  * The picker's own: never the thread's `stickerPlayback`, so the two never stop each other's stickers. Times come
  * from the window's timers (fake ones in tests).
@@ -17,7 +21,12 @@ const PLAY_TAIL_MS = 120;
 
 /** What a cell does when its turn comes: plays its file (two loops of `loopMs` each), or goes back to its key frame. */
 export interface BreathingCell {
-  play(): void;
+  /**
+   * Shows its file: answers once it is showing (its two loops are timed from then), or fails when it can't be — the
+   * turn is given up. Answering nothing, it shows at once. Once `stop` is called, a file still on its way is never
+   * shown (the cell's to see to).
+   */
+  play(): Promise<unknown> | void;
   stop(): void;
   /** One loop of its file (the catalog's `durationMs`). */
   loopMs: number;
@@ -30,6 +39,10 @@ interface Entry {
   order: number;
   state: State;
   timer: ReturnType<typeof setTimeout> | null;
+  /** When it began waiting for its turn (first come, first served). */
+  since: number;
+  /** Its plays, counted: what an answer from an earlier play (its file arriving late) is told apart by. */
+  turn: number;
 }
 
 export class StickerBreath {
@@ -54,7 +67,7 @@ export class StickerBreath {
       known.order = order;
       return;
     }
-    this.cells.set(key, { cell, order, state: 'hidden', timer: null });
+    this.cells.set(key, { cell, order, state: 'hidden', timer: null, since: 0, turn: 0 });
   }
 
   /** A cell leaves the grid: stopped if it was moving. */
@@ -72,6 +85,7 @@ export class StickerBreath {
     if (visible) {
       if (entry.state !== 'hidden') return;
       entry.state = 'waiting';
+      entry.since = this.now();
       // On the next turn of the loop: cells coming into view together (one watcher's batch) start in reading order.
       this.later(0);
       return;
@@ -116,8 +130,9 @@ export class StickerBreath {
     return this.queue().map(([k]) => k);
   }
 
+  /** Those waiting, the one waiting longest first; reading order among those that began waiting together. */
   private queue(): [string, Entry][] {
-    return [...this.cells].filter(([, e]) => e.state === 'waiting').sort((a, b) => a[1].order - b[1].order);
+    return [...this.cells].filter(([, e]) => e.state === 'waiting').sort((a, b) => a[1].since - b[1].since || a[1].order - b[1].order);
   }
 
   private clear(entry: Entry) {
@@ -138,9 +153,28 @@ export class StickerBreath {
     }
     const [key, entry] = next;
     entry.state = 'playing';
+    const turn = ++entry.turn;
     this.lastStart = this.now();
-    entry.cell.play();
-    entry.timer = setTimeout(() => this.played(key), entry.cell.loopMs * 2 + PLAY_TAIL_MS);
+    const length = entry.cell.loopMs * 2 + PLAY_TAIL_MS;
+    // Until its file is showing the turn is held, but no longer than a play would last: one that never comes gives
+    // its turn up then.
+    entry.timer = setTimeout(() => this.played(key, turn), length);
+    const showing = entry.cell.play();
+    if (showing && typeof showing.then === 'function') {
+      const current = () => this.cells.get(key) === entry && entry.state === 'playing' && entry.turn === turn;
+      showing.then(
+        () => {
+          if (!current()) return;
+          // Showing now: its two loops from here.
+          this.clear(entry);
+          entry.timer = setTimeout(() => this.played(key, turn), length);
+        },
+        // A file that couldn't be shown (offline, the site failing) holds its turn the play's whole length, as one
+        // that never comes does: given up at once, the turns would go round failing cells as fast as they free up —
+        // a fetch every 80 ms for as long as the picker is open.
+        () => {},
+      );
+    }
     this.pump();
   }
 
@@ -153,10 +187,11 @@ export class StickerBreath {
     }, ms);
   }
 
-  /** A play ran its two loops: back on its key frame, its turn free, and after a rest it waits again. */
-  private played(key: string): void {
+  /** A play ran its two loops (or couldn't be shown): back on its key frame, its turn free, and after a rest it waits again. */
+  private played(key: string, turn: number): void {
     const entry = this.cells.get(key);
-    if (!entry || entry.state !== 'playing') return;
+    if (!entry || entry.state !== 'playing' || entry.turn !== turn || this.disposed) return;
+    this.clear(entry);
     entry.cell.stop();
     entry.state = 'resting';
     const [lo, hi] = BREATH_REST_MS;
@@ -164,6 +199,7 @@ export class StickerBreath {
       entry.timer = null;
       if (entry.state !== 'resting') return;
       entry.state = 'waiting';
+      entry.since = this.now();
       this.pump();
     }, lo + this.random() * (hi - lo));
     this.pump();

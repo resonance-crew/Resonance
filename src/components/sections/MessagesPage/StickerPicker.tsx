@@ -240,8 +240,9 @@ export function StickerPicker({ recents, onPick, variant = 'panel', gridRef }: S
 
 /**
  * One sticker of the grid: its key frame at rest, its file while its turn lasts (a fresh address each play, so an
- * `<img>` starts it from its first frame: the file's loop count is baked in). A press washes its cell in the
- * terracotta's light tint (the drawn outline, never a CSS box); a tap sends it.
+ * `<img>` starts it from its first frame: the file's loop count is baked in). A play answers once its file is showing
+ * (its loops are timed from then, a first fetch taking a while); a file arriving after its turn ended is never shown.
+ * A press washes its cell in the terracotta's light tint (the drawn outline, never a CSS box); a tap sends it.
  */
 function PickerCell({
   cellKey,
@@ -266,6 +267,8 @@ function PickerCell({
   const ref = useRef<HTMLButtonElement>(null);
   const url = useRef<string | null>(null);
   const alive = useRef(true);
+  // Its plays, counted: a stop ends the one under way, so its file, arriving late, is let be.
+  const turn = useRef(0);
   const loopMs = stickerOf(sticker.pack, sticker.id)?.durationMs ?? 2000;
 
   const letGo = (address: string | null) => {
@@ -280,18 +283,18 @@ function PickerCell({
     const unregister = register(cellKey, order, el, {
       loopMs,
       play: () => {
-        void stickerBlob(anim).then(
-          (blob) => {
-            if (!alive.current) return;
-            const before = url.current;
-            url.current = URL.createObjectURL(blob);
-            setSrc(url.current);
-            letGo(before);
-          },
-          () => undefined,
-        );
+        const mine = ++turn.current;
+        return stickerBlob(anim).then((blob) => {
+          // Its turn is over (out of view, its time up, the picker gone): never shown, no address made for it.
+          if (!alive.current || turn.current !== mine) return;
+          const before = url.current;
+          url.current = URL.createObjectURL(blob);
+          setSrc(url.current);
+          letGo(before);
+        });
       },
       stop: () => {
+        turn.current++;
         if (!alive.current) return;
         const before = url.current;
         url.current = null;

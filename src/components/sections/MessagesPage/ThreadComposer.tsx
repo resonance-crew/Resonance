@@ -12,6 +12,7 @@ import {
   type Ref,
   type RefObject,
 } from 'react';
+import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import { useLocale, useTranslations } from 'next-intl';
 import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
@@ -261,6 +262,19 @@ export function ThreadComposer({
   const [recents, setRecents] = useState<StickerRef[]>([]);
   const lastSticker = useRef<{ key: string; at: number } | null>(null);
   const smileRef = useRef<HTMLSpanElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  // Where the popover lay, for STICKER_REPEAT_MS after a sticker sent from it closed it: the old two-click habit's
+  // second click lands on nothing there, never on the thread under it (a card, a link, a picture).
+  const [catcher, setCatcher] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const catcherTimer = useRef<number | null>(null);
+  const dropCatcher = useCallback(() => {
+    if (catcherTimer.current != null) window.clearTimeout(catcherTimer.current);
+    catcherTimer.current = null;
+    setCatcher(null);
+  }, []);
+  useEffect(() => () => {
+    if (catcherTimer.current != null) window.clearTimeout(catcherTimer.current);
+  }, []);
   const stackRef = useRef<HTMLDivElement>(null);
   const capsuleRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -285,6 +299,7 @@ export function ThreadComposer({
     }
     if (uid) setRecents(readRecentStickers(uid));
     if (desktop) {
+      dropCatcher();
       setStickers('popover');
       return;
     }
@@ -324,7 +339,18 @@ export function ThreadComposer({
     if (!send({ text: '', sticker: ref })) return;
     lastSticker.current = { key, at: now };
     if (uid) noteRecentSticker(uid, ref);
-    if (stickers === 'popover') closeStickers(true);
+    if (stickers === 'popover') {
+      const box = popoverRef.current?.getBoundingClientRect();
+      if (box) {
+        dropCatcher();
+        setCatcher({ top: box.top, left: box.left, width: box.width, height: box.height });
+        catcherTimer.current = window.setTimeout(() => {
+          catcherTimer.current = null;
+          setCatcher(null);
+        }, STICKER_REPEAT_MS);
+      }
+      closeStickers(true);
+    }
   }
 
   // Escape closes the panel (the popover has its own).
@@ -546,20 +572,29 @@ export function ThreadComposer({
 
   // --- What rides along ----------------------------------------------------------------------------------------
   // A reply chosen is said once to a screen reader (「回覆 bob」), the focus staying in the field; one brought back
-  // with a draft is not news.
+  // with a draft is not news — until it is put away or another takes its place: chosen again, it is said.
   const [said, setSaid] = useState('');
   const replyId = replyingTo?.id ?? null;
   const replySeen = useRef<string | null>(replyId);
   useEffect(() => {
+    if (draftReply.current && replySeen.current === draftReply.current && replyId !== draftReply.current) draftReply.current = null;
+    // The region empties whenever the reply changes or goes: nothing stale stays to be read later.
+    setSaid('');
     if (!replyId || replyId === replySeen.current || replyId === draftReply.current) {
       replySeen.current = replyId;
       return;
     }
     replySeen.current = replyId;
-    setSaid(replyHandle ? t('replyingTo', { handle: replyHandle }) : t('replyingToSelf'));
-    // Said, then gone from the page (nothing stale is read later).
+    const words = replyHandle ? t('replyingTo', { handle: replyHandle }) : t('replyingToSelf');
+    // Said on the next frame, after the emptying: the same words for another reply still change the region.
+    const frame = window.requestAnimationFrame(() => setSaid(words));
+    // Said, then gone from the page.
     const id = window.setTimeout(() => setSaid(''), 1500);
-    return () => window.clearTimeout(id);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(id);
+      setSaid('');
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [replyId]);
 
@@ -784,10 +819,31 @@ export function ThreadComposer({
 
       {/* With a mouse the stickers hang over the capsule's top edge — over what rides in it too, never on it. */}
       {stickers === 'popover' && smileRef.current && capsuleRef.current && (
-        <StickerPopover anchor={smileRef.current} above={capsuleRef.current} onClose={() => closeStickers(true)}>
+        <StickerPopover anchor={smileRef.current} above={capsuleRef.current} boxRef={popoverRef} onClose={() => closeStickers(true)}>
           {picker}
         </StickerPopover>
       )}
+      {/* Gone with the sticker sent, the popover's place takes the next click for a moment, quietly: the field
+          keeps writing (a press here takes no focus) and nothing under it hears the click. */}
+      {catcher &&
+        createPortal(
+          <div
+            className={styles.clickCatcher}
+            data-click-catcher=""
+            aria-hidden
+            style={catcher}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          />,
+          document.body,
+        )}
 
       {cardModalLoaded && (
         <InsertCardModal

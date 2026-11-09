@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
 import { PaperSheet } from '@/components/atoms/PaperSheet/PaperSheet';
@@ -21,6 +21,8 @@ export interface StickerPopoverProps {
   above?: HTMLElement;
   /** It goes (Escape, a press outside, the ☺ again): the focus goes back to the field. */
   onClose: () => void;
+  /** Its sheet, for the composer to know where it lay once it goes. */
+  boxRef?: RefObject<HTMLDivElement | null>;
   children: ReactNode;
 }
 
@@ -34,7 +36,7 @@ export interface StickerPopoverProps {
  * under it leaves it be: it holds what is being written, not a message) —
  * placed again only when the capsule's height changes.
  */
-export function StickerPopover({ anchor, above, onClose, children }: StickerPopoverProps) {
+export function StickerPopover({ anchor, above, onClose, boxRef, children }: StickerPopoverProps) {
   const t = useTranslations('messages');
   const root = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<{ top: number; left: number } | null>(null);
@@ -86,7 +88,10 @@ export function StickerPopover({ anchor, above, onClose, children }: StickerPopo
 
   return createPortal(
     <div
-      ref={root}
+      ref={(el) => {
+        root.current = el;
+        if (boxRef) boxRef.current = el;
+      }}
       className={styles.stickerPopover}
       role="dialog"
       aria-label={t('stickers')}

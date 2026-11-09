@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, renderWithIntl, screen } from '@/../test/render';
 import { BREATH_STAGGER_MS } from '@/lib/chat/stickerBreath';
+import { stickerOf } from '@/lib/stickers/catalog';
 import { PICKER_PLAYING_PHONE, PICKER_PLAYING_WIDE, StickerPicker } from './StickerPicker';
 import { STICKER_POPOVER_H, STICKER_POPOVER_W } from './StickerPopover';
 
@@ -100,6 +101,41 @@ describe('the sticker picker', () => {
     await settle();
     expect(moving()).toHaveLength(PICKER_PLAYING_WIDE);
     expect(PICKER_PLAYING_WIDE).toBe(12);
+  });
+
+  // Round 23 review: a first play fetches its file, which may take a while — its loops run from when it shows, and
+  // a file arriving once its turn is over is never shown (nor moving outside the limit).
+  it('times a play from when its file is showing, and never shows one that comes after its turn ended', async () => {
+    const answers = new Map<string, () => void>();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => new Promise<Response>((resolve) => answers.set(url, () => resolve(new Response(new Blob(['webp'])))))),
+    );
+    renderWithIntl(<StickerPicker recents={[]} onPick={() => {}} />);
+    // The last pack's last two: no test before fetched them (a file is kept for the page's life once read).
+    const [slow, late] = cells().slice(-2);
+    const answer = (cell: HTMLElement) => [...answers].find(([url]) => url.startsWith(`/stickers/${cell.dataset.sticker}.webp`))![1];
+    show([slow, late], 1);
+    act(() => void vi.advanceTimersByTime(BREATH_STAGGER_MS * 2));
+    await settle();
+    expect(answers.size).toBe(2);
+    expect(moving()).toEqual([]);
+    // One leaves the view while its file is on its way; the other's comes two seconds after it was asked for.
+    show([late], 0);
+    act(() => void vi.advanceTimersByTime(2000));
+    answer(slow)();
+    answer(late)();
+    await settle();
+    expect(moving()).toEqual([slow]);
+    expect(late.querySelector('img')!.getAttribute('src')).toMatch(/\.thumb\.webp/);
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    // Its two loops from when it showed: still moving just before their end, on its key frame at it.
+    const [pack, id] = slow.dataset.sticker!.split('/');
+    const play = stickerOf(pack, id)!.durationMs * 2 + 120;
+    act(() => void vi.advanceTimersByTime(play - 1));
+    expect(moving()).toEqual([slow]);
+    act(() => void vi.advanceTimersByTime(1));
+    expect(moving()).toEqual([]);
   });
 
   it('starts no cell while the grid scrolls', async () => {
