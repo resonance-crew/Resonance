@@ -164,7 +164,7 @@ async function reset(serial: string, v: Variant) {
   await shell(serial, `cmd locale set-app-locales ${PACKAGE} --locales ${v.locale}`);
 }
 
-async function launch(serial: string, ctx: CaptureContext, account: Account | null, route: string | null) {
+async function launch(serial: string, ctx: CaptureContext, account: Account | null, route: string | null, extra: readonly string[] = []) {
   const args = [
     'am', 'start', '-S', '-n', ACTIVITY,
     '--ez', 'emulator', 'true',
@@ -175,6 +175,8 @@ async function launch(serial: string, ctx: CaptureContext, account: Account | nu
   ];
   if (account) args.push('--es', 'email', `${account}@resonance.test`, '--es', 'password', SEED_PASSWORD);
   if (route) args.push('--es', 'route', route);
+  // The screen's own debug extras (`app.android` in screens.ts): a panel open, something riding the composer.
+  args.push(...extra);
   await adb(serial, 'shell', ...args);
 }
 
@@ -197,7 +199,7 @@ async function steady(serial: string): Promise<{ png: Buffer; settled: boolean }
 }
 
 async function shoot(serial: string, ctx: CaptureContext, screen: Screen, first: boolean) {
-  await launch(serial, ctx, screen.as, screen.route);
+  await launch(serial, ctx, screen.as, screen.route, screen.app?.android);
   // A cold start reads the account and the page over the network (an account's first launch also signs in).
   await sleep(first ? 8000 : 4000);
   await demoBar(serial);

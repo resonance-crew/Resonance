@@ -119,7 +119,7 @@ export const captureMac: Capture = async (ctx) => {
     await sleep(10_000);
     quit(signIn.pid);
     for (const screen of group) {
-      const window = await launch(launchArgs(ctx, account, screen.route, v));
+      const window = await launch(launchArgs(ctx, account, screen.route, v, screen.app?.mac ?? screen.app?.ios));
       try {
         const name = shotName(screen, v);
         const { png, settled } = await shoot(window, ctx);

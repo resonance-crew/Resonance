@@ -30,12 +30,34 @@ export type Screen = {
   /** CSS selectors the web capture paints over (things that change by themselves). */
   mask?: string[];
   /**
-   * The web's own way to it, where the site has no such page (the apps' 通知 tab is a bell's panel
-   * here): another path, and a CSS selector clicked once that page is ready.
+   * The web's own way to it: where the site has no such page (the apps' 通知 tab is a bell's panel
+   * here) another path; a CSS selector clicked once the page is ready; and what this browser keeps
+   * for it, written to the site's localStorage before the page opens and taken away before the next
+   * screen (a conversation's draft, `lib/data/chatDrafts`).
    */
-  web?: { route: string; click: string };
+  web?: { route?: string; click?: string; storage?: Record<string, string> };
+  /**
+   * The apps' own debug launch arguments for it, after the account and the route (apps/README.md):
+   * iOS's `-key value` pairs, Android's `am start` extras (`--es key value`). The Mac takes `mac`, else
+   * iOS's (the same target).
+   */
+  app?: { ios?: string[]; android?: string[]; mac?: string[] };
   /** Share of pixels that may differ (beyond diff.ts's shift) before an area counts as changed: for a screen that moves a little by itself. */
   maxDiff?: number;
+};
+
+/**
+ * alice's draft in her conversation with bob (the web's `thread-reply`): answering bob's newest
+ * message (his note on her letter) with her newest published card riding — what the apps' `visualRide
+ * replyCard` sets up. Kept as of the run (a draft older than 30 days is none).
+ */
+export const REPLY_CARD_DRAFT: Record<string, string> = {
+  'resonance:draft:alice:alice_bob': JSON.stringify({
+    text: '',
+    replyTo: { id: 'n-bob-letter', senderId: 'bob', text: '你的信讓我想起我自己的十年前。' },
+    cardId: 'alice-reply',
+    at: Date.now(),
+  }),
 };
 
 export const SCREENS: Screen[] = [
@@ -67,6 +89,16 @@ export const SCREENS: Screen[] = [
     expect: "The conversation list: bob (his note's words as the last line) and carol (her letter, waiting for an answer)" },
   { id: 'thread', route: '/messages/bob', as: 'alice',
     expect: "The thread with bob: a bubble with a heart reaction chip in its gutter, a 小紙團 sticker (牽牽 謝謝) with no bubble, alice's reply quoting his first line (a hug reaction), one dashed unsent line, bob's note quoting alice's card 寫給十年前的自己 above its words, the floating composer capsule (＋, field, ☺, send) at the foot" },
+  // Round 23: the sticker panel (a popover on the web's desktop and the Mac), captured still.
+  { id: 'thread-stickers', route: '/messages/bob', as: 'alice',
+    web: { click: 'button[aria-label="貼圖"], button[aria-label="Stickers"]' },
+    app: { ios: ['-threadPanel', 'stickers'], android: ['--es', 'threadPanel', 'stickers'] },
+    expect: "The thread with bob, the 小紙團 sticker panel open in the keyboard's place (on the web's desktop and the Mac a popover of four columns standing on the capsule's top edge): the pack bar of the five heads, then the grid of bigger cells, four to a row on phones (six on tablets), no preview sheet over the capsule" },
+  // Round 23: what rides the next message, inside the capsule.
+  { id: 'thread-reply', route: '/messages/bob', as: 'alice',
+    web: { storage: REPLY_CARD_DRAFT },
+    app: { ios: ['-visualRide', 'replyCard'], android: ['--es', 'visualRide', 'replyCard'] },
+    expect: "The thread with bob, alice's composer answering bob's newest message (his note 你的信讓我想起我自己的十年前。) with her card 我也在雨裡走過 riding: both rows inside the capsule's outline over its text line — the reply's wavy rule and the card's tile over the ＋, their words where the text starts, each ✕ over Send — Send the 52 × 48 block at the bottom right, nothing riding above the capsule" },
   { id: 'thread-letter', route: '/messages/carol', as: 'alice',
     expect: "carol's letter to alice (not connected): her note quoting alice's card 搬家後的第一個安靜夜晚, and the hint that replying connects them" },
   { id: 'notifications', route: '/notifications', as: 'alice',
