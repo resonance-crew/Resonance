@@ -649,8 +649,11 @@ export function ThreadComposer({
           focusField();
         }}
         onKeyDown={(e) => {
-          // Escape puts the reply away when nothing else is open over the field (a panel or the popover go first).
+          // Escape puts the reply away when nothing else is open over the field: a panel, the popover or the ＋'s
+          // menu (a portal whose keys reach here through React) goes first.
           if (e.key !== 'Escape' || e.defaultPrevented || !replyingTo || stickers !== 'closed') return;
+          const capsule = capsuleRef.current;
+          if (!capsule?.contains(e.target as Node) || capsule.querySelector('[aria-expanded="true"]')) return;
           e.preventDefault();
           onCancelReply();
           focusField();

@@ -158,6 +158,48 @@ describe('what rides the next message', () => {
     expect(onCancelReply).toHaveBeenCalledTimes(1);
   });
 
+  it('lets Escape close the ＋’s menu first, the reply staying', async () => {
+    const u = userEvent.setup({ pointerEventsCheck: 0 });
+    const onCancelReply = vi.fn();
+    renderWithIntl(composer({ replyingTo: { id: 'm1', senderId: 'alice', text: 'rain' }, replyHandle: 'alice', onCancelReply }));
+    await u.click(screen.getByRole('button', { name: 'Attach a photo or a card' }));
+    expect(screen.getByRole('menuitem', { name: 'Card' })).toBeInTheDocument();
+    await u.keyboard('{Escape}');
+    expect(screen.queryByRole('menuitem', { name: 'Card' })).toBeNull();
+    expect(onCancelReply).not.toHaveBeenCalled();
+  });
+
+  // Round 23 (the critic's §8): a sticker sent that takes the reply riding with it drops the capsule from 98 to 48
+  // while the panel is grown: the panel is measured again, so the capsule stays under the header.
+  it('measures the grown panel again when the capsule’s height changes under it', async () => {
+    asDesktop(false);
+    const observers: ResizeObserverCallback[] = [];
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(cb: ResizeObserverCallback) {
+        observers.push(cb);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    let stackH = 98;
+    const offsetHeight = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.className.includes('composerStack') ? stackH : 48;
+    });
+    renderWithIntl(composer({ expandRoom: () => 700, replyingTo: { id: 'm1', senderId: 'alice', text: 'rain' }, replyHandle: 'alice' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Stickers' }));
+    const panel = document.querySelector<HTMLElement>('[class*="stickerPanel"]')!;
+    // At rest: the keyboard's height (as it was last).
+    const base = parseFloat(panel.style.height);
+    await userEvent.click(screen.getByRole('button', { name: 'Expand stickers' }));
+    expect(panel.style.height).toBe(`${700 - 98 + base - 8}px`);
+    stackH = 48;
+    act(() => observers.forEach((cb) => cb([], {} as ResizeObserver)));
+    expect(panel.style.height).toBe(`${700 - 48 + base - 8}px`);
+    offsetHeight.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
   it('says a reply chosen to a screen reader once, and not one brought back with a draft', () => {
     const quote = { id: 'm9', senderId: 'alice', text: 'rain' };
     const view = renderWithIntl(composer({ replyHandle: 'alice' }));
