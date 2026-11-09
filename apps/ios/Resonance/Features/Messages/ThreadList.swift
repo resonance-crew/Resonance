@@ -102,6 +102,19 @@ struct MessageMenu {
     let frame: CGRect
     let link: URL?
     var onLink = false
+
+    /// The menu over the message as `find` gives it now (round 23 §1): held while it was still on its way (傳送中 —
+    /// a sticker just sent, which one tap sends now), the menu was built from the sending row and stayed empty; read
+    /// again on every draw, it fills in — the tray, 回覆, 收回 — once the message is delivered. A message `find` no
+    /// longer knows keeps the row it was held as. An album's picture is held as a row of its own (no album).
+    func live(_ find: (String) -> ChatMessage?) -> MessageMenu {
+        guard let now = find(row.message.key), now != row.message else { return self }
+        let fresh = ThreadRow(message: now, position: row.position, dayLabel: row.dayLabel, timeLabel: row.timeLabel,
+                              album: row.album.map { album in album.map { $0.key == now.key ? now : (find($0.key) ?? $0) } })
+        return MessageMenu(row: fresh, frame: frame, link: link, onLink: onLink)
+    }
+
+    func live(in model: ThreadModel) -> MessageMenu { live { model.message($0) } }
 }
 
 /// How far up the thread is scrolled (in screens) before "latest messages" offers the way back down.

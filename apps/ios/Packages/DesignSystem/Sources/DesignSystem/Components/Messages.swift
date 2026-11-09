@@ -674,12 +674,13 @@ public struct SharedCardSkeleton: View {
 
 // MARK: - Composer
 
-/// The chat composer's measures (round 9 §4, round 10 §3), the same on the web and Android: one
-/// floating capsule exactly 48 tall for a line of text at any text size, ＋ (44 wide) at its start,
-/// Send as its 52-wide end segment; 14 from the screen's sides, 8 over the bottom safe area (or the
-/// keyboard), at most 720 wide; what rides with the message in rows 6 above it. Behind them the foot's
-/// paper (``ComposerBacking``) across the whole pane, its top `fade` (12) a fade into it — never a halo,
-/// never a shadow.
+/// The chat composer's measures (round 9 §4, round 10 §3, round 23 §2), the same on the web and Android: one
+/// floating capsule exactly 48 tall for a line of text at any text size, ＋ (44 wide) at its start, Send as its
+/// 52-wide end segment; 14 from the screen's sides, 8 over the bottom safe area (or the keyboard), at most 720
+/// wide. What rides with the message rides INSIDE it (round 23, Telegram's way): rows over the text line in three
+/// columns that run top to bottom — a mark in ＋'s column, the words where the text starts, a ✕ in Send's
+/// column. Behind the capsule the foot's paper (``ComposerBacking``) across the whole pane, its top `fade` (12)
+/// a fade into it over the capsule's top edge — never a halo, never a shadow.
 public nonisolated enum ComposerMetrics {
     /// The capsule with one line in it, whatever the text size (only more lines make it taller).
     public static let height: CGFloat = 48
@@ -689,49 +690,70 @@ public nonisolated enum ComposerMetrics {
     /// The send segment, the capsule's end.
     public static let sendWidth: CGFloat = 52
     public static let sendGlyph: CGFloat = 20
-    /// The foot's paper fades in over its top 12 (round 11 §3: just enough to see it is a fade), from the
-    /// top edge of what the foot shows first: over the capsule's top 12 when nothing rides with the
-    /// message; from the top of `rideFadeRoom` over the topmost riding row when something does.
+    /// The foot's paper fades in over its top 12 (round 11 §3: just enough to see it is a fade), over the
+    /// capsule's top 12 — with or without rows riding inside it (round 23: no extra room, no extra fade).
     public static let fade: CGFloat = 12
-    /// What the foot gains over its riding rows (the owner's notes 2026-10-31): the whole fade, then
-    /// `slipGap` of solid paper — so the paper over the rows' first ink (a picture, a card's tile, the
-    /// reply's rule, a label) is as deep as under their last ink down to the capsule.
-    public static let rideFadeRoom: CGFloat = fade + slipGap
     /// The capsule over the bottom safe area or the keyboard.
     public static let bottomGap: CGFloat = 8
     /// A pane the capsule doesn't fill (2026-11-01, the owner's notes: it is at its widest, room beside it past the
     /// gutter — an iPad, the Mac): the thread shows beside the capsule and nowhere else — it sinks into a fade this
     /// tall at the foot (from 20 over the capsule's foot down past its 8), while a column of paper exactly the
-    /// capsule's width runs from it (or from 8 over what rides with it) to the screen's foot, its sides fading in over
+    /// capsule's width runs from the capsule's middle to the screen's foot, its sides fading in over
     /// `wideSideFade` from the capsule's edges (the clear edge on its border, no fade past it). The web's `.dock`
     /// in a pane over 748.
     public static let wideFootFade: CGFloat = bottomGap + 20
     public static let wideSideFade: CGFloat = 12
-    /// Over riding rows in a wide pane: the column starts this far over them, its top `wideRideFade` a fade, its
-    /// top corners round by `wideRideRadius` inside the side fade; the rows stand `wideRideInset` further in, their ✕
-    /// `wideRideEndInset` (clear of the fading side).
-    public static let wideRideLead: CGFloat = 8
-    public static let wideRideFade: CGFloat = 10
-    public static let wideRideRadius: CGFloat = 16
-    public static let wideRideInset: CGFloat = 4
-    public static let wideRideEndInset: CGFloat = 12
     public static func widePane(_ width: CGFloat) -> Bool { width > maxWidth }
-    /// The last row (or a notice) over the capsule.
-    public static let slipGap: CGFloat = 6
-    /// A riding row: at least 52 tall, 4 over and under its content, which starts 12 in from the
-    /// capsule's start edge; 10 from its lead to its words; a 40 × 40 picture or tile, a tile's glyph 18.
-    public static let rowMinHeight: CGFloat = 52
-    public static let rowPadY: CGFloat = 4
-    public static let rowStart: CGFloat = 12
-    public static let rowLeadGap: CGFloat = 10
-    public static let rowThumb: CGFloat = 40
-    public static let rowGlyph: CGFloat = 18
+
+    // What rides inside the capsule (round 23 §2, SETTLED): one number each, pinned on all three platforms.
+
+    /// The rows' block under the pen line: its top padding (the wobble's reach and half the pen), nothing between
+    /// rows, nothing between the last row and the text line (the text's own padding is the gap).
+    public static let ridingTop: CGFloat = 6
+    /// A riding row (the reply, the note answered, the card); one line of 36 on a short viewport.
+    public static let rowHeight: CGFloat = 44
+    public static let shortRowHeight: CGFloat = 36
+    /// The lead column is ＋'s own: a mark of at most 32 centred in it (6 clear each side) — the reply's wavy rule
+    /// (6 wide, the row less 16), the note's glyph tile, the card's cover tile, the error's small mark.
+    public static let leadColumn: CGFloat = attachWidth
+    public static let leadMark: CGFloat = 32
+    public static let replyRuleInset: CGFloat = 8
+    /// A tile's glyph (the note, a card with no cover).
+    public static let rowGlyph: CGFloat = 16
+    /// A reply's media — a quoted sticker (faded), picture or card's cover — at the start of the text column.
+    public static let replyMedia: CGFloat = 36
+    public static let replyMediaGap: CGFloat = 8
+    /// The picture strip: 8 + 56 + 8 (thumbnails 44 on a short viewport), spanning the capsule's inner width
+    /// `stripInset` in from each side, so nothing crosses the wobbly pen line.
+    public static let stripPad: CGFloat = 8
+    public static let stripThumb: CGFloat = 56
+    public static let shortStripThumb: CGFloat = 44
+    public static let stripInset: CGFloat = 8
+    public static func stripHeight(short: Bool = false) -> CGFloat { stripPad * 2 + (short ? shortStripThumb : stripThumb) }
+    /// Why the last try didn't go: at least 32 tall, its words 12.5 in terracotta.
+    public static let errorMinHeight: CGFloat = 32
+    public static let errorSize: CGFloat = 12.5
+    /// A row's words: the label over the detail (12 / 12.5), 13 / 14 on the Mac (its 77 % would make them ~9 pt).
+    public static func rowLabelSize(mac: Bool) -> CGFloat { mac ? 13 : 12 }
+    public static func rowDetailSize(mac: Bool) -> CGFloat { mac ? 14 : 12.5 }
+
+    /// How tall the riding block is: its top padding, a row per reply / note / card, the strip, the error line (as
+    /// tall as its words, at least 32) — nothing at all when nothing rides.
+    public static func ridingHeight(rows: Int, pictures: Bool, error: CGFloat? = nil, short: Bool = false) -> CGFloat {
+        guard rows > 0 || pictures || error != nil else { return 0 }
+        let row = short ? shortRowHeight : rowHeight
+        return ridingTop + CGFloat(rows) * row + (pictures ? stripHeight(short: short) : 0) + (error.map { max(errorMinHeight, $0) } ?? 0)
+    }
+
     /// The screen's sides (the page gutter) and the widest the capsule is.
     public static let gutter: CGFloat = 14
     public static let maxWidth: CGFloat = 720
-    /// The text's size (× the interface scale) and its most lines before it scrolls.
+    /// The text's size (× the interface scale) and its most lines before it scrolls — three on a short viewport
+    /// (a phone on its side with the keyboard up: a reply and five lines would leave no thread).
     public static let textSize: CGFloat = 16
     public static let maxLines = 5
+    public static let shortMaxLines = 3
+    public static func maxLines(short: Bool) -> Int { short ? shortMaxLines : maxLines }
     /// The air from the capsule's (or the slip's) top to the newest message, the jump pill and 已複製
     /// (the web's --dock-clear; 12 sat the newest message on the capsule).
     public static let clearance: CGFloat = 20
@@ -742,7 +764,8 @@ public nonisolated enum ComposerMetrics {
     public static let textTrailing: CGFloat = 10
     /// Round 22: the capsule's tools are one button (v3, the owner's call): ☺ / ⌨ before the send segment the very
     /// size, glyph and press of ＋ at its start, and ⤢ / ⤡ — the same 44 square, a ghost — centred in the send column
-    /// at the capsule's top-right, `cornerInset` under its pen line (room above it as the send block has under its glyph).
+    /// at the top of the text area (under what rides; the capsule's top-right when nothing does), `cornerInset` under
+    /// it — never on a row's ✕ (round 23).
     public static let stickerWidth: CGFloat = attachWidth
     public static let stickerGlyph: CGFloat = attachGlyph
     public static let cornerGlyph: CGFloat = 18
@@ -750,8 +773,12 @@ public nonisolated enum ComposerMetrics {
     public static let cornerInset: CGFloat = 4
     /// ⤢ shows once the text runs to this many lines.
     public static let expandAtLines = 3
-    /// Grown over the thread on an iPad or the Mac: at most this share of the thread pane.
+    /// Grown over the thread on an iPad or the Mac: at most this share of the thread pane — the whole capsule,
+    /// what rides in it included.
     public static let expandedPaneShare: CGFloat = 0.6
+
+    /// Where ⤢ / ⤡'s square starts, from the capsule's top: under what rides, `cornerInset` into the text area.
+    public static func cornerTop(riding: CGFloat) -> CGFloat { riding + cornerInset }
 
     /// The text's padding above and below so a line `lineHeight` tall sits centred in the 48 —
     /// computed from the line the text really draws at its size, so the capsule never grows from the
@@ -761,29 +788,36 @@ public nonisolated enum ComposerMetrics {
     }
 
     /// The capsule's pen (round 10 §3.3): the field's border at rest, its darker hover pen while it is
-    /// written in — darker, never another colour (it was terracotta).
+    /// written in — darker, never another colour (it was terracotta); never because something rides.
     public static func pen(focused: Bool) -> Color { focused ? Tokens.fieldBorderHover : Tokens.fieldBorder }
-
-    /// How much the foot adds over what it holds: `rideFadeRoom` when rows ride over the capsule (the fade,
-    /// then 6 of solid paper over the first row); nothing otherwise (it lies over the capsule's top 12).
-    public static func fadeRoom(riding: Bool) -> CGFloat { riding ? rideFadeRoom : 0 }
 
     /// ＋'s ink: muted at rest, the text ink while its menu is open (the web's bare trigger, `data-open`).
     public static func attachInk(open: Bool) -> Color { open ? Tokens.text : Tokens.textMuted }
 
     /// The send segment's seam: SegmentedActionBar's seed for the seam after the text.
     static func seamSeed(_ seed: Double) -> Double { seed + 11 }
+
+    /// The composer capsule's steady wobble (round 23): the one-line capsule's own amplitude and bow at every
+    /// height, two turns down each side — so no number its outline is drawn from follows its height, and a row
+    /// coming or going inside it (one tap) moves only its sides and its top: the foot edge under the thumb, ＋, ☺
+    /// and Send's corner stay where they were. At 48 tall it is today's capsule exactly (the same `wobRect`, the
+    /// same draws). `mag` × 0.95 × `curve` = 48 × 0.032 × 1.6, `wobRect`'s own cap at 48, so the amplitude never
+    /// changes; the corners' jitter is already the same from 48 up.
+    public static let steadyMag: Double = Double(height) * 0.032 / 0.95
+    public static let steadyCurve: Double = 1.6
+    public static let steadySegmentsV: Double = 2
 }
 
-/// The composer's capsule (round 9 §4, round 10 §3): one hand-drawn field shape — the field's wobble,
+/// The composer's capsule (round 9 §4, round 10 §3, round 23 §2): one hand-drawn field shape — the field's wobble,
 /// the cream paper, its pen at INK in the field's border, darker (the field's hover pen) while it is
-/// being written in, never a halo. Inside, ＋ as a ghost at its start, the text (`field`, no border of
-/// its own), and Send as its end segment: a wavy seam cut across the capsule in the paper's colour (the
-/// segmented bar's language), the segment's face the tonal peach with a terracotta plane at rest and
+/// being written in, never a halo. Inside, what rides with the message (`riding`: rows over the text line, inside
+/// the pen line — nothing over the capsule any more), then the text line: ＋ as a ghost at its start, the text
+/// (`field`, no border of its own), and Send as its end segment: a wavy seam cut across the capsule in the paper's
+/// colour (the segmented bar's language), the segment's face the tonal peach with a terracotta plane at rest and
 /// the solid terracotta with a cream plane once there is something to send (a 140 ms change). Send
-/// is disabled by its semantics, never faded. ＋ and the plane sit on the last line's row: a field grown
-/// to more lines keeps them at its foot.
-public struct ComposerCapsule<Field: View>: View {
+/// is disabled by its semantics, never faded. ＋, ☺ and the plane sit on the last line's row: a field grown
+/// to more lines, or rows riding, keep them at its foot.
+public struct ComposerCapsule<Field: View, Riding: View>: View {
     let focused: Bool
     let canSend: Bool
     /// ＋'s menu (圖片 · 卡片) is open: ＋ wears the web's open bare trigger — the text ink on a soft wobbly
@@ -802,17 +836,23 @@ public struct ComposerCapsule<Field: View>: View {
     var sendFace: ComposerSendFace = .send
     var faceLabel: String?
     var onFace: (() -> Void)?
-    /// More than one line (or grown over the thread, option C): the send segment is a 52 × 48 block on the last
-    /// row, its top-left corner rounded, with the column over it free for ⤢ / ⤡ — no longer the full-height strip.
+    /// More than one line, grown over the thread (option C), or something riding: the send segment is a 52 × 48
+    /// block on the last row, its top-left corner rounded, with the column over it free for ⤢ / ⤡ — no longer the
+    /// full-height strip.
     var block = false
+    /// The capsule's outline keeps its foot where it is whatever its height (``ComposerMetrics/steadyMag``):
+    /// the chat composer's; the publish step's tag field keeps the field's own wobble.
+    var steady = false
     @ViewBuilder let field: Field
+    @ViewBuilder let riding: Riding
     @State private var attachFrame: CGRect = .zero
     @State private var sendPressed = false
 
     public init(focused: Bool, canSend: Bool, attachOpen: Bool = false, seed: Double = 17, attachLabel: String, sendLabel: String,
                 stickers: ComposerSideButton? = nil, corner: ComposerSideButton? = nil, sendFace: ComposerSendFace = .send,
-                faceLabel: String? = nil, onFace: (() -> Void)? = nil, block: Bool = false,
-                onAttach: @escaping (CGRect) -> Void, onSend: @escaping () -> Void, @ViewBuilder field: () -> Field) {
+                faceLabel: String? = nil, onFace: (() -> Void)? = nil, block: Bool = false, steady: Bool = false,
+                onAttach: @escaping (CGRect) -> Void, onSend: @escaping () -> Void, @ViewBuilder field: () -> Field,
+                @ViewBuilder riding: () -> Riding) {
         self.focused = focused
         self.canSend = canSend
         self.attachOpen = attachOpen
@@ -825,15 +865,33 @@ public struct ComposerCapsule<Field: View>: View {
         self.faceLabel = faceLabel
         self.onFace = onFace
         self.block = block
+        self.steady = steady
         self.onAttach = onAttach
         self.onSend = onSend
         self.field = field()
+        self.riding = riding()
     }
 
     /// The segment acts: Send sends, ↑ / ↓ grow or shrink the sticker panel.
     private var segmentEnabled: Bool { sendFace == .send ? canSend : onFace != nil }
 
     public var body: some View {
+        VStack(spacing: 0) {
+            // What rides with the message, inside the pen line over the text line (round 23 §2).
+            riding
+            textLine
+                .frame(minHeight: ComposerMetrics.height)
+        }
+        // As tall as its rows and its text ask (and the segment with it) — never the height it is offered.
+        .fixedSize(horizontal: false, vertical: true)
+        .background {
+            ComposerCapsuleFace(seed: seed, focused: focused, canSend: canSend && sendFace == .send, pressed: sendPressed,
+                                block: block, steady: steady)
+        }
+    }
+
+    /// The text line: ＋, the text, ☺, and the send column (⤢ / ⤡ at its top, the block at its foot).
+    private var textLine: some View {
         HStack(alignment: .bottom, spacing: 0) {
             Button { onAttach(attachFrame) } label: {
                 OrganicIcon(.plus, size: ComposerMetrics.attachGlyph, color: ComposerMetrics.attachInk(open: attachOpen),
@@ -861,9 +919,10 @@ public struct ComposerCapsule<Field: View>: View {
                 .transition(.opacity)
             }
             // The send column: the block on the last row and, over it, ⤢ / ⤡ (round 22 v2) — or, one line, the segment.
+            // It is the text line's alone, so ⤢ / ⤡ stands at the top of the text area, under what rides (round 23).
             VStack(spacing: 0) {
                 if block {
-                    // ⤢ / ⤡ in the send column, at the capsule's top-right — where a full-screen control is looked for
+                    // ⤢ / ⤡ in the send column, at the text area's top-right — where a full-screen control is looked for
                     // and easy to reach — the block at its foot (the owner's call, round 22 v2).
                     if let corner {
                         sideButton(corner, width: ComposerMetrics.cornerSide) {
@@ -898,13 +957,6 @@ public struct ComposerCapsule<Field: View>: View {
             .frame(width: ComposerMetrics.sendWidth)
             .frame(maxHeight: .infinity, alignment: .bottom)
         }
-        .frame(minHeight: ComposerMetrics.height)
-        // As tall as its text asks (and the segment with it) — never the height it is offered.
-        .fixedSize(horizontal: false, vertical: true)
-        .background {
-            ComposerCapsuleFace(seed: seed, focused: focused, canSend: canSend && sendFace == .send, pressed: sendPressed,
-                                block: block)
-        }
     }
 
     /// The plane — or the sticker panel's ˄ / ˅ (round 22 §4.1): both always there, one showing, the chevron turned up
@@ -932,6 +984,19 @@ public struct ComposerCapsule<Field: View>: View {
         }
         .buttonStyle(OrganicPressStyle(inset: pressInset))
         .accessibilityLabel(spec.label)
+    }
+}
+
+extension ComposerCapsule where Riding == EmptyView {
+    /// A capsule with nothing riding in it.
+    public init(focused: Bool, canSend: Bool, attachOpen: Bool = false, seed: Double = 17, attachLabel: String, sendLabel: String,
+                stickers: ComposerSideButton? = nil, corner: ComposerSideButton? = nil, sendFace: ComposerSendFace = .send,
+                faceLabel: String? = nil, onFace: (() -> Void)? = nil, block: Bool = false, steady: Bool = false,
+                onAttach: @escaping (CGRect) -> Void, onSend: @escaping () -> Void, @ViewBuilder field: () -> Field) {
+        self.init(focused: focused, canSend: canSend, attachOpen: attachOpen, seed: seed, attachLabel: attachLabel,
+                  sendLabel: sendLabel, stickers: stickers, corner: corner, sendFace: sendFace, faceLabel: faceLabel,
+                  onFace: onFace, block: block, steady: steady, onAttach: onAttach, onSend: onSend, field: field,
+                  riding: { EmptyView() })
     }
 }
 
@@ -1009,16 +1074,29 @@ public struct BareTriggerDisc: View {
     }
 }
 
-/// The capsule's own shape: the field's wobble (FieldSurface's), radius 16.
+/// The capsule's own shape: the field's wobble (FieldSurface's), radius 16 — or, `steady` (the chat composer's,
+/// round 23), the one-line capsule's wobble at every height (``ComposerMetrics/steadyMag``), so its foot edge and
+/// corners never move when what rides in it comes or goes.
 public nonisolated struct ComposerCapsuleShape: Shape {
     public var seed: Double
+    public var steady: Bool
 
-    public init(seed: Double) {
+    public init(seed: Double, steady: Bool = false) {
         self.seed = seed
+        self.steady = steady
     }
 
     public func path(in rect: CGRect) -> Path {
-        WobRectShape(radius: ComposerMetrics.radius, seed: seed).path(in: rect)
+        guard steady else { return WobRectShape(radius: ComposerMetrics.radius, seed: seed).path(in: rect) }
+        return WobRectShape(radius: ComposerMetrics.radius, seed: seed, mag: ComposerMetrics.steadyMag,
+                            options: Self.steadyOptions(width: rect.width)).path(in: rect)
+    }
+
+    /// The steady outline's options: the bow and the turns down the sides fixed, the turns along the top and foot
+    /// the width's own (as `WobRectShape` picks them).
+    public static func steadyOptions(width: CGFloat) -> WobRectOptions {
+        WobRectOptions(curve: ComposerMetrics.steadyCurve, segmentsH: .count(Double(autoSegments(Double(width)))),
+                       segmentsV: .count(ComposerMetrics.steadySegmentsV))
     }
 }
 
@@ -1031,11 +1109,14 @@ struct ComposerCapsuleFace: View {
     let canSend: Bool
     let pressed: Bool
     var segmentWidth: CGFloat = ComposerMetrics.sendWidth
-    /// Grown over the thread (round 22 §4.3): the segment a block on the last row, its seam on its top and left.
+    /// Grown over the thread (round 22 §4.3), or something riding: the segment a block on the last row, its seam on
+    /// its top and left.
     var block = false
+    /// The chat composer's outline, whose foot stays put whatever rides in it (``ComposerCapsuleShape``).
+    var steady = false
 
     var body: some View {
-        let shape = ComposerCapsuleShape(seed: seed)
+        let shape = ComposerCapsuleShape(seed: seed, steady: steady)
         let segment = ComposerSendSegment(seed: seed, width: segmentWidth, block: block)
         ZStack {
             shape.fill(Tokens.cream)
@@ -1171,18 +1252,17 @@ public struct ComposerSlip<Content: View>: View {
 /// fade over the foot's last ``ComposerMetrics/wideFootFade``, and a column of paper as wide as the capsule
 /// from `wide.columnTop` down to the screen's foot (``ComposerColumnPaper``).
 public struct ComposerBacking: View {
-    /// A wide pane's foot: how tall it is, how wide its capsule, where the column starts, and whether rows ride.
+    /// A wide pane's foot: how tall it is, how wide its capsule, and where the column starts (the capsule's middle:
+    /// what rides rides inside the opaque capsule, round 23).
     public struct Wide: Equatable {
         public var footHeight: CGFloat
         public var capsuleWidth: CGFloat
         public var columnTop: CGFloat
-        public var riding: Bool
 
-        public init(footHeight: CGFloat, capsuleWidth: CGFloat, columnTop: CGFloat, riding: Bool) {
+        public init(footHeight: CGFloat, capsuleWidth: CGFloat, columnTop: CGFloat) {
             self.footHeight = footHeight
             self.capsuleWidth = capsuleWidth
             self.columnTop = columnTop
-            self.riding = riding
         }
     }
 
@@ -1208,7 +1288,7 @@ public struct ComposerBacking: View {
                         .contentShape(Rectangle())
                         .onTapGesture(perform: onTap)
                 }
-                ComposerColumnPaper(riding: wide.riding, onTap: onTap)
+                ComposerColumnPaper(onTap: onTap)
                     .frame(width: wide.capsuleWidth)
                     .padding(.top, wide.columnTop)
             }
@@ -1228,34 +1308,24 @@ public struct ComposerBacking: View {
 }
 
 /// The column of paper under a wide pane's capsule (``ComposerBacking``'s `wide`): exactly as wide as the capsule,
-/// fading in over ``ComposerMetrics/wideSideFade`` from each side; with rows `riding`, its top
-/// ``ComposerMetrics/wideRideFade`` a fade and its top corners round. Its taps are the paper's (`onTap`).
+/// fading in over ``ComposerMetrics/wideSideFade`` from each side, from under the capsule's middle down. Its taps are
+/// the paper's (`onTap`).
 public struct ComposerColumnPaper: View {
-    let riding: Bool
     let onTap: () -> Void
 
-    public init(riding: Bool, onTap: @escaping () -> Void) {
-        self.riding = riding
+    public init(onTap: @escaping () -> Void) {
         self.onTap = onTap
     }
 
     public var body: some View {
         let side = ComposerMetrics.wideSideFade
-        let radius = riding ? side + ComposerMetrics.wideRideRadius : 0
         GeometryReader { geo in
             let w = max(geo.size.width, side * 2 + 1)
-            let h = max(geo.size.height, 1)
-            UnevenRoundedRectangle(topLeadingRadius: radius, topTrailingRadius: radius)
-                .fill(Tokens.cream)
+            Tokens.cream
                 .mask {
                     LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: side / w),
                                            .init(color: .black, location: 1 - side / w), .init(color: .clear, location: 1)],
                                    startPoint: .leading, endPoint: .trailing)
-                }
-                .mask {
-                    LinearGradient(stops: [.init(color: riding ? .clear : .black, location: 0),
-                                           .init(color: .black, location: min(1, ComposerMetrics.wideRideFade / h))],
-                                   startPoint: .top, endPoint: .bottom)
                 }
         }
         .contentShape(Rectangle())
@@ -1264,59 +1334,98 @@ public struct ComposerColumnPaper: View {
     }
 }
 
-/// One thing riding with the message (round 10 §3.4), in the reply's style: its lead (the reply's
-/// wavy rule, a 40 × 40 picture, or a glyph on a tile — ``ComposerRowTile``), a label (12, semibold)
-/// over a detail (12.5, muted) — one line each, cut with … — and a ✕ a finger wide at the row's end.
-/// No frame: rows sit on the foot's paper in the composer's column, their content 12 in from the
-/// capsule's start edge, at least 52 tall, touching each other. A label alone is centred in its row.
-/// The lead and the words take no taps: a tap there is a tap on the paper (the keyboard goes away).
+/// One thing riding with the message (round 10 §3.4, round 23 §2: inside the capsule, Telegram's three columns): its
+/// mark centred in ＋'s column (`lead`: the reply's wavy rule, a 32 glyph or cover tile — ``ComposerRowTile``), then
+/// where the text starts a reply's media if it has one (`media`, 36) and its words — a label (12, semibold) over a
+/// detail (12.5, muted), one line each, cut with …; 13 / 14 on the Mac; on a short viewport one line of 36,
+/// label · detail — and a ✕ a finger wide centred in Send's column. 44 tall; no frame, no divider: the rows touch.
+/// A tap on the words is the row's (`onTap`: the reply's jumps to the message it answers, the others give the
+/// field the keyboard); a tap anywhere in the row never puts the keyboard away, and the ✕ leaves it where it is.
 /// `onRemove` nil: nothing to take away yet (a picture still being readied), its room kept.
-public struct ComposerRow<Lead: View>: View {
+public struct ComposerRow<Lead: View, Media: View>: View {
     let label: String
     let detail: String?
     let removeLabel: String
     let onRemove: (() -> Void)?
+    var onTap: (() -> Void)?
+    /// One line of 36 (a short viewport: a phone on its side with the keyboard up).
+    var short = false
     let lead: Lead
+    let media: Media
 
-    public init(label: String, detail: String? = nil, removeLabel: String, onRemove: (() -> Void)?,
-                @ViewBuilder lead: () -> Lead) {
+    public init(label: String, detail: String? = nil, removeLabel: String, onRemove: (() -> Void)?, onTap: (() -> Void)? = nil,
+                short: Bool = false, @ViewBuilder lead: () -> Lead, @ViewBuilder media: () -> Media) {
         self.label = label
         self.detail = detail
         self.removeLabel = removeLabel
         self.onRemove = onRemove
+        self.onTap = onTap
+        self.short = short
         self.lead = lead()
+        self.media = media()
     }
 
+    private static var mac: Bool { ProcessInfo.processInfo.isMacCatalystApp || ProcessInfo.processInfo.isiOSAppOnMac }
+
     public var body: some View {
-        HStack(spacing: ComposerMetrics.rowLeadGap) {
+        let mac = Self.mac
+        let labelFont = AppFonts.body(ComposerMetrics.rowLabelSize(mac: mac), weight: .semibold)
+        let detailFont = AppFonts.body(ComposerMetrics.rowDetailSize(mac: mac))
+        let shown = detail.flatMap { $0.isEmpty ? nil : $0 }
+        HStack(spacing: 0) {
             lead
+                .frame(width: ComposerMetrics.leadColumn)
                 .allowsHitTesting(false)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(label).font(AppFonts.body(12, weight: .semibold)).foregroundStyle(Tokens.text).lineLimit(1)
-                if let detail, !detail.isEmpty {
-                    Text(detail).font(AppFonts.body(12.5)).foregroundStyle(Tokens.textMuted).lineLimit(1)
+            HStack(spacing: ComposerMetrics.replyMediaGap) {
+                media
+                Group {
+                    if short {
+                        // One line: the label, then the detail after a dot.
+                        let head = Text(verbatim: label).font(labelFont).foregroundStyle(Tokens.text)
+                        let tail = Text(verbatim: shown.map { " · " + $0 } ?? "").font(detailFont).foregroundStyle(Tokens.textMuted)
+                        Text("\(head)\(tail)").lineLimit(1)
+                    } else {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(label).font(labelFont).foregroundStyle(Tokens.text).lineLimit(1)
+                            if let shown {
+                                Text(shown).font(detailFont).foregroundStyle(Tokens.textMuted).lineLimit(1)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .onTapGesture { onTap?() }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(onTap != nil ? .isButton : [])
+            Group {
+                if let onRemove {
+                    OrganicIconButton(.close, label: removeLabel, size: 16, action: onRemove)
+                } else {
+                    Color.clear.frame(width: 44, height: 44)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .allowsHitTesting(false)
-            if let onRemove {
-                OrganicIconButton(.close, label: removeLabel, size: 16, action: onRemove)
-            } else {
-                Color.clear.frame(width: 44, height: 44)
-            }
+            // The ✕ centred in Send's column, under the capsule's end.
+            .frame(width: ComposerMetrics.sendWidth)
         }
-        .padding(.vertical, ComposerMetrics.rowPadY)
-        .padding(.leading, ComposerMetrics.rowStart)
-        // The ✕'s glyph on the send plane's line, under the capsule's end.
-        .padding(.trailing, (ComposerMetrics.sendWidth - 44) / 2)
-        .frame(minHeight: ComposerMetrics.rowMinHeight)
+        .frame(height: short ? ComposerMetrics.shortRowHeight : ComposerMetrics.rowHeight)
         .accessibilityElement(children: .contain)
     }
 }
 
-/// A riding row's 40 × 40 lead, rounded as the chips were (12 / 14): a picture cover-cropped (or the
-/// pen's loader while it is readied), a card's cover, or a glyph (18) on the tonal tile — the
-/// terracotta light mixed into the paper, the chips' old face.
+extension ComposerRow where Media == EmptyView {
+    public init(label: String, detail: String? = nil, removeLabel: String, onRemove: (() -> Void)?, onTap: (() -> Void)? = nil,
+                short: Bool = false, @ViewBuilder lead: () -> Lead) {
+        self.init(label: label, detail: detail, removeLabel: removeLabel, onRemove: onRemove, onTap: onTap, short: short,
+                  lead: lead, media: { EmptyView() })
+    }
+}
+
+/// A riding row's tile (round 23: 32 in ＋'s column, 36 as a reply's media), rounded as the chips were (12 / 14 at
+/// 40, in proportion): a picture cover-cropped (or the pen's loader while it is readied), a card's cover, or a glyph
+/// (16) on the tonal tile — the terracotta light mixed into the paper, the chips' old face.
 public struct ComposerRowTile: View {
     public enum Face {
         case picture(UIImage?)
@@ -1325,13 +1434,20 @@ public struct ComposerRowTile: View {
     }
 
     let face: Face
+    let side: CGFloat
 
-    public init(_ face: Face) {
+    public init(_ face: Face, side: CGFloat = ComposerMetrics.leadMark) {
         self.face = face
+        self.side = side
     }
 
-    public static let shape = UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 14, bottomTrailingRadius: 12,
-                                                     topTrailingRadius: 14)
+    /// The tile's corners at `side` (12 / 14 at 40).
+    public static func shape(side: CGFloat) -> UnevenRoundedRectangle {
+        let k = side / 40
+        return UnevenRoundedRectangle(topLeadingRadius: 12 * k, bottomLeadingRadius: 14 * k, bottomTrailingRadius: 12 * k,
+                                      topTrailingRadius: 14 * k)
+    }
+    public static let shape = shape(side: 40)
     /// The tile's face: the terracotta light at 40% on the paper.
     public static let tonal = Tokens.cream.mix(with: Tokens.terracottaLight, by: 0.4, in: .device)
 
@@ -1342,7 +1458,7 @@ public struct ComposerRowTile: View {
                 if let image {
                     Image(uiImage: image).resizable().scaledToFill()
                 } else {
-                    Self.tonal.overlay { SketchLoader(size: 18) }
+                    Self.tonal.overlay { SketchLoader(size: 16) }
                 }
             case let .cover(url):
                 Self.tonal.overlay {
@@ -1354,8 +1470,8 @@ public struct ComposerRowTile: View {
                 Self.tonal.overlay { OrganicIcon(icon, size: ComposerMetrics.rowGlyph, color: Tokens.text, strokeWidth: Tokens.ink) }
             }
         }
-        .frame(width: ComposerMetrics.rowThumb, height: ComposerMetrics.rowThumb)
-        .clipShape(Self.shape)
+        .frame(width: side, height: side)
+        .clipShape(Self.shape(side: side))
         .accessibilityHidden(true)
     }
 }

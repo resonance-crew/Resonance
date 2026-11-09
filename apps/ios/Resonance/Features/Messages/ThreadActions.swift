@@ -50,6 +50,10 @@ extension MessageMenu {
         return rows
     }
 
+    /// Whether 複製 is offered: words to copy — never a sticker's, whose words are only its fallback for builds that
+    /// can't draw it (〔貼圖：謝謝〕; the owner, round 23: no 複製 on a sticker, as Telegram, LINE and WhatsApp).
+    nonisolated static func copies(_ message: ChatMessage) -> Bool { !message.text.isEmpty && message.sticker == nil }
+
     /// The list's rows for the message pressed, in their order
     /// (``rows(link:onLink:reply:copy:unsend:stopSharing:report:failed:)``). `copied` is told when something
     /// went to the clipboard (the thread says so: nothing else would).
@@ -58,8 +62,7 @@ extension MessageMenu {
                report: @escaping () -> Void) -> [OrganicMenuItem] {
         let message = row.message
         let rows = Self.rows(link: link != nil, onLink: onLink && link != nil, reply: model.canReply(message),
-                             // A sticker's words are its fallback for builds that can't draw it: nothing to copy.
-                             copy: !message.text.isEmpty && message.sticker == nil,
+                             copy: Self.copies(message),
                              unsend: model.me.map { message.canUnsend(viewer: $0) } ?? false,
                              stopSharing: model.me.map { message.canStopSharing(viewer: $0) } ?? false,
                              report: !model.isMine(message) && message.delivery == .delivered && !message.isUnsent,
@@ -182,6 +185,12 @@ struct MessageMenuOverlay: View {
     @AccessibilityFocusState private var trayFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// What the menu offers, for its glide when that changes while it is open.
+    private struct Filled: Equatable {
+        let items: [String]
+        let tray: Bool
+    }
+
     /// The tray's choices: the viewer's current reaction and what choosing does.
     struct ReactionChoice {
         let current: ReactionId?
@@ -234,6 +243,9 @@ struct MessageMenuOverlay: View {
                 .opacity(shown ? 1 : 0)
                 .offset(x: x(listWidth), y: place.listY + (placed ? 0 : -place.shift))
             }
+            // Held while it was on its way, the menu fills in as it is delivered (round 23 §1): the tray and the rows
+            // come, and the message glides to where both fit, as it does when it is first lifted.
+            .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.22, bounce: 0.12), value: Filled(items: items.map(\.id), tray: reactions != nil))
         }
         .ignoresSafeArea()
         .accessibilityAction(.escape, dismiss)

@@ -20,6 +20,11 @@ final class StickerLibrary {
     let catalog: StickerCatalog
     /// The stickers this account sent last, newest first (the panel's 🕘 tab).
     private(set) var recents: [StickerRef] = []
+    /// The 🕘 tab as it was when the picker opened (round 23 §3): one tap sends, so a quick second tap in the tab
+    /// would land on another sticker if it reordered under the finger — what is sent is stored at once and shown
+    /// from the next opening. Nil while no picker is open.
+    private(set) var heldRecents: [StickerRef]?
+    @ObservationIgnored private var holds = 0
     /// Stickers the bundle lacks that the site couldn't give either: drawn as their message's words.
     private(set) var unavailable: Set<StickerRef> = []
     /// Stickers the bundle lacks, read from the site and kept on the device.
@@ -166,8 +171,20 @@ final class StickerLibrary {
         defaults.set(all, forKey: Self.recentsKey)
     }
 
-    /// The recents the catalog still has.
-    var shownRecents: [StickerRef] { StickerRecents.known(recents, in: catalog) }
+    /// The recents the catalog still has — while a picker is open, as they were when it opened.
+    var shownRecents: [StickerRef] { heldRecents ?? StickerRecents.known(recents, in: catalog) }
+
+    /// A picker opened: its 🕘 tab holds still until every picker open is closed (``releaseRecents()``).
+    func holdRecents() {
+        if holds == 0 { heldRecents = StickerRecents.known(recents, in: catalog) }
+        holds += 1
+    }
+
+    /// A picker closed: the last one lets the 🕘 tab show what was sent meanwhile, from the next opening.
+    func releaseRecents() {
+        holds = max(0, holds - 1)
+        if holds == 0 { heldRecents = nil }
+    }
 
     private static let recentsKey = "stickers.recents"
 
@@ -214,6 +231,127 @@ nonisolated struct StickerPlaybackLimiter: Equatable {
     /// `key` stopped (it ended, left the screen, or was stopped).
     mutating func end(_ key: String) {
         playing.removeAll { $0 == key }
+    }
+}
+
+/// One tap sends a sticker (round 23 §3) — a second tap on the same sticker within `window` (600 ms) is ignored:
+/// people who learned 「再點一次傳送」 tap twice. Two different stickers may go back to back. Pure, so it is pinned.
+nonisolated struct StickerSendGuard: Equatable {
+    static let window: TimeInterval = 0.6
+    private(set) var last: StickerRef?
+    private(set) var at: Date = .distantPast
+
+    /// Whether a tap on `sticker` at `now` sends it (and, if it does, it is the one a second tap is measured from).
+    mutating func allows(_ sticker: StickerRef, now: Date = .now) -> Bool {
+        if sticker == last, now.timeIntervalSince(at) < Self.window { return false }
+        last = sticker
+        at = now
+        return true
+    }
+}
+
+/// The picker's stickers "breathing" (round 23 §3): a cell at least 60 % in view plays its file once — the two loops
+/// it bakes in, about 4.8 s — then rests on its thumb (the same hero pose the file starts and ends on) for 1.5–3 s,
+/// and plays again. At most `capacity` play at once (8 on a phone, 12 on an iPad's or the Mac's wider picker: what a
+/// panel shows, every visible cell moving within a few seconds); a cell waiting takes a free slot in the grid's order
+/// (row by row), one start at a time, none while the grid is scrolling. The picker's own — never the thread's
+/// ``StickerPlayback``. Pure, so it is pinned; ``StickerBreathingClock`` runs it.
+nonisolated struct StickerBreathing: Equatable {
+    /// A phone's picker and the wider ones' (6 columns, the Mac's popover).
+    static let phoneCapacity = 8
+    static let wideCapacity = 12
+    /// Starts come one at a time, this far apart.
+    static let stagger: TimeInterval = 0.08
+    /// A cell rests on its thumb this long between plays (picked anew each time).
+    static let rest: ClosedRange<TimeInterval> = 1.5...3
+
+    static func capacity(columns: Int) -> Int { columns >= 6 ? wideCapacity : phoneCapacity }
+
+    let capacity: Int
+    /// The cells in view, by their place in the grid.
+    private(set) var inView: [String: Int] = [:]
+    private(set) var playing: Set<String> = []
+    /// When a cell that played may play again.
+    private(set) var restingUntil: [String: Date] = [:]
+    var scrolling = false
+
+    init(capacity: Int) {
+        self.capacity = capacity
+    }
+
+    /// A cell came at least 60 % into view (`order`: its place in the grid, row by row).
+    mutating func shown(_ key: String, order: Int) { inView[key] = order }
+
+    /// A cell left the view: it stops (it plays again from its start when it comes back).
+    mutating func hidden(_ key: String) {
+        inView[key] = nil
+        playing.remove(key)
+        restingUntil[key] = nil
+    }
+
+    /// The cell to start now: the first waiting in the grid's order — none while scrolling or with every slot taken.
+    func next(now: Date) -> String? {
+        guard !scrolling, playing.count < capacity else { return nil }
+        return inView.filter { key, _ in !playing.contains(key) && (restingUntil[key].map { $0 <= now } ?? true) }
+            .min { $0.value < $1.value }?.key
+    }
+
+    mutating func start(_ key: String) {
+        guard inView[key] != nil else { return }
+        playing.insert(key)
+        restingUntil[key] = nil
+    }
+
+    /// A cell's play ended: it rests `rest` seconds, its slot free for the next.
+    mutating func ended(_ key: String, now: Date, rest: TimeInterval) {
+        guard playing.remove(key) != nil else { return }
+        if inView[key] != nil { restingUntil[key] = now.addingTimeInterval(rest) }
+    }
+}
+
+/// Runs a picker's ``StickerBreathing`` while the picker shows: a start every ``StickerBreathing/stagger`` at most,
+/// nothing at all while motion is quiet (Reduce Motion, Low Power Mode: the thumbs alone). Only who plays is
+/// watched: a cell coming into view or the grid scrolling draws nothing again.
+@MainActor @Observable final class StickerBreathingClock {
+    @ObservationIgnored private var state: StickerBreathing
+    /// The cells playing now (the one thing the cells read).
+    private(set) var playing: Set<String> = []
+
+    init(capacity: Int) {
+        state = StickerBreathing(capacity: capacity)
+    }
+
+    func isPlaying(_ key: String) -> Bool { playing.contains(key) }
+    func shown(_ key: String, order: Int) { state.shown(key, order: order) }
+    func hidden(_ key: String) {
+        state.hidden(key)
+        publish()
+    }
+    func scrolling(_ on: Bool) { state.scrolling = on }
+    /// Said by the cell, after the update that ended it (never inside one).
+    func ended(_ key: String) {
+        guard state.playing.contains(key) else { return }
+        state.ended(key, now: .now, rest: .random(in: StickerBreathing.rest))
+        publish()
+    }
+
+    /// Starts what may start, one at a time, for as long as the picker shows (its task's life).
+    func run() async {
+        #if DEBUG
+        // The release screenshots hold the picker still (its thumbs), so two captures are one picture.
+        if VisualCapture.on { return }
+        #endif
+        while !Task.isCancelled {
+            if !StickerPlayback.still, let key = state.next(now: .now) {
+                state.start(key)
+                publish()
+            }
+            try? await Task.sleep(for: .seconds(StickerBreathing.stagger))
+        }
+    }
+
+    private func publish() {
+        if playing != state.playing { playing = state.playing }
     }
 }
 

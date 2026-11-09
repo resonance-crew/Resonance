@@ -12,7 +12,7 @@ enum AttachTab: String, Equatable {
 /// line with a short wavy grip in its middle (drag it up to grow the panel to under the header, down to close
 /// it; VoiceOver adjusts it), and at its foot the segmented 圖片｜卡片. 圖片 is the system's own photo picker laid
 /// inline (out of the app's process: no library access asked for), several pictures chosen in order — they ride
-/// in the strip over the capsule as they are picked; 卡片 lists the viewer's cards, a tap and the card rides.
+/// in the strip inside the capsule as they are picked (round 23); 卡片 lists the viewer's cards, a tap and the card rides.
 /// No card, no shadow: the foot's paper goes on under it.
 struct AttachPanel: View {
     @Binding var tab: AttachTab

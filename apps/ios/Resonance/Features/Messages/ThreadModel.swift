@@ -165,6 +165,9 @@ final class ThreadModel {
     @ObservationIgnored private var draftSave: Task<Void, Never>?
     /// While the draft is put back, its changes aren't saved again.
     @ObservationIgnored private var restoringDraft = false
+    /// Whether what the composer holds is kept as the conversation's draft: not for a screen check that fills it
+    /// itself (`-visualRide`), whose reply and card would otherwise ride into every later launch's thread.
+    @ObservationIgnored var keepsDrafts = true
     /// The quoted message of a draft put back, to be checked once the thread is read (unsent or deleted: dropped).
     @ObservationIgnored private var quoteToCheck: String?
 
@@ -930,7 +933,7 @@ final class ThreadModel {
     func saveDraft() {
         draftSave?.cancel()
         draftSave = nil
-        guard draftRestored, let me, let pairId else { return }
+        guard draftRestored, keepsDrafts, let me, let pairId else { return }
         session.chatDrafts.keep(text: draft, replyTo: replyingTo, noteRef: noteRef, cardId: pendingCard?.id, uid: me, pair: pairId)
     }
 
