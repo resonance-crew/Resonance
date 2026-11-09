@@ -864,6 +864,12 @@ public enum L10n {
         public static var attachImage: String { Strings.shared.string("messages.attachImage") }
         /// Card
         public static var attachCardShort: String { Strings.shared.string("messages.attachCardShort") }
+        /// Sent with your message
+        public static var composerRiding: String { Strings.shared.string("messages.composerRiding") }
+        /// Remove note
+        public static var removeNote: String { Strings.shared.string("messages.removeNote") }
+        /// Remove picture {n}
+        public static func removeImageAt(n: Int) -> String { Strings.shared.format("messages.removeImageAt", ["n": n]) }
         /// Remove photo
         public static var removeImage: String { Strings.shared.string("messages.removeImage") }
         /// Sent a photo

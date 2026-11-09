@@ -866,6 +866,12 @@ object L10n {
         val attachImage: String get() = Strings.string("messages.attachImage")
         /** Card */
         val attachCardShort: String get() = Strings.string("messages.attachCardShort")
+        /** Sent with your message */
+        val composerRiding: String get() = Strings.string("messages.composerRiding")
+        /** Remove note */
+        val removeNote: String get() = Strings.string("messages.removeNote")
+        /** Remove picture {n} */
+        fun removeImageAt(n: Int): String = Strings.format("messages.removeImageAt", mapOf("n" to n))
         /** Remove photo */
         val removeImage: String get() = Strings.string("messages.removeImage")
         /** Sent a photo */
