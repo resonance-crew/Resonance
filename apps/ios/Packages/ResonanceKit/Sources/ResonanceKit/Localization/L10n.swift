@@ -868,7 +868,7 @@ public enum L10n {
         public static var composerRiding: String { Strings.shared.string("messages.composerRiding") }
         /// Remove note
         public static var removeNote: String { Strings.shared.string("messages.removeNote") }
-        /// Remove picture {n}
+        /// Remove photo {n}
         public static func removeImageAt(n: Int) -> String { Strings.shared.format("messages.removeImageAt", ["n": n]) }
         /// Remove photo
         public static var removeImage: String { Strings.shared.string("messages.removeImage") }
@@ -1050,10 +1050,6 @@ public enum L10n {
         public static var stickerPanelExpand: String { Strings.shared.string("messages.stickerPanelExpand") }
         /// Collapse stickers
         public static var stickerPanelCollapse: String { Strings.shared.string("messages.stickerPanelCollapse") }
-        /// Tap again to send
-        public static var stickerPreviewHint: String { Strings.shared.string("messages.stickerPreviewHint") }
-        /// Preview: {name}, tap again to send
-        public static func stickerPreviewA11y(name: String) -> String { Strings.shared.format("messages.stickerPreviewA11y", ["name": name]) }
         /// Send sticker
         public static var stickerSendHint: String { Strings.shared.string("messages.stickerSendHint") }
         /// Recent

@@ -592,8 +592,6 @@
     "keyboard": "鍵盤",
     "stickerPanelExpand": "展開貼圖",
     "stickerPanelCollapse": "收合貼圖",
-    "stickerPreviewHint": "再點一次傳送",
-    "stickerPreviewA11y": "預覽：{name}，再點一次傳送",
     "stickerSendHint": "傳送貼圖",
     "stickerRecent": "最近用過",
     "stickerShared": "傳送了一張貼圖",

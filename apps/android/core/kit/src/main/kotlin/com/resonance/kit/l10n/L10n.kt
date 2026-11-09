@@ -870,7 +870,7 @@ object L10n {
         val composerRiding: String get() = Strings.string("messages.composerRiding")
         /** Remove note */
         val removeNote: String get() = Strings.string("messages.removeNote")
-        /** Remove picture {n} */
+        /** Remove photo {n} */
         fun removeImageAt(n: Int): String = Strings.format("messages.removeImageAt", mapOf("n" to n))
         /** Remove photo */
         val removeImage: String get() = Strings.string("messages.removeImage")
@@ -1052,10 +1052,6 @@ object L10n {
         val stickerPanelExpand: String get() = Strings.string("messages.stickerPanelExpand")
         /** Collapse stickers */
         val stickerPanelCollapse: String get() = Strings.string("messages.stickerPanelCollapse")
-        /** Tap again to send */
-        val stickerPreviewHint: String get() = Strings.string("messages.stickerPreviewHint")
-        /** Preview: {name}, tap again to send */
-        fun stickerPreviewA11y(name: String): String = Strings.format("messages.stickerPreviewA11y", mapOf("name" to name))
         /** Send sticker */
         val stickerSendHint: String get() = Strings.string("messages.stickerSendHint")
         /** Recent */
