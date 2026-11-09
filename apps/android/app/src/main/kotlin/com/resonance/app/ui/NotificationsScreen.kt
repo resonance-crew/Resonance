@@ -4,8 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +15,7 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.InlineTextContent
@@ -31,7 +30,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Outline
@@ -39,7 +37,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.addOutline
-import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
@@ -94,10 +91,11 @@ import kotlin.math.roundToInt
 
 /**
  * Notifications, live (web: NotificationBell, round 21). The rows stand in parts by time — 今天, 這週,
- * 更早 — apart by air alone, no rules between them. Each says who did what: their face on the left,
- * their pen name in bold and what they did (a note's own words quoted under it, in its card's colour),
- * and when; the card it is about on the right. Unread: the words in the text's ink and the dot ending
- * the first line; read, muted. Tapping opens where it happened and marks it read.
+ * 更早 — each part's rows touching, parted by hand-drawn curves that show only as the edge of a row's
+ * wash (round 23 §4: [ListBands], no rules between them). Each says who did what: their face on the
+ * left, their pen name in bold and what they did (a note's own words quoted under it, in its card's
+ * colour), and when; the card it is about on the right. Unread: the words in the text's ink and the dot
+ * ending the first line; read, muted. Tapping opens where it happened and marks it read.
  */
 @Composable
 fun NotificationsScreen(session: Session, open: (Route) -> Unit) {
@@ -125,7 +123,8 @@ fun NotificationsScreen(session: Session, open: (Route) -> Unit) {
             now = Instant.now()
         }
     }
-    TabScreen(L10n.App.Nav.notifications, titleInBar = true) {
+    val list = rememberLazyListState()
+    TabScreen(L10n.App.Nav.notifications, titleInBar = true, list = list) {
         when {
             // Nothing read, and the listener failed: a retry, not a loader forever.
             !loaded && failed -> item {
@@ -139,23 +138,26 @@ fun NotificationsScreen(session: Session, open: (Route) -> Unit) {
                     fill = true, modifier = Modifier.fillParentMaxHeight(),
                 )
             }
-            else -> bellParts(items, now).forEachIndexed { part, (group, rows) ->
-                item(key = "part:${group.name}", contentType = "bellPart") {
+            else -> bellBands(bellParts(items, now)).forEachIndexed { part, (group, rows) ->
+                item(key = bellPartKey(group), contentType = "bellPart") {
                     BasicText(
                         group.title,
                         style = AppFonts.body(13f, 600, lineHeight = 1.4f, color = Tokens.TextMuted),
-                        modifier = Modifier.readableColumn().padding(horizontal = 20.dp)
-                            .padding(top = if (part == 0) 0.dp else 14.dp, bottom = 4.dp)
+                        // On bare paper, clear of the bands' curves above and below it; at the reading column's start
+                        // (filling it: a tablet's column would otherwise centre the words).
+                        modifier = Modifier.readableColumn().fillMaxWidth().padding(horizontal = ListBands.ContentInset)
+                            .padding(top = if (part == 0) 0.dp else BellPartGap, bottom = ListBands.TitleToBand)
                             .semantics { heading() },
                     )
                 }
-                items(rows, key = { it.id }, contentType = { "notification" }) { item ->
-                    Box(Modifier.padding(top = if (item === rows.first()) 0.dp else 2.dp)) {
-                        NotificationRow(item, extras, BellTime.words(item.createdAt?.toInstant() ?: now, now, Strings.language.locale, L10n.App.Notifications.justNow)) {
-                            // The bell row is read; a conversation is marked read only by opening it, which an anonymous card's row never does.
-                            session.notifications.markRead(item)
-                            notificationRoute(item)?.let(open)
-                        }
+                items(rows, key = { it.item.id }, contentType = { "notification" }) { (item, below) ->
+                    NotificationRow(
+                        item, extras, BellTime.words(item.createdAt?.toInstant() ?: now, now, Strings.language.locale, L10n.App.Notifications.justNow),
+                        below = below, scrolling = { list.isScrollInProgress },
+                    ) {
+                        // The bell row is read; a conversation is marked read only by opening it, which an anonymous card's row never does.
+                        session.notifications.markRead(item)
+                        notificationRoute(item)?.let(open)
                     }
                 }
             }
@@ -167,18 +169,34 @@ fun NotificationsScreen(session: Session, open: (Route) -> Unit) {
 private val BellFace = 40.dp
 private val BellThumb = 46.dp
 
+/** Above a part's title after the first: with the row's own [ListBands.RowPad], round 21's 24 from the last row's content. */
+internal val BellPartGap = 12.dp
+
+/** A part's title, and the key the band above it ends its bottom curve on. */
+internal fun bellPartKey(group: BellGroup): String = "part:${group.name}"
+
+/** A bell row and the key of the curve under it: the next row's id, else the next part's title, else the list's end. */
+internal data class BandedBell(val item: NotificationsStore.Item, val below: String)
+
+/** The parts' rows with the curves under them ([ListBands]: each curve is the lower row's, never a place in the list). */
+internal fun bellBands(parts: List<Pair<BellGroup, List<NotificationsStore.Item>>>): List<Pair<BellGroup, List<BandedBell>>> =
+    parts.mapIndexed { i, (group, rows) ->
+        val after = parts.getOrNull(i + 1)?.let { bellPartKey(it.first) } ?: ListBands.EndKey
+        group to rows.zip(bandsBelow(rows.map { it.id }, after), ::BandedBell)
+    }
+
 /**
  * The bell's rows still on their way: six of a row's measures — the 40 face, two lines of words, and
- * on two of them the 46 card — with no rules between them. iOS's NotificationsSkeleton.
+ * on two of them the 46 card — touching as the bands do, with no rules between them. iOS's NotificationsSkeleton.
  */
 @Composable
 private fun NotificationsSkeleton() {
     // One clock for its blocks (composed together).
     SharedShimmer {
         val lines = listOf(0.82f, 0.64f, 0.9f, 0.58f, 0.76f, 0.7f)
-        Column(Modifier.readableColumn().padding(horizontal = 20.dp).semantics { contentDescription = L10n.Home.moreLoading }, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.readableColumn().padding(horizontal = ListBands.ContentInset).semantics { contentDescription = L10n.Home.moreLoading }) {
             for (i in lines.indices) {
-                Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(Modifier.fillMaxWidth().padding(vertical = ListBands.RowPad), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Skeleton(Modifier.width(BellFace), height = BellFace, radius = 13.dp)
                     Column(Modifier.weight(1f).padding(top = 3.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                         Skeleton(Modifier.fillMaxWidth(lines[i]), height = 14.dp)
@@ -195,56 +213,57 @@ private fun NotificationsSkeleton() {
  * One row (BellRow.tsx): who did it — their face — on the left; their pen name in bold and what they
  * did, a note's words quoted under it, and when; the card it is about on the right. Unread: the
  * sentence in the text's ink and the 6 terracotta dot 8 after it, ending its first line (TalkBack
- * hears 未讀); read, the sentence muted, the name always in the text's ink. A press washes the row's
- * own wobbly outline, as the conversation list's rows do.
+ * hears 未讀); read, the sentence muted, the name always in the text's ink. A press or a pointer
+ * washes the row's band (round 23 §4): the list's whole width between its curve and [below]'s, its
+ * content in the reading column 20 from the edges.
  */
 @Composable
-private fun NotificationRow(item: NotificationsStore.Item, extras: NotificationsStore.Extras, time: String, onClick: () -> Unit) {
+private fun NotificationRow(
+    item: NotificationsStore.Item,
+    extras: NotificationsStore.Extras,
+    time: String,
+    below: String,
+    scrolling: () -> Boolean,
+    onClick: () -> Unit,
+) {
     val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    val hovered by source.collectIsHoveredAsState()
-    val seed = (seedFromString(item.id) % 97).toDouble()
-    val wash = Tokens.TowardInk.copy(alpha = 0.045f)
     val unread = item.isUnread
     val sentence = bellSentence(item)
     val cardId = item.cardId?.takeIf { it.isNotEmpty() }
     val card = cardId?.let { extras.cards[it] }
     val preview = item.preview?.takeIf { item.type == "note" && it.isNotEmpty() }
-    Row(
+    Box(
         Modifier
-            .readableColumn()
-            .padding(horizontal = 8.dp)
             .fillMaxWidth()
+            .listBand(item.id, below, source, scrolling)
             .hoverable(source)
             .pointerHoverIcon(PointerIcon.Hand)
-            .drawWithCache {
-                val h = (size.height / density).toDouble()
-                val outline = WobRectShape(
-                    h * 0.28, seed, mag = 2.4,
-                    options = WobRectOptions(curve = 1.3, cornerJitter = 2.4, cornerOffset = h * 0.05, segmentsH = SegValue.Count(3.0), segmentsV = SegValue.Count(1.0)),
-                ).createOutline(size, layoutDirection, this)
-                onDrawBehind { if (pressed || hovered) drawOutline(outline, wash) }
-            }
-            .clickable(source, indication = null, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+            .clickable(source, indication = null, role = Role.Button, onClick = onClick),
     ) {
-        if (sentence.handle != null) {
-            val uid = item.fromUserId.orEmpty()
-            Face(extras.people[uid], sentence.handle, uid, settled = uid.isEmpty() || extras.personSettled(uid))
-        } else {
-            GlyphTile(item.type)
-        }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Sentence(sentence, unread)
-            if (preview != null) NoteQuote(preview, card)
-            BasicText(time, style = AppFonts.body(12f, lineHeight = 1.4f, color = Tokens.TextMuted))
-        }
-        when {
-            cardId == null -> Unit
-            card != null -> CardThumb(card)
-            // Still being read: its place kept; read and not there (gone, in the trash), nothing — the words take the room.
-            !extras.cardSettled(cardId) -> ThumbFace(cardId) { Box(Modifier.fillMaxSize().background(Mixes.SkeletonBase)) }
+        Row(
+            Modifier
+                .readableColumn()
+                .fillMaxWidth()
+                .padding(horizontal = ListBands.ContentInset, vertical = ListBands.RowPad),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (sentence.handle != null) {
+                val uid = item.fromUserId.orEmpty()
+                Face(extras.people[uid], sentence.handle, uid, settled = uid.isEmpty() || extras.personSettled(uid))
+            } else {
+                GlyphTile(item.type)
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Sentence(sentence, unread)
+                if (preview != null) NoteQuote(preview, card)
+                BasicText(time, style = AppFonts.body(12f, lineHeight = 1.4f, color = Tokens.TextMuted))
+            }
+            when {
+                cardId == null -> Unit
+                card != null -> CardThumb(card)
+                // Still being read: its place kept; read and not there (gone, in the trash), nothing — the words take the room.
+                !extras.cardSettled(cardId) -> ThumbFace(cardId) { Box(Modifier.fillMaxSize().background(Mixes.SkeletonBase)) }
+            }
         }
     }
 }

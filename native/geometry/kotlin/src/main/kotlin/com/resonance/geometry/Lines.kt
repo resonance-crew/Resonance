@@ -166,9 +166,10 @@ fun arrowHeadPath(tip: Pt, angle: Double, size: Double, seed: Double): List<Path
 // --- Organic menu rows (src/lib/design/rowMenu.ts) --------------------------
 
 /** Wavy boundary between two menu rows; rounded like the web because the
- *  rounded points feed the divider and region paths. */
-fun rowBoundary(y: Double, w: Double, seed: Double, amp: Double, pad: Double): List<Pt> {
-    val steps = 4
+ *  rounded points feed the divider and region paths. [steps] turns across: a
+ *  menu's 4 by default (the fixtures' own); a list's bands, wider, take more
+ *  (round 23: one every ~100, so a window-wide band is never nearly straight). */
+fun rowBoundary(y: Double, w: Double, seed: Double, amp: Double, pad: Double, steps: Int = 4): List<Pt> {
     val rnd = Prng(seed)
     val pts = arrayListOf(Pt(-pad, jsRound2(y)))
     for (k in 0..steps) {
