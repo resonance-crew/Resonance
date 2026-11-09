@@ -160,8 +160,16 @@ struct ThreadScreen: View {
                 if let opened = defaults.string(forKey: "threadPanel") {
                     while !model.threadReady { try? await Task.sleep(for: .milliseconds(100)) }
                     try? await Task.sleep(for: .seconds(1))
-                    panels.open(opened == "attach" ? .attach : .stickers)
-                    if defaults.bool(forKey: "threadPanelTall") { panels.setExpanded(true) }
+                    let kind: ComposerPanel = opened == "attach" ? .attach : .stickers
+                    if onMac {
+                        // On a Mac ☺ and ＋ open the popover, as `toggleStickers` / `toggleAttach` do — never a panel in
+                        // the keyboard's place. It hangs from the capsule's top, so the capsule is measured first.
+                        while capsuleFrame.height == 0 { try? await Task.sleep(for: .milliseconds(100)) }
+                        macPopover = kind
+                    } else {
+                        panels.open(kind)
+                        if defaults.bool(forKey: "threadPanelTall") { panels.setExpanded(true) }
+                    }
                 }
                 if defaults.bool(forKey: "threadExpand") {
                     while !model.threadReady { try? await Task.sleep(for: .milliseconds(100)) }
