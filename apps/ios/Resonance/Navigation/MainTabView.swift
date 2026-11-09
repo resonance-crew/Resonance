@@ -444,7 +444,12 @@ struct MainTabView: View {
             if case .write? = paths[tab]?.last { return }
             paths[tab, default: []].append(.write(request))
         }
-        .onOpenURL(perform: open)
+        // A link into the app (a universal link, the Smart App Banner's 打開): the session held it from the app's root
+        // until the tabs were here — a cold launch's through the restore, a sign-in or onboarding — and it opens once.
+        .onChange(of: session.links.pending, initial: true) { _, pending in
+            guard pending != nil, let url = session.links.take() else { return }
+            open(url)
+        }
         // A tapped push: its page, or the notifications when it has none (also after a cold start).
         .onChange(of: push.opened, initial: true) { _, opened in
             guard let opened else { return }
@@ -535,10 +540,14 @@ struct MainTabView: View {
     }
     #endif
 
-    /// Site links (universal links, shared URLs) open on the current tab.
+    /// Site links (universal links, the Smart App Banner's, shared URLs) open on the current tab; a page the
+    /// association claims that the app can't show opens in the in-app browser.
     private func open(_ url: URL) {
-        guard let route = Route(url: url, origin: session.config.origin) else { return }
-        open(route)
+        switch IncomingLink.of(url, origin: session.config.origin) {
+        case let .route(route): open(route)
+        case let .browser(page): InAppBrowser.open(page)
+        case .none: break
+        }
     }
 
     private func open(_ route: Route) {
