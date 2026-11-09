@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { wobRect } from './wobRect';
+import { edgeDraws, wobAmp, wobRect } from './wobRect';
 
 // wobRect generates the wobbly card/border outlines. It must be deterministic
 // per seed (SSR/CSR parity) and always emit a well-formed, closed SVG path.
@@ -41,5 +41,32 @@ describe('wobRect', () => {
     const many = wobRect(400, 400, 20, 3, 6, { segmentsH: 8, segmentsV: 8 });
     const count = (s: string) => (s.match(/C/g) ?? []).length;
     expect(count(many)).toBeGreaterThan(count(few));
+  });
+
+  // Round 23: a shape that grows from a resting height (the chat composer) keeps its foot and corners — only its
+  // sides take the growth — and is the plain shape at that height.
+  it('grows a steady shape by its sides alone, and is the plain one at its resting height', () => {
+    const W = 300;
+    const rest = 48;
+    const amp = wobAmp(W, rest, 2.6, 1.6);
+    const steady = { ampX: amp, draws: edgeDraws(rest - 32, 2, amp) };
+    const draw = (H: number, segV: number) => wobRect(W, H, 16, 7, 2.6, { segmentsH: 3, segmentsV: segV, curve: 1.6, steady });
+    expect(draw(rest, 2)).toBe(wobRect(W, rest, 16, 7, 2.6, { segmentsH: 3, segmentsV: 2, curve: 1.6 }));
+    const cubics = (d: string) => d.split(' C ').slice(1).map((c) => c.split(' ').map((p) => p.split(',').map(Number)));
+    const restC = cubics(draw(rest, 2));
+    const tall = 220;
+    const tallC = cubics(draw(tall, 4));
+    // TL corner + 3 top + TR corner: the same points.
+    expect(tallC.slice(0, 5)).toEqual(restC.slice(0, 5));
+    // BR corner + 3 bottom + BL corner: the same points, moved down by the growth.
+    const footRest = restC.slice(5 + 2, 5 + 2 + 5);
+    const footTall = tallC.slice(5 + 4, 5 + 4 + 5).map((c) => c.map(([x, y]) => [x, +(y - (tall - rest)).toFixed(2)]));
+    expect(footTall).toEqual(footRest);
+  });
+
+  it('counts what an edge takes of the stream: nothing for a straight one', () => {
+    expect(edgeDraws(100, 1, 2)).toBe(0);
+    expect(edgeDraws(6, 3, 2)).toBe(0);
+    expect(edgeDraws(100, 3, 2)).toBe(4);
   });
 });

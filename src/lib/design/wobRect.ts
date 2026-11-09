@@ -14,6 +14,28 @@ export interface WobRectOpts {
    * `R` is; without it all four are `R`. The twin of the Kotlin and Swift `cornerRadii`.
    */
   cornerRadii?: [number, number, number, number];
+  /**
+   * A shape that grows taller from a resting height (the chat composer's capsule, round 23): its corners and its
+   * top and bottom edges drawn as at that height whatever its height — the horizontal edges' swing `ampX` (px, in
+   * place of the one worked out from `mag` and `curve`), and the right edge taking `draws` of the stream however
+   * long it is (what it takes at the resting height: {@link edgeDraws}), so nothing drawn after it depends on its
+   * length. Growing then moves the sides alone: the bottom edge and its corners stay put, the top edge only rises.
+   * At the resting height the path is the plain one's, point for point.
+   */
+  steady?: { draws: number; ampX: number };
+}
+
+/**
+ * How far an edge's anchors swing off its line (px) for a `W` × `H` shape of wobble `mag` and bow `curve` — what
+ * {@link wobRect} works out for every edge.
+ */
+export function wobAmp(W: number, H: number, mag: number, curve = 1): number {
+  return Math.min(mag * 0.95 * curve, Math.min(W, H) * 0.032 * Math.max(1, curve));
+}
+
+/** How many of the stream's numbers an edge `len` long in `segs` segments of swing `amp` takes (none when straight). */
+export function edgeDraws(len: number, segs: number, amp: number): number {
+  return segs < 2 || len < amp * 4 ? 0 : 2 * (segs - 1);
 }
 
 // Corners: bezier quarter-circles with slightly jittered radius.
@@ -26,7 +48,13 @@ export function wobRect(
   mag?: number,
   opts?: WobRectOpts
 ): string {
-  const rnd = makePrng(seed);
+  const stream = makePrng(seed);
+  // Counted, so a steady shape's right edge can be drawn from a copy of the stream at the same place.
+  let drawn = 0;
+  const rnd = () => {
+    drawn++;
+    return stream();
+  };
   const m = mag != null ? mag : Math.min(W, H) * 0.025;
   const K = 0.552;
 
@@ -63,7 +91,9 @@ export function wobRect(
   const brX = ox(), brY = oy();
   const blX = ox(), blY = oy();
 
-  const perpAmp = Math.min(m * 0.95 * curve, Math.min(W, H) * 0.032 * Math.max(1, curve));
+  const steady = opts?.steady;
+  const perpAmp = wobAmp(W, H, m, curve);
+  const ampX = steady ? steady.ampX : perpAmp;
 
   const f = (n: number) => +n.toFixed(2);
   const C = (x1: number, y1: number, x2: number, y2: number, x: number, y: number) =>
@@ -84,21 +114,23 @@ export function wobRect(
     P0: [number, number],
     P1: [number, number],
     axis: 'x' | 'y',
-    segs: number
+    segs: number,
+    r: () => number = rnd
   ): string[] => {
     const emit = axis === 'x' ? cubicH : cubicV;
     const len = axis === 'x' ? Math.abs(P1[0] - P0[0]) : Math.abs(P1[1] - P0[1]);
-    if (segs < 2 || len < perpAmp * 4) return [emit(P0, P1)];
+    const amp = axis === 'x' ? ampX : perpAmp;
+    if (edgeDraws(len, segs, amp) === 0) return [emit(P0, P1)];
     const anchors: [number, number][] = [];
     const anchorJitter = Math.min(0.08, 0.4 / segs);
     for (let i = 1; i < segs; i++) {
-      const t = i / segs + (rnd() - 0.5) * anchorJitter;
+      const t = i / segs + (r() - 0.5) * anchorJitter;
       const x = P0[0] + (P1[0] - P0[0]) * t;
       const y = P0[1] + (P1[1] - P0[1]) * t;
       anchors.push(
         axis === 'x'
-          ? [x, y + (rnd() - 0.5) * 2 * perpAmp]
-          : [x + (rnd() - 0.5) * 2 * perpAmp, y]
+          ? [x, y + (r() - 0.5) * 2 * amp]
+          : [x + (r() - 0.5) * 2 * amp, y]
       );
     }
     const result: string[] = [];
@@ -130,7 +162,17 @@ export function wobRect(
   parts.push(C(TRa[0] + (W - TRa[0]) * K, 0,
                W, TRb[1] * (1 - K),
                TRb[0], TRb[1]));
-  parts.push(...buildEdge(TRb, BRa, 'y', segV));
+  if (steady) {
+    // The right edge from a copy of the stream where it stands; the stream itself moves on by what the edge takes
+    // at the resting height, so the bottom and left edges draw the same numbers at any height.
+    const at = drawn;
+    const copy = makePrng(seed);
+    for (let i = 0; i < at; i++) copy();
+    parts.push(...buildEdge(TRb, BRa, 'y', segV, copy));
+    for (let i = 0; i < steady.draws; i++) rnd();
+  } else {
+    parts.push(...buildEdge(TRb, BRa, 'y', segV));
+  }
 
   parts.push(C(W, BRa[1] + (H - BRa[1]) * K,
                BRb[0] + (W - BRb[0]) * K, H,

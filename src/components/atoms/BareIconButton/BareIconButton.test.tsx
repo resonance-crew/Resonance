@@ -39,4 +39,25 @@ describe('BareIconButton', () => {
     expect(link.nextElementSibling).toHaveTextContent('Edit profile');
     expect(screen.queryByRole('button')).toBeNull();
   });
+
+  // Round 23: the composer's ✕s — a press leaves the focus in the field being written in (a phone's keyboard stays up).
+  it('can leave the focus where it is when pressed, and still answers the press', async () => {
+    const onClick = vi.fn();
+    render(
+      <>
+        <textarea aria-label="Message" />
+        <BareIconButton icon="close" label="Cancel reply" keepFocus onClick={onClick} />
+        <BareIconButton icon="close" label="Plain" />
+      </>,
+    );
+    const field = screen.getByRole('textbox', { name: 'Message' });
+    field.focus();
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel reply' }));
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(field).toHaveFocus();
+    const plain = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    screen.getByRole('button', { name: 'Plain' }).dispatchEvent(plain);
+    expect(plain.defaultPrevented).toBe(false);
+  });
 });
+

@@ -42,6 +42,11 @@ export interface BareIconButtonProps {
   /** It opens something (a popover, a panel): whether that is open now, and what it is (aria-expanded / -haspopup). */
   expanded?: boolean;
   haspopup?: 'dialog' | 'menu';
+  /**
+   * A press leaves the focus where it is (the composer's ✕s, round 23): the field being written in keeps it, so a
+   * phone's keyboard stays up and nothing under it moves. A keyboard's Enter or Space still presses it.
+   */
+  keepFocus?: boolean;
 }
 
 /**
@@ -68,6 +73,7 @@ export function BareIconButton({
   className,
   expanded,
   haspopup,
+  keepFocus = false,
 }: BareIconButtonProps) {
   // Escape puts the tooltip away until the pointer or focus leaves (content shown on hover or focus has to be dismissible).
   const [tipDismissed, setTipDismissed] = useState(false);
@@ -105,6 +111,8 @@ export function BareIconButton({
           aria-busy={loading || undefined}
           aria-expanded={expanded}
           aria-haspopup={haspopup}
+          onPointerDown={keepFocus ? (e) => e.preventDefault() : undefined}
+          onMouseDown={keepFocus ? (e) => e.preventDefault() : undefined}
           onClick={loading ? undefined : onClick}
         >
           {face}
