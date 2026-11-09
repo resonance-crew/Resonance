@@ -713,13 +713,15 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
         }
 
         menu?.let { m ->
-            // An album's picture pressed: that picture's own message (its reactions, its unsend).
-            val held = m.target
+            // An album's picture pressed: that picture's own message (its reactions, its unsend) — as the thread holds it
+            // now, so a message held while still 傳送中 gets its reactions, 回覆 and 收回 the moment it is delivered.
+            val held = model.find(m.target.key) ?: m.target
+            val heldMenu = remember(m, held) { if (held == m.target) m else MessageMenu(m.row, m.bounds, m.link, held) }
             MessageMenuOverlay(
                 m, ctx,
-                actions = remember(m) {
+                actions = remember(heldMenu) {
                     messageActions(
-                        m, model, links, context, open,
+                        heldMenu, model, links, context, open,
                         reply = { reply(held) },
                         unsend = { unsending = held },
                         // 停止分享 asks nothing: the message stays, and sending the card again shares it again.
