@@ -159,6 +159,10 @@ that text (the simulator can't type into the fields from outside), and
 conversation's composer (`-route /messages/<handle>` opens one), `-threadReply YES`
 answers their newest message (a reply riding, the keyboard up) and `-threadPicture <s>`
 opens the newest picture and closes it that many seconds later (round 11 §1's check).
+`-visualRide replyCard` (or `replyPictures`) rides a reply with a card (or pictures) in the
+composer and keeps no draft (the release screenshots' `thread-reply`); `-threadPanel stickers`
+opens the sticker panel. Android's twins are `--es visualRide replyCard` and
+`--es threadPanel stickers` (debug builds, each read once).
 `-route /settings` (or `/settings/<section>`: profile, account, privacy, notifications,
 language, appearance, terms, delete) opens Settings or one of its pages.
 `-openWriter YES` opens the writer on a new card at launch and `-writeCard <id>`
@@ -373,12 +377,15 @@ The composer floats over the thread (round 9 §4, round 10 §3; `ComposerCapsule
 `ComposerBacking` in DesignSystem): one capsule — ＋, the text, Send as its end segment, tonal at rest and
 solid with something to send — 48 for a line at any text size (`ComposerText`: the padding from the line it
 draws), growing to five lines, its pen the field's border, darker (`Tokens.fieldBorderHover`) while it is
-written in, never a halo. What rides along is a row each in the reply's style, no frame — the reply (its
-wavy rule), the note answered or the card (a glyph on a tonal tile, a card's cover when it has one), the
-picture (its 40 × 40) — label · detail · ✕ at the end (`ComposerRide` orders them); the letter's line is
+written in, never a halo. What rides along rides inside the capsule over the text line (round 23,
+`ComposerCapsule`'s `riding` slot): the reply (its wavy rule; its media a 36 thumbnail before the words), the
+note answered or the card (a ≤ 32 tile), the pictures (a strip 8 + 56 + 8, a ✕ on each), the error line —
+mark in the ＋'s column · words where the text starts · ✕ over Send (`ComposerRide` orders them), rows 44, 6 under
+the pen line, one reply a 98 capsule, Send the corner block whenever anything rides
+(`sendsFromBlock(lines:expanded:riding:)`), the outline steady as rows come and go; the letter's line is
 the thread's last item, a notice in the composer's place a framed slip. Behind it all the foot's paper
 runs the pane's whole width down to the screen's foot (through the home indicator, under the keyboard),
-its top 12 a fade (round 11 §3): over the capsule's top 12, or from 6 above the topmost riding row. It is the
+its top 12 a fade (round 11 §3) over the capsule's top edge. It is the
 thread's `.safeAreaInset(edge: .bottom)`; the list runs under it to the screen's foot and, drawn upside
 down, takes all it covers (the fade too) as its top margin (`ThreadFoot.room`, + 12), which the pill and
 已複製 keep too. A tap on the thread or on the foot's solid paper puts the keyboard away (`KeyboardTapAway`:
@@ -913,3 +920,22 @@ cut by the sheet's outline alone — its band runs at least 10 past the box on e
 on the pen line, never short of it. The toast and the thread's way-back pill (`OrganicPill`) are made as a card is: the
 accent's light wash inside a pen line of the accent at INK, the toast with a card's corners (16), the pill round, no
 shadow. Pinned in `RoundEighteenTest`.
+
+Round 23 (2026-11-09), both apps: what rides with a message is inside the capsule (see the iOS composer
+paragraph; Android's `CapsuleField` `header` slot, the ＋ column 48, the error row ≥ 32 with a terracotta dot and
+no ✕); a one-line capsule is exactly the old `wobRect`, taller only its sides are drawn anew. The sticker picker
+sends on one tap (`StickerSendGuard` / `StickerTapGuard`: the same sticker within 600 ms is ignored; recents held
+while it is open) and breathes (iOS `StickerBreathing` + `StickerBreathingClock`, Android `PickerBreath` /
+`BreathingSticker`, decoded at cell size: in view ≥ 60 %, one play, 1.5–3 s on the thumb, 8 at once on a phone,
+12 wider, never while scrolling, still under Reduce Motion / animations off, Low Power / battery saver). Android's
+sticker crash (round 23 §0: `AnimatedImageDrawable`'s posted start ran over a callback list our unregister had
+emptied) is fixed by one drawable per player, its end callback registered once and never unregistered
+(`StickerRun`); a sticker held just after sending reads its message again (`model.find`), and on iOS
+`MessageMenu.live`. The notifications list and a phone's conversations are bands (`ListBands`, both apps:
+`rowBoundary(…, steps)` seeded by the lower row's key, nothing at rest, a press 12 % from 80 ms cancelled by a
+scroll, a pointer 6 %; Android's `delayedPress`); a phone's conversations put their content 20 from the edges
+and the first row 4 under the bar. A tablet can be checked on a phone AVD: `adb shell wm size 2560x1600; adb shell
+wm density 320`, then `wm size reset; wm density reset`. iOS Universal Links: both hosts in both entitlements;
+test on a device (Settings › Developer › Universal Links › Diagnostics — the simulator falls to Safari), and after
+the first archive check `codesign -d --entitlements -` lists associated-domains (else tick Associated Domains on
+the App ID once). The site's association file must be live before such a build ships.

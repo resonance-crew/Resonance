@@ -13,7 +13,7 @@ come, are Playwright's.
 | --- | --- | --- |
 | `sign-in` | — → alice | A signed-out start, the emulator build's email form, alice's home feed (我也在雨裡走過 first) |
 | `send-message` | alice | `/messages/bob`: types a message, 送出, the bubble is in the thread and nothing is left 傳送中⋯ |
-| `send-sticker` | alice | `/messages/bob`: ☺ (貼圖) opens the panel, 心暖暖 once previews it (再點一次傳送), again sends it: 貼圖：心暖暖 in the thread |
+| `send-sticker` | alice | `/messages/bob`: ☺ (貼圖) opens the panel, one tap on 心暖暖 sends it (round 23): 貼圖：心暖暖 in the thread, and held at once its menu fills in with 回覆 and 收回, never 複製 |
 | `react-reply` | alice | holds bob's note: the tray's 感動 (你回應了感動), then 回覆 and a reply that quotes the note |
 | `unsend-message` | alice | sends a message, holds it, 收回 → the dialog's 收回: 你收回了一則訊息 |
 | `chat-draft` | alice | types to bob and leaves unsent: the list shows the words after a pen, the thread keeps them |
