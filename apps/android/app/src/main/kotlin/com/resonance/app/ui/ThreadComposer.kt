@@ -104,6 +104,9 @@ import com.resonance.kit.chat.ComposerPanel
 import com.resonance.kit.chat.PanelMachine
 import com.resonance.kit.chat.PanelState
 import com.resonance.kit.chat.ReplyQuote
+import com.resonance.kit.chat.ChatMessage
+import com.resonance.api.models.FeedCard
+import java.util.Date
 import com.resonance.kit.chat.ChatSticker
 import com.resonance.kit.chat.StickerCatalog
 import com.resonance.kit.chat.SegmentRole
@@ -391,13 +394,25 @@ private fun replyMedia(model: ThreadModel, quote: ReplyQuote): (@Composable () -
             }
         }
     }
-    val cover = quote.cardRef?.let { model.cards[it]?.imageUrl }
+    val cover = replyCover(quote, original, model.cards, model.me)
     if (cover != null) return {
         Box(Modifier.fillMaxSize().clip(ComposerLeadShape).background(ComposerTileFace)) {
             AsyncImage(model = cover, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
     }
     return null
+}
+
+/**
+ * The cover of the card [quote] quotes, as the bubble would draw that card: none for one the viewer can't read — not
+ * read, or someone else's 私人卡 whose sharing ended ([sharingEnded], on the [original] message as the thread holds it
+ * now; one it doesn't hold, a draft's reply to an older page, is judged as carrying no pass).
+ */
+internal fun replyCover(quote: ReplyQuote, original: ChatMessage?, cards: Map<String, FeedCard?>, me: String?): String? {
+    val ref = quote.cardRef ?: return null
+    val card = cards[ref] ?: return null
+    val message = original ?: ChatMessage(quote.id, quote.senderId, "", Date(0), cardRef = ref)
+    return card.imageUrl.takeUnless { sharingEnded(message, card, me) }
 }
 
 /**

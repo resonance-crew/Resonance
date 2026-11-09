@@ -262,10 +262,15 @@ internal fun opensInMessages(route: Route, fromTab: Tab, cls: LayoutClass): Bool
  * Where a tapped push leads: its page (`route`, parsed), a conversation by the sender's uid —
  * the push's own `fromUserId`, or else what its bell row says once the list has it ([sender]) —
  * or null: the notifications. With the uid the thread listens at once and still opens after a
- * rename.
+ * rename. The extras reach the activity from any app on the device, so a `fromUserId` that
+ * can't be a document id (a `/`, nothing at all) is left out: the thread would put it in
+ * Firestore paths (`users/{uid}`, `conversations/{pair}`), which throw on it.
  */
 internal fun pushedRoute(route: Route?, fromUserId: String?, sender: () -> String?): Route? =
-    if (route is Route.Thread && route.uid == null) route.copy(uid = fromUserId ?: sender()) else route
+    if (route is Route.Thread && route.uid == null) route.copy(uid = fromUserId?.takeIf(PUSHED_UID::matches) ?: sender()) else route
+
+/** A uid a push may name (Firebase Auth's are at most 128 characters; ours are letters, digits, `_` and `-`). */
+private val PUSHED_UID = Regex("^[A-Za-z0-9_-]{1,128}$")
 
 /**
  * A new card's writer saved its first draft: its stack entry now names the draft, and no longer

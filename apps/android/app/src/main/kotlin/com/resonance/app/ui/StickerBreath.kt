@@ -35,8 +35,11 @@ import kotlin.random.Random
  * 負擔)」): a cell at least 60 % in view plays its file once — the two plays baked into it, about 4.8 s — then rests on
  * its thumb (the hero pose the file starts and ends on, so the swap never shows) for 1.5–3 s, and plays again. At
  * most [max] play at once (the picker's own limit, never the thread's [StickerPlayback]: picking never stops a sticker
- * in the thread, nor the thread one here); cells waiting take a free turn in reading order, one every [STAGGER_MILLIS]
- * (so a screenful starts as a ripple, not all in one frame), and none starts while the grid is being scrolled.
+ * in the thread, nor the thread one here); cells waiting take a free turn first come, first served — the one waiting
+ * longest, since it came into view or since its rest ended, reading order only between cells that began waiting
+ * together (a play outlasts the longest rest, so turns in reading order alone would keep going to the first 2 × [max]
+ * cells and the rest of a grown panel would never play) — one every [STAGGER_MILLIS] (so a screenful starts as a
+ * ripple, not all in one frame), and none starts while the grid is being scrolled.
  *
  * Plain state and a clock, so its rule is tested without a screen: [step] is called every [STAGGER_MILLIS] with the
  * cells in view, [ended] when a cell's play runs out.
@@ -50,20 +53,27 @@ internal class PickerBreath(
     /** The cells playing now, by key (read by each cell while it composes). */
     val playing = mutableStateListOf<String>()
     private val restUntil = HashMap<String, Long>()
+    /** When each cell in view and not playing began waiting for a turn: as it came into view, or as its rest ends. */
+    private val waitingSince = HashMap<String, Long>()
     private var lastStart = Long.MIN_VALUE / 2
 
     /**
      * A step: [inView] (the cells ≥ 60 % in view, in reading order) and whether the grid is [scrolling]. A cell gone
-     * from view stops at once; otherwise, with a turn free, not scrolling, and [STAGGER_MILLIS] since the last start,
-     * the first cell in view that isn't playing or resting starts.
+     * from view stops at once and waits no more; one in view and not playing waits from now — or from the end of its
+     * rest. Then, with a turn free, not scrolling, and [STAGGER_MILLIS] since the last start, the cell waiting longest
+     * starts (the first in reading order among those that began waiting at the same moment).
      */
     fun step(inView: List<String>, scrolling: Boolean) {
         val shown = inView.toHashSet()
         if (playing.any { it !in shown }) playing.removeAll { it !in shown }
-        if (scrolling || playing.size >= max) return
         val t = now()
+        waitingSince.keys.retainAll(shown)
+        val busy = playing.toHashSet()
+        for (key in inView) if (key !in busy && key !in waitingSince) waitingSince[key] = maxOf(t, restUntil[key] ?: Long.MIN_VALUE)
+        if (scrolling || playing.size >= max) return
         if (t - lastStart < STAGGER_MILLIS) return
-        val next = inView.firstOrNull { it !in playing && (restUntil[it] ?: Long.MIN_VALUE) <= t } ?: return
+        val next = inView.filter { (waitingSince[it] ?: Long.MAX_VALUE) <= t }.minByOrNull { waitingSince.getValue(it) } ?: return
+        waitingSince.remove(next)
         playing += next
         lastStart = t
     }

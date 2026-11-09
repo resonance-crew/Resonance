@@ -6,6 +6,7 @@ import com.resonance.app.DraftService
 import com.resonance.app.DraftValues
 import com.resonance.kit.chat.ChatMessage
 import com.resonance.kit.chat.Delivery
+import com.resonance.kit.chat.ReplyQuote
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
 import java.io.File
@@ -19,6 +20,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -59,10 +61,11 @@ class StopSharingPrivateCardsTest {
         author: String,
         published: String? = null,
         visibility: FeedCard.Visibility = FeedCard.Visibility.`private`,
+        imageUrl: String? = null,
     ) = FeedCard(
         id = "k", slug = null, title = "雨中散步", excerpt = "…", tags = emptyList(), publishedAt = published,
         author = Author(id = author, handle = author, initials = "B", accentColor = "", avatarUrl = null, avatarSeed = null, verified = false, region = null),
-        anonymous = false, visibility = visibility, imageUrl = null, imageLabel = null,
+        anonymous = false, visibility = visibility, imageUrl = imageUrl, imageLabel = null,
         accentHue = null, readMinutes = 3, referenceCardId = null, reason = null, editedAt = null,
         trashedAt = null, purgeAt = null, restoresTo = null,
     )
@@ -139,6 +142,27 @@ class StopSharingPrivateCardsTest {
         // A link to a card (no cardRef), or a card not read: nothing to take back.
         assertFalse(sharingEnded(message(bob, cardRef = null, privateShare = false), draft, me))
         assertFalse(sharingEnded(message(bob, privateShare = false), null, me))
+    }
+
+    @Test fun theReplyRowShowsNoCoverOfACardNoLongerShared() {
+        val cover = "https://img.resonance.channel/cards/2026-10/rain.webp"
+        val kept = mapOf("k" to card(bob, published = "2026-09-01T08:00:00Z", imageUrl = cover))
+        val quote = ReplyQuote("m1", bob, "", cardRef = "k")
+        // Still shared: its cover beside the reply, as the bubble draws the card.
+        assertEquals(cover, replyCover(quote, message(bob), kept, me))
+        // 停止分享 while the thread held it: the bubble draws a card I can't read, so the reply row shows no cover either.
+        assertNull(replyCover(quote, message(bob, privateShare = false), kept, me))
+        // A message the thread doesn't hold (a draft's reply to an older page) has no pass to go by.
+        assertNull(replyCover(quote, null, kept, me))
+        // My own card, and a card readers have, keep their covers however they were sent.
+        val mine = mapOf("k" to card(me, imageUrl = cover))
+        assertEquals(cover, replyCover(ReplyQuote("m1", me, "", cardRef = "k"), message(me, privateShare = false), mine, me))
+        val open = mapOf("k" to card(bob, published = "2026-09-01T08:00:00Z", visibility = FeedCard.Visibility.`public`, imageUrl = cover))
+        assertEquals(cover, replyCover(quote, message(bob, privateShare = false), open, me))
+        assertEquals(cover, replyCover(quote, null, open, me))
+        // A card not read (not mine to see), or a quote of no card: none, as before.
+        assertNull(replyCover(quote, message(bob), mapOf("k" to null), me))
+        assertNull(replyCover(ReplyQuote("m1", bob, "嗨"), message(bob, cardRef = null), kept, me))
     }
 
     // The publish step's warning

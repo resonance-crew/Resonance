@@ -2,6 +2,9 @@ package com.resonance.app.ui
 
 import androidx.compose.ui.input.key.KeyEvent
 import com.resonance.kit.chat.ChatSticker
+import com.resonance.kit.chat.StickerCatalog
+import java.io.File
+import kotlin.random.Random
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -14,8 +17,9 @@ import android.view.KeyEvent as NativeKey
  * Round 23's composer and sticker picker rules that aren't drawing: Send is the bottom-end block whenever anything
  * rides, ⤢ still only from the third line; Escape lets a reply go unless a panel is open; a grown capsule beside the
  * conversations at most 60 % of the pane; one tap sends a sticker, a second on the same one within 600 ms doesn't;
- * the 🕘 recents hold still while the panel shows; the picker's cells breathe — at most their limit at once, in
- * reading order, one start at a time, none while scrolling, resting after each play.
+ * the 🕘 recents hold still while the panel shows; the picker's cells breathe — at most their limit at once, first
+ * come first served (reading order between equals: none starved), one start at a time, none while scrolling, resting
+ * after each play.
  */
 @RunWith(RobolectricTestRunner::class)
 class RoundTwentyThreeTest {
@@ -102,7 +106,7 @@ class RoundTwentyThreeTest {
         t += 1_000
         breath.step(cells, scrolling = false)
         assertEquals(3, breath.playing.size)
-        // A play runs out: its turn goes to the next waiting in reading order, and it rests.
+        // A play runs out: its turn goes to the one waiting longest (all since the first step: reading order), and it rests.
         breath.ended("c1")
         breath.step(cells, scrolling = false)
         assertEquals(listOf("c2", "c3", "c4"), breath.playing.toList())
@@ -118,6 +122,51 @@ class RoundTwentyThreeTest {
         t += 2_000
         breath.step(cells, scrolling = false)
         assertTrue("c1" in breath.playing)
+    }
+
+    /**
+     * Two minutes of a grown panel on a fake clock: [cells] all in view, each playing its catalog sticker's file through
+     * (its two plays, as [BreathingSticker] sets them: twice the catalog's loop), its end delivered as the drawable's
+     * callback would, a step every [PickerBreath.STAGGER_MILLIS] as the grid's loop makes one; how often each played.
+     */
+    private fun breathe(cells: Int, max: Int, seed: Int, millis: Long = 120_000): List<Int> {
+        val loops = StickerCatalog.parse(File("../../../public/stickers/catalog.json").readText())!!.all
+            .map { it.durationMs.toLong() }.filter { it > 0 }
+        var t = 0L
+        val random = Random(seed)
+        val breath = PickerBreath(max, now = { t }, rest = { random.nextLong(PickerBreath.REST_MIN_MILLIS, PickerBreath.REST_MAX_MILLIS + 1) })
+        val keys = (0 until cells).map { "c$it" }
+        val play = keys.withIndex().associate { (i, key) -> key to 2 * loops[i % loops.size] }
+        val endsAt = HashMap<String, Long>()
+        val plays = keys.associateWith { 0 }.toMutableMap()
+        while (t <= millis) {
+            endsAt.filterValues { it <= t }.keys.toList().forEach { key ->
+                endsAt.remove(key)
+                breath.ended(key)
+            }
+            if (t % PickerBreath.STAGGER_MILLIS == 0L) {
+                breath.step(keys, scrolling = false)
+                breath.playing.filter { it !in endsAt }.forEach { key ->
+                    endsAt[key] = t + play.getValue(key)
+                    plays[key] = plays.getValue(key) + 1
+                }
+            }
+            t += 10
+        }
+        return keys.map { plays.getValue(it) }
+    }
+
+    @Test fun everyCellInViewGetsItsTurnsFirstComeFirstServedNoneStarved() {
+        // A grown phone panel (24 cells at the phone's 8) and a grown tablet panel (36 at 12): a play (4.2–5.2 s) outlasts
+        // the longest rest (3 s), so turns handed out in reading order would keep going to the first 2 × max cells.
+        listOf(24 to PICKER_PLAYING_PHONE, 36 to PICKER_PLAYING_WIDE).forEach { (cells, max) ->
+            (1..5).forEach { seed ->
+                val plays = breathe(cells, max, seed)
+                val least = plays.min()
+                assertTrue("$cells cells at $max (seed $seed): $plays", least >= 2)
+                assertTrue("$cells cells at $max (seed $seed): $plays", plays.max() <= 2 * least)
+            }
+        }
     }
 
     @Test fun noCellStartsWhileTheGridScrollsAndACellOutOfViewStops() {

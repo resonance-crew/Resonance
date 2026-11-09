@@ -60,6 +60,18 @@ class ThreadRoutesTest {
         assertEquals(null, pushedRoute(null, "a1") { "a1" })
     }
 
+    @Test fun aSenderThatCantBeADocumentIdIsLeftOut() {
+        // The activity takes these extras from any app: a uid with a `/` (or none at all) would reach Firestore's paths
+        // (`conversations/{pair}` has an odd number of segments and throws), so the thread goes by pen name instead.
+        listOf("a/b", "", "../x", "a".repeat(129), "a b").forEach { uid ->
+            assertEquals(uid, Route.Thread("alice"), pushedRoute(Route.Thread("alice"), uid) { null })
+            // The bell row's (Firestore's own) still counts.
+            assertEquals(uid, Route.Thread("alice", uid = "a1"), pushedRoute(Route.Thread("alice"), uid) { "a1" })
+        }
+        assertEquals(Route.Thread("alice", uid = "Xy_12-ab"), pushedRoute(Route.Thread("alice"), "Xy_12-ab") { null })
+        assertEquals(Route.Thread("alice", uid = "a".repeat(128)), pushedRoute(Route.Thread("alice"), "a".repeat(128)) { null })
+    }
+
     @Test fun aPushFromSomeoneRenamedSinceKeepsTheirThreadOnTop() {
         // The thread is open under their new pen name; the push still carries the old one, and their uid.
         val stack = mutableListOf<Route>(root, Route.Thread("alice-new", uid = "a1"))
