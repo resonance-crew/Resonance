@@ -67,6 +67,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
@@ -900,15 +901,21 @@ private fun StickerFace(
     actions: List<CustomAccessibilityAction>,
     onLongPress: () -> Unit,
 ) {
-    val autoplay = remember(message.key) { interactive && StickerPlayback.firstSight(message.key) }
     var replays by remember(message.key) { mutableIntStateOf(0) }
+    // The gesture below starts with the first touch and keeps running while the row stays (its key is the message's,
+    // which doesn't change on delivery): it calls the hold as it is now, never the one it started with — a sticker
+    // touched while 傳送中 would otherwise open the menu of a message still on its way (empty) for as long as it stays.
+    val hold by rememberUpdatedState(onLongPress)
     val name = L10n.Messages.stickerLabel(sticker.name(com.resonance.kit.l10n.Strings.language.tag))
     PlayingSticker(
-        sticker, ctx.origin, key = message.key, size = ctx.stickerSize, autoplay = autoplay, replays = replays,
+        sticker, ctx.origin, key = message.key, size = ctx.stickerSize,
+        // Asked as it is first placed on screen: a row composed ahead of the screen doesn't spend its first sight.
+        autoplay = { interactive && StickerPlayback.firstSight(message.key) },
+        replays = replays,
         modifier = Modifier
             .then(
                 if (interactive) Modifier.pointerInput(message.key) {
-                    detectTapGestures(onTap = { replays++ }, onLongPress = { onLongPress() })
+                    detectTapGestures(onTap = { replays++ }, onLongPress = { hold() })
                 } else Modifier,
             )
             .then(if (message.delivery == Delivery.Failed) Modifier.fade(0.6f) else Modifier)

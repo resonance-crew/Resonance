@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
@@ -28,12 +29,14 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import com.resonance.app.Stickers
 import com.resonance.design.prefersReducedMotion
 import com.resonance.kit.chat.PlaybackLimiter
 import com.resonance.kit.chat.StickerCatalog
+import kotlinx.coroutines.flow.first
 import kotlin.math.roundToInt
 
 /**
@@ -74,14 +77,63 @@ internal object StickerPlayback {
         limiter.start(key).forEach { stops[it] = (stops[it] ?: 0) + 1 }
     }
 
-    fun stop(key: String) = limiter.stop(key)
+    /**
+     * [key] stopped playing (its plays ended, it was told to stop, or it left the screen): its turn is free,
+     * and a stop it was told is forgotten — a sticker drawn again later doesn't take an old one as news.
+     */
+    fun stop(key: String) {
+        limiter.stop(key)
+        stops.remove(key)
+    }
+}
+
+/**
+ * One decoded sticker's plays, as the end callback of its `AnimatedImageDrawable` sees them (2.4.1).
+ *
+ * Why it exists: Android's `AnimatedImageDrawable` posts its start (first draw after `start()`) and end
+ * (`stop()`) callbacks to the main looper, and the posted lambda walks its callback list without asking
+ * whether it is still there; unregistering the last callback sets that list to null. A sticker let go
+ * between its first draw and that posted lambda — a tap replaying it, a quick second tap in the panel, the
+ * three-at-once limit — took the app down with a NullPointerException in
+ * `AnimatedImageDrawable.lambda$postOnAnimationStart`. So a drawable's callback is registered once and never
+ * unregistered, and it decides here whether an end it hears ends anything:
+ * - only while the sticker is still on screen ([release]d: never again);
+ * - only while a play we started is under way (a play we stopped ourselves ended already: [stopped]);
+ * - only once the drawable has really stopped: a replay is `stop(); start()`, and the end the `stop()` posts
+ *   arrives after the `start()`, while the drawable runs again.
+ */
+internal class StickerRun {
+    private var live = true
+    private var started = false
+
+    /** A play starts (`start()` is called right after). */
+    fun started() {
+        started = true
+    }
+
+    /** We stopped the play ourselves (its ending has been handled). */
+    fun stopped() {
+        started = false
+    }
+
+    /** The sticker left the screen: nothing it hears matters any more. */
+    fun release() {
+        live = false
+        started = false
+    }
+
+    /** Whether an end the drawable reports, while it is [running] or not, is the end of our play. */
+    fun ends(running: Boolean): Boolean = live && started && !running
 }
 
 /**
  * A sticker as the thread draws it (round 22 §4.5): no bubble, [size] square, standing on the page —
- * playing its file's two plays when [autoplay] (its first sight this session), else resting on its hero
- * pose (the thumb); [replays] bumped (a tap) plays it again. At most three play at once ([StickerPlayback]); leaving
- * the screen lets its frames go. With the system's animations off, the hero pose only.
+ * playing its file's two plays when [autoplay] says so as it is first placed on screen (its first sight this
+ * session; a row the list composes ahead of the screen isn't placed, and neither plays nor takes a turn),
+ * else resting on its hero pose (the thumb); [replays] bumped (a tap) plays it again from its first frame.
+ * At most three play at once ([StickerPlayback]). The file is decoded once, the first time it plays, and
+ * kept while the sticker is on screen: a replay starts the same drawable over. With the system's animations
+ * off, the hero pose only.
  */
 @Composable
 internal fun PlayingSticker(
@@ -89,46 +141,91 @@ internal fun PlayingSticker(
     origin: String,
     key: String,
     size: Dp,
-    autoplay: Boolean,
+    autoplay: () -> Boolean,
     replays: Int,
     modifier: Modifier = Modifier,
 ) {
     val still = LocalContext.current.prefersReducedMotion()
-    var playing by remember(key) { mutableStateOf(autoplay && !still) }
-    LaunchedEffect(replays) { if (replays > 0 && !still) playing = true }
+    var playing by remember(key) { mutableStateOf(false) }
+    var placed by remember(key) { mutableStateOf(false) }
+    // Keyed on the sticker: a sticker never shows another's frames (produceState's value would outlive its key).
+    var drawable by remember(key, sticker) { mutableStateOf<Drawable?>(null) }
+    LaunchedEffect(key, sticker) {
+        while (true) {
+            snapshotFlow { playing }.first { it }
+            val decoded = Stickers.animated(sticker, origin)
+            if (decoded != null) {
+                drawable = decoded
+                break
+            }
+            // Not readable now (a file this build doesn't carry, offline): at rest, and a tap asks again.
+            playing = false
+        }
+    }
+    val d = drawable
     val stopped = StickerPlayback.stops[key] ?: 0
     LaunchedEffect(stopped) { if (stopped > 0) playing = false }
-    Box(modifier.size(size)) {
+    // A tap: from the first frame again — the same drawable, stopped and started; at rest, it simply plays.
+    LaunchedEffect(replays) {
+        if (replays == 0 || still) return@LaunchedEffect
+        if (playing && d is AnimatedImageDrawable) {
+            d.stop()
+            d.start()
+            StickerPlayback.start(key)
+        } else playing = true
+    }
+    Box(
+        modifier.size(size).onPlaced {
+            if (!placed) {
+                placed = true
+                if (!still && autoplay()) playing = true
+            }
+        },
+    ) {
         // The thumb is the sticker's hero pose, not the file's first frame: it shows at rest and until the file's first
         // frame is ready, never under the playing frames (their clear parts would show it through, a ghost).
-        val drawable by produceState<Drawable?>(null, sticker, replays, playing) { value = if (playing) Stickers.animated(sticker, origin) else null }
-        val d = drawable
         if (!playing || d !is AnimatedImageDrawable) StickerPose(sticker, origin, Modifier.fillMaxSize())
-        if (playing) {
-            if (d is AnimatedImageDrawable) {
+        if (d is AnimatedImageDrawable) {
+            val run = remember(d) { StickerRun() }
+            // Registered once for this drawable and never unregistered (see [StickerRun]); declared before the play below,
+            // so it is there before the first start() and let go after the last stop().
+            DisposableEffect(d) {
+                d.registerAnimationCallback(
+                    object : Animatable2.AnimationCallback() {
+                        override fun onAnimationEnd(drawable: Drawable?) {
+                            if (run.ends(d.isRunning)) {
+                                run.stopped()
+                                playing = false
+                            }
+                        }
+                    },
+                )
+                onDispose {
+                    run.release()
+                    d.stop()
+                    d.callback = null
+                }
+            }
+            if (playing) {
                 val painter = remember(d) { DrawablePainter(d) }
                 DisposableEffect(d) {
                     StickerPlayback.start(key)
-                    val done = object : Animatable2.AnimationCallback() {
-                        override fun onAnimationEnd(drawable: Drawable?) {
-                            playing = false
-                        }
-                    }
-                    d.registerAnimationCallback(done)
                     // Two plays: the file says so itself (its loop count), and this holds whatever it says.
                     d.repeatCount = 1
+                    run.started()
+                    // A drawable stopped (or played out) starts over from its first frame.
                     d.start()
                     onDispose {
-                        d.unregisterAnimationCallback(done)
+                        run.stopped()
                         d.stop()
                         StickerPlayback.stop(key)
                     }
                 }
                 Image(painter, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-            } else if (d != null) {
-                // A still file (the stand-ins before the art lands): nothing to play.
-                LaunchedEffect(d) { playing = false }
             }
+        } else if (playing && d != null) {
+            // A still file (the stand-ins before the art lands): nothing to play.
+            LaunchedEffect(d) { playing = false }
         }
     }
 }

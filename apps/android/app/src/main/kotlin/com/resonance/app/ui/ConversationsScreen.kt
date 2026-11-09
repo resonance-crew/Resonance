@@ -23,7 +23,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import com.resonance.design.LocalWindowLayout
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -93,9 +94,19 @@ fun ConversationsScreen(session: Session, open: (Route) -> Unit) {
     val someone = connected.orEmpty().any { it !in blocked.orEmpty() }
     val connectionsInvite = rememberInviteShown(session, NotifyInvite.ConnectionCards, eligible = someone)
     LaunchedEffect(connectionsInvite && state.loaded) { if (connectionsInvite && state.loaded) list.keepTopInView(before = 1) }
-    // In the rows' column: the page's 16 / 18 and the list pane's own 14.
-    val inviteFrame = Modifier.readableColumn(NotifyInviteMaxWidth + 62.dp).padding(start = 16.dp, end = 18.dp).padding(horizontal = 14.dp).padding(top = 4.dp, bottom = 16.dp)
-    TabScreen(L10n.App.Nav.messages, titleInBar = true, tabletAir = false, list = list) {
+    // A phone's rows are bands, their content 20 from the edges, the first 4 under the bar's foot; a tablet's and
+    // the panes' keep the page's 16 / 18 and the list pane's own 14 (round 23 §5: [ConversationsFrame]).
+    val frame = ConversationsFrame.of(LocalWindowLayout.current.cls)
+    val scrolling = { list.isScrollInProgress }
+    // In the rows' column; on a phone its pen line 16 under the bar's foot, where a first row's avatar would stand.
+    val inviteFrame = Modifier.readableColumn(NotifyInviteMaxWidth + 62.dp).padding(start = frame.start, end = frame.end).padding(horizontal = frame.rowInset)
+        .padding(top = if (frame.bands) ListBands.RowPad else 4.dp, bottom = 16.dp)
+    // The curve under each row: the next row's key, the starters' label under the last conversation, the list's end under the last row.
+    val conversationKeys = state.conversations.map { "c:${it.id}" }
+    val starterKeys = state.starters.map { "s:${it.id}" }
+    val conversationsBelow = bandsBelow(conversationKeys, if (starterKeys.isNotEmpty()) StartersKey else ListBands.EndKey)
+    val startersBelow = bandsBelow(starterKeys, ListBands.EndKey)
+    TabScreen(L10n.App.Nav.messages, titleInBar = true, tabletAir = false, headGap = frame.headGap, list = list) {
         if (connectionsInvite && state.loaded) notifyInviteItem(session, NotifyInvite.ConnectionCards, inviteFrame)
         if (state.loaded && state.conversations.isEmpty() && state.starters.isEmpty() && !twoPane) {
             // Nothing yet: the shared empty state, in the middle of the room between the bar and the tab bar.
@@ -110,26 +121,31 @@ fun ConversationsScreen(session: Session, open: (Route) -> Unit) {
             item { OrganicEmptyState(L10n.Native.loadError, L10n.Native.retry, { session.conversations.resume() }, action = EmptyAction.Outline) }
         } else if (!state.loaded) {
             // Still reading: the rows' own shapes, so nothing jumps when they arrive.
-            item(key = "skeleton") { ConversationsSkeleton() }
+            item(key = "skeleton") { ConversationsSkeleton(frame) }
         }
-        items(state.conversations, key = { "c:${it.id}" }, contentType = { "conversation" }) { convo ->
+        itemsIndexed(state.conversations, key = { _, it -> "c:${it.id}" }, contentType = { _, _ -> "conversation" }) { i, convo ->
             ConversationRow(
                 convo.other, preview(convo), convo.sentAt?.let(::rowTime), convo.unread, open,
                 chosen = chosen?.isWith(convo.other) == true, draft = drafts[convo.id]?.preview,
+                frame = frame, band = conversationKeys.getOrNull(i)?.let { it to conversationsBelow[i] }, scrolling = scrolling,
             )
         }
         if (state.starters.isNotEmpty()) {
-            item {
+            item(key = StartersKey) {
                 BasicText(
                     L10n.Messages.startSection.uppercase(),
                     style = AppFonts.body(11f, lineHeight = 1.3f, color = Tokens.TextMuted).copy(letterSpacing = 0.08.em),
-                    // The page's 14 plus the list pane's own 2 / 4.
-                    modifier = Modifier.readableColumn().padding(start = 16.dp, end = 18.dp).padding(top = 16.dp, bottom = 4.dp).padding(horizontal = 14.dp),
+                    // In the rows' column; on a phone, on bare paper clear of the bands' curves under it.
+                    modifier = Modifier.readableColumn().padding(start = frame.start, end = frame.end)
+                        .padding(top = 16.dp, bottom = if (frame.bands) ListBands.TitleToBand else 4.dp).padding(horizontal = frame.rowInset),
                 )
             }
-            items(state.starters, key = { "s:${it.id}" }, contentType = { "conversation" }) { person ->
+            itemsIndexed(state.starters, key = { _, it -> "s:${it.id}" }, contentType = { _, _ -> "conversation" }) { i, person ->
                 val pair = me?.let { listOf(it, person.id).sorted().joinToString("_") }
-                ConversationRow(person, L10n.Messages.noMessagesYet, null, 0, open, chosen = chosen?.isWith(person) == true, draft = pair?.let { drafts[it]?.preview })
+                ConversationRow(
+                    person, L10n.Messages.noMessagesYet, null, 0, open, chosen = chosen?.isWith(person) == true, draft = pair?.let { drafts[it]?.preview },
+                    frame = frame, band = starterKeys.getOrNull(i)?.let { it to startersBelow[i] }, scrolling = scrolling,
+                )
             }
         }
     }
@@ -187,40 +203,45 @@ private fun Route.Thread.isWith(person: Person): Boolean = if (uid != null) uid 
 
 /**
  * One row: the avatar, the pen name over the last line, the time and the
- * unread badge on the right; a faint hand-drawn wash while pressed or under a
- * pointer (RowWash: R h·0.28, three turns across) — and beside the thread pane,
- * the chosen row's terracotta wash (MessagesPage's active row).
+ * unread badge on the right. On a phone ([ConversationsFrame.bands]) the row is
+ * a band — the screen's width between its curve and the one under it ([band]:
+ * its key and the next's), washed while pressed (round 23 §5, as the
+ * notifications are); on a tablet and beside the thread pane, a faint
+ * hand-drawn wash while pressed or under a pointer (RowWash: R h·0.28, three
+ * turns across) — and beside the thread pane, the chosen row's terracotta wash
+ * (MessagesPage's active row).
  */
 @Composable
-private fun ConversationRow(person: Person, preview: String, time: String?, unread: Int, open: (Route) -> Unit, chosen: Boolean = false, draft: String? = null) {
+private fun ConversationRow(
+    person: Person,
+    preview: String,
+    time: String?,
+    unread: Int,
+    open: (Route) -> Unit,
+    chosen: Boolean = false,
+    draft: String? = null,
+    frame: ConversationsFrame,
+    band: Pair<String, String>?,
+    scrolling: () -> Boolean,
+) {
     val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    val hovered by source.collectIsHoveredAsState()
-    val seed = seedFromString(person.id).toDouble()
     val chosenWash = Tokens.TerracottaLight.copy(alpha = 0.55f)
-    val pressWash = Tokens.TowardInk.copy(alpha = 0.045f)
+    val wash = if (frame.bands && band != null) {
+        Modifier.listBand(band.first, band.second, source, scrolling, rest = chosenWash.takeIf { chosen })
+    } else {
+        Modifier.rowBlob(person.id, source, chosen, chosenWash)
+    }
     Row(
         Modifier
             .readableColumn()
-            // The page's 14 plus the list pane's own 2 / 4.
-            .padding(start = 16.dp, end = 18.dp)
+            .padding(start = frame.start, end = frame.end)
             .fillMaxWidth()
             .hoverable(source)
             .pointerHoverIcon(PointerIcon.Hand)
-            .drawWithCache {
-                val h = (size.height / density).toDouble()
-                val outline = WobRectShape(
-                    h * 0.28, seed, mag = 2.4,
-                    options = WobRectOptions(curve = 1.3, cornerJitter = 2.4, cornerOffset = h * 0.05, segmentsH = SegValue.Count(3.0), segmentsV = SegValue.Count(1.0)),
-                ).createOutline(size, layoutDirection, this)
-                onDrawBehind {
-                    if (chosen) drawOutline(outline, chosenWash)
-                    else if (pressed || hovered) drawOutline(outline, pressWash)
-                }
-            }
+            .then(wash)
             .clickable(source, indication = null, role = Role.Button) { open(Route.Thread(person.handle, uid = person.id)) }
             .semantics { selected = chosen }
-            .padding(vertical = 12.dp, horizontal = 14.dp),
+            .padding(vertical = ListBands.RowPad, horizontal = frame.rowInset),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -252,19 +273,45 @@ private fun ConversationRow(person: Person, preview: String, time: String?, unre
 }
 
 /**
- * The conversations still on their way: six rows in a row's measures — the 40 face, the pen name
- * over the last line, the time at the end — in the warm shimmer. iOS's ConversationsSkeleton.
+ * A tablet's (and a pane's) row wash: a faint hand-drawn blob while pressed or under a pointer
+ * (RowWash: R h·0.28, three turns across), or the chosen row's terracotta.
  */
 @Composable
-private fun ConversationsSkeleton() {
+private fun Modifier.rowBlob(id: String, source: MutableInteractionSource, chosen: Boolean, chosenWash: Color): Modifier {
+    val pressed by source.collectIsPressedAsState()
+    val hovered by source.collectIsHoveredAsState()
+    val seed = seedFromString(id).toDouble()
+    val pressWash = Tokens.TowardInk.copy(alpha = 0.045f)
+    return drawWithCache {
+        val h = (size.height / density).toDouble()
+        val outline = WobRectShape(
+            h * 0.28, seed, mag = 2.4,
+            options = WobRectOptions(curve = 1.3, cornerJitter = 2.4, cornerOffset = h * 0.05, segmentsH = SegValue.Count(3.0), segmentsV = SegValue.Count(1.0)),
+        ).createOutline(size, layoutDirection, this)
+        onDrawBehind {
+            if (chosen) drawOutline(outline, chosenWash)
+            else if (pressed || hovered) drawOutline(outline, pressWash)
+        }
+    }
+}
+
+/** The label over the people to start a conversation with, and the key the band above it ends on. */
+private const val StartersKey = "starters"
+
+/**
+ * The conversations still on their way: six rows in a row's measures — the 40 face, the pen name
+ * over the last line, the time at the end — in the warm shimmer, in the rows' own frame. iOS's ConversationsSkeleton.
+ */
+@Composable
+private fun ConversationsSkeleton(frame: ConversationsFrame) {
     // One clock for its blocks (composed together).
     SharedShimmer {
         val names = listOf(96, 128, 80, 112, 88, 120)
         val lines = listOf(0.78f, 0.56f, 0.7f, 0.48f, 0.64f, 0.52f)
-        Column(Modifier.readableColumn().padding(start = 16.dp, end = 18.dp).semantics { contentDescription = L10n.Home.moreLoading }) {
+        Column(Modifier.readableColumn().padding(start = frame.start, end = frame.end).semantics { contentDescription = L10n.Home.moreLoading }) {
             for (i in 0 until 6) {
                 Row(
-                    Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 14.dp),
+                    Modifier.fillMaxWidth().padding(vertical = ListBands.RowPad, horizontal = frame.rowInset),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {

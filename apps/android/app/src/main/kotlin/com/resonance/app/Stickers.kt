@@ -20,6 +20,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.util.concurrent.Callable
 
 /**
  * The 小紙團 stickers on this device (round 22 §2, §4.5): the catalog and files the build bundles
@@ -28,8 +29,9 @@ import java.io.File
  * (`/stickers/<pack>/<id>.webp?v=`, cached for good there), fetched once and kept in
  * cacheDir/stickers. A sticker found in neither is drawn as its message's fallback words.
  *
- * Key poses (256 px) are kept decoded in a small memory cache; an animated file is decoded afresh for
- * each playback ([animated]: an `AnimatedImageDrawable`, its two plays baked in) and let go when it ends.
+ * Key poses (256 px) are kept decoded in a small memory cache; an animated file is decoded when a sticker
+ * on screen first plays ([animated]: an `AnimatedImageDrawable`, its two plays baked in) and let go when
+ * that sticker leaves the screen.
  */
 object Stickers {
     private lateinit var app: Context
@@ -104,14 +106,21 @@ object Stickers {
     }
 
     /**
-     * [sticker]'s animated file, decoded for one playback: an `AnimatedImageDrawable` whose loop count
+     * [sticker]'s animated file, decoded for one sticker on screen: an `AnimatedImageDrawable` whose loop count
      * the file carries (two plays) — or, for a still file (the placeholders before the art lands), a
-     * plain drawable. Null: it can't be read.
+     * plain drawable. Null: it can't be read. [targetPx] decodes its frames at that size (the picker's cells, round 23
+     * §3: about a third of the memory of the 432 px file); none, the file's own.
      */
-    suspend fun animated(sticker: StickerCatalog.Sticker, origin: String): Drawable? = withContext(Dispatchers.IO) {
+    suspend fun animated(sticker: StickerCatalog.Sticker, origin: String, targetPx: Int? = null): Drawable? = withContext(Dispatchers.IO) {
         val source = source(sticker.file, sticker.url, sticker.v, bundledFile = isBundled(sticker), origin = origin) ?: return@withContext null
         try {
-            ImageDecoder.decodeDrawable(source) { decoder, _, _ -> decoder.allocator = ImageDecoder.ALLOCATOR_DEFAULT }
+            ImageDecoder.decodeDrawable(source) { decoder, info, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_DEFAULT
+                val side = maxOf(info.size.width, info.size.height)
+                if (targetPx != null && targetPx in 1 until side) {
+                    decoder.setTargetSize(info.size.width * targetPx / side, info.size.height * targetPx / side)
+                }
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -120,16 +129,27 @@ object Stickers {
         }
     }
 
-    /** Where a file is read from: the bundle's asset, else the site's file kept in cacheDir/stickers (fetched once). */
+    /**
+     * Where a file is read from: the bundle's asset, else the site's file kept in cacheDir/stickers (fetched once).
+     * A bundled file is opened as a file descriptor (stored, not deflated: `noCompress += "webp"`), which the native
+     * decoder of an animated drawable holds itself — not a Java asset stream it would read from after that stream's
+     * owner may be gone.
+     */
     private fun source(path: String, url: String, v: String, bundledFile: Boolean, origin: String): ImageDecoder.Source? {
-        if (bundledFile) return ImageDecoder.createSource(app.assets, "stickers/$path")
+        if (bundledFile) return ImageDecoder.createSource(Callable { app.assets.openFd("stickers/$path") })
         val kept = File(app.cacheDir, "stickers/${path.removeSuffix(".webp")}-$v.webp")
         if (!kept.isFile) {
             val bytes = get(origin.trimEnd('/') + url) ?: return null
             kept.parentFile?.mkdirs()
-            val tmp = File(kept.parentFile, kept.name + ".part")
-            tmp.writeBytes(bytes)
-            tmp.renameTo(kept)
+            // A name of its own per download: two reads of the same file at once (its pose and its animation, two rows)
+            // never write into one another's half, and the one renamed last wins whole.
+            val tmp = File.createTempFile(kept.name, ".part", kept.parentFile)
+            try {
+                tmp.writeBytes(bytes)
+                if (!tmp.renameTo(kept) && !kept.isFile) return null
+            } finally {
+                tmp.delete()
+            }
         }
         return ImageDecoder.createSource(kept)
     }

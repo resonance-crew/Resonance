@@ -6,8 +6,10 @@ import com.resonance.api.models.RestoredCard
 import com.resonance.api.models.TrashedCard
 import com.resonance.design.BarLineInset
 import com.resonance.design.ComposerFade
-import com.resonance.design.ComposerRowsGap
-import com.resonance.design.ComposerRowsLead
+import com.resonance.design.ComposerHeight
+import com.resonance.design.ComposerRowHeight
+import com.resonance.design.ComposerRowsTop
+import com.resonance.design.ComposerStripHeight
 import com.resonance.design.TabletBarRowDrop
 import com.resonance.design.Toasts
 import com.resonance.design.TopBarRow
@@ -28,8 +30,8 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Round 11's rules that aren't drawing alone: the foot's short fade (12, starting 6 over riding
- * rows), the writer's head and its title's gap from the reading head's numbers, the publish step's
+ * Round 11's rules that aren't drawing alone: the foot's short fade (12; round 23: what rides is inside
+ * the capsule), the writer's head and its title's gap from the reading head's numbers, the publish step's
  * one section gap, the save state's line under the title, a tablet's back bar row set lower, and
  * the trash shelf's restore toast saying who reads the card now — read off the restore's answer.
  */
@@ -56,12 +58,15 @@ class RoundElevenTest {
 
     // §3
 
-    @Test fun theFootFadesInOver12ThenSixOfSolidPaperOverTheRows() {
+    @Test fun theFootFadesInOver12AndWhatRidesIsInsideTheCapsule() {
         assertEquals(12.dp, ComposerFade)
-        // The fade ends 6 over the topmost row, as the last row ends 6 over the capsule (the owner's notes 2026-10-31):
-        // a centred lead has as much solid paper above it as below it to the capsule.
-        assertEquals(18.dp, ComposerRowsLead)
-        assertEquals(ComposerRowsGap, ComposerRowsLead - ComposerFade)
+        // Round 23 §2 (the owner's 「不用做這個漸層」): no fade over riding rows — they are inside the pen line, 6 under it,
+        // 44 each, touching the text line. One reply: 6 + 44 + 48 = 98 (the foot was 18 + 52 + 6 + 48 = 124).
+        assertEquals(6.dp, ComposerRowsTop)
+        assertEquals(44.dp, ComposerRowHeight)
+        assertEquals(98.dp, ComposerRowsTop + ComposerRowHeight + ComposerHeight)
+        // The picture strip: 8 + 56 + 8.
+        assertEquals(72.dp, ComposerStripHeight)
     }
 
     // §4

@@ -86,6 +86,32 @@ class BellRowsTest {
         assertEquals("", summary.after)
     }
 
+    @Test fun eachRowsBottomCurveIsTheRowBelowsOrThePartTitleUnderIt() {
+        // Round 23 §4: the rows of a part touch, parted by curves seeded by the lower row — the band above a part's
+        // title ends on that title's key, the list's last on its end — so a new row on top moves no other curve.
+        val rows = listOf(
+            row("a", at(2026, 10, 29, 0, 20)),
+            row("b", at(2026, 10, 29, 0, 5)),
+            row("c", at(2026, 10, 27)),
+            row("d", at(2026, 9, 1)),
+            row("e", at(2026, 8, 1)),
+        )
+        val bands = bellBands(bellParts(rows, now, zone))
+        assertEquals(
+            listOf(
+                BellGroup.Today to listOf("a" to "b", "b" to bellPartKey(BellGroup.ThisWeek)),
+                BellGroup.ThisWeek to listOf("c" to bellPartKey(BellGroup.Earlier)),
+                BellGroup.Earlier to listOf("d" to "e", "e" to ListBands.EndKey),
+            ),
+            bands.map { (group, banded) -> group to banded.map { it.item.id to it.below } },
+        )
+        // A new notification arrives: the curves under the others are as they were.
+        val arrived = bellBands(bellParts(listOf(row("z", now)) + rows, now, zone))
+        assertEquals("a", arrived[0].second[0].below)
+        assertEquals(bands.flatMap { it.second }.map { it.below }, arrived.flatMap { it.second }.drop(1).map { it.below })
+        assertEquals("part:ThisWeek", bellPartKey(BellGroup.ThisWeek))
+    }
+
     private fun row(id: String, at: java.time.Instant?, type: String = "resonance") = NotificationsStore.Item(
         id = id, type = type, fromHandle = "阿澄", fromUserId = "u1", cardId = "c1", preview = null, noteId = null,
         count = null, readAt = null, createdAt = at?.let { Date.from(it) },
