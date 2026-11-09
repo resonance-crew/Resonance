@@ -1,0 +1,553 @@
+/* ── 01 封面 The cover ───────────────────────────────────────────────────────────────────────────────────────────
+   zh: the title set vertically in two columns of manuscript cells (稿紙), read right to left — 用故事 | 回應故事 —
+   and the first column one cell short: a puppet stands in that fourth cell as the character that isn't there.
+   --cell is the cell (168 / 140 / 92), kept so the whole title fits a laptop's first screen. */
+
+.cover {
+  position: relative;
+  --cell: clamp(76px, 23.5vw, 92px);
+  padding: calc(var(--app-header-h) + 8px) 0 clamp(40px, 6vw, 88px);
+}
+
+@media (min-width: 640px) {
+  .cover {
+    --cell: 140px;
+    padding-top: 18px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .cover {
+    --cell: clamp(124px, calc((100svh - 230px) / 4), 168px);
+  }
+}
+
+.sheet {
+  align-items: start;
+}
+
+.body {
+  grid-column: 2 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    'kick title'
+    'copy title'
+    'get title';
+  column-gap: clamp(24px, 6vw, 96px);
+  padding-top: clamp(18px, 2.6vw, 36px);
+}
+
+@media (min-width: 1024px) {
+  .body {
+    grid-column: 2;
+    /* the title's right edge on the text column's, its cell's spotlight spilling into the margin */
+  }
+}
+
+.kicker,
+.copy,
+.download {
+  position: relative;
+  z-index: 1;
+}
+
+.kicker {
+  grid-area: kick;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding-top: 8px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  color: var(--button-on-tonal);
+}
+
+.kickerRule {
+  width: 52px;
+  height: 8px;
+  overflow: visible;
+}
+
+.copy {
+  grid-area: copy;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(28px, 5svh, 56px);
+  min-width: 0;
+  padding-block: clamp(20px, 3vw, 40px) 8px;
+}
+
+/* The dek: the one rule that makes the place different, in the reading type. */
+.dek {
+  margin: 0;
+  max-width: 16.5em;
+  font-family: var(--font-story-serif);
+  font-weight: 500;
+  font-size: clamp(17px, 2vw, 27px);
+  line-height: 1.8;
+  letter-spacing: 0.03em;
+  color: var(--color-text);
+  text-wrap: pretty;
+}
+
+/* A phrase keeps together where the line has room for it (a line breaks after a comma or a dash, not mid-phrase). */
+.phrase {
+  display: inline-block;
+}
+
+/* ── The cover story: the newest card's first sentence, set as the issue's cover line ── */
+
+.coverLine {
+  margin: 0;
+  max-width: 30em;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.coverLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  color: var(--color-text-muted);
+}
+
+.coverLabel::after {
+  content: '';
+  width: 40px;
+  height: 1px;
+  background: var(--hair-pen, currentColor);
+}
+
+.coverQuote {
+  position: relative;
+  margin: 0;
+  font-family: var(--font-story-serif);
+  font-weight: 500;
+  font-size: clamp(18px, 1.75vw, 24px);
+  line-height: 1.7;
+  letter-spacing: 0.02em;
+  text-wrap: pretty;
+}
+
+.coverQuote[data-script='latin'] {
+  font-family: var(--font-heading);
+  font-style: italic;
+  letter-spacing: 0;
+}
+
+/* The opening bracket hangs in the margin: the words line up with the label above. */
+.hang {
+  position: absolute;
+  right: 100%;
+}
+
+.coverMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.dot {
+  opacity: 0.6;
+}
+
+.readLink {
+  margin-left: 6px;
+  color: var(--button-on-tonal);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  border-radius: 4px;
+}
+
+.readLink:hover {
+  text-decoration: underline wavy var(--link-wave) 1px;
+  text-underline-offset: 5px;
+}
+
+.readLink:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: 3px;
+}
+
+/* The badges (and the QR code for a mouse), set flush left under the copy, level with the title's foot. */
+.download {
+  grid-area: get;
+  justify-content: flex-start !important;
+  margin-top: 32px;
+}
+
+.download > div {
+  justify-content: flex-start;
+}
+
+/* ── The title in its cells ── */
+
+.titleBlock {
+  grid-area: title;
+  position: relative;
+  width: calc(var(--cell) * 2);
+  height: calc(var(--cell) * 4);
+  /* the last cell's floor: a hair over the block's own foot */
+  margin-bottom: 12px;
+}
+
+.zhTitle {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, var(--cell));
+  grid-template-rows: repeat(4, var(--cell));
+  font-family: var(--font-story-serif);
+  font-weight: 700;
+  font-size: calc(var(--cell) * 0.76);
+  line-height: 1;
+  color: var(--color-text);
+  cursor: default;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  font-weight: inherit;
+  /* the ripple's sway and swell about the character's own middle */
+  transform-origin: 50% 50%;
+  will-change: auto;
+}
+
+.glyph[data-accent] {
+  color: var(--color-terracotta);
+}
+
+/* The manuscript paper's lines: quiet, so the empty cell reads as a cell. */
+.grid {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  color: color-mix(in oklch, var(--soft-pen) 32%, transparent);
+}
+
+/* 回應's pen wave down its left side, where a vertical line's wavy mark (書名號) sits. */
+.accentWave {
+  position: absolute;
+  z-index: 2;
+  left: calc(var(--cell) * 0.04);
+  top: calc(var(--cell) * 0.1);
+  width: 8px;
+  height: calc(var(--cell) * 1.8);
+  overflow: visible;
+}
+
+/* The sage spotlight behind the empty cell (one drifting blob). */
+.spotlight {
+  position: absolute;
+  z-index: 0;
+  left: -60%;
+  right: -60%;
+  top: 20%;
+  bottom: -30%;
+  pointer-events: none;
+}
+
+.spotBlob {
+  position: absolute;
+  left: 60%;
+  top: 49%;
+  translate: -50% -50%;
+  opacity: 0.4;
+}
+
+/* The puppet's stage: the fourth cell of the right-hand column, with room over it for a raised arm or a hop and a
+   little each side for its mittens. Its still stands on the cell's floor. */
+.cellLayer {
+  --unit: calc(var(--cell) * 0.8);
+  position: absolute;
+  z-index: 3;
+  left: calc(var(--cell) - 16px);
+  width: calc(var(--cell) + 32px);
+  top: calc(var(--cell) * 2.66);
+  height: calc(var(--cell) * 1.34 + 12px);
+}
+
+.cellStill {
+  position: absolute;
+  left: 50%;
+  bottom: calc(12px + var(--cell) * 0.07);
+  translate: -50% 0;
+  transform-origin: 50% 100%;
+  transition:
+    opacity 0.18s ease,
+    scale 0.18s ease-in;
+}
+
+/* the live one pops up where the still stood: the still folds down into the page first */
+.titleBlock[data-live] .cellStill,
+.enBlock[data-live] .cellStill {
+  opacity: 0;
+  scale: 1 0.04;
+}
+
+.nightOnly {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-scheme='light'])) .dayOnly {
+    display: none;
+  }
+  :global(:root:not([data-scheme='light'])) .nightOnly {
+    display: block;
+  }
+}
+:global(:root[data-scheme='dark']) .dayOnly {
+  display: none;
+}
+:global(:root[data-scheme='dark']) .nightOnly {
+  display: block;
+}
+
+/* ── en: the title across, its second line set in by one cell for 摺摺 ── */
+
+.cover[data-script='latin'] .body {
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    'kick kick'
+    'title title'
+    'copy get';
+  align-items: end;
+}
+
+.enBlock {
+  grid-area: title;
+  position: relative;
+  font-size: clamp(40px, 8.4vw, 124px);
+  margin-top: 0.12em;
+  /* the slot's middle, in the title's em: the spotlight centres there */
+  --slot-x: 0.5em;
+  --slot-y: 1.56em;
+}
+
+.enTitle {
+  position: relative;
+  z-index: 2;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1em;
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  color: var(--color-text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.enLine {
+  display: block;
+  white-space: nowrap;
+}
+
+.enWord {
+  position: relative;
+  display: inline-block;
+}
+
+.enWord[data-accent] {
+  color: var(--color-terracotta);
+}
+
+.enWave {
+  position: absolute;
+  left: 0;
+  bottom: 0.02em;
+  width: 100%;
+  height: 0.12em;
+  overflow: visible;
+}
+
+/* The slot: an empty cell one line tall before "with", drawn in the zh grid's pen — the word that isn't there. */
+.slot {
+  position: relative;
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.17em;
+  letter-spacing: 0;
+}
+
+.slotCell {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  color: color-mix(in oklch, var(--soft-pen) 42%, transparent);
+}
+
+/* 摺摺's stage: the slot, with room over it for a raised arm or a hop and a little each side for its mittens */
+.enCell {
+  --unit: 0.8em;
+  position: absolute;
+  z-index: 3;
+  left: -0.2em;
+  right: -0.2em;
+  top: -0.5em;
+  bottom: 0;
+}
+
+.enCell .cellStill {
+  bottom: 0.06em;
+}
+
+/* en: the spotlight's box round the slot, big enough for the whole blob (the live one is drawn inside it) */
+.enBlock .spotlight {
+  left: calc(var(--slot-x) - 260px);
+  top: calc(var(--slot-y) - 260px);
+  right: auto;
+  bottom: auto;
+  width: 520px;
+  height: 520px;
+}
+
+.spotBlobEn {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  opacity: 0.38;
+}
+
+.cover[data-script='latin'] .copy {
+  padding-top: clamp(20px, 3vw, 40px);
+}
+
+.cover[data-script='latin'] .dek {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  max-width: 22em;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+
+.cover[data-script='latin'] .download {
+  justify-self: end;
+}
+
+/* ── tablet ── */
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .body {
+    grid-column: 1 / -1;
+    column-gap: 40px;
+  }
+  .dek {
+    font-size: 20px;
+  }
+}
+
+/* ── phone: the title at the right top, the kicker and dek beside it, the badges under both ── */
+
+@media (max-width: 639px) {
+  .body {
+    grid-column: 1 / -1;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+      'kick title'
+      'copy title'
+      'get get';
+    column-gap: 14px;
+    padding-top: 6px;
+  }
+  .kicker {
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    gap: 6px;
+    padding-top: 4px;
+  }
+  .kickerRule {
+    width: 22px;
+  }
+  .copy {
+    justify-content: flex-start;
+    padding-top: 14px;
+  }
+  .dek {
+    font-size: 16px;
+    line-height: 1.75;
+    letter-spacing: 0.02em;
+  }
+  .coverLine {
+    display: none;
+  }
+  .cover {
+    padding-bottom: 20px;
+  }
+  .download {
+    margin-top: 26px;
+    justify-content: center !important;
+  }
+  .download > div {
+    justify-content: center;
+  }
+  .cover[data-script='latin'] .body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'kick' 'title' 'copy' 'get';
+  }
+  .cover[data-script='latin'] .download {
+    justify-self: stretch;
+  }
+  .cover[data-script='latin'] .dek {
+    font-size: 18px;
+  }
+  /* four big lines — Answer / stories / ▢ with / stories — the slot as tall as the zh title's cells */
+  .enBlock {
+    font-size: clamp(52px, 17.4vw, 96px);
+    margin-top: 0.08em;
+    --slot-y: 2.6em;
+  }
+  .enLine {
+    white-space: normal;
+  }
+}
+
+/* At twice the zoom (or a very narrow column) the vertical title would crowd its copy out: it stays as it is down to
+   320 px, the cells shrinking with the width. */
+
+@media (max-width: 359px) {
+  .dek {
+    font-size: 15px;
+    letter-spacing: 0;
+  }
+  .kicker {
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+  }
+  .kickerRule {
+    display: none;
+  }
+}

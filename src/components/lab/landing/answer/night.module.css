@@ -1,0 +1,373 @@
+/* The ending, at night: the CTA band and the footer are one night (悄悄's), in either scheme. */
+
+.band,
+.foot {
+  --unit: clamp(72px, 7vw, 100px);
+  --band-night: oklch(25% 0.045 262); /* colour-fixed: the night band is night in either scheme */
+  --color-text: oklch(94% 0.02 85); /* colour-fixed: on the night band in either scheme */
+  --color-text-muted: oklch(80% 0.025 85); /* colour-fixed: on the night band in either scheme */
+  --star: oklch(93% 0.04 92); /* colour-fixed: pinprick stars on the night */
+  --flap-paper: oklch(33% 0.05 262); /* colour-fixed: the back of the night's folded corner */
+  --button-tonal: oklch(37% 0.055 262); /* colour-fixed: a tonal fill on the night */
+  --button-on-tonal: oklch(92% 0.04 85); /* colour-fixed: on the night's tonal fill */
+  --field-border-focus: oklch(82% 0.1 70); /* colour-fixed: focus on the night */
+  /* the pen along the wave the stories' paper runs down into (more of it at night, where paper and band are close) */
+  --night-edge-pen: color-mix(in oklch, var(--soft-pen) 40%, transparent);
+  position: relative;
+  background: var(--band-night);
+  color: var(--color-text);
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-scheme='light'])) .band,
+  :global(:root:not([data-scheme='light'])) .foot {
+    --band-night: oklch(18% 0.035 262); /* colour-fixed: a deeper night in the dark scheme */
+    --flap-paper: oklch(26% 0.045 262); /* colour-fixed: the folded corner's back, darker scheme */
+    --button-tonal: oklch(30% 0.05 262); /* colour-fixed: a tonal fill on the deeper night */
+    --night-edge-pen: color-mix(in oklch, var(--soft-pen) 90%, var(--color-cream));
+  }
+}
+:global(:root[data-scheme='dark']) .band,
+:global(:root[data-scheme='dark']) .foot {
+  --band-night: oklch(18% 0.035 262); /* colour-fixed: a deeper night in the dark scheme */
+  --flap-paper: oklch(26% 0.045 262); /* colour-fixed: the folded corner's back, darker scheme */
+  --button-tonal: oklch(30% 0.05 262); /* colour-fixed: a tonal fill on the deeper night */
+  --night-edge-pen: color-mix(in oklch, var(--soft-pen) 90%, var(--color-cream));
+}
+
+.band {
+  padding: clamp(150px, 15vw, 210px) var(--page-side) clamp(48px, 6vw, 88px);
+}
+
+@media (max-width: 719px) {
+  /* the title starts under the folded corner, never beneath it */
+  .band {
+    padding-top: 196px;
+  }
+}
+
+/* ── Stars ──────────────────────────────────────────────────────── */
+
+.stars {
+  position: absolute;
+  inset: 110px 0 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.stars i {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  background: var(--star);
+  opacity: 0.55;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .stars .twinkle {
+    animation: twinkle 3.2s steps(3) infinite;
+  }
+}
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+/* ── The folded corner ──────────────────────────────────────────── */
+
+.corner {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  width: clamp(84px, 15vw, 220px);
+  aspect-ratio: 1;
+  perspective: 700px;
+  pointer-events: none;
+}
+.cornerUnder {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+/* the corner folded away: what lies behind the band shows there */
+.cornerGone {
+  fill: var(--color-cream-dark);
+}
+.pencil {
+  stroke: color-mix(in oklch, var(--color-text) 55%, transparent);
+}
+.flap {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+  /* folded down: lying on the band; a half lift where scroll can't move it */
+  transform: rotate3d(1, 1, 0, 16deg);
+}
+.flap svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.flapPaper {
+  fill: var(--flap-paper);
+  stroke: color-mix(in oklch, var(--color-text) 60%, transparent);
+}
+.flapLines {
+  stroke: color-mix(in oklch, var(--color-text) 30%, transparent);
+}
+/* As the band reaches the middle of the view, the corner lifts (scroll moves paper, never puppets). */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .flap {
+      animation: lift linear forwards;
+      animation-timeline: view();
+      animation-range: entry 80% cover 48%;
+    }
+  }
+}
+/* from the half lift it rests at, up to about thirty degrees past it: no jump where the scroll takes it over */
+@keyframes lift {
+  from {
+    transform: rotate3d(1, 1, 0, 16deg);
+  }
+  to {
+    transform: rotate3d(1, 1, 0, 44deg);
+  }
+}
+
+/* ── 摺摺 on the wave ───────────────────────────────────────────── */
+
+.tuckZone {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--unit) * -1.3);
+  height: calc(var(--unit) * 1.3 + 96px);
+  z-index: 3;
+  pointer-events: none;
+}
+.tuckStill {
+  position: absolute;
+  display: block;
+  translate: -50% -100%;
+  transition: opacity 0.2s steps(2);
+}
+.tuckStill[data-gone] {
+  opacity: 0;
+}
+
+/* ── The CTA ────────────────────────────────────────────────────── */
+
+/* The CTA and the footer share one axis: the band's middle. */
+.cta {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.title {
+  margin: 0 auto;
+  max-width: 14em;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: clamp(32px, 4.4vw, 60px);
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  color: var(--color-text);
+}
+.clause {
+  display: inline-block;
+}
+
+.line {
+  margin: 18px auto 0;
+  max-width: 34em;
+  font-family: var(--font-body);
+  font-size: clamp(16px, 1.4vw, 19px);
+  line-height: 1.7;
+  color: var(--color-text-muted);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px 14px;
+  margin-top: 28px;
+}
+
+/* ── The footer: the same night ─────────────────────────────────── */
+
+.foot {
+  padding: clamp(20px, 3vw, 40px) var(--page-side) clamp(32px, 4vw, 52px);
+}
+
+/* 悄悄 napping on the pen line under its own words: 「晚安，再讀一個就好 →」. */
+.goodnight {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  margin-top: 4px;
+  padding: 0 28px;
+}
+.hushZone {
+  position: relative;
+  flex: none;
+  width: calc(var(--unit) * 1.7);
+  height: calc(var(--unit) * 1.15);
+  z-index: 2;
+}
+.hushLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+}
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .hushLine {
+      animation: line-in linear forwards;
+      animation-timeline: view();
+      animation-range: entry 0% cover 30%;
+    }
+  }
+}
+@keyframes line-in {
+  from {
+    clip-path: inset(-8px 100% -8px 0);
+  }
+  to {
+    clip-path: inset(-8px 0 -8px 0);
+  }
+}
+.hushStill {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  display: block;
+  translate: -50% 0;
+  transition: opacity 0.2s steps(2);
+}
+.hushStill[data-gone] {
+  opacity: 0;
+}
+
+.footInner {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  text-align: center;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.brandName {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--color-text);
+}
+.tagline {
+  margin: -8px 0 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.oneMore {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 20px -4px;
+  font-family: var(--font-story-serif);
+  font-size: clamp(18px, 2vw, 26px);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-text);
+  text-decoration: none;
+  text-align: start;
+  text-wrap: balance;
+}
+.oneMore:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1.2px;
+  text-underline-offset: 6px;
+}
+.oneMore:focus-visible,
+.link:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
+.download {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.trademarks {
+  max-width: 34em;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.5;
+  color: color-mix(in oklch, var(--color-text-muted) 85%, transparent);
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 24px;
+}
+.link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+.link:hover {
+  color: var(--color-text);
+}
+
+.copyright {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: color-mix(in oklch, var(--color-text-muted) 85%, transparent);
+}
+
+.rest {
+  color: var(--color-text-muted) !important;
+}
+
+/* A phone: 悄悄 and its words on one line. */
+@media (max-width: 719px) {
+  .goodnight {
+    padding: 0 6px;
+  }
+  .hushZone {
+    width: calc(var(--unit) * 1.35);
+  }
+}
