@@ -332,6 +332,34 @@ describe('MessagesPage list', () => {
     renderPage(<MessagesPage />);
     expect(mockPush).toHaveBeenCalledWith('/signin');
   });
+
+  // Round 23 §5: a phone's rows are bands (CSS chooses: the hand-drawn wash wider), each its own key's curve over
+  // the next row's — the starters' label between the two lists.
+  it('gives every row both washes, a phone’s band and the wider wash, CSS showing one', () => {
+    renderPage(<MessagesPage />);
+    const rows = screen.getAllByRole('link');
+    expect(rows.length).toBeGreaterThan(1);
+    for (const row of rows) {
+      expect(row.querySelector('[data-band]')).not.toBeNull();
+      expect(row.querySelector('[class*="rowWash"]')).not.toBeNull();
+    }
+  });
+
+  it('changes the list on phones only: content on the page margin, no room over the first band — 721–900 as it was', () => {
+    const pageCss = readFileSync(join(process.cwd(), 'src/components/sections/MessagesPage/MessagesPage.module.css'), 'utf8');
+    const phone = pageCss.slice(pageCss.lastIndexOf('@media (max-width: 720px) {'));
+    expect(phone).toMatch(/\.page:not\(\[data-thread-open\]\) \{\s*padding-left: 0;\s*padding-right: 0;/);
+    expect(phone).toMatch(/\.page:not\(\[data-thread-open\]\) \.listPane \{\s*padding: 0 0 16px;/);
+    expect(phone).toMatch(/\.row \{\s*padding: 12px var\(--page-pad-x\);/);
+    expect(phone).toMatch(/\.rowWash \{\s*display: none;/);
+    expect(phone).toMatch(/\.rowBand \{\s*display: block;/);
+    expect(phone).toMatch(/\.startSectionTitle \{\s*margin: 16px var\(--page-pad-x\) 6px;/);
+    // The single pane up to 900 keeps its 14 and the list's 18 over its first row; the band hides there.
+    const single = pageCss.slice(pageCss.indexOf('@media (max-width: 900px) {'), pageCss.lastIndexOf('@media (max-width: 720px) {'));
+    expect(single).toMatch(/padding: var\(--app-header-h\) 14px 0;/);
+    expect(pageCss).toMatch(/\.listPane \{[^}]*padding: 18px calc\(4px \+ var\(--sb-hit\)\) 16px 14px;/);
+    expect(pageCss).toMatch(/\.rowBand \{\s*display: none;\s*\}/);
+  });
 });
 
 describe('MessagesPage thread', () => {

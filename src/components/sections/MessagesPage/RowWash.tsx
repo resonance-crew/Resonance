@@ -8,8 +8,9 @@ import styles from './MessagesPage.module.css';
 /**
  * A row's hover/selected wash — a wobbly curved fill (the markdown toolbar's
  * hand-drawn chip language) driven by the row's `--row-fill` variable, instead
- * of a flat rounded rectangle or a border. The conversation list's rows and
- * the in-thread search's results wear it.
+ * of a flat rounded rectangle or a border. The conversation list's rows wider
+ * than a phone and the in-thread search's results wear it (a phone's list and
+ * the bell's are bands: atoms/BandWash).
  */
 export function RowWash({ seed }: { seed: number }) {
   const ref = useRef<HTMLSpanElement>(null);
