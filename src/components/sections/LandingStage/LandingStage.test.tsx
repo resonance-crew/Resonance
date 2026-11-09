@@ -126,13 +126,13 @@ describe('LandingStage', () => {
     try {
       const { container } = render(
         <main>
-          <h1>讓生命影響生命</h1>
+          <h1>用故事回應故事</h1>
           <Fresh />
         </main>,
       );
       await act(async () => idle.forEach(fn => fn()));
       await act(async () => new Promise(r => setTimeout(r, 0)));
-      expect(container.querySelector('h1')?.textContent).toBe('讓生命影響生命');   // the page, not an error page
+      expect(container.querySelector('h1')?.textContent).toBe('用故事回應故事');   // the page, not an error page
       expect(layer()).toBeNull();
       expect(mount.calls).toHaveLength(0);
     } finally {
@@ -147,13 +147,13 @@ describe('LandingStage', () => {
     try {
       const { container } = render(
         <main>
-          <h1>讓生命影響生命</h1>
+          <h1>用故事回應故事</h1>
           <LandingStage />
         </main>,
       );
       await act(async () => idle.forEach(fn => fn()));
       await waitFor(() => expect(mount.calls).toHaveLength(1));
-      expect(container.querySelector('h1')?.textContent).toBe('讓生命影響生命');
+      expect(container.querySelector('h1')?.textContent).toBe('用故事回應故事');
       expect(mount.destroy).not.toHaveBeenCalled();   // there was nothing to destroy
     } finally {
       warn.mockRestore();

@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "title": "Resonance — Let lives influence lives",
+    "title": "Resonance — Answer stories with stories",
     "description": "A space for real life stories from around the world to connect"
   },
   "nav": {
@@ -15,10 +15,10 @@
   },
   "hero": {
     "tag": "✦ Real life stories",
-    "headlinePrefix": "Let lives ",
-    "headlineAccent": "influence",
-    "headlineSuffix": " lives",
-    "description": "A space for real life stories from around the world to connect. Read, share, and resonate with the experiences that shape us.",
+    "headlinePrefix": "",
+    "headlineAccent": "Answer",
+    "headlineSuffix": " stories with stories",
+    "description": "A space for real life stories from around the world to connect — read, share, and resonate with the experiences that shape us",
     "proof": "Be among the first storytellers here"
   },
   "feed": {
@@ -29,7 +29,7 @@
   },
   "cta": {
     "title": "Share your story and let the world hear your voice",
-    "description": "Every story matters. Yours might be the one that changes someone’s day.",
+    "description": "Every story matters — yours might be the one that changes someone’s day",
     "write": "Write your story",
     "read": "Read stories first"
   },
@@ -41,21 +41,21 @@
     "qr": "QR code that opens Resonance in your phone’s app store"
   },
   "footer": {
-    "tagline": "Let lives influence lives",
+    "tagline": "Answer stories with stories",
     "about": "About",
     "pals": "Paper Pals",
     "contact": "Contact",
     "privacy": "Privacy",
     "terms": "Terms",
-    "copyright": "© 2026 Resonance. All rights reserved.",
-    "trademarks": "Apple and App Store are trademarks of Apple Inc. Google Play and the Google Play logo are trademarks of Google LLC."
+    "copyright": "© 2026 Resonance · All rights reserved",
+    "trademarks": "Apple and App Store are trademarks of Apple Inc.; Google Play and the Google Play logo are trademarks of Google LLC"
   },
   "about": {
     "metaTitle": "About us",
     "metaDescription": "We believe everyone has a story to share. On Resonance, when a story moves you, you don't answer with a like: you write a card of your own that resonates with it.",
     "tag": "✦ About us",
     "title": "We believe everyone has a story to share",
-    "lead": "Every one of us is born whole and singular, carrying experiences and insights all our own — and stories are the best way to connect one person to another and to let lives influence lives. That's why we built Resonance.",
+    "lead": "Every one of us is born whole and singular, carrying experiences and insights all our own — and stories are the best way to connect one person to another and to let lives influence lives; that's why we built Resonance",
     "belief": {
       "kicker": "Our mission",
       "title": "Let every person, in all their dimensions,\nmeet one another through real stories",

@@ -96,4 +96,15 @@ describe('copy punctuation', () => {
     const offenders = enStrings.filter(([, text]) => enSentences(text) >= 2 && !/[.!?…][”’"')]*$/.test(text));
     expect(offenders).toEqual([]);
   });
+
+  // The owner's (2026-11-09): a page's subtitle — the line under its title — and the footer's
+  // words carry no full stop at all, however much they say; two thoughts are joined by a comma,
+  // a semicolon or a dash instead. (An abbreviation's dot, as in "Apple Inc.;", is not a stop.)
+  it('subtitles and the footer carry no full stop at all', () => {
+    const NO_STOP = /^(hero\.description|feed\.subtitle|cta\.description|about\.lead|about\.closing\.body|pals\.hero\.lead|footer\..+)$/;
+    const zhOffenders = zhStrings.filter(([key, text]) => NO_STOP.test(key) && /。/.test(text));
+    const enOffenders = enStrings.filter(([key, text]) => NO_STOP.test(key) && /(?<!\b(?:Inc|Ltd|Co|LLC))\.(?=\s|$)/.test(text));
+    expect(zhOffenders).toEqual([]);
+    expect(enOffenders).toEqual([]);
+  });
 });

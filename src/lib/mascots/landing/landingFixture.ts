@@ -144,7 +144,7 @@ export function installLanding(name: PresetName, doc: Document = document): Inst
   const hero = el('section', { 'data-mascot-zone': 'hero' }, g.hero);
   const pillWrap = el('div', { 'data-mascot': 'pill' });
   pillWrap.append(el('span', {}, g.pill, '真實的人生故事'));
-  const h1 = el('h1', { 'data-mascot': 'headline' }, g.headline, '讓生命影響生命');
+  const h1 = el('h1', { 'data-mascot': 'headline' }, g.headline, '用故事回應故事');
   const para = el('p', { 'data-mascot': 'hero-text' }, undefined, '一個讓世界各地的人生故事相互連結的空間');
   lines.set(para, g.para);
   const download = el('div', { id: 'download' });

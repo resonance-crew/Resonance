@@ -34,7 +34,7 @@ describe('the (auth) layout', () => {
 
     const home = screen.getByRole('link', { name: 'Resonance' });
     expect(home).toHaveAttribute('href', '/');
-    const line = screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === 'Let lives influence lives');
+    const line = screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === 'Answer stories with stories');
     expect(home.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // The accent word carries the hero's pen-wave underline.
     const accent = within(line).getByText(en.hero.headlineAccent).parentElement!;

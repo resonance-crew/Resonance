@@ -4,7 +4,7 @@
 
 public enum L10n {
     public enum Metadata {
-        /// Resonance — Let lives influence lives
+        /// Resonance — Answer stories with stories
         public static var title: String { Strings.shared.string("metadata.title") }
         /// A space for real life stories from around the world to connect
         public static var description: String { Strings.shared.string("metadata.description") }
@@ -30,13 +30,13 @@ public enum L10n {
     public enum Hero {
         /// ✦ Real life stories
         public static var tag: String { Strings.shared.string("hero.tag") }
-        /// Let lives 
+        /// 
         public static var headlinePrefix: String { Strings.shared.string("hero.headlinePrefix") }
-        /// influence
+        /// Answer
         public static var headlineAccent: String { Strings.shared.string("hero.headlineAccent") }
-        ///  lives
+        ///  stories with stories
         public static var headlineSuffix: String { Strings.shared.string("hero.headlineSuffix") }
-        /// A space for real life stories from around the world to connect. Read, share, and resonate with the experiences that shap
+        /// A space for real life stories from around the world to connect — read, share, and resonate with the experiences that sha
         public static var description: String { Strings.shared.string("hero.description") }
         /// Be among the first storytellers here
         public static var proof: String { Strings.shared.string("hero.proof") }
@@ -54,7 +54,7 @@ public enum L10n {
     public enum Cta {
         /// Share your story and let the world hear your voice
         public static var title: String { Strings.shared.string("cta.title") }
-        /// Every story matters. Yours might be the one that changes someone’s day.
+        /// Every story matters — yours might be the one that changes someone’s day
         public static var description: String { Strings.shared.string("cta.description") }
         /// Write your story
         public static var write: String { Strings.shared.string("cta.write") }
@@ -74,7 +74,7 @@ public enum L10n {
         public static var qr: String { Strings.shared.string("download.qr") }
     }
     public enum Footer {
-        /// Let lives influence lives
+        /// Answer stories with stories
         public static var tagline: String { Strings.shared.string("footer.tagline") }
         /// About
         public static var about: String { Strings.shared.string("footer.about") }
@@ -86,9 +86,9 @@ public enum L10n {
         public static var privacy: String { Strings.shared.string("footer.privacy") }
         /// Terms
         public static var terms: String { Strings.shared.string("footer.terms") }
-        /// © 2026 Resonance. All rights reserved.
+        /// © 2026 Resonance · All rights reserved
         public static var copyright: String { Strings.shared.string("footer.copyright") }
-        /// Apple and App Store are trademarks of Apple Inc. Google Play and the Google Play logo are trademarks of Google LLC.
+        /// Apple and App Store are trademarks of Apple Inc.; Google Play and the Google Play logo are trademarks of Google LLC
         public static var trademarks: String { Strings.shared.string("footer.trademarks") }
     }
     public enum About {

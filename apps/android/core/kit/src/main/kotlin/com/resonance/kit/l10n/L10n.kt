@@ -6,7 +6,7 @@ package com.resonance.kit.l10n
 
 object L10n {
     object Metadata {
-        /** Resonance — Let lives influence lives */
+        /** Resonance — Answer stories with stories */
         val title: String get() = Strings.string("metadata.title")
         /** A space for real life stories from around the world to connect */
         val description: String get() = Strings.string("metadata.description")
@@ -32,13 +32,13 @@ object L10n {
     object Hero {
         /** ✦ Real life stories */
         val tag: String get() = Strings.string("hero.tag")
-        /** Let lives  */
+        /**  */
         val headlinePrefix: String get() = Strings.string("hero.headlinePrefix")
-        /** influence */
+        /** Answer */
         val headlineAccent: String get() = Strings.string("hero.headlineAccent")
-        /**  lives */
+        /**  stories with stories */
         val headlineSuffix: String get() = Strings.string("hero.headlineSuffix")
-        /** A space for real life stories from around the world to connect. Read, share, and resonate with the experiences that shap */
+        /** A space for real life stories from around the world to connect — read, share, and resonate with the experiences that sha */
         val description: String get() = Strings.string("hero.description")
         /** Be among the first storytellers here */
         val proof: String get() = Strings.string("hero.proof")
@@ -56,7 +56,7 @@ object L10n {
     object Cta {
         /** Share your story and let the world hear your voice */
         val title: String get() = Strings.string("cta.title")
-        /** Every story matters. Yours might be the one that changes someone’s day. */
+        /** Every story matters — yours might be the one that changes someone’s day */
         val description: String get() = Strings.string("cta.description")
         /** Write your story */
         val write: String get() = Strings.string("cta.write")
@@ -76,7 +76,7 @@ object L10n {
         val qr: String get() = Strings.string("download.qr")
     }
     object Footer {
-        /** Let lives influence lives */
+        /** Answer stories with stories */
         val tagline: String get() = Strings.string("footer.tagline")
         /** About */
         val about: String get() = Strings.string("footer.about")
@@ -88,9 +88,9 @@ object L10n {
         val privacy: String get() = Strings.string("footer.privacy")
         /** Terms */
         val terms: String get() = Strings.string("footer.terms")
-        /** © 2026 Resonance. All rights reserved. */
+        /** © 2026 Resonance · All rights reserved */
         val copyright: String get() = Strings.string("footer.copyright")
-        /** Apple and App Store are trademarks of Apple Inc. Google Play and the Google Play logo are trademarks of Google LLC. */
+        /** Apple and App Store are trademarks of Apple Inc.; Google Play and the Google Play logo are trademarks of Google LLC */
         val trademarks: String get() = Strings.string("footer.trademarks")
     }
     object About {

@@ -42,7 +42,7 @@ Stack: Firebase Auth + session cookies, Cloud Firestore, Cloudflare R2 (object s
 
 `src/middleware.ts` intercepts all requests and routes through `[locale]` (supports `en` and `zh-TW`, `localePrefix: 'always'`). The `next-intl` plugin handles server-side translations; message files live in `src/messages/{locale}.json`. The path alias `@/*` maps to `src/*`. Note: `next.config.ts` lists `firebase`/`firebase-admin` in `serverExternalPackages` to avoid Webpack vendor-chunk require errors.
 
-**Copy**: a string of one sentence or a fragment ends without a full stop in both languages (zh-TW no 「。」, en no "." — titles, labels, buttons, placeholders, hints, captions, empty states, status lines, toasts, inline errors, push copy); two or more sentences keep every stop, the last too; ？！… stay; en alone keeps the period on a one-sentence alert/confirm dialog body (Apple style; listed in `src/messages/punctuation.test.ts`, which guards the rule).
+**Copy**: a string of one sentence or a fragment ends without a full stop in both languages (zh-TW no 「。」, en no "." — titles, labels, buttons, placeholders, hints, captions, empty states, status lines, toasts, inline errors, push copy); two or more sentences keep every stop, the last too; ？！… stay; en alone keeps the period on a one-sentence alert/confirm dialog body (Apple style; listed in `src/messages/punctuation.test.ts`, which guards the rule). A page's subtitle (the line under its title — the landing page's, the closing band's, About's, Paper Pals') and the footer's words carry no full stop at all, however much they say: two thoughts are joined by a comma, a semicolon or a dash (the owner's, 2026-11-09).
 
 App routes under `src/app/[locale]/`:
 
