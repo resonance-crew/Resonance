@@ -69,9 +69,9 @@ export function prepareProject(ctx: CaptureContext): Promise<void> {
 /**
  * The app's launch arguments for one screen: the private stack, the stillness switch, the variant's
  * appearance and language (the app's own UserDefaults keys, which a launch argument outranks), the
- * account (or none) and the page.
+ * account (or none), the page and the screen's own debug arguments (`app.ios`).
  */
-export function launchArgs(ctx: CaptureContext, account: Account | null, route: string | null, v: Variant): string[] {
+export function launchArgs(ctx: CaptureContext, account: Account | null, route: string | null, v: Variant, extra: readonly string[] = []): string[] {
   const args = [
     '-emulator', 'YES',
     '-emulatorAuthPort', String(ctx.ports.auth),
@@ -87,6 +87,8 @@ export function launchArgs(ctx: CaptureContext, account: Account | null, route: 
   ];
   args.push(...(account ? ['-email', `${account}@resonance.test`, '-password', SEED_PASSWORD] : ['-signedOut', 'YES']));
   if (route) args.push('-route', route);
+  // The screen's own debug arguments (`app.ios` in screens.ts): a panel open, something riding the composer.
+  args.push(...extra);
   return args;
 }
 
@@ -181,7 +183,7 @@ export const captureIos: Capture = async (ctx) => {
         launch(udid, launchArgs(ctx, account, null, v));
         await sleep(10_000);
         for (const screen of group) {
-          launch(udid, launchArgs(ctx, account, screen.route, v));
+          launch(udid, launchArgs(ctx, account, screen.route, v, screen.app?.ios));
           const name = shotName(screen, v);
           const { png, settled } = await shoot(udid, ctx);
           writeFileSync(shotPath(ctx.runDir, 'ios', device.id, name), png);

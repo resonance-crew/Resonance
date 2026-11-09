@@ -48,6 +48,8 @@ export function AppHeader({ user, signedIn = true, authReady = true, activeKey }
   // two-pane layout owns the full height, so no in-page heading exists.
   const onMessages = pathname === '/messages' || pathname.startsWith('/messages/');
   const onThread = pathname.startsWith('/messages/');
+  // So does the bell's own page (round 23 §4: what a phone's bell opens, as the apps' 通知 tab).
+  const onNotifications = pathname === '/notifications';
   // So does Settings on a phone (as the apps' bars do): its menu then starts
   // with the first row, the page's own heading kept for screen readers only.
   // Wider, the page's heading stands over its side nav and the brand stays.
@@ -105,6 +107,8 @@ export function AppHeader({ user, signedIn = true, authReady = true, activeKey }
           <span className={styles.brand}>
             {onMessages ? (
               tNav('messages')
+            ) : onNotifications ? (
+              tNav('notifications')
             ) : onSettings ? (
               <>
                 <span className={styles.brandPhone}>{tNav('settings')}</span>

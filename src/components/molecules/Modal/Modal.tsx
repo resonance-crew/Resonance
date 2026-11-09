@@ -1,6 +1,6 @@
 'use client';
 
-import { CSSProperties, ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, CSSProperties, ReactNode, RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { keyboardInset } from '@/lib/hooks/useKeyboardInset';
 import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
@@ -79,6 +79,25 @@ function useVisibleBox(active: boolean): { top: number; bottom: number } {
     };
   }, [active]);
   return box;
+}
+
+/**
+ * The dialog's drawn paper, for what inside it must end on its wobble rather than its box (the bell's bands, round
+ * 23 §4): the outline (`wobRect`, in the dialog's own coordinates — its border box), the size it was drawn at, and
+ * the dialog itself, to measure against. Null outside a Modal, and while the paper is not measured yet.
+ */
+export interface ModalPaper {
+  outline: string;
+  w: number;
+  h: number;
+  dialog: RefObject<HTMLDivElement | null>;
+}
+
+const ModalPaperContext = createContext<ModalPaper | null>(null);
+
+/** The Modal this is drawn in: its paper's outline and size (see {@link ModalPaper}); null outside one. */
+export function useModalPaper(): ModalPaper | null {
+  return useContext(ModalPaperContext);
 }
 
 /**
@@ -281,18 +300,22 @@ export function Modal({
     };
   }, [open, mounted]);
 
-  if (!open || !mounted) return null;
+  const borderPath = useMemo(
+    () =>
+      w && h
+        ? wobRect(w, h, R, seed, mag, {
+            segmentsH: [3, 4],
+            segmentsV: [5, 6],
+            curve: 0.6,
+            cornerJitter: 0.9,
+            cornerOffset: 5,
+          })
+        : '',
+    [w, h, seed, mag],
+  );
+  const paper = useMemo<ModalPaper | null>(() => (borderPath ? { outline: borderPath, w, h, dialog: ref } : null), [borderPath, w, h]);
 
-  const borderPath =
-    w && h
-      ? wobRect(w, h, R, seed, mag, {
-          segmentsH: [3, 4],
-          segmentsV: [5, 6],
-          curve: 0.6,
-          cornerJitter: 0.9,
-          cornerOffset: 5,
-        })
-      : '';
+  if (!open || !mounted) return null;
 
   return createPortal(
     <div
@@ -348,7 +371,7 @@ export function Modal({
           curve={0.6} cornerJitter={0.9} cornerOffset={5}
         />
         <div className={styles.content}>
-          {children}
+          <ModalPaperContext.Provider value={paper}>{children}</ModalPaperContext.Provider>
           {closeButton && onClose && <ModalCloseRow label={close} onClose={onClose} />}
         </div>
         {!closeButton && onClose && (

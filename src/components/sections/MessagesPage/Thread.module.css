@@ -1144,11 +1144,11 @@ button.chips::before {
    foot, across the pane and down to the screen's edge, so nothing of the
    thread shows under or beside it. Its top 12 are a fade from the thread into
    the paper, starting on the top edge of what the foot shows first — the
-   capsule; with rows riding over it, 18 over the topmost row, so the fade ends
-   6 over it and the paper over the rows' first ink is as deep as under their
-   last ink down to the capsule (the owner's notes 2026-10-31); solid below. The fade lets taps through to the thread; the solid
-   paper takes them (nothing hidden under it can be pressed). Under what is in
-   the foot (the foot is its own stacking context). */
+   capsule, whatever rides inside it (round 23: nothing rides over it any
+   more, so no other fade); solid below. The fade lets taps through to the
+   thread; the solid paper takes them (nothing hidden under it can be
+   pressed). Under what is in the foot (the foot is its own stacking
+   context). */
 .dock::before,
 .dock::after {
   content: '';
@@ -1171,17 +1171,11 @@ button.chips::before {
   pointer-events: auto;
 }
 
-.dock:has(.carry) {
-  padding-top: 18px;
-}
-
-/* What rides the next message over the capsule, and the capsule (round 22: one stack, so a sticker's preview
-   floats over both). */
+/* The capsule (and the line it says to a screen reader). */
 .composerStack {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
 }
 
 .paperFill {
@@ -1269,42 +1263,53 @@ button.chips::before {
   color: var(--color-text-muted);
 }
 
-/* What rides the next message (round 10 §3.4): a row each, in the reply's
-   style — what it is at the start, whom or what in two lines, a 44 ✕ at the
-   end — with no frame, on the foot's solid paper. */
-.carry {
+/* What rides the next message, inside the capsule over the text's line
+   (round 23, Telegram's way — the owner's: 「回覆的訊息會在這個整個訊息框的
+   border 以內」): 6 under the pen line, a row each with nothing between them
+   and none under the last (the text's own room is the gap), no divider. The
+   capsule's three columns run through every row: its mark in the ＋'s 44, its
+   words where the text starts, its ✕ centred in Send's 52. One reply makes the
+   capsule 6 + 44 + 48 = 98 tall. */
+.riding {
   display: flex;
   flex-direction: column;
+  padding-top: 6px;
 }
 
 .carryRow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 52px;
-  padding: 4px 0 4px 12px;
+  min-height: 44px;
 }
 
-/* A reply's lead: a short wavy pen rule in terracotta, the row's height. */
+/* The mark (at most 32), centred in the ＋'s column, 6 clear of it on each side. */
+.carryMark {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  width: 44px;
+}
+
+/* A reply's mark: a short wavy pen rule in terracotta, the row's height less 16. */
 .carryRule {
   display: flex;
-  flex-shrink: 0;
-  align-self: stretch;
   width: 6px;
-  margin: 4px 0;
+  height: 28px;
 }
 
-/* A picture's or a card's lead: its picture, cover-cropped — or a glyph on the
+/* A note's or a card's mark: the card's cover, cover-cropped — or a glyph on the
    tonal tile (the terracotta tint mixed into the paper). */
 .carryTile {
   display: flex;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   overflow: hidden;
-  border-radius: 12px 14px 12px 14px;
+  border-radius: 10px 12px 10px 12px;
   background: color-mix(in oklch, var(--color-terracotta-light) 40%, var(--color-cream));
 }
 
@@ -1313,6 +1318,35 @@ button.chips::before {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* Whom or what, where the field's text starts — a reply's picture or sticker first (Telegram's photo reply). A
+   reply's words are a button: they go to the message it answers. */
+.carryWords {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  align-self: stretch;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+button.carryWords {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button.carryWords:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: -2px;
+  border-radius: 8px;
 }
 
 .carryText {
@@ -1339,43 +1373,50 @@ button.chips::before {
   white-space: nowrap;
 }
 
+/* The ✕, centred over Send. */
 .carryRemove {
   display: flex;
-  flex-shrink: 0;
+  flex: none;
+  justify-content: center;
+  width: 52px;
 }
 
-.carryRemove > button {
+.carryRemove button {
   width: 44px;
   height: 44px;
 }
 
-/* A reply to a sticker: the rule, then the sticker's key frame. */
-.carryRuleWith {
-  display: flex;
-  flex-shrink: 0;
-  align-self: stretch;
-  align-items: center;
-  gap: 8px;
+/* What the message being answered shows, small, before its words: its picture or its card's cover, 36. */
+.carryMedia {
+  display: block;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 8px 10px 8px 10px;
 }
 
+/* A reply to a sticker: its key frame, 36. */
 .carrySticker {
   display: block;
-  width: 40px;
-  height: 40px;
+  flex: none;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
   /* Quoted, it is quieter, as in the thread's quote. */
   opacity: 0.55;
 }
 
-/* The pictures riding (round 22 §4.2 and the owner's notes — iOS's way everywhere): their thumbnails in a row
-   over the capsule, each with its own small round ✕ on its top-right corner; up to ten, the row scrolling
-   sideways when they are more than it. */
+/* The pictures riding (round 22 §4.2 and the owner's notes — iOS's way everywhere; round 23 inside the capsule):
+   their 56 thumbnails in a strip across the capsule's inner width, 8 clear of its pen line all round (8 + 56 + 8),
+   each with its own small round ✕ on its top-right corner; up to ten, the strip scrolling sideways when they are
+   more than it, its edges fading where more of them lie (useEdgeFades). */
 .carryStrip {
   display: flex;
   gap: 8px;
-  /* As much under the thumbnails as over them. */
-  padding: 4px 2px 4px 4px;
+  padding: 8px;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
 }
 
@@ -1386,10 +1427,10 @@ button.chips::before {
 .carryThumb {
   position: relative;
   flex: none;
-  width: 60px;
-  height: 60px;
+  width: 56px;
+  height: 56px;
   overflow: hidden;
-  border-radius: 14px 16px 14px 16px;
+  border-radius: 12px 14px 12px 14px;
   background: color-mix(in oklch, var(--color-terracotta-light) 40%, var(--color-cream));
 }
 
@@ -1456,16 +1497,24 @@ button.chips::before {
   display: none;
 }
 
-/* The capsule (ComposerCapsule): one field holding the ＋, the text and Send.
-   One line is exactly 48 tall at any text size — the field's padding comes
-   from its own line height — and only more lines grow it. */
+/* The capsule (ComposerCapsule): one field holding what rides along (its rows,
+   over the text's line), the ＋, the text and Send. One line is exactly 48 tall
+   at any text size — the field's padding comes from its own line height — and
+   only more lines, or what rides, grow it. */
 .capsule {
   position: relative;
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
   min-height: 48px;
   --shape-fill: var(--color-cream);
   --shape-ink: var(--field-border);
+}
+
+/* The text's line: the ＋, the field, the ☺ and the send column, on its last row. */
+.fieldLine {
+  display: flex;
+  align-items: flex-end;
+  min-height: 48px;
 }
 
 .capsuleShape {
@@ -1613,9 +1662,10 @@ button.chips::before {
   height: 48px;
 }
 
-/* The send column: Send the full height while the field is one line; from its second line a 52 × 48 block on
-   the last row, and over it, at the capsule's top-right (the owner's: where a finger looks for it, and full
-   screen's corner), ⤢ from the third line or, grown, ⤡. */
+/* The send column: Send the full height while the field is one line; from its second line — or with anything
+   riding along — a 52 × 48 block on the last row, and over it, at the text's top (the capsule's top-right, or just
+   under what rides: the owner's, where a finger looks for it, and full screen's corner), ⤢ from the third line
+   or, grown, ⤡. */
 .sendColumn {
   display: flex;
   flex: none;
@@ -1625,7 +1675,7 @@ button.chips::before {
   width: 52px;
 }
 
-/* Flush with the capsule's top as the block is with its foot, centred over the block. */
+/* Flush with the text's top as the block is with its foot, centred over the block. */
 .aboveSend {
   display: flex;
   flex: 1;
@@ -1784,6 +1834,61 @@ button.chips::before {
   }
 }
 
+/* A short window under a finger — a phone on its side with the keyboard up, about 190 left (round 23): what rides
+   along is one line of 36 (whom · what), its thumbnails 44, and the text stops growing at three lines, so the
+   thread keeps some room. */
+@media (pointer: coarse) and (max-height: 500px) {
+  .carryRow {
+    min-height: 36px;
+  }
+
+  .carryRemove button {
+    height: 36px;
+  }
+
+  .carryText {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 0;
+  }
+
+  .carryLabel {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .carryDetail {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .carryDetail::before {
+    content: '·';
+    content: '·' / '';
+    margin-inline: 6px;
+  }
+
+  .carryRule {
+    height: 20px;
+  }
+
+  .carryTile,
+  .carryMedia,
+  .carrySticker {
+    width: 28px;
+    height: 28px;
+  }
+
+  .carryThumb {
+    width: 44px;
+    height: 44px;
+  }
+
+  .capsule textarea.composerInput {
+    max-height: calc(2lh + 48px);
+  }
+}
+
 /* ── Phones ───────────────────────────────────────────────────────── */
 
 @media (max-width: 900px) {
@@ -1817,11 +1922,11 @@ button.chips::before {
 /* A pane the capsule doesn't fill (2026-11-01, the owner's notes: it is at its 720, room beside it past the gutter —
    a wide window, a tablet; the apps' tablets and the Mac alike): the thread shows on either side of the capsule,
    sinking into a fade at the screen's foot (from 20 over the capsule's foot down to the edge), and nowhere else.
-   Under the capsule and what rides with it, a column of paper exactly the capsule's width runs to the screen's edge
-   (nothing shows under or below the field), its sides fading in over 12 from the capsule's edges, so the clear edge
-   lies on the capsule's border and no fade shows past it; with rows riding, it starts 8 over them, its top 10 a
-   fade, its top corners round, and the rows stand 4 further in (their ✕ 12). A pane the capsule fills keeps the paper across it
-   (above). So does the sticker panel in the keyboard's place (a touch tablet): it is that paper going on. */
+   Under the capsule (what rides along is inside it), a column of paper exactly the capsule's width runs to the
+   screen's edge (nothing shows under or below the field), its sides fading in over 12 from the capsule's edges, so
+   the clear edge lies on the capsule's border and no fade shows past it. A pane the capsule fills keeps the paper
+   across it (above). So does the sticker panel in the keyboard's place (a touch tablet): it is that paper going
+   on. */
 @container thread-pane (min-width: 749px) {
   .dock:not(:has(> .stickerPanel))::before {
     display: none;
@@ -1834,43 +1939,20 @@ button.chips::before {
     pointer-events: none;
   }
 
-  .dock:not(:has(> .stickerPanel)):has(.carry) {
-    padding-top: 8px;
-  }
-
-  /* The ✕ stands 12 in, clear of the paper's fading side. */
-  .dock:not(:has(> .stickerPanel)) .carry {
-    padding-inline: 4px 12px;
-  }
-
   .dock:not(:has(> .stickerPanel)) .composerStack::before {
     content: '';
     position: absolute;
     z-index: -1;
     left: 0;
     right: 0;
-    /* From the capsule's middle (it is opaque above that), or 8 over the rows riding over it; down past the dock's
-       8 and the safe area to the screen's edge. */
+    /* From the capsule's middle (it is opaque above that); down past the dock's 8 and the safe area to the
+       screen's edge. */
     top: 24px;
     bottom: calc(-8px - env(safe-area-inset-bottom, 0px));
     background: var(--color-cream);
     -webkit-mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent);
     mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent);
     pointer-events: auto;
-  }
-
-  .dock:not(:has(> .stickerPanel)) .composerStack:has(> .carry)::before {
-    top: -8px;
-    /* Round by 16 inside the side fade's 12. */
-    border-radius: 28px 28px 0 0;
-    -webkit-mask-image:
-      linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent),
-      linear-gradient(to bottom, transparent, #000 10px);
-    -webkit-mask-composite: source-in;
-    mask-image:
-      linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent),
-      linear-gradient(to bottom, transparent, #000 10px);
-    mask-composite: intersect;
   }
 }
 
@@ -2078,6 +2160,21 @@ button.chips::before {
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
 }
 
+/* Round 23 (the owner's: 「在選擇的區域顯示要大一點」): the panel reaches 6 past the foot's column on each side,
+   so its grid stands 8 from a phone's edges (the foot's gutter is 14), 4 between cells, each sticker 2 inside its
+   cell: a phone's cells ~90 across (from ~85), their art ~86 (from ~73). Centred, it overflows the column evenly
+   (the dock is a column of flex items). The pack bar lines up with the grid. */
+.dock > .stickerPanel {
+  align-self: center;
+  width: calc(100% + 12px);
+  max-width: 732px;
+  margin-inline: 0;
+}
+
+.stickerPanel .packBar {
+  padding-inline: 2px;
+}
+
 .stickerPicker {
   display: flex;
   flex: 1;
@@ -2162,7 +2259,7 @@ button.chips::before {
   position: relative;
   flex: 1;
   min-height: 0;
-  padding: 0 4px 8px;
+  padding: 0 0 8px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
@@ -2173,7 +2270,7 @@ button.chips::before {
 }
 
 .packHeading {
-  margin: 8px 6px 4px;
+  margin: 8px 4px 4px;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.3;
@@ -2199,7 +2296,7 @@ button.chips::before {
 }
 
 .stickerPicker[data-variant='popover'] .stickerCells {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .stickerCell {
@@ -2208,15 +2305,15 @@ button.chips::before {
   align-items: center;
   justify-content: center;
   aspect-ratio: 1;
-  padding: 6px;
+  padding: 2px;
   border: none;
   background: none;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Its wash: a hand-drawn square (CellWash), grey under the pointer, the terracotta's light tint for the one
-   previewed — never a CSS box. */
+/* Its wash: a hand-drawn square (CellWash), grey under the pointer, the terracotta's light tint while pressed —
+   the tap landing, the sticker on its way (round 23: one tap sends) — never a CSS box. */
 .cellWash {
   position: absolute;
   inset: 0;
@@ -2242,8 +2339,9 @@ button.chips::before {
   }
 }
 
-.stickerCell[aria-pressed='true'] .cellWash {
+.stickerCell:active .cellWash {
   fill: color-mix(in oklch, var(--color-terracotta-light) 45%, transparent);
+  transition: none;
 }
 
 .stickerCell:focus-visible {
@@ -2259,92 +2357,21 @@ button.chips::before {
   vector-effect: non-scaling-stroke;
 }
 
-/* On a desktop: a flat menu sheet over the ☺ (PaperSheet), ~360 × 420, five columns. */
+/* On a desktop: a flat menu sheet over the capsule (PaperSheet), 400 × 460, four columns — the grid 8 in from the
+   sheet's edges, its cells as big as a phone's (round 23). */
 .stickerPopover {
   position: fixed;
   z-index: 120;
-  width: 360px;
-  height: 420px;
+  width: 400px;
+  height: 460px;
 }
 
 .stickerPopoverBody {
   position: absolute;
-  inset: 8px 6px 6px;
+  inset: 8px;
   z-index: 2;
   display: flex;
   flex-direction: column;
-}
-
-/* A sticker picked: moving on its sheet with 「再點一次傳送」 under it — over the thread's foot above the
-   capsule on a phone, at the popover's foot on a desktop. A tap sends it. */
-.previewSlot {
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 50%;
-  z-index: 3;
-  transform: translateX(-50%);
-}
-
-.popoverPreview {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 3;
-  display: flex;
-  justify-content: center;
-  padding: 8px 0 4px;
-  /* Only the sheet takes a press: the stickers beside it stay pickable. */
-  pointer-events: none;
-}
-
-.stickerPreview {
-  all: unset;
-  position: relative;
-  /* It takes its press wherever it lies (its slot in the popover lets presses through beside it). */
-  pointer-events: auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  box-sizing: border-box;
-  width: 184px;
-  padding: 14px 16px 12px;
-  cursor: pointer;
-  animation: previewIn 180ms cubic-bezier(0.2, 0.8, 0.3, 1);
-  -webkit-tap-highlight-color: transparent;
-}
-
-.stickerPreviewArt,
-.stickerPreviewHint {
-  position: relative;
-  z-index: 2;
-}
-
-.stickerPreviewArt {
-  display: block;
-  width: 144px;
-  height: 144px;
-  object-fit: contain;
-}
-
-.stickerPreviewHint {
-  font-size: 12px;
-  line-height: 1.3;
-  color: var(--color-text-muted);
-}
-
-.stickerPreview:focus-visible {
-  outline: 2px solid var(--field-border-focus);
-  outline-offset: 2px;
-  border-radius: 20px;
-}
-
-@keyframes previewIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px) scale(0.96);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2354,7 +2381,6 @@ button.chips::before {
     transition: none;
   }
 
-  .stickerPreview,
   .slot[data-sticker][data-flash] .sticker {
     animation: none;
   }

@@ -117,7 +117,8 @@ export function reportOnlyPolicy(env: SecurityEnv): string {
       preview && 'https://vercel.live',
     ],
     'worker-src': ["'self'", 'blob:'],
-    'manifest-src': ["'none'"],
+    // The site's own manifest only (src/app/manifest.ts: it names the Android app, never an installable site).
+    'manifest-src': ["'self'"],
     'object-src': ["'none'"],
     'base-uri': ["'self'"],
     'form-action': ["'self'"],

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Divider } from '@/components/atoms/Divider/Divider';
 import { OrganicScrollbar, organicScrollTarget } from '@/components/atoms/OrganicScrollbar/OrganicScrollbar';
@@ -17,6 +17,8 @@ import { conversationId } from '@/lib/db/firestore/client/messages';
 import { Icon } from '@/components/atoms/Icon';
 import type { Conversation, User } from '@/lib/db/types';
 import { EmptyState } from '@/components/molecules/EmptyState/EmptyState';
+import { BandWash, bandHost, useBandPress } from '@/components/atoms/BandWash/BandWash';
+import { BAND_END_KEY, bandsBelow } from '@/lib/design/listBands';
 import { RowWash } from './RowWash';
 import { ThreadView } from './ThreadView';
 import styles from './MessagesPage.module.css';
@@ -65,6 +67,16 @@ export function MessagesPage({ activeHandle, replyNote, userId }: MessagesPagePr
   const formatWhen = (d: Date) =>
     d.toDateString() === new Date().toDateString() ? timeFmt.format(d) : dayFmt.format(d);
 
+  // A phone's rows are bands (round 23 §5): the curve under each is the next row's key's — the starters' label under
+  // the last conversation, the list's end under the last row (lib/design/listBands; Android's ConversationsScreen).
+  const shown = conversations.filter((c) => people[c.participants.find((p) => p !== user.id) ?? '']);
+  const conversationKeys = shown.map((c) => `c:${c.id}`);
+  const starterKeys = starters.map((p) => `s:${p.id}`);
+  const below = new Map<string, string>([
+    ...bandsBelow(conversationKeys, starterKeys.length ? STARTERS_KEY : BAND_END_KEY).map((k, i) => [conversationKeys[i], k] as const),
+    ...bandsBelow(starterKeys, BAND_END_KEY).map((k, i) => [starterKeys[i], k] as const),
+  ]);
+
   const rowFor = (person: User, convo?: Conversation) => {
     const unread = convo ? (convo.unread[user.id] ?? 0) : 0;
     const last = convo?.lastMessage;
@@ -86,14 +98,15 @@ export function MessagesPage({ activeHandle, replyNote, userId }: MessagesPagePr
     // 草稿 — until it is sent; not on the row of the thread open beside the list, whose composer shows it.
     const draft = person.handle === activeHandle ? null : drafts[convo?.id ?? conversationId(user.id, person.id)];
     const draftWords = draft ? draft.text.trim().replace(/\s+/g, ' ') || (draft.cardId ? t('attachCardShort') : '') : '';
+    const key = convo ? `c:${convo.id}` : `s:${person.id}`;
     return (
-      <Link
+      <ConversationRow
         key={person.id}
         href={`/messages/${person.handle}?u=${encodeURIComponent(person.id)}`}
-        className={styles.row}
-        data-active={person.handle === activeHandle || undefined}
+        active={person.handle === activeHandle}
+        washSeed={seedFromString(person.id)}
+        band={{ top: key, bottom: below.get(key) ?? BAND_END_KEY }}
       >
-        <RowWash seed={seedFromString(person.id)} />
         <HandDrawnAvatar
           src={person.avatarUrl}
           initials={person.initials}
@@ -118,7 +131,7 @@ export function MessagesPage({ activeHandle, replyNote, userId }: MessagesPagePr
           )}
           {unread > 0 && <UnreadBadge count={unread} />}
         </span>
-      </Link>
+      </ConversationRow>
     );
   };
 
@@ -139,11 +152,7 @@ export function MessagesPage({ activeHandle, replyNote, userId }: MessagesPagePr
             />
           )}
 
-          {conversations.map((c) => {
-            const otherUid = c.participants.find((p) => p !== user.id) ?? '';
-            const person = people[otherUid];
-            return person ? rowFor(person, c) : null;
-          })}
+          {shown.map((c) => rowFor(people[c.participants.find((p) => p !== user.id) ?? ''], c))}
 
           {starters.length > 0 && (
             <>
@@ -169,6 +178,38 @@ export function MessagesPage({ activeHandle, replyNote, userId }: MessagesPagePr
         ) : null}
       </section>
     </div>
+  );
+}
+
+/** The label over the people to start a conversation with, and the key the band above it ends on. */
+const STARTERS_KEY = 'starters';
+
+/**
+ * One conversation's row, a link to its thread: on a phone (≤ 720, the module CSS) a band — the list's width between
+ * its curve and the one under it (`band`), washed under a pointer or a press, as the bell's rows are (round 23 §5);
+ * wider, and beside the thread pane, a faint hand-drawn wash under the pointer (RowWash) and the chosen row's
+ * terracotta. Both are in the HTML, CSS showing one.
+ */
+function ConversationRow({
+  href,
+  active,
+  washSeed,
+  band,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  washSeed: number;
+  band: { top: string; bottom: string };
+  children: ReactNode;
+}) {
+  const press = useBandPress();
+  return (
+    <Link href={href} className={`${styles.row} ${bandHost}`} data-active={active || undefined} {...press}>
+      <RowWash seed={washSeed} />
+      <BandWash topKey={band.top} bottomKey={band.bottom} className={styles.rowBand} />
+      {children}
+    </Link>
   );
 }
 

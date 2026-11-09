@@ -8,7 +8,7 @@
  */
 import { writeFileSync } from 'node:fs';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
-import { screensFor, shotName, type Account, type Screen, type Variant } from './screens';
+import { SCREENS, screensFor, shotName, type Account, type Screen, type Variant } from './screens';
 import { SEED_PASSWORD, ignorePath, settle, shotPath, variantsFor, type Capture, type CaptureContext, type Rect } from './util';
 
 export type WebDevice = { id: string; phone: boolean; width: number; height: number; touch: boolean };
@@ -85,8 +85,29 @@ function trackRequests(page: Page) {
 
 const idle = new WeakMap<Page, ReturnType<typeof trackRequests>>();
 
+/** Every key any screen writes to the site's localStorage (`web.storage`). */
+const STORED = [...new Set(SCREENS.flatMap((s) => Object.keys(s.web?.storage ?? {})))];
+
+/**
+ * What this browser keeps for `screen` (its `web.storage`), written on the site's own origin before
+ * its page opens; what another screen kept is taken away first, so nothing of one screen (a draft)
+ * shows on the next. The page is on the site already (signed in, or the last screen).
+ */
+async function keep(page: Page, screen: Screen) {
+  const wanted = screen.web?.storage ?? {};
+  if (!STORED.length || !page.url().startsWith('http')) return;
+  await page.evaluate(
+    ([keys, set]) => {
+      for (const key of keys) if (!(key in set)) localStorage.removeItem(key);
+      for (const [key, value] of Object.entries(set)) localStorage.setItem(key, value);
+    },
+    [STORED, wanted] as const,
+  );
+}
+
 async function shoot(page: Page, ctx: CaptureContext, screen: Screen, v: Variant): Promise<{ png: Buffer; settled: boolean; ignore: Rect[] }> {
   if (!idle.has(page)) idle.set(page, trackRequests(page));
+  await keep(page, screen);
   const route = screen.web?.route ?? screen.route;
   await page.goto(`${ctx.devUrl}/${v.locale}${route === '/' ? '' : route}`, { waitUntil: 'load', timeout: 120_000 });
   const ready = async () => {

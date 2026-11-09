@@ -4,7 +4,7 @@ import { useMemo, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
 import { Icon, type IconName } from '@/components/atoms/Icon';
-import { RowWash } from '../MessagesPage/RowWash';
+import { BandWash, bandHost, useBandPress } from '@/components/atoms/BandWash/BandWash';
 import { wobRect } from '@/lib/design/wobRect';
 import { wavyVertical } from '@/lib/design/wavyPath';
 import { INK } from '@/lib/design/strokes';
@@ -61,6 +61,8 @@ export function bellSentence(
 
 export interface BellRowProps {
   n: Notification;
+  /** The keys of the band's curves (lib/design/listBands): its own along the top, the one under it along the bottom. */
+  band: { top: string; bottom: string };
   /** Who it is from, once read (undefined while reading, or for an account that is gone). */
   person: User | undefined;
   /** The card it is about, once read. */
@@ -76,39 +78,43 @@ export interface BellRowProps {
  * its card's colour, and when; the card it is about on the right (its cover,
  * no frame, as a feed card's picture; or its colours and first word). Unread:
  * the words in the text's ink and the dot ending the first line; read, all
- * muted. Rows stand apart by air alone, a wash under the pointer (the
- * conversation list's rows).
+ * muted. Each row is a band (round 23 §4): the list's whole width between
+ * two hand-drawn curves it shares with its neighbours, washed only under a
+ * pointer or a press — its content in the list's column.
  */
-export function BellRowContent({ n, person, card, settled, when }: BellRowProps) {
+export function BellRowContent({ n, band, person, card, settled, when }: BellRowProps) {
   const t = useTranslations('app.notifications');
   const unread = n.readAt === null;
   const { before, handle, after } = bellSentence(t, n);
   const cardId = typeof n.payload.cardId === 'string' ? n.payload.cardId : '';
   const preview = n.type === 'note' && typeof n.payload.preview === 'string' ? n.payload.preview : '';
   const fromId = typeof n.payload.fromUserId === 'string' ? n.payload.fromUserId : '';
+  const press = useBandPress();
   return (
-    <span className={styles.row}>
-      <RowWash seed={seedFromString(n.id) % 97} />
-      {handle != null ? (
-        <BellFace person={person} handle={handle} uid={fromId} settled={settled} />
-      ) : (
-        <span className={styles.glyphTile} aria-hidden>
-          <Icon name={GLYPHS[n.type] ?? 'bell'} size={18} color="var(--color-terracotta)" />
+    <span className={`${styles.row} ${bandHost}`} {...press}>
+      <BandWash topKey={band.top} bottomKey={band.bottom} />
+      <span className={styles.rowInner}>
+        {handle != null ? (
+          <BellFace person={person} handle={handle} uid={fromId} settled={settled} />
+        ) : (
+          <span className={styles.glyphTile} aria-hidden>
+            <Icon name={GLYPHS[n.type] ?? 'bell'} size={18} color="var(--color-terracotta)" />
+          </span>
+        )}
+        <span className={styles.words} data-unread={unread || undefined}>
+          <span className={styles.line}>
+            {before}
+            {handle != null && <b className={styles.handle}>{handle}</b>}
+            {after}
+            {unread && <span aria-hidden data-unread-dot className={styles.dot} />}
+            {unread && <span className={styles.srOnly}>{`, ${t('unread')}`}</span>}
+          </span>
+          {/* A note's content IS the notification: the reader wrote to the author, so its words are here. */}
+          {preview && <BellNoteQuote text={preview} card={card} />}
+          <span className={styles.when}>{when}</span>
         </span>
-      )}
-      <span className={styles.words} data-unread={unread || undefined}>
-        <span className={styles.line}>
-          {before}
-          {handle != null && <b className={styles.handle}>{handle}</b>}
-          {after}
-          {unread && <span aria-hidden data-unread-dot className={styles.dot} />}
-          {unread && <span className={styles.srOnly}>{`, ${t('unread')}`}</span>}
-        </span>
-        {/* A note's content IS the notification: the reader wrote to the author, so its words are here. */}
-        {preview && <BellNoteQuote text={preview} card={card} />}
-        <span className={styles.when}>{when}</span>
+        {cardId && (card ? <BellCardThumb card={card} /> : !settled && <BellThumbPending cardId={cardId} />)}
       </span>
-      {cardId && (card ? <BellCardThumb card={card} /> : !settled && <BellThumbPending cardId={cardId} />)}
     </span>
   );
 }

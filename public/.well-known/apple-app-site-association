@@ -1,0 +1,26 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["V7H59QAJPL.com.resonance.stories"],
+        "components": [
+          { "/": "/card/?*", "comment": "A card (Route.card): the same pages the Android app's App Links filter claims" },
+          { "/": "/u/?*", "comment": "A profile" },
+          { "/": "/messages/?*", "comment": "A conversation, with or without ?note=&card=" },
+          { "/": "/me/thought-map", "comment": "The thought map" },
+          { "/": "/me/thought-map/" },
+          { "/": "/en/card/?*" },
+          { "/": "/en/u/?*" },
+          { "/": "/en/messages/?*" },
+          { "/": "/en/me/thought-map" },
+          { "/": "/en/me/thought-map/" },
+          { "/": "/zh-TW/card/?*" },
+          { "/": "/zh-TW/u/?*" },
+          { "/": "/zh-TW/messages/?*" },
+          { "/": "/zh-TW/me/thought-map" },
+          { "/": "/zh-TW/me/thought-map/" }
+        ]
+      }
+    ]
+  }
+}

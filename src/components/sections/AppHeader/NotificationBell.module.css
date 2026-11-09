@@ -1,16 +1,29 @@
-/* Scrollable notification list inside the bell modal — same language as the
-   thread's「卡片與連結」modal: capped height, and the drawn bar
-   (OrganicScrollbar) in the gutter on its right in place of the native one. */
+/* The bell's list (round 23 §4): rows that touch, each a band between two hand-drawn curves it shares with its
+   neighbours (BandWash), seen only under a pointer or a press; the parts' titles on bare paper between them. Its two
+   homes set where the content stands: in the dialog 30 from the paper's edge (its 22 and the rows' own 8), on the
+   page the page's side margin, in the reading column. */
 .scrollArea {
   position: relative;
+  /* NotificationBell's dialog padding at the sides. */
+  --bell-pad: 22px;
+  /* The body reaches 10 past the dialog's box on both sides — past the farthest the paper's wobble swings out — and
+     the dialog's outline, its clip, ends every band on the paper's pen line. */
+  --bell-bleed: calc(var(--bell-pad) + 10px);
+  --bell-inset: calc(var(--bell-bleed) + 8px);
+  /* The content's end: past the drawn bar's 14px column (--sb-hit) while it is there. */
+  --bell-inset-end: calc(var(--bell-inset) + var(--sb-hit));
 }
 
+/* Scrollable inside the dialog — the thread's「卡片與連結」modal's language: capped height, and the drawn bar
+   (OrganicScrollbar) in the gutter on its right in place of the native one, standing over the bands. */
 .scrollBody {
   /* Rows carry a face and a card now (~70 tall): room for six or seven before it scrolls; on a computer's
      screen, room for nine or ten. */
   max-height: min(520px, 66vh);
   overflow-y: auto;
-  padding-right: var(--sb-hit);
+  margin-inline: calc(-1 * var(--bell-bleed));
+  /* Room under the last band for its curve's swing. */
+  padding-bottom: 4px;
 }
 
 @media (min-width: 721px) and (hover: hover) and (pointer: fine) {
@@ -19,31 +32,46 @@
   }
 }
 
-/* The gutter is the drawn bar's 14px column (--sb-hit), and only while the
-   bar is there: with nothing to scroll, or on a phone or touch screen (which
-   never shows one), the rows and their rules run to the dialog's edge, square
-   with its buttons. */
-.scrollArea:has(> [data-hidden]) .scrollBody {
-  padding-right: 0;
+/* The gutter is the drawn bar's, and only while the bar is there: with nothing to scroll, or on a phone or touch
+   screen (which never shows one), the content ends where it starts, square with the dialog's buttons. */
+.scrollArea:has(> [data-hidden]) {
+  --bell-inset-end: var(--bell-inset);
 }
 
 @media (max-width: 720px), (hover: none) and (pointer: coarse) {
-  .scrollBody {
-    padding-right: 0;
+  .scrollArea {
+    --bell-inset-end: var(--bell-inset);
   }
 }
 
-/* --- The list (round 21): parts by time, rows apart by air — no rules between them — each with
-   its sender's face, its words and the card it is about. --- */
+/* On the page (/notifications): the bands run the window's width, the content the page's margin in and, on a wide
+   window, the reading column. */
+.pageList {
+  --bell-inset: var(--page-pad-x);
+  --bell-inset-end: var(--page-pad-x);
+  --bell-column: 680px;
+}
+
+/* --- The list (round 21): parts by time — no rules between rows — each with its sender's face, its words and the
+   card it is about. A part's title on bare paper: 12 over it (24 from the last row's content), and the curves'
+   swing and 4 more under it (lib/design/listBands BAND_TITLE_TO_BAND). --- */
 .groupTitle {
-  margin: 14px 8px 4px;
+  margin: 12px 0 6px;
+  padding: 0 var(--bell-inset-end) 0 var(--bell-inset);
   font-size: 13px;
   font-weight: 600;
+  line-height: 1.4;
   color: var(--color-text-muted);
 }
 
 section:first-child > .groupTitle {
   margin-top: 0;
+}
+
+.column {
+  display: block;
+  max-width: var(--bell-column, none);
+  margin-inline: auto;
 }
 
 .list {
@@ -52,27 +80,43 @@ section:first-child > .groupTitle {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
 
 .rowLink {
   display: block;
   text-decoration: none;
   color: inherit;
+  -webkit-tap-highlight-color: transparent;
 }
 
+/* A band: 12 above and below its content (BAND_ROW_PAD), touching the next. */
 .row {
+  position: relative;
+  display: block;
+  padding: 12px var(--bell-inset-end) 12px var(--bell-inset);
+  cursor: pointer;
+}
+
+.rowInner {
   position: relative;
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 10px 8px;
-  cursor: pointer;
-  --row-fill: transparent;
+  max-width: var(--bell-column, none);
+  margin-inline: auto;
 }
 
-.row:hover {
-  --row-fill: color-mix(in oklch, var(--toward-ink) 4.5%, transparent);
+.skeletonRow {
+  cursor: default;
+}
+
+.skeletonWords {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 9px;
+  padding-top: 3px;
 }
 
 .words {

@@ -10,7 +10,7 @@ export const SITE_PAGES = ['/about', '/paper-pals'] as const;
 export const POLICY_PAGES = ['/privacy', '/terms', '/support', '/child-safety'] as const;
 
 /** The signed-in app's pages: a crawler gets a sign-in redirect or an empty shell there. */
-export const APP_PAGES = ['/home', '/me', '/settings', '/messages', '/write'] as const;
+export const APP_PAGES = ['/home', '/me', '/settings', '/messages', '/notifications', '/write'] as const;
 
 export const SITEMAP_PATH = '/sitemap.xml';
 

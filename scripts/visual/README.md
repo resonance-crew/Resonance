@@ -123,7 +123,7 @@ The reference machine (2026-10-31): MacBook (Apple silicon, arm64, 24 GB), macOS
 
 Phones take three variants because dark mode and English break the same way at every width and the
 phone is where text is tightest; every other device takes light zh-TW (`PHONE_VARIANTS` in
-`screens.ts`). 20 web screens and 17 app screens give 100 + 68 + 17 + 68 = 253 captures.
+`screens.ts`). 22 web screens and 19 app screens give 110 + 76 + 19 + 76 = 281 captures.
 
 ### Setting the devices up on another machine
 
@@ -225,5 +225,11 @@ the account, an `expect` line saying what it should show (the reviewer reads it)
 if an app has no such place. An app screen needs its path to open by launch route (see above).
 Where the web has no page for it, `web: { route, click }` opens another path and clicks a selector
 once it is ready (the notifications: the bell's panel over the feed); a click, unlike a drag or a
-long press, lands the same every run. The
+long press, lands the same every run. `web.storage` is what the browser keeps for the screen (a
+conversation's draft, so the composer opens with a reply and a card riding: `thread-reply`), written
+to the site's localStorage before its page opens and taken away before the next screen. A state the
+apps reach by a gesture or a tap is opened by their own debug launch arguments, `app: { ios, android
+}` (`-threadPanel stickers` / `--es threadPanel stickers` for `thread-stickers`, `-visualRide
+replyCard` / `--es visualRide replyCard` for `thread-reply`), added after the account and the route;
+the Mac takes `app.mac`, else iOS's. The
 next run reports it as new; accept it once it looks right.

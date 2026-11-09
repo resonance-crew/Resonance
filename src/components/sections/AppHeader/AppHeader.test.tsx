@@ -73,6 +73,15 @@ describe('AppHeader brand slot', () => {
     expect(within(brand).getByText('Resonance')).toBeInTheDocument();
   });
 
+  // Round 23 §4: the bell's own page names itself as Messages does, at every width.
+  it('says Notifications on the bell’s page', () => {
+    nav.pathname = '/notifications';
+    renderWithIntl(<AppHeader user={user} signedIn authReady />);
+    const brand = screen.getByRole('link', { name: 'Notifications' });
+    expect(brand).toHaveAttribute('href', expect.stringMatching(/\/home$/));
+    expect(within(brand).queryByText('Resonance')).toBeNull();
+  });
+
   it('says only Resonance elsewhere', () => {
     renderWithIntl(<AppHeader user={user} signedIn authReady />);
     expect(screen.queryByRole('link', { name: /Settings/ })).toBeNull();

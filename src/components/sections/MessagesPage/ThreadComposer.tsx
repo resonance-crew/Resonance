@@ -25,6 +25,7 @@ import { preparePicture, UnsupportedImage, type PreparedPicture } from '@/lib/ch
 import { INK } from '@/lib/design/strokes';
 import { wobCircle } from '@/lib/design/wobCircle';
 import { wobRect } from '@/lib/design/wobRect';
+import { useEdgeFades } from '@/lib/hooks/useEdgeFades';
 import { useOpenedOnce } from '@/lib/hooks/useOpenedOnce';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { rememberedKeyboardHeight, useRememberKeyboardHeight } from '@/lib/hooks/useKeyboardHeight';
@@ -39,7 +40,6 @@ import { ComposerCapsule, type CapsuleSegment } from './ComposerCapsule';
 import { StickerPanel } from './StickerPanel';
 import { StickerPicker } from './StickerPicker';
 import { StickerPopover } from './StickerPopover';
-import { StickerPreview } from './StickerPreview';
 import styles from './Thread.module.css';
 
 // The card picker loads when it is first opened, not with the thread.
@@ -53,6 +53,8 @@ const DESKTOP = '(hover: hover) and (pointer: fine) and (min-width: 768px)';
 export const EXPAND_AT_LINES = 3;
 /** How long after the last keystroke a draft is kept. */
 export const DRAFT_SAVE_MS = 500;
+/** A second tap on the sticker just sent, this soon, is the old two-tap habit (round 23): it sends nothing more. */
+export const STICKER_REPEAT_MS = 600;
 
 /** What the thread can ask of its composer. */
 export interface ThreadComposerHandle {
@@ -94,6 +96,10 @@ export interface ThreadComposerProps {
   onExpandedChange?: (expanded: boolean) => void;
   /** What the thread can ask of it. */
   handle?: Ref<ThreadComposerHandle>;
+  /** The reply's words pressed: the thread goes to the message it answers, and washes it (round 23). */
+  onJumpToReply?: (messageId: string) => void;
+  /** What the message being answered shows, small: its picture, or its card's cover (a sticker's is its own). */
+  replyMedia?: string;
 }
 
 /** A picture waiting in the composer: ready to go up, and where its thumbnail draws it from. */
@@ -116,14 +122,15 @@ let pictureKeys = 0;
  * as the thread lets it (option C) — the ☺ of the 小紙團 stickers, and Send
  * as the capsule's end segment (ComposerCapsule). On a phone the stickers take
  * the keyboard's place under the capsule (↑ in the send segment grows them,
- * when there is nothing to send); with a mouse they hang over the ☺. A
- * sticker picked is previewed, moving; picked again (or its preview tapped) it
- * goes. What the next message carries (the message it answers, a note it
- * quotes, a card or pictures — one of the two, a choice asked before one
- * replaces the other) rides just over it, a row each in the reply's style.
- * What is being written is kept as the conversation's draft in this browser
- * until it is sent. Its state lives here, so typing never draws the thread
- * above it again; sending never holds it.
+ * when there is nothing to send); with a mouse they hang over the capsule. A
+ * tap on a sticker sends it (round 23). What the next message carries (the
+ * message it answers, a note it quotes, a card or pictures — one of the two, a
+ * choice asked before one replaces the other) rides inside the capsule over
+ * the text's line, Telegram's way (round 23): a row each — its mark over the
+ * ＋, its words where the text starts, its ✕ over Send — and the pictures as a
+ * strip of thumbnails. What is being written is kept as the conversation's
+ * draft in this browser until it is sent. Its state lives here, so typing
+ * never draws the thread above it again; sending never holds it.
  */
 export function ThreadComposer({
   inputRef,
@@ -141,6 +148,8 @@ export function ThreadComposer({
   expandRoom,
   onExpandedChange,
   handle,
+  onJumpToReply,
+  replyMedia,
 }: ThreadComposerProps) {
   const t = useTranslations('messages');
   const tSafety = useTranslations('safety');
@@ -247,14 +256,14 @@ export function ThreadComposer({
   const [panelTall, setPanelTall] = useState(false);
   const [panelBase, setPanelBase] = useState(300);
   const [panelTallH, setPanelTallH] = useState(300);
-  const [preview, setPreview] = useState<StickerRef | null>(null);
+  // The recents as the picker shows them: read as it opens and held while it is open (round 23 — a tap sends, and
+  // a list reordering under the next tap would send another sticker); a sticker sent is stored at once.
   const [recents, setRecents] = useState<StickerRef[]>([]);
+  const lastSticker = useRef<{ key: string; at: number } | null>(null);
   const smileRef = useRef<HTMLSpanElement>(null);
   const stackRef = useRef<HTMLDivElement>(null);
+  const capsuleRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (uid) setRecents(readRecentStickers(uid));
-  }, [uid]);
 
   const [focused, setFocused] = useState(false);
   useRememberKeyboardHeight(focused && desktop === false);
@@ -262,7 +271,6 @@ export function ThreadComposer({
   const closeStickers = useCallback((focusField: boolean) => {
     setStickers('closed');
     setPanelTall(false);
-    setPreview(null);
     if (focusField) inputRef.current?.focus({ preventScroll: true });
   }, [inputRef]);
 
@@ -272,6 +280,7 @@ export function ThreadComposer({
       closeStickers(true);
       return;
     }
+    if (uid) setRecents(readRecentStickers(uid));
     if (desktop) {
       setStickers('popover');
       return;
@@ -282,53 +291,50 @@ export function ThreadComposer({
     window.requestAnimationFrame(() => inputRef.current?.blur());
   }
 
-  // Grown, the panel reaches to just under the thread's header (the capsule rides up with it).
+  // Grown, the panel reaches to just under the thread's header (the capsule rides up with it) — measured again
+  // whenever the capsule's height changes meanwhile (a sticker sent that took the reply riding with it: 98 → 48).
   const measureTall = useCallback(() => {
     const room = expandRoom?.('panel');
     const stack = stackRef.current?.offsetHeight ?? 48;
     if (room) setPanelTallH(Math.max(panelBase, room - stack + panelBase - 8));
   }, [expandRoom, panelBase]);
   useLayoutEffect(() => {
-    if (panelOpen) measureTall();
+    if (!panelOpen) return;
+    measureTall();
+    const el = stackRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => measureTall());
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [panelOpen, measureTall]);
 
+  /**
+   * A sticker tapped: it goes at once (round 23, the owner's: one tap). The same one tapped again within
+   * STICKER_REPEAT_MS is the old two-tap habit and sends nothing more; two different ones may go back to back.
+   * The popover closes, the field writing again; the panel stays.
+   */
   function sendSticker(ref: StickerRef) {
     if (!ready) return;
+    const key = `${ref.pack}/${ref.id}`;
+    const now = Date.now();
+    if (lastSticker.current?.key === key && now - lastSticker.current.at < STICKER_REPEAT_MS) return;
     if (!send({ text: '', sticker: ref })) return;
-    setPreview(null);
-    if (uid) setRecents(noteRecentSticker(uid, ref));
+    lastSticker.current = { key, at: now };
+    if (uid) noteRecentSticker(uid, ref);
+    if (stickers === 'popover') closeStickers(true);
   }
 
-  function pickSticker(ref: StickerRef) {
-    // Picked again: it goes. Otherwise it is previewed, moving.
-    if (preview && preview.pack === ref.pack && preview.id === ref.id) sendSticker(ref);
-    else setPreview(ref);
-  }
-
-  // A press anywhere but the preview or a sticker puts the preview away.
-  useEffect(() => {
-    if (!preview) return;
-    const onDown = (e: PointerEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target?.closest('[data-sticker-preview], [data-sticker]')) return;
-      setPreview(null);
-    };
-    document.addEventListener('pointerdown', onDown, true);
-    return () => document.removeEventListener('pointerdown', onDown, true);
-  }, [preview]);
-
-  // Escape closes the panel (the popover has its own); the preview first.
+  // Escape closes the panel (the popover has its own).
   useEffect(() => {
     if (!panelOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       e.preventDefault();
-      if (preview) setPreview(null);
-      else closeStickers(true);
+      closeStickers(true);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [panelOpen, preview, closeStickers]);
+  }, [panelOpen, closeStickers]);
 
   // Words in the field: no stickers beside them (the ☺ is gone with them).
   const hasWords = text.trim().length > 0;
@@ -346,7 +352,7 @@ export function ThreadComposer({
   const [lines, setLines] = useState(1);
   const [expanded, setExpanded] = useState(false);
   const [expandedH, setExpandedH] = useState<number | null>(null);
-  const carryRef = useRef<HTMLDivElement>(null);
+  const ridingRef = useRef<HTMLDivElement>(null);
 
   /** The text's edges fade where more of it lies beyond them (14 px, round 22 §4.3). */
   const fades = useCallback(() => {
@@ -357,15 +363,15 @@ export function ThreadComposer({
     mark(el, 'data-fade-bottom', max > 1 && el.scrollTop < max - 1);
   }, [inputRef]);
 
-  /** The grown field's height: what the thread leaves it, less what rides over it (its room above and below the
-   * lines is the text box's own: it runs to the capsule's pen line). */
+  /** The grown field's height: what the thread leaves the capsule, less the rows riding inside it over the text
+   * (its room above and below the lines is the text box's own: it runs to the capsule's pen line). */
   const measureExpanded = useCallback(() => {
     const el = inputRef.current;
     if (!el) return;
     const line = parseFloat(getComputedStyle(el).lineHeight) || 24;
     const room = expandRoom?.('field') ?? Math.round(window.innerHeight * 0.6);
-    const carry = carryRef.current ? carryRef.current.offsetHeight + 6 : 0;
-    setExpandedH(Math.max(line * 2 + 48, Math.round(room - carry)));
+    const riding = ridingRef.current?.offsetHeight ?? 0;
+    setExpandedH(Math.max(line * 2 + 48, Math.round(room - riding)));
   }, [expandRoom, inputRef]);
 
   // Auto-grow: the field rests at one line and takes its height from what is written (the CSS caps it at five);
@@ -427,6 +433,8 @@ export function ThreadComposer({
   // once when the page is left; forgotten once sent, emptied or the conversation deleted.
   const restoredFor = useRef<string | null>(null);
   const restoringCard = useRef<string | null>(null);
+  // The reply a draft brought back (not announced as one just chosen).
+  const draftReply = useRef<string | null>(null);
   const dirty = useRef(false);
   const gone = useRef(false);
   const draftNow = useRef(() => ({ text: '', replyTo: undefined as MessageReplyQuote | undefined, noteRef, cardId: undefined as string | undefined }));
@@ -445,7 +453,10 @@ export function ThreadComposer({
     if (draft.noteRef && !replyNote) setNoteRef(draft.noteRef);
     // A quote of a message known to be unsent is dropped here; the thread asks about it again as its messages come
     // (unsent, missing from the whole history, the conversation gone: ThreadView).
-    if (draft.replyTo && !replyingTo && !isUnsent?.(draft.replyTo.id)) onRestoreReply?.(draft.replyTo);
+    if (draft.replyTo && !replyingTo && !isUnsent?.(draft.replyTo.id)) {
+      draftReply.current = draft.replyTo.id;
+      onRestoreReply?.(draft.replyTo);
+    }
     if (draft.cardId) {
       const id = draft.cardId;
       restoringCard.current = id;
@@ -530,15 +541,32 @@ export function ThreadComposer({
     if (!panelOpen) inputRef.current?.focus();
   }
 
+  // --- What rides along ----------------------------------------------------------------------------------------
+  // A reply chosen is said once to a screen reader (「回覆 bob」), the focus staying in the field; one brought back
+  // with a draft is not news.
+  const [said, setSaid] = useState('');
+  const replyId = replyingTo?.id ?? null;
+  const replySeen = useRef<string | null>(replyId);
+  useEffect(() => {
+    if (!replyId || replyId === replySeen.current || replyId === draftReply.current) {
+      replySeen.current = replyId;
+      return;
+    }
+    replySeen.current = replyId;
+    setSaid(replyHandle ? t('replyingTo', { handle: replyHandle }) : t('replyingToSelf'));
+    // Said, then gone from the page (nothing stale is read later).
+    const id = window.setTimeout(() => setSaid(''), 1500);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replyId]);
+
   // The send segment: Send — or, with the panel open and nothing to send, ↑ / ↓ for the panel.
   const segment: CapsuleSegment = panelOpen && !hasContent ? (panelTall ? 'collapse' : 'expand') : 'send';
   const carries = !!(replyingTo || noteRef || pendingCard || pictures.length);
-  const picker = (
-    <StickerPicker recents={recents} selected={preview} onPick={pickSticker} variant={desktop ? 'popover' : 'panel'} gridRef={gridRef} />
-  );
+  const picker = <StickerPicker recents={recents} onPick={sendSticker} variant={desktop ? 'popover' : 'panel'} gridRef={gridRef} />;
   // The second line of the reply's row: its words, a picture, a card — a sticker this build knows is its key frame
   // alone (round 22, the owner's notes: no name beside it); one it doesn't, its fallback words.
-  const replySticker = replyingTo?.sticker ? stickerName(replyingTo.sticker, locale) : null;
+  const replySticker = replyingTo?.sticker && !replyingTo.unsent ? stickerName(replyingTo.sticker, locale) : null;
   const replyDetail = !replyingTo
     ? ''
     : replyingTo.unsent
@@ -548,77 +576,91 @@ export function ThreadComposer({
           ? undefined
           : replyingTo.text || t('stickerUnknown')
         : replyingTo.text || (replyingTo.image ? t('replyImage') : t('replyCard'));
-  // From its second line the send segment is a block on the last row; from the third ⤢ stands in its column, at the
-  // capsule's top-right.
-  const block = lines > 1 || expanded;
+  // What the answered message shows, small, before the words (Telegram's photo reply): a sticker's key frame,
+  // quieter, or its picture or card's cover.
+  const replyThumb =
+    replyingTo && !replyingTo.unsent
+      ? replyingTo.sticker && replySticker
+        ? { src: stickerPath(replyingTo.sticker, 'thumb'), sticker: true }
+        : replyMedia
+          ? { src: replyMedia, sticker: false }
+          : null
+      : null;
+  // From its second line — or with anything riding — the send segment is a block on the last row; from the third ⤢
+  // stands in its column, at the text's top.
+  const block = lines > 1 || expanded || carries;
   // A sticker isn't sent with words: with words in the field the ☺ steps aside and the field takes its room.
   const offersStickers = trimmed.length === 0;
+  const focusField = () => inputRef.current?.focus({ preventScroll: true });
+
+  const riding = carries ? (
+    <>
+      {replyingTo && (
+        <CarryRow
+          mark={<CarryRule />}
+          media={
+            replyThumb && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className={replyThumb.sticker ? styles.carrySticker : styles.carryMedia} src={replyThumb.src} alt="" draggable={false} />
+            )
+          }
+          label={replyHandle ? t('replyingTo', { handle: replyHandle }) : t('replyingToSelf')}
+          detail={replyDetail}
+          onWords={onJumpToReply ? () => onJumpToReply(replyingTo.id) : undefined}
+          removeLabel={t('replyCancel')}
+          onRemove={onCancelReply}
+        />
+      )}
+      {noteRef && (
+        <CarryRow mark={<CarryTile icon="note" />} label={t('quotedNote')} removeLabel={t('removeNote')} onRemove={() => setNoteRef(undefined)} />
+      )}
+      {pendingCard && (
+        <CarryRow
+          mark={<CarryTile icon="cards" picture={pendingCard.media?.type === 'image' ? pendingCard.media.url : undefined} />}
+          label={!pendingCard.publishedAt || pendingCard.visibility === 'private' ? t('privateCard') : t('attachCardShort')}
+          detail={pendingCard.thoughtCore}
+          removeLabel={t('removeCard')}
+          onRemove={() => setPendingCard(null)}
+        />
+      )}
+      {/* The pictures (round 22, the owner's notes — iOS's way on every platform): their thumbnails in a row,
+          each taken back by the small round ✕ on its corner; no numbers, no count, no ✕ for them all. */}
+      {pictures.length > 0 && (
+        <PictureStrip
+          pictures={pictures}
+          removeLabel={(i) => (pictures.length > 1 ? t('removeImageAt', { n: i + 1 }) : t('removeImage'))}
+          onRemove={(key) => setPictures((cur) => cur.filter((x) => x.key !== key))}
+        />
+      )}
+    </>
+  ) : null;
 
   return (
     <>
-      <div ref={stackRef} className={styles.composerStack}>
-        {/* What rides the next message — the message it answers, then a note, a card or pictures — as rows in the
-            reply's style straight on the foot's paper, over the capsule, which keeps its exact shape whatever it
-            carries (round 10 §3.4). */}
-        {carries && (
-          <div ref={carryRef} className={styles.carry}>
-            {replyingTo && (
-              <CarryRow
-                lead={
-                  replyingTo.sticker && replySticker ? (
-                    <span className={styles.carryRuleWith}>
-                      <CarryRule />
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img className={styles.carrySticker} src={stickerPath(replyingTo.sticker, 'thumb')} alt="" />
-                    </span>
-                  ) : (
-                    <CarryRule />
-                  )
-                }
-                label={replyHandle ? t('replyingTo', { handle: replyHandle }) : t('replyingToSelf')}
-                detail={replyDetail}
-                removeLabel={t('replyCancel')}
-                onRemove={onCancelReply}
-              />
-            )}
-            {noteRef && (
-              <CarryRow
-                lead={<CarryTile icon="note" />}
-                label={t('quotedNote')}
-                removeLabel={t('removeCard')}
-                onRemove={() => setNoteRef(undefined)}
-              />
-            )}
-            {pendingCard && (
-              <CarryRow
-                lead={<CarryTile icon="cards" picture={pendingCard.media?.type === 'image' ? pendingCard.media.url : undefined} />}
-                label={!pendingCard.publishedAt || pendingCard.visibility === 'private' ? t('privateCard') : t('attachCardShort')}
-                detail={pendingCard.thoughtCore}
-                removeLabel={t('removeCard')}
-                onRemove={() => setPendingCard(null)}
-              />
-            )}
-            {/* The pictures (round 22, the owner's notes — iOS's way on every platform): their thumbnails in a row,
-                each taken back by the small round ✕ on its corner; no numbers, no count, no ✕ for them all. */}
-            {pictures.length > 0 && (
-              <div className={styles.carryStrip}>
-                {pictures.map((p, i) => (
-                  <span key={p.key} className={styles.carryThumb}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.previewUrl} alt="" />
-                    <ThumbRemove
-                      label={pictures.length > 1 ? `${t('removeImage')} ${i + 1}` : t('removeImage')}
-                      seed={41 + i * 7}
-                      onClick={() => setPictures((cur) => cur.filter((x) => x.key !== p.key))}
-                    />
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
+      <div
+        ref={stackRef}
+        className={styles.composerStack}
+        // A press anywhere in the capsule but on a control writes in the field (round 23): its rows and its room
+        // round the text never take the focus from it, so a phone's keyboard stays up.
+        onMouseDown={(e) => {
+          const target = e.target as HTMLElement;
+          if (target.closest('button, a, input, textarea, [role="menu"]') || !capsuleRef.current?.contains(target)) return;
+          e.preventDefault();
+          focusField();
+        }}
+        onKeyDown={(e) => {
+          // Escape puts the reply away when nothing else is open over the field: a panel, the popover or the ＋'s
+          // menu (a portal whose keys reach here through React) goes first.
+          if (e.key !== 'Escape' || e.defaultPrevented || !replyingTo || stickers !== 'closed') return;
+          const capsule = capsuleRef.current;
+          if (!capsule?.contains(e.target as Node) || capsule.querySelector('[aria-expanded="true"]')) return;
+          e.preventDefault();
+          onCancelReply();
+          focusField();
+        }}
+      >
         <ComposerCapsule
+          capsuleRef={capsuleRef}
           focused={focused}
           ready={valid}
           segment={segment}
@@ -626,6 +668,9 @@ export function ThreadComposer({
           onSend={() => (segment === 'send' ? submit() : setPanelTall(segment === 'expand'))}
           expanded={expanded}
           block={block}
+          riding={riding}
+          ridingLabel={t('composerRiding')}
+          ridingRef={ridingRef}
           aboveSend={
             (lines >= EXPAND_AT_LINES || expanded) && (
               <GrowButton expanded={expanded} label={expanded ? t('collapseComposer') : t('expandComposer')} onClick={() => setGrown(!expanded)} />
@@ -667,14 +712,7 @@ export function ThreadComposer({
           />
           {/* The field's room: one line centred in the capsule's 48 by its own padding, so a scrolled field's
               lines stop at it, never under the capsule's pen. A press in that room writes in the field. */}
-          <div
-            className={styles.composerField}
-            onMouseDown={(e) => {
-              if (e.target !== e.currentTarget) return;
-              e.preventDefault();
-              inputRef.current?.focus();
-            }}
-          >
+          <div className={styles.composerField}>
             <Textarea
               ref={inputRef}
               // No frame of its own: the capsule is its frame (the underline variant, its line taken off here).
@@ -702,10 +740,6 @@ export function ThreadComposer({
                 if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
                   e.preventDefault();
                   submit();
-                } else if (e.key === 'Escape' && replyingTo) {
-                  // Only the reply is put away (not a search open over the thread).
-                  e.preventDefault();
-                  onCancelReply();
                 }
               }}
               placeholder={t('placeholder')}
@@ -733,18 +767,10 @@ export function ThreadComposer({
           )}
         </ComposerCapsule>
 
-        {/* A sticker picked on a phone: moving on its sheet over the thread's foot, above the capsule. */}
-        {preview && panelOpen && (
-          <div className={styles.previewSlot}>
-            <StickerPreview sticker={preview} placement="foot" onSend={() => sendSticker(preview)} />
-          </div>
-        )}
-        {/* Said once to a screen reader as a sticker is previewed (there while the stickers are open, so it is heard). */}
-        {stickers !== 'closed' && (
-          <span className={styles.srOnly} role="status" aria-live="polite">
-            {preview ? t('stickerPreviewA11y', { name: stickerName(preview, locale) ?? '' }) : ''}
-          </span>
-        )}
+        {/* Said once to a screen reader: a reply chosen (the focus stays in the field). */}
+        <span className={styles.srOnly} aria-live="polite">
+          {said}
+        </span>
       </div>
 
       {panelOpen && (
@@ -753,14 +779,10 @@ export function ThreadComposer({
         </StickerPanel>
       )}
 
-      {stickers === 'popover' && smileRef.current && (
-        <StickerPopover anchor={smileRef.current} onClose={() => closeStickers(true)}>
+      {/* With a mouse the stickers hang over the capsule's top edge — over what rides in it too, never on it. */}
+      {stickers === 'popover' && smileRef.current && capsuleRef.current && (
+        <StickerPopover anchor={smileRef.current} above={capsuleRef.current} onClose={() => closeStickers(true)}>
           {picker}
-          {preview && (
-            <div className={styles.popoverPreview}>
-              <StickerPreview sticker={preview} placement="popover" onSend={() => sendSticker(preview)} />
-            </div>
-          )}
         </StickerPopover>
       )}
 
@@ -814,7 +836,7 @@ function mark(el: HTMLElement, attr: string, on: boolean) {
   } else if (el.hasAttribute(attr)) el.removeAttribute(attr);
 }
 
-/** A reply's lead: a short wavy pen rule in terracotta. */
+/** A reply's mark: a short wavy pen rule in terracotta, over the ＋'s column. */
 function CarryRule() {
   return (
     <span className={styles.carryRule} aria-hidden>
@@ -823,39 +845,60 @@ function CarryRule() {
   );
 }
 
+/** Keeps the field's focus through a press (round 23): a phone's keyboard stays up, nothing under it moves. */
+const keepFocus = (e: { preventDefault(): void }) => e.preventDefault();
+
 /**
- * One thing riding the next message, in the reply's style (round 10 §3.4): what it is at the start — the reply's
- * wavy rule, a picture's thumbnail (pictures' strip), a card's cover or a glyph on a tonal tile — then whom or
- * what (and a line of it), and its ✕ at the end.
+ * One thing riding the next message, inside the capsule over the text's line (round 23, Telegram's way): the
+ * capsule's three columns run through it — its mark (the reply's wavy rule, a note's glyph, a card's cover) in
+ * the ＋'s, whom or what (and a line of it) where the text starts, a reply's picture or sticker first when it has
+ * one, and its ✕ centred over Send. A reply's words go to the message it answers (`onWords`); the others' write
+ * in the field (the stack's press).
  */
 function CarryRow({
-  lead,
+  mark,
+  media,
   label,
   detail,
+  onWords,
   removeLabel,
   onRemove,
 }: {
-  lead: ReactNode;
+  mark: ReactNode;
+  media?: ReactNode;
   label: string;
   detail?: string;
+  onWords?: () => void;
   removeLabel: string;
   onRemove: () => void;
 }) {
-  return (
-    <div className={styles.carryRow}>
-      {lead}
+  const words = (
+    <>
+      {media}
       <span className={styles.carryText}>
         <span className={styles.carryLabel}>{label}</span>
         {detail && <span className={styles.carryDetail}>{detail}</span>}
       </span>
+    </>
+  );
+  return (
+    <div className={styles.carryRow}>
+      <span className={styles.carryMark}>{mark}</span>
+      {onWords ? (
+        <button type="button" className={styles.carryWords} onPointerDown={keepFocus} onMouseDown={keepFocus} onClick={onWords}>
+          {words}
+        </button>
+      ) : (
+        <span className={styles.carryWords}>{words}</span>
+      )}
       <span className={styles.carryRemove}>
-        <BareIconButton icon="close" label={removeLabel} iconSize={16} tipAlign="end" onClick={onRemove} />
+        <BareIconButton icon="close" label={removeLabel} iconSize={16} tipAlign="end" keepFocus onClick={onRemove} />
       </span>
     </div>
   );
 }
 
-/** A row's 40 × 40 lead: the picture when there is one, else `icon` on the tonal tile. */
+/** A row's 32 × 32 mark: the picture when there is one, else `icon` on the tonal tile. */
 function CarryTile({ icon, picture }: { icon?: IconName; picture?: string }) {
   return (
     <span className={styles.carryTile} aria-hidden>
@@ -863,21 +906,76 @@ function CarryTile({ icon, picture }: { icon?: IconName; picture?: string }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img src={picture} alt="" />
       ) : (
-        icon && <Icon name={icon} size={18} color="var(--color-terracotta)" />
+        icon && <Icon name={icon} size={16} color="var(--color-terracotta)" />
       )}
     </span>
   );
 }
 
 /**
+ * The pictures riding, inside the capsule (round 23): a strip across its inner width, 8 clear of its pen line all
+ * round, of 56 thumbnails — each taken back by its own small ✕ on its corner (round 22: no numbers, no count, no ✕
+ * for them all) — scrolling sideways when they are more than it, its edges fading where more of them lie; a
+ * mouse's wheel scrolls it sideways too.
+ */
+function PictureStrip({
+  pictures,
+  removeLabel,
+  onRemove,
+}: {
+  pictures: readonly PendingPicture[];
+  removeLabel: (index: number) => string;
+  onRemove: (key: string) => void;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const edges = useEdgeFades(ref, 'x');
+  // A wheel turned up or down over the strip moves it sideways (a mouse has no other way), while there is more of
+  // it that way; past its end the wheel is the thread's again.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      const max = el.scrollWidth - el.clientWidth;
+      if (max <= 0) return;
+      const next = Math.max(0, Math.min(max, el.scrollLeft + e.deltaY));
+      if (next === el.scrollLeft) return;
+      e.preventDefault();
+      el.scrollLeft = next;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+  return (
+    <div ref={edges} className={styles.carryStrip}>
+      {pictures.map((p, i) => (
+        <span key={p.key} className={styles.carryThumb}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={p.previewUrl} alt="" draggable={false} />
+          <ThumbRemove label={removeLabel(i)} seed={41 + i * 7} onClick={() => onRemove(p.key)} />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
  * A picture's own ✕ on its thumbnail's top-right corner (round 22, the owner's notes): a small round button of
  * the viewer's dark with a cream ✕ — its outline only a touch hand-drawn (a neat disc, not a blob), a finger's
- * 32 round it unseen.
+ * 32 round it unseen. A press keeps the field's focus.
  */
 function ThumbRemove({ label, seed, onClick }: { label: string; seed: number; onClick: () => void }) {
   const disc = useMemo(() => wobCircle(12, 12, 10.5, seed, { segments: 10, mag: 0.35, cpJitter: 0.12 }), [seed]);
   return (
-    <button type="button" className={styles.thumbRemove} aria-label={label} title={label} onClick={onClick}>
+    <button
+      type="button"
+      className={styles.thumbRemove}
+      aria-label={label}
+      title={label}
+      onPointerDown={keepFocus}
+      onMouseDown={keepFocus}
+      onClick={onClick}
+    >
       <svg className={styles.thumbDisc} viewBox="0 0 24 24" aria-hidden="true">
         <path d={disc} />
       </svg>
@@ -891,8 +989,8 @@ export const TOOL_W = 44;
 export const TOOL_H = 48;
 
 /**
- * ⤢ / ⤡ (round 22, the owner's notes): a ghost button at the capsule's top-right, in the send column, the
- * capsule's one tool size —
+ * ⤢ / ⤡ (round 22, the owner's notes): a ghost button in the send column at the text's top (the capsule's
+ * top-right, or under what rides along, round 23), the capsule's one tool size —
  * no fill and no outline at rest; under a pointer, the keyboard's focus or a press, a soft square of ink (a
  * hand-drawn rounded square, as the bare glyphs' disc), the glyph centred.
  */

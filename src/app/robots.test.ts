@@ -77,6 +77,8 @@ describe('/robots.txt in production', () => {
       '/en/settings',
       '/zh-TW/messages',
       '/en/messages/bob',
+      '/en/notifications',
+      '/zh-TW/notifications',
       '/en/write',
       '/zh-TW/write/draft-1',
     ]) {

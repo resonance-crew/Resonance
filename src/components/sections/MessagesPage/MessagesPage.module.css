@@ -135,7 +135,12 @@
   pointer-events: none;
 }
 
-.row > :not(.rowWash) {
+/* A phone's band (round 23 §5, the media query at the foot): wider, the hand-drawn wash alone. */
+.rowBand {
+  display: none;
+}
+
+.row > :not(.rowWash):not(.rowBand) {
   position: relative;
 }
 
@@ -496,5 +501,32 @@
   }
   .headerBack {
     display: inline-flex;
+  }
+}
+
+/* Phones only (round 23 §5, the owner: 「手機上私訊頁面左右 margin 減少…但是這個設計又僅限於手機」 — 721–900, a single
+   pane too, keeps the numbers above): the list's rows are bands as the bell's are — edge to edge, touching, their
+   content the page's margin in (20 at 390, as the notifications), the first band's top at the header's box (its
+   avatar ~21 under the pen line, level with the notifications' first title) — washed under a pointer or a press. */
+@media (max-width: 720px) {
+  .page:not([data-thread-open]) {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .page:not([data-thread-open]) .listPane {
+    padding: 0 0 16px;
+  }
+  .row {
+    padding: 12px var(--page-pad-x);
+  }
+  .rowWash {
+    display: none;
+  }
+  .rowBand {
+    display: block;
+  }
+  /* On bare paper between the bands: 16 over it, the curves' swing and 4 more under it (BAND_TITLE_TO_BAND). */
+  .startSectionTitle {
+    margin: 16px var(--page-pad-x) 6px;
   }
 }

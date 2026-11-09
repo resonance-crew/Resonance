@@ -10,7 +10,10 @@ export const APP_STORE_ID = '6817604797';
 
 export const APP_STORE_URL = `https://apps.apple.com/tw/app/resonance/id${APP_STORE_ID}`;
 
-export const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.resonance.stories';
+/** The Android app's package name (Google Play, App Links' assetlinks.json, the web manifest's related app). */
+export const PLAY_PACKAGE = 'com.resonance.stories';
+
+export const PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${PLAY_PACKAGE}`;
 
 /**
  * Safari's Smart App Banner (`<meta name="apple-itunes-app">`) for a public
