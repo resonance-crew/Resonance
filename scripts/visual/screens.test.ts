@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { REPLY_CARD_DRAFT, SCREENS, screensFor, shotName, BASE_VARIANT } from './screens';
+import en from '../../src/messages/en.json';
+import zhTW from '../../src/messages/zh-TW.json';
 
 const seed = readFileSync(join(process.cwd(), 'scripts/seed-emulator.ts'), 'utf8');
 
@@ -39,6 +41,15 @@ describe('the release screenshots’ screens', () => {
     // The message and the card are the seed's own: bob's note in their thread, alice's published card.
     expect(seed).toContain(`thread('${draft.replyTo.id}', { senderId: '${draft.replyTo.senderId}', text: '${draft.replyTo.text}'`);
     expect(seed).toMatch(new RegExp(`cards/${draft.cardId}'\\)\\.set\\(\\{\\s*authorId: 'alice'[\\s\\S]*?visibility: 'public', publishedAt`));
+  });
+
+  // Round 23 §4: the web's bell is a link — a phone follows it to the 通知 page, wider it opens the dialog.
+  it('opens the web’s notifications by the bell’s link, named as the header names it', () => {
+    const bell = SCREENS.find((s) => s.id === 'notifications')!;
+    expect(bell.web).toEqual({
+      route: '/home',
+      click: `a[aria-label="${zhTW.app.nav.notifications}"], a[aria-label="${en.app.nav.notifications}"]`,
+    });
   });
 
   it('gives the apps their arguments as launch arguments can carry them', () => {

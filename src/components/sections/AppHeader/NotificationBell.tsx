@@ -1,67 +1,37 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
-import { Link } from '@/i18n/navigation';
+import { useState, type MouseEvent } from 'react';
+import { useTranslations } from 'next-intl';
+import { Link, usePathname } from '@/i18n/navigation';
 import { Modal } from '@/components/molecules/Modal/Modal';
 import { Icon } from '@/components/atoms/Icon';
 import { EmptyState } from '@/components/molecules/EmptyState/EmptyState';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
-import { OrganicScrollbar, organicScrollTarget } from '@/components/atoms/OrganicScrollbar/OrganicScrollbar';
-import styles from './NotificationBell.module.css';
-import type { Notification } from '@/lib/db/types';
-import { useBellExtras, useNotifications } from '@/lib/data/hooks';
-import { markNotificationRead } from '@/lib/db/firestore/client/notifications';
-import { useEdgeFades } from '@/lib/hooks/useEdgeFades';
-import { bellHref } from './bellLink';
-import { BellRowContent } from './BellRow';
-import { bellGroup, bellWhen, type BellGroup } from './bellTime';
+import { BellList, bellOpensPage, useBell } from './BellList';
 
+/**
+ * The header's bell: its badge counts the viewer's unread notifications, live. It is a link to the bell's page
+ * (`/notifications`, round 23 §4) — what a phone opens, as the apps' 通知 tab, and what works before the page has
+ * hydrated or in a new tab — and wider (`BELL_PAGE_QUERY` failing) a click opens the list in a dialog over the page
+ * instead. On its own page it wears its solid twin.
+ */
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
-  // The viewer's newest notifications, live: a new one rings the badge while
-  // the page is open, and one read elsewhere stops counting.
-  const live = useNotifications(20);
-  // Rows clicked here count as read at once, before the listener hears the write.
-  const [readHere, setReadHere] = useState<ReadonlySet<string>>(() => new Set());
-  const items = useMemo(
-    () => (live.data ?? []).map((n) => (n.readAt === null && readHere.has(n.id) ? { ...n, readAt: new Date() } : n)),
-    [live.data, readHere],
-  );
-  const fetched = live.data !== undefined || live.error !== null;
-  // Long lists scroll inside the modal (hidden native bar + hand-drawn rail).
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const scrollEdges = useEdgeFades(scrollRef);
+  const pathname = usePathname();
+  const onPage = pathname === '/notifications';
+  // The list's faces and cards are read only while the dialog shows it (the badge needs neither); the page reads its own.
+  const bell = useBell(open);
+  const { items, fetched, unreadCount } = bell;
 
   const tApp = useTranslations('app.notifications');
   const tNav = useTranslations('app.nav');
-  const locale = useLocale();
-  // Each row's face and card, read once the list is open (the badge needs neither).
-  const extras = useBellExtras(open ? items : undefined);
-  // The parts of the list — today, the week before, earlier — and each row's time, as of this render.
-  const now = new Date();
-  const groups = useMemo(() => {
-    const out: { group: BellGroup; items: Notification[] }[] = [];
-    const at = new Date();
-    for (const n of items) {
-      const group = bellGroup(n.createdAt, at);
-      if (out.at(-1)?.group !== group) out.push({ group, items: [] });
-      out.at(-1)!.items.push(n);
-    }
-    return out;
-  }, [items]);
 
-  const unreadCount = useMemo(
-    () => items.filter((n) => n.readAt === null).length,
-    [items],
-  );
-
-  function handleClickItem(n: Notification) {
-    if (n.readAt === null) {
-      setReadHere((prev) => new Set(prev).add(n.id));
-      markNotificationRead(n.id).catch(() => {});
-    }
-    setOpen(false);
+  function onBell(e: MouseEvent<HTMLAnchorElement>) {
+    // A new tab or window, or the page itself: the link's own way.
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || onPage) return;
+    if (bellOpensPage()) return;
+    e.preventDefault();
+    setOpen(true);
   }
 
   // Wobbly badge chip — same hand-drawn curve language as the avatar frame.
@@ -70,22 +40,23 @@ export function NotificationBell() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
+      <Link
+        href="/notifications"
+        onClick={onBell}
         aria-label={tNav('notifications')}
+        aria-current={onPage ? 'page' : undefined}
         style={{
           position: 'relative',
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
+          display: 'inline-flex',
           padding: 6,
           color: 'var(--color-text)',
+          textDecoration: 'none',
           // The badge hangs off the top-right corner; sit the bell a touch
           // lower so the pair reads vertically centered in the header row.
           transform: 'translateY(3px)',
         }}
       >
-        <Icon name="bell" size={22} />
+        <Icon name={onPage ? 'bell-fill' : 'bell'} size={22} />
         {unreadCount > 0 && (
           <span
             style={{
@@ -120,7 +91,7 @@ export function NotificationBell() {
             <span style={{ position: 'relative' }}>{unreadCount}</span>
           </span>
         )}
-      </button>
+      </Link>
 
       <Modal
         open={open}
@@ -136,50 +107,11 @@ export function NotificationBell() {
         <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: 20, marginBottom: 14 }}>
           {tNav('notifications')}
         </h3>
-        {fetched && items.length === 0 && (
+        {fetched && items.length === 0 ? (
           <EmptyState icon="bell" seed={37} titleAs="p" title={tApp('emptyTitle')} line={tApp('empty')} />
+        ) : (
+          <BellList bell={bell} variant="dialog" onPicked={() => setOpen(false)} />
         )}
-        <div className={styles.scrollArea}>
-          <div ref={scrollEdges} className={`${styles.scrollBody} ${organicScrollTarget}`}>
-            {groups.map((g) => (
-              <section key={g.group} aria-labelledby={`bell-${g.group}`}>
-                <h4 id={`bell-${g.group}`} className={styles.groupTitle}>
-                  {tApp(g.group)}
-                </h4>
-                <ul className={styles.list}>
-                  {g.items.map((n) => {
-                    // Where the row leads (as its push does): a note on an anonymous card opens the card, never a
-                    // thread with its writer — see bellLink.
-                    const href = bellHref(n);
-                    const from = typeof n.payload.fromUserId === 'string' ? n.payload.fromUserId : '';
-                    const cardId = typeof n.payload.cardId === 'string' ? n.payload.cardId : '';
-                    const inner = (
-                      <BellRowContent
-                        n={n}
-                        person={extras?.people[from]}
-                        card={extras?.cards[cardId]}
-                        settled={extras !== undefined}
-                        when={bellWhen(n.createdAt, now, locale, tApp('justNow'))}
-                      />
-                    );
-                    return (
-                      <li key={n.id} onClick={() => handleClickItem(n)}>
-                        {href ? (
-                          <Link href={href} className={styles.rowLink}>
-                            {inner}
-                          </Link>
-                        ) : (
-                          inner
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            ))}
-          </div>
-          <OrganicScrollbar targetRef={scrollRef} seed={31} />
-        </div>
       </Modal>
     </>
   );

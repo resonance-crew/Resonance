@@ -1,0 +1,21 @@
+/* The bell's page: no side padding of its own — the bands run the window's width, their content the page's margin
+   in (NotificationBell.module.css .pageList). The first part's title stands 16 under the header's pen line, which
+   runs ~9 above the header's box (HEADER_STROKE_Y 72.9 of 82): 82 + 7. A column, so the empty state can take the
+   room under the header. */
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  padding: calc(var(--app-header-h) + 7px) 0 var(--page-pad-bottom);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

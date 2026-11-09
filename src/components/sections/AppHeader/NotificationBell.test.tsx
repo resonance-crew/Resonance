@@ -1,23 +1,55 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ReactNode } from 'react';
-import { renderWithIntl, screen, userEvent, within } from '@/../test/render';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { MouseEvent, ReactNode } from 'react';
+import { fireEvent, renderWithIntl, screen, userEvent, within } from '@/../test/render';
 import type { Card, Notification, User } from '@/lib/db/types';
 import type { BellExtras } from '@/lib/data/hooks';
 import { bellHref, onAnonymousCard } from './bellLink';
+import { BELL_PAGE_QUERY, bellParts, forgetBellReadHere } from './BellList';
 import { NotificationBell } from './NotificationBell';
 import zhTW from '@/messages/zh-TW.json';
 
 // The header's bell, on its live list (useNotifications) and the read mark it writes: where each row leads.
 
+const nav = vi.hoisted(() => ({ path: '/home', followed: [] as string[] }));
 vi.mock('@/i18n/navigation', () => ({
-  // Where it would go is the href; jsdom goes nowhere.
-  Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
-    <a href={href} {...rest} onClick={(e) => e.preventDefault()}>
+  // Where it would go is the href; jsdom goes nowhere — a click the page didn't take for itself is noted as followed.
+  Link: ({ href, children, onClick, ...rest }: { href: string; children: ReactNode; onClick?: (e: MouseEvent<HTMLAnchorElement>) => void }) => (
+    <a
+      href={href}
+      {...rest}
+      onClick={(e) => {
+        onClick?.(e);
+        if (!e.defaultPrevented) nav.followed.push(href);
+        e.preventDefault();
+      }}
+    >
       {children}
     </a>
   ),
+  usePathname: () => nav.path,
 }));
+
+/** A window where `query` matches (the phone's, for the bell's page) — or none. */
+function windowWhere(matching: string | null) {
+  window.matchMedia = ((query: string) => ({
+    matches: query === matching,
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+}
+const originalMatchMedia = window.matchMedia;
+afterEach(() => {
+  window.matchMedia = originalMatchMedia;
+  nav.path = '/home';
+  nav.followed = [];
+  forgetBellReadHere();
+});
 
 const live = vi.hoisted(() => ({ rows: [] as Notification[], extras: undefined as BellExtras | undefined }));
 vi.mock('@/lib/data/hooks', () => ({
@@ -52,7 +84,7 @@ const namedResonance = bell('n4', 'resonance', { fromUserId: 'carol', fromHandle
 async function openBell() {
   const user = userEvent.setup();
   renderWithIntl(<NotificationBell />);
-  await user.click(screen.getByRole('button', { name: 'Notifications' }));
+  await user.click(screen.getByRole('link', { name: 'Notifications' }));
   return { user, list: screen.getByRole('dialog') };
 }
 
@@ -99,11 +131,11 @@ describe('the bell’s rows', () => {
     live.rows = [bell('n5', 'invite_expired', {})];
     const user = userEvent.setup();
     renderWithIntl(<NotificationBell />, { locale: 'zh-TW', messages: zhTW });
-    await user.click(screen.getByRole('button', { name: zhTW.app.nav.notifications }));
+    await user.click(screen.getByRole('link', { name: zhTW.app.nav.notifications }));
     const list = screen.getByRole('dialog', { name: zhTW.app.nav.notifications });
     expect(within(list).getByText(zhTW.app.notifications.inviteExpired)).toBeInTheDocument();
     expect(screen.queryByText('Invite expired')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Notifications' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Notifications' })).toBeNull();
   });
 
   it('mark only the bell row read when one on an anonymous card is opened — no conversation, and offer no reply', async () => {
@@ -155,12 +187,12 @@ describe('the bell’s faces, cards and parts', () => {
     live.extras = undefined;
     const user = userEvent.setup();
     const view = renderWithIntl(<NotificationBell />);
-    await user.click(screen.getByRole('button', { name: 'Notifications' }));
+    await user.click(screen.getByRole('link', { name: 'Notifications' }));
     // Still reading: a quiet tile holds the card's place.
-    expect(screen.getByRole('link').querySelector('[class*="thumbPending"]')).not.toBeNull();
+    expect(within(screen.getByRole('dialog')).getByRole('link').querySelector('[class*="thumbPending"]')).not.toBeNull();
     live.extras = { people: {}, cards: {} };
     view.rerender(<NotificationBell />);
-    const row = screen.getByRole('link');
+    const row = within(screen.getByRole('dialog')).getByRole('link');
     expect(row.querySelector('[class*="thumbPending"]')).toBeNull();
     expect(row.querySelector('[class*="thumb"]')).toBeNull();
   });
@@ -184,6 +216,89 @@ describe('the bell’s faces, cards and parts', () => {
     expect(read).toHaveTextContent('3 days ago');
     // No wavy rules between the rows any more.
     expect(list.querySelector('ul svg path[d^="M"][stroke-width="1.2"]')).toBeNull();
+  });
+});
+
+// Round 23 §4: a phone's bell opens a page of its own (the apps' 通知 tab), wider a dialog over the page; and the rows
+// are bands — touching, parted by curves seen only under a pointer or a press.
+describe('the bell on a phone and wider', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    live.rows = [namedNote, namedResonance];
+    live.extras = { people: {}, cards: {} };
+  });
+
+  it('is a link to the bell’s page, which a phone follows — no dialog', async () => {
+    windowWhere(BELL_PAGE_QUERY);
+    const user = userEvent.setup();
+    renderWithIntl(<NotificationBell />);
+    const bellLink = screen.getByRole('link', { name: 'Notifications' });
+    expect(bellLink).toHaveAttribute('href', '/notifications');
+    await user.click(bellLink);
+    expect(nav.followed).toEqual(['/notifications']);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('opens the dialog over the page wider, and leaves a click for a new tab to the link', () => {
+    windowWhere(null);
+    renderWithIntl(<NotificationBell />);
+    const bellLink = screen.getByRole('link', { name: 'Notifications' });
+    fireEvent.click(bellLink, { metaKey: true });
+    expect(nav.followed).toEqual(['/notifications']);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(bellLink);
+    expect(screen.getByRole('dialog', { name: 'Notifications' })).toBeInTheDocument();
+    expect(nav.followed).toEqual(['/notifications']);
+  });
+
+  it('says it is the page on its own page — its solid twin — and opens no dialog over it', () => {
+    nav.path = '/notifications';
+    windowWhere(null);
+    renderWithIntl(<NotificationBell />);
+    const bellLink = screen.getByRole('link', { name: 'Notifications' });
+    expect(bellLink).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(bellLink);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('draws each row of the dialog as a band, nothing at rest', async () => {
+    const { list } = await openBell();
+    const rows = within(list).getAllByRole('link');
+    expect(rows).toHaveLength(2);
+    for (const row of rows) expect(row.querySelector('[data-band]')).not.toBeNull();
+    // jsdom measures nothing, so no curve is drawn; and the band's fill is the row's `--band-fill`, transparent at rest.
+    expect(list.querySelector('[data-band] path')).toBeNull();
+    expect(list.querySelector('[data-band-pressed]')).toBeNull();
+  });
+
+  it('counts a row tapped in the dialog as read on the badge at once, before the listener hears it', async () => {
+    const { user, list } = await openBell();
+    expect(screen.getByRole('link', { name: 'Notifications' })).toHaveTextContent('2');
+    await user.click(within(list).getAllByRole('link')[0]);
+    expect(markNotificationRead).toHaveBeenCalledWith('n3');
+    expect(screen.getByRole('link', { name: 'Notifications' })).toHaveTextContent('1');
+  });
+});
+
+describe('bellParts', () => {
+  const now = new Date('2026-10-10T12:00:00');
+  const hoursAgo = (id: string, h: number): Notification => ({ ...bell(id, 'resonance', {}), createdAt: new Date(now.getTime() - h * 3_600_000) });
+
+  it('gives each row the key of the curve under it: the next row’s, the next part’s title, the list’s end', () => {
+    const parts = bellParts([hoursAgo('a', 1), hoursAgo('b', 2), hoursAgo('c', 72)], now);
+    expect(parts.map((p) => p.group)).toEqual(['today', 'thisWeek']);
+    expect(parts[0].rows.map((r) => [r.n.id, r.below])).toEqual([
+      ['a', 'b'],
+      ['b', 'part:thisWeek'],
+    ]);
+    expect(parts[1].rows.map((r) => [r.n.id, r.below])).toEqual([['c', 'bands:end']]);
+  });
+
+  it('moves no curve under the others when a notification arrives on top (keys, never places)', () => {
+    const before = bellParts([hoursAgo('a', 1), hoursAgo('b', 2), hoursAgo('c', 3)], now)[0].rows;
+    const after = bellParts([hoursAgo('z', 0.5), hoursAgo('a', 1), hoursAgo('b', 2), hoursAgo('c', 3)], now)[0].rows;
+    expect(after.slice(1)).toEqual(before);
+    expect(after[0].below).toBe('a');
   });
 });
 

@@ -8,15 +8,17 @@ import { makePrng } from './prng';
 // A gently wavy horizontal boundary between two rows, as a point list so the
 // row fills and the stroked dividers share identical geometry. Runs from -pad
 // to w+pad so fills overshoot and the outer clip trims them flush to the
-// wobbly border (no slivers, dividers reach both edges).
+// wobbly border (no slivers, dividers reach both edges). `steps` turns across:
+// a menu's 4 by default (the native fixtures' own); a list's bands, wider,
+// take more (round 23: lib/design/listBands, one every ~100 px).
 export function rowBoundary(
   y: number,
   w: number,
   seed: number,
   amp: number,
   pad: number,
+  steps = 4,
 ): [number, number][] {
-  const steps = 4;
   const rnd = makePrng(seed);
   const f = (n: number): number => +n.toFixed(2);
   const pts: [number, number][] = [[-pad, f(y)]];

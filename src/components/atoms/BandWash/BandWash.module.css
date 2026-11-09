@@ -1,0 +1,34 @@
+/* A row that is a band (bandHost): its wash, nothing at rest. The mixes are lib/design/listBands'
+   BAND_HOVER_MIX / BAND_PRESS_MIX (BandWash.test pins them). */
+.host {
+  --band-fill: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .host:hover {
+    --band-fill: color-mix(in oklch, var(--toward-ink) 6%, transparent);
+  }
+}
+
+.host[data-band-pressed] {
+  --band-fill: color-mix(in oklch, var(--toward-ink) 12%, transparent);
+}
+
+/* The band lies under the row's content, over its whole box; its curves swing 2 past it, unclipped. */
+.band {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.svg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  overflow: visible;
+}
+
+.fill {
+  fill: var(--band-fill, transparent);
+}
