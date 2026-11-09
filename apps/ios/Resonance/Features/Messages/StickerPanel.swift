@@ -95,7 +95,7 @@ struct StickerPanel: View {
                 if let first = visible.first, first != shownSection { shownSection = first }
             }
             // No new start while the grid moves (round 23 §3).
-            .onScrollPhaseChange { _, phase in breathing.scrolling(phase.isScrolling) }
+            .onScrollPhaseChange { _, phase in breathing.scrolling(phase.moves) }
             // Down under the home indicator to the screen's edge (round 22 v3): no band of paper under the grid.
             .ignoresSafeArea(.container, edges: toScreenEdge ? .bottom : [])
         }

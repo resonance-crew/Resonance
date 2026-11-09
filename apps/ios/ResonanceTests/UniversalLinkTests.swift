@@ -93,6 +93,33 @@ import Testing
         #expect(link("https://img.resonance.channel/card/a-walk/x") == .none)
     }
 
+    @Test func onlyTheSitesOwnPagesOpenAnything() {
+        // Another scheme — Google's own callback should its sign-in decline it, an app's, a file — or no host at all
+        // opens nothing, though a route would take the path (the app registers no scheme of its own).
+        for other in ["com.googleusercontent.apps.1090298219401-pgd3sh80h9ukvf4l564dpvegebi2s8o7:/card/a-walk",
+                      "com.googleusercontent.apps.1090298219401-pgd3sh80h9ukvf4l564dpvegebi2s8o7://resonance.channel/u/bob",
+                      "resonance:/messages/bob?note=a/b&card=c1", "resonance://resonance.channel/card/a-walk",
+                      "ftp://resonance.channel/card/a-walk", "file:///card/a-walk", "/card/a-walk", "card/a-walk",
+                      "https:/card/a-walk"] {
+            #expect(link(other) == .none, "\(other)")
+        }
+        // http on the site's hosts still opens (the old links), and the local stack's own origin for its build.
+        #expect(link("http://resonance.channel/card/a-walk") == .route(.card("a-walk")))
+        #expect(IncomingLink.of(URL(string: "http://127.0.0.1:3100/u/bob")!, origin: AppConfig.emulator.origin) == .route(.author("bob")))
+    }
+
+    @Test func aCraftedLinkOpensTheThreadWithoutWhatItCantName() {
+        // One tap from any app: a note id Firestore can't take as a document opens the conversation alone, never ends it.
+        for query in ["note=a/b&card=c1", "note=&card=c1", "note=n1&card=a%2Fb", "note=n1&card="] {
+            #expect(link("https://resonance.channel/messages/bob?\(query)") == .route(.thread(handle: "bob", note: nil)), "\(query)")
+        }
+        // A pen name or a card key decoded with a "/" in it: the site's page, in the in-app browser.
+        let slashed = "https://resonance.channel/card/a%2Fb"
+        #expect(link(slashed) == .browser(URL(string: slashed)!))
+        let named = "https://resonance.channel/messages/a%2Fb?note=n1&card=c1"
+        #expect(link(named) == .browser(URL(string: named)!))
+    }
+
     @Test func theClaimedPathsAreTheAssociationsOwn() {
         for path in ["/card/x", "/u/x", "/messages/x", "/me/thought-map", "/en/card/x", "/zh-TW/me/thought-map/", "/card/x/y"] {
             #expect(IncomingLink.claims(path), "\(path)")

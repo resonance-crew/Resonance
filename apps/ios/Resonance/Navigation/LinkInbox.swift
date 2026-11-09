@@ -46,11 +46,13 @@ enum IncomingLink: Equatable {
     case none
 
     static func of(_ url: URL, origin: URL) -> IncomingLink {
-        if let route = Route(url: url, origin: origin) { return .route(route) }
+        // The site's own pages only, http(s) on its hosts: a URL of another scheme (one Google's sign-in declined — the
+        // app registers no scheme of its own) or with no host opens nothing, though a route would take its path.
         guard let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http",
-              let host = url.host(), StoryLink.isSiteHost(host, origin: origin), claims(url.path(percentEncoded: false))
+              let host = url.host(), StoryLink.isSiteHost(host, origin: origin)
         else { return .none }
-        return .browser(url)
+        if let route = Route(url: url, origin: origin) { return .route(route) }
+        return claims(url.path(percentEncoded: false)) ? .browser(url) : .none
     }
 
     /// The paths apple-app-site-association (and Android's App Links filter) hand to the app: /card/…, /u/…,

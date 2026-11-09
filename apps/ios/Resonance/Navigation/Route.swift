@@ -68,19 +68,32 @@ extension Route {
         if let host = url.host(), !StoryLink.isSiteHost(host, origin: origin) { return nil }
         var parts = url.pathComponents.filter { $0 != "/" }
         if let first = parts.first, ["en", "zh-TW"].contains(first) { parts.removeFirst() }
-        guard parts.count == 2 else { return nil }
+        // A segment decoded from "%2F" holds a "/": no card key or pen name has one (it names no page here).
+        guard parts.count == 2, !parts[1].contains("/") else { return nil }
         switch parts[0] {
         case "card": self = .card(parts[1])
         case "u": self = .author(parts[1])
         case "me" where parts[1] == "thought-map": self = .thoughtMap
         case "messages":
-            // /messages/{handle}?note={noteId}&card={cardId} (a note's reply link) keeps its query.
+            // /messages/{handle}?note={noteId}&card={cardId} (a note's reply link) keeps its query — both ids only
+            // when each is one (``linkId(_:)``): a link from anywhere names them, and the thread reads the note by
+            // its id as a document. Anything else opens the conversation alone.
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-            let value = { (name: String) in query.first { $0.name == name }?.value }
+            let value = { (name: String) in Self.linkId(query.first { $0.name == name }?.value) }
             let note = value("card").flatMap { card in value("note").map { MessagingAPI.NoteRef(cardId: card, noteId: $0) } }
             self = .thread(handle: parts[1], note: note)
         default: return nil
         }
+    }
+
+    /// `value` when it is an id a link may name a document by — 1 to 128 of `A–Z a–z 0–9 _ -` (Firestore's own
+    /// ids, a note's client id) — else nil. Firestore throws an Objective-C exception (which nothing in Swift can
+    /// catch: the app ends) for a document id holding "/" or empty.
+    nonisolated static func linkId(_ value: String?) -> String? {
+        guard let value, (1...128).contains(value.utf8.count),
+              value.utf8.allSatisfy({ (0x30...0x39).contains($0) || (0x41...0x5A).contains($0) || (0x61...0x7A).contains($0) || $0 == 0x5F || $0 == 0x2D })
+        else { return nil }
+        return value
     }
 }
 

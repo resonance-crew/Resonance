@@ -144,6 +144,28 @@ import Testing
         #expect(!cancelled.showsWash)
     }
 
+    @Test func aFingerRestingOnTheListIsNoScroll() {
+        // iOS enters .tracking the moment a finger touches the list: counted as scrolling, every row's press would
+        // be taken back before it showed (and a quick tap's flash too). Only movement counts.
+        let phases: [(ScrollPhase, Bool)] = [(.idle, false), (.tracking, false), (.interacting, true), (.decelerating, true),
+                                             (.animating, true)]
+        for (phase, moves) in phases { #expect(phase.moves == moves, "\(phase)") }
+        // A finger down on a row while the list is only tracking it waits for its band, as on a list at rest.
+        var press = BandPress()
+        let down = press.down(scrolling: ScrollPhase.tracking.moves)
+        #expect(down)
+        press.delayElapsed()
+        #expect(press.showsWash)
+        // The same goes for the sticker grid: a finger resting on it holds no start back.
+        var breathing = StickerBreathing(capacity: 1)
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        breathing.shown("a", order: 0, now: t)
+        breathing.scrolling = ScrollPhase.tracking.moves
+        #expect(breathing.next(now: t) == "a")
+        breathing.scrolling = ScrollPhase.interacting.moves
+        #expect(breathing.next(now: t) == nil)
+    }
+
     @Test func thePressIsStrongerThanAPointerAndRestIsNothing() {
         var press = BandPress()
         #expect(ListBands.alpha(press: press, hovered: false) == 0)

@@ -253,9 +253,12 @@ nonisolated struct StickerSendGuard: Equatable {
 /// The picker's stickers "breathing" (round 23 §3): a cell at least 60 % in view plays its file once — the two loops
 /// it bakes in, about 4.8 s — then rests on its thumb (the same hero pose the file starts and ends on) for 1.5–3 s,
 /// and plays again. At most `capacity` play at once (8 on a phone, 12 on an iPad's or the Mac's wider picker: what a
-/// panel shows, every visible cell moving within a few seconds); a cell waiting takes a free slot in the grid's order
-/// (row by row), one start at a time, none while the grid is scrolling. The picker's own — never the thread's
-/// ``StickerPlayback``. Pure, so it is pinned; ``StickerBreathingClock`` runs it.
+/// panel shows, every visible cell moving within a few seconds); a free slot goes to the cell that has waited longest
+/// — first come, first served, from the moment it came into view or its rest ended — the grid's order (row by row)
+/// only between cells that began waiting together (the first batch); one start at a time, none while the grid is
+/// scrolling. A play outlasts the longest rest, so a grid's first cells would otherwise take every slot for good in a
+/// grown panel with more than twice `capacity` in view. The picker's own — never the thread's ``StickerPlayback``.
+/// Pure, so it is pinned; ``StickerBreathingClock`` runs it.
 nonisolated struct StickerBreathing: Equatable {
     /// A phone's picker and the wider ones' (6 columns, the Mac's popover).
     static let phoneCapacity = 8
@@ -271,41 +274,52 @@ nonisolated struct StickerBreathing: Equatable {
     /// The cells in view, by their place in the grid.
     private(set) var inView: [String: Int] = [:]
     private(set) var playing: Set<String> = []
-    /// When a cell that played may play again.
-    private(set) var restingUntil: [String: Date] = [:]
+    /// When each cell in view and not playing begins (or began) to wait for a slot: the moment it came into view, or
+    /// its rest's end after a play.
+    private(set) var waitingSince: [String: Date] = [:]
     var scrolling = false
 
     init(capacity: Int) {
         self.capacity = capacity
     }
 
-    /// A cell came at least 60 % into view (`order`: its place in the grid, row by row).
-    mutating func shown(_ key: String, order: Int) { inView[key] = order }
+    /// A cell came at least 60 % into view at `now` (`order`: its place in the grid, row by row): it waits from then.
+    /// Said again for a cell already in view, it keeps its place in the queue.
+    mutating func shown(_ key: String, order: Int, now: Date) {
+        if inView[key] == nil { waitingSince[key] = now }
+        inView[key] = order
+    }
 
-    /// A cell left the view: it stops (it plays again from its start when it comes back).
+    /// A cell left the view: it stops (it plays again from its start when it comes back, waiting afresh).
     mutating func hidden(_ key: String) {
         inView[key] = nil
         playing.remove(key)
-        restingUntil[key] = nil
+        waitingSince[key] = nil
     }
 
-    /// The cell to start now: the first waiting in the grid's order — none while scrolling or with every slot taken.
+    /// The cell to start now: the one that has waited longest, the grid's order between equals — none while
+    /// scrolling or with every slot taken.
     func next(now: Date) -> String? {
         guard !scrolling, playing.count < capacity else { return nil }
-        return inView.filter { key, _ in !playing.contains(key) && (restingUntil[key].map { $0 <= now } ?? true) }
-            .min { $0.value < $1.value }?.key
+        var best: (key: String, since: Date, order: Int)?
+        for (key, order) in inView where !playing.contains(key) {
+            guard let since = waitingSince[key], since <= now else { continue }
+            if let b = best, (b.since, b.order) <= (since, order) { continue }
+            best = (key, since, order)
+        }
+        return best?.key
     }
 
     mutating func start(_ key: String) {
         guard inView[key] != nil else { return }
         playing.insert(key)
-        restingUntil[key] = nil
+        waitingSince[key] = nil
     }
 
-    /// A cell's play ended: it rests `rest` seconds, its slot free for the next.
+    /// A cell's play ended: it rests `rest` seconds, its slot free for the next, and waits again from then.
     mutating func ended(_ key: String, now: Date, rest: TimeInterval) {
         guard playing.remove(key) != nil else { return }
-        if inView[key] != nil { restingUntil[key] = now.addingTimeInterval(rest) }
+        if inView[key] != nil { waitingSince[key] = now.addingTimeInterval(rest) }
     }
 }
 
@@ -314,6 +328,9 @@ nonisolated struct StickerBreathing: Equatable {
 /// watched: a cell coming into view or the grid scrolling draws nothing again.
 @MainActor @Observable final class StickerBreathingClock {
     @ObservationIgnored private var state: StickerBreathing
+    /// The clock's latest tick: cells coming into view between two ticks begin waiting together (at the earlier one),
+    /// so the grid's order — not the order SwiftUI happened to say them in — starts the first batch.
+    @ObservationIgnored private var tick = Date.now
     /// The cells playing now (the one thing the cells read).
     private(set) var playing: Set<String> = []
 
@@ -322,7 +339,7 @@ nonisolated struct StickerBreathing: Equatable {
     }
 
     func isPlaying(_ key: String) -> Bool { playing.contains(key) }
-    func shown(_ key: String, order: Int) { state.shown(key, order: order) }
+    func shown(_ key: String, order: Int) { state.shown(key, order: order, now: tick) }
     func hidden(_ key: String) {
         state.hidden(key)
         publish()
@@ -342,7 +359,8 @@ nonisolated struct StickerBreathing: Equatable {
         if VisualCapture.on { return }
         #endif
         while !Task.isCancelled {
-            if !StickerPlayback.still, let key = state.next(now: .now) {
+            tick = .now
+            if !StickerPlayback.still, let key = state.next(now: tick) {
                 state.start(key)
                 publish()
             }

@@ -793,7 +793,7 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
             barHiding?.scrolled(to: now[0], limit: now[1])
         }
         .onScrollPhaseChange { _, phase, context in
-            if scrolling != phase.isScrolling { scrolling = phase.isScrolling }
+            if scrolling != phase.moves { scrolling = phase.moves }
             guard phase == .idle else { return }
             let y = context.geometry.contentOffset.y + context.geometry.contentInsets.top
             withAnimation(.easeOut(duration: 0.18)) { hidden = y < travel || hidden < travel / 2 ? 0 : travel }

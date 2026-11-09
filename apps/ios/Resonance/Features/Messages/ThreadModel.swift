@@ -406,6 +406,9 @@ final class ThreadModel {
     private func lookForOpenedNote() {
         guard let note = openedFor, let pairId else { return }
         openedFor = nil
+        // Its ids came with a link (``Route/linkId(_:)`` checked them there): this is the last word before one names a
+        // document, where a "/" or nothing at all would end the app.
+        guard Route.linkId(note.noteId) != nil, Route.linkId(note.cardId) != nil else { return }
         Task {
             let ref = FirebaseBootstrap.db.collection("conversations").document(pairId).collection("messages").document(note.noteId)
             if (try? await ref.getDocument())?.exists == true {
@@ -1028,6 +1031,22 @@ final class ThreadModel {
 
     /// A shared card as the viewer may see it (nil: on its way, or not visible to them).
     func card(_ key: String) -> FeedCard? { sharedCards.card(key) }
+
+    /// The card a reply's quote carried, as the bubble of the message it answers would draw it — nil while it is
+    /// read, or when the viewer can't see it (the composer's reply row then shows no cover).
+    func quotedCard(_ quote: ReplyQuote) -> FeedCard? {
+        guard let cardRef = quote.cardRef else { return nil }
+        return Self.quotedCard(sharedCards.lookup(cardRef), quote: quote, original: message(quote.id), viewer: me)
+    }
+
+    /// The bubble's rule (``readable(_:in:viewer:)``) for a quote's card: someone else's 私人卡 its sender no longer
+    /// shares here shows nothing of itself. An answered message the thread doesn't hold (a draft's reply to an older
+    /// one) can't vouch for its pass, so it reads as a message without one.
+    static func quotedCard(_ lookup: CardLookup<FeedCard>, quote: ReplyQuote, original: ChatMessage?, viewer: String?) -> FeedCard? {
+        let message = original ?? ChatMessage(id: quote.id, senderId: quote.senderId, text: "", sentAt: .distantPast, cardRef: quote.cardRef)
+        guard case let .found(card) = readable(lookup, in: message, viewer: viewer) else { return nil }
+        return card
+    }
 
     /// The cards the messages share, those not asked for yet in one request.
     private func loadCards() {

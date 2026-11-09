@@ -121,6 +121,48 @@ import Testing
         }
     }
 
+    @Test func aReplyRowDrawsThePictureOfTheQuoteItShowsNow() {
+        // The row read p1 for the first picture reply; the same row now answers p2 (its view kept): p1 is not drawn.
+        let first = UIImage(), second = UIImage()
+        let loaded = ReplyPicture(id: "p1", image: first)
+        #expect(ReplyPicture.shown(loaded, for: "p2", cached: nil) == nil)
+        #expect(ReplyPicture.shown(loaded, for: "p2", cached: second) === second)
+        // Its own picture, read or kept by the thread.
+        #expect(ReplyPicture.shown(loaded, for: "p1", cached: nil) === first)
+        #expect(ReplyPicture.shown(nil, for: "p2", cached: second) === second)
+    }
+
+    @Test func aReplyRowShowsACardsCoverOnlyAsItsBubbleWould() throws {
+        let card = { (id: String, visibility: String) -> FeedCard in
+            let json = """
+            {"id":"\(id)","slug":null,"title":"Card \(id)","excerpt":"…","tags":[],"publishedAt":"2026-09-01T08:00:00.000Z",
+             "author":{"id":"alice","handle":"alice","initials":"AL","accentColor":"oklch(90% 0.05 60)","avatarUrl":null,
+             "avatarSeed":"42","verified":false,"region":"TW"},
+             "anonymous":false,"visibility":"\(visibility)","imageUrl":"https://img.resonance.channel/covers/\(id).webp",
+             "imageLabel":null,"accentHue":null,"readMinutes":3,"referenceCardId":null,"reason":null}
+            """
+            return try! JSONDecoder().decode(FeedCard.self, from: Data(json.utf8))
+        }
+        let kept = card("kept", "private"), open = card("open", "public")
+        let at = Date(timeIntervalSince1970: 1_000_000)
+        let quote = ReplyQuote(id: "m1", senderId: "alice", text: "", cardRef: "kept")
+        func original(privateShare: Bool) -> ChatMessage {
+            ChatMessage(id: "m1", senderId: "alice", text: "", sentAt: at, cardRef: "kept", privateShare: privateShare)
+        }
+        // Alice's 私人卡, still shared with bob by the message he answers: its cover.
+        #expect(ThreadModel.quotedCard(.found(kept), quote: quote, original: original(privateShare: true), viewer: "bob") == kept)
+        // She stopped sharing it (or the message is from before passes): no cover, whatever was read of it before.
+        #expect(ThreadModel.quotedCard(.found(kept), quote: quote, original: original(privateShare: false), viewer: "bob") == nil)
+        // The answered message isn't held (a draft's reply to an older one): nothing vouches for the pass.
+        #expect(ThreadModel.quotedCard(.found(kept), quote: quote, original: nil, viewer: "bob") == nil)
+        // Her own card to alice, and any card readers have, as looked up; nothing while it is read or hidden.
+        #expect(ThreadModel.quotedCard(.found(kept), quote: quote, original: nil, viewer: "alice") == kept)
+        let openQuote = ReplyQuote(id: "m2", senderId: "alice", text: "", cardRef: "open")
+        #expect(ThreadModel.quotedCard(.found(open), quote: openQuote, original: nil, viewer: "bob") == open)
+        #expect(ThreadModel.quotedCard(.loading, quote: quote, original: original(privateShare: true), viewer: "bob") == nil)
+        #expect(ThreadModel.quotedCard(.hidden, quote: quote, original: original(privateShare: true), viewer: "bob") == nil)
+    }
+
     // MARK: §1 — a held message read again as it is delivered
 
     @Test func aStickerHeldWhileOnItsWayFillsItsMenuInOnceDelivered() {
@@ -193,8 +235,8 @@ import Testing
         var breathing = StickerBreathing(capacity: 2)
         let t = Date(timeIntervalSince1970: 1_800_000_000)
         #expect(breathing.next(now: t) == nil)
-        for (i, key) in ["c", "a", "d", "b"].enumerated().reversed() { breathing.shown(key, order: [2, 0, 3, 1][i]) }
-        // Row by row: a (0), then b (1).
+        for (i, key) in ["c", "a", "d", "b"].enumerated().reversed() { breathing.shown(key, order: [2, 0, 3, 1][i], now: t) }
+        // Come into view together: row by row, a (0), then b (1).
         #expect(breathing.next(now: t) == "a")
         breathing.start("a")
         #expect(breathing.next(now: t) == "b")
@@ -215,14 +257,83 @@ import Testing
         breathing.scrolling = true
         #expect(breathing.next(now: t.addingTimeInterval(5)) == nil)
         breathing.scrolling = false
+        // First come, first served: b has waited since 1.5, a since 2, d since 4 — b goes first, though a is above it.
+        #expect(breathing.next(now: t.addingTimeInterval(5)) == "b")
+        breathing.start("b")
+        #expect(breathing.next(now: t.addingTimeInterval(5)) == nil)
+        breathing.ended("c", now: t.addingTimeInterval(5), rest: 0)
         #expect(breathing.next(now: t.addingTimeInterval(5)) == "a")
-        // A cell scrolled away stops and frees its slot; it starts afresh when it comes back.
+        breathing.start("a")
+        // Said again for a cell already in view, it keeps its place in the queue.
+        breathing.ended("b", now: t.addingTimeInterval(5), rest: 0)
+        breathing.shown("d", order: 3, now: t.addingTimeInterval(5))
+        #expect(breathing.next(now: t.addingTimeInterval(5)) == "d")
+        // A cell scrolled away stops and frees its slot; it waits afresh (at the back) when it comes back.
         breathing.hidden("c")
-        #expect(!breathing.playing.contains("c") && breathing.restingUntil["c"] == nil)
+        #expect(!breathing.playing.contains("c") && breathing.waitingSince["c"] == nil)
+        breathing.shown("c", order: 2, now: t.addingTimeInterval(6))
+        #expect(breathing.waitingSince["c"] == t.addingTimeInterval(6))
         // An end said for a cell no longer playing changes nothing.
         let before = breathing
         breathing.ended("c", now: t, rest: 2)
         #expect(breathing == before)
+    }
+
+    @Test func aGrownPanelsCellsAllBreatheInTurn() throws {
+        // A play (the file's two loops, the catalog's lengths: ~4.2–5.2 s) outlasts the longest rest (3 s): served in
+        // the grid's order, a grown panel's first 2 × capacity cells would take every slot and the rest never play.
+        let library = StickerLibrary(defaults: try #require(UserDefaults(suiteName: "RoundTwentyThreeTests-\(UUID().uuidString)")))
+        let loops = library.catalog.packs.flatMap(\.stickers).compactMap(\.durationMs).map { 2 * Double($0) / 1000 }
+        try #require(!loops.isEmpty)
+        #expect(loops.allSatisfy { $0 > StickerBreathing.rest.upperBound })
+        // A grown phone panel at the phone's cap, a grown tablet panel at the wide one.
+        for (cells, capacity) in [(24, StickerBreathing.phoneCapacity), (36, StickerBreathing.wideCapacity)] {
+            let plays = Self.breathe(cells: cells, capacity: capacity, loops: loops, for: 120)
+            let counts = (0..<cells).map { plays[$0, default: 0] }
+            #expect(counts.min()! >= 2, "\(cells) cells at \(capacity): \(counts)")
+            #expect(Double(counts.max()!) <= 2 * Double(counts.min()!), "\(cells) cells at \(capacity): \(counts)")
+        }
+        // The first batch, in view together, still starts in the grid's order, a stagger apart.
+        var first = StickerBreathing(capacity: StickerBreathing.phoneCapacity)
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        for order in (0..<24).shuffled() { first.shown("s\(order)", order: order, now: t) }
+        var started: [String] = []
+        for step in 0..<StickerBreathing.phoneCapacity {
+            let key = try #require(first.next(now: t.addingTimeInterval(Double(step) * StickerBreathing.stagger)))
+            first.start(key)
+            started.append(key)
+        }
+        #expect(started == (0..<StickerBreathing.phoneCapacity).map { "s\($0)" })
+    }
+
+    /// Plays per cell (by its place in the grid) over `seconds` of a fake clock ticking at the clock's stagger: every
+    /// cell in view from the start, each play as long as its sticker's two loops, each rest 1.5–3 s (seeded).
+    private static func breathe(cells: Int, capacity: Int, loops: [Double], for seconds: Double) -> [Int: Int] {
+        var breathing = StickerBreathing(capacity: capacity)
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        for order in 0..<cells { breathing.shown("\(order)", order: order, now: t0) }
+        var seed: UInt64 = 0x2023_1109
+        func rest() -> TimeInterval {
+            seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            let unit = Double(seed >> 11) / Double(1 << 53)
+            return StickerBreathing.rest.lowerBound + unit * (StickerBreathing.rest.upperBound - StickerBreathing.rest.lowerBound)
+        }
+        var ends: [Int: Date] = [:]
+        var plays: [Int: Int] = [:]
+        var now = t0
+        while now < t0.addingTimeInterval(seconds) {
+            for (order, end) in ends.sorted(by: { $0.key < $1.key }) where end <= now {
+                breathing.ended("\(order)", now: end, rest: rest())
+                ends[order] = nil
+            }
+            if let key = breathing.next(now: now), let order = Int(key) {
+                breathing.start(key)
+                plays[order, default: 0] += 1
+                ends[order] = now.addingTimeInterval(loops[order % loops.count])
+            }
+            now = now.addingTimeInterval(StickerBreathing.stagger)
+        }
+        return plays
     }
 
     @Test func thePickersMeasuresAreOneRuleEverywhere() {

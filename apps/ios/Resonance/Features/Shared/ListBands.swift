@@ -190,3 +190,10 @@ extension EnvironmentValues {
     /// The tab's list is scrolling (dragged, or gliding on): a band's press holds off (``TabScreen`` says so).
     @Entry var listScrolling = false
 }
+
+extension ScrollPhase {
+    /// The content is moving — dragged, gliding on, or scrolled by the app. A finger merely resting on the list
+    /// (`.tracking`, which `isScrolling` counts: iOS enters it the moment a finger touches) is not: counted, a band's
+    /// press and a quick tap's flash would never show, and a finger resting on the sticker grid would stop its starts.
+    nonisolated var moves: Bool { self == .interacting || self == .decelerating || self == .animating }
+}

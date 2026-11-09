@@ -191,12 +191,14 @@ private struct ComposerErrorRow: View {
 
 /// A reply's media at the start of its words (round 23, Telegram's photo reply): a quoted sticker's still, faded as
 /// the thread's quote draws it; the picture it answers, from the thread's own copy; or the cover of the card it
-/// carried. Nothing for words alone.
+/// carried, as the bubble would draw that card (``ThreadModel/quotedCard(_:)``). Nothing for words alone.
 private struct ReplyMedia: View {
     let quote: ReplyQuote
     let model: ThreadModel
     let side: CGFloat
-    @State private var picture: UIImage?
+    /// The picture this row read, by its id: the row outlives the quote it shows (a second picture reply in the same
+    /// riding row keeps the view), so what an earlier quote loaded is never drawn for the next.
+    @State private var loaded: ReplyPicture?
 
     var body: some View {
         if let sticker = QuotedReply.quotedSticker(quote) {
@@ -206,15 +208,29 @@ private struct ReplyMedia: View {
                 .accessibilityElement()
                 .accessibilityLabel(L10n.Messages.stickerLabel(name: StickerLibrary.shared.label(sticker)))
         } else if quote.image, let image = model.message(quote.id)?.image {
-            ComposerRowTile(.picture(picture ?? model.pictures.cached(image.id, .thumb)), side: side)
+            ComposerRowTile(.picture(ReplyPicture.shown(loaded, for: image.id, cached: model.pictures.cached(image.id, .thumb))), side: side)
                 .task(id: image.id) {
-                    if picture == nil, model.pictures.cached(image.id, .thumb) == nil {
-                        picture = await model.pictures.image(image.id, .thumb)
-                    }
+                    guard loaded?.id != image.id, model.pictures.cached(image.id, .thumb) == nil else { return }
+                    let picture = await model.pictures.image(image.id, .thumb)
+                    // A quote changed meanwhile: its own task reads its own picture.
+                    guard !Task.isCancelled, let picture else { return }
+                    loaded = ReplyPicture(id: image.id, image: picture)
                 }
-        } else if let cardRef = quote.cardRef, let cover = model.card(cardRef)?.imageUrl.flatMap(URL.init(string:)) {
+        } else if let cover = model.quotedCard(quote)?.imageUrl.flatMap(URL.init(string:)) {
             ComposerRowTile(.cover(cover), side: side)
         }
+    }
+}
+
+/// A picture a reply's row read for itself, with the id it was read for.
+struct ReplyPicture {
+    let id: String
+    let image: UIImage
+
+    /// What the row draws for picture `id`: what it read, when it read that picture — else the thread's own copy.
+    static func shown(_ loaded: ReplyPicture?, for id: String, cached: UIImage?) -> UIImage? {
+        if let loaded, loaded.id == id { return loaded.image }
+        return cached
     }
 }
 
