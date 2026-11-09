@@ -900,11 +900,13 @@ private fun StickerFace(
     actions: List<CustomAccessibilityAction>,
     onLongPress: () -> Unit,
 ) {
-    val autoplay = remember(message.key) { interactive && StickerPlayback.firstSight(message.key) }
     var replays by remember(message.key) { mutableIntStateOf(0) }
     val name = L10n.Messages.stickerLabel(sticker.name(com.resonance.kit.l10n.Strings.language.tag))
     PlayingSticker(
-        sticker, ctx.origin, key = message.key, size = ctx.stickerSize, autoplay = autoplay, replays = replays,
+        sticker, ctx.origin, key = message.key, size = ctx.stickerSize,
+        // Asked as it is first placed on screen: a row composed ahead of the screen doesn't spend its first sight.
+        autoplay = { interactive && StickerPlayback.firstSight(message.key) },
+        replays = replays,
         modifier = Modifier
             .then(
                 if (interactive) Modifier.pointerInput(message.key) {

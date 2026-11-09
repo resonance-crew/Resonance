@@ -312,7 +312,7 @@ internal fun StickerPreview(
         ) {
             // A new sticker previewed plays from its start (its key under it all).
             androidx.compose.runtime.key(s.pack, s.id) {
-                PlayingSticker(s, origin, key = "preview:${s.pack}/${s.id}", size = size, autoplay = true, replays = 0)
+                PlayingSticker(s, origin, key = "preview:${s.pack}/${s.id}", size = size, autoplay = { true }, replays = 0)
             }
             BasicText(
                 L10n.Messages.stickerPreviewHint,
