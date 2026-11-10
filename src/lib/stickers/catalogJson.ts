@@ -11,7 +11,7 @@ export function catalogJson(): string {
     iconV: STICKER_ART[`${p.id}/icon`]?.v ?? '0',
     stickers: p.stickers.map((d) => {
       const st = stickerOf(p.id, d.id)!;
-      return { id: st.id, name: st.name, durationMs: st.durationMs, frames: st.frames, v: st.v };
+      return { id: st.id, name: st.name, durationMs: st.durationMs, frames: st.frames, v: st.v, box: st.box, poseBox: st.poseBox };
     }),
   }));
   return `${JSON.stringify({ version: STICKER_CATALOG_VERSION, packs }, null, 1)}\n`;

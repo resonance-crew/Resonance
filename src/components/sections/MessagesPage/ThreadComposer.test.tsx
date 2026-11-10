@@ -5,6 +5,9 @@ import { act, fireEvent, renderWithIntl, screen, userEvent, waitFor, within } fr
 import { mockElementSize } from '@/../test/organic';
 import type { Card, MessageReplyQuote } from '@/lib/db/types';
 import { INK } from '@/lib/design/strokes';
+import { Icon } from '@/components/atoms/Icon';
+import { stickerFitTransform, stickerQuoteFit } from '@/lib/chat/stickerBox';
+import { stickerOf } from '@/lib/stickers/catalog';
 
 const toast = vi.hoisted(() => ({ show: vi.fn() }));
 vi.mock('@/components/providers/ToastProvider', () => ({ useToast: () => toast }));
@@ -126,36 +129,21 @@ describe('what rides the next message', () => {
     expect(onCancelReply).toHaveBeenCalledTimes(1);
   });
 
-  // The reply's mark drew ~18 of its 28, nearly straight (the Divider trims each end and turns twice). The apps'
-  // ReplyRule: over the box's whole height (28; 20 in a short window), seed 31, ±1.1, a turn every 9 or so and 3 at
-  // least, one pen (INK) with round ends, in terracotta.
-  it.each([28, 20])('draws the reply’s rule over its whole box, %i tall, as the apps do', (tall) => {
-    const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')!;
-    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
-      configurable: true,
-      get(this: HTMLElement) {
-        return String(this.className).includes('carryRule') ? tall : 48;
-      },
-    });
-    try {
-      renderWithIntl(composer({ replyingTo: { id: 'm1', senderId: 'alice', text: 'rain' }, replyHandle: 'alice' }));
-      const rule = rowOf('Replying to alice').querySelector('[class*="carryRule"]')!;
-      expect(rule.querySelector('svg')).toHaveAttribute('viewBox', `-3 0 6 ${tall}`);
-      const path = rule.querySelector('svg path')!;
-      const d = path.getAttribute('d')!;
-      // Top to bottom of the box, on its axis at both ends.
-      expect(d.startsWith('M 0,0 ')).toBe(true);
-      expect(d.endsWith(` 0,${tall}`)).toBe(true);
-      expect(d.match(/C/g)).toHaveLength(Math.max(3, Math.round(tall / 9)));
-      const xs = [...d.matchAll(/(-?[\d.]+),(-?[\d.]+)/g)].map((m) => Math.abs(Number(m[1])));
-      expect(Math.max(...xs)).toBeLessThanOrEqual(1.1);
-      expect(Math.max(...xs)).toBeGreaterThan(0.1);
-      expect(path).toHaveAttribute('stroke', 'var(--color-terracotta)');
-      expect(path).toHaveAttribute('stroke-width', String(INK));
-      expect(path).toHaveAttribute('stroke-linecap', 'round');
-    } finally {
-      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', height);
-    }
+  // Round 24 (the owner's: 「把左邊這一條垂直的線改成這種回覆的這個圖案」): the reply's mark is the reply glyph — the
+  // held message's 回覆, the arrow rising and turning back left — 20, one pen (INK) in terracotta, in the ＋'s column.
+  it('marks a reply with the reply glyph the held message’s Reply wears, not a rule', () => {
+    renderWithIntl(composer({ replyingTo: { id: 'm1', senderId: 'alice', text: 'rain' }, replyHandle: 'alice' }));
+    const mark = rowOf('Replying to alice').querySelector('[class*="carryMark"]')!;
+    expect(mark.querySelector('[class*="carryRule"]')).toBeNull();
+    const svg = mark.querySelector('svg')!;
+    expect(svg).toHaveAttribute('width', '20');
+    expect(svg).toHaveAttribute('stroke', 'var(--color-terracotta)');
+    expect(svg).toHaveAttribute('stroke-width', String(INK));
+    // The very glyph the menus draw for 回覆.
+    const { container } = renderWithIntl(<Icon name="reply" />);
+    expect(Array.from(svg.querySelectorAll('path')).map((p) => p.getAttribute('d'))).toEqual(
+      Array.from(container.querySelectorAll('path')).map((p) => p.getAttribute('d')),
+    );
   });
 
   it('keeps the field’s focus through a ✕ and through a press on a row', () => {
@@ -347,6 +335,40 @@ describe('what rides the next message', () => {
     expect(row).not.toHaveTextContent('Thanks');
   });
 
+  // Round 24 (the owner's: 點點 stood under the half of the reply's thumbnail): the key frame's drawing is centred in
+  // the 36, as large as 92 % of it.
+  it('centres a quoted sticker’s drawing in its thumbnail', () => {
+    renderWithIntl(composer({ replyingTo: { id: 's1', senderId: 'alice', text: '〔貼圖：嗨！〕', sticker: { pack: 'pip', id: 'hi' } }, replyHandle: 'alice' }));
+    const frame = rowOf('Replying to alice').querySelector<HTMLElement>('[class*="carrySticker"]')!;
+    const img = frame.querySelector('img')!;
+    expect(img).toHaveAttribute('src', expect.stringContaining('/stickers/pip/hi.thumb.webp'));
+    const fit = stickerQuoteFit(stickerOf('pip', 'hi')!.poseBox);
+    expect(fit.y).toBeLessThan(0);
+    expect(img.style.transform).toBe(stickerFitTransform(fit));
+  });
+
+  // Round 24 (the owner's: 「回覆一個貼圖之後，再選擇回覆另外一個貼圖，沒辦法切換」): the row follows each reply — sticker
+  // to sticker, to words and back.
+  it('moves its row from one sticker being answered to the next', () => {
+    const quote = (id: string, pack: string, sticker: string): MessageReplyQuote => ({ id, senderId: 'alice', text: '〔貼圖〕', sticker: { pack, id: sticker } });
+    const view = renderWithIntl(composer({ replyHandle: 'alice', replyingTo: quote('s1', 'twine', 'thanks') }));
+    const img = () => rowOf('Replying to alice').querySelector('img');
+    const src = () => img()?.getAttribute('src');
+    expect(src()).toContain('/stickers/twine/thanks.thumb.webp');
+    const first = img();
+    view.rerender(composer({ replyHandle: 'alice', replyingTo: quote('s2', 'pip', 'haha') }));
+    expect(src()).toContain('/stickers/pip/haha.thumb.webp');
+    // A picture of its own: a browser keeps drawing an image's old picture until its new address has loaded, and
+    // the row's words are the same for two stickers of one sender — the first must never stand for the second.
+    expect(img()).not.toBe(first);
+    view.rerender(composer({ replyHandle: 'alice', replyingTo: { id: 'm3', senderId: 'alice', text: 'rain' } }));
+    expect(src()).toBeUndefined();
+    expect(rowOf('Replying to alice')).toHaveTextContent('rain');
+    view.rerender(composer({ replyHandle: 'alice', replyingTo: quote('s1', 'twine', 'thanks') }));
+    expect(src()).toContain('/stickers/twine/thanks.thumb.webp');
+    expect(rowOf('Replying to alice')).not.toHaveTextContent('rain');
+  });
+
   it('names what each ✕ takes away', async () => {
     renderWithIntl(composer({ replyNote: { noteId: 'n1', cardId: 'walk' } }));
     expect(rowOf('In reply to your note').lastElementChild).toContainElement(screen.getByRole('button', { name: 'Remove note' }));
@@ -461,6 +483,17 @@ describe('the stickers', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Keyboard' }));
     expect(screen.queryByRole('toolbar', { name: 'Stickers' })).toBeNull();
     expect(field()).toHaveFocus();
+  });
+
+  // Round 24: the wide foot's rules find the panel as the foot's own child, after the capsule's stack
+  // (`.dock > .stickerPanel`, `.dock:has(> .stickerPanel) .composerStack`): it opens beside the stack, never in it.
+  it('opens the panel as the foot’s own child, next to the capsule’s stack', async () => {
+    asDesktop(false);
+    renderWithIntl(<div data-testid="foot">{composer()}</div>);
+    await userEvent.click(screen.getByRole('button', { name: 'Stickers' }));
+    const panel = document.querySelector<HTMLElement>('[class*="stickerPanel"]')!;
+    expect(panel.parentElement).toBe(screen.getByTestId('foot'));
+    expect(panel.previousElementSibling?.className).toMatch(/composerStack/);
   });
 
   // Round 22 (the owner's third notes): scrolling the grid only scrolls it — the panel grows from ↑ alone (and

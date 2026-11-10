@@ -17,10 +17,14 @@ struct ConversationsScreen: View {
     @Environment(\.chosenThread) private var chosen
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.window) private var window
+    /// Beside the conversation in two panes: where the invite's band is, for the detail pane's gutter.
+    @Environment(\.paneBand) private var paneBand
 
     var body: some View {
         let store = session.conversations
         let frame = ConversationsFrame.of(window.layoutClass)
+        let look = frame.invite(onMac: ProcessInfo.processInfo.isMacCatalystApp)
+        let banded = store.loaded && look == .band && session.notifyAsks.shows(.connectionCards, connected: connected)
         // The curve under each row: the next row's key, the starters' label under the last conversation, the list's
         // end under the last row.
         let conversationKeys = store.conversations.map { ConversationsFrame.key(conversation: $0.id) }
@@ -33,57 +37,69 @@ struct ConversationsScreen: View {
         TabScreen(L10n.App.Nav.messages, titleInBar: true, phoneTop: frame.top, tabletGap: false,
                   head: session.notifyAsks.shows(.connectionCards, connected: connected) ? "notifyInvite" : nil) {
             VStack(alignment: .leading, spacing: 0) {
-                if store.loaded {
-                    // A connection's new cards offered (notification-asks §4): atop the list, once there is someone —
-                    // in the rows' column, 16 above the first row; on a phone its pen line 16 under the bar's foot,
-                    // where a first row's face would stand, and 20 from the edges, where the rows' content is.
-                    NotificationInvite(invite: .connectionCards, connected: connected)
-                        .padding(.horizontal, frame.inviteInset)
-                        .padding(.top, frame.inviteTop)
-                        .padding(.bottom, 16)
+                // A connection's new cards offered (notification-asks §4): atop the list, once there is someone (round 24,
+                // by the kind of device): a phone's and the Mac's a grey band from edge to edge of the list, its top the
+                // bar's pen line, its words where the rows' content is, the first row as far under its foot as under the
+                // bar's — the Mac's, beside a conversation, carried across to the rule between the panes; an iPad's a
+                // borderless card in the rows' column, where the first row would stand, the first row 12 under it.
+                if banded {
+                    NotificationInvite(invite: .connectionCards, connected: connected, look: .band,
+                                       leading: frame.leading + frame.rowInset, trailing: frame.trailing + frame.rowInset,
+                                       tuck: frame.top + HeaderEdge.height, top: frame.inviteWordsTop,
+                                       reach: paneBand == nil ? 0 : PaneLines.gutter)
+                        .padding(.bottom, frame.inviteGap(.band))
                 }
-                if chosen == nil, store.loaded, store.conversations.isEmpty, store.starters.isEmpty {
-                    OrganicEmptyState(title: L10n.Messages.emptyTitle, message: L10n.Messages.empty, icon: .chat, seed: 23, fills: true)
-                        // Centred on the page, not on the list's inset column.
-                        .padding(.leading, -frame.leading)
-                        .padding(.trailing, -frame.trailing)
-                } else if !store.loaded, store.failed {
-                    // Nothing read, and a listener failed: a retry rather than an empty page.
-                    OrganicEmptyState(message: L10n.Native.loadError, actionTitle: L10n.Native.retry, actionStyle: .outline) {
-                        store.resume()
+                VStack(alignment: .leading, spacing: 0) {
+                    if store.loaded, look == .card {
+                        NotificationInvite(invite: .connectionCards, connected: connected, look: .card)
+                            .padding(.bottom, frame.inviteGap(.card))
                     }
-                } else if !store.loaded {
-                    // Still reading: the rows' own shapes, so nothing jumps when they arrive.
-                    ConversationsSkeleton(inset: frame.rowInset)
-                }
-                ForEach(Array(store.conversations.enumerated()), id: \.element.id) { i, convo in
-                    ConversationRow(person: convo.other, preview: preview(convo), time: convo.sentAt.map { Self.time($0) },
-                                    unread: convo.unread, draft: draft(convo.id), inset: frame.rowInset,
-                                    band: frame.bands ? (top: conversationKeys[i], bottom: conversationsBelow[i]) : nil)
-                        .id(convo.other.id)
-                }
-                if !store.starters.isEmpty {
-                    Text(L10n.Messages.startSection.uppercased())
-                        .font(AppFonts.body(11))
-                        .tracking(11 * 0.08)
-                        .foregroundStyle(Tokens.textMuted)
-                        .padding(.top, 16)
-                        // On a phone, on bare paper clear of the bands' curves under it.
-                        .padding(.bottom, frame.bands ? ListBands.titleToBand : 4)
-                        .padding(.horizontal, frame.rowInset)
-                    ForEach(Array(store.starters.enumerated()), id: \.element.id) { i, person in
-                        ConversationRow(person: person, preview: L10n.Messages.noMessagesYet, time: nil, unread: 0,
-                                        draft: session.uid.flatMap { draft(ThreadModel.pairId($0, person.id)) }, inset: frame.rowInset,
-                                        band: frame.bands ? (top: starterKeys[i], bottom: startersBelow[i]) : nil)
-                            .id(person.id)
+                    if chosen == nil, store.loaded, store.conversations.isEmpty, store.starters.isEmpty {
+                        OrganicEmptyState(title: L10n.Messages.emptyTitle, message: L10n.Messages.empty, icon: .chat, seed: 23, fills: true)
+                            // Centred on the page, not on the list's inset column.
+                            .padding(.leading, -frame.leading)
+                            .padding(.trailing, -frame.trailing)
+                    } else if !store.loaded, store.failed {
+                        // Nothing read, and a listener failed: a retry rather than an empty page.
+                        OrganicEmptyState(message: L10n.Native.loadError, actionTitle: L10n.Native.retry, actionStyle: .outline) {
+                            store.resume()
+                        }
+                    } else if !store.loaded {
+                        // Still reading: the rows' own shapes, so nothing jumps when they arrive.
+                        ConversationsSkeleton(inset: frame.rowInset)
+                    }
+                    ForEach(Array(store.conversations.enumerated()), id: \.element.id) { i, convo in
+                        ConversationRow(person: convo.other, preview: preview(convo), time: convo.sentAt.map { Self.time($0) },
+                                        unread: convo.unread, draft: draft(convo.id), inset: frame.rowInset,
+                                        band: frame.bands ? (top: conversationKeys[i], bottom: conversationsBelow[i]) : nil)
+                            .id(convo.other.id)
+                    }
+                    if !store.starters.isEmpty {
+                        Text(L10n.Messages.startSection.uppercased())
+                            .font(AppFonts.body(11))
+                            .tracking(11 * 0.08)
+                            .foregroundStyle(Tokens.textMuted)
+                            .padding(.top, 16)
+                            // On a phone, on bare paper clear of the bands' curves under it.
+                            .padding(.bottom, frame.bands ? ListBands.titleToBand : 4)
+                            .padding(.horizontal, frame.rowInset)
+                        ForEach(Array(store.starters.enumerated()), id: \.element.id) { i, person in
+                            ConversationRow(person: person, preview: L10n.Messages.noMessagesYet, time: nil, unread: 0,
+                                            draft: session.uid.flatMap { draft(ThreadModel.pairId($0, person.id)) }, inset: frame.rowInset,
+                                            band: frame.bands ? (top: starterKeys[i], bottom: startersBelow[i]) : nil)
+                                .id(person.id)
+                        }
                     }
                 }
+                // A tablet's: the page's 14 plus the list pane's own 2 / 4. A phone's bands run edge to edge.
+                .padding(.leading, frame.leading)
+                .padding(.trailing, frame.trailing)
+                .readableColumn()
             }
-            // A tablet's: the page's 14 plus the list pane's own 2 / 4. A phone's bands run edge to edge.
-            .padding(.leading, frame.leading)
-            .padding(.trailing, frame.trailing)
-            .readableColumn()
         }
+        // While the invite's grey band is the list's top, the gap a pull opens over it is grey too (round 24, the
+        // owner: 「往下滑的時候，上面顏色就斷掉了」), never the page's cream between the bar and the band.
+        .pullPaper(paper: banded ? AsideBand.paper : nil)
         // Two panes: a conversation chosen from elsewhere (a bell, a profile) has its row brought into
         // view, once the list has it (round 5 E3).
         // The invite's reasons: the system's word on each visit and back from Settings, the switches once a session.
@@ -92,6 +108,11 @@ struct ConversationsScreen: View {
             if phase == .active { Task { await session.notifyAsks.refresh(connected: connected) } }
         }
         .animation(.easeOut(duration: 0.2), value: session.notifyAsks.shows(.connectionCards, connected: connected))
+        // Two panes on the Mac: the band's papers under the header and across the gutter (``PaneBand``) come and go
+        // as the band does — told here, as it changes, never as the band merely leaves the screen.
+        .onChange(of: PaneBand.ListState(loaded: store.loaded, banded: banded), initial: true) { was, now in
+            paneBand?.listChanged(from: was, to: now)
+        }
         .onChange(of: chosenRow, initial: true) { _, id in
             guard let id else { return }
             withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(id) }
@@ -238,10 +259,15 @@ nonisolated struct ConversationsFrame: Equatable {
             : ConversationsFrame(leading: 16, trailing: 18, rowInset: 14, top: 16, bands: false)
     }
 
-    /// The invite atop the list: on a phone 20 from the edges with its pen line where the first row's face would
-    /// stand (16 under the bar's foot); a tablet's in the rows' column, 4 under its top.
-    var inviteInset: CGFloat { bands ? ListBands.contentInset : 0 }
-    var inviteTop: CGFloat { bands ? ListBands.rowPad : 4 }
+    /// How the invite atop the list sits (round 24, by the kind of device — the owner's): a phone's and the Mac's a grey
+    /// band (``InviteLook/band``), an iPad's — one pane or two, either way up — a borderless card in the rows' column.
+    func invite(onMac: Bool) -> InviteLook { bands || onMac ? .band : .card }
+    /// A band starts at the bar's foot and its words 20 under it (level with the feed's invite): the band's own top
+    /// is where the first row's would be (``top`` under the foot), its paper tucked up from there.
+    var inviteWordsTop: CGFloat { 20 - top }
+    /// Under the invite to the first row: under a band as under the bar's foot (``top``), under a card 12.
+    /// Android's conversationsInviteLook / conversationsInviteGap.
+    func inviteGap(_ look: InviteLook) -> CGFloat { look == .band ? top : 12 }
 
     /// The rows' keys (a curve's seed is its lower row's), and the starters' label's (the band above it ends on it).
     static func key(conversation id: String) -> String { "c:\(id)" }

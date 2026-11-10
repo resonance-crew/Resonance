@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import androidx.compose.ui.unit.dp
 import com.resonance.design.ReactionChipItem
 import com.resonance.design.generated.ReactionId
 import com.resonance.kit.chat.ChatSticker
@@ -118,11 +119,22 @@ class StickerComposerTest {
     }
 
     @Test fun aStickerAnsweringComesUpOverItsQuoteAndAQuotedStickerIsFaded() {
-        // A bubble lies over the quote's foot kept for it; a sticker over the lower edge of a quote that kept none (16–20).
-        assertEquals(com.resonance.design.REPLY_OVERLAP, quoteOverlap(answerIsSticker = false, quoted = true))
-        assertEquals(20f, quoteOverlap(answerIsSticker = true, quoted = true)!!.value, 0f)
-        assertEquals(true, STICKER_OVER_QUOTE.value in 16f..20f)
-        assertEquals(null, quoteOverlap(answerIsSticker = true, quoted = false))
+        // A bubble lies over the quote's foot kept for it; a sticker over the lower edge of a quote that kept none (16–20),
+        // by its drawing (round 24, the web's rule): its key pose 18 over the quote, whatever empty paper its room keeps
+        // above that pose — 點點's 嗨！ rests lower than its frames reach, so its room comes up by that much more.
+        val side = 128.dp
+        assertEquals(com.resonance.design.REPLY_OVERLAP, quoteOverlap(null, quoted = true, side))
+        assertEquals(18f, STICKER_OVER_QUOTE.value, 0f)
+        val hi = catalog.find(ChatSticker("pip", "hi"))!!
+        val art = hi.poseBox.top - (hi.box.top - com.resonance.kit.chat.StickerBox.TRIM_MARGIN)
+        assertEquals(true, art > 0.02f)
+        assertEquals(18f + 128f * art, quoteOverlap(hi, quoted = true, side)!!.value, 1e-3f)
+        // The drawing itself: where the key pose starts in the room, less the overlap, is 18 above the room's laid top.
+        assertEquals(-18f, 128f * hi.artTop - quoteOverlap(hi, quoted = true, side)!!.value, 1e-3f)
+        // A sticker the catalog has no numbers for: its square, so the 18 alone.
+        val bare = hi.copy(box = com.resonance.kit.chat.StickerBox.Whole, poseBox = com.resonance.kit.chat.StickerBox.Whole)
+        assertEquals(18f, quoteOverlap(bare, quoted = true, side)!!.value, 0f)
+        assertEquals(null, quoteOverlap(hi, quoted = false, side))
         // Quoted, a sticker is muted as quoted words are.
         assertEquals(0.55f, QUOTED_STICKER_ALPHA, 0f)
     }

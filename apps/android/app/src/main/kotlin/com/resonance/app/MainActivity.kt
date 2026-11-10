@@ -100,6 +100,7 @@ class MainActivity : ComponentActivity() {
             DebugLaunch.avifDecoder = intent.getBooleanExtra("avifDecoder", false)
             DebugLaunch.feedPicksDelay = intent.getIntExtra("feedPicksDelay", 0)
             DebugLaunch.feedPicksIds = intent.getStringExtra("feedPicks")?.split(',')?.map(String::trim)?.filter(String::isNotEmpty)
+            DebugLaunch.notifyInvites = intent.getStringExtra("notifyInvite")?.let { if (it == "all") setOf("picks", "connectionCards") else setOf(it) }.orEmpty()
             mascotExtras(intent)
             // `--ez` from adb, or a string from Maestro's launchApp arguments.
             if (intent.getStringExtra("askForNotifications") == "false" || !intent.getBooleanExtra("askForNotifications", true)) {
@@ -275,6 +276,8 @@ object DebugLaunch {
     var feedPicksDelay = 0
     /** Cards stood in for today's picks (the emulator's recommender has none). */
     var feedPicksIds: List<String>? = null
+    /** The invites shown whatever their reasons (`--es notifyInvite picks|connectionCards|all`, iOS's `-notifyInvite`: screen checks). */
+    var notifyInvites: Set<String> = emptySet()
     /**
      * The paper puppets' island's screen checks (`--es mascotJs …`): calls into its API, logged with
      * their answers (tag Mascots). Each is taken once, by the island on screen, once it has a scene —

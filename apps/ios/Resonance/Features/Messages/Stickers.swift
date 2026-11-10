@@ -57,6 +57,16 @@ final class StickerLibrary {
     /// Its name, else 「貼圖」 (a sticker this build doesn't know, whose words are the message's own).
     func label(_ ref: StickerRef) -> String { name(ref) ?? L10n.Messages.stickerUnknown }
 
+    // MARK: Drawings
+
+    /// Where `ref`'s drawing lies in its square over its whole animation (round 24 §B: the thread lays a sticker out by
+    /// it) — the whole square for one this build doesn't know.
+    func box(_ ref: StickerRef) -> StickerBox { catalog.box(ref) }
+
+    /// Where `ref`'s key pose (its thumb) lies in its square (round 24 §C: a quote centres it) — the whole square for
+    /// one this build doesn't know.
+    func poseBox(_ ref: StickerRef) -> StickerBox { catalog.poseBox(ref) }
+
     // MARK: Files
 
     /// The bundled file of `ref` (its animation, or its still: the thumb, the art's hero pose), if this build carries it.
@@ -202,6 +212,39 @@ final class StickerLibrary {
 }
 
 // MARK: - Playback
+
+/// Where a play is, frame by frame (round 24): `CGAnimateImageDataWithBlock` doesn't stop after the file's own loops
+/// (it plays on), and its frames come a little later than the file's delays say — so a play counts its loops by the
+/// frames themselves and ends on the last frame of its last loop (the hero pose, which the still then stands for), or
+/// at the first frame of a loop too many should that last frame be skipped. Pure.
+nonisolated struct StickerPlayCount: Equatable {
+    let frames: Int
+    let loops: Int
+    /// Loops played to their end so far.
+    private(set) var played = 0
+    private var last = -1
+
+    init(frames: Int, loops: Int) {
+        self.frames = frames
+        self.loops = max(1, loops)
+    }
+
+    enum Step: Equatable {
+        /// Draw this frame.
+        case draw
+        /// The play is over: the still again, and nothing more of it is drawn.
+        case end
+    }
+
+    /// The animation handed over frame `index`.
+    mutating func next(_ index: Int) -> Step {
+        if index < last { played += 1 }
+        last = index
+        if played >= loops { return .end }
+        if played == loops - 1, index >= frames - 1 { return .end }
+        return .draw
+    }
+}
 
 /// Who may animate (round 22 §4.5): a sticker plays its two loops the first time it comes on screen — once
 /// per message for as long as the app runs — and again on a tap; at most three at once, the newest taking the
@@ -415,6 +458,12 @@ nonisolated struct StickerBreathing: Equatable {
 /// While it plays only the animation's frames are drawn — never the still under them, whose pose would show
 /// through the frames' clear parts — and once it ends (or is stopped) the still is back: the still until the
 /// first frame is decoded, the frames, the still again. Leaving the window frees what it read.
+///
+/// Round 24: a play ends on its last frame (the hero pose again, which the still then stands for) and nothing of it
+/// is drawn after that — ImageIO plays on past the file's two loops, a little slower than its delays, and a frame
+/// landing after the end used to stay for good. Each frame drawn is a bitmap of the view's own (``ownFrame(_:maxPixels:)``):
+/// what ImageIO hands over is decoded lazily from the running animation, and kept past it — or while another play of
+/// the same file runs, another row's — it came out blank or as that other row's frame.
 final class StickerPlayerView: UIView {
     private let imageView = UIImageView()
     private var run = 0
@@ -469,27 +518,33 @@ final class StickerPlayerView: UIView {
             // A still (a placeholder until the art lands): nothing to play.
             return finish(mine)
         }
-        var last = -1
-        var plays = 0
+        var count = StickerPlayCount(frames: frames, loops: loops)
+        // Frames are kept at the size they are drawn (the file's own until the view is laid out on a screen).
+        let scale = traitCollection.displayScale
+        let pixels = bounds.isEmpty || scale <= 0 ? Int.max : Int((max(bounds.width, bounds.height) * scale).rounded(.up))
         let status = CGAnimateImageDataWithBlock(data as CFData, nil) { [weak self] index, image, stop in
             MainActor.assumeIsolated {
+                // This play is over (it ended, was stopped or replaced, or the view is gone): nothing more of it is drawn.
                 guard let self, self.run == mine else {
                     stop.pointee = true
                     return
                 }
-                if index < last { plays += 1 }
-                last = index
-                self.imageView.image = UIImage(cgImage: image)
-                if plays >= loops {
+                switch count.next(index) {
+                case .end:
                     stop.pointee = true
                     self.finish(mine)
+                case .draw:
+                    // A frame that can't be copied is skipped: the one before it (or the still) stays.
+                    if let own = Self.ownFrame(image, maxPixels: pixels) { self.imageView.image = UIImage(cgImage: own) }
                 }
             }
         }
         guard status == noErr else { return finish(mine) }
-        // The file may stop by itself after its own loops (it bakes two in): the slot is let go then too.
+        // Its frames end it (``StickerPlayCount``); should they stop coming before its last loop's end (a file that
+        // plays fewer loops, a frame that can't be read), this lets its slot go — with room for ImageIO's frames
+        // running a little behind the file's delays, so a play whose frames still come is never cut short.
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(loop * Double(loops) + 0.3))
+            try? await Task.sleep(for: .seconds(loop * Double(loops) * 1.5 + 1))
             self?.finish(mine)
         }
     }
@@ -507,8 +562,32 @@ final class StickerPlayerView: UIView {
     private func finish(_ mine: Int) {
         guard run == mine, let ended = onEnd else { return }
         onEnd = nil
+        // The play is over: a frame of it still on its way finds another run and stops the animation, never drawn
+        // over the still (it used to stay there for good, an ImageIO frame that later drew blank).
+        run += 1
         imageView.image = still
         ended()
+    }
+
+    /// What the view draws now: its still at rest, a frame of its own while it plays.
+    var shownImage: UIImage? { imageView.image }
+
+    /// `image` — a frame as `CGAnimateImageDataWithBlock` hands it over, decoded lazily from the running animation —
+    /// as a bitmap of its own, at most `maxPixels` on its longer side: drawn whenever the screen asks, whatever has
+    /// become of that animation, or of another play of the same file.
+    nonisolated static func ownFrame(_ image: CGImage, maxPixels: Int) -> CGImage? {
+        let longest = max(image.width, image.height)
+        guard longest > 0, let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        let scale = min(1, Double(max(1, maxPixels)) / Double(longest))
+        let width = max(1, Int((Double(image.width) * scale).rounded()))
+        let height = max(1, Int((Double(image.height) * scale).rounded()))
+        guard let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        ) else { return nil }
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
     }
 
     /// One loop's length: the frames' delays as the file keeps them (about 2 s when it says nothing).

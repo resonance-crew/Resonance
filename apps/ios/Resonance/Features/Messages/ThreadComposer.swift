@@ -18,12 +18,15 @@ struct ThreadComposer: View {
     /// What lies under the capsule (round 22 §4.1): ☺ shows ⌨ while the sticker panel is open, ＋ its open
     /// state while the attach panel is, and the send segment ↑ / ↓ in the sticker panel with nothing to send.
     var panels = ComposerPanels()
+    /// Bumped each time the keyboard is asked for outright (⌨): the field takes it whatever `composing` said
+    /// (``ComposerTextView/keyboardAsk``).
+    var keyboardAsk = 0
     /// Grown over the thread: the text box's height (nil at rest).
     var expandedTextHeight: CGFloat?
     /// ＋ was tapped: where it is on the screen (the Mac's popover hangs from it).
     let onAttach: (CGRect) -> Void
-    /// ☺ / ⌨ was tapped.
-    var onStickers: () -> Void = {}
+    /// ☺ / ⌨ was tapped: true for ⌨ — the face drawn under the finger, whatever the panels became meanwhile.
+    var onStickers: (Bool) -> Void = { _ in }
     /// ↑ / ↓ was tapped.
     var onPanelFace: () -> Void = {}
     /// ⤢ (true) or ⤡ (false) was tapped.
@@ -59,12 +62,13 @@ struct ThreadComposer: View {
         let metrics = ComposerText.current()
         let expanded = model.composerExpanded && expandedTextHeight != nil
         let offersStickers = Self.offersStickers(draft: model.draft)
+        let keyboardFace = panels.stickersOpen
         ComposerCapsule(
             focused: composing, canSend: model.canSend, attachOpen: panels.attachOpen, attachLabel: L10n.Messages.attach,
             sendLabel: L10n.Messages.send,
             stickers: !offersStickers ? nil
-                : ComposerSideButton(on: panels.stickersOpen, label: panels.stickersOpen ? L10n.Messages.keyboard : L10n.Messages.stickers,
-                                     action: onStickers),
+                : ComposerSideButton(on: keyboardFace, label: keyboardFace ? L10n.Messages.keyboard : L10n.Messages.stickers,
+                                     action: { onStickers(keyboardFace) }),
             corner: lines >= ComposerMetrics.expandAtLines || expanded
                 ? ComposerSideButton(on: expanded, label: expanded ? L10n.Messages.collapseComposer : L10n.Messages.expandComposer,
                                      action: { onExpand(!expanded) })
@@ -73,6 +77,9 @@ struct ThreadComposer: View {
             faceLabel: panels.expanded ? L10n.Messages.stickerPanelCollapse : L10n.Messages.stickerPanelExpand,
             onFace: onPanelFace, block: Self.sendsFromBlock(lines: lines, expanded: expanded, riding: !rides.isEmpty),
             steady: true,
+            // A panel under the capsule (round 24 §C): the 8 of paper under ⌨ and ＋ is theirs — a thumb landing a hair
+            // low there closed the sticker panel and brought no keyboard.
+            reachBelow: Self.reachBelow(panelOpen: panels.isOpen),
             onAttach: onAttach, onSend: { if model.canSend { model.send() } }
         ) {
             ComposerTextView(text: $model.draft, focused: $composing, placeholder: L10n.Messages.placeholder,
@@ -86,7 +93,8 @@ struct ThreadComposer: View {
                              onFades: { top, bottom in
                                  if fadeTop != top { fadeTop = top }
                                  if fadeBottom != bottom { fadeBottom = bottom }
-                             })
+                             },
+                             keyboardAsk: keyboardAsk)
                 .mask { ComposerFadeMask(top: fadeTop, bottom: fadeBottom) }
         } riding: {
             // Inside the pen line, over the text line: no divider, the rows touching (round 23 §2). The block is always
@@ -115,6 +123,13 @@ struct ThreadComposer: View {
         return words.isEmpty ? nil : words.replacingOccurrences(of: "\n", with: " ")
     }
 
+    /// How far under the capsule ＋ and ☺ / ⌨ take a tap: while a panel shows, all the paper between the capsule and
+    /// the panel (``ComposerMetrics/bottomGap``) — there a tap would put the panel away; otherwise none (a tap under
+    /// the capsule puts the keyboard away, as on the thread).
+    nonisolated static func reachBelow(panelOpen: Bool) -> CGFloat {
+        panelOpen ? ComposerMetrics.bottomGap : 0
+    }
+
     /// ☺ only while nothing is written (round 22 v2): a sticker goes on its own, and words take the room it had.
     nonisolated static func offersStickers(draft: String) -> Bool {
         draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -138,7 +153,10 @@ struct ThreadComposer: View {
                             removeLabel: L10n.Messages.replyCancel, onRemove: { model.cancelReply() },
                             // Its words go to the message it answers, pulsed there (the thread's quote does the same).
                             onTap: { onJump(quote.id) }, short: short) {
-                    ReplyRule().frame(height: rowHeight - 2 * ComposerMetrics.replyRuleInset)
+                    // The reply's own glyph, the held message's 回覆 (round 24 §D: the wavy rule read oddly).
+                    OrganicIcon(.reply, size: ComposerMetrics.replyGlyph(short: short), color: Tokens.terracotta,
+                                strokeWidth: Tokens.ink)
+                        .accessibilityHidden(true)
                 } media: {
                     ReplyMedia(quote: quote, model: model, side: short ? mark : ComposerMetrics.replyMedia)
                 }

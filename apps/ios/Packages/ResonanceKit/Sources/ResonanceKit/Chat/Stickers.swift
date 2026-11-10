@@ -94,13 +94,38 @@ public struct StickerCatalog: Decodable, Equatable, Sendable {
         public let durationMs: Int?
         public let frames: Int?
         public let v: String?
+        /// Where its drawing lies in its square over every frame of the animation (round 24): no frame draws outside
+        /// it. The whole square for a catalog that doesn't say (one bundled before it did).
+        public let box: StickerBox
+        /// Where its key pose (the thumb, the sticker at rest) lies in its square — the whole square when unsaid.
+        public let poseBox: StickerBox
 
-        public init(id: String, name: [String: String], durationMs: Int? = nil, frames: Int? = nil, v: String? = nil) {
+        public init(id: String, name: [String: String], durationMs: Int? = nil, frames: Int? = nil, v: String? = nil,
+                    box: StickerBox = .full, poseBox: StickerBox = .full) {
             self.id = id
             self.name = name
             self.durationMs = durationMs
             self.frames = frames
             self.v = v
+            self.box = box
+            self.poseBox = poseBox
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, name, durationMs, frames, v, box, poseBox
+        }
+
+        /// A `box` or `poseBox` that isn't four fractions in order is read as the whole square — never a catalog
+        /// that can't be read.
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(String.self, forKey: .id)
+            name = try c.decode([String: String].self, forKey: .name)
+            durationMs = try c.decodeIfPresent(Int.self, forKey: .durationMs)
+            frames = try c.decodeIfPresent(Int.self, forKey: .frames)
+            v = try c.decodeIfPresent(String.self, forKey: .v)
+            box = StickerBox.from(try? c.decodeIfPresent([Double].self, forKey: .box)) ?? .full
+            poseBox = StickerBox.from(try? c.decodeIfPresent([Double].self, forKey: .poseBox)) ?? .full
         }
 
         public func name(_ language: Strings.Language) -> String {
@@ -130,6 +155,12 @@ public struct StickerCatalog: Decodable, Equatable, Sendable {
 
     public func knows(_ ref: StickerRef) -> Bool { entry(ref) != nil }
 
+    /// Where `ref`'s drawing lies over its whole animation — the whole square for one this catalog doesn't know.
+    public func box(_ ref: StickerRef) -> StickerBox { entry(ref)?.sticker.box ?? .full }
+
+    /// Where `ref`'s key pose lies — the whole square for one this catalog doesn't know.
+    public func poseBox(_ ref: StickerRef) -> StickerBox { entry(ref)?.sticker.poseBox ?? .full }
+
     /// What the sticker is called in `language` — or, for one this catalog doesn't know, nil.
     public func name(_ ref: StickerRef, _ language: Strings.Language) -> String? {
         entry(ref)?.sticker.name(language)
@@ -138,6 +169,78 @@ public struct StickerCatalog: Decodable, Equatable, Sendable {
     /// Every sticker in the picker's order, with its pack.
     public var all: [StickerRef] {
         packs.flatMap { pack in pack.stickers.map { StickerRef(pack: pack.id, id: $0.id) } }
+    }
+}
+
+/// Where a sticker's drawing lies in its 432² square (round 24; the catalog's `box` / `poseBox`, alpha > 8): its
+/// edges as fractions of the side, `[left, top, right, bottom]`.
+public struct StickerBox: Equatable, Hashable, Sendable {
+    public let left: Double
+    public let top: Double
+    public let right: Double
+    public let bottom: Double
+
+    public init(left: Double, top: Double, right: Double, bottom: Double) {
+        self.left = left
+        self.top = top
+        self.right = right
+        self.bottom = bottom
+    }
+
+    /// The whole square: what a sticker the catalog says nothing of is taken to fill.
+    public static let full = StickerBox(left: 0, top: 0, right: 1, bottom: 1)
+
+    /// The catalog's `[left, top, right, bottom]`, or nil for anything that isn't four fractions in order.
+    public static func from(_ values: [Double]?) -> StickerBox? {
+        guard let values, values.count == 4, values.allSatisfy({ $0.isFinite && (0...1).contains($0) }),
+              values[0] < values[2], values[1] < values[3] else { return nil }
+        return StickerBox(left: values[0], top: values[1], right: values[2], bottom: values[3])
+    }
+
+    public var width: Double { right - left }
+    public var height: Double { bottom - top }
+    public var midX: Double { (left + right) / 2 }
+    public var midY: Double { (top + bottom) / 2 }
+}
+
+/// A sticker in the thread laid out by its drawing, not its square (round 24 §B): the paper above and below the
+/// drawing takes no room. The layout box is as wide as the square and `height` × its side tall — the drawing's
+/// height and `margin` over and under it, never more than the square — and the square is drawn at its full side
+/// moved up by `top` × its side, so the drawing lies in the box (every frame is inside `box`: nothing is cut). The
+/// twin of the web's and Android's.
+public enum StickerTrim {
+    /// The air kept over and under the drawing, as a fraction of the side.
+    public static let margin = 0.02
+
+    /// How far up the square is drawn, as a fraction of its side.
+    public static func top(_ box: StickerBox) -> Double { max(0, box.top - margin) }
+
+    /// The layout box's height, as a fraction of the side.
+    public static func height(_ box: StickerBox) -> Double { min(1, box.bottom - box.top + 2 * margin) }
+
+    /// Where the key pose's drawing (`pose`, the sticker at rest) starts inside the layout box, as a fraction of the
+    /// side: a sticker answering a quote rises over it by its drawing, not by its box (the web's `stickerArtTop`).
+    public static func artTop(_ box: StickerBox, pose: StickerBox) -> Double { max(0, pose.top - top(box)) }
+}
+
+/// A sticker shown small for a message (round 24 §C — a reply's quote, the composer's reply row): its thumb drawn so
+/// its key pose is centred in the square and as large as fits with 4 % of the side round it, never smaller than the
+/// square's own. The twin of the web's and Android's.
+public enum StickerQuoteFit {
+    /// The share of the side the pose may take.
+    public static let fill = 0.92
+
+    /// How much larger than the square the thumb is drawn (1 at least).
+    public static func scale(_ pose: StickerBox) -> Double {
+        let longest = max(pose.width, pose.height)
+        return longest > 0 ? max(1, fill / longest) : 1
+    }
+
+    /// How far the scaled thumb's centre moves from the square's, as fractions of the square's side, so the pose's
+    /// centre lands on the square's.
+    public static func offset(_ pose: StickerBox) -> (x: Double, y: Double) {
+        let k = scale(pose)
+        return (x: -k * (pose.midX - 0.5), y: -k * (pose.midY - 0.5))
     }
 }
 

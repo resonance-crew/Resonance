@@ -312,9 +312,11 @@ struct WriteWorkspace: View {
             .animation(.easeOut(duration: 0.12), value: drag?.hides ?? false)
             .animation(.easeOut(duration: 0.12), value: drag?.fills ?? false)
         }
-        // The window's middle whatever the keyboard takes: the format bar coming up under the story
-        // never moves the grip.
-        .ignoresSafeArea(.keyboard)
+        // Under a hardware keyboard's strip, the window's middle: the format bar coming up under the story
+        // never moves the grip. An on-screen keyboard takes the window's lower half and more, and the grip
+        // kept to the window's middle stood on its top edge (round 24, part 4, the owner: 「把手…比較偏下
+        // 面的位置」): it stays in the middle of what the keyboard leaves.
+        .ignoresSafeArea(keyboard.hardware ? .keyboard : [])
     }
 
     /// The docked grip's centre, in from the trailing edge.

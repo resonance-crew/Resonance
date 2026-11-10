@@ -22,6 +22,8 @@ struct ThreadScreen: View {
     @Environment(\.isSelectedTab) private var onSelectedTab
     /// Beside the list in two panes: no way back (the list is there), the rule along its side.
     @Environment(\.inDetailPane) private var inPane
+    /// The window, measured at the root: an iPad's popovers want room beside the capsule (``ComposerOpens``).
+    @Environment(\.window) private var window
     @State private var model: ThreadModel?
     /// Closes the model once the screen is gone for good (`ScreenLifetime`).
     @State private var lifetime = ScreenLifetime()
@@ -44,8 +46,9 @@ struct ThreadScreen: View {
     @State private var replacing: Replacing?
     /// The attach panel's grip, dragged (points up).
     @State private var panelDrag: CGFloat = 0
-    /// The Mac's popovers at ☺ and ＋ (round 22 §4.1–4.2): a sheet over the thread, never the panels.
-    @State private var macPopover: ComposerPanel?
+    /// The popovers at ☺ and ＋ (round 22 §4.1–4.2): a sheet over the thread, never the panels — the Mac's, and an
+    /// iPad's with no on-screen keyboard to trade a panel for (round 24, part 3 §A2: ``ComposerOpens``).
+    @State private var popover: ComposerPanel?
     /// The capsule on the screen — what rides inside it included (round 23) — how tall what rides is, and the
     /// screen itself.
     @State private var capsuleFrame: CGRect = .zero
@@ -83,8 +86,12 @@ struct ThreadScreen: View {
     /// How tall the bar is (the list's room under it), how wide the list, and the screen's safe area.
     @State private var barHeight: CGFloat = 58
     @State private var listWidth: CGFloat = 390
-    /// The floating foot's height, above the safe area or the keyboard.
+    /// The capsule's part of the floating foot (the capsule, or a slip in its place, and the 8 under it), above the
+    /// safe area or the keyboard — measured apart from a panel under it (round 24, part 3 §B).
     @State private var footHeight: CGFloat = 0
+    /// In two panes, ``PaneLines``' box in the screen's space (``screenSpace``): the attach panel's paper and its top
+    /// pen line run on to the rule (round 24, part 3 §C).
+    @State private var ruleBox: CGRect = .zero
     @State private var safe = EdgeInsets()
     @State private var underBar = false
     /// Where the list is scrolled to, and the way to send it to a message.
@@ -101,6 +108,9 @@ struct ThreadScreen: View {
     @State private var shownHeight: CGFloat = 0
     /// The composer's text has the keyboard (its `UITextView` says so, and is told).
     @State private var composing = false
+    /// Bumped each time the keyboard is asked for outright (⌨, a field that didn't take the focus asked again):
+    /// the text view takes it in UIKit even when `composing` was true already (round 24 §C).
+    @State private var keyboardAsk = 0
     @FocusState private var searchFocused: Bool
 
     var body: some View {
@@ -161,11 +171,15 @@ struct ThreadScreen: View {
                     while !model.threadReady { try? await Task.sleep(for: .milliseconds(100)) }
                     try? await Task.sleep(for: .seconds(1))
                     let kind: ComposerPanel = opened == "attach" ? .attach : .stickers
-                    if onMac {
-                        // On a Mac ☺ and ＋ open the popover, as `toggleStickers` / `toggleAttach` do — never a panel in
-                        // the keyboard's place. It hangs from the capsule's top, so the capsule is measured first.
+                    // Pinned to the device, never to its keyboard (the release screenshots' `thread-stickers`): the Mac's
+                    // popover, everywhere else the panel — whether the Simulator has the Mac's keyboard connected, or
+                    // GameController has found it yet, would otherwise make an iPad's capture a popover one run and a
+                    // panel the next.
+                    if ComposerOpens.Device.current == .mac {
+                        // As ☺ and ＋ open it there (`toggleStickers` / `toggleAttach`). It hangs from the capsule's top,
+                        // so the capsule is measured first.
                         while capsuleFrame.height == 0 { try? await Task.sleep(for: .milliseconds(100)) }
-                        macPopover = kind
+                        popover = kind
                     } else {
                         panels.open(kind)
                         if defaults.bool(forKey: "threadPanelTall") { panels.setExpanded(true) }
@@ -291,7 +305,16 @@ struct ThreadScreen: View {
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { barFrame = $0 }
                 .accessibilityHidden(menu != nil)
             // Beside the list: the rule between the panes and the bar's foot from it, over the bar's paper.
-            if inPane { PaneLines(barHeight: barHeight) }
+            if inPane {
+                PaneLines(barHeight: barHeight)
+                // Its box, laid as it lays its own (round 24, part 3 §C): what runs on to the rule is cut on its curve.
+                Color.clear
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.screenSpace)) } action: { ruleBox = $0 }
+                    .padding(.top, -PaneLines.tuck)
+                    .ignoresSafeArea(edges: .bottom)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
             if let held = menu, let model {
                 // The message as the thread holds it now (round 23 §1): held while it was still on its way (a sticker
                 // just sent), its menu fills in — the tray, 回覆, 收回 — the moment it is delivered.
@@ -311,10 +334,13 @@ struct ThreadScreen: View {
                                        ? .init(current: model.myReaction(to: message)) { model.react(message, with: $0) }
                                        : nil, dimmed: $pressDimmed) { self.menu = nil }
             }
-            if let macPopover, let model {
-                // Anchored to the capsule's real top: over what rides in it, never on it (round 23 §2).
-                MacComposerPopover(kind: macPopover, anchor: capsuleFrame, onDismiss: { closeMacPopover() }) {
-                    if macPopover == .stickers {
+            if let popover, let model {
+                // Anchored to the capsule's real top: over what rides in it, never on it (round 23 §2). The attach
+                // sheet's paper is the picker's while 圖片 shows (round 24, part 3 §C1).
+                MacComposerPopover(kind: popover, anchor: capsuleFrame,
+                                   paper: popover == .attach ? AttachPaper.of(attachTab).color : nil,
+                                   onDismiss: { closePopover() }) {
+                    if popover == .stickers {
                         StickerPanel(library: StickerLibrary.shared, columns: StickerPanel.popoverColumns,
                                      maxPlaying: StickerBreathing.wideCapacity) { tapSticker($0, model) }
                     } else {
@@ -324,20 +350,33 @@ struct ThreadScreen: View {
             }
         }
         .background(Tokens.cream)
+        .coordinateSpace(.named(Self.screenSpace))
         .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { safe = $0 }
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { screenFrame = $0 }
         // The keyboard is up: a panel waiting for it goes (round 22 §4.1).
         .onChange(of: keyboard.shownCount) { _, _ in
             if panels.awaitingKeyboard { withTransaction(\.disablesAnimations, true) { panels.keyboardShown() } }
         }
-        // The field took the focus while a panel showed (a tap on it): the panel stays until the keyboard is up.
+        // The field took the focus while a panel showed (a tap on it): the panel stays until the keyboard is up. It gave
+        // the focus up before that keyboard came (a drag on the thread put it away): the panel goes too, and nothing
+        // brings that keyboard back (round 24 §C).
         .onChange(of: composing) { _, now in
-            guard now, panels.isOpen, !panels.awaitingKeyboard else { return }
-            awaitKeyboard(forPanel: true)
+            if now {
+                guard panels.isOpen, !panels.awaitingKeyboard else { return }
+                panels.keyboardRequested()
+                panelAwaitsKeyboard()
+            } else if panels.awaitingKeyboard {
+                withAnimation(.easeOut(duration: 0.22)) {
+                    panels.focusLost()
+                    panelDrag = 0
+                }
+            }
         }
-        // A tap on the thread (or the foot's paper): the panel goes too.
+        // A tap on the thread (or the foot's paper): the panel goes too — and so does a keyboard on its way to take its
+        // place (its ask is over: KeyboardAway let the field's focus go, and `closePanels` says so to the composer
+        // whether or not UIKit had given the field the focus to let go of).
         .onReceive(NotificationCenter.default.publisher(for: KeyboardAway.didAsk)) { _ in
-            guard panels.isOpen, !panels.awaitingKeyboard else { return }
+            guard panels.isOpen else { return }
             withAnimation(.easeOut(duration: 0.22)) { closePanels() }
         }
         // The keyboard back where it was after a picture: the thread takes its foot from it again.
@@ -459,23 +498,20 @@ struct ThreadScreen: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { foot(model) }
     }
 
-    /// A pane the capsule doesn't fill: no paper beside the capsule (``ComposerMetrics/widePane(_:)``).
-    private var widePane: Bool { ComposerMetrics.widePane(listWidth) }
+    /// The foot's papers as the pane, the capsule's part of the foot and the panel under it stand (``ThreadFootPapers``).
+    private var footPapers: ThreadFootPapers {
+        ThreadFootPapers.of(listWidth: listWidth, capsulePart: footHeight, panel: panels.shown, tab: attachTab)
+    }
 
-    /// A wide pane's foot for its paper (nil: the paper across the pane — a phone, or a panel in the keyboard's
-    /// place): the column under the capsule starts at the capsule's middle (it is opaque above that, what rides
-    /// riding inside it — round 23; a slip in its place too).
-    private func wideFoot(_ model: ThreadModel) -> ComposerBacking.Wide? {
-        guard widePane, !panels.isOpen else { return nil }
-        return ComposerBacking.Wide(
-            footHeight: footHeight,
-            capsuleWidth: min(listWidth, ComposerMetrics.maxWidth) - ComposerMetrics.gutter * 2,
-            columnTop: ComposerMetrics.height / 2
-        )
+    /// In two panes, the rule beside the thread (``PaneLines``' box): what runs on across the gutter is cut on its line.
+    private var paneRule: PaneRuleBox? {
+        inPane && ruleBox.height > 0 ? PaneRuleBox(box: ruleBox, space: Self.screenSpace) : nil
     }
 
     /// The thread and the room over its floating foot, measured against each other.
-    private static let footSpace = "thread.foot"
+    nonisolated private static let footSpace = "thread.foot"
+    /// The whole screen (the detail pane, in two): ``PaneLines``' box and the panel's paper are measured in it.
+    nonisolated private static let screenSpace = "thread.screen"
 
     /// A line about the conversation that scrolls with it as its last item (round 9 §4): answering
     /// their letter connects the two — said over a composer that floats, not on a band of its own.
@@ -490,14 +526,16 @@ struct ThreadScreen: View {
     /// the foot's paper (round 10 §3.2) across the whole pane, down to the screen's foot, fading in over
     /// its top 12 (round 11 §3); a tap on its solid part puts the keyboard away, as a tap on the thread does.
     @ViewBuilder private func foot(_ model: ThreadModel) -> some View {
-        VStack(spacing: 0) {
+        // The capsule's part measured apart from a panel under it (``ThreadFootStack``): a wide pane's paper is a fade at
+        // its last 28 alone, ending where a panel begins (round 24, part 3 §B).
+        ThreadFootStack(onCapsulePart: { footHeight = $0 }) {
             VStack(spacing: 0) {
                 if model.accessKnown {
                     switch model.access {
                     case .open, .replyToConnect:
-                        ThreadComposer(model: model, composing: $composing, panels: panels,
+                        ThreadComposer(model: model, composing: $composing, panels: panels, keyboardAsk: keyboardAsk,
                                        expandedTextHeight: expandedTextHeight(model),
-                                       onAttach: { _ in toggleAttach(model) }, onStickers: { toggleStickers(model) },
+                                       onAttach: { _ in toggleAttach(model) }, onStickers: { toggleStickers(model, keyboardFace: $0) },
                                        onPanelFace: { withAnimation(.easeOut(duration: 0.25)) { panels.setExpanded(!panels.expanded) } },
                                        onExpand: { expandComposer($0, model) },
                                        onPastePictures: { pictures in
@@ -528,25 +566,30 @@ struct ThreadScreen: View {
                     }
                 }
             }
-            .padding(.horizontal, ComposerMetrics.gutter)
-            .padding(.bottom, ComposerMetrics.bottomGap)
-            // A wide pane keeps the field to a writing width, centred under the thread.
-            .frame(maxWidth: ComposerMetrics.maxWidth)
-            .frame(maxWidth: .infinity)
-            // The panel in the keyboard's place (round 22 §4.1–4.2): the foot's own paper going on, across the pane.
+        } panel: {
+            // The panel in the keyboard's place (round 22 §4.1–4.2): the foot's own paper going on, across the pane —
+            // the picker's paper under 圖片 (round 24, part 3 §C1), from the panel's top line down to the window's foot,
+            // to its edges and, in two panes, across the gutter to the rule. Its top is cut on that line's own wave
+            // (``AttachPaperShape``): laid from the panel's top edge, a straight strip of it showed over the line.
             if panels.isOpen, model.access.canWrite {
                 panel(model)
                     .frame(height: panelHeight)
+                    .background(alignment: .top) {
+                        if let paper = footPapers.panel.color {
+                            FromPaneRule(rule: paneRule) { AttachPaperShape().fill(paper) }
+                                .ignoresSafeArea(edges: [.bottom, .horizontal])
+                                .allowsHitTesting(false)
+                                .accessibilityHidden(true)
+                        }
+                    }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        // How tall the foot is (a wide pane's paper is a fade at its last 28 alone).
-        .onGeometryChange(for: CGFloat.self) { $0.size.height.rounded() } action: { footHeight = $0 }
         .background(alignment: .top) {
             if model.accessKnown {
                 // A pane the capsule doesn't fill (2026-11-01): the thread beside the capsule, sinking into a fade at the
-                // foot; the panel in the keyboard's place keeps the paper across the pane (it is that paper going on).
-                ComposerBacking(wide: wideFoot(model)) { KeyboardAway.now() }
+                // capsule's foot — with a panel under it too (round 24, part 3 §B: the panel's paper from its top down).
+                ComposerBacking(wide: footPapers.wide) { KeyboardAway.now() }
                     // Through the home indicator, and under the keyboard (no message shows through its glass).
                     .ignoresSafeArea(edges: .bottom)
             }
@@ -607,24 +650,41 @@ struct ThreadScreen: View {
 
     // MARK: Composer panels (round 22 §4.1–4.3)
 
-    /// On a Mac ☺ and ＋ open popovers (a sheet at the button), never a panel in a keyboard's place.
-    private var onMac: Bool { ProcessInfo.processInfo.isMacCatalystApp || ProcessInfo.processInfo.isiOSAppOnMac }
+    /// ☺ and ＋ open popovers (a sheet at the button) rather than a panel in the keyboard's place, asked at the tap
+    /// (round 24, part 3 §A2: ``ComposerOpens``): on the Mac always; on an iPad wide enough when no on-screen keyboard
+    /// would stand in the panel's place — a hardware keyboard, a floating or split one, only a shortcut strip docked.
+    private var opensPopover: Bool {
+        ComposerOpens.at(device: .current, windowWidth: window.width, hardwareKeyboard: HardwareKeyboard.connected,
+                         keyboardFloats: keyboard.floats, dockedHeight: keyboard.height,
+                         keyboardHeight: keyboard.rememberedHeight, windowGap: KeyboardWatch.windowGap) == .popover
+    }
+
+    /// The tap goes to the popovers: one is open (it stays one until it closes, whatever the keyboard did meanwhile), or
+    /// none is and no panel either, and this is where ☺ and ＋ open them. A panel open stays a panel until it goes.
+    private var tapsPopover: Bool {
+        popover != nil || (!panels.isOpen && opensPopover)
+    }
 
     /// ☺ / ⌨: the sticker panel in the keyboard's place (laid out at the keyboard's height first, the keyboard
-    /// put away after it — nothing dips), or the keyboard back.
-    private func toggleStickers(_ model: ThreadModel) {
+    /// put away after it — nothing dips), or the keyboard back (round 24 §C) — decided by the face tapped
+    /// (`keyboardFace`: ⌨), asked of the field outright (`keyboardAsk`) so it comes whatever `composing` said, and
+    /// asked again by a second ⌨ while it is on its way. Where ☺ opens a popover (``tapsPopover``), the sticker sheet
+    /// over ☺ instead: the field and its keyboard are left as they are.
+    private func toggleStickers(_ model: ThreadModel, keyboardFace: Bool) {
         if model.composerExpanded { expandComposer(false, model) }
-        if onMac {
-            macPopover = macPopover == .stickers ? nil : .stickers
+        if tapsPopover {
+            popover = popover == .stickers ? nil : .stickers
             return
         }
         let keyboardUp = keyboard.height > 0
         var next = panels
-        let wantsKeyboard = next.toggleStickers()
+        let wantsKeyboard = next.tapStickerKey(keyboard: keyboardFace)
         if wantsKeyboard {
             panels = next
             composing = true
-            awaitKeyboard(forPanel: true)
+            keyboardAsk += 1
+            // A panel gone from under ⌨ meanwhile leaves nothing to wait for: the keyboard comes as it always does.
+            if panels.awaitingKeyboard { panelAwaitsKeyboard() }
         } else {
             panelDrag = 0
             // Over a keyboard the panel takes its place at once; with none up it rises.
@@ -633,11 +693,12 @@ struct ThreadScreen: View {
         }
     }
 
-    /// ＋: the attach panel in the keyboard's place (or, open, closed again).
+    /// ＋: the attach panel in the keyboard's place (or, open, closed again) — or the attach sheet at ＋ where it opens a
+    /// popover (``tapsPopover``).
     private func toggleAttach(_ model: ThreadModel) {
         if model.composerExpanded { expandComposer(false, model) }
-        if onMac {
-            macPopover = macPopover == .attach ? nil : .attach
+        if tapsPopover {
+            popover = popover == .attach ? nil : .attach
             return
         }
         let keyboardUp = keyboard.height > 0
@@ -648,19 +709,49 @@ struct ThreadScreen: View {
         if next.isOpen { composing = false }
     }
 
-    /// The panel goes.
-    private func closePanels() {
-        panels.close()
+    /// The panel goes — and so does a keyboard asked for in its place that hasn't come yet (round 24 §C): `composing`
+    /// lets it go at once, since a field UIKit never gave the focus hears no resign (its textViewDidEndEditing never
+    /// comes), and the composer still wanting it would raise that keyboard at some later update. `keepingKeyboard`:
+    /// the panel makes way for the text itself (⤢), whose keyboard is still wanted.
+    private func closePanels(keepingKeyboard: Bool = false) {
+        if panels.putAway(), !keepingKeyboard { composing = false }
         panelDrag = 0
     }
 
-    /// The field asked for the keyboard while a panel shows: the panel waits for it, and goes once it is up —
-    /// or, with a hardware keyboard (none comes), a moment later.
-    private func awaitKeyboard(forPanel: Bool) {
-        panels.keyboardRequested()
+    /// The field asked for the keyboard while a panel shows (``ComposerPanels/keyboardRequested()``): the panel waits
+    /// for it and goes once it is up (its didShow) — and the latest ask looks in on it (``KeyboardWait``): never
+    /// taking the panel from under a keyboard still rising (nor one that has sent no frame yet, before the last look),
+    /// asking a field that didn't take the focus once more, with a hardware or a floating keyboard (none comes into
+    /// the panel's place) letting the panel go at the first look, and — the field refusing the focus twice — leaving
+    /// the panel as it was, ⌨ there to ask again. A wait whose field gave the focus up ends with it
+    /// (``ComposerPanels/focusLost()``).
+    private func panelAwaitsKeyboard() {
+        let ask = panels.asks
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(700))
-            if panels.awaitingKeyboard { withAnimation(.easeOut(duration: 0.2)) { panels.keyboardShown() } }
+            var waited = Duration.zero
+            for look in [KeyboardWait.firstLook, KeyboardWait.lastLook] {
+                try? await Task.sleep(for: look - waited)
+                waited = look
+                guard panels.awaitingKeyboard, panels.asks == ask else { return }
+                switch KeyboardWait.next(keyboardComing: keyboard.height > 0,
+                                         fieldFocused: FirstResponder.current() is ComposerUITextView,
+                                         noneComes: HardwareKeyboard.connected || keyboard.floats,
+                                         last: look == KeyboardWait.lastLook) {
+                case .keepWaiting:
+                    continue
+                case .askAgain:
+                    composing = true
+                    keyboardAsk += 1
+                case .close:
+                    withAnimation(.easeOut(duration: 0.2)) { panels.keyboardShown() }
+                    return
+                case .giveUp:
+                    // The panel stays (no dip to a foot with no keyboard), and the pen line says what UIKit says.
+                    panels.keyboardNeverCame()
+                    composing = false
+                    return
+                }
+            }
         }
     }
 
@@ -672,7 +763,7 @@ struct ThreadScreen: View {
         // Measured live: a sticker sent with a reply riding drops the capsule 98 → 48, and the panel grows by as much.
         let tall = max(rest, screenFrame.maxY - barFrame.maxY - 8 - capsuleFrame.height - ComposerMetrics.bottomGap)
         let full = panels.expanded ? tall : rest
-        return min(tall, max(160, full + panelDrag)) - foot
+        return min(tall, max(ComposerPanels.least, full + panelDrag)) - foot
     }
 
     /// What the panel holds.
@@ -689,7 +780,8 @@ struct ThreadScreen: View {
         }
     }
 
-    /// The attach panel (round 22 §4.2), the phone's in the keyboard's place or the Mac's popover's content.
+    /// The attach panel (round 22 §4.2), in the keyboard's place (`gripped`) or the popover's content — the picker kept
+    /// clear of the popover's pen line there (round 24, part 3 §D2).
     private func attachPanel(_ model: ThreadModel, gripped: Bool) -> some View {
         AttachPanel(tab: $attachTab, selection: pickerBinding(model),
                     maxSelection: AlbumRef.maxCount - model.pendingPictures.filter { !Self.fromPicker($0.key) }.count,
@@ -705,7 +797,8 @@ struct ThreadScreen: View {
                             if taller { panels.setExpanded(true) } else if panels.expanded { panels.setExpanded(false) } else { closePanels() }
                         }
                     },
-                    gripped: gripped, toScreenEdge: gripped)
+                    gripped: gripped, toScreenEdge: gripped, rule: gripped ? paneRule : nil,
+                    pickerInsets: gripped ? EdgeInsets() : ComposerPopoverMetrics.pickerInsets)
     }
 
     /// The grip let go: far enough (or fast enough) up grows the panel to under the header, down closes it
@@ -722,24 +815,25 @@ struct ThreadScreen: View {
     }
 
     /// A tap on a sticker sends it (round 23 §3: no preview, no second tap) — unless it is a second tap on the same
-    /// one within 600 ms, the old habit's. On the Mac the popover goes and the field takes the focus back.
+    /// one within 600 ms, the old habit's. From a popover (the Mac's, an iPad's) the popover goes and the field takes
+    /// the focus back.
     private func tapSticker(_ sticker: StickerRef, _ model: ThreadModel) {
         guard stickerGuard.allows(sticker) else { return }
         model.sendSticker(sticker)
-        if macPopover != nil { closeMacPopover() }
+        if popover != nil { closePopover() }
     }
 
-    /// The Mac's popover goes; the field takes the focus back.
-    private func closeMacPopover() {
-        macPopover = nil
+    /// The popover goes; the field takes the focus back.
+    private func closePopover() {
+        popover = nil
         composing = true
     }
 
-    /// A hardware keyboard's Esc in the field (round 23 §2): the Mac's popover goes first; with no popover or panel
-    /// open, the reply riding is cancelled. Anything else is the field's own.
+    /// A hardware keyboard's Esc in the field (round 23 §2): a popover goes first; with no popover or panel open, the
+    /// reply riding is cancelled. Anything else is the field's own.
     private func escape(_ model: ThreadModel) -> Bool {
-        if macPopover != nil {
-            closeMacPopover()
+        if popover != nil {
+            closePopover()
             return true
         }
         guard !panels.isOpen, menu == nil, model.replyingTo != nil else { return false }
@@ -797,7 +891,7 @@ struct ThreadScreen: View {
             expandedTop = nil
             return
         }
-        if panels.isOpen { closePanels() }
+        if panels.isOpen { closePanels(keepingKeyboard: true) }
         let space = max(1, capsuleFrame.minY - barFrame.maxY)
         let top = barFrame.maxY + 12
         var kept: CGFloat = 0
@@ -1353,6 +1447,79 @@ nonisolated enum ThreadFoot {
     }
 }
 
+/// The composer's popovers' measures (``MacComposerPopover``, a generic view: no stored statics of its own).
+enum ComposerPopoverMetrics {
+    /// The sheet's paper over what it holds, and under it.
+    static let contentTop: CGFloat = 8
+    static let contentBottom: CGFloat = 10
+    /// The sheet's pen line (``MenuSheetShape``, stroked over the stickers, under the attach sheet's picker).
+    static let pen = StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round)
+    /// How far the attach sheet's photo picker keeps from the sheet's box on every side (round 24, part 3 §D2): far
+    /// enough that a square corner stays inside the pen line's inner edge at the sheet's corners — their radius 26 (± 7 %),
+    /// the line's wobble and half the pen inside it — not only along its sides. The picker is an out-of-process view no
+    /// clip reliably trims, and on an iPad it may draw no rounded corners of its own: 6 at its sides kept the sides clear
+    /// and still ran each corner across the whole line. Under 圖片 the sheet's paper is the picker's own (``AttachPaper``),
+    /// so the margin doesn't show.
+    static let pickerClear: CGFloat = 12
+
+    /// The picker's padding inside the sheet's content (which stands ``contentTop`` and ``contentBottom`` in already).
+    static var pickerInsets: EdgeInsets {
+        EdgeInsets(top: pickerClear - contentTop, leading: pickerClear, bottom: pickerClear - contentBottom, trailing: pickerClear)
+    }
+
+    /// Where the picker's rect lies in a sheet of `size`, the sheet's box at the origin.
+    static func pickerRect(in size: CGSize) -> CGRect {
+        CGRect(x: pickerClear, y: pickerClear, width: size.width - 2 * pickerClear, height: size.height - 2 * pickerClear)
+    }
+}
+
+/// The thread's floating foot (round 24, part 3 §B): the capsule's part — the composer or a slip in its place, kept to a
+/// writing width and centred, 8 over the safe area or the keyboard — and under it, while one shows, the panel in the
+/// keyboard's place. Only the capsule's part is measured (`onCapsulePart`): a wide pane's fade ends on it, so a panel
+/// counted in would sink the fade to the panel's foot and leave the panel with no paper under it, the thread showing
+/// through the sticker panel.
+struct ThreadFootStack<Capsule: View, Panel: View>: View {
+    let onCapsulePart: (CGFloat) -> Void
+    @ViewBuilder let capsule: Capsule
+    @ViewBuilder let panel: Panel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            capsule
+                .padding(.horizontal, ComposerMetrics.gutter)
+                .padding(.bottom, ComposerMetrics.bottomGap)
+                // A wide pane keeps the field to a writing width, centred under the thread.
+                .frame(maxWidth: ComposerMetrics.maxWidth)
+                .frame(maxWidth: .infinity)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height.rounded() } action: { onCapsulePart($0) }
+            panel
+        }
+    }
+}
+
+/// The papers of the thread's foot (round 24, part 3 §B–C1, the owner: with a panel open on a tablet "這個鍵盤兩側還是會
+/// 有這個實色區域"). `wide`: a pane the capsule doesn't fill (``ComposerMetrics/widePane(_:)``) looks the same with a
+/// panel open as without — clear beside the capsule, the thread showing there, a fade over the last
+/// ``ComposerMetrics/wideFootFade`` of the capsule's part of the foot (`capsulePart`: the capsule, or a slip in its
+/// place, and the 8 under it — never the panel), so it ends exactly where a panel begins; the column under the capsule
+/// from its middle down (opaque above that, what rides riding inside it — round 23); and from there the paper across the
+/// pane, under the panel too, down to the window's foot. Nil: a pane the capsule fills (a phone, a narrow pane) keeps the
+/// paper across it. `panel`: the panel's own paper laid from its top line down (``AttachPaper``) — the picker's under 圖片,
+/// the foot's under anything else.
+struct ThreadFootPapers: Equatable {
+    var wide: ComposerBacking.Wide?
+    var panel: AttachPaper
+
+    static func of(listWidth: CGFloat, capsulePart: CGFloat, panel: ComposerPanel, tab: AttachTab) -> ThreadFootPapers {
+        let wide = ComposerMetrics.widePane(listWidth)
+            ? ComposerBacking.Wide(footHeight: capsulePart,
+                                   capsuleWidth: min(listWidth, ComposerMetrics.maxWidth) - ComposerMetrics.gutter * 2,
+                                   columnTop: ComposerMetrics.height / 2)
+            : nil
+        return ThreadFootPapers(wide: wide, panel: panel == .attach ? AttachPaper.of(tab) : .foot)
+    }
+}
+
 /// What the confirm asks before a card takes the pictures' place, or pictures the card's (round 22 §4.2).
 enum Replacing: Equatable {
     case withCard(FeedCard)
@@ -1380,20 +1547,35 @@ enum Replacing: Equatable {
     }
 }
 
-/// The Mac's popover at ☺ or ＋ (round 22 §4.1–4.2): a flat sheet of the menus' paper inside the grey pen line,
-/// no shadow, hanging over the capsule from the button — ☺'s at its end, ＋'s at its start — its foot 8 over the
+/// The Mac's popover at ☺ or ＋ (round 22 §4.1–4.2) — an iPad's too, where no on-screen keyboard would take a panel's
+/// place (round 24, part 3 §A2: ``ComposerOpens``): a flat sheet of the menus' paper inside the grey pen line, no
+/// shadow, hanging over the capsule from the button — ☺'s at its end, ＋'s at its start — its foot 8 over the
 /// capsule's real top (round 23: over what rides inside it, never on it). A click beside it or Escape closes it,
 /// and the field takes the focus back. The stickers' is 4 columns across 400 × 460 (round 23 §3).
+///
+/// The sticker sheet's pen line is drawn over what it holds (round 24, part 3 §D1, the owner: the line "被切斷" where
+/// what it held ran over it); the attach sheet's under it, as the menus' are: its photo picker is drawn by another
+/// process, and on the Mac any view of ours laid over it — even one that takes no hit, even a stroke — takes every
+/// click on it, so no picture could be chosen (part 3, the owner: "圖片沒辦法點擊"). The picker keeps
+/// ``ComposerPopoverMetrics/pickerClear`` inside the sheet's box, so it never reaches the line. `paper`: the sheet's
+/// paper when it isn't the menus' (the attach sheet's under 圖片: the picker's own, ``AttachPaper``, so one colour fills
+/// the line — §D3).
 struct MacComposerPopover<Content: View>: View {
     let kind: ComposerPanel
     /// The capsule, on the screen.
     let anchor: CGRect
+    var paper: Color?
     let onDismiss: () -> Void
     @ViewBuilder let content: Content
     @State private var shown = false
 
     static func size(_ kind: ComposerPanel) -> CGSize {
         kind == .stickers ? CGSize(width: 400, height: 460) : CGSize(width: 360, height: 460)
+    }
+
+    /// The sheet's outline: its paper's shape and the line stroked on it.
+    static func sheet(_ kind: ComposerPanel) -> MenuSheetShape {
+        MenuSheetShape(seed: kind == .stickers ? 53 : 59)
     }
 
     var body: some View {
@@ -1410,15 +1592,31 @@ struct MacComposerPopover<Content: View>: View {
                     .contentShape(Rectangle())
                     .onTapGesture(perform: onDismiss)
                     .accessibilityHidden(true)
+                let sheet = Self.sheet(kind)
+                let pen = sheet.stroke(MenuSheetColors.pen(hue: nil), style: ComposerPopoverMetrics.pen)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
                 content
-                    .padding(.top, 8)
-                    .padding(.bottom, 10)
+                    .padding(.top, ComposerPopoverMetrics.contentTop)
+                    .padding(.bottom, ComposerPopoverMetrics.contentBottom)
                     .frame(width: size.width, height: size.height)
-                    .background { PaperSheet(seed: kind == .stickers ? 53 : 59) }
-                    .clipShape(MenuSheetShape(seed: kind == .stickers ? 53 : 59))
-                    .scaleEffect(shown ? 1 : 0.96, anchor: kind == .stickers ? .bottomTrailing : .bottomLeading)
+                    // ``PaperSheet``'s paper behind; the pen behind what the attach sheet holds, over the stickers.
+                    .background {
+                        ZStack {
+                            sheet.fill(paper ?? MenuSheetColors.paper(hue: nil))
+                            if kind == .attach { pen }
+                        }
+                        .accessibilityHidden(true)
+                    }
+                    .overlay { if kind != .attach { pen } }
+                    .clipShape(sheet)
+                    // Only the sticker sheet grows into place: a transform over the picker, even one at rest, leaves it
+                    // taking no click on the Mac (as a view over it does, above).
+                    .scaleEffect(shown || kind == .attach ? 1 : 0.96, anchor: kind == .stickers ? .bottomTrailing : .bottomLeading)
                     .opacity(shown ? 1 : 0)
-                    .offset(x: max(12, x), y: y)
+                    // Laid where it hangs, never moved there: an offset is a transform too.
+                    .padding(.leading, max(12, x))
+                    .padding(.top, y)
             }
         }
         .ignoresSafeArea()
@@ -1440,3 +1638,4 @@ nonisolated enum ComposerGrowth {
         return max(least, capsule - riding - 2 * padding)
     }
 }
+

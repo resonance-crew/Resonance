@@ -54,6 +54,7 @@ import com.resonance.design.generated.Tokens
 import com.resonance.design.generated.ResonanceColors
 import com.resonance.design.generated.LocalResonanceColors
 import com.resonance.design.toPath
+import com.resonance.geometry.PathCommand
 import com.resonance.geometry.wavyVertical
 import com.resonance.kit.l10n.L10n
 import kotlin.math.max
@@ -238,7 +239,8 @@ private fun paneRuleRun(from: Float, to: Float, seed: Double, cx: Float, d: Floa
 }
 
 /**
- * Where the scrim of a message held in the thread pane lies (round 17 review D2): it starts at the rule between the
+ * Where the rule beside the thread pane lies, for what reaches back to it: a line across the pane ([lineLead]), and the
+ * scrim of a message held in the thread pane (round 17 review D2) — it starts at the rule between the
  * panes, not at the pane's own edge 12 past it — no undimmed strip between the rule and the dimmed thread. In the
  * detail pane's own frame (px; its pages are laid out from a status bar's height above the pane's top, under the
  * header's [header] row): the pane itself from its top (its bar's paper lies over the scrim there), and the 12 beside
@@ -262,8 +264,52 @@ internal class PaneScrimEdge(private val status: Dp, private val header: Dp) {
         }
     }
 
+    /**
+     * Where a line across the pane at [y] (px of the pane's frame, [size] px large) starts to meet the rule (round 24
+     * part 3 §C2: the attach panel's top pen line): this far before the pane's start (px) — back across the gap to the
+     * rule's centre where the line crosses its wave, the very curve [PaneRule] draws, but [PaneLeadTuck], so its round
+     * cap ends inside the rule's stroke, as the pane bar's line does.
+     */
+    fun lineLead(y: Float, size: Size, d: Float): Float {
+        val g = paneRuleGeometry(status.value, size.height / d + header.value)
+        val swing = paneRuleSwing(g.junction, g.bottom, PaneRuleLowerSeed, y / d + header.value)
+        return (PaneGap.value - swing - PaneLeadTuck.value) * d
+    }
+
+    /** How far before the pane's start what meets the rule may draw: the gap and the wave's farthest swing. */
+    val reach: Dp get() = PaneGap + PaneRuleAmp
+
     override fun equals(other: Any?) = other is PaneScrimEdge && other.status == status && other.header == header
     override fun hashCode() = status.hashCode() * 31 + header.hashCode()
+}
+
+/**
+ * How far one run of the rule ([paneRuleRun], [from] → [to], dp from the window's top) swings off its centre line at
+ * [y] (dp; clamped to the run), in dp: each turn eases from one point to the next as y runs on evenly (its handles sit
+ * a third of the way down, straight above and below each point), so its x there is exactly `x0 + (x1 − x0)(3t² − 2t³)`.
+ */
+internal fun paneRuleSwing(from: Float, to: Float, seed: Double, y: Float): Float {
+    val h = to - from
+    if (h <= 0f) return 0f
+    val run = wavyVertical(h.toDouble(), seed, PaneRuleAmp.value.toDouble(), max(2, (h / 34).roundToInt()))
+    val at = (y - from).toDouble().coerceIn(0.0, h.toDouble())
+    var x0 = 0.0
+    var y0 = 0.0
+    for (c in run) {
+        when (c) {
+            is PathCommand.Move -> { x0 = c.x; y0 = c.y }
+            is PathCommand.Cubic -> {
+                if (at <= c.y) {
+                    val t = if (c.y > y0) (at - y0) / (c.y - y0) else 1.0
+                    return (x0 + (c.x - x0) * t * t * (3 - 2 * t)).toFloat()
+                }
+                x0 = c.x
+                y0 = c.y
+            }
+            else -> {}
+        }
+    }
+    return x0.toFloat()
 }
 
 /**

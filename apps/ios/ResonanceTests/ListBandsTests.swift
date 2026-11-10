@@ -30,6 +30,46 @@ import Testing
         return (top, bottom.reversed())
     }
 
+    /// Round 24, part 4 (the owner on an iPad's notifications: 「左邊、右邊，它就要這個區塊就要切斷了」): a wide window's
+    /// band is cut at its frame's sides — the reading column — its corners rounded; its curves keep every swing. A
+    /// phone's runs on as it was.
+    @Test func aWideWindowsBandIsCutAtTheColumnWithRoundedCorners() {
+        let rect = CGRect(x: 0, y: 0, width: 720, height: 76)
+        let open = BandShape(top: "a", bottom: "b").path(in: rect)
+        let cut = BandShape(top: "a", bottom: "b", cut: true).path(in: rect)
+        // Open: the band's corners are its own (the curves meet the ends flat), so a point just inside one is in it.
+        #expect(open.contains(CGPoint(x: 1, y: 1.5)))
+        // Cut: the corner is rounded away, the side and the middle stay.
+        #expect(!cut.contains(CGPoint(x: 1, y: 1.5)))
+        #expect(!cut.contains(CGPoint(x: 719, y: 74.5)))
+        #expect(cut.contains(CGPoint(x: 1, y: 38)))
+        #expect(cut.contains(CGPoint(x: 360, y: 38)))
+        // Never past the column's sides, and every swing of the curves kept between the corners.
+        let box = cut.boundingRect
+        #expect(box.minX >= -0.01 && box.maxX <= 720.01)
+        // A point on a curve itself (the intersection redraws it) may fall either way: the rows sampled stand off the frame's
+        // own lines (0 and 76, where the open band's ends run flat), and a point within 0.3 of an edge is left out.
+        var differ: [String] = []
+        for i in 0...200 {
+            let x = 40 + Double(i) * 3.2
+            for y in stride(from: -2.9, through: 78.9, by: 0.5) where open.contains(CGPoint(x: x, y: y)) != cut.contains(CGPoint(x: x, y: y)) {
+                let onEdge = open.contains(CGPoint(x: x, y: y - 0.3)) != open.contains(CGPoint(x: x, y: y + 0.3))
+                if !onEdge { differ.append("(\(x), \(y))") }
+            }
+        }
+        #expect(differ.isEmpty, "\(differ.count): \(differ.prefix(8))")
+    }
+
+    /// Round 24, part 4 (the owner on an iPad in a window: 「header 會被遮擋住」): only a phone's brand bar slides up under
+    /// the status bar as its list is read down; an iPad's (or the Mac's) stays in a window narrow enough for a phone's
+    /// layout, and a tablet's header never slides.
+    @Test func onlyAPhonesBrandBarSlidesAway() {
+        #expect(BrandBarTravel.of(topTabs: false, phone: true) == 48)
+        #expect(BrandBarTravel.of(topTabs: false, phone: false) == 0)
+        #expect(BrandBarTravel.of(topTabs: true, phone: false) == 0)
+        #expect(BrandBarTravel.of(topTabs: true, phone: true) == 0)
+    }
+
     @Test func neighboursShareOneCurveSeededByTheLowerRow() {
         let w = 402.0
         // Row a (64 tall) over row b (90 tall): a's bottom curve is b's top curve, wherever each is drawn.
@@ -184,8 +224,11 @@ import Testing
         // Edge to edge, the content 20 in; the first row 4 under the bar's foot, its face (40, the row's 12 in) at 16.
         #expect(phone.leading == 0 && phone.trailing == 0 && phone.rowInset == 20)
         #expect(phone.top == 4 && phone.top + ListBands.rowPad == 16)
-        // The invite atop: 20 from the edges, its pen line where the first face would stand.
-        #expect(phone.inviteInset == 20 && phone.top + phone.inviteTop == 16)
+        // The invite atop (round 24): a grey band under the bar's pen line, its words where the rows' content is and 20
+        // under the bar's foot, the first row as far under its foot as under the bar's — on a phone, whoever runs it.
+        #expect(phone.invite(onMac: false) == .band && phone.invite(onMac: true) == .band)
+        #expect(phone.leading + phone.rowInset == 20 && phone.inviteGap(.band) == phone.top)
+        #expect(phone.top + phone.inviteWordsTop == 20)
 
         // An iPad (a medium window, two panes) and the Mac: as they were — the page's 16 / 18, the row's 14, 16
         // under the bar, the blob.
@@ -193,7 +236,12 @@ import Testing
             let wide = ConversationsFrame.of(layout)
             #expect(!wide.bands)
             #expect(wide.leading == 16 && wide.trailing == 18 && wide.rowInset == 14 && wide.top == 16)
-            #expect(wide.inviteInset == 0 && wide.inviteTop == 4)
+            // The invite (round 24, by the kind of device): an iPad's a borderless card in the rows' column, the first
+            // row 12 under it; the Mac's a band, its words 20 under the header's foot and in the rows' column, the first
+            // row as far under its foot as under the header's.
+            #expect(wide.invite(onMac: false) == .card && wide.inviteGap(.card) == 12)
+            #expect(wide.invite(onMac: true) == .band && wide.inviteGap(.band) == wide.top)
+            #expect(wide.top + wide.inviteWordsTop == 20 && wide.leading + wide.rowInset == 30)
         }
         // An iPad in Slide Over is a compact window: a phone's.
         #expect(ConversationsFrame.of(LayoutClass.of(375)).bands)
@@ -205,5 +253,77 @@ import Testing
         #expect(ConversationsFrame.key(starter: "carol") == "s:carol")
         // The last conversation's band ends on the starters' label when there are starters.
         #expect(ListBands.below(["c:1", "c:2"], after: ConversationsFrame.startersKey) == ["c:2", "starters"])
+    }
+
+    /// Round 24 (the owner: 「這個線都應該要接在一起，底色要填滿」): the Mac list's invite band joined to the header's
+    /// line — its grey laid from under the header's wave down over the band's top, whatever the list does.
+    @MainActor @Test func theMacsBandReachesUpUnderTheHeader() {
+        // The band's paper and its muted words on it: the thread's grey, the ink that clears 4.5:1 there.
+        #expect(AsideBand.paper == Tokens.bubbleTheirs && AsideBand.muted == Tokens.linkCardMuted)
+        // In a box laid as the rule's (its top 8 over the header's foot), the band 16 under the foot and 130 tall.
+        let band = CGRect(x: 0, y: PaneLines.tuck + 16, width: Tokens.msgListW, height: 130)
+        // At rest: from the box's top (under the wave) to a point over the band's top.
+        #expect(PaneBand.listPaper(band: band) == 0..<(PaneLines.tuck + 17))
+        // Pulled 40 down: the gap over it is grey too.
+        #expect(PaneBand.listPaper(band: band.offsetBy(dx: 0, dy: 40)) == 0..<(PaneLines.tuck + 57))
+        // Scrolled up under the header: down to the header's foot, while the band reaches it…
+        #expect(PaneBand.listPaper(band: band.offsetBy(dx: 0, dy: -60)) == 0..<PaneLines.tuck)
+        #expect(PaneBand.listPaper(band: band.offsetBy(dx: 0, dy: -150)) == 0..<(PaneLines.tuck - 4))
+        // …and nothing once it has gone up past the box.
+        #expect(PaneBand.listPaper(band: band.offsetBy(dx: 0, dy: -160)) == nil)
+    }
+
+    /// Round 24 review: the band's papers (the header's join, the gutter) are there exactly while the list draws the
+    /// band — not while the band is on screen: a page pushed over the panes, or another tab, hides the band and brings
+    /// it back with its geometry unchanged, so nothing places it again, and its place must still be there. They come
+    /// and go with the band's own 0.2 s fade when the invite comes or goes, at once when the list shows or reads its rows.
+    @MainActor @Test func theMacsBandKeepsItsPapersUntilTheListLetsItGo() {
+        typealias Lists = PaneBand.ListState
+        let reading = Lists(loaded: false, banded: false), bare = Lists(loaded: true, banded: false)
+        let banded = Lists(loaded: true, banded: true)
+        let at = CGRect(x: 0, y: PaneLines.tuck + 16, width: Tokens.msgListW, height: 130)
+
+        // The list appears with its band: told first, then laid out…
+        let band = PaneBand()
+        band.listChanged(from: banded, to: banded)
+        #expect(band.frame == nil)
+        band.place(at, reach: PaneLines.gutter)
+        #expect(band.frame == at && band.reach == PaneLines.gutter)
+        // …or laid out first, then told.
+        let early = PaneBand()
+        early.place(at, reach: PaneLines.gutter)
+        #expect(early.frame == nil)
+        early.listChanged(from: banded, to: banded)
+        #expect(early.frame == at && early.reach == PaneLines.gutter)
+
+        // It scrolls; then a page is pushed over the panes and popped — the band says nothing, the list nothing new
+        // (told again as it appears, it is as it was): the papers stay where the band last was.
+        let scrolled = at.offsetBy(dx: 0, dy: -30)
+        band.place(scrolled, reach: PaneLines.gutter)
+        band.listChanged(from: banded, to: banded)
+        #expect(band.frame == scrolled && band.reach == PaneLines.gutter)
+
+        // The invite answered (不用了, 好，通知我): the papers go, and a word from the band fading out lays nothing.
+        band.listChanged(from: banded, to: bare)
+        #expect(band.frame == nil && band.reach == 0)
+        band.place(scrolled, reach: PaneLines.gutter)
+        #expect(band.frame == nil)
+        // Offered again: the new band lays them where it is.
+        band.listChanged(from: bare, to: banded)
+        band.place(at, reach: PaneLines.gutter)
+        #expect(band.frame == at)
+        // The rows read again: gone with the band, and back with it once they are in.
+        band.listChanged(from: banded, to: reading)
+        #expect(band.frame == nil)
+        band.listChanged(from: reading, to: banded)
+        band.place(at, reach: PaneLines.gutter)
+        #expect(band.frame == at)
+
+        // The band's fade when the invite comes or goes; none as the list first shows, or as its rows come and go.
+        #expect(PaneBand.arrival(from: bare, to: banded) == PaneBand.fade)
+        #expect(PaneBand.arrival(from: banded, to: bare) == PaneBand.fade)
+        #expect(PaneBand.arrival(from: banded, to: banded) == nil)
+        #expect(PaneBand.arrival(from: reading, to: banded) == nil)
+        #expect(PaneBand.arrival(from: banded, to: reading) == nil)
     }
 }

@@ -29,6 +29,97 @@ import Testing
         #expect(catalog.name(StickerRef(pack: "later", id: "wave"), .en) == nil)
     }
 
+    // MARK: Round 24 — where each sticker's drawing lies
+
+    @Test func theCatalogSaysWhereEachStickersDrawingLiesInItsSquare() throws {
+        let catalog = try #require(Self.repoCatalog)
+        // pip/haha: the top 28 % of its square is empty paper over every frame; its key pose sits lower still.
+        let haha = StickerRef(pack: "pip", id: "haha")
+        #expect(catalog.box(haha) == StickerBox(left: 0.037, top: 0.278, right: 0.965, bottom: 0.972))
+        #expect(catalog.poseBox(haha) == StickerBox(left: 0.035, top: 0.332, right: 0.934, bottom: 0.973))
+        // Every sticker says both, inside its square; a sticker the catalog doesn't know fills it.
+        for ref in catalog.all {
+            #expect(catalog.box(ref) != .full && catalog.poseBox(ref) != .full, "\(ref.pack)/\(ref.id)")
+        }
+        #expect(catalog.box(StickerRef(pack: "later", id: "wave")) == .full)
+        #expect(catalog.poseBox(StickerRef(pack: "later", id: "wave")) == .full)
+    }
+
+    @Test func aCatalogWithoutBoxesOrWithBadOnesIsStillRead() throws {
+        // A catalog bundled before the boxes, and one whose boxes aren't four fractions in order: every sticker is read,
+        // its drawing taken to fill the square.
+        let json = """
+        {"version":1,"packs":[{"id":"pip","name":{"zh-TW":"點點"},"icon":"pip/icon.webp","stickers":[
+          {"id":"hi","name":{"zh-TW":"嗨"}},
+          {"id":"a","name":{"zh-TW":"a"},"box":[0.1,0.2,0.9],"poseBox":"x"},
+          {"id":"b","name":{"zh-TW":"b"},"box":[0.9,0.2,0.1,0.8],"poseBox":[0,0,1,1.5]},
+          {"id":"c","name":{"zh-TW":"c"},"box":[0,0.25,1,1],"poseBox":[0.1,0.3,0.9,0.95]}]}]}
+        """
+        let catalog = try #require(StickerCatalog.decode(Data(json.utf8)))
+        #expect(catalog.all.count == 4)
+        for id in ["hi", "a", "b"] {
+            #expect(catalog.box(StickerRef(pack: "pip", id: id)) == .full)
+            #expect(catalog.poseBox(StickerRef(pack: "pip", id: id)) == .full)
+        }
+        #expect(catalog.box(StickerRef(pack: "pip", id: "c")) == StickerBox(left: 0, top: 0.25, right: 1, bottom: 1))
+        #expect(StickerBox.from([0, 0, 1]) == nil && StickerBox.from([0.2, 0.5, 0.8, 0.5]) == nil && StickerBox.from(nil) == nil)
+    }
+
+    @Test func aStickerInTheThreadTakesTheRoomOfItsDrawingNotItsSquare() {
+        // pip/haha at 128: no frame draws above 27.8 % — the box starts 2 % over the drawing, ends 2 % under it.
+        let haha = StickerBox(left: 0.037, top: 0.278, right: 0.965, bottom: 0.972)
+        #expect(abs(StickerTrim.top(haha) - 0.258) < 1e-9)
+        #expect(abs(StickerTrim.height(haha) - 0.734) < 1e-9)
+        // The drawing (the square moved up by top) lies inside the box with the margin over and under it.
+        let side = 128.0
+        let drawnTop = haha.top * side - StickerTrim.top(haha) * side
+        let drawnBottom = haha.bottom * side - StickerTrim.top(haha) * side
+        #expect(abs(drawnTop - StickerTrim.margin * side) < 1e-9)
+        #expect(abs(StickerTrim.height(haha) * side - drawnBottom - StickerTrim.margin * side) < 1e-9)
+        // A drawing touching the square's top and foot: nothing is taken, never more than the square.
+        #expect(StickerTrim.top(.full) == 0 && StickerTrim.height(.full) == 1)
+        let tall = StickerBox(left: 0.1, top: 0.01, right: 0.9, bottom: 0.99)
+        #expect(StickerTrim.top(tall) == 0 && StickerTrim.height(tall) == 1)
+    }
+
+    @Test func aStickerAnsweringAQuoteRisesByItsDrawingAtRestNotByItsBox() {
+        // pip/haha: its frames reach 27.8 % down, its key pose only 33.2 % — so the pose starts 7.4 % of the side into
+        // the layout box (which starts 2 % over the frames), the paper a quote's overlap rises past (the web's
+        // stickerArtTop).
+        let box = StickerBox(left: 0.037, top: 0.278, right: 0.965, bottom: 0.972)
+        let pose = StickerBox(left: 0.035, top: 0.332, right: 0.934, bottom: 0.973)
+        #expect(abs(StickerTrim.artTop(box, pose: pose) - (0.332 - 0.258)) < 1e-9)
+        // pip/hi: it jumps higher than it rests.
+        let hiBox = StickerBox(left: 0.164, top: 0.141, right: 0.813, bottom: 0.919)
+        let hiPose = StickerBox(left: 0.168, top: 0.336, right: 0.816, bottom: 0.922)
+        #expect(abs(StickerTrim.artTop(hiBox, pose: hiPose) - (0.336 - 0.121)) < 1e-9)
+        // A pose at the top of its frames starts in the margin; one over the box's top (a square drawn from its top)
+        // is never above it: never below 0. Unknown: the square, no paper.
+        #expect(abs(StickerTrim.artTop(StickerBox(left: 0, top: 0.3, right: 1, bottom: 0.9),
+                                       pose: StickerBox(left: 0, top: 0.3, right: 1, bottom: 0.9)) - StickerTrim.margin) < 1e-9)
+        #expect(StickerTrim.artTop(StickerBox(left: 0, top: 0.01, right: 1, bottom: 0.9),
+                                   pose: StickerBox(left: 0, top: 0.0, right: 1, bottom: 0.9)) == 0)
+        #expect(StickerTrim.artTop(.full, pose: .full) == 0)
+    }
+
+    @Test func aQuotedStickersPoseIsCentredAndAsLargeAsFitsInItsSquare() {
+        // pip/haha's pose sits low (its middle at 65 % of the square): drawn 0.92 / 0.899 larger, moved up to the middle.
+        let pose = StickerBox(left: 0.035, top: 0.332, right: 0.934, bottom: 0.973)
+        let k = StickerQuoteFit.scale(pose)
+        #expect(abs(k - 0.92 / 0.899) < 1e-9)
+        let offset = StickerQuoteFit.offset(pose)
+        // The pose's middle, scaled about the square's middle and moved, lands on the square's middle.
+        #expect(abs(0.5 + k * (pose.midX - 0.5) + offset.x - 0.5) < 1e-9)
+        #expect(abs(0.5 + k * (pose.midY - 0.5) + offset.y - 0.5) < 1e-9)
+        #expect(offset.y < -0.15)
+        // Its longer side takes 92 % of the square (4 % each side).
+        #expect(abs(k * max(pose.width, pose.height) - StickerQuoteFit.fill) < 1e-9)
+        // A pose already filling the square is never drawn smaller, only centred; the whole square stays as it is.
+        let wide = StickerBox(left: 0, top: 0.02, right: 0.99, bottom: 0.96)
+        #expect(StickerQuoteFit.scale(wide) == 1)
+        #expect(StickerQuoteFit.scale(.full) == 1 && StickerQuoteFit.offset(.full) == (x: 0, y: 0))
+    }
+
     @Test func aStickerFieldIsReadOnlyWhenItsIdsAreOnesTheContractTakes() {
         #expect(StickerRef.from(["pack": "pip", "id": "hi"]) == StickerRef(pack: "pip", id: "hi"))
         #expect(StickerRef.from(["pack": "Pip", "id": "hi"]) == nil)

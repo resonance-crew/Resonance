@@ -16,9 +16,10 @@ import Testing
         // ☺: the panel, laid out where the keyboard is (the thread ignores the keyboard while it shows).
         #expect(panels.toggleStickers() == false)
         #expect(panels.shown == .stickers && panels.stickersOpen && panels.ignoresKeyboard)
-        // ⌨: the keyboard is asked for; the panel stays under it until it is up — nothing dips between them.
+        // ⌨: the keyboard is asked for; the panel stays under it until it is up — nothing dips between them — and ⌨
+        // with it (round 24 §C: a second tap meanwhile asks again, never the panel back).
         #expect(panels.toggleStickers() == true)
-        #expect(panels.isOpen && panels.awaitingKeyboard && !panels.stickersOpen)
+        #expect(panels.isOpen && panels.awaitingKeyboard && panels.stickersOpen)
         panels.keyboardShown()
         #expect(!panels.isOpen && !panels.ignoresKeyboard)
         // A keyboard coming up with no panel waiting changes nothing.

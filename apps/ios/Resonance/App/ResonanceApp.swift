@@ -14,6 +14,9 @@ struct ResonanceApp: App {
         let config = AppConfig.current
         FirebaseBootstrap.configure(config)
         _session = State(initialValue: SessionStore(config: config))
+        // GameController finds a hardware keyboard on its own time: watched from launch, an iPad's first ☺ knows of one
+        // (round 24, part 3 §A2 — ``ComposerOpens``).
+        HardwareKeyboard.watch()
         #if DEBUG
         if VisualCapture.on { UIView.setAnimationsEnabled(false) }
         #endif

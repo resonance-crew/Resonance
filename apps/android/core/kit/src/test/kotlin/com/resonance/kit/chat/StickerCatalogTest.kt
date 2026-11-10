@@ -62,6 +62,91 @@ class StickerCatalogTest {
         assertNull(StickerCatalog.parse("not json"))
     }
 
+    @Test fun eachStickerSaysWhereItsDrawingSitsInItsSquareAndAnOlderCatalogReadsAsTheWholeSquare() {
+        // 點點's 哈哈: the top 28 % of its square is empty paper in every frame (round 24).
+        val haha = catalog.find(ChatSticker("pip", "haha"))!!
+        assertEquals(StickerBox(0.037f, 0.278f, 0.965f, 0.972f), haha.box)
+        assertEquals(StickerBox(0.035f, 0.332f, 0.934f, 0.973f), haha.poseBox)
+        catalog.all.forEach { s ->
+            assertTrue(s.box != StickerBox.Whole && s.poseBox != StickerBox.Whole, "${s.pack}/${s.id} has its boxes")
+            assertTrue(s.box.top < s.box.bottom && s.box.left < s.box.right, "${s.pack}/${s.id}")
+        }
+        // A catalog from before round 24 (an older bundle, the site's then), or numbers that make no box: the whole square.
+        val old = StickerCatalog.parse("""{"version":1,"packs":[{"id":"ok","stickers":[
+            {"id":"a"},
+            {"id":"b","box":[0.1,0.2,0.9],"poseBox":[0.5,0.2,0.4,0.9]},
+            {"id":"c","box":[-0.1,0.2,0.9,0.9],"poseBox":[0.1,0.2,0.9,1.5]}
+        ]}]}""")!!
+        old.all.forEach {
+            assertEquals(StickerBox.Whole, it.box, it.id)
+            assertEquals(StickerBox.Whole, it.poseBox, it.id)
+        }
+    }
+
+    @Test fun theThreadTakesRoomForTheDrawingAndTwoPercentAboveAndBelowItInsideTheSquare() {
+        val haha = catalog.find(ChatSticker("pip", "haha"))!!.box
+        assertEquals(0.258f, haha.trimTop, 1e-4f)
+        assertEquals(0.992f, haha.trimBottom, 1e-4f)
+        assertEquals(0.734f, haha.trimHeight, 1e-4f)
+        // Never taller than the square, never above its top: a drawing that reaches its edges takes it whole.
+        val edge = StickerBox(0f, 0.01f, 1f, 0.995f)
+        assertEquals(0f, edge.trimTop)
+        assertEquals(1f, edge.trimHeight)
+        assertEquals(1f, edge.trimBottom)
+        assertEquals(0f, StickerBox.Whole.trimTop)
+        assertEquals(1f, StickerBox.Whole.trimHeight)
+        // The web's `stickerTrim` and iOS's `StickerTrim`, to the number: max(0, top − 2 %) and min(1, height + 4 %).
+        // 牽牽's 在嗎？ starts 1.9 % down: its room starts at the square's top and is still its drawing and both margins
+        // tall (0.998, not the 0.997 a room ended at its drawing's foot + 2 % would be).
+        val anyone = catalog.find(ChatSticker("twine", "anyone-there"))!!.box
+        assertEquals(0f, anyone.trimTop)
+        assertEquals(0.977f - 0.019f + 0.04f, anyone.trimHeight, 1e-4f)
+        // 點點's 謝謝你！ reaches 1.9 % from the foot: its room ends a hair past it (where the square is clear), 0.882 tall.
+        val thankYou = catalog.find(ChatSticker("pip", "thank-you"))!!.box
+        assertEquals(0.119f, thankYou.trimTop, 1e-4f)
+        assertEquals(0.882f, thankYou.trimHeight, 1e-4f)
+        assertEquals(1.001f, thankYou.trimBottom, 1e-4f)
+        catalog.all.forEach { s ->
+            val b = s.box
+            assertTrue(b.trimTop in 0f..b.top && b.trimHeight in 0f..1f, "${s.pack}/${s.id}")
+            // Every frame inside the room, and the room no more than a hair past the square.
+            assertTrue(b.bottom <= b.trimBottom && b.trimBottom <= 1.002f, "${s.pack}/${s.id}")
+        }
+    }
+
+    @Test fun aStickerAnsweringAQuoteComesUpOverItByItsKeyPosesDrawing() {
+        // The web's `stickerArtTop`: where the key pose starts in the room, of the side.
+        val hi = catalog.find(ChatSticker("pip", "hi"))!!
+        assertEquals(hi.poseBox.top - (hi.box.top - StickerBox.TRIM_MARGIN), hi.artTop, 1e-4f)
+        // A key pose as high as its frames: the margin alone; a sticker without numbers: none.
+        val haha = catalog.find(ChatSticker("pip", "haha"))!!
+        assertEquals(StickerBox.TRIM_MARGIN, haha.copy(poseBox = haha.box).artTop, 1e-4f)
+        assertEquals(0f, haha.copy(box = StickerBox.Whole, poseBox = StickerBox.Whole).artTop)
+        // Never negative, should a pose start above the room.
+        assertEquals(0f, haha.copy(poseBox = StickerBox(0f, 0.1f, 1f, 0.9f)).artTop)
+    }
+
+    @Test fun aQuotedPoseStandsInTheMiddleAsLargeAsFitsWithFourPercentToSpareNeverSmallerThanItsSquare() {
+        fun centre(b: StickerBox) = (b.quoteX + b.quoteScale * (b.left + b.right) / 2) to (b.quoteY + b.quoteScale * (b.top + b.bottom) / 2)
+        val pose = catalog.find(ChatSticker("pip", "haha"))!!.poseBox
+        val (x, y) = centre(pose)
+        assertEquals(0.5f, x, 1e-4f)
+        assertEquals(0.5f, y, 1e-4f)
+        // Its longer side (its width, 0.899) fills 92 % of the quote.
+        assertEquals(0.92f, pose.quoteScale * maxOf(pose.width, pose.height), 1e-4f)
+        // Its drawing then lies within the quote, 4 % in at least from every edge.
+        assertTrue(pose.quoteY + pose.quoteScale * pose.top >= 0.04f - 1e-4f)
+        assertTrue(pose.quoteY + pose.quoteScale * pose.bottom <= 0.96f + 1e-4f)
+        // A pose already larger than that is only centred, never shrunk; the whole square stays as it is.
+        val big = StickerBox(0.01f, 0.1f, 0.99f, 0.9f)
+        assertEquals(1f, big.quoteScale)
+        assertEquals(0.5f, centre(big).first, 1e-4f)
+        assertEquals(0.5f, centre(big).second, 1e-4f)
+        assertEquals(1f, StickerBox.Whole.quoteScale)
+        assertEquals(0f, StickerBox.Whole.quoteX)
+        assertEquals(0f, StickerBox.Whole.quoteY)
+    }
+
     private class Device : StickerRecents.Storage {
         val values = HashMap<String, String>()
         override fun read(account: String): String? = values[account]

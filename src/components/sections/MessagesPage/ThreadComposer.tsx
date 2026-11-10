@@ -23,11 +23,9 @@ import { OrganicMenu } from '@/components/molecules/OrganicMenu/OrganicMenu';
 import { useToast } from '@/components/providers/ToastProvider';
 import { preparePicture, UnsupportedImage, type PreparedPicture } from '@/lib/chat/preparePicture';
 import { INK } from '@/lib/design/strokes';
-import { wavyVertical } from '@/lib/design/wavyPath';
 import { wobCircle } from '@/lib/design/wobCircle';
 import { wobRect } from '@/lib/design/wobRect';
 import { useEdgeFades } from '@/lib/hooks/useEdgeFades';
-import { useElementSize } from '@/lib/hooks/useElementSize';
 import { useOpenedOnce } from '@/lib/hooks/useOpenedOnce';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { rememberedKeyboardHeight, useRememberKeyboardHeight } from '@/lib/hooks/useKeyboardHeight';
@@ -37,11 +35,12 @@ import type { Card, MessageReplyQuote } from '@/lib/db/types';
 import { ALBUM_MAX, type ThreadDraft } from '@/lib/data/thread';
 import { forgetChatDraft, keepChatDraft, readChatDraft } from '@/lib/data/chatDrafts';
 import { noteRecentSticker, readRecentStickers } from '@/lib/data/stickerRecents';
-import { stickerName, stickerPath, type StickerRef } from '@/lib/stickers/catalog';
+import { stickerName, type StickerRef } from '@/lib/stickers/catalog';
 import { ComposerCapsule, type CapsuleSegment } from './ComposerCapsule';
 import { StickerPanel } from './StickerPanel';
 import { StickerPicker } from './StickerPicker';
 import { StickerPopover } from './StickerPopover';
+import { QuotedSticker } from './StickerPart';
 import styles from './Thread.module.css';
 
 // The card picker loads when it is first opened, not with the thread.
@@ -616,13 +615,18 @@ export function ThreadComposer({
           : replyingTo.text || t('stickerUnknown')
         : replyingTo.text || (replyingTo.image ? t('replyImage') : t('replyCard'));
   // What the answered message shows, small, before the words (Telegram's photo reply): a sticker's key frame,
-  // quieter, or its picture or card's cover.
+  // quieter, its drawing centred in the thumbnail (round 24), or its picture or card's cover.
   const replyThumb =
     replyingTo && !replyingTo.unsent
       ? replyingTo.sticker && replySticker
-        ? { src: stickerPath(replyingTo.sticker, 'thumb'), sticker: true }
+        ? (
+            <QuotedSticker key={`${replyingTo.sticker.pack}/${replyingTo.sticker.id}`} sticker={replyingTo.sticker} className={styles.carrySticker} />
+          )
         : replyMedia
-          ? { src: replyMedia, sticker: false }
+          ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className={styles.carryMedia} src={replyMedia} alt="" draggable={false} />
+            )
           : null
       : null;
   // From its second line — or with anything riding — the send segment is a block on the last row; from the third ⤢
@@ -636,13 +640,8 @@ export function ThreadComposer({
     <>
       {replyingTo && (
         <CarryRow
-          mark={<CarryRule />}
-          media={
-            replyThumb && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img className={replyThumb.sticker ? styles.carrySticker : styles.carryMedia} src={replyThumb.src} alt="" draggable={false} />
-            )
-          }
+          mark={<CarryReplyGlyph />}
+          media={replyThumb}
           label={replyHandle ? t('replyingTo', { handle: replyHandle }) : t('replyingToSelf')}
           detail={replyDetail}
           onWords={onJumpToReply ? () => onJumpToReply(replyingTo.id) : undefined}
@@ -896,33 +895,13 @@ function mark(el: HTMLElement, attr: string, on: boolean) {
   } else if (el.hasAttribute(attr)) el.removeAttribute(attr);
 }
 
-/** The reply rule's height before it is measured: the row's 44 less 8 at each end (20 in a short window, the CSS). */
-const CARRY_RULE_H = 28;
-
 /**
- * A reply's mark: a short wavy pen rule in terracotta, over the ＋'s column — the apps' ReplyRule, drawn over the
- * box's whole height (the row's less 16): seed 31, swinging 1.1 either side, a turn every 9 or so (3 at least),
- * one pen (INK) with round ends.
+ * A reply's mark (round 24, the owner's: the vertical line read oddly): the reply glyph — the held message's 回覆,
+ * the arrow rising and turning back left — 20 (18 in a short window, the CSS), one pen (INK) in terracotta, centred
+ * in the ＋'s column.
  */
-function CarryRule() {
-  const ref = useRef<HTMLSpanElement>(null);
-  const { h: measured } = useElementSize(ref);
-  const h = measured || CARRY_RULE_H;
-  const d = useMemo(() => wavyVertical(h, 31, 1.1, Math.max(3, Math.round(h / 9))), [h]);
-  return (
-    <span ref={ref} className={styles.carryRule} aria-hidden>
-      <svg viewBox={`-3 0 6 ${h}`} preserveAspectRatio="none" overflow="visible">
-        <path
-          d={d}
-          fill="none"
-          stroke="var(--color-terracotta)"
-          strokeWidth={INK}
-          strokeLinecap="round"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
-    </span>
-  );
+function CarryReplyGlyph() {
+  return <Icon name="reply" size={20} color="var(--color-terracotta)" strokeWidth={INK} className={styles.carryReply} />;
 }
 
 /** Keeps the field's focus through a press (round 23): a phone's keyboard stays up, nothing under it moves. */
@@ -930,7 +909,7 @@ const keepFocus = (e: { preventDefault(): void }) => e.preventDefault();
 
 /**
  * One thing riding the next message, inside the capsule over the text's line (round 23, Telegram's way): the
- * capsule's three columns run through it — its mark (the reply's wavy rule, a note's glyph, a card's cover) in
+ * capsule's three columns run through it — its mark (the reply's arrow, a note's glyph, a card's cover) in
  * the ＋'s, whom or what (and a line of it) where the text starts, a reply's picture or sticker first when it has
  * one, and its ✕ centred over Send. A reply's words go to the message it answers (`onWords`); the others' write
  * in the field (the stack's press).

@@ -8,11 +8,11 @@ import android.os.Looper
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.RememberObserver
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -22,31 +22,77 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import com.resonance.app.Stickers
 import com.resonance.design.prefersReducedMotion
 import com.resonance.kit.chat.PlaybackLimiter
+import com.resonance.kit.chat.StickerBox
 import com.resonance.kit.chat.StickerCatalog
 import kotlinx.coroutines.flow.first
 import kotlin.math.roundToInt
 
 /**
  * A sticker's hero pose (round 22): the 256 px still, decoded once and kept ([Stickers.pose]) — what the
- * panel's grid, a quote and a sticker at rest show. Nothing while it is read (a cell keeps its place).
+ * panel's grid and a sticker at rest show. Nothing while it is read (a cell keeps its place).
  */
 @Composable
 internal fun StickerPose(sticker: StickerCatalog.Sticker, origin: String, modifier: Modifier = Modifier) {
-    val pose by produceState(Stickers.cachedPose(sticker), sticker) { if (value == null) value = Stickers.pose(sticker, origin) }
+    val pose by rememberStickerPose(sticker, origin)
     Box(modifier) { pose?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) } }
+}
+
+/**
+ * A sticker's pose standing for its message, small (round 24 §C): the composer's reply row, the quote over a reply —
+ * its square drawn so that its pose ([StickerCatalog.Sticker.poseBox]) stands in the middle, as large as fits with
+ * 4 % to spare and never smaller than the square ([com.resonance.kit.chat.StickerBox.quoteScale]): 點點, whose
+ * drawing fills only the square's lower part, no longer stands below the half. Cut at its box.
+ */
+@Composable
+internal fun QuotedStickerPose(sticker: StickerCatalog.Sticker, origin: String, modifier: Modifier = Modifier) {
+    val pose by rememberStickerPose(sticker, origin)
+    val fit = sticker.poseBox
+    Box(modifier.clipToBounds()) {
+        pose?.let {
+            Image(
+                it, null,
+                Modifier.fillMaxSize().graphicsLayer {
+                    transformOrigin = TransformOrigin(0f, 0f)
+                    scaleX = fit.quoteScale
+                    scaleY = fit.quoteScale
+                    translationX = fit.quoteX * size.width
+                    translationY = fit.quoteY * size.height
+                },
+                contentScale = ContentScale.Fit,
+            )
+        }
+    }
+}
+
+/**
+ * [sticker]'s key pose: the one kept in memory at once, else read ([Stickers.pose]) — and only ever [sticker]'s. Held
+ * per sticker (round 24 §A): a view that goes on to show another sticker — the composer's reply row when 回覆 is chosen
+ * on a second sticker — starts empty and reads that one's, where `produceState`'s value, kept across its keys and only
+ * read while empty, went on showing the first sticker's pose.
+ */
+@Composable
+internal fun rememberStickerPose(sticker: StickerCatalog.Sticker, origin: String): State<ImageBitmap?> {
+    val pose = remember(sticker) { mutableStateOf(Stickers.cachedPose(sticker)) }
+    LaunchedEffect(sticker) { if (pose.value == null) pose.value = Stickers.pose(sticker, origin) }
+    return pose
 }
 
 /** A pack's tab icon (the character's head). */
@@ -127,13 +173,38 @@ internal class StickerRun {
 }
 
 /**
+ * A sticker in the thread takes room for its drawing, not its square (round 24 §B, the owner: no empty paper above
+ * 點點): [size] wide (placed as the square is) and as tall as its [StickerBox.trimHeight] of [size] — the drawing of
+ * every frame ([box]) and 2 % above and below — with its [size] square laid [StickerBox.trimTop] of it up. What reaches
+ * past that room is clear in every frame, so nothing drawn is cut; taps, the hold, the reactions' chip at its foot and
+ * the face beside it go by the room.
+ */
+internal fun Modifier.stickerRoom(size: Dp, box: StickerBox): Modifier = layout { measurable, constraints ->
+    val side = size.roundToPx()
+    val square = measurable.measure(Constraints.fixed(side, side))
+    val (top, height) = stickerRoomPx(side, box)
+    layout(side.coerceIn(constraints.minWidth, constraints.maxWidth), height.coerceIn(constraints.minHeight, constraints.maxHeight)) { square.place(0, -top) }
+}
+
+/**
+ * How far up [side]'s square is laid in a sticker's room, and the room's height, in whole pixels ([stickerRoom]): the
+ * height its own [StickerBox.trimHeight] of the side, never the square's foot less the top (the web's and iOS's room —
+ * it may end a pixel past the foot, where the square is clear), at least one pixel, never more than the square.
+ */
+internal fun stickerRoomPx(side: Int, box: StickerBox): Pair<Int, Int> {
+    val top = (side * box.trimTop).roundToInt()
+    val height = (side * box.trimHeight).roundToInt().coerceIn(1, side.coerceAtLeast(1))
+    return top to height
+}
+
+/**
  * A sticker as the thread draws it (round 22 §4.5): no bubble, [size] square, standing on the page —
  * playing its file's two plays when [autoplay] says so as it is first placed on screen (its first sight this
  * session; a row the list composes ahead of the screen isn't placed, and neither plays nor takes a turn),
  * else resting on its hero pose (the thumb); [replays] bumped (a tap) plays it again from its first frame.
  * At most three play at once ([StickerPlayback]). The file is decoded once, the first time it plays, and
  * kept while the sticker is on screen: a replay starts the same drawable over. With the system's animations
- * off, the hero pose only.
+ * off, the hero pose only. It takes room for its drawing alone ([stickerRoom]).
  */
 @Composable
 internal fun PlayingSticker(
@@ -175,7 +246,7 @@ internal fun PlayingSticker(
         } else playing = true
     }
     Box(
-        modifier.size(size).onPlaced {
+        modifier.stickerRoom(size, sticker.box).onPlaced {
             if (!placed) {
                 placed = true
                 if (!still && autoplay()) playing = true

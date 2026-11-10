@@ -302,6 +302,31 @@ private fun StoryBand(
     )
 }
 
+/**
+ * A band of a list that is no card (round 24, the owner: an invite 「做成像是首頁這邊手機上文章…用水平分割線分割的區段…
+ * 裡面有填色」): [paper] edge to edge with the story bands' grain over everything, parted by the story bands' own
+ * wavy rule (wavyLine(200, seed, 1.4, 7), centred on the edge) in [pen]. [topRule] / [bottomRule] null: no rule
+ * there — under the bar (its pen line is the top) or over a card's own top rule. [above]: how far the paper
+ * reaches up past the box, under the bar's wavy band, as the feed's first card does (the rule-less top only).
+ */
+fun Modifier.filledBand(paper: Color, pen: Color, topRule: Double?, bottomRule: Double?, above: Dp = 0.dp, grainInk: GrainInk): Modifier =
+    drawWithCache {
+        val reach = above.toPx()
+        val grain = Grain.brush(GrainMode.Tile, "grain-overlay", size, density, 1f, grainInk)
+        val top = topRule?.let { wavyLinePath(size.width, 0f, density, it, 1.4, 7) }
+        val bottom = bottomRule?.let { wavyLinePath(size.width, 0f, density, it, 1.4, 7) }
+        val stroke = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round)
+        val paperSize = Size(size.width, size.height + reach)
+        onDrawWithContent {
+            drawRect(paper, topLeft = Offset(0f, -reach), size = paperSize)
+            top?.let { drawPath(it, pen, style = stroke) }
+            bottom?.let { translate(top = size.height) { drawPath(it, pen, style = stroke) } }
+            drawContent()
+            // The tile's ink averages ½: twice the mean darkening, as a story band's.
+            grain?.let { drawRect(it, topLeft = Offset(0f, -reach), size = paperSize, alpha = StoryGrain.Band * 2) }
+        }
+    }
+
 /** StoryCard's rule above the byline: wavyLine(200, seed + 91, 1.2, 6), 2 below the excerpt. */
 @Composable
 private fun BylineRule(seed: Double, color: Color) {

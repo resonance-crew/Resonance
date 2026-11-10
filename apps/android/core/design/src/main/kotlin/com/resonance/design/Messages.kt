@@ -910,20 +910,3 @@ private fun SkeletonLines(style: TextStyle, height: Dp, vararg bars: Modifier) {
         }
     }
 }
-
-/** A reply's rule in the composer: a short vertical pen line in terracotta, wavy like the headers' edges. */
-@Composable
-fun ReplyRule(modifier: Modifier = Modifier, seed: Double = 31.0) {
-    val ink = Tokens.Terracotta
-    Box(
-        modifier
-            .width(6.dp)
-            .clearAndSetSemantics { }
-            .drawWithCache {
-                val h = size.height / density
-                val line = com.resonance.geometry.wavyVertical(h.toDouble(), seed, 1.1, max(3, (h / 9).toInt())).toPath(density, size.width / 2, 0f)
-                val pen = Stroke(2.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
-                onDrawBehind { drawPath(line, ink, style = pen) }
-            },
-    )
-}

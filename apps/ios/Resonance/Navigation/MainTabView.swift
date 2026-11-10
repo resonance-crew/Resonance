@@ -360,6 +360,11 @@ struct MainTabView: View {
                 ))
                 .environment(\.isSelectedTab, t == tab)
                 .environment(\.scrollToTop, toTop[t] ?? 0)
+                // Held to the top of the window, never to the foot the tab bar keeps to: a stack laid out taller
+                // than the room left (a keyboard's band coming and going while another tab had the focus) ran
+                // out over the top, its header under the status bar until the window was resized (round 24,
+                // part 4, the owner on the iPad: 「header 壞掉了…縮放視窗，它會馬上恢復正常」).
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .opacity(t == tab ? 1 : 0)
                 .allowsHitTesting(t == tab)
                 .accessibilityHidden(t != tab)
@@ -621,6 +626,12 @@ private struct BadgedTabs<Content: View>: View {
     }
 }
 
+/// How far a tab's brand bar may slide up as its list is read down (``TabScreen``): only a phone's, under its own tab
+/// bar's layout — an iPad's or the Mac's stays, in a window narrow enough for a phone's layout too (round 24, part 4).
+nonisolated enum BrandBarTravel {
+    static func of(topTabs: Bool, phone: Bool) -> CGFloat { topTabs || !phone ? 0 : 48 }
+}
+
 /// A tab's root screen: the brand bar (the web's phone AppHeader), then the
 /// page title and the content scrolling under the bar, with room at the
 /// bottom for the tab bar. The brand bar has nothing to press, so it gives the
@@ -698,8 +709,11 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     /// rides on the list, below the loader in that gap, never over it.
     private var drawnDown: CGFloat { max(0, -(nearTop + restingTop)) }
     /// The bar's row above its wavy edge: 4 of air and the 44 lockup. A tablet's header carries the
-    /// navigation and never slides away.
-    private var travel: CGFloat { window.topTabs ? 0 : 48 }
+    /// navigation and never slides away — nor does an iPad's (or the Mac's) bar in a window narrow enough for a
+    /// phone's layout (round 24, part 4, the owner: in a window 「header 會被遮擋住…疊在那個 notification bar
+    /// 下面」): slid up there, the window's controls stood over the stories and the status bar's paper over the
+    /// bar. A phone's alone gives the stories its room.
+    private var travel: CGFloat { BrandBarTravel.of(topTabs: window.topTabs, phone: UIDevice.current.userInterfaceIdiom == .phone) }
     private var topPadding: CGFloat {
         guard titleInBar else { return title.isEmpty ? 0 : 40 }
         return window.topTabs && tabletGap ? tabletTop ?? HeaderChrome.contentTop(width: window.width) : phoneTop
@@ -800,6 +814,8 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
         }
         .scrollIndicators(.hidden)
         .background(Tokens.cream)
+        // The window grew into a tablet's header (or the bar may no longer slide): it is back, whatever the scroll.
+        .onChange(of: travel) { _, now in if hidden > now { hidden = now } }
         .onScrollGeometryChange(for: CGFloat.self) { min($0.contentOffset.y, 0) } action: { _, y in nearTop = y }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { restingTop = $0 }
         // The container is the scroll view's frame inside its insets: the bar above, the home indicator below.

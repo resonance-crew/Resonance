@@ -1131,6 +1131,10 @@ button.chips::before {
   width: 100%;
   padding: 0 14px calc(8px + env(safe-area-inset-bottom, 0px));
   pointer-events: none;
+  /* How far the foot's paper reaches past the pane on each side, to the screen's edges: beside the list nowhere
+     (the pane ends at the window's edge and at the gap to the rule, the page's own cream); on a single pane the
+     page's 14 (the phones' rule below). */
+  --foot-reach: 0px;
 }
 
 .dock > * {
@@ -1153,8 +1157,8 @@ button.chips::before {
 .dock::after {
   content: '';
   position: absolute;
-  left: 0;
-  right: 0;
+  left: calc(-1 * var(--foot-reach));
+  right: calc(-1 * var(--foot-reach));
   z-index: -1;
 }
 
@@ -1292,19 +1296,11 @@ button.chips::before {
   width: 44px;
 }
 
-/* A reply's mark: a short wavy pen rule in terracotta, the row's height less 16,
-   drawn over all of it (CarryRule, the apps' ReplyRule). */
-.carryRule {
-  display: flex;
-  width: 6px;
-  height: 28px;
-}
-
-.carryRule svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
+/* A reply's mark (round 24, the owner's): the reply glyph — the held message's 回覆 — 20, in the terracotta pen
+   (CarryReplyGlyph; 18 in a short window). */
+.carryReply svg {
+  width: 20px;
+  height: 20px;
 }
 
 /* A note's or a card's mark: the card's cover, cover-cropped — or a glyph on the
@@ -1404,15 +1400,28 @@ button.carryWords:focus-visible {
   border-radius: 8px 10px 8px 10px;
 }
 
-/* A reply to a sticker: its key frame, 36. */
+/* A reply to a sticker: its key frame, 36, the drawing centred in it (QuotedSticker, round 24). */
 .carrySticker {
+  position: relative;
   display: block;
   flex: none;
   width: 36px;
   height: 36px;
-  object-fit: contain;
+  overflow: hidden;
   /* Quoted, it is quieter, as in the thread's quote. */
   opacity: 0.55;
+}
+
+/* A quoted sticker's key frame in its frame: the square, moved and grown so its drawing is centred (the transform,
+   from its top-left corner); what lies past the frame is its transparent paper. */
+.carrySticker img,
+.quoteSticker img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform-origin: 0 0;
+  -webkit-user-drag: none;
 }
 
 /* The pictures riding (round 22 §4.2 and the owner's notes — iOS's way everywhere; round 23 inside the capsule):
@@ -1876,8 +1885,9 @@ button.carryWords:focus-visible {
     margin-inline: 6px;
   }
 
-  .carryRule {
-    height: 20px;
+  .carryReply svg {
+    width: 18px;
+    height: 18px;
   }
 
   .carryTile,
@@ -1918,12 +1928,7 @@ button.carryWords:focus-visible {
   .dock {
     padding-right: 0;
     padding-left: 0;
-  }
-
-  .dock::before,
-  .dock::after {
-    left: -14px;
-    right: -14px;
+    --foot-reach: 14px;
   }
 }
 
@@ -1933,21 +1938,20 @@ button.carryWords:focus-visible {
    Under the capsule (what rides along is inside it), a column of paper exactly the capsule's width runs to the
    screen's edge (nothing shows under or below the field), its sides fading in over 12 from the capsule's edges, so
    the clear edge lies on the capsule's border and no fade shows past it. A pane the capsule fills keeps the paper
-   across it (above). So does the sticker panel in the keyboard's place (a touch tablet): it is that paper going
-   on. */
+   across it (above). */
 @container thread-pane (min-width: 749px) {
-  .dock:not(:has(> .stickerPanel))::before {
+  .dock::before {
     display: none;
   }
 
-  .dock:not(:has(> .stickerPanel))::after {
+  .dock::after {
     top: auto;
     height: calc(28px + env(safe-area-inset-bottom, 0px));
     background: linear-gradient(to bottom, transparent, var(--color-cream));
     pointer-events: none;
   }
 
-  .dock:not(:has(> .stickerPanel)) .composerStack::before {
+  .composerStack::before {
     content: '';
     position: absolute;
     z-index: -1;
@@ -1962,6 +1966,35 @@ button.carryWords:focus-visible {
     mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent);
     pointer-events: auto;
   }
+
+  /* The sticker panel in the keyboard's place (a touch tablet; round 24, the owner's: 「鍵盤兩側還是會有這個實色區域
+     … 只留最底下的那個漸層」): the foot looks as it does without it. Beside the capsule the thread still shows, and
+     the fade is the capsule's part of the foot's — its last 28, 22 over the capsule's foot down through the 6
+     between them — ending where the panel begins; the column runs from the capsule's middle to the panel's top;
+     from there the panel's own paper is across the pane (with the panel, below). The foot's own fade at the
+     screen's foot would lie under the panel: none. */
+  .dock:has(> .stickerPanel)::after {
+    display: none;
+  }
+
+  .dock:has(> .stickerPanel) .composerStack::before {
+    bottom: -6px;
+  }
+
+  /* Across the pane (the stack is centred in it: half its own width less half the pane's), to the screen's edges
+     on a single pane; see-through to taps, as the fade without a panel is. */
+  .dock:has(> .stickerPanel) .composerStack::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    left: calc(50% - 50cqi - var(--foot-reach));
+    right: calc(50% - 50cqi - var(--foot-reach));
+    bottom: -6px;
+    height: 28px;
+    background: linear-gradient(to bottom, transparent, var(--color-cream));
+    pointer-events: none;
+  }
+
 }
 
 /* ── A picture sent in the thread, and its viewer ─────────────────── */
@@ -2059,26 +2092,35 @@ button.carryWords:focus-visible {
 }
 
 /* A sticker in the thread: no bubble, the 小紙團 standing on the page — 128 on a phone, 144 wider — on its
-   sender's side, its chip and tools beside it as a picture's are. */
+   sender's side, its chip and tools beside it as a picture's are. It lays out by its drawing, not its square
+   (round 24, the owner's): its box is as wide as the square and as tall as the drawing with 2 % over and under it
+   (--sticker-trim-h, StickerPart from the catalog's numbers), the square drawn whole --sticker-trim-top of its side
+   above that box — past it only where it is transparent, so nothing is cut and the empty paper over the puppet
+   takes no room. A tap, a hold and the chip take the box (over a quote, less the band it rises over the quote:
+   below); the square answers no pointer. */
 .sticker {
+  --sticker-size: 128px;
   position: relative;
   display: block;
-  width: 128px;
-  height: 128px;
+  width: var(--sticker-size);
+  height: calc(var(--sticker-size) * var(--sticker-trim-h, 1));
 }
 
 @media (min-width: 768px) {
   .sticker {
-    width: 144px;
-    height: 144px;
+    --sticker-size: 144px;
   }
 }
 
 .sticker img {
+  position: absolute;
+  top: calc(-1 * var(--sticker-size) * var(--sticker-trim-top, 0));
+  left: 0;
   display: block;
-  width: 100%;
-  height: 100%;
+  width: var(--sticker-size);
+  height: var(--sticker-size);
   object-fit: contain;
+  pointer-events: none;
   -webkit-user-drag: none;
 }
 
@@ -2118,10 +2160,11 @@ button.carryWords:focus-visible {
 }
 
 .quoteSticker {
+  position: relative;
   display: block;
   width: 40px;
   height: 40px;
-  object-fit: contain;
+  overflow: hidden;
   /* Quoted, it is quieter, as quoted words are muted (the owner's). */
   opacity: 0.55;
 }
@@ -2141,10 +2184,48 @@ button.carryWords:focus-visible {
   margin-top: -18px;
 }
 
-/* By its drawing, not its square: the room above the puppet (--art-top, read once from its key frame) is taken
-   off too, so every sticker's drawing comes up 18 over the quote alike. */
+/* By its drawing, not its box: the paper over the key frame's drawing in its box (--sticker-art, a fraction of the
+   side: the catalog's numbers, or read once from a later pack's key frame) is taken off too, so every sticker's
+   drawing comes up 18 over the quote alike. */
 .slot[data-sticker][data-over-quote] .sticker {
-  margin-top: calc(-1 * var(--art-top, 0px));
+  /* The band of its box above the quote's foot: the slot's 18 and the paper taken off over the drawing. */
+  --sticker-rise: calc(18px + var(--sticker-size) * var(--sticker-art, 0));
+  margin-top: calc(-1 * var(--sticker-size) * var(--sticker-art, 0));
+}
+
+/* That band is the quote's (round 24): a tap or a hold there reaches the quote, as on any reply — a tap goes to
+   the quoted message — and the sticker answers below the quote's foot alone. Nothing moves: the slot and the box
+   take no pointer, the button is the box less its top --sticker-rise (the image lies in the box, not the button,
+   so it stays where it is), and the chip takes its pointer back. */
+.slot[data-sticker][data-over-quote] {
+  pointer-events: none;
+}
+
+.slot[data-sticker][data-over-quote] .stickerButton {
+  height: max(0px, calc(100% - var(--sticker-rise)));
+  margin-top: min(var(--sticker-rise), calc(var(--sticker-size) * var(--sticker-trim-h, 1)));
+  pointer-events: auto;
+}
+
+/* The thread's chip (a button) takes its taps back; the held overlay's lifted copy (a span) stays see-through to the scrim. */
+.slot[data-sticker][data-over-quote] button.chips {
+  pointer-events: auto;
+}
+
+/* Its keyboard ring stays round the whole box, as before. */
+.slot[data-sticker][data-over-quote] .stickerButton:focus-visible {
+  outline: none;
+}
+
+.slot[data-sticker][data-over-quote] .sticker:has(> .stickerButton:focus-visible) {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: 2px;
+  border-radius: 16px;
+}
+
+/* Its hover tools centre on what it answers: the slot less the 18 over the quote. */
+.slot[data-sticker][data-over-quote] > .actions {
+  top: calc(50% + 9px);
 }
 
 /* The sticker panel in the keyboard's place on a phone (round 22 §4.1): the foot's own paper going on — no
@@ -2177,6 +2258,20 @@ button.carryWords:focus-visible {
   width: calc(100% + 12px);
   max-width: 732px;
   margin-inline: 0;
+}
+
+/* In a pane the capsule doesn't fill (the wide foot, above), from its top down to the screen's edge the panel's
+   paper is across the pane — to the gap before the rule beside the list (the page's own cream) or the screen's
+   edges, and the window's edge — its stickers in their 732 in the middle: the panel is the pane's width, its padding
+   the room beside them. Its paper is its own background, so it takes its own taps (nothing of the thread under it
+   can be pressed) and rides its height animation. */
+@container thread-pane (min-width: 749px) {
+  .dock > .stickerPanel {
+    width: calc(100cqi + 2 * var(--foot-reach));
+    max-width: none;
+    padding-inline: calc((100cqi + 2 * var(--foot-reach) - 732px) / 2);
+    background: var(--color-cream);
+  }
 }
 
 .stickerPanel .packBar {

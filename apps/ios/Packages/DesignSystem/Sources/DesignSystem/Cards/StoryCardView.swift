@@ -468,6 +468,87 @@ struct StoryBand: ViewModifier {
     }
 }
 
+/// An aside laid as a band of the list it heads — a notification invite atop the conversations or the home feed, on a
+/// phone (and the Mac's conversations) — round 24, the owner: 「做成像是首頁這邊手機上文章會變成使用水平分割線分割的區段…裡面有
+/// 填色…深色一點的灰，這樣就不會…顯得又多一張卡片的感覺」: the thread's grey (``paper``) from edge to edge of its list, the story
+/// bands' grain over everything (as ``StoryBand``), parted from what is around it by their wavy rule (7 turns, amp 1.4,
+/// at ``Tokens/inkLight``) in the header's quiet grey — never a sheet in a pen line, so it never reads as one more card.
+/// (A tablet's invite is a borderless card instead, by the owner's word.) Its muted words are ``muted``, which clears
+/// 4.5:1 on this grey (the page's muted ink doesn't, in the light).
+/// With a `tuck` its top is the bar's pen line: no rule there, its paper runs that far up under the bar's wave band (as
+/// the feed's first band does: between the wave's crests the grey shows), and the gap a pull opens over it is the
+/// screen's to paint in the same grey and grain (`pullPaper(paper: AsideBand.paper)`), so it never shows the page's
+/// cream (「往下拉的時候…底色也不會斷掉」). Without a tuck, its own rule on top. `bottomRule` draws its own along the foot —
+/// none where the next band's top rule is that edge (the feed's cards); with a `reach` that rule is the band's part of
+/// one line `reach` longer than the band (the Mac's list, on to the rule between the panes): the band draws it as far as
+/// its own trailing edge, and whatever carries the band on beside its list draws the rest (``footRule(width:)``).
+/// Android's `Modifier.filledBand` is the twin, its rules seeded alike (``topSeed`` / ``bottomSeed``).
+public struct AsideBand: ViewModifier {
+    let tuck: CGFloat?
+    let bottomRule: Bool
+    var reach: CGFloat = 0
+
+    /// The rules' seeds (Android's INVITE_TOP_RULE / INVITE_BOTTOM_RULE).
+    public static let topSeed: Double = 84
+    public static let bottomSeed: Double = 108
+    /// The band's paper: the other person's bubble's grey.
+    public static let paper = Tokens.bubbleTheirs
+    /// The muted ink on that grey (a tablet's borderless card's too): the muted ink deepened to clear 4.5:1 on the
+    /// bubbles' papers.
+    public static let muted = Tokens.linkCardMuted
+
+    public func body(content: Content) -> some View {
+        let tuck = tuck ?? 0
+        return content
+            .padding(.top, tuck)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Self.paper)
+            // GrainOverlay at StoryGrain.band: ink at 2× so the mean darkening is the band's (and a pull's gap's).
+            .overlay {
+                GrainLayer(shape: Rectangle(), mode: .tile, opacity: Self.grain, tile: "grain-overlay")
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+            .overlay(alignment: .top) { if self.tuck == nil { rule(Self.topSeed).offset(y: -3) } }
+            .overlay(alignment: .bottom) {
+                if bottomRule {
+                    // Laid out `reach` longer, cut at the band's own edge (its pen's round caps kept above and below).
+                    rule(Self.bottomSeed)
+                        .padding(.trailing, -reach)
+                        .mask { Rectangle().padding(.vertical, -6) }
+                        .offset(y: 3)
+                }
+            }
+            .padding(.top, -tuck)
+    }
+
+    /// The grain's ink over the paper.
+    public static let grain = StoryGrain.band * 2
+
+    /// The band's foot rule as a band `width` wide (its `reach` included) draws it, in the box of the rule's 6 high
+    /// centred on the foot: what carries the band on beyond its list draws the rest of the same line from it.
+    public static func footRule(width: CGFloat) -> some View {
+        WavyRuleShape(seed: bottomSeed, amp: 1.4, steps: 7)
+            .stroke(Tokens.fieldBorderHover, style: StrokeStyle(lineWidth: Tokens.inkLight, lineCap: .round))
+            .frame(width: width, height: 6)
+    }
+
+    private func rule(_ seed: Double) -> some View {
+        WavyRuleShape(seed: seed, amp: 1.4, steps: 7)
+            .stroke(Tokens.fieldBorderHover, style: StrokeStyle(lineWidth: Tokens.inkLight, lineCap: .round))
+            .frame(height: 6)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
+public extension View {
+    /// This aside as a grey band of its list (``AsideBand``).
+    func asideBand(tuck: CGFloat? = nil, bottomRule: Bool = true, reach: CGFloat = 0) -> some View {
+        modifier(AsideBand(tuck: tuck, bottomRule: bottomRule, reach: reach))
+    }
+}
+
 /// The web's striped cover placeholder: the card's fill, diagonal hatching
 /// in a darker shade of it, and the label in monospace.
 public struct StoryImagePlaceholder: View {

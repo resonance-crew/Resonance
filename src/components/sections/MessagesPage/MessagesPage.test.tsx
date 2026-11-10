@@ -645,8 +645,8 @@ describe('MessagesPage thread', () => {
     expect(cssRule('.quoteBubble[data-sticker]')).toMatch(/padding:\s*6px 10px 20px/);
     // The answering sticker comes up over the quote's lower edge, in front; the quoted one is drawn quieter.
     expect(cssRule('.slot[data-sticker][data-over-quote]')).toMatch(/margin-top:\s*-18px/);
-    // …by its drawing: the room above the puppet in its square is taken off too.
-    expect(cssRule('.slot[data-sticker][data-over-quote] .sticker')).toMatch(/margin-top:\s*calc\(-1 \* var\(--art-top, 0px\)\)/);
+    // …by its drawing: the paper above the puppet in its box is taken off too.
+    expect(cssRule('.slot[data-sticker][data-over-quote] .sticker')).toMatch(/margin-top:\s*calc\(-1 \* var\(--sticker-size\) \* var\(--sticker-art, 0\)\)/);
     expect(cssRule('.slot')).toMatch(/z-index:\s*1/);
     expect(cssRule('.quoteSticker')).toMatch(/opacity:\s*0\.55/);
     expect(cssRule('.carrySticker')).toMatch(/opacity:\s*0\.55/);
@@ -659,6 +659,67 @@ describe('MessagesPage thread', () => {
     expect(screen.getByText('by the river')).toBeInTheDocument();
     await userEvent.click(within(grid as HTMLElement).getAllByRole('button', { name: 'View photo' })[2]);
     expect(screen.getByRole('dialog', { name: 'View photo' }).querySelector('img')).toHaveAttribute('src', '/api/v1/chat-images/img-a3');
+  });
+
+  // Round 24: a sticker answering a quote comes up over it by 18 and the paper over its drawing (up to ~45 for
+  // 點點's 嗨 at 128). That band of its box, above the quote's foot, is the quote's — a tap there goes to the quoted
+  // message, as on any reply, instead of playing the sticker — and the sticker answers below the quote's foot alone;
+  // its drawing, its place, its chip stay where they were.
+  it('leaves the band a sticker rises over its quote to the quote', async () => {
+    mockUseAuth.mockReturnValue({ user: viewer, loading: false, sessionReady: true });
+    const scrollTo = Element.prototype.scrollTo;
+    Element.prototype.scrollTo = vi.fn() as unknown as Element['scrollTo'];
+    try {
+      const at = (s: number) => new Date(Date.UTC(2026, 9, 31, 8, 0, s));
+      server.messages = [
+        { id: 'w1', senderId: 'alice', text: 'see you at the river', sentAt: at(1) },
+        {
+          id: 's2',
+          senderId: 'me',
+          text: '〔貼圖：嗨！〕',
+          sentAt: at(2),
+          sticker: { pack: 'pip', id: 'hi' },
+          replyTo: { id: 'w1', senderId: 'alice', text: 'see you at the river' },
+        },
+      ];
+      const { container } = renderPage(<MessagesPage activeHandle="alice" />);
+      const sticker = await screen.findByRole('button', { name: 'Sticker: Hi!' });
+      expect(sticker.closest('[data-over-quote]')).toHaveAttribute('data-sticker');
+
+      // The band: its top 18 + --sticker-art of its side, the part of its box above the quote's foot.
+      expect(cssRule('.slot[data-sticker][data-over-quote] .sticker')).toMatch(
+        /--sticker-rise:\s*calc\(18px \+ var\(--sticker-size\) \* var\(--sticker-art, 0\)\)/,
+      );
+      // The slot and the box take no pointer there; the button is the box less that band; the chip keeps its own.
+      expect(cssRule('.slot[data-sticker][data-over-quote]')).toMatch(/pointer-events:\s*none/);
+      const button = cssRule('.slot[data-sticker][data-over-quote] .stickerButton');
+      expect(button).toMatch(/height:\s*max\(0px, calc\(100% - var\(--sticker-rise\)\)\)/);
+      expect(button).toMatch(/margin-top:\s*min\(var\(--sticker-rise\),/);
+      expect(button).toMatch(/pointer-events:\s*auto/);
+      expect(cssRule('.slot[data-sticker][data-over-quote] button.chips')).toMatch(/pointer-events:\s*auto/);
+      // Not the held overlay's lifted copy (its chip is a span): a tap there must reach the scrim.
+      expect(cssRule('.slot[data-sticker][data-over-quote] .chips')).toBeFalsy();
+      // The hover tools centre on what it answers: the slot less the 18 it lies over the quote.
+      expect(cssRule('.slot[data-sticker][data-over-quote] > .actions')).toMatch(/top:\s*calc\(50% \+ 9px\)/);
+      // Its keyboard ring stays round the whole box.
+      expect(cssRule('.slot[data-sticker][data-over-quote] .stickerButton:focus-visible')).toMatch(/outline:\s*none/);
+      expect(cssRule('.slot[data-sticker][data-over-quote] .sticker:has(> .stickerButton:focus-visible)')).toMatch(/outline:\s*2px solid/);
+      // Nothing moves: the image lies in the box (positioned), not in the button (which isn't), so the button's
+      // shorter box leaves the drawing where it was; the rise itself is as it was.
+      expect(cssRule('.sticker')).toMatch(/position:\s*relative/);
+      expect(cssRule('.stickerButton')).not.toMatch(/position|transform/);
+      expect(cssRule('.slot[data-sticker][data-over-quote]')).toMatch(/margin-top:\s*-18px/);
+      // A sticker answering nothing keeps its whole box.
+      expect(cssRule('.stickerButton')).toMatch(/width:\s*100%;\s*height:\s*100%/);
+      expect(cssRule('.slot[data-sticker]')).toBe('');
+
+      // A tap on the quote goes to the quoted message; the sticker stays on its key frame.
+      await userEvent.click(screen.getByRole('button', { name: 'see you at the river' }));
+      await waitFor(() => expect(container.querySelector('[data-message-id="w1"]')).toHaveAttribute('data-flash'));
+      expect(sticker.querySelector('img')).toHaveAttribute('src', expect.stringContaining('/stickers/pip/hi.thumb.webp'));
+    } finally {
+      Element.prototype.scrollTo = scrollTo;
+    }
   });
 
   it('renders a shared card and a note-reply quote in the thread', async () => {

@@ -34,8 +34,9 @@ import Testing
         // The lead column is ＋'s own, its mark at most 32 with 6 clear each side.
         #expect(ComposerMetrics.leadColumn == ComposerMetrics.attachWidth)
         #expect((ComposerMetrics.leadColumn - ComposerMetrics.leadMark) / 2 >= 6)
-        // The reply's rule leaves 8 over and under it in its row.
-        #expect(ComposerMetrics.rowHeight - 2 * ComposerMetrics.replyRuleInset == 28)
+        // The reply's mark (round 24 §D: its glyph, no longer a rule) fits the lead mark's room in either row.
+        #expect(ComposerMetrics.replyGlyph(short: false) <= ComposerMetrics.leadMark)
+        #expect(ComposerMetrics.replyGlyph(short: true) <= ComposerMetrics.shortRowHeight - 8)
         // The ✕ (44) sits in Send's 52 column; a reply's media (36) fits its row with room.
         #expect(44 <= ComposerMetrics.sendWidth)
         #expect(ComposerMetrics.replyMedia < ComposerMetrics.rowHeight)

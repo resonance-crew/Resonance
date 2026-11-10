@@ -20,6 +20,22 @@ const rule = (selector: string) => {
   // Every block of the selector's own (one shared with another selector too), in order.
   return [...css.matchAll(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`, 'g'))].map((m) => m[1]).join('\n');
 };
+/** What every `@container thread-pane (min-width: 749px)` block holds (the wide foot), one after the other. */
+const wideRules = () =>
+  [...css.matchAll(/@container thread-pane \(min-width: 749px\) \{/g)]
+    .map((m) => {
+      // To the block's own closing brace.
+      let depth = 1;
+      let i = m.index! + m[0].length;
+      for (; depth > 0 && i < css.length; i++) depth += css[i] === '{' ? 1 : css[i] === '}' ? -1 : 0;
+      return css.slice(m.index! + m[0].length, i - 1);
+    })
+    .join('\n');
+/** A selector's own block(s) inside the wide foot's container rules. */
+const wideRule = (selector: string) => {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return [...wideRules().matchAll(new RegExp(`\\n {2}${escaped}\\s*\\{([^}]*)\\}`, 'g'))].map((m) => m[1]).join('\n');
+};
 
 function capsule(props: Partial<Parameters<typeof ComposerCapsule>[0]> = {}) {
   return (
@@ -121,6 +137,46 @@ describe('the composer capsule (round 9 §4)', () => {
     expect(rule('.sendGlyph[data-turned]')).toMatch(/transform:\s*rotate\(180deg\)/);
   });
 
+  // Round 24 (the owner's: 「鍵盤兩側還是會有這個實色區域…只留最底下的那個漸層」): in a pane the capsule doesn't
+  // fill, the foot looks the same with the sticker panel open as without — clear beside the capsule, the 28 fade
+  // ending where the panel begins, the column under the capsule — and the panel's own paper across the pane from its
+  // top down to the screen's edge.
+  it('keeps the thread beside the capsule with the sticker panel open in a wide pane', () => {
+    const wide = wideRules();
+    // No wide rule stands aside for the panel any more.
+    expect(wide).not.toMatch(/:not\(:has\(> \.stickerPanel\)\)/);
+    expect(wideRule('.dock::before')).toMatch(/display:\s*none/);
+    expect(wideRule('.dock::after')).toMatch(/height:\s*calc\(28px \+ env\(safe-area-inset-bottom, 0px\)\)/);
+    expect(wideRule('.dock::after')).toMatch(/pointer-events:\s*none/);
+    expect(wideRule('.composerStack::before')).toMatch(/top:\s*24px;[\s\S]*background:\s*var\(--color-cream\)[\s\S]*pointer-events:\s*auto/);
+
+    // With the panel: the fade is the capsule's part's last 28, across the pane, ending on the panel's top (the
+    // foot's 6 under the capsule), see-through to taps; the column stops there too; the foot's own fade (under the
+    // panel) is gone.
+    expect(wideRule('.dock:has(> .stickerPanel)::after')).toMatch(/display:\s*none/);
+    expect(wideRule('.dock:has(> .stickerPanel) .composerStack::before')).toMatch(/bottom:\s*-6px/);
+    const fade = wideRule('.dock:has(> .stickerPanel) .composerStack::after');
+    expect(fade).toMatch(/left:\s*calc\(50% - 50cqi - var\(--foot-reach\)\);\s*right:\s*calc\(50% - 50cqi - var\(--foot-reach\)\)/);
+    expect(fade).toMatch(/bottom:\s*-6px;\s*height:\s*28px/);
+    expect(fade).toMatch(/linear-gradient\(to bottom, transparent, var\(--color-cream\)\)/);
+    expect(fade).toMatch(/pointer-events:\s*none/);
+
+    // The panel is the pane's width on its own paper, its stickers in their 732 in the middle — after the panel's
+    // base rule, which would win otherwise.
+    const panel = wideRule('.dock > .stickerPanel');
+    expect(panel).toMatch(/width:\s*calc\(100cqi \+ 2 \* var\(--foot-reach\)\);\s*max-width:\s*none/);
+    expect(panel).toMatch(/padding-inline:\s*calc\(\(100cqi \+ 2 \* var\(--foot-reach\) - 732px\) \/ 2\)/);
+    expect(panel).toMatch(/background:\s*var\(--color-cream\)/);
+    expect(rule('.dock > .stickerPanel')).toMatch(/max-width:\s*732px/);
+    expect(css.lastIndexOf('@container thread-pane')).toBeGreaterThan(css.indexOf('\n.dock > .stickerPanel {'));
+
+    // The foot's paper reaches the screen's edges: past the pane by the page's 14 on a single pane, nowhere beside
+    // the list.
+    expect(rule('.dock')).toMatch(/--foot-reach:\s*0px/);
+    expect(rule('.dock::after')).toMatch(/left:\s*calc\(-1 \* var\(--foot-reach\)\);\s*right:\s*calc\(-1 \* var\(--foot-reach\)\)/);
+    expect(css).toMatch(/@media \(max-width: 900px\) \{[^@]*?\n {2}\.dock \{[^}]*--foot-reach:\s*14px/);
+  });
+
   // Round 10 §3.3: written in, its pen darkens — the field's own darker ink — and never turns terracotta.
   it('darkens its pen while written in, without changing its colour', () => {
     const { container, rerender } = render(capsule());
@@ -197,9 +253,8 @@ describe('what rides inside the capsule (round 23)', () => {
     expect(rule('.carryRow')).not.toMatch(/padding|margin|gap/);
     expect(rule('.carryMark')).toMatch(/width:\s*44px/);
     expect(rule('.plusSlot')).toMatch(/width:\s*44px/);
-    expect(rule('.carryRule')).toMatch(/width:\s*6px;[\s\S]*height:\s*28px/);
-    // The reply's rule is drawn over all of its box (CarryRule).
-    expect(rule('.carryRule svg')).toMatch(/width:\s*100%;[\s\S]*height:\s*100%/);
+    // The reply's mark: the reply glyph, 20 (round 24).
+    expect(rule('.carryReply svg')).toMatch(/width:\s*20px;[\s\S]*height:\s*20px/);
     expect(rule('.carryTile')).toMatch(/width:\s*32px;[\s\S]*height:\s*32px/);
     expect(rule('.carryMedia')).toMatch(/width:\s*36px;[\s\S]*height:\s*36px/);
     expect(rule('.carrySticker')).toMatch(/width:\s*36px;[\s\S]*height:\s*36px;[\s\S]*opacity:\s*0\.55/);

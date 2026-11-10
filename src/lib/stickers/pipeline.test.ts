@@ -8,6 +8,7 @@ import {
 } from '../../../scripts/stickers/pipeline';
 import { STICKER_PACKS } from './catalog';
 import { STICKER_ART } from './catalog.generated';
+import { inkBox } from '../../../scripts/stickers/catalog';
 
 const root = resolve(__dirname, '../../..');
 const file = (pack: string, name: string) => resolve(root, `public/stickers/${pack}/${name}`);
@@ -108,7 +109,7 @@ describe('the sticker pipeline: pictures and files', () => {
     expect(drawn).toBeGreaterThanOrEqual(6);
   });
 
-  it('keeps catalog.generated.ts true to the files (npm run stickers, or npx tsx scripts/stickers/catalog.ts)', () => {
+  it('keeps catalog.generated.ts true to the files (npm run stickers, or npx tsx scripts/stickers/catalog.ts)', async () => {
     for (const p of STICKER_PACKS) {
       const icon = file(p.id, 'icon.webp');
       if (existsSync(icon)) {
@@ -123,7 +124,12 @@ describe('the sticker pipeline: pictures and files', () => {
         expect(STICKER_ART[at], at).toEqual({
           durationMs: info.animated ? info.durationMs : 0, frames: info.frames, bytes: anim.length,
           v: contentVersion([anim, readFileSync(file(p.id, `${st.id}.thumb.webp`))]),
+          box: await inkBox(file(p.id, `${st.id}.webp`)), poseBox: await inkBox(file(p.id, `${st.id}.thumb.webp`)),
         });
+        // The key frame is one of the animation's: its drawing lies inside the animation's box.
+        const [l, t, r, b] = STICKER_ART[at]!.box!;
+        const [pl, pt, pr, pb] = STICKER_ART[at]!.poseBox!;
+        expect(pl >= l - 0.01 && pt >= t - 0.01 && pr <= r + 0.01 && pb <= b + 0.01, at).toBe(true);
       }
     }
   });

@@ -651,16 +651,12 @@ struct MessageCore: View {
         let sticker = message.sticker.flatMap { StickerLibrary.shared.drawable($0) ? $0 : nil }
         let core = VStack(alignment: mine ? .trailing : .leading, spacing: 0) {
             if let sticker {
-                if let quote = message.replyTo {
-                    QuotedReply(quote: quote, mine: mine, ctx: ctx, interactive: interactive, underSticker: true)
+                ThreadStickerStack(
+                    message: message, sticker: sticker, side: ctx.stickerSide, mine: mine, interactive: interactive,
+                    quote: message.replyTo.map { QuotedReply(quote: $0, mine: mine, ctx: ctx, interactive: interactive, underSticker: true) }
+                ) {
+                    MessageReactions(message: message, mine: mine, model: model, onTap: interactive ? { press(nil, carried: carried) } : nil)
                 }
-                ThreadStickerView(message: message, sticker: sticker, side: ctx.stickerSide, interactive: interactive)
-                    .overlay(alignment: mine ? .bottomLeading : .bottomTrailing) {
-                        MessageReactions(message: message, mine: mine, model: model, onTap: interactive ? { press(nil, carried: carried) } : nil)
-                    }
-                    // A sticker answering rises over the quote's lower edge, in front of it (round 22 v3: close to what
-                    // it answers); the quote keeps its even padding.
-                    .padding(.top, message.replyTo == nil ? 0 : -QuotedReply.stickerOverlap)
             } else {
             if note {
                 NotedCard(message: message, carried: carried, mine: mine, ctx: ctx, interactive: interactive)
@@ -925,6 +921,33 @@ private struct NotedCard: View {
     }
 }
 
+/// A sticker message as the thread lays it (round 22 §4.5): no bubble, its reactions in the gutter by its foot — and,
+/// answering a message, under that message's quote: laid up over the quote's lower edge, in front of it (round 22 v3:
+/// close to what it answers), by ``QuotedReply/stickerRise(_:side:)`` — its drawing at rest overlaps the quote by
+/// ``QuotedReply/stickerOverlap`` whatever paper is over it (round 24); the quote keeps its even padding.
+/// The band of its box it lays over the quote stays the quote's (round 24): a tap there goes to the quoted message, a
+/// hold there is held on the quote — the sticker's own tap and hold start under it (``ThreadStickerView/overQuote``).
+struct ThreadStickerStack<Quote: View, Reactions: View>: View {
+    let message: ChatMessage
+    let sticker: StickerRef
+    let side: CGFloat
+    let mine: Bool
+    let interactive: Bool
+    /// The quote of the message it answers; nil when it answers none.
+    let quote: Quote?
+    @ViewBuilder let reactions: () -> Reactions
+
+    var body: some View {
+        let rise = quote == nil ? 0 : QuotedReply.stickerRise(sticker, side: side)
+        VStack(alignment: mine ? .trailing : .leading, spacing: 0) {
+            if let quote { quote }
+            ThreadStickerView(message: message, sticker: sticker, side: side, interactive: interactive, overQuote: rise)
+                .overlay(alignment: mine ? .bottomLeading : .bottomTrailing, content: reactions)
+                .padding(.top, -rise)
+        }
+    }
+}
+
 /// The message a reply quotes, which the reply's bubble lies over; tapping it goes to the original. A sticker is
 /// quoted by its key pose alone (round 22 v2).
 /// Who answered whom goes without saying in a one-to-one thread (the reply stands on its sender's
@@ -941,8 +964,17 @@ struct QuotedReply: View {
     static let stickerSide: CGFloat = 44
     /// A quoted sticker is drawn faded, as quoted words are muted (round 22 v3) — in the thread and the replying row.
     static let stickerFade: Double = 0.55
-    /// How far a sticker answering a quote rises over the quote's lower edge.
+    /// How far a sticker answering a quote rises over the quote's lower edge: its drawing at rest (the key pose)
+    /// overlaps the quote by this much.
     static let stickerOverlap: CGFloat = 18
+
+    /// How far up a sticker answering a quote is laid (round 24, the web's rule): its key pose's drawing overlaps the
+    /// quote by ``stickerOverlap`` whatever clear paper its layout box keeps over that drawing (``StickerTrim``) —
+    /// the box itself rises by that paper more.
+    static func stickerRise(_ sticker: StickerRef, side: CGFloat) -> CGFloat {
+        let library = StickerLibrary.shared
+        return stickerOverlap + side * CGFloat(StickerTrim.artTop(library.box(sticker), pose: library.poseBox(sticker)))
+    }
 
     /// The sticker a quote shows (one this build can draw), or nil: then its words.
     static func quotedSticker(_ quote: ReplyQuote) -> StickerRef? {

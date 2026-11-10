@@ -53,8 +53,8 @@ struct FeedScreen: View {
             enterFrom = nil
         }
         .animation(.easeInOut(duration: 0.25), value: model?.refreshFailure)
-        // A pull's gap wears the first band's paper (round 5 B1).
-        .pullPaper(pullPaper)
+        // A pull's gap wears the first band's paper (round 5 B1), tonight's card's grey band's too (round 24).
+        .pullPaper(paper: pullPaper)
         .refreshable {
             // Asked for by hand: the server answers, not the HTTP cache.
             session.httpCache.freshness.invalidate()
@@ -132,20 +132,23 @@ struct FeedScreen: View {
         if top, let id = picksNotice.reachedTop() { session.toasts.dismiss(id) }
     }
 
-    /// The paper of the band at the bar's line, when the feed's top is one: the first card's family
-    /// (the list's colouring gives the first card its own preference), or the first skeleton's. None
-    /// over the bordered grid, an empty or failed feed, or a refresh note above the cards.
-    private var pullPaper: CardPalette? {
+    /// The paper of the band at the bar's line, when the feed's top is one: tonight's card's invite on a
+    /// phone, a grey band of its own (round 24, the owner: 「往下拉的時候，這個底色會斷掉」); else the first
+    /// card's family (the list's colouring gives the first card its own preference), or the first
+    /// skeleton's. None over the bordered grid, an empty or failed feed, a refresh note above the cards
+    /// (the band under it draws its own top rule), or a tablet's invite — a card on the page's cream.
+    private var pullPaper: Color? {
         guard window.layoutClass != .expanded else { return nil }
         switch model?.phase ?? .idle {
         case .idle, .loading:
-            return CardPalette(index: CardPalette.palettes([nil])[0])
+            return CardPalette(index: CardPalette.palettes([nil])[0]).interior
         case .failed:
             return nil
         case .loaded:
-            guard let model, !model.isEmpty, model.refreshFailure == nil, !inviting,
-                  let first = StoryCardList.families(model.cards, splitAt: splitAt(model)).first else { return nil }
-            return CardPalette(index: first)
+            guard let model, !model.isEmpty, model.refreshFailure == nil else { return nil }
+            if inviting { return window.layoutClass == .compact ? AsideBand.paper : nil }
+            guard let first = StoryCardList.families(model.cards, splitAt: splitAt(model)).first else { return nil }
+            return CardPalette(index: first).interior
         }
     }
 
@@ -204,17 +207,27 @@ struct FeedScreen: View {
                 }
                 if inviting {
                     // Tonight's card offered to a reader (notification-asks §3), above the cards where the refresh
-                    // note sits: a band of its own over a phone's bands (the first card then starts with its own top
-                    // wave), one wide card over a tablet's grid, inset as the grid's cards are.
+                    // note sits (round 24, by the kind of device): a grey band of its own over a phone's bands (the first
+                    // card then starts with its own top wave); over a tablet's bands a borderless card in the bands'
+                    // content column, 24 under the bar's foot and 24 over the first card's top rule; over a tablet's
+                    // grid one wide borderless card, inset as the grid's cards are.
                     if gridded {
-                        PicksInvite(wide: true)
+                        PicksInvite(look: .grid)
                             .padding(.horizontal, window.pad)
                             .frame(maxWidth: 1200)
                             .frame(maxWidth: .infinity)
                             .padding(.top, model.refreshFailure != nil ? 0 : HeaderChrome.contentTop(width: window.width))
                             .padding(.bottom, Tokens.feedGap - 4)
+                    } else if window.layoutClass == .compact {
+                        PicksInvite(look: .band, underBar: model.refreshFailure == nil)
                     } else {
-                        PicksInvite(wide: false)
+                        // Where a band's content is (``StoryBand``): its 38 inside the reading measure, centred.
+                        PicksInvite(look: .column)
+                            .padding(.horizontal, PicksInvite.bandInset)
+                            .frame(maxWidth: Tokens.measure + 2 * PicksInvite.bandInset)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, model.refreshFailure != nil ? 0 : 24)
+                            .padding(.bottom, 24)
                     }
                 }
                 // The scroll anchors on the cards, so picks put on top of them never move the one being read.

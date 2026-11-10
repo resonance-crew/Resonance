@@ -161,8 +161,9 @@ answers their newest message (a reply riding, the keyboard up) and `-threadPictu
 opens the newest picture and closes it that many seconds later (round 11 §1's check).
 `-visualRide replyCard` (or `replyPictures`) rides a reply with a card (or pictures) in the
 composer and keeps no draft (the release screenshots' `thread-reply`); `-threadPanel stickers`
-opens the sticker panel. Android's twins are `--es visualRide replyCard` and
-`--es threadPanel stickers` (debug builds, each read once).
+opens the sticker panel; `-notifyInvite picks|connectionCards|all` shows those push invites whatever their
+reasons (tapping them still answers them for the account). Android's twins are `--es visualRide replyCard`,
+`--es threadPanel stickers` and `--es notifyInvite picks|connectionCards|all` (debug builds, each read once).
 `-route /settings` (or `/settings/<section>`: profile, account, privacy, notifications,
 language, appearance, terms, delete) opens Settings or one of its pages.
 `-openWriter YES` opens the writer on a new card at launch and `-writeCard <id>`
@@ -378,7 +379,7 @@ The composer floats over the thread (round 9 §4, round 10 §3; `ComposerCapsule
 solid with something to send — 48 for a line at any text size (`ComposerText`: the padding from the line it
 draws), growing to five lines, its pen the field's border, darker (`Tokens.fieldBorderHover`) while it is
 written in, never a halo. What rides along rides inside the capsule over the text line (round 23,
-`ComposerCapsule`'s `riding` slot): the reply (its wavy rule; its media a 36 thumbnail before the words), the
+`ComposerCapsule`'s `riding` slot): the reply (the `reply` glyph, 20 in terracotta at INK, 18 on a short window — round 24, where a wavy rule stood; its media a 36 thumbnail before the words, a sticker's drawing centred in it), the
 note answered or the card (a ≤ 32 tile), the pictures (a strip 8 + 56 + 8, a ✕ on each), the error line —
 mark in the ＋'s column · words where the text starts · ✕ over Send (`ComposerRide` orders them), rows 44, 6 under
 the pen line, one reply a 98 capsule, Send the corner block whenever anything rides
@@ -934,7 +935,8 @@ emptied) is fixed by one drawable per player, its end callback registered once a
 `MessageMenu.live`. The notifications list and a phone's conversations are bands (`ListBands`, both apps:
 `rowBoundary(…, steps)` seeded by the lower row's key, nothing at rest, a press 12 % from 80 ms cancelled by a
 scroll, a pointer 6 %; Android's `delayedPress`); a phone's conversations put their content 20 from the edges
-and the first row 4 under the bar. A tablet can be checked on a phone AVD: `adb shell wm size 2560x1600; adb shell
+and the first row 4 under the bar. On a tablet or the Mac a bell row is the reading column, its band cut at the
+column's sides with corners rounded 16 (round 24: `BandShape` `cut`, Android `ListBands.path(…, cut)`). A tablet can be checked on a phone AVD: `adb shell wm size 2560x1600; adb shell
 wm density 320`, then `wm size reset; wm density reset`. iOS Universal Links: both hosts in both entitlements;
 test on a device (Settings › Developer › Universal Links › Diagnostics — the simulator falls to Safari), and after
 the first archive check `codesign -d --entitlements -` lists associated-domains (else tick Associated Domains on

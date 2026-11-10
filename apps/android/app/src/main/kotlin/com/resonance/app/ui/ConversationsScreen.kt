@@ -14,6 +14,11 @@ import androidx.compose.foundation.layout.width
 import com.resonance.design.SharedShimmer
 import com.resonance.design.Skeleton
 import com.resonance.design.readableColumn
+import com.resonance.design.HeaderEdgeHeight
+import com.resonance.design.brandBarHeight
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -92,22 +97,26 @@ fun ConversationsScreen(session: Session, open: (Route) -> Unit) {
     val blocked by session.conversations.blockedIds.collectAsStateWithLifecycle()
     // Someone not blocked (their cards would never reach this account).
     val someone = connected.orEmpty().any { it !in blocked.orEmpty() }
-    val connectionsInvite = rememberInviteShown(session, NotifyInvite.ConnectionCards, eligible = someone)
+    val connections = rememberInviteShown(session, NotifyInvite.ConnectionCards, eligible = someone)
+    val connectionsInvite = connections.shown
     LaunchedEffect(connectionsInvite && state.loaded) { if (connectionsInvite && state.loaded) list.keepTopInView(before = 1) }
     // A phone's rows are bands, their content 20 from the edges, the first 4 under the bar's foot; a tablet's and
     // the panes' keep the page's 16 / 18 and the list pane's own 14 (round 23 §5: [ConversationsFrame]).
     val frame = ConversationsFrame.of(LocalWindowLayout.current.cls)
     val scrolling = { list.isScrollInProgress }
-    // In the rows' column; on a phone its pen line 16 under the bar's foot, where a first row's avatar would stand.
-    val inviteFrame = Modifier.readableColumn(NotifyInviteMaxWidth + 62.dp).padding(start = frame.start, end = frame.end).padding(horizontal = frame.rowInset)
-        .padding(top = if (frame.bands) ListBands.RowPad else 4.dp, bottom = 16.dp)
+    // The invite by the device's kind (round 24): a phone's a band of the list from the bar's pen line, its words in the
+    // rows' column, its paper up under the bar to the list's top, the first row 4 under it; a tablet's and the panes' a
+    // card with no pen line in the rows' column, where the first row would be, 12 above it.
+    val barFoot = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + brandBarHeight() + HeaderEdgeHeight
+    val inviteLook = conversationsInviteLook(frame, Modifier.readableColumn(), barFoot)
+    val inviteRoom = conversationsInviteRoom(frame, Modifier.readableColumn())
     // The curve under each row: the next row's key, the starters' label under the last conversation, the list's end under the last row.
     val conversationKeys = state.conversations.map { "c:${it.id}" }
     val starterKeys = state.starters.map { "s:${it.id}" }
     val conversationsBelow = bandsBelow(conversationKeys, if (starterKeys.isNotEmpty()) StartersKey else ListBands.EndKey)
     val startersBelow = bandsBelow(starterKeys, ListBands.EndKey)
     TabScreen(L10n.App.Nav.messages, titleInBar = true, tabletAir = false, headGap = frame.headGap, list = list) {
-        if (connectionsInvite && state.loaded) notifyInviteItem(session, NotifyInvite.ConnectionCards, inviteFrame)
+        if (connectionsInvite && state.loaded) notifyInviteItem(session, connections, inviteRoom, inviteLook)
         if (state.loaded && state.conversations.isEmpty() && state.starters.isEmpty() && !twoPane) {
             // Nothing yet: the shared empty state, in the middle of the room between the bar and the tab bar.
             item {

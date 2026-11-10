@@ -74,10 +74,12 @@ import com.resonance.design.ComposerCapsule
 import com.resonance.design.ComposerHeight
 import com.resonance.design.ComposerLeadShape
 import com.resonance.design.ComposerLeadSize
+import com.resonance.design.ComposerShortLeadSize
+import com.resonance.design.ComposerMediaSize
+import com.resonance.design.ComposerShortMediaSize
+import com.resonance.design.composerTileShape
 import com.resonance.design.ComposerRow
-import com.resonance.design.ComposerRowHeight
 import com.resonance.design.ComposerRowsTop
-import com.resonance.design.ComposerShortRowHeight
 import com.resonance.design.ComposerShortThumb
 import com.resonance.design.ComposerShortViewport
 import com.resonance.design.ComposerStripPad
@@ -90,7 +92,7 @@ import com.resonance.design.ComposerSegment
 import com.resonance.design.ComposerTile
 import com.resonance.design.OrganicIcon
 import com.resonance.design.OrganicIndication
-import com.resonance.design.ReplyRule
+import com.resonance.design.ComposerReplyMark
 import com.resonance.design.SketchLoader
 import com.resonance.design.bareMenuOpen
 import com.resonance.design.blocksTouches
@@ -304,7 +306,7 @@ internal fun ridingRows(reply: Boolean, note: Boolean, card: Boolean, picture: B
 
 /**
  * The rows riding with the message, inside the capsule over the text (round 23 §2), [ComposerRowsTop] under its pen
- * line, touching, each mark · words · ✕ ([ComposerRow]): the reply (the wavy terracotta rule; whom to over a line of
+ * line, touching, each mark · words · ✕ ([ComposerRow]): the reply (the reply arrow in terracotta; whom to over a line of
  * what — a sticker, a picture or a card it answers as a 36 thumbnail before the words; the words go to the message),
  * the note answered (its glyph on the tonal tile), the card (its cover on the tile, else its glyph; 卡片 over its
  * title), the pictures chosen ([PictureStrip]), and why the last message didn't go ([ComposerErrorRow]). One group
@@ -325,43 +327,30 @@ private fun ComposerRows(model: ThreadModel, short: Boolean, onQuote: (String) -
         val note = model.noteRef
         val card = model.pendingCard
         val error = model.error
-        val rowHeight = if (short) ComposerShortRowHeight else ComposerRowHeight
-        val rule: @Composable () -> Unit = { ReplyRule(Modifier.height(rowHeight - REPLY_RULE_INSET)) }
+        val tile = if (short) ComposerShortLeadSize else ComposerLeadSize
         ridingRows(reply != null, note != null, card != null, model.pictures.isNotEmpty(), error != null).forEach { row ->
             when (row) {
                 Riding.Reply -> reply?.let { quote ->
                     val toSelf = quote.senderId == model.me
                     val who = if (toSelf) L10n.Messages.replyingToSelf else L10n.Messages.replyingTo(model.other?.handle.orEmpty())
-                    val jump = { onQuote(quote.id) }
-                    when (val detail = replyDetail(quote)) {
-                        is ReplyDetail.Words -> ComposerRow(
-                            who, detail.text, L10n.Messages.replyCancel, { model.cancelReply() },
-                            short = short, onTap = jump,
-                            media = replyMedia(model, quote),
-                            lead = rule,
-                        )
-                        // A sticker: its key pose alone before whom it answers, no words (the owner's) — its name for TalkBack.
-                        is ReplyDetail.Sticker -> ComposerRow(
-                            who, null, L10n.Messages.replyCancel, { model.cancelReply() },
-                            short = short, onTap = jump,
-                            media = {
-                                StickerPose(detail.sticker, model.origin, Modifier.fillMaxSize().alpha(QUOTED_STICKER_ALPHA).semantics { contentDescription = detail.spoken })
-                            },
-                            lead = rule,
-                        )
-                    }
+                    ComposerReplyRow(
+                        quote, who, model.origin, short,
+                        onCancel = { model.cancelReply() },
+                        onTap = { onQuote(quote.id) },
+                        wordsMedia = { replyMedia(model, quote, short) },
+                    )
                 }
                 Riding.Note -> ComposerRow(
                     L10n.Messages.quotedNote, null, L10n.Messages.removeNote, { model.noteRef = null },
                     short = short, onTap = onFocusField,
-                ) { ComposerTile(IconName.Note) }
+                ) { ComposerTile(IconName.Note, side = tile) }
                 Riding.Card -> card?.let { c ->
                     // A 私人卡 says so where 卡片 would: the message is what lets them read it.
                     ComposerRow(
                         if (c.keptPrivate) L10n.Messages.privateCard else L10n.Messages.attachCardShort, c.title, L10n.Messages.removeCard, { model.pendingCard = null },
                         short = short, onTap = onFocusField,
                     ) {
-                        ComposerTile(IconName.Cards) {
+                        ComposerTile(IconName.Cards, side = tile) {
                             c.cover?.let { AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
                         }
                     }
@@ -373,19 +362,60 @@ private fun ComposerRows(model: ThreadModel, short: Boolean, onQuote: (String) -
     }
 }
 
-/** The reply's rule stands this much shorter than its row (8 clear above and below). */
-private val REPLY_RULE_INSET = 16.dp
+/**
+ * The reply riding with the message (round 23 §2, round 24): the reply arrow over ＋ ([ComposerReplyMark], in place of
+ * the wavy rule), whom it answers ([who]) over a line of what — words, with [wordsMedia]'s thumbnail before them (a
+ * picture or a card's cover the thread holds, read only for words) — or, for a sticker this build draws, its key pose
+ * alone before whom it answers, no words (the owner's): its name for TalkBack, the pose centred in its thumbnail
+ * ([QuotedStickerPose]) and always [quote]'s own sticker, however the reply changed before. A tap on the words is
+ * [onTap] (to the message it answers), its ✕ [onCancel].
+ */
+@Composable
+internal fun ComposerReplyRow(
+    quote: ReplyQuote,
+    who: String,
+    origin: String,
+    short: Boolean,
+    onCancel: () -> Unit,
+    onTap: () -> Unit,
+    wordsMedia: () -> (@Composable () -> Unit)?,
+    modifier: Modifier = Modifier,
+    find: (ChatSticker) -> StickerCatalog.Sticker? = com.resonance.app.Stickers::find,
+) {
+    val mark: @Composable () -> Unit = { ComposerReplyMark(short = short) }
+    when (val detail = replyDetail(quote, find)) {
+        is ReplyDetail.Words -> ComposerRow(
+            who, detail.text, L10n.Messages.replyCancel, onCancel, modifier,
+            short = short, onTap = onTap,
+            media = wordsMedia(),
+            lead = mark,
+        )
+        is ReplyDetail.Sticker -> ComposerRow(
+            who, null, L10n.Messages.replyCancel, onCancel, modifier,
+            short = short, onTap = onTap,
+            media = {
+                QuotedStickerPose(detail.sticker, origin, Modifier.fillMaxSize().alpha(QUOTED_STICKER_ALPHA).semantics { contentDescription = detail.spoken })
+            },
+            lead = mark,
+        )
+    }
+}
+
+/** A reply's picture or cover thumbnail ([short]: a short window's): rounded as the lead tiles are, in proportion (iOS's `ComposerRowTile.shape(side:)`). */
+private val ReplyMediaShape = composerTileShape(ComposerMediaSize)
+private val ShortReplyMediaShape = composerTileShape(ComposerShortMediaSize)
 
 /**
- * What a reply answers, as a 36 thumbnail before its words (Telegram's photo reply): the picture it quotes, or the
+ * What a reply answers, as a 36 thumbnail (a short window's 28) before its words (Telegram's photo reply): the picture it quotes, or the
  * cover of the card it quotes — as the thread holds that message now; none for words (or a picture not held).
  */
-private fun replyMedia(model: ThreadModel, quote: ReplyQuote): (@Composable () -> Unit)? {
+private fun replyMedia(model: ThreadModel, quote: ReplyQuote, short: Boolean): (@Composable () -> Unit)? {
     if (quote.unsent) return null
+    val shape = if (short) ShortReplyMediaShape else ReplyMediaShape
     val original = model.find(quote.id)
     val picture = original?.let(model::picture)
     if (picture != null) return {
-        Box(Modifier.fillMaxSize().clip(ComposerLeadShape).background(Tokens.CreamDark)) {
+        Box(Modifier.fillMaxSize().clip(shape).background(Tokens.CreamDark)) {
             when (picture) {
                 is ChatPictureSource.Local -> Image(picture.preview, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 is ChatPictureSource.Remote -> model.pictureLoader?.let { loader ->
@@ -396,7 +426,7 @@ private fun replyMedia(model: ThreadModel, quote: ReplyQuote): (@Composable () -
     }
     val cover = replyCover(quote, original, model.cards, model.me)
     if (cover != null) return {
-        Box(Modifier.fillMaxSize().clip(ComposerLeadShape).background(ComposerTileFace)) {
+        Box(Modifier.fillMaxSize().clip(shape).background(ComposerTileFace)) {
             AsyncImage(model = cover, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
     }
@@ -610,9 +640,6 @@ internal fun replyDetail(quote: ReplyQuote, find: (ChatSticker) -> StickerCatalo
     if (sticker != null) return ReplyDetail.Sticker(sticker, L10n.Messages.stickerLabel(sticker.name(Strings.language.tag)))
     return ReplyDetail.Words(quoteWords(quote))
 }
-
-/** A replied sticker's pose in the reply row. */
-private val REPLIED_STICKER = 32.dp
 
 /**
  * A quote's words, wherever one shows (the composer's reply row, the quote over a reply): a sticker's

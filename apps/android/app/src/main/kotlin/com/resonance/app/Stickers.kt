@@ -83,7 +83,7 @@ object Stickers {
 
     /** The key pose of [sticker] (null: it can't be read now). */
     suspend fun pose(sticker: StickerCatalog.Sticker, origin: String): ImageBitmap? {
-        val key = "pose:${sticker.thumb}?${sticker.v}"
+        val key = poseKey(sticker)
         poses.get(key)?.let { return it }
         return withContext(Dispatchers.IO) {
             val source = source(sticker.thumb, sticker.thumbUrl, sticker.v, bundledFile = isBundled(sticker), origin = origin) ?: return@withContext null
@@ -92,7 +92,14 @@ object Stickers {
     }
 
     /** The pose kept in memory, if it is (drawn without a frame's wait). */
-    fun cachedPose(sticker: StickerCatalog.Sticker): ImageBitmap? = poses.get("pose:${sticker.thumb}?${sticker.v}")
+    fun cachedPose(sticker: StickerCatalog.Sticker): ImageBitmap? = poses.get(poseKey(sticker))
+
+    /** Keeps [pose] as [sticker]'s decoded pose (the tests' poses, which no file holds). */
+    internal fun keepPose(sticker: StickerCatalog.Sticker, pose: ImageBitmap) {
+        poses.put(poseKey(sticker), pose)
+    }
+
+    private fun poseKey(sticker: StickerCatalog.Sticker) = "pose:${sticker.thumb}?${sticker.v}"
 
     /** A pack's tab icon (the character's head). */
     suspend fun icon(pack: StickerCatalog.Pack, origin: String): ImageBitmap? {

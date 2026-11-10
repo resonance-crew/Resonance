@@ -133,6 +133,7 @@ import com.resonance.kit.chat.PictureBox
 import com.resonance.kit.chat.Carried
 import com.resonance.kit.chat.words
 import com.resonance.kit.chat.ThreadRow
+import com.resonance.kit.chat.StickerCatalog
 import com.resonance.kit.l10n.L10n
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -686,7 +687,8 @@ private fun ReplyQuoteView(message: ChatMessage, mine: Boolean, ctx: ThreadConte
             seed = seedFromId(quote.id, 19),
             onClick = if (interactive) { { ctx.onQuote(quote.id) } } else null,
             // Faded as quoted words are muted (the owner's): it is what was answered, not what is said.
-            leading = sticker?.let { s -> { StickerPose(s, ctx.origin, Modifier.size(QUOTED_STICKER).alpha(QUOTED_STICKER_ALPHA)) } },
+            // Its pose in the middle of its 44 (round 24 §C), however low in its square the drawing stands.
+            leading = sticker?.let { s -> { QuotedStickerPose(s, ctx.origin, Modifier.size(QUOTED_STICKER).alpha(QUOTED_STICKER_ALPHA)) } },
             // A sticker answering lies over nothing (it has no bubble): the quote keeps no foot for it, its content centred.
             overlapped = !underSticker,
         )
@@ -744,9 +746,12 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     // A sticker (round 22 §4.5): drawn from the bundle, or the site's file for a later pack; one found nowhere is its fallback words.
     val stickerRef = message.sticker
-    val sticker by produceState(stickerRef?.let { com.resonance.app.Stickers.find(it) }, stickerRef) {
-        if (value == null && stickerRef != null) value = com.resonance.app.Stickers.ensure(stickerRef, ctx.origin)
+    // Held per sticker (round 24 §A): never a sticker another message named here before (produceState's value outlives its key).
+    val stickerState = remember(stickerRef) { mutableStateOf(stickerRef?.let { com.resonance.app.Stickers.find(it) }) }
+    LaunchedEffect(stickerRef) {
+        if (stickerState.value == null && stickerRef != null) stickerState.value = com.resonance.app.Stickers.ensure(stickerRef, ctx.origin)
     }
+    val sticker by stickerState
     val album = row.album
     val words = carried.words(message)
     val links = remember(words) { Linkify.find(words) }
@@ -796,9 +801,10 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
         // The reply lies over the foot of what it quotes, a note over the card it was left on; a sticker answering comes up
         // over the quote's lower edge, in front of it (the owner's: close to what it answers, overlapping is fine) — the
         // quote keeping its even air, the sticker's own transparent margin taking the rest.
-        Box(quoteOverlap(answerIsSticker = drawnSticker != null, quoted = message.replyTo != null || message.isNote)?.let { Modifier.overlapAbove(it) } ?: Modifier) {
+        val overlap = quoteOverlap(drawnSticker, quoted = message.replyTo != null || message.isNote, ctx.stickerSize)
+        Box(overlap?.let { Modifier.overlapAbove(it) } ?: Modifier) {
         if (drawnSticker != null) {
-            StickerFace(drawnSticker, message, ctx, interactive, actions, onLongPress = { press(null) })
+            StickerFace(drawnSticker, message, ctx.origin, ctx.stickerSize, interactive, actions, over = overlap ?: 0.dp, onLongPress = { press(null) })
         } else MessageBubble(
             words, mine, seedFromId(message.key),
             actions = actions,
@@ -866,16 +872,22 @@ internal fun mergedChips(each: List<List<ReactionChipItem>>): List<ReactionChipI
 
 /**
  * How far what answers lies over the quote above it (none: nothing quoted): a bubble over the quote's foot kept for it
- * ([REPLY_OVERLAP]); a sticker, which has no bubble, over the lower edge of a quote that kept no foot ([STICKER_OVER_QUOTE]).
+ * ([REPLY_OVERLAP]); a sticker ([answer], drawn [stickerSize] square), which has no bubble, over the lower edge of a
+ * quote that kept no foot — by its drawing: its key pose rises [STICKER_OVER_QUOTE] over the quote whatever empty paper
+ * its room keeps above that pose ([StickerCatalog.Sticker.artTop] of its side; the web's `--sticker-art`, iOS's twin).
  */
-internal fun quoteOverlap(answerIsSticker: Boolean, quoted: Boolean): Dp? = when {
+internal fun quoteOverlap(answer: StickerCatalog.Sticker?, quoted: Boolean, stickerSize: Dp): Dp? = when {
     !quoted -> null
-    answerIsSticker -> STICKER_OVER_QUOTE
+    answer != null -> STICKER_OVER_QUOTE + stickerSize * answer.artTop
     else -> REPLY_OVERLAP
 }
 
-/** A sticker answering comes this far up over its quote's lower edge (the owner's: 16–20; the art's own transparent margin leaves its sparkles just touching). */
-internal val STICKER_OVER_QUOTE = 20.dp
+/**
+ * A sticker answering lies this far over its quote's lower edge (the owner's: 16–20), measured to its drawing — the
+ * key pose's top, not its room's ([stickerRoom] starts 2 % above the frames, and a pose may rest lower than they reach)
+ * — so the drawing itself lies over the quote's foot, in front of it, by the same 18 on every platform.
+ */
+internal val STICKER_OVER_QUOTE = 18.dp
 
 /** A quoted sticker's pose is drawn this faint, as quoted words are muted (the thread's quote and the reply row alike). */
 internal const val QUOTED_STICKER_ALPHA = 0.55f
@@ -887,18 +899,21 @@ private val QUOTED_STICKER = 44.dp
 private val ALBUM_WIDTH = 280.dp
 
 /**
- * A sticker in the thread (round 22 §4.5): no bubble, [ThreadContext.stickerSize] square on its sender's
+ * A sticker in the thread (round 22 §4.5): no bubble, [size] square ([ThreadContext.stickerSize]) on its sender's
  * side, playing its two plays the first time it comes on screen this session, then at rest on its key
  * pose; a tap plays it again, a hold is the message's menu (its reactions and unsend as any message's).
- * Its name is what TalkBack reads.
+ * Its name is what TalkBack reads. Answering a quote, it lies [over] up over the quote's foot ([quoteOverlap]): that
+ * band of its room is the quote's to touch, so its tap and hold take the rest of the room alone.
  */
 @Composable
-private fun StickerFace(
+internal fun StickerFace(
     sticker: com.resonance.kit.chat.StickerCatalog.Sticker,
     message: ChatMessage,
-    ctx: ThreadContext,
+    origin: String,
+    size: Dp,
     interactive: Boolean,
     actions: List<CustomAccessibilityAction>,
+    over: Dp = 0.dp,
     onLongPress: () -> Unit,
 ) {
     var replays by remember(message.key) { mutableIntStateOf(0) }
@@ -907,26 +922,33 @@ private fun StickerFace(
     // touched while 傳送中 would otherwise open the menu of a message still on its way (empty) for as long as it stays.
     val hold by rememberUpdatedState(onLongPress)
     val name = L10n.Messages.stickerLabel(sticker.name(com.resonance.kit.l10n.Strings.language.tag))
-    PlayingSticker(
-        sticker, ctx.origin, key = message.key, size = ctx.stickerSize,
-        // Asked as it is first placed on screen: a row composed ahead of the screen doesn't spend its first sight.
-        autoplay = { interactive && StickerPlayback.firstSight(message.key) },
-        replays = replays,
-        modifier = Modifier
-            .then(
-                if (interactive) Modifier.pointerInput(message.key) {
+    Box {
+        PlayingSticker(
+            sticker, origin, key = message.key, size = size,
+            // Asked as it is first placed on screen: a row composed ahead of the screen doesn't spend its first sight.
+            autoplay = { interactive && StickerPlayback.firstSight(message.key) },
+            replays = replays,
+            modifier = Modifier
+                .then(if (message.delivery == Delivery.Failed) Modifier.fade(0.6f) else Modifier)
+                .semantics {
+                    contentDescription = name
+                    if (interactive) {
+                        onLongClick { onLongPress(); true }
+                        if (actions.isNotEmpty()) customActions = actions
+                    }
+                },
+        )
+        // Its tap and hold (round 24): the room less its top [over] — the band it rises over the quote's foot, where a tap is
+        // the quote's (it jumps to what was quoted), not a replay. Laid over the room, so the room itself is as it was.
+        if (interactive) Box(
+            Modifier
+                .matchParentSize()
+                .padding(top = over)
+                .pointerInput(message.key) {
                     detectTapGestures(onTap = { replays++ }, onLongPress = { hold() })
-                } else Modifier,
-            )
-            .then(if (message.delivery == Delivery.Failed) Modifier.fade(0.6f) else Modifier)
-            .semantics {
-                contentDescription = name
-                if (interactive) {
-                    onLongClick { onLongPress(); true }
-                    if (actions.isNotEmpty()) customActions = actions
-                }
-            },
-    )
+                },
+        )
+    }
 }
 
 /**
@@ -1119,7 +1141,7 @@ private fun DeliveryLine(message: ChatMessage, model: ThreadModel) {
 private const val SLOW_SEND_MILLIS = 1000L
 
 /** The row sits `by` closer to what is above it: the bubble that answers lies over the foot of the quote. */
-private fun Modifier.overlapAbove(by: Dp): Modifier = layout { measurable, constraints ->
+internal fun Modifier.overlapAbove(by: Dp): Modifier = layout { measurable, constraints ->
     val placeable = measurable.measure(constraints)
     val up = by.roundToPx()
     layout(placeable.width, (placeable.height - up).coerceAtLeast(0)) { placeable.place(0, -up) }

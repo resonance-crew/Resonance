@@ -1577,6 +1577,44 @@ describe('reactions and unsending (round 16)', () => {
     expect(row.querySelector('[class*="carryDetail"]')).toBeNull();
   });
 
+  // Round 24 (the owner's: 「回覆一個貼圖之後，再選擇回覆另外一個貼圖，沒辦法切換」): the reply row follows each
+  // reply chosen — sticker to sticker, sticker to words and back, and the same sticker twice.
+  it('moves the reply from one sticker to the next, and between a sticker and words', async () => {
+    server.messages = [
+      text('s1', '〔貼圖：謝謝〕', { sentAt: now(), sticker: { pack: 'twine', id: 'thanks' } }),
+      text('s2', '〔貼圖：哈哈〕', { sentAt: now(), sticker: { pack: 'pip', id: 'haha' } }),
+      text('m3', 'rain again', { sentAt: now() }),
+    ];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const { container } = renderWithIntl(thread());
+    await screen.findByRole('button', { name: 'Sticker: Haha' });
+    const replyTo = async (id: string) => {
+      const overlay = await hold(container, id);
+      await user.click(within(overlay).getByRole('menuitem', { name: 'Reply' }));
+      await gone();
+    };
+    const row = () => screen.getByText('Replying to alice', { ignore: SAID }).closest<HTMLElement>('[class*="carryRow"]')!;
+    const shown = () => row().querySelector('img')?.getAttribute('src') ?? row().querySelector('[class*="carryDetail"]')?.textContent;
+
+    await replyTo('s1');
+    expect(shown()).toContain('/stickers/twine/thanks.thumb.webp');
+    await replyTo('s2');
+    expect(shown()).toContain('/stickers/pip/haha.thumb.webp');
+    await replyTo('s2');
+    expect(shown()).toContain('/stickers/pip/haha.thumb.webp');
+    await replyTo('m3');
+    expect(shown()).toBe('rain again');
+    await replyTo('s1');
+    expect(shown()).toContain('/stickers/twine/thanks.thumb.webp');
+    // A mouse's ↩ beside each.
+    const arrow = (id: string) => within(container.querySelector<HTMLElement>(`[data-message-id="${id}"]`)!).getByRole('button', { name: 'Reply' });
+    await user.click(arrow('s2'));
+    expect(shown()).toContain('/stickers/pip/haha.thumb.webp');
+    await user.click(arrow('s1'));
+    expect(shown()).toContain('/stickers/twine/thanks.thumb.webp');
+  });
+
   it('unsends one of the viewer’s own after a plain-coloured yes: a dashed line where it was, its quote emptied', async () => {
     server.messages = [
       text('m1', 'oops, wrong chat', { sentAt: now() }, 'me'),

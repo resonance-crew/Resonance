@@ -66,13 +66,16 @@ class ComposerFootTest {
             Box(Modifier.width(360.dp)) {
                 ComposerRow(
                     "回覆 bob", "那篇雨後散步寫得好好", "取消回覆", { closed++ }, Modifier.testTag("row"), onTap = { tapped++ },
-                ) { ReplyRule(Modifier.height(28.dp).testTag("mark")) }
+                ) { ComposerReplyMark(Modifier.testTag("mark")) }
             }
         }
         val row = compose.onNodeWithTag("row").assertHeightIsEqualTo(ComposerRowHeight).getBoundsInRoot()
-        // The mark centred in ＋'s 48 column.
+        // The mark — the reply arrow, 20 (round 24: no longer the wavy rule) — centred in ＋'s 48 column and in the row.
         val mark = compose.onNodeWithTag("mark", useUnmergedTree = true).getBoundsInRoot()
         assertEquals((row.left + ComposerLeadColumn / 2).value, ((mark.left + mark.right) / 2).value, 0.5f)
+        assertEquals(((row.top + row.bottom) / 2).value, ((mark.top + mark.bottom) / 2).value, 0.5f)
+        assertEquals(20f, (mark.right - mark.left).value, 0.5f)
+        assertEquals(20f, (mark.bottom - mark.top).value, 0.5f)
         // The words start where the field's do: past ＋'s column.
         val label = compose.onNodeWithText("回覆 bob").getBoundsInRoot()
         assertEquals((row.left + ComposerLeadColumn).value, label.left.value, 0.5f)
@@ -97,8 +100,15 @@ class ComposerFootTest {
         compose.onNodeWithTag("short").assertHeightIsEqualTo(ComposerShortRowHeight)
         // Label · detail on one line.
         compose.onNodeWithText("卡片 · 寫給十年前的自己").assertExists()
-        assertEquals(32.dp, ComposerLeadSize)
+        // The card's or note's tile 36 in ＋'s 48 (6 clear each side, as iOS's 32 in its 44), as large as a reply's media;
+        // a short window's 8 less than its row, as iOS's (round 24, the owner: 「卡片的圖片…可不可以顯示再大一點點呢」).
+        assertEquals(36.dp, ComposerLeadSize)
+        assertEquals(ComposerLeadColumn - 12.dp, ComposerLeadSize)
         assertEquals(36.dp, ComposerMediaSize)
+        assertEquals(28.dp, ComposerShortLeadSize)
+        // A reply's arrow: 20, a short window's one-line row 18.
+        assertEquals(20.dp, ComposerReplyMarkSize)
+        assertEquals(18.dp, ComposerShortReplyMarkSize)
     }
 
     @Test fun aRepliesMediaStandsAtTheWordsStartAndTheWordsAfterIt() {
@@ -107,7 +117,7 @@ class ComposerFootTest {
                 ComposerRow(
                     "回覆 bob", null, "取消回覆", {}, Modifier.testTag("row"),
                     media = { Box(Modifier.fillMaxSize().testTag("media")) },
-                ) { ReplyRule(Modifier.height(28.dp)) }
+                ) { ComposerReplyMark() }
             }
         }
         val row = compose.onNodeWithTag("row").getBoundsInRoot()

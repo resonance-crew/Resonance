@@ -13,6 +13,7 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,6 +30,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
@@ -41,15 +46,17 @@ import com.resonance.app.Session
 import com.resonance.design.PanelGripMark
 import com.resonance.design.Segment
 import com.resonance.design.SegmentedActionBar
-import com.resonance.design.WavyDivider
+import com.resonance.design.toPath
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
+import com.resonance.geometry.wavyLine
 import com.resonance.kit.chat.ChatAlbum
 import com.resonance.kit.l10n.L10n
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * The room a panel takes under the capsule, in the keyboard's place (round 22 §4.1–4.2), as px: [height]
@@ -129,6 +136,8 @@ internal class PanelRoom(private val scope: CoroutineScope, private val still: B
  * one line and 「允許存取」; with some pictures allowed, the rest by 「選擇更多相片」; refused, the system's
  * picker instead, so a picture can always be sent. 卡片 is the viewer's cards
  * ([CardPickPanel]).
+ *
+ * The panel itself runs across the pane, its pen line too ([AttachPanelFrame]); what it shows keeps to [column].
  */
 @Composable
 internal fun AttachPanel(
@@ -142,33 +151,70 @@ internal fun AttachPanel(
     onSystemPicker: () -> Unit,
     onPickCard: (com.resonance.api.models.FeedCard) -> Unit,
     modifier: Modifier = Modifier,
+    /** Where the pictures, the cards and the floating bar keep to (a tablet's reading column); the pen line runs on past it. */
+    column: Modifier = Modifier,
+    /** Beside the conversations: how far back the pen line reaches to meet the rule between the panes. */
+    lineLead: PanelLineLead? = null,
     /** The card riding with the next message: ticked in 卡片. */
     chosenCard: String? = null,
     /** The navigation bar under the panel: the grid and the list run on under it to the screen's edge, the bar floats over it. */
     navigation: Dp = 0.dp,
 ) {
+    AttachPanelFrame(
+        room, onGrip, modifier, column, lineLead,
+        bar = {
+            // The halves float over what they show (the owner's notes 6): no band behind them, and a tap beside them is the
+            // grid's or the list's — nothing round the bar takes a touch. Smaller than a full-width bar, so it hides less.
+            SegmentedActionBar(
+                listOf(
+                    tabSegment(AttachTab.Pictures, tab, L10n.Messages.attachImage, IconName.Image, onTab),
+                    tabSegment(AttachTab.Cards, tab, L10n.Messages.attachCardShort, IconName.Cards, onTab),
+                ),
+                Modifier.align(Alignment.BottomCenter).padding(bottom = AttachBarGap + navigation).width(AttachBarWidth),
+                seed = 79.0,
+                minHeight = AttachBarHeight,
+            )
+        },
+    ) {
+        when (tab) {
+            AttachTab.Pictures -> GalleryPane(numberOf, onToggle, onSystemPicker, bottom = AttachBarRoom + navigation)
+            AttachTab.Cards -> CardPickPanel(session, onPickCard, Modifier.fillMaxSize(), bottom = AttachBarRoom + navigation, chosenId = chosenCard)
+        }
+    }
+}
+
+/**
+ * The attach panel's frame (round 24 part 3 §C2, the owner's: the line over the pictures 「沒有接在這個兩側」): the grip
+ * band across the whole pane — its pen line from the window's edge, or from the rule beside the conversations
+ * ([lineLead]), to the window's edge, the grip mark over the middle, which is the middle of what it shows — then
+ * [content] in [column] (a tablet's reading column, centred: the pictures, the prompt, the cards), and [bar] over it,
+ * in that column too.
+ */
+@Composable
+internal fun AttachPanelFrame(
+    room: PanelRoom,
+    onGrip: (PanelRoom.Stop) -> Unit,
+    modifier: Modifier = Modifier,
+    column: Modifier = Modifier,
+    lineLead: PanelLineLead? = null,
+    bar: @Composable BoxScope.() -> Unit,
+    content: @Composable BoxScope.() -> Unit,
+) {
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            PanelGrip(room, onGrip)
-            Box(Modifier.fillMaxWidth().weight(1f)) {
-                when (tab) {
-                    AttachTab.Pictures -> GalleryPane(numberOf, onToggle, onSystemPicker, bottom = AttachBarRoom + navigation)
-                    AttachTab.Cards -> CardPickPanel(session, onPickCard, Modifier.fillMaxSize(), bottom = AttachBarRoom + navigation, chosenId = chosenCard)
-                }
-            }
+            PanelGrip(room, onGrip, lineLead)
+            Box(Modifier.weight(1f).then(column).fillMaxSize(), content = content)
         }
-        // The halves float over what they show (the owner's notes 6): no band behind them, and a tap beside them is the
-        // grid's or the list's — nothing round the bar takes a touch. Smaller than a full-width bar, so it hides less.
-        SegmentedActionBar(
-            listOf(
-                tabSegment(AttachTab.Pictures, tab, L10n.Messages.attachImage, IconName.Image, onTab),
-                tabSegment(AttachTab.Cards, tab, L10n.Messages.attachCardShort, IconName.Cards, onTab),
-            ),
-            Modifier.align(Alignment.BottomCenter).padding(bottom = AttachBarGap + navigation).width(AttachBarWidth),
-            seed = 79.0,
-            minHeight = AttachBarHeight,
-        )
+        Box(column.fillMaxSize(), content = bar)
     }
+}
+
+/**
+ * How far before the pane's start the attach panel's top pen line starts (px, ≥ 0) for that line [y] px under the
+ * panel's top: beside the conversations, back to the rule between the panes where the line crosses its wave.
+ */
+internal fun interface PanelLineLead {
+    fun at(y: Float): Float
 }
 
 /** The floating 圖片｜卡片: this wide and tall, this far over the panel's foot. */
@@ -194,18 +240,37 @@ private fun tabSegment(which: AttachTab, chosen: AttachTab, label: String, icon:
 }
 
 /**
- * The panel's top edge (round 22 §4.2): one pen line across, the short wavy grip on it — a 44-tall band
- * that drags the panel taller or down to close, and offers both to TalkBack.
+ * The panel's top edge (round 22 §4.2): one pen line across, the short wavy grip on it — a 28-tall band
+ * that drags the panel taller or down to close, and offers both to TalkBack. The line runs the band's whole
+ * width (the pane's), a turn every ~[GripLineTurn] — never fewer than seven, as across the column it once kept
+ * to — and on back by [lineLead] to meet the rule beside the conversations, straight across the gap.
  */
 @Composable
-private fun PanelGrip(room: PanelRoom, onGrip: (PanelRoom.Stop) -> Unit) {
+private fun PanelGrip(room: PanelRoom, onGrip: (PanelRoom.Stop) -> Unit, lineLead: PanelLineLead?) {
     val source = remember { MutableInteractionSource() }
     val dragged by source.collectIsDraggedAsState()
     val drag = rememberDraggableState { dy -> room.dragBy(dy) }
+    // In the fields' quiet pen.
+    val pen = Tokens.FieldBorder
+    val ink = Tokens.Ink
     Box(
         Modifier
             .fillMaxWidth()
             .height(28.dp)
+            .drawWithCache {
+                val y = GripLineY.toPx()
+                val w = size.width / density
+                val steps = maxOf(GRIP_LINE_STEPS, (w / GripLineTurn.value).roundToInt())
+                val line = wavyLine(w.toDouble(), GRIP_LINE_SEED, GRIP_LINE_AMP, steps).toPath(density, 0f, y)
+                val stroke = Stroke(ink.toPx(), cap = StrokeCap.Round)
+                onDrawBehind {
+                    // Read as it is drawn: the panel's top moves with the room it takes, and the rule's wave with it.
+                    val lead = lineLead?.at(y) ?: 0f
+                    // One opaque pen: where the lead-in meets the line nothing darkens.
+                    if (lead > 0f) drawLine(pen, Offset(-lead, y), Offset(0f, y), stroke.width, StrokeCap.Round)
+                    drawPath(line, pen, style = stroke)
+                }
+            }
             .draggable(drag, Orientation.Vertical, interactionSource = source, onDragStopped = { v -> onGrip(room.settle(v, closes = true)) })
             .semantics {
                 contentDescription = L10n.Messages.panelGrip
@@ -217,11 +282,18 @@ private fun PanelGrip(room: PanelRoom, onGrip: (PanelRoom.Stop) -> Unit) {
             },
         contentAlignment = Alignment.TopCenter,
     ) {
-        // The pen line along the top, in the fields' quiet pen, and the grip over its middle on the paper.
-        WavyDivider(color = Tokens.FieldBorder, seed = 67.0, amp = 1.2, lineWidth = Tokens.Ink, modifier = Modifier.padding(top = 2.dp))
+        // The grip over the line's middle, on the paper.
         Box(Modifier.padding(top = 10.dp)) { PanelGripMark(active = dragged) }
     }
 }
+
+/** The grip band's pen line: its centre this far under the panel's top (the divider's 6 tall, 2 down, as it was). */
+internal val GripLineY = 5.dp
+private const val GRIP_LINE_SEED = 67.0
+private const val GRIP_LINE_AMP = 1.2
+private const val GRIP_LINE_STEPS = 7
+/** Seven turns across the 720 column the line kept to before it ran across the pane. */
+private val GripLineTurn = 103.dp
 
 /**
  * 圖片: the gallery once it may read the phone's pictures, else one line and one button ([GalleryPrompt]):

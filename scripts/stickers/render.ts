@@ -306,7 +306,7 @@ async function main() {
     if (failures.length) process.exit(1);
     return;
   }
-  writeCatalog();
+  await writeCatalog();
   for (const pack of new Set(list.map(j => j.pack))) {
     const out = await contactSheet(pack);
     if (out) console.log(`contact sheet: ${out.replace(ROOT + '/', '')}`);

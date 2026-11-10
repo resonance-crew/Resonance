@@ -6,12 +6,13 @@ import SwiftUI
 /// part's rows touching, parted by hand-drawn curves that show only as the edge of a row's wash (round
 /// 23 §4: ``ListBands``, no rules between them): who did it (their face) on the left, their pen name
 /// and what they did — a note's own words quoted under it in its card's colour — and when, and the
-/// card it is about on the right. A band runs the screen's width (an iPad's or the Mac's window too),
-/// its content 20 from a phone's edges or in the reading column. Tapping opens where it happened and
-/// marks it read.
+/// card it is about on the right. A phone's band runs the screen's width, its content 20 from the edges;
+/// a wide window's (an iPad's, the Mac's) is the reading column's, cut at its sides 20 past the content
+/// (round 24, part 4). Tapping opens where it happened and marks it read.
 struct NotificationsScreen: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.openRoute) private var openRoute
+    @Environment(\.window) private var window
 
     var body: some View {
         let store = session.notifications
@@ -102,12 +103,13 @@ struct NotificationsScreen: View {
                                  face: Self.face(of: item, extras: extras),
                                  card: Self.card(of: item, extras: extras),
                                  when: item.createdAt.map { BellTime.when($0, now: now) } ?? "")
-                // The content 20 from a phone's edges, in the reading column on a wide window; the band the whole width.
+                // The content 20 from the band's ends: a phone's edges, a wide window's reading column.
                 .padding(.horizontal, ListBands.contentInset)
-                .readableColumn()
                 .contentShape(Rectangle())
         }
-        .buttonStyle(BandWashStyle(top: item.id, bottom: below))
+        .buttonStyle(BandWashStyle(top: item.id, bottom: below, cut: window.layoutClass != .compact))
+        // On a wide window the row — its band and its tap — is the reading column, the band cut at its sides.
+        .readableColumn()
     }
 
     /// A note's own words (a note IS what it says), nothing for any other row.

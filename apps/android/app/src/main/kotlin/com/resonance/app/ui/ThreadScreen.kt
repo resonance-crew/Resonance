@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
 import com.resonance.api.models.FeedCard
@@ -92,6 +94,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -237,8 +240,6 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     var panel by remember { mutableStateOf(PanelState()) }
     // Which panel's content is drawn: kept while a closing panel slides away.
     var shownPanel by remember { mutableStateOf(ComposerPanel.None) }
-    // The thread's foot's width (px): whether its capsule fills it.
-    var footWidth by remember { mutableIntStateOf(0) }
     var attachTab by rememberSaveable { mutableStateOf(AttachTab.Pictures) }
     val still = remember(context) { context.prefersReducedMotion() }
     val panelRoom = remember { PanelRoom(scope, still) }
@@ -341,6 +342,15 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     val phone = LocalWindowLayout.current.cls == LayoutClass.Compact
     // The window's orientation (a pane beside the conversations may be upright in a window on its side).
     val landscape = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    // Beside the conversations: the rule between the panes, which a held message's scrim starts at (round 17 review D2)
+    // and the attach panel's top pen line reaches back to (round 24 part 3 §C2).
+    val paneEdge = LocalPaneScrimEdge.current
+    // The panel's top lies the keyboard's place over the pane's foot: its line meets the rule's wave at that height.
+    val panelLineLead = remember(paneEdge, keyboardPlace, density) {
+        paneEdge?.let { edge ->
+            PanelLineLead { y -> edge.lineLead(screenHeight - keyboardPlace() + y, Size(screenWidth.toFloat(), screenHeight.toFloat()), density.density) }
+        }
+    }
     /** The keyboard's place for a panel now: the keyboard's own height while it is up, else the one remembered. */
     fun panelBase(): Float {
         val keyboardUp = imeInsets.getBottom(density) - navigationBars.getBottom(density)
@@ -576,9 +586,6 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
             ThreadModel.Phase.Loading, ThreadModel.Phase.Ready -> {
                 val ready = model.phase == ThreadModel.Phase.Ready
                 val foot = model.foot
-                // No paper beside the capsule in a pane it doesn't fill (at its widest, room beside it past the
-                // gutter), unless a panel stands in the keyboard's place.
-                val widePane = !phone && with(density) { footWidth.toDp() } > ComposerMax && shownPanel == ComposerPanel.None
                 // The thread runs to the screen's foot; the composer floats over it.
                 Box(Modifier.fillMaxSize()) {
                     if (ready) MessageList(rows, ctx, list, top, Modifier.fillMaxSize().onThreadBlankTap(putKeyboardAway), pillVisible = !(searching && showResults), sayEmpty = foot.composes, room = room, notice = notice)
@@ -590,90 +597,64 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                 // thread mostly is somewhere to write, and the field stays put — what was typed, the keyboard.
                 // It floats 8 over the navigation bar or the keyboard, the page's gutter at its sides; in a wide
                 // pane it keeps to a column of its own, centred under the thread. Behind it the foot's paper
-                // (round 10 §3.2) runs the pane's whole width down to the screen's edge, so the thread never
-                // shows under or beside it — its fade over the foot's top 12 (round 11 §3), counted in the room it
-                // takes; a tap on its solid part puts the keyboard away, as one on the thread's blank does.
-                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { footWidth = it.width }) {
-                    // A pane the capsule doesn't fill (2026-11-01): the thread beside the capsule, sinking into a fade at the
-                    // foot's edge; a panel in the keyboard's place keeps the paper across the pane (it is that paper going on).
-                    if (foot != ThreadFoot.Pending) ComposerBacking(
-                        Modifier.matchParentSize(), onTap = putKeyboardAway,
-                        wide = if (!widePane) null else {
-                            // The column under the capsule starts at its middle (it is opaque above that, what rides
-                            // with the message included; a slip in its place too).
-                            ComposerWideFoot(
-                                footHeight = with(density) { room.foot.toDp() } + ComposerGap,
-                                columnTop = ComposerHeight / 2,
-                                capsuleMax = ComposerMax,
-                                gutter = ComposerGutter,
+                // (round 10 §3.2, [ThreadFootFrame]): across the pane down to the screen's edge, its fade over the
+                // foot's top 12 (round 11 §3) counted in the room it takes — or, in a wide pane, the thread beside the
+                // capsule ([threadWideFoot]); a tap on its solid part puts the keyboard away, as one on the thread's
+                // blank does.
+                ThreadFootFrame(
+                    phone, room, keyboardPlace,
+                    // The panel's content runs on under the navigation bar to the screen's edge (its lists scroll
+                    // there, their fade at that edge; room under their last row keeps it clear of the bar).
+                    panelContent = { panelRoom.contentHeight.roundToInt() + navigationBars.getBottom(density) },
+                    onPaperTap = putKeyboardAway,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    paper = foot != ThreadFoot.Pending,
+                    reach = paneEdge?.reach ?: 0.dp,
+                    composer = {
+                        val padded = Modifier.readableColumn(ComposerMax).padding(horizontal = ComposerGutter)
+                        when (foot) {
+                            ThreadFoot.Composer, ThreadFoot.Answer -> Composer(
+                                model, handle, composerFocus, panel,
+                                onStickers = onStickers, onAttach = onAttach, onSegment = onSegment, onFieldTap = onFieldTap,
+                                expandedHeight = expandedHeight, onExpand = expand, onCollapse = collapse,
+                                onQuote = { id -> jump(id, true) },
+                                onFocusField = focusField,
+                                modifier = padded,
                             )
-                        },
-                    )
-                    Column(Modifier.fillMaxWidth()) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = ComposerGap)
-                                .onSizeChanged { room.foot = it.height },
-                        ) {
-                            val padded = Modifier.readableColumn(ComposerMax).padding(horizontal = ComposerGutter)
-                            when (foot) {
-                                ThreadFoot.Composer, ThreadFoot.Answer -> Composer(
-                                    model, handle, composerFocus, panel,
-                                    onStickers = onStickers, onAttach = onAttach, onSegment = onSegment, onFieldTap = onFieldTap,
-                                    expandedHeight = expandedHeight, onExpand = expand, onCollapse = collapse,
-                                    onQuote = { id -> jump(id, true) },
-                                    onFocusField = focusField,
-                                    modifier = padded,
+                            ThreadFoot.Awaiting -> FootNote(L10n.Messages.awaitingReply, padded)
+                            ThreadFoot.Closed -> FootNote(L10n.Messages.notConnected, padded) {
+                                BasicText(
+                                    L10n.Messages.viewProfile,
+                                    style = AppFonts.body(13f, lineHeight = 1.3f, color = Tokens.Terracotta).copy(textDecoration = TextDecoration.Underline),
+                                    modifier = Modifier
+                                        .heightIn(min = 44.dp)
+                                        .wrapContentHeight()
+                                        .plainClickable(role = Role.Button) { open(Route.Author(model.other?.handle ?: handle)) },
                                 )
-                                ThreadFoot.Awaiting -> FootNote(L10n.Messages.awaitingReply, padded)
-                                ThreadFoot.Closed -> FootNote(L10n.Messages.notConnected, padded) {
-                                    BasicText(
-                                        L10n.Messages.viewProfile,
-                                        style = AppFonts.body(13f, lineHeight = 1.3f, color = Tokens.Terracotta).copy(textDecoration = TextDecoration.Underline),
-                                        modifier = Modifier
-                                            .heightIn(min = 44.dp)
-                                            .wrapContentHeight()
-                                            .plainClickable(role = Role.Button) { open(Route.Author(model.other?.handle ?: handle)) },
-                                    )
-                                }
-                                // Whether a note waits not heard yet: no foot, rather than one that changes as it arrives.
-                                ThreadFoot.Pending -> {}
                             }
+                            // Whether a note waits not heard yet: no foot, rather than one that changes as it arrives.
+                            ThreadFoot.Pending -> {}
                         }
-                        // The keyboard's place: the keyboard itself, a panel standing in for it, or the navigation bar —
-                        // the panel's content laid out at its own height from the top, the rest clipped.
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .clipToBounds()
-                                .layout { measurable, constraints ->
-                                    val h = keyboardPlace()
-                                    // The panel's content runs on under the navigation bar to the screen's edge (its lists scroll
-                                    // there, their fade at that edge; room under their last row keeps it clear of the bar).
-                                    val content = panelRoom.contentHeight.roundToInt() + navigationBars.getBottom(this)
-                                    val placeable = measurable.measure(Constraints.fixed(constraints.maxWidth, content.coerceAtLeast(0)))
-                                    layout(constraints.maxWidth, h) { placeable.place(0, 0) }
-                                },
-                        ) {
-                            val origin = session.config.origin
-                            val navigation = with(density) { navigationBars.getBottom(density).toDp() }
-                            when (shownPanel) {
-                                ComposerPanel.Stickers -> StickerPanel(
-                                    stickerCatalog, panelRecents, origin, tapSticker,
-                                    Modifier.readableColumn(ComposerMax), navigation = navigation,
-                                    playing = if (phone) PICKER_PLAYING_PHONE else PICKER_PLAYING_WIDE,
-                                )
-                                ComposerPanel.Attach -> AttachPanel(
-                                    session, attachTab, { attachTab = it }, model::pictureNumber, panelRoom,
-                                    onGrip = settlePanel, onToggle = togglePicture, onSystemPicker = pickWithSystem,
-                                    onPickCard = toggleCard,
-                                    modifier = Modifier.readableColumn(ComposerMax), navigation = navigation,
-                                    chosenCard = model.pendingCard?.id,
-                                )
-                                else -> {}
-                            }
-                        }
+                    },
+                ) {
+                    val origin = session.config.origin
+                    val navigation = with(density) { navigationBars.getBottom(density).toDp() }
+                    when (shownPanel) {
+                        ComposerPanel.Stickers -> StickerPanel(
+                            stickerCatalog, panelRecents, origin, tapSticker,
+                            Modifier.readableColumn(ComposerMax), navigation = navigation,
+                            playing = if (phone) PICKER_PLAYING_PHONE else PICKER_PLAYING_WIDE,
+                        )
+                        // Across the pane, its pen line too — from the rule beside the conversations — its content in the
+                        // composer's column (round 24 part 3 §C2).
+                        ComposerPanel.Attach -> AttachPanel(
+                            session, attachTab, { attachTab = it }, model::pictureNumber, panelRoom,
+                            onGrip = settlePanel, onToggle = togglePicture, onSystemPicker = pickWithSystem,
+                            onPickCard = toggleCard,
+                            column = Modifier.readableColumn(ComposerMax), lineLead = panelLineLead, navigation = navigation,
+                            chosenCard = model.pendingCard?.id,
+                        )
+                        else -> {}
                     }
                 }
             }
@@ -696,7 +677,6 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
         // paper keeping the rest — the bar, the conversations beside the pane and the rule between stay as they are.
         // Beside the conversations it reaches back to the rule itself (round 17 review D2): no undimmed strip between.
         val scrim = ModalScrim
-        val paneEdge = LocalPaneScrimEdge.current
         Box(
             Modifier.fillMaxSize().drawWithCache {
                 val region = paneEdge?.region(size, this.density)
@@ -1145,6 +1125,69 @@ private fun MediaHead(text: String) {
         modifier = Modifier.padding(bottom = 4.dp),
     )
 }
+
+/**
+ * The thread's foot (round 9 §4, round 22 §4.1–4.2): [composer] — the capsule, or a notice in its place — floating
+ * [ComposerGap] over the keyboard's place, and that place: the keyboard itself, a panel standing in for it ([panel],
+ * laid out [panelContent] px tall from its top, the rest clipped — but [reach] before the pane's start, where a panel's
+ * line comes to meet the rule beside the conversations), or the navigation bar. Behind both the foot's paper
+ * ([ComposerBacking]; none without [paper]), shaped by [threadWideFoot]; a tap on its solid part is [onPaperTap].
+ */
+@Composable
+internal fun ThreadFootFrame(
+    phone: Boolean,
+    room: ComposerRoom,
+    keyboardPlace: () -> Int,
+    panelContent: () -> Int,
+    onPaperTap: () -> Unit,
+    modifier: Modifier = Modifier,
+    paper: Boolean = true,
+    reach: Dp = 0.dp,
+    composer: @Composable () -> Unit,
+    panel: @Composable () -> Unit,
+) {
+    val density = LocalDensity.current
+    // The foot's width (px): whether its capsule fills it.
+    var width by remember { mutableIntStateOf(0) }
+    Box(modifier.fillMaxWidth().onSizeChanged { width = it.width }) {
+        if (paper) ComposerBacking(
+            Modifier.matchParentSize(), onTap = onPaperTap,
+            wide = with(density) { threadWideFoot(phone, width.toDp(), room.foot.toDp()) },
+        )
+        Column(Modifier.fillMaxWidth()) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = ComposerGap)
+                    .onSizeChanged { room.foot = it.height },
+            ) { composer() }
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .drawWithContent { clipRect(left = -reach.toPx()) { this@drawWithContent.drawContent() } }
+                    .layout { measurable, constraints ->
+                        val h = keyboardPlace()
+                        val placeable = measurable.measure(Constraints.fixed(constraints.maxWidth, panelContent().coerceAtLeast(0)))
+                        layout(constraints.maxWidth, h) { placeable.place(0, 0) }
+                    },
+            ) { panel() }
+        }
+    }
+}
+
+/**
+ * The foot's paper in a pane [footWidth] wide over a [capsule] as tall (the composer, or a notice in its place): null —
+ * the paper across the pane — where the capsule fills it (a [phone], a narrow pane). In a pane it doesn't fill (at its
+ * widest, room beside it past the gutter: a tablet, 2026-11-01) the thread shows beside the capsule, and does so
+ * whatever lies under it — the keyboard, or a panel in its place (round 24 part 3 §B, the owner's: 「只留最底下的那個
+ * 漸層，就像普通的輸入的模式下這樣子」): the fade over the last [com.resonance.design.ComposerWideFootFade] of the
+ * capsule's part of the foot (the capsule and its [ComposerGap], never a panel) ends where the keyboard's place begins,
+ * and from there the paper runs across the pane — a panel's own paper; and the column under the capsule from its middle
+ * down (it is opaque above that, what rides with the message included; a slip in its place too).
+ */
+internal fun threadWideFoot(phone: Boolean, footWidth: Dp, capsule: Dp): ComposerWideFoot? =
+    if (phone || footWidth <= ComposerMax) null
+    else ComposerWideFoot(footHeight = capsule + ComposerGap, columnTop = ComposerHeight / 2, capsuleMax = ComposerMax, gutter = ComposerGutter)
 
 /** The widest the composer runs in a wide thread pane. */
 private val ComposerMax = 720.dp

@@ -20,7 +20,9 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -72,9 +74,9 @@ import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.prefersReducedMotion
 import com.resonance.kit.l10n.L10n
-import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /**
  * What the workspace's editor pane shows: the writer's own card (the route's, `slot` [ROUTE_SLOT]),
@@ -503,6 +505,10 @@ private fun PaneGrip(
     val density = LocalDensity.current
     val reveal = with(density) { GRIP_REVEAL.toPx() }
     val dock = with(density) { (GRIP_TOUCH_W / 2).toPx() }
+    // An on-screen keyboard takes the window's lower half and more: the grip, kept to the window's middle, stood on
+    // its top edge (round 24, part 4 — the owner on the iPad: 「把手…比較偏下面的位置」). It stays in the middle of
+    // what the keyboard leaves; with none (a hardware keyboard raises no IME) the window's middle, as before.
+    val ime = WindowInsets.ime.getBottom(density)
     var start by remember { mutableFloatStateOf(0f) }
     var moved by remember { mutableFloatStateOf(0f) }
     val open = pane.open
@@ -520,7 +526,8 @@ private fun PaneGrip(
                 val placeable = measurable.measure(Constraints())
                 val cx = PaneDrag.gripCentre(pane.drawn, window, dock)
                 layout(constraints.maxWidth, constraints.maxHeight) {
-                    placeable.place((cx - placeable.width / 2f).roundToInt(), (constraints.maxHeight - placeable.height) / 2)
+                    val room = constraints.maxHeight - ime.coerceIn(0, constraints.maxHeight)
+                    placeable.place((cx - placeable.width / 2f).roundToInt(), ((room - placeable.height) / 2).coerceAtLeast(0))
                 }
             }
             .size(GRIP_TOUCH_W, GRIP_TOUCH_H)

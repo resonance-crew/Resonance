@@ -152,7 +152,7 @@ class ComposerCapsuleTest {
                 header = {
                     androidx.compose.foundation.layout.Column(Modifier.testTag("rows").fillMaxWidth().padding(top = ComposerRowsTop)) {
                         repeat(rows) { i ->
-                            ComposerRow("回覆 bob", "那篇雨後散步", "取消回覆 $i", {}) { ReplyRule(Modifier.size(6.dp, 28.dp)) }
+                            ComposerRow("回覆 bob", "那篇雨後散步", "取消回覆 $i", {}) { ComposerReplyMark() }
                         }
                     }
                 },

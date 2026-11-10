@@ -98,6 +98,13 @@ export interface Sticker extends StickerDef {
   frames: number;
   /** The files' content version, for their immutable URLs (`?v=`). */
   v: string;
+  /**
+   * Where the drawing sits in its square, [left, top, right, bottom] as fractions of the side: `box` over every frame of
+   * the animation (the thread trims the empty paper above and below it), `poseBox` the key frame's (a quote centres it).
+   * The whole square for a sticker whose art this build doesn't have numbers for.
+   */
+  box: readonly [number, number, number, number];
+  poseBox: readonly [number, number, number, number];
 }
 
 /** The catalog's version: bumped whenever a pack or a sticker is added (clients that bundle an older one fetch the rest). */
@@ -109,7 +116,11 @@ export function stickerOf(pack: string, id: string): Sticker | null {
   const def = p?.stickers.find((x) => x.id === id);
   if (!p || !def) return null;
   const art = STICKER_ART[`${pack}/${id}`];
-  return { ...def, pack, durationMs: art?.durationMs ?? 2000, frames: art?.frames ?? 1, v: art?.v ?? '0' };
+  const whole = [0, 0, 1, 1] as const;
+  return {
+    ...def, pack, durationMs: art?.durationMs ?? 2000, frames: art?.frames ?? 1, v: art?.v ?? '0',
+    box: art?.box ?? whole, poseBox: art?.poseBox ?? whole,
+  };
 }
 
 export function isSticker(pack: unknown, id: unknown): boolean {

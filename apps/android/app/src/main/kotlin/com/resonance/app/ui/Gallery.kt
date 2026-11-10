@@ -35,7 +35,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -59,7 +58,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -355,20 +360,86 @@ private fun MoreTile(onClick: () -> Unit) {
  * in the room above the floating 圖片｜卡片 ([bottom]). 「允許存取」 asks the system, and a refusal goes on to
  * the system's picker at once (the caller's), so sending pictures never depends on the permission; once
  * the system won't ask again, the line says access is off and 「挑選相片」 opens that picker.
+ *
+ * Its button is always whole and in view, whatever the display and text sizes (round 24: on the owner's Pixel —
+ * display size 500, text 1.5 — the centred stack outgrew the panel and squeezed the button to an empty sliver):
+ * [GalleryPromptStack] leaves the picture glyph out once the three don't fit the room, then lets the line scroll
+ * above the button, which stays put; only a room too small for one line and the button scrolls as a whole.
  */
 @Composable
 internal fun GalleryPrompt(forever: Boolean, onAction: () -> Unit, modifier: Modifier = Modifier, bottom: Dp = 0.dp) {
-    Column(
-        modifier.fillMaxSize().padding(start = 28.dp, end = 28.dp, top = 16.dp, bottom = bottom + 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        OrganicIcon(IconName.Image, size = 28.dp, color = Tokens.TextMuted, strokeWidth = Tokens.Ink.value)
-        BasicText(
-            if (forever) L10n.Messages.galleryOff else L10n.Messages.galleryPrimer,
-            style = AppFonts.body(14f, lineHeight = 1.55f, color = Tokens.Text).copy(textAlign = TextAlign.Center),
-            modifier = Modifier.padding(top = 12.dp, bottom = 18.dp).widthIn(max = 280.dp),
-        )
-        OrganicButton(if (forever) L10n.Messages.galleryChoose else L10n.Messages.galleryAllow, onClick = onAction)
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        // The room for the stack: the panel's, less the bar floating at its foot and the prompt's own air.
+        val room = (maxHeight - bottom - GalleryPromptAir * 2).coerceAtLeast(0.dp)
+        val words = AppFonts.body(14f, lineHeight = GalleryPromptLine, color = Tokens.Text).copy(textAlign = TextAlign.Center)
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 28.dp, end = 28.dp, top = GalleryPromptAir, bottom = bottom + GalleryPromptAir),
+        ) {
+            GalleryPromptStack(
+                room,
+                line = with(LocalDensity.current) { 14.sp.toDp() * GalleryPromptLine },
+                icon = { OrganicIcon(IconName.Image, size = 28.dp, color = Tokens.TextMuted, strokeWidth = Tokens.Ink.value) },
+                words = { BasicText(if (forever) L10n.Messages.galleryOff else L10n.Messages.galleryPrimer, style = words) },
+                button = { OrganicButton(if (forever) L10n.Messages.galleryChoose else L10n.Messages.galleryAllow, onClick = onAction) },
+            )
+        }
+    }
+}
+
+/** The gallery prompt's air above its stack and above the floating bar. */
+private val GalleryPromptAir = 12.dp
+
+/** The prompt's line keeps to this width. */
+private val GalleryPromptWords = 280.dp
+
+/** The prompt's line height (of its 14). */
+private const val GalleryPromptLine = 1.55f
+
+/**
+ * The prompt's [icon] · 12 · [words] · 18 · [button], each centred across, the stack centred in [room]. When the three
+ * are taller than [room], without the icon; still taller, the words scroll in what the button leaves them (never less
+ * than one [line]) and the button stays whole under them; past that — not even one line beside the button — the stack
+ * is as tall as it needs (the prompt round it scrolls). Every part is measured at its own height, the button never
+ * squeezed.
+ */
+@Composable
+internal fun GalleryPromptStack(
+    room: Dp,
+    line: Dp,
+    icon: @Composable () -> Unit,
+    words: @Composable () -> Unit,
+    button: @Composable () -> Unit,
+) {
+    val scroll = rememberScrollState()
+    Layout({ icon(); Box(Modifier.verticalScroll(scroll)) { words() }; button() }, Modifier.fillMaxWidth()) { parts, constraints ->
+        val width = constraints.maxWidth
+        val loose = Constraints(maxWidth = width)
+        val roomPx = room.roundToPx()
+        val wordsWidth = minOf(width, GalleryPromptWords.roundToPx())
+        val iconP = parts[0].measure(loose)
+        val buttonP = parts[2].measure(loose)
+        val iconGap = 12.dp.roundToPx()
+        val buttonGap = 18.dp.roundToPx()
+        val wordsHeight = parts[1].maxIntrinsicHeight(wordsWidth)
+        val bare = wordsHeight + buttonGap + buttonP.height
+        val withIcon = iconP.height + iconGap + bare <= roomPx
+        // What the words may take: all of them when they fit beside the button, else what is left (one line at least).
+        val wordsRoom = if (bare <= roomPx) wordsHeight else maxOf(roomPx - buttonGap - buttonP.height, minOf(wordsHeight, line.roundToPx()))
+        val wordsP = parts[1].measure(Constraints(maxWidth = wordsWidth, maxHeight = wordsRoom))
+        val content = (if (withIcon) iconP.height + iconGap else 0) + wordsP.height + buttonGap + buttonP.height
+        val height = maxOf(content, roomPx)
+        layout(width, height) {
+            var y = (height - content) / 2
+            if (withIcon) {
+                iconP.place((width - iconP.width) / 2, y)
+                y += iconP.height + iconGap
+            }
+            wordsP.place((width - wordsP.width) / 2, y)
+            y += wordsP.height + buttonGap
+            buttonP.place((width - buttonP.width) / 2, y)
+        }
     }
 }

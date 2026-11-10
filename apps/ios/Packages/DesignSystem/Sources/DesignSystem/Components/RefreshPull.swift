@@ -104,9 +104,11 @@ extension View {
     /// still runs it — the pull that starts it, the room it keeps open while it
     /// runs, VoiceOver's three-finger scroll at the top — with its own drawing
     /// faded out. Its content offers the same refresh as an accessibility
-    /// action with `sketchRefreshAction(named:)`. Nothing without an action.
+    /// action with `sketchRefreshAction(named:)`. Without an action, no refresh:
+    /// only the gap a pull opens wears the screen's `pullPaper` (the
+    /// conversations' invite band, round 24), as `overscrollPaper` paints it.
     @ViewBuilder public func sketchRefreshable(_ action: RefreshAction?) -> some View {
-        if let action { modifier(SketchRefresh(action: action)) } else { self }
+        if let action { modifier(SketchRefresh(action: action)) } else { modifier(PulledPaper()) }
     }
 
     /// The pull for whoever can't pull (VoiceOver, Switch Control, Voice Control): an accessibility
@@ -135,7 +137,13 @@ extension View {
     /// bar and the band's colour. Set on the screen around the scroll view; nil (the default) leaves
     /// the page's cream (the bordered grid, and every list whose top isn't a band).
     public func pullPaper(_ palette: CardPalette?) -> some View {
-        environment(\.pullPaper, palette)
+        pullPaper(paper: palette?.interior)
+    }
+
+    /// The same, for a band whose paper is no card's (round 24: an invite's grey band, ``AsideBand/paper``,
+    /// at the feed's or the conversations' top): the gap wears `paper` under the bands' grain.
+    public func pullPaper(paper: Color?) -> some View {
+        environment(\.pullPaper, paper)
     }
 
     /// The same paper for a scroll view that has no refresh of its own (the writer's publish step,
@@ -144,23 +152,39 @@ extension View {
     /// colour, never the page's cream over the band's paper. Nil leaves the cream. Set on the scroll
     /// view, under the bar (as `sketchRefreshable` is).
     public func overscrollPaper(_ palette: CardPalette?) -> some View {
-        modifier(OverscrollPaper(palette: palette))
+        overscrollPaper(paper: palette?.interior)
+    }
+
+    /// The same, in a plain paper under the bands' grain (round 24, ``AsideBand/paper``).
+    public func overscrollPaper(paper: Color?) -> some View {
+        modifier(OverscrollPaper(paper: paper))
     }
 }
 
-/// `overscrollPaper(_:)`: how far the content stands below its resting place, and the paper in that gap.
+/// `overscrollPaper(paper:)`: how far the content stands below its resting place, and the paper in that gap. With no
+/// paper the gap isn't followed at all (a list without one scrolls with nothing written per frame).
 private struct OverscrollPaper: ViewModifier {
-    let palette: CardPalette?
+    let paper: Color?
     @State private var gap: CGFloat = 0
 
     func body(content: Content) -> some View {
+        let follows = paper != nil
         content
-            .onScrollGeometryChange(for: CGFloat.self) { -($0.contentOffset.y + $0.contentInsets.top) } action: { _, now in
+            .onScrollGeometryChange(for: CGFloat.self) { follows ? -($0.contentOffset.y + $0.contentInsets.top) : 0 } action: { _, now in
                 gap = now
             }
             .overlay(alignment: .top) {
-                if let palette { PullPaper(palette: palette, gap: gap) }
+                if let paper { PullPaper(paper: paper, gap: gap) }
             }
+    }
+}
+
+/// `sketchRefreshable(nil)`: no refresh, but the screen's `pullPaper` (if any) in the gap a pull opens.
+private struct PulledPaper: ViewModifier {
+    @Environment(\.pullPaper) private var paper
+
+    func body(content: Content) -> some View {
+        content.modifier(OverscrollPaper(paper: paper))
     }
 }
 
@@ -174,8 +198,8 @@ extension EnvironmentValues {
     @Entry var sketchRefreshRun: SketchRefreshRun? = nil
     /// The screen's refresh in place, for `sketchRefreshAction` away from the top.
     @Entry var sketchRefreshInPlace: SketchInPlaceRefresh? = nil
-    /// The first band's palette, for the gap a pull opens (`pullPaper`).
-    @Entry var pullPaper: CardPalette? = nil
+    /// The first band's paper, for the gap a pull opens (`pullPaper`).
+    @Entry var pullPaper: Color? = nil
     /// The room a tablet's refresh keeps open over the system's while it runs (``SketchRefreshRoom``).
     @Entry var sketchRefreshRoom: CGFloat = 0
 }
@@ -346,7 +370,7 @@ private struct SketchRefresh: ViewModifier {
             }
             .overlay(alignment: .top) {
                 ZStack(alignment: .top) {
-                    if let paper { PullPaper(palette: paper, gap: pull.gap) }
+                    if let paper { PullPaper(paper: paper, gap: pull.gap) }
                     PullLoader(pull: pull)
                 }
             }
@@ -362,18 +386,18 @@ private struct SketchRefresh: ViewModifier {
     }
 }
 
-/// The gap a pull opens under a band that starts at the bar's line, in that band's paper and grain
-/// (`StoryBand`'s): from the top of the bar's wave band (tucked behind the bar's cream, as the band's
-/// own paper is) down to where the band's paper now begins. Its own grain: at 0.09 of ink the seam
-/// between the two tiles doesn't show.
+/// The gap a pull opens under a band that starts at the bar's line, in that band's paper (a card's
+/// interior, or an invite's grey) and grain (`StoryBand`'s, `AsideBand`'s): from the top of the bar's
+/// wave band (tucked behind the bar's cream, as the band's own paper is) down to where the band's
+/// paper now begins. Its own grain: at 0.09 of ink the seam between the two tiles doesn't show.
 private struct PullPaper: View {
-    let palette: CardPalette
+    let paper: Color
     let gap: CGFloat
 
     var body: some View {
         if gap > 0.5 {
             Rectangle()
-                .fill(palette.interior)
+                .fill(paper)
                 .overlay { GrainLayer(shape: Rectangle(), mode: .tile, opacity: StoryGrain.band * 2, tile: "grain-overlay") }
                 // A point over the band's own top, so no hairline shows between the two papers.
                 .frame(maxWidth: .infinity)

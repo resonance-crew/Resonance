@@ -66,6 +66,8 @@ import com.resonance.design.AppFonts
 import com.resonance.design.CardPalette
 import com.resonance.design.EmptyAction
 import com.resonance.design.HandDrawnAvatar
+import com.resonance.design.LayoutClass
+import com.resonance.design.LocalWindowLayout
 import com.resonance.design.Mixes
 import com.resonance.design.OrganicEmptyState
 import com.resonance.design.OrganicIcon
@@ -232,17 +234,20 @@ private fun NotificationRow(
     val cardId = item.cardId?.takeIf { it.isNotEmpty() }
     val card = cardId?.let { extras.cards[it] }
     val preview = item.preview?.takeIf { item.type == "note" && it.isNotEmpty() }
+    // A phone's band runs edge to edge; a tablet's row — its band and its tap — is the reading column, the band cut at
+    // its sides (round 24, part 4).
+    val cut = LocalWindowLayout.current.cls != LayoutClass.Compact
     Box(
         Modifier
+            .readableColumn()
             .fillMaxWidth()
-            .listBand(item.id, below, source, scrolling)
+            .listBand(item.id, below, source, scrolling, cut = cut)
             .hoverable(source)
             .pointerHoverIcon(PointerIcon.Hand)
             .clickable(source, indication = null, role = Role.Button, onClick = onClick),
     ) {
         Row(
             Modifier
-                .readableColumn()
                 .fillMaxWidth()
                 .padding(horizontal = ListBands.ContentInset, vertical = ListBands.RowPad),
             horizontalArrangement = Arrangement.spacedBy(12.dp),

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { artTopOf, prefersStill, stickerBlob, stickerPlayback } from '@/lib/chat/stickerPlayback';
+import { stickerArtTop, stickerFitTransform, stickerQuoteFit, stickerTrim } from '@/lib/chat/stickerBox';
 import { stickerName, stickerOf, stickerPath, type StickerRef } from '@/lib/stickers/catalog';
 import styles from './Thread.module.css';
 
@@ -21,7 +22,12 @@ export interface StickerPartProps {
 
 /**
  * A sticker in the thread (round 22 §4.5): no bubble — the 小紙團 stands on
- * the page, 128 on a phone, 144 wider, on its sender's side. It plays its two
+ * the page, 128 on a phone, 144 wider, on its sender's side. It lays out by its
+ * drawing, not its square (round 24, the owner's): its box is the drawing's
+ * height with 2 % over and under it (`stickerTrim`), the square drawn whole
+ * past it where it is transparent, so no empty paper stands over the puppet —
+ * a tap, a hold and the chip all take that box (answering a quote, less the
+ * band it rises over the quote, which is the quote's). It plays its two
  * loops the first time it comes on screen (once per message for the page),
  * then rests on its key frame; a tap plays it again. At most three move at
  * once, one leaving the screen stops, and with reduced motion it only ever
@@ -38,11 +44,20 @@ export function StickerPart({ messageKey, sticker, fallback, interactive, title,
   const anim = stickerPath(sticker, 'anim');
   const label = name ? t('stickerLabel', { name }) : fallback || t('stickerUnknown');
   const [src, setSrc] = useState(thumb);
-  // Where its drawing starts in its square (px): a sticker answering a quote comes up over it by its drawing.
-  const [artTop, setArtTop] = useState(0);
+  // Its layout box: the drawing's, by the catalog's numbers (a sticker this build doesn't know keeps its square).
+  const trim = stickerTrim(known?.box);
+  // Where its key frame's drawing starts in that box (a fraction of the side): a sticker answering a quote comes up
+  // over it by its drawing. The catalog says so; for a later pack it is read from its loaded key frame.
+  const [measuredArt, setMeasuredArt] = useState(0);
+  const artTop = known ? stickerArtTop(known.box, known.poseBox) : measuredArt;
   const measure = (img: HTMLImageElement) => {
-    if (img.src.includes('.thumb.')) setArtTop(Math.round(artTopOf(img) * img.clientHeight));
+    if (!known && img.src.includes('.thumb.')) setMeasuredArt(artTopOf(img));
   };
+  const boxStyle = {
+    '--sticker-trim-top': trim.top,
+    '--sticker-trim-h': trim.height,
+    '--sticker-art': artTop,
+  } as CSSProperties;
   const ref = useRef<HTMLSpanElement>(null);
   const ending = useRef<(() => void) | null>(null);
   const timer = useRef<number | null>(null);
@@ -119,7 +134,7 @@ export function StickerPart({ messageKey, sticker, fallback, interactive, title,
   }, [interactive, messageKey, play]);
 
   return (
-    <span ref={ref} className={styles.sticker} title={title} style={artTop ? ({ '--art-top': `${artTop}px` } as CSSProperties) : undefined}>
+    <span ref={ref} className={styles.sticker} title={title} style={boxStyle}>
       {interactive ? (
         <button
           type="button"
@@ -144,6 +159,23 @@ export function StickerPart({ messageKey, sticker, fallback, interactive, title,
         // eslint-disable-next-line @next/next/no-img-element
         <img src={thumb} alt={label} draggable={false} onLoad={(e) => measure(e.currentTarget)} onError={() => onFailed?.()} />
       )}
+    </span>
+  );
+}
+
+/**
+ * A sticker standing small for its message — the quote a reply carries in the thread, the composer's reply row
+ * (round 24, the owner's: 點點 stood under the half of its frame): its key frame drawn so the drawing at rest is
+ * centred in the frame and as large as 92 % of it (`stickerQuoteFit`), never smaller than its square drawn whole.
+ * The frame (`className`) gives the size and clips what lies past it, which is only the key frame's transparent
+ * paper.
+ */
+export function QuotedSticker({ sticker, className }: { sticker: StickerRef; className: string }) {
+  const transform = stickerFitTransform(stickerQuoteFit(stickerOf(sticker.pack, sticker.id)?.poseBox));
+  return (
+    <span className={className} aria-hidden>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={stickerPath(sticker, 'thumb')} alt="" draggable={false} style={transform ? { transform } : undefined} />
     </span>
   );
 }

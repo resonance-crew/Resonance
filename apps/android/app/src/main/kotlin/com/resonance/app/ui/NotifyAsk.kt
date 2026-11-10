@@ -13,6 +13,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,13 +32,15 @@ import com.resonance.design.ModalActionMinWidth
 import com.resonance.design.ModalActionMinHeight
 import com.resonance.design.toPath
 import com.resonance.design.wideCardOutline
+import com.resonance.design.filledBand
+import com.resonance.design.HeaderEdgeHeight
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.unit.Dp
 import com.resonance.design.OrganicButton
 import com.resonance.design.GrainMode
 import com.resonance.design.Grain
 import com.resonance.design.ButtonVariant
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.layout.Layout
@@ -46,6 +51,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.resonance.app.AskKind
+import com.resonance.app.BuildConfig
+import com.resonance.app.DebugLaunch
 import com.resonance.app.NotifyAskRules
 import com.resonance.app.PushCenter
 import com.resonance.app.Session
@@ -60,7 +67,6 @@ import com.resonance.design.ModalTitle
 import com.resonance.design.OrganicModal
 import com.resonance.design.Toasts
 import com.resonance.design.generated.Tokens
-import com.resonance.design.organicSurface
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.push.NotificationSwitch
 import com.resonance.kit.push.get
@@ -159,13 +165,13 @@ internal fun NotifyAskDialog(kind: AskKind, onLater: () -> Unit, onTurnOn: () ->
     }
 }
 
-/** How wide an invite stands at most (centred in a wider list: a tablet's), its paper itself — the lists add their own side insets to it. */
-internal val NotifyInviteMaxWidth = 600.dp
-
 /** The two invites (§3, §4): the switch each turns on and its words. */
 internal enum class NotifyInvite(val switch: NotificationSwitch) {
     Picks(NotificationSwitch.Picks),
     ConnectionCards(NotificationSwitch.ConnectionCards);
+
+    /** Its name to the debug builds' `--es notifyInvite` (iOS's `-notifyInvite` names). */
+    val debugName: String get() = if (this == Picks) "picks" else "connectionCards"
 
     val title: String get() = if (this == Picks) L10n.NotifyAsk.picksTitle else L10n.NotifyAsk.connectionCardsTitle
     val body: String get() = if (this == Picks) L10n.NotifyAsk.picksBody else L10n.NotifyAsk.connectionCardsBody
@@ -175,12 +181,31 @@ internal enum class NotifyInvite(val switch: NotificationSwitch) {
 }
 
 /**
+ * An invite in its list: [shown] while its reasons hold ([reasons]: [NotifyAskRules.showsInvite]) and the system's
+ * first no hasn't put it away on this screen ([putAway]: the reasons may still hold, the system may ask again). What
+ * the list lays out round it — the feed's pull paper, whether the first card starts at the bar's line — reads
+ * [shown], never the reasons alone, so nothing there wears the invite's grey once it has gone (round 24 review).
+ */
+@Stable
+internal class InviteShown(val invite: NotifyInvite, private val reasons: State<Boolean>) {
+    private var away by mutableStateOf(false)
+
+    val shown: Boolean get() = reasons.value && !away
+
+    /** The system said no (not for good): the invite leaves this screen, nothing saved. */
+    fun putAway() {
+        away = true
+    }
+}
+
+/**
  * Whether [invite] shows now ([NotifyAskRules.showsInvite]) once [eligible] — reading the switches
  * the first time it is, and the system's question and the "picks" channel (both invites' pushes come
- * on it) again whenever the app comes back.
+ * on it) again whenever the app comes back. Debug builds' `--es notifyInvite picks|connectionCards|all`
+ * show those invites whatever their reasons (screen checks; iOS's `-notifyInvite`).
  */
 @Composable
-internal fun rememberInviteShown(session: Session, invite: NotifyInvite, eligible: Boolean): Boolean {
+internal fun rememberInviteShown(session: Session, invite: NotifyInvite, eligible: Boolean): InviteShown {
     val settings by session.notifySettings.collectAsStateWithLifecycle()
     val answered by session.invitesAnswered.collectAsStateWithLifecycle()
     var system by remember { mutableStateOf(PushCenter.systemQuestion) }
@@ -193,7 +218,11 @@ internal fun rememberInviteShown(session: Session, invite: NotifyInvite, eligibl
     // The flows' debug switch (`--ez askForNotifications false`) keeps the invites away too: nothing pushes a page down.
     val asks = PushCenter.asksEnabled
     LaunchedEffect(eligible, asks) { if (eligible && asks) session.readNotifySettingsOnce() }
-    return asks && NotifyAskRules.showsInvite(eligible, settings?.get(invite.switch), system, invite.switch in answered, channelOff)
+    val forced = BuildConfig.DEBUG && invite.debugName in DebugLaunch.notifyInvites
+    val reasons = rememberUpdatedState(
+        forced || asks && NotifyAskRules.showsInvite(eligible, settings?.get(invite.switch), system, invite.switch in answered, channelOff),
+    )
+    return remember(invite) { InviteShown(invite, reasons) }
 }
 
 /**
@@ -206,46 +235,145 @@ internal suspend fun LazyListState.keepTopInView(before: Int) {
 }
 
 /**
- * An invite's card in a list (§3 above the home feed's cards, §4 at the top of the conversations list),
- * keyed so the list animates it away once answered.
+ * An invite in a list (§3 above the home feed's cards, §4 at the top of the conversations list), keyed so the list
+ * animates it away once answered. [modifier] is the item's own (the room under it); [look] how it is drawn there.
  */
-internal fun LazyListScope.notifyInviteItem(session: Session, invite: NotifyInvite, modifier: Modifier = Modifier, look: InviteLook = InviteLook.Sheet) {
-    item(key = "notify-invite-${invite.name}") {
+internal fun LazyListScope.notifyInviteItem(session: Session, invite: InviteShown, modifier: Modifier = Modifier, look: InviteLook) {
+    item(key = "notify-invite-${invite.invite.name}") {
         NotifyInviteCard(session, invite, modifier.animateItem(), look)
     }
 }
 
-/** How an invite is drawn where it lies. */
-internal enum class InviteLook {
-    /** Its own paper inside a pen line, the buttons under its words (the conversations list). */
-    Sheet,
+/**
+ * How an invite is drawn where it lies — by the device's kind, not only its width (round 24, the owner): a phone's is a
+ * band of its list ([Band]); a tablet's, one pane or two, a card with no pen line inside the content's own margins
+ * ([Card]), or over the bordered grid the grid's wide card ([WideCard]).
+ */
+internal sealed interface InviteLook {
+    /**
+     * A phone's: a band of its list, never a card (round 24, the owner: 「做成像是首頁這邊手機上文章…用水平分割線分割的區段…
+     * 裡面有填色…深色一點的灰，這樣就不會在手機的版面上顯得又多一張卡片的感覺」): the thread's grey ([Tokens.BubbleTheirs]) edge to
+     * edge with the story bands' grain, parted by their wavy rule in the header's quiet grey ([Tokens.FieldBorderHover]).
+     * [words]: where its words stand across it (the list's own content column). [underBar]: its top is the bar's pen
+     * line — no rule of its own there, the paper reaching [above] up past its box under the bar, so no pull or stretch
+     * ever opens the page's cream between the bar's line and the band — else its own rule along its top. [bottomRule]:
+     * its own rule along its foot (false over a card that draws its own top rule). [top]: from its box's top to its
+     * words (its foot keeps 20). Inside: title, 8, the line, 14, then 不用了 · 好，通知我 at the end.
+     */
+    data class Band(
+        val words: Modifier,
+        val underBar: Boolean,
+        val top: Dp = InviteBandPad,
+        val above: Dp = 0.dp,
+        val bottomRule: Boolean = true,
+    ) : InviteLook
 
     /**
-     * No paper of its own (the owner, 2026-11-01): a band of the banded feed, on the page between the
-     * header's pen line and the first card's top wave — the lines already there.
+     * A tablet's (round 24, the owner: 「在 iPad 和 Android 平板上…這個通知區塊…應該要做這種沒有 border 的卡片，就是原本的設計，
+     * 因為它這時候左邊右邊的 padding 已經變多了」): the thread's grey with the cards' grain in a card's organic outline
+     * ([borderlessCard]), no pen line at all, never edge to edge — its item puts it inside the content's margins. 22 at
+     * its sides, [top] over the title and [bottom] under the buttons; inside: title, 8, the line, 14, then 不用了 ·
+     * 好，通知我 at the end (stacked, the verb on top, when they don't fit). [seed]: its outline's.
      */
-    Band,
+    data class Card(val top: Dp, val bottom: Dp, val seed: Double) : InviteLook
 
-    /** The grid's width as one more card, framed as the grid's cards are: words at the start, buttons at the end beside them. */
-    WideCard,
+    /**
+     * The bordered grid's (an expanded window): the grid's width as one more card, borderless as [Card] — words at the
+     * start, buttons at the end beside them.
+     */
+    data object WideCard : InviteLook
 }
 
+/** A band invite's air inside: above its words and under its buttons. */
+internal val InviteBandPad = 20.dp
+
+/** The band invite's rules (wavyLine seeds): along its top, along its foot. */
+internal const val INVITE_TOP_RULE = 84.0
+internal const val INVITE_BOTTOM_RULE = 108.0
+
+/** The invites' card outlines (wobRect seeds): the picks invite's, the connection-cards invite's. */
+internal const val PICKS_INVITE_SEED = 191.0
+internal const val CONNECTIONS_INVITE_SEED = 193.0
+
 /**
- * The invite card: a paper sheet in the card style — the card paper inside the modal's pen line, no
- * shadow — its title, one line, then 不用了 (tonal) · 好，通知我 (solid) at its end. 好，通知我 puts the
- * system's question first when it was never put; on a yes (or with notifications already showing) the
- * switch is saved, the card goes and the toast says what was turned on — a failed save keeps the card,
- * and the toast says so. A system no: the card goes, nothing saved, and the toast leads to the system
+ * The connection-cards invite atop the conversations list, as [frame] lays the rows out. A phone's ([ConversationsFrame.bands])
+ * is a band from the bar's pen line, its words where the rows' content is and 20 under the bar's foot (as the feed's
+ * picks invite's are), its paper reaching up to the list's top ([barFoot]: the bar's foot under it) so a stretch at the
+ * top never parts it from the bar. A tablet's and the panes' is [ConversationsInviteCard], where [conversationsInviteRoom]
+ * puts it.
+ */
+internal fun conversationsInviteLook(frame: ConversationsFrame, readable: Modifier, barFoot: Dp): InviteLook {
+    if (!frame.bands) return ConversationsInviteCard
+    val gap = frame.headGap ?: 0.dp
+    return InviteLook.Band(
+        words = readable.padding(start = frame.start, end = frame.end).padding(horizontal = frame.rowInset),
+        underBar = true,
+        top = InviteBandPad - gap,
+        above = barFoot + gap,
+    )
+}
+
+/** A tablet's conversations invite: 22 over its title, 20 under its buttons (round 24 §A3). */
+internal val ConversationsInviteCard = InviteLook.Card(top = 22.dp, bottom = 20.dp, seed = CONNECTIONS_INVITE_SEED)
+
+/**
+ * The conversations invite's own room in the list: a phone's band the list's whole width; a tablet's card in the rows'
+ * column ([readable]), its edges where a row's box is — its top where the first row's would be — and both the
+ * [conversationsInviteGap] over the first row.
+ */
+internal fun conversationsInviteRoom(frame: ConversationsFrame, readable: Modifier): Modifier =
+    if (frame.bands) Modifier.padding(bottom = conversationsInviteGap(frame))
+    else readable.padding(start = frame.start, end = frame.end).padding(bottom = conversationsInviteGap(frame))
+
+/** Under the conversations invite to the first row: a phone's 4, as the first row stands under the bar's foot; else 12. */
+internal fun conversationsInviteGap(frame: ConversationsFrame): Dp = if (frame.bands) frame.headGap ?: 4.dp else 12.dp
+
+/**
+ * The picks invite over a phone's banded feed: its words where the cards' are ([inset]); under the bar its top is the
+ * bar's pen line (the list starts at the top of the bar's wavy band, so its words keep that band's height more, and a
+ * pull's gap wears its grey: FeedScreen's `pullPaper`), else — a refresh note above it — a rule of its own; its foot is
+ * the first card's own top rule.
+ */
+internal fun feedInviteLook(inset: Dp, underBar: Boolean): InviteLook.Band = InviteLook.Band(
+    words = Modifier.padding(horizontal = inset),
+    underBar = underBar,
+    top = if (underBar) HeaderEdgeHeight + InviteBandPad else InviteBandPad,
+    bottomRule = false,
+)
+
+/** A tablet's picks invite over the banded feed: more air over its title than the conversations' (26, 22 under its buttons). */
+internal val FeedInviteCard = InviteLook.Card(top = 26.dp, bottom = 22.dp, seed = PICKS_INVITE_SEED)
+
+/** Around the picks invite's card over a tablet's banded feed: 24 under the bar's foot and 24 over the first card's top rule. */
+internal val FeedInviteCardAir = 24.dp
+
+/**
+ * Where the picks invite's card stands over a tablet's banded feed (a medium window: the cards full-bleed bands, their
+ * content in the centred reading column): its sides on the cards' content edges ([inset], where their covers' edges
+ * are), [FeedInviteCardAir] under the bar's foot ([underBar]: the list starts at the top of the bar's wavy band) or
+ * under a refresh note, and as much over the first card, which then draws its own top rule.
+ */
+internal fun feedInviteCardRoom(inset: Dp, underBar: Boolean): PaddingValues = PaddingValues(
+    start = inset, end = inset,
+    top = (if (underBar) HeaderEdgeHeight else 0.dp) + FeedInviteCardAir,
+    bottom = FeedInviteCardAir,
+)
+
+/**
+ * The invite ([InviteLook]: a phone's band of its list, a tablet's borderless card, or the grid's wide card) — its
+ * title, one line, then 不用了 (tonal) · 好，通知我 (solid) at its end. 好，通知我 puts the system's question first when it
+ * was never put; on a yes (or with notifications already showing) the switch is saved, the card goes and the toast says
+ * what was turned on — a failed save keeps the card, and the toast says so. A system no: the card goes, nothing saved, and the toast leads to the system
  * settings; the dialog closed with Back answered nothing, and the card stays.
  * 不用了: gone for good, for this account on this install.
  */
 @Composable
-internal fun NotifyInviteCard(session: Session, invite: NotifyInvite, modifier: Modifier = Modifier, look: InviteLook = InviteLook.Sheet) {
+internal fun NotifyInviteCard(session: Session, shown: InviteShown, modifier: Modifier = Modifier, look: InviteLook) {
+    val invite = shown.invite
     val context = LocalContext.current
     val toasts = LocalToasts.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
-    var hidden by remember { mutableStateOf(false) }
     fun save() {
         busy = true
         scope.launch {
@@ -271,7 +399,8 @@ internal fun NotifyInviteCard(session: Session, invite: NotifyInvite, modifier: 
             busy = false
         } else {
             busy = false
-            hidden = true
+            // Put away on this screen, where the list reads it (the feed's pull paper, its first card's rule).
+            shown.putAway()
             toasts.show(
                 L10n.NotifyAsk.systemOff,
                 action = Toasts.Action(L10n.NotifyAsk.openSettings, L10n.NotifyAsk.openSettings) {
@@ -280,7 +409,7 @@ internal fun NotifyInviteCard(session: Session, invite: NotifyInvite, modifier: 
             )
         }
     }
-    if (hidden) return
+    if (!shown.shown) return
     NotifyInviteSheet(
         invite.title, invite.body, busy, modifier, look,
         onNo = { session.answerInvite(invite.switch) },
@@ -296,16 +425,17 @@ internal fun NotifyInviteCard(session: Session, invite: NotifyInvite, modifier: 
     )
 }
 
-/** The invite's words and buttons in [look], apart from what its buttons do: title (18) → 8 → line → 14 → buttons (18 on the sheet). */
+/** The invite's words and buttons in [look], apart from what its buttons do: title (18) → 8 → line → 14 → buttons. */
 @Composable
 internal fun NotifyInviteSheet(
-    title: String, body: String, busy: Boolean, modifier: Modifier = Modifier, look: InviteLook = InviteLook.Sheet,
+    title: String, body: String, busy: Boolean, modifier: Modifier = Modifier, look: InviteLook,
     onNo: () -> Unit, onYes: () -> Unit,
 ) {
     val words: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             BasicText(title, style = AppFonts.heading(18f, lineHeight = 1.3f), modifier = Modifier.semantics { heading() })
-            ModalBody(body)
+            // On the grey every look is drawn on, the muted ink deepened to clear 4.5:1 (the text-muted is short of it there).
+            ModalBody(body, color = InviteBodyInk)
         }
     }
     // As the dialogs' foot: small pills a finger can land on.
@@ -313,46 +443,66 @@ internal fun NotifyInviteSheet(
     val no: @Composable () -> Unit = { OrganicButton(L10n.NotifyAsk.no, target, variant = ButtonVariant.Tonal, small = true, enabled = !busy, onClick = onNo) }
     val yes: @Composable () -> Unit = { OrganicButton(L10n.NotifyAsk.yes, target, small = true, loading = busy, onClick = onYes) }
     when (look) {
-        InviteLook.Sheet -> Column(
+        is InviteLook.Band -> {
+            val paper = Tokens.BubbleTheirs
+            val pen = Tokens.FieldBorderHover
+            Box(
+                modifier
+                    .fillMaxWidth()
+                    .filledBand(
+                        paper, pen,
+                        topRule = INVITE_TOP_RULE.takeUnless { look.underBar },
+                        bottomRule = INVITE_BOTTOM_RULE.takeIf { look.bottomRule },
+                        above = if (look.underBar) look.above else 0.dp,
+                        grainInk = GrainInk.current,
+                    ),
+            ) {
+                Column(look.words.padding(top = look.top, bottom = InviteBandPad)) {
+                    words()
+                    ModalActions(L10n.NotifyAsk.no, onNo, L10n.NotifyAsk.yes, onYes, busy = busy, topPadding = 14.dp)
+                }
+            }
+        }
+        is InviteLook.Card -> Column(
             modifier
                 .fillMaxWidth()
-                .organicSurface(Tokens.CardBg, Tokens.ModalBorder, radius = 22.0, seed = 67.0, grainInk = GrainInk.current)
-                .padding(horizontal = 22.dp, vertical = 20.dp),
+                .borderlessCard(look.seed)
+                .padding(start = 22.dp, end = 22.dp, top = look.top, bottom = look.bottom),
         ) {
-            words()
-            ModalActions(L10n.NotifyAsk.no, onNo, L10n.NotifyAsk.yes, onYes, busy = busy, topPadding = 18.dp)
-        }
-        InviteLook.Band -> Column(modifier.fillMaxWidth()) {
             words()
             ModalActions(L10n.NotifyAsk.no, onNo, L10n.NotifyAsk.yes, onYes, busy = busy, topPadding = 14.dp)
         }
-        InviteLook.WideCard -> {
-            val grainInk = GrainInk.current
-            val paper = Tokens.CardBg
-            val pen = Tokens.ModalBorder
-            WideInviteLayout(
-                modifier
-                    .fillMaxWidth()
-                    // The grid's cards' outline, its long edges turning as often per dp as theirs, in the dialog's paper and pen.
-                    .drawWithCache {
-                        val outline = Outline.Generic(wideCardOutline((size.width / density).toDouble(), (size.height / density).toDouble(), WIDE_INVITE_SEED).toPath(density))
-                        val grain = Grain.brush(GrainMode.Tile, "grain-card", size, density, 0.2f, grainInk)
-                        val ink = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                        onDrawBehind {
-                            drawOutline(outline, paper)
-                            grain?.let { drawOutline(outline, it, alpha = 0.2f) }
-                            drawOutline(outline, pen, style = ink)
-                        }
-                    }
-                    .padding(22.dp),
-                words = words, no = no, yes = yes,
-            )
-        }
+        InviteLook.WideCard -> WideInviteLayout(
+            modifier.fillMaxWidth().borderlessCard(PICKS_INVITE_SEED).padding(22.dp),
+            words = words, no = no, yes = yes,
+        )
     }
 }
 
-/** The wide invite's outline seed (the grid's cards take theirs from their place). */
-private const val WIDE_INVITE_SEED = 191.0
+/**
+ * The invite's line on its grey: the muted ink deepened to clear 4.5:1 on the bubbles' papers ([Tokens.LinkCardMuted],
+ * the link cards' — [Tokens.TextMuted] falls short of it on [Tokens.BubbleTheirs] in the light themes).
+ */
+internal val InviteBodyInk: androidx.compose.ui.graphics.Color @Composable @ReadOnlyComposable get() = Tokens.LinkCardMuted
+
+/**
+ * A tablet's invite paper (round 24, the owner's 「沒有 border 的卡片」): the thread's grey ([Tokens.BubbleTheirs]) with the
+ * cards' grain (`grain-card` at 0.2) in a card's organic outline — the grid's cards', its long edges turning as often
+ * per dp as theirs ([wideCardOutline]) — and no pen line at all.
+ */
+@Composable
+private fun Modifier.borderlessCard(seed: Double): Modifier {
+    val grainInk = GrainInk.current
+    val paper = Tokens.BubbleTheirs
+    return drawWithCache {
+        val outline = Outline.Generic(wideCardOutline((size.width / density).toDouble(), (size.height / density).toDouble(), seed).toPath(density))
+        val grain = Grain.brush(GrainMode.Tile, "grain-card", size, density, 0.2f, grainInk)
+        onDrawBehind {
+            drawOutline(outline, paper)
+            grain?.let { drawOutline(outline, it, alpha = 0.2f) }
+        }
+    }
+}
 
 /** The words keep at least this much beside the buttons; with less, the buttons go under them. */
 private val WideInviteWordsMin = 280.dp

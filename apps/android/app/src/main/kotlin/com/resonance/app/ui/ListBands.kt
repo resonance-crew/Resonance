@@ -12,7 +12,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.isOutOfBounds
 import androidx.compose.ui.input.pointer.pointerInput
@@ -39,8 +43,10 @@ import kotlin.math.max
  * 區塊」): no rule between them — each row is the paper between two hand-drawn curves it shares with its neighbours,
  * seen only as the edge of its wash: a finger's press ([PressAlpha], from [PressDelayMs] in, gone the moment the list
  * scrolls) or a pointer over it ([HoverAlpha]); at rest nothing is drawn. The rows touch ([RowPad] above and below each
- * row's content, no gap), the band runs the list's whole width — a phone's screen edge to edge, a tablet's window —
- * while the content keeps its column, and its curves swing [Amp] about the rows' edges, drawn unclipped.
+ * row's content, no gap), a phone's band runs the screen edge to edge, and its curves swing [Amp] about the rows'
+ * edges, drawn unclipped. On a tablet the band is cut where the reading column ends, [ContentInset] past the content,
+ * its corners rounded [CutRadius] (round 24, part 4, the owner: 「左邊、右邊，它就要這個區塊就要切斷了，這樣延伸到兩邊
+ * 好像怪怪的」): a card's piece of the band.
  *
  * Each curve is seeded by the key of the row BELOW it, never by a place in the list: a row arriving on top moves no
  * other curve. A row's top curve is its own key's, its bottom one the next row's — or, above a part's title, that
@@ -62,6 +68,12 @@ internal object ListBands {
 
     /** The content's side inset from the band's ends on a phone (and inside a tablet's reading column). */
     val ContentInset: Dp = 20.dp
+
+    /**
+     * A band cut at the reading column's sides (a tablet): its corners' radius. The cut's box stands [Amp] and 1 past the
+     * row's frame above and below, so the curves keep every swing and only the corners round.
+     */
+    const val CutRadius = 16.0
 
     /** A finger held this long on a row before its band shows (a scroll starting sooner shows nothing). */
     const val PressDelayMs = 80L
@@ -87,6 +99,21 @@ internal object ListBands {
         val top = curve(0.0, w, topKey)
         val back = curve(h, w, bottomKey).reversed()
         return dividerPath(top) + PathCommand.Line(back[0].x, back[0].y) + dividerPath(back).drop(1) + PathCommand.Close
+    }
+
+    /**
+     * A row's band as drawn, [w] × [h] dp at [density]: [cut], its ends cut at the frame's sides with rounded corners
+     * (a tablet's: the frame is the reading column).
+     */
+    fun path(w: Double, h: Double, topKey: String, bottomKey: String, cut: Boolean, density: Float): Path {
+        val band = region(w, h, topKey, bottomKey).toPath(density)
+        if (!cut) return band
+        val reach = ((Amp + 1) * density).toFloat()
+        val radius = (CutRadius * density).toFloat()
+        val box = Path().apply {
+            addRoundRect(RoundRect(0f, -reach, (w * density).toFloat(), (h * density).toFloat() + reach, CornerRadius(radius, radius)))
+        }
+        return Path().apply { op(band, box, PathOperation.Intersect) }
     }
 }
 
@@ -119,7 +146,8 @@ internal data class ConversationsFrame(
 
 /**
  * The band behind a row: nothing at rest ([rest] when it has one: a chosen row), the press or the pointer's wash
- * filling it between its curves. The row's own `clickable` keeps the tap; this only watches the finger.
+ * filling it between its curves — [cut] at the row's sides on a tablet, where the row is the reading column. The row's
+ * own `clickable` keeps the tap; this only watches the finger.
  */
 @Composable
 internal fun Modifier.listBand(
@@ -128,6 +156,7 @@ internal fun Modifier.listBand(
     source: MutableInteractionSource,
     scrolling: () -> Boolean,
     rest: Color? = null,
+    cut: Boolean = false,
 ): Modifier {
     val hovered by source.collectIsHoveredAsState()
     var pressed by remember { mutableStateOf(false) }
@@ -136,7 +165,7 @@ internal fun Modifier.listBand(
     return this
         .delayedPress(scrolling) { pressed = it }
         .drawWithCache {
-            val path = ListBands.region((size.width / density).toDouble(), (size.height / density).toDouble(), topKey, bottomKey).toPath(density)
+            val path = ListBands.path((size.width / density).toDouble(), (size.height / density).toDouble(), topKey, bottomKey, cut, density)
             onDrawBehind {
                 if (rest != null) drawPath(path, rest)
                 when {

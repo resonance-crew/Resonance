@@ -8,26 +8,57 @@ import UIKit
 // tap; an album's pictures are one grid in one bubble's outline, each opening the viewer and each held for
 // its own menu.
 
-/// A sticker's still at `side` points (its thumb file: the art's hero pose), decoded off the main thread.
+/// A sticker's still standing for a message in a `side` square — a reply's quote, the composer's reply row (round 24
+/// §C): its thumb (the art's hero pose) drawn so the pose is centred and as large as fits with 4 % round it
+/// (``StickerQuoteFit``), decoded at the size it is drawn, off the main thread. The view outlives the sticker it shows
+/// (the reply row answering a second sticker keeps it, as it does for a picture), so what it read is kept with the
+/// sticker and size it was read for: an earlier sticker's still is never drawn for the next one.
 struct StickerStill: View {
     let sticker: StickerRef
     let side: CGFloat
-    @State private var image: UIImage?
+    @State private var loaded: StickerStillRead?
 
     var body: some View {
         let library = StickerLibrary.shared
+        let pose = library.poseBox(sticker)
+        let drawn = side * CGFloat(StickerQuoteFit.scale(pose))
+        let offset = StickerQuoteFit.offset(pose)
+        let key = StickerStillRead.key(sticker, side: drawn)
         Group {
-            if let shown = image ?? library.stillAtHand(sticker, side: side) {
+            if let shown = StickerStillRead.shown(loaded, for: key, atHand: library.stillAtHand(sticker, side: drawn)) {
                 Image(uiImage: shown).resizable().interpolation(.high).scaledToFit()
+                    .frame(width: drawn, height: drawn)
+                    .offset(x: side * CGFloat(offset.x), y: side * CGFloat(offset.y))
             } else {
                 Color.clear
             }
         }
         .frame(width: side, height: side)
-        .task(id: "\(sticker.pack)/\(sticker.id)|\(side)") {
-            if image == nil { image = await library.still(sticker, side: side) }
+        // The pose lies inside the square; only clear paper of the larger thumb is cut.
+        .clipped()
+        .task(id: key) {
+            guard loaded?.key != key else { return }
+            let image = await library.still(sticker, side: drawn)
+            // Another sticker came meanwhile: its own task reads its own still.
+            guard !Task.isCancelled, let image else { return }
+            loaded = StickerStillRead(key: key, image: image)
         }
         .accessibilityHidden(true)
+    }
+}
+
+/// A still a ``StickerStill`` read for itself, with the sticker and size it was read for (round 24 §A).
+struct StickerStillRead {
+    let key: String
+    let image: UIImage
+
+    static func key(_ sticker: StickerRef, side: CGFloat) -> String { "\(sticker.pack)/\(sticker.id)|\(side)" }
+
+    /// What the view draws for `key`: what it read, when it read that sticker at that size — else the library's copy at
+    /// hand (nil until it is decoded: the square waits empty, never on the sticker answered before).
+    static func shown(_ loaded: StickerStillRead?, for key: String, atHand: UIImage?) -> UIImage? {
+        if let loaded, loaded.key == key { return loaded.image }
+        return atHand
     }
 }
 
@@ -43,6 +74,9 @@ struct AnimatedSticker: UIViewRepresentable {
 
     func makeUIView(context: Context) -> StickerPlayerView {
         let view = StickerPlayerView()
+        // Its taps are the SwiftUI box's round it (``ThreadStickerView``): the square's clear paper outside that box
+        // takes none.
+        view.isUserInteractionEnabled = false
         view.setContentHuggingPriority(.defaultLow, for: .horizontal)
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         view.rest(on: rest)
@@ -55,6 +89,8 @@ struct AnimatedSticker: UIViewRepresentable {
         context.coordinator.played = play
         guard play > 0, !StickerPlayback.still, let file = StickerLibrary.shared.file(sticker) else { return }
         let slot = slot
+        // A replay over a play still running: end that one first, so its ending lets go of the old turn, not the new.
+        view.stop()
         StickerPlayback.shared.start(slot) { [weak view] in view?.stop() }
         view.play(file) { StickerPlayback.shared.end(slot) }
     }
@@ -74,19 +110,34 @@ struct AnimatedSticker: UIViewRepresentable {
 /// comes on screen (once per message while the app runs) and again on a tap, and rests on its still (the
 /// thumb's hero pose — never drawn under the frames while it plays). While
 /// a sticker this build doesn't carry is read from the site, its place waits empty.
+///
+/// It takes the room of its drawing, not of its square (round 24 §B, ``StickerTrim``): as wide as the square, as tall
+/// as the drawing over all its frames with 2 % over and under it, the square drawn whole and moved up so the drawing
+/// lies in that box — the clear paper above and below takes no room (and no tap: a tap or a hold is the box's, but for
+/// the band it lays over a quote it answers, which is the quote's). The reactions' chip, the sender's face, a quote it
+/// rises over all go by the box.
 struct ThreadStickerView: View {
     let message: ChatMessage
     let sticker: StickerRef
     let side: CGFloat
     let interactive: Bool
+    /// The band at the top of its box laid over the quote it answers (``ThreadStickerStack``, round 24): drawn as
+    /// ever, but a tap or a hold there is the quote's — the sticker's own start under it (``StickerTapArea``).
+    var overQuote: CGFloat = 0
     @State private var play = 0
     @State private var rest: UIImage?
     @State private var onScreen = false
 
     var body: some View {
         let library = StickerLibrary.shared
+        let box = library.box(sticker)
         AnimatedSticker(sticker: sticker, rest: rest ?? library.stillAtHand(sticker, side: side), play: play, slot: message.key)
             .frame(width: side, height: side)
+            // Drawn past the box only where it is clear: every frame lies inside the drawing's box.
+            .offset(y: -side * CGFloat(StickerTrim.top(box)))
+            .allowsHitTesting(false)
+            .frame(width: side, height: side * CGFloat(StickerTrim.height(box)), alignment: .top)
+            .contentShape(StickerTapArea(overQuote: overQuote))
             .messagePartTap(interactive ? { replay() } : nil, washes: false)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(L10n.Messages.stickerLabel(name: library.label(sticker)))
@@ -109,6 +160,18 @@ struct ThreadStickerView: View {
 
     private func replay() {
         play += 1
+    }
+}
+
+/// Where a sticker in the thread takes a tap or a hold (round 24): its whole box but the band at its top laid over the
+/// quote it answers (`overQuote` points), which is the quote's — a tap on the quote's lower part goes to the quoted
+/// message instead of replaying the sticker. A sticker answering nothing takes its whole box.
+nonisolated struct StickerTapArea: Shape {
+    let overQuote: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let cut = min(max(0, overQuote), rect.height)
+        return Path(CGRect(x: rect.minX, y: rect.minY + cut, width: rect.width, height: rect.height - cut))
     }
 }
 

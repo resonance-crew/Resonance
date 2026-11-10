@@ -5,9 +5,10 @@ import SwiftUI
 /// 區塊」): no rule between them — each row is the paper between two hand-drawn curves it shares with its neighbours,
 /// seen only as the edge of its wash: a finger's press (``pressAlpha``, from ``pressDelay`` in, gone the moment the
 /// list scrolls) or a pointer over it (``hoverAlpha``, the Mac's and an iPad's trackpad); at rest nothing is drawn. The
-/// rows touch (``rowPad`` above and below each row's content, no gap), the band runs the list's whole width — a phone's
-/// screen edge to edge, a tablet's or the Mac's window — while the content keeps its column, and its curves swing
-/// ``amp`` about the rows' edges, drawn unclipped.
+/// rows touch (``rowPad`` above and below each row's content, no gap), a phone's band runs the screen edge to edge, and
+/// its curves swing ``amp`` about the rows' edges, drawn unclipped. On a wide window — a tablet's, the Mac's — the band
+/// is cut where the reading column ends, ``contentInset`` past the content, its corners rounded ``cutRadius`` (round 24,
+/// part 4, the owner: 「左邊、右邊，它就要這個區塊就要切斷了，這樣延伸到兩邊好像怪怪的」): a card's piece of the band.
 ///
 /// Each curve is seeded by the key of the row BELOW it, never by a place in the list: a row arriving on top moves no
 /// other curve. A row's top curve is its own key's, its bottom one the next row's — or, above a part's title, that
@@ -24,6 +25,9 @@ nonisolated enum ListBands {
     static var titleToBand: CGFloat { CGFloat(amp) + titleClear }
     /// The content's side inset from the band's ends on a phone (and inside a tablet's reading column).
     static let contentInset: CGFloat = 20
+    /// A band cut at the reading column's sides (a wide window): its corners' radius. The cut's box stands ``amp`` and 1
+    /// past the row's frame above and below, so the curves keep every swing and only the corners round.
+    static let cutRadius: CGFloat = 16
     /// A finger held this long on a row before its band shows (a scroll starting sooner shows nothing).
     static let pressDelay: Duration = .milliseconds(80)
     /// A tap lifted before ``pressDelay``: how long the list is given to say it took the finger for a scroll
@@ -107,26 +111,34 @@ nonisolated struct BandPress: Equatable {
     mutating func scrolled() { phase = .idle }
 }
 
-/// A row's band as a shape: its own curve on top, `bottom`'s under it, reaching ``ListBands/amp`` past the frame.
+/// A row's band as a shape: its own curve on top, `bottom`'s under it, reaching ``ListBands/amp`` past the frame —
+/// `cut`, its ends cut at the frame's sides with rounded corners (a wide window's: the frame is the reading column).
 nonisolated struct BandShape: Shape {
     let top: String
     let bottom: String
+    var cut = false
 
     func path(in rect: CGRect) -> Path {
         guard rect.width > 0, rect.height > 0 else { return Path() }
-        return ListBands.region(w: Double(rect.width), h: Double(rect.height), top: top, bottom: bottom)
+        let band = ListBands.region(w: Double(rect.width), h: Double(rect.height), top: top, bottom: bottom)
             .path(offsetX: Double(rect.minX), offsetY: Double(rect.minY))
+        guard cut else { return band }
+        let reach = CGFloat(ListBands.amp) + 1
+        return band.intersection(Path(roundedRect: rect.insetBy(dx: 0, dy: -reach), cornerRadius: ListBands.cutRadius,
+                                      style: .continuous))
     }
 }
 
 /// A row of a banded list: nothing at rest, the band between its curves washed while pressed or under a pointer.
+/// `cut`: the row stands in a wide window's reading column, its band cut at the column's sides (``BandShape``).
 struct BandWashStyle: ButtonStyle {
     /// The row's own key (its top curve) and the key under it (``ListBands/below(_:after:)``).
     let top: String
     let bottom: String
+    var cut = false
 
     func makeBody(configuration: Configuration) -> some View {
-        BandWash(label: configuration.label, top: top, bottom: bottom, pressed: configuration.isPressed)
+        BandWash(label: configuration.label, top: top, bottom: bottom, cut: cut, pressed: configuration.isPressed)
     }
 }
 
@@ -134,6 +146,7 @@ private struct BandWash<Label: View>: View {
     let label: Label
     let top: String
     let bottom: String
+    let cut: Bool
     let pressed: Bool
     @Environment(\.listScrolling) private var scrolling
     @State private var press = BandPress()
@@ -145,7 +158,7 @@ private struct BandWash<Label: View>: View {
             .background {
                 let alpha = ListBands.alpha(press: press, hovered: hovered)
                 if alpha > 0 {
-                    BandShape(top: top, bottom: bottom).fill(Tokens.towardInk.opacity(alpha))
+                    BandShape(top: top, bottom: bottom, cut: cut).fill(Tokens.towardInk.opacity(alpha))
                 }
             }
             .onHover { hovered = $0 }

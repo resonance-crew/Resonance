@@ -29,6 +29,10 @@ struct ComposerTextView: UIViewRepresentable {
     var onPastePictures: ([Data]) -> Void = { _ in }
     /// Whether there is text beyond the box's top and its bottom edge (each fades out while there is).
     var onFades: (Bool, Bool) -> Void = { _, _ in }
+    /// Bumped each time the keyboard is asked for outright (⌨, round 24 §C): the field takes the focus in UIKit
+    /// whether or not `focused` changed — a binding already true asks nothing by itself — and, holding it already
+    /// with no keyboard over it, lets it go and takes it again (``FieldFocus``).
+    var keyboardAsk = 0
 
     static let fade: CGFloat = 14
 
@@ -58,10 +62,28 @@ struct ComposerTextView: UIViewRepresentable {
             view.attributedText = NSAttributedString(string: text, attributes: Self.attributes(metrics))
             box.textChanged()
         }
-        if focused, !view.isFirstResponder, view.window != nil {
+        // UIKit's focus follows `focused`, after this update (never inside it); an ask for the keyboard (⌨) is answered
+        // even when `focused` was true already.
+        let asked = keyboardAsk != context.coordinator.keyboardAsk
+        context.coordinator.keyboardAsk = keyboardAsk
+        switch FieldFocus.next(wanted: focused, held: view.isFirstResponder, inWindow: view.window != nil, asked: asked) {
+        case .take:
             DispatchQueue.main.async { if self.focused, !view.isFirstResponder { view.becomeFirstResponder() } }
-        } else if !focused, view.isFirstResponder {
+        case .retake:
+            // Held with no keyboard over it (UIKit put the keyboard away and kept the field): let go and taken again —
+            // not while the keyboard it took the focus for may still be a moment from its first frame, nor for a
+            // hardware keyboard (``FieldFocus/retakes(keyboardOnScreen:sinceFocus:hardwareKeyboard:)``).
+            DispatchQueue.main.async {
+                guard self.focused, view.isFirstResponder,
+                      FieldFocus.retakes(keyboardOnScreen: KeyboardWatch.shared.onScreen,
+                                         sinceFocus: CACurrentMediaTime() - view.focusTakenAt,
+                                         hardwareKeyboard: HardwareKeyboard.connected) else { return }
+                view.retakeKeyboard()
+            }
+        case .give:
             DispatchQueue.main.async { if !self.focused, view.isFirstResponder { view.resignFirstResponder() } }
+        case .none:
+            break
         }
     }
 
@@ -124,9 +146,12 @@ struct ComposerTextView: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: ComposerTextView
         private var lastLines = 0
+        /// The last ask for the keyboard the field has answered (``ComposerTextView/keyboardAsk``).
+        var keyboardAsk: Int
 
         init(_ parent: ComposerTextView) {
             self.parent = parent
+            keyboardAsk = parent.keyboardAsk
         }
 
         func report(_ lines: Int) {
@@ -140,11 +165,15 @@ struct ComposerTextView: UIViewRepresentable {
             if parent.text != textView.text { parent.text = textView.text }
         }
 
+        // The focus let go and taken again for the keyboard (``ComposerUITextView/retakeKeyboard()``) is no news: to
+        // the composer the field never lost it.
         func textViewDidBeginEditing(_ textView: UITextView) {
+            if (textView as? ComposerUITextView)?.retaking == true { return }
             if !parent.focused { parent.focused = true }
         }
 
         func textViewDidEndEditing(_ textView: UITextView) {
+            if (textView as? ComposerUITextView)?.retaking == true { return }
             if parent.focused { parent.focused = false }
         }
 
@@ -255,6 +284,32 @@ final class ComposerUITextView: UITextView {
     var onReturn: () -> Void = {}
     var onEscape: () -> Bool = { false }
     var onPastePictures: ([Data]) -> Void = { _ in }
+    /// Letting the focus go to take it straight back (``retakeKeyboard()``): its delegate tells no one.
+    private(set) var retaking = false
+    /// When it last took the focus (`CACurrentMediaTime`), however it came — a tap on it, the composer's ask, a
+    /// retake: a keyboard on its way since then is left to come (``FieldFocus/retakeGrace``).
+    private(set) var focusTakenAt: CFTimeInterval = -.infinity
+
+    override func becomeFirstResponder() -> Bool {
+        let took = super.becomeFirstResponder()
+        if took { focusTakenAt = CACurrentMediaTime() }
+        return took
+    }
+
+    /// The focus held with no keyboard over it — UIKit can put the keyboard away and keep the field, and asking a
+    /// field that holds the focus for it again is no ask at all (round 24 §C: the owner's ⌨ that "sometimes didn't
+    /// bring the keyboard back") —: the focus is let go and taken again on the next turn of the run loop, which brings
+    /// a keyboard as any focusing does. Never under an input method's marked text (letting go would end it).
+    func retakeKeyboard() {
+        guard isFirstResponder, !retaking, markedTextRange == nil else { return }
+        retaking = true
+        _ = resignFirstResponder()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            defer { retaking = false }
+            if window != nil, !isFirstResponder { _ = becomeFirstResponder() }
+        }
+    }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         if let key = presses.first?.key, key.keyCode == .keyboardReturnOrEnter || key.keyCode == .keypadEnter,

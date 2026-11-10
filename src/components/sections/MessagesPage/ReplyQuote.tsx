@@ -2,10 +2,11 @@
 
 import { useRef } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { stickerName, stickerPath } from '@/lib/stickers/catalog';
+import { stickerName } from '@/lib/stickers/catalog';
 import { QUOTE_RADIUS, bubbleStandInRadius, seedFromId } from '@/lib/design/bubble';
 import type { MessageReplyQuote } from '@/lib/db/types';
 import { useBubbleClip } from './MessageBubble';
+import { QuotedSticker } from './StickerPart';
 import styles from './Thread.module.css';
 
 export interface ReplyQuoteProps {
@@ -71,9 +72,9 @@ export function ReplyQuote({ quote, own, viewerId, otherHandle, onJump, apart = 
         onClick={() => onJump?.(quote.id)}
       >
         {sticker && stickerWords ? (
-          // A sticker's quote is its key frame alone (round 22, the owner's notes); its name is said, not shown.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img className={styles.quoteSticker} src={stickerPath(sticker, 'thumb')} alt="" draggable={false} />
+          // A sticker's quote is its key frame alone (round 22, the owner's notes), its drawing centred in the frame
+          // (round 24); its name is said, not shown.
+          <QuotedSticker sticker={sticker} className={styles.quoteSticker} />
         ) : (
           <span className={styles.quoteText} data-unsent={quote.unsent || undefined}>
             {words}

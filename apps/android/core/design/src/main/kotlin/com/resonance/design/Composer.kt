@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -68,6 +69,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.Layout
+import kotlin.math.roundToInt
 import com.resonance.design.generated.IconName
 import com.resonance.geometry.PathCommand
 import com.resonance.geometry.Prng
@@ -721,10 +726,12 @@ private fun Modifier.paperTouches(onTap: () -> Unit): Modifier {
 
 /**
  * One thing riding with the message, inside the capsule over the text (round 23 §2, Telegram's way), in three
- * columns: its [lead] mark (the reply's rule, a glyph or cover on a 32 tile) centred in ＋'s column
+ * columns: its [lead] mark (the reply's arrow [ComposerReplyMark], a glyph or cover on a [ComposerLeadSize] tile) centred in ＋'s column
  * ([ComposerLeadColumn]); then — where the field's words start — a reply's [media] (a 36 thumbnail: a sticker's pose,
  * a picture, a card's cover) and its [label] (12 / 600) over one line of [detail] (12.5, muted; none: the label alone,
- * centred); and a 44 ✕ in Send's column, named [closeLabel]. [ComposerRowHeight] tall; [short] (a short window) one
+ * centred), the two set close (round 24, the owner: 「這兩個文字之間的間距好像要縮小一點點…這兩個項目加起來的高度有一點太高
+ * 了」 — line heights [ComposerRowLine], nothing between them); and a 44 ✕ in Send's column, named [closeLabel].
+ * [ComposerRowHeight] tall, taller only when a large text size needs it (never clipped); [short] (a short window) one
  * line [ComposerShortRowHeight] tall, label · detail. A tap on the words is [onTap] (the reply: to the message it
  * answers; a note or a card: the field), named [tapLabel]; nothing in a row takes the field's focus away.
  */
@@ -744,7 +751,8 @@ fun ComposerRow(
 ) {
     val height = if (short) ComposerShortRowHeight else ComposerRowHeight
     Row(
-        modifier.fillMaxWidth().height(height).padding(end = ComposerSendWidth / 2 - ComposerCloseSize / 2),
+        // At least its height, as tall as its words when a large text size needs more; its columns fill it.
+        modifier.fillMaxWidth().heightIn(min = height).height(IntrinsicSize.Min).padding(end = ComposerSendWidth / 2 - ComposerCloseSize / 2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(ComposerLeadColumn).fillMaxHeight(), contentAlignment = Alignment.Center) { lead() }
@@ -759,8 +767,9 @@ fun ComposerRow(
                 Box(Modifier.size(if (short) ComposerShortMediaSize else ComposerMediaSize), contentAlignment = Alignment.Center) { media() }
                 Spacer(Modifier.width(ComposerMediaGap))
             }
-            val labelStyle = AppFonts.body(if (short) 12.5f else 12f, 600, lineHeight = 1.35f, color = Tokens.Text)
-            val detailStyle = AppFonts.body(12.5f, lineHeight = 1.35f, color = Tokens.TextMuted)
+            val line = if (short) 1.35f else ComposerRowLine
+            val labelStyle = AppFonts.body(if (short) 12.5f else 12f, 600, lineHeight = line, color = Tokens.Text)
+            val detailStyle = AppFonts.body(12.5f, lineHeight = line, color = Tokens.TextMuted)
             if (short) {
                 // One line: label · detail.
                 val line = androidx.compose.ui.text.buildAnnotatedString {
@@ -771,7 +780,7 @@ fun ComposerRow(
                 }
                 BasicText(line, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = labelStyle)
             } else {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                ComposerRowLines(12f, 12.5f, Modifier.weight(1f)) {
                     BasicText(label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = labelStyle)
                     if (!detail.isNullOrEmpty()) BasicText(detail, maxLines = 1, overflow = TextOverflow.Ellipsis, style = detailStyle)
                 }
@@ -815,6 +824,40 @@ fun ComposerErrorRow(text: String, modifier: Modifier = Modifier) {
 /** The error row's mark: a small terracotta dot. */
 private val ComposerErrorMark = 8.dp
 
+/**
+ * A two-line row's line (label over detail): a box [ComposerRowLine] of its text's size, nothing between the two — the
+ * pair 29.4 tall at the default text size, 44.4 at the owner's 1.5 (18 + 19 dp of type × 1.2: the row grows that
+ * fraction rather than clip; round 24).
+ */
+const val ComposerRowLine = 1.2f
+
+/**
+ * The label over the detail ([content]: one text or two, of [labelSize] and [detailSize] sp), each in a line box
+ * [ComposerRowLine] of its size with its words centred in it, nothing between the boxes. Laid out here rather than by
+ * the texts' own line height: a single line under Compose's `LineHeightStyle.Mode.Fixed` is never shorter than its
+ * font's own height (Noto Sans TC's 1.45), which kept the two 37 apart at the default text size and overflowed the 44
+ * row at 1.5. The texts keep their own boxes — their glyphs are never clipped — and only reach past the line boxes by
+ * the font's empty leading.
+ */
+@Composable
+private fun ComposerRowLines(labelSize: Float, detailSize: Float, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Layout(content, modifier) { parts, constraints ->
+        val loose = Constraints(maxWidth = constraints.maxWidth)
+        val texts = parts.map { it.measure(loose) }
+        // As `lineHeight = 1.2.em` would: of the size the text is set at (a large text size scales it, non-linearly from 1.03).
+        val lines = listOf(labelSize, detailSize).take(texts.size).map { it.sp.toPx() * ComposerRowLine }
+        val width = texts.maxOf { it.width }.coerceIn(constraints.minWidth, constraints.maxWidth)
+        val height = lines.sum().roundToInt().coerceIn(constraints.minHeight, constraints.maxHeight)
+        layout(width, height) {
+            var top = 0f
+            texts.forEachIndexed { i, text ->
+                text.place(0, (top + (lines[i] - text.height) / 2).roundToInt())
+                top += lines[i]
+            }
+        }
+    }
+}
+
 /** A reply's media at the words' start (a sticker's pose, a picture, a card's cover); in a short window, smaller. */
 val ComposerMediaSize = 36.dp
 val ComposerShortMediaSize = 28.dp
@@ -845,22 +888,57 @@ fun Modifier.sideFades(start: () -> Boolean, end: () -> Boolean, edge: Dp = Edge
 /** A riding row's ✕: the bare icon button's hit box. */
 val ComposerCloseSize = 44.dp
 
-/** A riding row's mark when it is a tile (a note's glyph, a card's cover): 32 square, 8 clear each side in the lead column. */
-val ComposerLeadSize = 32.dp
+/**
+ * A riding row's mark when it is a tile (a note's glyph, a card's cover): 36 square, 6 clear each side in ＋'s 48
+ * column — as iOS's 32 stands in its 44 (round 24, the owner: 「卡片的圖片在這個回覆區塊可不可以顯示再大一點點呢…我看到
+ * 在 iOS 上面的大小是再大一點的」), and as large as a reply's [ComposerMediaSize] beside it. A short window's row: 8 less
+ * than the row ([ComposerShortLeadSize]), as iOS's.
+ */
+val ComposerLeadSize = 36.dp
+val ComposerShortLeadSize = ComposerShortRowHeight - 8.dp
 
-/** The rounding of a riding row's thumbnail and tile (the attachment chips' 12 / 14). */
+/** The rounding of a riding row's picture strip thumbnails (the attachment chips' 12 / 14). */
 val ComposerLeadShape = RoundedCornerShape(topStart = 12.dp, topEnd = 14.dp, bottomEnd = 12.dp, bottomStart = 14.dp)
+
+/** A riding row's tile or reply thumbnail [side] across, rounded as the chips were in proportion (12 / 14 at 40: iOS's `ComposerRowTile.shape(side:)`). */
+fun composerTileShape(side: Dp): RoundedCornerShape {
+    val k = side.value / 40f
+    return RoundedCornerShape(topStart = (12 * k).dp, topEnd = (14 * k).dp, bottomEnd = (12 * k).dp, bottomStart = (14 * k).dp)
+}
+
+/**
+ * A reply's mark in its riding row (round 24, the owner: 「把左邊這一條垂直的線…改成這種回覆的這個圖案」, in place of the wavy
+ * rule): the reply glyph — the held message's 回覆, drawn with that row's pen ([ComposerReplyMarkPen], INK: the menu
+ * sheet's, web INK, iOS `Tokens.ink`) — in the accent the rule had, [ComposerReplyMarkSize] (a short window's one-line
+ * row: [ComposerShortReplyMarkSize]), centred in ＋'s column by its row. Silent to TalkBack: the row's label says it is a
+ * reply.
+ */
+@Composable
+fun ComposerReplyMark(modifier: Modifier = Modifier, short: Boolean = false) {
+    OrganicIcon(
+        IconName.Reply, modifier,
+        size = if (short) ComposerShortReplyMarkSize else ComposerReplyMarkSize,
+        color = Tokens.Terracotta,
+        strokeWidth = ComposerReplyMarkPen.value,
+    )
+}
+
+/** The reply mark's pen, in the glyph's 24-unit box: the held menu's 回覆 row's (never the icon's INK_STRONG default). */
+val ComposerReplyMarkPen = Tokens.Ink
+
+val ComposerReplyMarkSize = 20.dp
+val ComposerShortReplyMarkSize = 18.dp
 
 /** The tonal tile's face: the light terracotta at 0.4 laid on the cream, opaque (the chips' old face). */
 val ComposerTileFace: Color @Composable @ReadOnlyComposable get() = Tokens.TerracottaLight.copy(alpha = 0.4f).compositeOver(Tokens.Cream)
 
 /**
- * A riding row's mark as a [ComposerLeadSize] tile: [icon] (16) on the tonal face, and over it [content] (a cover),
- * clipped to the same rounding, once there is one.
+ * A riding row's mark as a [side] tile ([ComposerLeadSize]; a short window's [ComposerShortLeadSize]): [icon] (16) on
+ * the tonal face, and over it [content] (a cover), clipped to the same rounding ([composerTileShape]), once there is one.
  */
 @Composable
-fun ComposerTile(icon: IconName?, modifier: Modifier = Modifier, content: (@Composable BoxScope.() -> Unit)? = null) {
-    Box(modifier.size(ComposerLeadSize).clip(ComposerLeadShape).background(ComposerTileFace), contentAlignment = Alignment.Center) {
+fun ComposerTile(icon: IconName?, modifier: Modifier = Modifier, side: Dp = ComposerLeadSize, content: (@Composable BoxScope.() -> Unit)? = null) {
+    Box(modifier.size(side).clip(composerTileShape(side)).background(ComposerTileFace), contentAlignment = Alignment.Center) {
         icon?.let { OrganicIcon(it, size = 16.dp, color = Tokens.Text) }
         content?.invoke(this)
     }

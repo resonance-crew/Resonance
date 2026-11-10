@@ -8,12 +8,54 @@ enum AttachTab: String, Equatable {
     case pictures, cards
 }
 
+/// The attach panel's paper (round 24, part 3 §C1, the owner: the picker's white under the foot's cream grip band,
+/// "這個區塊兩種顏色，看起來就怪怪的"). Under 卡片 the foot's own: the panel lays nothing of its own, and the foot's paper
+/// goes on under it. Under 圖片 the system picker's, laid under the grip band and the picker alike — from the grip's pen
+/// line down (``AttachPaperShape``), across the whole pane to the rule (``FromPaneRule``), the window's edges and its foot
+/// — so the panel is one paper from its top line down. Changed with the tab at once (no fade: no cream shows under the
+/// picker as it comes).
+enum AttachPaper: Equatable {
+    case foot, picker
+
+    static func of(_ tab: AttachTab) -> AttachPaper { tab == .pictures ? .picker : .foot }
+
+    /// What the panel lays under itself: nothing for the foot's paper; for the picker its own — `systemBackground`,
+    /// what the inline PhotosPicker draws under its grid, resolved in the panel's traits (the scene's: the app's
+    /// appearance overrides them): white by day; by night black on an iPhone or an iPad, and on the Mac rgb(30,30,30),
+    /// the very grey its picker fills its rect with there.
+    var color: Color? { self == .picker ? Self.pickerPaper : nil }
+
+    static let pickerPaper = Color(uiColor: .systemBackground)
+}
+
+/// The attach panel's top pen line (its grip's), where it lies in the panel: ``frameHeight`` tall at the panel's top,
+/// stretched across it from the rule or the window's edge to the window's edge — so the picker's paper, laid in the same
+/// frame, is cut on the very wave it is stroked on (``AttachPaperShape``).
+nonisolated enum AttachPanelLine {
+    static let shape = WavyRuleShape(seed: 211, amp: 1.2, steps: 9)
+    static let frameHeight: CGFloat = 6
+}
+
+/// The picker's paper under 圖片 (round 24, part 3 §C1, review): from the grip's pen line down, its top on the line's own
+/// centre — not from the panel's top edge, which left a straight strip of it showing over the hand-drawn line (white on
+/// the cream by day, black by night) — the pen hiding the edge where the two meet.
+nonisolated struct AttachPaperShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = AttachPanelLine.shape.path(in: CGRect(x: rect.minX, y: rect.minY, width: rect.width,
+                                                         height: AttachPanelLine.frameHeight))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
 /// The attach panel (round 22 §4.2), in the keyboard's place under the capsule: its top edge one hand-drawn pen
 /// line with a short wavy grip in its middle (drag it up to grow the panel to under the header, down to close
 /// it; VoiceOver adjusts it), and at its foot the segmented 圖片｜卡片. 圖片 is the system's own photo picker laid
 /// inline (out of the app's process: no library access asked for), several pictures chosen in order — they ride
 /// in the strip inside the capsule as they are picked (round 23); 卡片 lists the viewer's cards, a tap and the card rides.
-/// No card, no shadow: the foot's paper goes on under it.
+/// No card, no shadow: the foot's paper goes on under it — under 圖片 the picker's (``AttachPaper``, laid by its host).
 struct AttachPanel: View {
     @Binding var tab: AttachTab
     @Binding var selection: [PhotosPickerItem]
@@ -34,6 +76,12 @@ struct AttachPanel: View {
     /// The picker and the cards scroll on to the screen's foot, under the home indicator (the phone's panel, v3);
     /// the floating bar keeps clear of the indicator.
     var toScreenEdge = false
+    /// The panes' rule beside the panel, in the detail pane (round 24, part 3 §C2): its top pen line runs on across the
+    /// gutter from the rule's own line, as the pane's paper does — the grip's mark staying centred over the panel.
+    var rule: PaneRuleBox?
+    /// How far in the picker stands: not at all in the keyboard's place (it runs edge to edge); clear of a popover's pen
+    /// line in one (``ComposerPopoverMetrics/pickerInsets``).
+    var pickerInsets = EdgeInsets()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,6 +97,7 @@ struct AttachPanel: View {
                         .photosPickerStyle(.inline)
                         .photosPickerDisabledCapabilities(.selectionActions)
                         .photosPickerAccessoryVisibility(.hidden, edges: .all)
+                        .padding(pickerInsets)
                     case .cards:
                         AttachCards(chosenCard: chosenCard, onCard: onCard)
                     }
@@ -71,12 +120,17 @@ struct AttachPanel: View {
         }
     }
 
-    /// The panel's top edge: a pen line across, the grip's wavy mark in its middle; dragged, the panel follows.
+    /// The panel's top edge: a pen line across the pane — from the rule between the panes, in two, and to the window's
+    /// edges through a phone's sides on its side, as the picker's paper is laid — the grip's wavy mark in the panel's
+    /// middle; dragged, the panel follows.
     private var grip: some View {
         ZStack {
-            WavyRuleShape(seed: 211, amp: 1.2, steps: 9)
-                .stroke(PaneLines.ink, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round))
-                .frame(height: 6)
+            FromPaneRule(rule: rule) {
+                AttachPanelLine.shape
+                    .stroke(PaneLines.ink, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round))
+            }
+            .frame(height: AttachPanelLine.frameHeight)
+            .ignoresSafeArea(.container, edges: .horizontal)
             WavyRuleShape(seed: 37, amp: 1.6, steps: 3)
                 .stroke(Tokens.fieldBorderHover, style: StrokeStyle(lineWidth: Tokens.inkStrong, lineCap: .round))
                 .frame(width: 36, height: 6)
