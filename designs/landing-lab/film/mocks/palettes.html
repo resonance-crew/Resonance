@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Landing film palettes</title>
+<!--
+  The landing film's art-direction mock: one paper landscape (the same seeded place) cut at six times of day, each
+  a sky wash + seven paper layers and the sea, whose colours come from one formula (depth → OKLCH ramp from the
+  time's haze to its ink, plus each layer's own paper at mid depth), the paper finish by depth (far: flat cut; mid:
+  cut with a pale cut edge; near: torn with a fibre rim, mottle and specks, a pencil line on the ground), the light
+  (sun / moon disc with paper halos, a rim light on the puppets at low sun, lit windows, a lighthouse, pinprick
+  stars) and the particles (paper birds, the ≋ wind, lanterns, fibres). Puppets are laid from their rig parts at rest.
+
+  ?view=grid (default): the six frames, 3 × 2, with swatches.   ?view=dusk: one dusk frame filling the window.
+  Procedural and seeded: the same seed, the same paper. The geometry is a port of designs/stickers/kit/paper.ts,
+  the filters its recipes rescaled for a landscape.
+-->
+<style>
+  :root { --paper: oklch(96.5% 0.015 75); --ink: oklch(26% 0.03 60); --muted: oklch(52% 0.04 70); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--paper); color: var(--ink); font: 14px/1.4 "DM Sans", system-ui, sans-serif; }
+  header { padding: 28px 40px 4px; }
+  header h1 { font: 600 22px/1.2 "Playfair Display", Georgia, serif; margin: 0 0 4px; }
+  header p { margin: 0; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px 22px; padding: 22px 40px 36px; }
+  figure { margin: 0; }
+  .frame svg { display: block; width: 100%; height: auto; border-radius: 10px; }
+  figcaption { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  figcaption b { font: 600 15px/1 "Playfair Display", Georgia, serif; min-width: 150px; }
+  .sw { display: flex; flex: 1; height: 16px; border-radius: 4px; overflow: hidden; }
+  .sw i { flex: 1; }
+  .sw i.sky { flex: 0.6; }
+  .sw i.gap { flex: 0.25; background: var(--paper); }
+  body.single { background: #000; }
+  body.single header, body.single figcaption { display: none; }
+  body.single .grid { display: block; padding: 0; }
+  body.single .frame svg { border-radius: 0; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<header>
+  <h1>A day in paper — six times of day</h1>
+  <p>One seeded place, seven paper layers and the sea, one colour formula: depth ramps the time's haze into its ink in OKLCH; each layer keeps a little of its own paper at mid depth</p>
+</header>
+<div class="grid" id="grid"></div>
+<script src="puppets.js"></script>
+<script>
+'use strict';
+window.__ready = false;
+/* ───────────── colour: OKLCH ↔ sRGB, contrast ───────────── */
+const D2R = Math.PI / 180;
+const lchToLab = ([L, C, h]) => [L, C * Math.cos(h * D2R), C * Math.sin(h * D2R)];
+function labToLch([L, a, b]) { let h = Math.atan2(b, a) / D2R; if (h < 0) h += 360; return [L, Math.hypot(a, b), h]; }
+function labToLin([L, a, b]) {
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  return [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s];
+}
+const inGamut = (v) => v.every((c) => c >= -0.0005 && c <= 1.0005);
+function fit([L, C, h]) {
+  if (inGamut(labToLin(lchToLab([L, C, h])))) return [L, C, h];
+  let lo = 0, hi = C;
+  for (let i = 0; i < 20; i++) { const mid = (lo + hi) / 2; if (inGamut(labToLin(lchToLab([L, mid, h])))) lo = mid; else hi = mid; }
+  return [L, lo, h];
+}
+const enc = (c) => { c = Math.min(1, Math.max(0, c)); return c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055; };
+const dec = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const srgb = (lch) => labToLin(lchToLab(fit(lch))).map(enc);
+const lumOfSrgb = (rgb) => { const [r, g, b] = rgb.map(dec); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const ratio = (y1, y2) => (Math.max(y1, y2) + 0.05) / (Math.min(y1, y2) + 0.05);
+function mixLab(c1, c2, t) { const a = lchToLab(c1), b = lchToLab(c2); return labToLch(a.map((v, i) => v + (b[i] - v) * t)); }
+/** OKLCH interpolation (lightness and chroma linear, hue the short way round): no grey in the middle. */
+function mixLch([L1, C1, h1], [L2, C2, h2], t) { let dh = ((h2 - h1 + 540) % 360) - 180; if (C1 < 0.005) dh = 0, h1 = h2; return [L1 + (L2 - L1) * t, C1 + (C2 - C1) * t, (h1 + dh * t + 360) % 360]; }
+const css = (lch, a = 1) => { const [r, g, b] = srgb(lch).map((c) => Math.round(c * 255)); return a >= 1 ? `rgb(${r},${g},${b})` : `rgba(${r},${g},${b},${a})`; };
+const fmt = ([L, C, h]) => `oklch(${(L * 100).toFixed(0)}% ${C.toFixed(3)} ${Math.round(h)})`;
+
+/* ───────────── paper geometry (port of designs/stickers/kit/paper.ts) ───────────── */
+function rng(seed) { let a = seed >>> 0; return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function spline(keys, step = 6, closed = true) {
+  const out = [], n = keys.length, segs = closed ? n : n - 1;
+  for (let i = 0; i < segs; i++) {
+    const p0 = keys[(i - 1 + n) % n], p1 = keys[i], p2 = keys[(i + 1) % n], p3 = keys[(i + 2) % n];
+    const P0 = !closed && i === 0 ? p1 : p0, P3 = !closed && i === segs - 1 ? p2 : p3;
+    const m = Math.max(2, Math.round(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / step));
+    for (let k = 0; k < m; k++) {
+      const t = k / m, t2 = t * t, t3 = t2 * t;
+      const f = (a, b, c, d) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+      out.push([f(P0[0], p1[0], p2[0], P3[0]), f(P0[1], p1[1], p2[1], P3[1])]);
+    }
+  }
+  if (!closed) out.push(keys[n - 1]);
+  return out;
+}
+function poly(keys, step = 6, closed = true) {
+  const out = [], n = keys.length, segs = closed ? n : n - 1;
+  for (let i = 0; i < segs; i++) {
+    const a = keys[i], b = keys[(i + 1) % n], m = Math.max(1, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / step));
+    for (let k = 0; k < m; k++) out.push([a[0] + ((b[0] - a[0]) * k) / m, a[1] + ((b[1] - a[1]) * k) / m]);
+  }
+  if (!closed) out.push(keys[n - 1]);
+  return out;
+}
+function tear(pts, seed, { amp = 4, jag = 2.2, wander = 9, closed = true } = {}) {
+  const r = rng(seed), n = pts.length; let w = 0; const slow = [];
+  for (let i = 0; i < n; i++) { w += (r() - 0.5) * 0.9; w *= 0.93; slow.push(w); }
+  return pts.map((p, i) => {
+    if (!closed && (i === 0 || i === n - 1)) return p;
+    const a = pts[(i - 1 + n) % n], b = pts[(i + 1) % n];
+    let tx = b[0] - a[0], ty = b[1] - a[1]; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+    const d = slow[i] * wander * 0.35 + (r() - 0.5) * 2 * jag + (r() < 0.08 ? (r() - 0.6) * amp * 2.2 : 0);
+    return [p[0] + ty * d, p[1] - tx * d];
+  });
+}
+const f1 = (n) => n.toFixed(1);
+const path = (pts, closed = true) => 'M' + pts.map((p) => `${f1(p[0])},${f1(p[1])}`).join('L') + (closed ? 'Z' : '');
+function smoothPath(pts) {
+  if (pts.length < 3) return path(pts, false);
+  let d = `M${f1(pts[0][0])},${f1(pts[0][1])}`;
+  for (let i = 1; i < pts.length - 1; i++) { const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2; d += `Q${f1(pts[i][0])},${f1(pts[i][1])} ${f1(mx)},${f1(my)}`; }
+  const L = pts[pts.length - 1]; return d + `L${f1(L[0])},${f1(L[1])}`;
+}
+function pencil(pts, seed, passes = 3, spread = 1.2) {
+  const r = rng(seed), out = [];
+  for (let k = 0; k < passes; k++) { const ox = (r() - 0.5) * spread * 2, oy = (r() - 0.5) * spread * 2; out.push(smoothPath(pts.map((p) => [p[0] + ox + (r() - 0.5) * spread, p[1] + oy + (r() - 0.5) * spread]))); }
+  return out;
+}
+function ellipse(cx, cy, rx, ry, n = 28, rot = 0) {
+  const out = [];
+  for (let i = 0; i < n; i++) { const t = (i / n) * Math.PI * 2, x = Math.cos(t) * rx, y = Math.sin(t) * ry; out.push([cx + x * Math.cos(rot) - y * Math.sin(rot), cy + x * Math.sin(rot) + y * Math.cos(rot)]); }
+  return out;
+}
+function ribbon(line, w, taperPow = 0.5) {
+  const left = [], right = [];
+  line.forEach((p, i) => {
+    const a = line[Math.max(0, i - 1)], b = line[Math.min(line.length - 1, i + 1)], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    const taper = Math.sin(Math.PI * (i / (line.length - 1))) ** taperPow;
+    const nx = -(b[1] - a[1]) / l, ny = (b[0] - a[0]) / l, ww = (w * (0.2 + 0.8 * taper)) / 2;
+    left.push([p[0] + nx * ww, p[1] + ny * ww]); right.push([p[0] - nx * ww, p[1] - ny * ww]);
+  });
+  return [...left, ...right.reverse()];
+}
+function yAt(edge, x) {
+  for (let i = 1; i < edge.length; i++) if (edge[i][0] >= x) { const a = edge[i - 1], b = edge[i], t = (x - a[0]) / (b[0] - a[0] || 1); return a[1] + (b[1] - a[1]) * t; }
+  return edge[edge.length - 1][1];
+}
+const W = 1600, H = 1000, HORIZON = 600, BASE = 1060;
+/** 悄悄 by evening and night: lit by its own lantern (its paper ×1.25 in sRGB), so its navy clears 3:1 on the dark near papers */
+const SELF_LIGHT = [1.25, 1.25, 1.25];
+const QS = new URLSearchParams(location.search), view = QS.get('view') || 'grid', NOGRAIN = QS.has('nograin'); // ?nograin: the page grain left to a CSS tile (size tests)
+
+/* ───────────── the six times of day ─────────────
+   sky: wash stops [offset, L, C, h]; haze: the air at the horizon (what the farthest paper fades into); ink: the
+   nearest paper, the time's darkest; gamma: how fast depth darkens; kappa: how much of its own paper a layer keeps;
+   rim: the fibre rim in this light; tint: the light on the puppets (sRGB multipliers); rimLight: the low sun's edge on
+   them. Every layer colour is derived (LAYERS + layerColour); only the sky, the light and the accent are chosen. */
+const TIMES = {
+  dawn: {
+    name: 'Dawn', zh: '黎明',
+    sky: [[0, 0.6, 0.075, 280], [0.42, 0.74, 0.075, 322], [0.76, 0.86, 0.07, 30], [1, 0.93, 0.06, 72]],
+    haze: [0.87, 0.045, 32], ink: [0.33, 0.055, 290], gamma: 0.85, kappa: 0.7,
+    disc: { kind: 'sun', x: 1020, y: 556, r: 86, c: [0.96, 0.07, 84], halo: [0.92, 0.07, 60] },
+    rim: [0.94, 0.035, 40], tint: [0.99, 0.96, 1.0], rimLight: [0.94, 0.07, 65], rimSide: 1,
+    accent: [0.84, 0.1, 62], sea: [0.82, 0.05, 340], mist: [0.9, 0.035, 25],
+    windows: 0.12, lanterns: 0, stars: 6, birds: 3, clouds: 'streak', wind: null, beam: false,
+    cast: [['tuck', 380], ['dot', 540]],
+  },
+  day: {
+    name: 'Blue-sky day', zh: '藍天',
+    sky: [[0, 0.63, 0.12, 248], [0.45, 0.75, 0.095, 238], [0.8, 0.86, 0.06, 225], [1, 0.91, 0.04, 208]],
+    haze: [0.87, 0.045, 215], ink: [0.38, 0.05, 192], gamma: 0.8, kappa: 1,
+    disc: { kind: 'sun', x: 1240, y: 200, r: 60, c: [0.985, 0.04, 98], halo: [0.95, 0.04, 215] },
+    rim: [0.975, 0.012, 85], tint: [1, 1, 1], rimLight: null, rimSide: 1,
+    accent: [0.62, 0.14, 45], sea: [0.74, 0.085, 230], mist: null,
+    windows: 0, lanterns: 0, stars: 0, birds: 5, clouds: 'puff', wind: [250, 330, 1], beam: false,
+    cast: [['tag', 340], ['dot', 470], ['card', 610]],
+  },
+  golden: {
+    name: 'Golden afternoon', zh: '金色午後',
+    sky: [[0, 0.72, 0.065, 234], [0.46, 0.87, 0.035, 96], [0.78, 0.9, 0.09, 88], [1, 0.91, 0.12, 80]],
+    haze: [0.86, 0.09, 82], ink: [0.34, 0.05, 150], gamma: 0.85, kappa: 0.85,
+    disc: { kind: 'sun', x: 1060, y: 470, r: 104, c: [0.96, 0.11, 92], halo: [0.93, 0.1, 84] },
+    rim: [0.95, 0.07, 86], tint: [1.03, 0.98, 0.9], rimLight: [0.94, 0.12, 86], rimSide: 1,
+    accent: [0.8, 0.14, 72], sea: [0.82, 0.1, 82], mist: null,
+    windows: 0, lanterns: 0, stars: 0, birds: 3, clouds: 'streak', wind: [180, 300, 1], beam: false,
+    cast: [['card', 400], ['tuck', 590]],
+  },
+  dusk: {
+    name: 'Dusk', zh: '黃昏',
+    sky: [[0, 0.45, 0.1, 296], [0.36, 0.61, 0.13, 338], [0.7, 0.76, 0.13, 28], [1, 0.87, 0.1, 66]],
+    haze: [0.75, 0.11, 22], ink: [0.27, 0.07, 310], gamma: 0.85, kappa: 0.55,
+    disc: { kind: 'sun', x: 860, y: 566, r: 118, c: [0.94, 0.085, 84], halo: [0.86, 0.12, 48] },
+    rim: [0.88, 0.075, 48], tint: [0.99, 0.91, 0.91], rimLight: [0.88, 0.13, 58], rimSide: 1,
+    accent: [0.82, 0.13, 60], sea: [0.7, 0.12, 18], mist: null,
+    windows: 0.35, lanterns: 3, stars: 5, birds: 6, clouds: 'streak', wind: [250, 330, 0.9], beam: false,
+    cast: [['tuck', 380], ['card', 580]],
+  },
+  evening: {
+    name: 'Evening', zh: '傍晚',
+    sky: [[0, 0.33, 0.08, 268], [0.45, 0.46, 0.09, 282], [0.8, 0.6, 0.085, 312], [1, 0.72, 0.09, 42]],
+    haze: [0.56, 0.07, 296], ink: [0.21, 0.05, 276], gamma: 0.95, kappa: 0.45,
+    disc: { kind: 'moon', x: 1300, y: 300, r: 66, c: [0.94, 0.04, 92], halo: [0.72, 0.05, 285] },
+    rim: [0.7, 0.04, 288], tint: [0.86, 0.87, 0.97], rimLight: null, rimSide: -1,
+    accent: [0.84, 0.13, 78], sea: [0.5, 0.075, 288], mist: null,
+    windows: 0.8, lanterns: 7, stars: 28, birds: 0, clouds: null, wind: null, beam: true,
+    cast: [['tag', 420], ['night', 900]],
+  },
+  night: {
+    name: 'Night', zh: '夜',
+    sky: [[0, 0.19, 0.045, 266], [0.5, 0.235, 0.055, 264], [0.85, 0.3, 0.06, 268], [1, 0.35, 0.06, 272]],
+    haze: [0.3, 0.06, 268], ink: [0.14, 0.035, 266], gamma: 1, kappa: 0.3,
+    disc: { kind: 'crescent', x: 1200, y: 190, r: 60, c: [0.92, 0.07, 92], halo: [0.42, 0.06, 262] },
+    rim: [0.56, 0.035, 258], tint: [0.76, 0.8, 0.94], rimLight: null, rimSide: 1,
+    accent: [0.86, 0.12, 85], sea: [0.27, 0.05, 264], mist: null,
+    windows: 0.32, lanterns: 4, stars: 150, birds: 0, clouds: null, wind: null, beam: true,
+    cast: [['dot', 430], ['night', 900]],
+  },
+};
+/* the layers, far → near: depth d (0 = the haze, 1 = the ink) and their own paper (C, h), from the brand's families */
+const LAYERS = [
+  { key: 'range', label: 'far range', d: 0.08, own: [0.015, 285] },
+  { key: 'peaks', label: 'near peaks', d: 0.2, own: [0.025, 270] },
+  { key: 'headland', label: 'headland', d: 0.34, own: [0.03, 250] },
+  { key: 'town', label: 'town', d: 0.5, own: [0.05, 48] },
+  { key: 'hills', label: 'tree hills', d: 0.66, own: [0.045, 140] },
+  { key: 'near', label: 'near hill', d: 0.82, own: [0.035, 150] },
+  { key: 'ground', label: 'ground', d: 1, own: [0, 0] },
+];
+/** The formula: t = d^γ; L, C linear and h the short way from haze to ink at t; plus κ·sin(πd) of the layer's own paper. */
+function layerColour(T, layer) {
+  const t = layer.d ** T.gamma;
+  const [L, C, h] = mixLch(T.haze, T.ink, t);
+  const w = T.kappa * Math.sin(Math.PI * layer.d);
+  const [, a, b] = lchToLab([L, C, h]), [, oa, ob] = lchToLab([0, layer.own[0], layer.own[1]]);
+  return labToLch([L, a + w * oa, b + w * ob]);
+}
+function paletteOf(T) {
+  const P = {};
+  for (const l of LAYERS) P[l.key] = layerColour(T, l);
+  P.sea = mixLch(T.sea, P.peaks, 0.2); // the sea reflects the sky, a step under the near peaks
+  P.shade = mixLab(P.ground, [0.08, 0.02, P.ground[2]], 0.4);
+  return P;
+}
+
+/* ───────────── the place (seeded, the same in every frame) ───────────── */
+function peaks(seed, x0, x1, base, hMin, hMax, n) {
+  const r = rng(seed), list = [];
+  for (let i = 0; i < n; i++) {
+    const cx = x0 + ((x1 - x0) * (i + 0.5)) / n + (r() - 0.5) * ((x1 - x0) / n) * 0.9;
+    const h = hMin + (hMax - hMin) * r() ** 1.2, hw = h * (1.25 + r() * 1.3), sk = (r() - 0.5) * 0.5;
+    const top = [cx + sk * hw * 0.5, base - h], L = [cx - hw, base], R = [cx + hw, base];
+    const ls = [L[0] + (top[0] - L[0]) * (0.45 + r() * 0.2), L[1] + (top[1] - L[1]) * (0.45 + r() * 0.2) - h * (r() * 0.12)];
+    const rs = [R[0] + (top[0] - R[0]) * (0.45 + r() * 0.2), R[1] + (top[1] - R[1]) * (0.45 + r() * 0.2) - h * (r() * 0.12)];
+    list.push({ cx, h, hw, top, pts: [L, ls, top, rs, R], seed: seed * 10 + i });
+  }
+  return list.sort((a, b) => b.h - a.h);
+}
+const close = (edge, y = BASE) => [...edge, [edge[edge.length - 1][0], y], [edge[0][0], y]];
+function place() {
+  const P = {};
+  P.range = peaks(11, -120, 1720, HORIZON + 14, 120, 230, 7);
+  P.peaks = peaks(23, -120, 1720, HORIZON + 14, 50, 120, 11);
+  // far shore (left) and the headland (right), sitting on the sea at their waterlines
+  P.shore = spline([[-80, 588], [90, 579], [260, 585], [440, 596], [560, 606]], 7, false);
+  P.headland = spline([[1010, 640], [1028, 600], [1060, 580], [1130, 570], [1260, 560], [1390, 540], [1510, 548], [1680, 556]], 7, false);
+  // the town's hill and its houses
+  P.townHill = spline([[700, 760], [820, 712], [960, 688], [1110, 676], [1270, 660], [1420, 668], [1560, 688], [1680, 696]], 7, false);
+  const r = rng(77); P.houses = []; P.windows = [];
+  let x = 880;
+  while (x < 1500) {
+    const tower = r() < 0.14, s = 1.3, w = (tower ? 18 + r() * 6 : 26 + r() * 24) * s, h = (tower ? 64 + r() * 26 : 20 + r() * 24) * s, rh = (tower ? 26 + r() * 10 : 10 + r() * 15) * s;
+    const yb = Math.min(yAt(P.townHill, x), yAt(P.townHill, x + w)) + 8;
+    const flat = !tower && r() < 0.2;
+    const roof = flat ? [[x - 2, yb - h], [x + w + 2, yb - h]] : [[x - 3, yb - h], [x + w / 2, yb - h - rh], [x + w + 3, yb - h]];
+    P.houses.push({ body: [[x, yb + 30], [x, yb - h], ...roof, [x + w, yb - h], [x + w, yb + 30]], roof: flat ? null : [[x - 3, yb - h + 1], [x + w / 2, yb - h - rh], [x + w + 3, yb - h + 1]] });
+    const cols = Math.max(1, Math.floor(w / 15)), rows = Math.max(1, Math.floor(h / 19));
+    for (let c = 0; c < cols; c++) for (let q = 0; q < rows; q++) P.windows.push({ x: x + 6 + c * ((w - 12) / cols) + 1, y: yb - h + 8 + q * 18, w: 6.5, h: 8.5, on: r() });
+    x += w + 3 + r() * 16;
+  }
+  // rolling hills and their trees
+  P.hills = spline([[-80, 742], [120, 728], [330, 748], [560, 770], [760, 778], [980, 760], [1200, 770], [1420, 748], [1680, 736]], 7, false);
+  const rt = rng(91); P.trees = [];
+  for (let tx = -20; tx < 1660; tx += 22 + rt() * 64) {
+    if (tx > 640 && tx < 980 && rt() < 0.7) continue;
+    const y = yAt(P.hills, tx) + 5, kind = rt() < 0.35 ? 'cypress' : 'round', s = 0.9 + rt() * 0.7;
+    P.trees.push({ x: tx, y, kind, s, seed: 400 + Math.floor(tx) });
+  }
+  // the near hill (left) with its lone tree; the low rise (right)
+  P.near = spline([[-80, 650], [70, 622], [210, 610], [360, 634], [520, 712], [660, 812], [780, 900]], 7, false);
+  P.nearRight = spline([[1180, 900], [1290, 838], [1420, 806], [1540, 796], [1680, 800]], 7, false);
+  // the ground the puppets stand on, with grass tufts along its edge
+  const g = spline([[-80, 868], [160, 884], [420, 890], [700, 888], [980, 880], [1260, 866], [1480, 846], [1680, 832]], 9, false);
+  const rg = rng(53); P.groundEdge = g;
+  P.ground = g.flatMap((p, i) => (i % 4 === 2 && rg() < 0.6 ? [[p[0] - 2.5, p[1]], [p[0] + 1 + rg() * 2, p[1] - 6 - rg() * 11], [p[0] + 3.5, p[1]]] : [p]));
+  return P;
+}
+const PLACE = place();
+
+/* ───────────── drawing ───────────── */
+function defs(k, T, P) {
+  const U = 'filterUnits="userSpaceOnUse" x="-120" y="-120" width="1840" height="1300"';
+  const night = T.ink[0] < 0.25;
+  const sh = night ? 0.3 : 0.18;
+  return `<defs>
+  <linearGradient id="sky-${k}" x1="0" y1="0" x2="0" y2="${HORIZON + 10}" gradientUnits="userSpaceOnUse">
+    ${T.sky.map(([o, L, C, h]) => `<stop offset="${o}" stop-color="${css([L, C, h])}"/>`).join('')}
+  </linearGradient>
+  <radialGradient id="glow-${k}" cx="${T.disc.x}" cy="${T.disc.y}" r="${T.disc.r * 5.5}" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="${css(T.disc.halo, 0.6)}"/><stop offset="0.3" stop-color="${css(T.disc.halo, 0.22)}"/><stop offset="1" stop-color="${css(T.disc.halo, 0)}"/>
+  </radialGradient>
+  <filter id="far-${k}" ${U} color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="2" seed="7" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G" result="cut"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.006 0.012" numOctaves="3" seed="5" result="m"/>
+    <feColorMatrix in="m" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0.16 0 0 0 -0.07" result="mottle"/>
+    <feComposite in="mottle" in2="cut" operator="in" result="mottles"/>
+    <feMerge><feMergeNode in="cut"/><feMergeNode in="mottles"/></feMerge>
+  </filter>
+  <filter id="cut-${k}" ${U} color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="17" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G" result="cut"/>
+    <feMorphology in="cut" operator="dilate" radius="0.8" result="fat"/>
+    <feFlood flood-color="${css(T.rim, 0.5)}"/><feComposite in2="fat" operator="in" result="rim"/>
+    <feGaussianBlur in="SourceAlpha" stdDeviation="7" result="b"/><feOffset dx="0" dy="-2" result="ob"/>
+    <feFlood flood-color="${css(P.shade)}" flood-opacity="${sh * 0.7}"/><feComposite in2="ob" operator="in" result="shadow"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.007 0.013" numOctaves="3" seed="25" result="m"/>
+    <feColorMatrix in="m" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 0.97  0.22 0 0 0 -0.095" result="mottle"/>
+    <feComposite in="mottle" in2="cut" operator="in" result="mottles"/>
+    <feMerge><feMergeNode in="shadow"/><feMergeNode in="rim"/><feMergeNode in="cut"/><feMergeNode in="mottles"/></feMerge>
+  </filter>
+  <filter id="torn-${k}" ${U} color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.08" numOctaves="2" seed="7" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="3.6" xChannelSelector="R" yChannelSelector="G" result="torn"/>
+    <feMorphology in="torn" operator="dilate" radius="1.5" result="fat"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.38 0.5" numOctaves="2" seed="3" result="fn"/>
+    <feDisplacementMap in="fat" in2="fn" scale="4.2" result="fibre"/>
+    <feFlood flood-color="${css(T.rim, 0.92)}"/><feComposite in2="fibre" operator="in" result="rim"/>
+    <feGaussianBlur in="fat" stdDeviation="9" result="blur"/><feOffset dx="0" dy="-3" result="off"/>
+    <feFlood flood-color="${css(P.shade)}" flood-opacity="${sh}"/><feComposite in2="off" operator="in" result="shadow"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="11" result="g"/>
+    <feColorMatrix in="g" type="matrix" values="0 0 0 0 0.3  0 0 0 0 0.3  0 0 0 0 0.27  4 0 0 0 -2.95" result="speck"/>
+    <feComposite in="speck" in2="torn" operator="in" result="specks"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.009 0.017" numOctaves="3" seed="5" result="m"/>
+    <feColorMatrix in="m" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 0.96  0.2 0 0 0 -0.085" result="mottle"/>
+    <feComposite in="mottle" in2="torn" operator="in" result="mottles"/>
+    <feMerge><feMergeNode in="shadow"/><feMergeNode in="rim"/><feMergeNode in="torn"/><feMergeNode in="mottles"/><feMergeNode in="specks"/></feMerge>
+  </filter>
+  <filter id="thin-${k}" ${U} color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.13" numOctaves="2" seed="9" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="2" xChannelSelector="R" yChannelSelector="G" result="torn"/>
+    <feMorphology in="torn" operator="dilate" radius="1" result="fat"/>
+    <feFlood flood-color="${css(T.rim, 0.7)}"/><feComposite in2="fat" operator="in" result="rim"/>
+    <feGaussianBlur in="fat" stdDeviation="2.4" result="blur"/><feOffset dx="1" dy="2.5" result="off"/>
+    <feFlood flood-color="${css(P.shade)}" flood-opacity="0.14"/><feComposite in2="off" operator="in" result="shadow"/>
+    <feMerge><feMergeNode in="shadow"/><feMergeNode in="rim"/><feMergeNode in="torn"/></feMerge>
+  </filter>
+  <filter id="near-${k}" ${U} color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.08" numOctaves="2" seed="13" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G" result="torn"/>
+    <feGaussianBlur in="torn" stdDeviation="1.4"/>
+  </filter>
+  <filter id="graphite-${k}" ${U}>
+    <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="2" result="w"/>
+    <feDisplacementMap in="SourceGraphic" in2="w" scale="1.6" result="d"/>
+    <feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="1" seed="6" result="t"/>
+    <feColorMatrix in="t" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -2.4 0 0 0 2.15" result="tooth"/>
+    <feComposite in="d" in2="tooth" operator="in"/>
+  </filter>
+  ${['', 'self'].map((v) => {
+    const tint = v ? SELF_LIGHT : T.tint;
+    return `<filter id="pup${v}-${k}" ${U} color-interpolation-filters="sRGB">
+    <feColorMatrix in="SourceGraphic" type="matrix" values="${tint[0]} 0 0 0 0  0 ${tint[1]} 0 0 0  0 0 ${tint[2]} 0 0  0 0 0 1 0" result="lit"/>
+    ${T.rimLight ? `<feOffset in="SourceAlpha" dx="${7 * -T.rimSide}" dy="3" result="sh"/>
+    <feComposite in="SourceAlpha" in2="sh" operator="out" result="edge"/>
+    <feFlood flood-color="${css(T.rimLight)}" flood-opacity="0.75"/><feComposite in2="edge" operator="in" result="rimlight"/>
+    <feMerge><feMergeNode in="lit"/><feMergeNode in="rimlight"/></feMerge>` : ''}
+  </filter>`;
+  }).join('')}
+  <filter id="grain-${k}" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="21" stitchTiles="stitch" result="g"/>
+    <feColorMatrix in="g" type="matrix" values="0 0 0 0 0.12  0 0 0 0 0.1  0 0 0 0 0.08  -1.1 0 0 0 0.62" result="dark"/>
+    <feColorMatrix in="g" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 0.96  1.1 0 0 0 -0.5" result="light"/>
+    <feMerge><feMergeNode in="dark"/><feMergeNode in="light"/></feMerge>
+  </filter>
+</defs>`;
+}
+
+function disc(k, T) {
+  const D = T.disc, out = [];
+  out.push(`<rect x="0" y="0" width="${W}" height="${HORIZON + 40}" fill="url(#glow-${k})"/>`);
+  const rings = D.kind === 'sun' && D.y < 300 ? [[1.9, 0.1]] : D.kind === 'crescent' ? [[2.3, 0.07], [1.55, 0.1]] : [[2.6, 0.08], [1.9, 0.11], [1.4, 0.15]];
+  rings.forEach(([s, a], i) => out.push(`<path d="${path(tear(ellipse(D.x, D.y, D.r * s, D.r * s, 72), 300 + i, { jag: 1.4, wander: 9 }))}" fill="${css(mixLab(D.halo, D.c, 0.35), a)}"/>`));
+  if (D.kind === 'crescent') {
+    const outer = path(tear(ellipse(D.x, D.y, D.r, D.r, 56), 310, { jag: 0.9, wander: 4 }));
+    const inner = path(tear(ellipse(D.x + D.r * 0.44, D.y - D.r * 0.2, D.r * 0.86, D.r * 0.86, 56), 311, { jag: 0.9, wander: 4 }));
+    out.push(`<mask id="cres-${k}"><rect width="${W}" height="${H}" fill="#fff"/><path d="${inner}" fill="#000"/></mask>`);
+    out.push(`<g mask="url(#cres-${k})"><path d="${outer}" fill="${css(D.c)}" filter="url(#thin-${k})"/></g>`);
+  } else {
+    out.push(`<path d="${path(tear(ellipse(D.x, D.y, D.r, D.r, 64), 312, { jag: 1, wander: 5 }))}" fill="${css(D.c)}" filter="url(#thin-${k})"/>`);
+    out.push(`<path d="${path(tear(ellipse(D.x - D.r * 0.12, D.y - D.r * 0.12, D.r * 0.64, D.r * 0.64, 48), 313, { jag: 0.8, wander: 3 }))}" fill="${css([Math.min(0.99, D.c[0] + 0.03), D.c[1] * 0.55, D.c[2]], 0.55)}"/>`);
+  }
+  return out.join('');
+}
+
+function stars(T) {
+  if (!T.stars) return '';
+  const r = rng(808), out = [];
+  for (let i = 0; i < T.stars; i++) {
+    const x = r() * W, y = Math.pow(r(), 1.4) * (HORIZON - 90);
+    if (Math.hypot(x - T.disc.x, y - T.disc.y) < T.disc.r * 1.8) continue;
+    const s = 0.7 + r() * r() * 2.2, a = 0.4 + r() * 0.6;
+    out.push(`<circle cx="${f1(x)}" cy="${f1(y)}" r="${(s * 3.4).toFixed(1)}" fill="${css(T.accent, 0.08 * a)}"/><circle cx="${f1(x)}" cy="${f1(y)}" r="${s.toFixed(2)}" fill="${css([0.97, 0.03, 90], a)}"/>`);
+    if (s > 2.2 && r() < 0.75) {
+      const q = s * 3.6, w = s * 0.65;
+      out.push(`<path d="M${f1(x)},${f1(y - q)}Q${f1(x + w)},${f1(y - w)} ${f1(x + q)},${f1(y)}Q${f1(x + w)},${f1(y + w)} ${f1(x)},${f1(y + q)}Q${f1(x - w)},${f1(y + w)} ${f1(x - q)},${f1(y)}Q${f1(x - w)},${f1(y - w)} ${f1(x)},${f1(y - q)}Z" fill="${css([0.97, 0.04, 92], 0.9)}"/>`);
+    }
+  }
+  return out.join('');
+}
+
+function clouds(k, T) {
+  if (!T.clouds) return '';
+  const out = [];
+  if (T.clouds === 'puff') {
+    const front = css(mixLab(T.sky[2].slice(1), [0.985, 0.01, 90], 0.6)), back = css(mixLab(T.sky[1].slice(1), T.sky[2].slice(1), 0.6));
+    for (const [cx, cy, w, sd] of [[250, 170, 330, 1], [690, 112, 240, 2], [1000, 290, 300, 3], [1470, 390, 240, 4]]) {
+      const r = rng(600 + sd), n = 4 + Math.floor(r() * 2), bumps = [];
+      for (let i = 0; i < n; i++) {
+        const u = (i + 0.5) / n, rr = (w / n) * (0.75 + r() * 0.45) * (1 - Math.abs(u - 0.5) * 0.7);
+        bumps.push([cx - w / 2 + w * u + (r() - 0.5) * 10, cy - rr * 0.45, rr]);
+      }
+      const shape = (dx, dy, s) => bumps.map(([x, y, rr], i) => path(tear(ellipse(x + dx, y + dy, rr * s, rr * 0.82 * s, 26), sd * 50 + i, { jag: 0.9, wander: 2.5 }))).join('') + path(tear(poly([[cx - w / 2 + dx, cy - 14 + dy], [cx + w / 2 + dx, cy - 14 + dy], [cx + w / 2 + dx, cy + dy], [cx - w / 2 + dx, cy + dy]], 6), sd * 50 + 9, { jag: 0.8, wander: 2 }));
+      out.push(`<g opacity="0.5"><path d="${shape(16, 10, 0.94)}" fill="${back}"/></g><g opacity="0.55"><path d="${shape(-10, 4, 0.9)}" fill="${front}"/></g><g opacity="0.6" filter="url(#far-${k})"><path d="${shape(0, 0, 1)}" fill="${front}"/></g>`);
+    }
+  } else {
+    const c = mixLab(T.disc.halo, T.sky[1].slice(1), 0.4);
+    for (const [cx, cy, w, h] of [[340, 300, 560, 11], [1200, 236, 440, 8], [760, 430, 700, 10], [1380, 476, 380, 7], [180, 472, 320, 6]]) {
+      const line = []; for (let x = cx - w / 2; x <= cx + w / 2; x += 8) line.push([x, cy + Math.sin((x - cx) / 90) * 3]);
+      out.push(`<path d="${path(tear(ribbon(line, h * 2, 0.35), 700 + cx, { jag: 0.6, wander: 2 }))}" fill="${css(mixLab(c, [0.98, 0.02, 80], 0.25), 0.75)}" filter="url(#thin-${k})"/>`);
+    }
+  }
+  return out.join('');
+}
+
+function birds(T, P, x0, y0, n) {
+  if (!n) return '';
+  const r = rng(909), out = [], c = css(mixLab(P.town, P.hills, 0.5));
+  for (let i = 0; i < n; i++) {
+    const x = x0 + i * 30 + (r() - 0.5) * 26, y = y0 + Math.abs(i - (n - 1) / 2) * 12 + (r() - 0.5) * 12, s = 0.9 + r() * 0.5, up = (4 + r() * 6) * s;
+    out.push(`<path d="M${f1(x - 11 * s)},${f1(y - up * 0.6)}Q${f1(x - 5 * s)},${f1(y - up)} ${f1(x)},${f1(y + 2 * s)}Q${f1(x + 5 * s)},${f1(y - up)} ${f1(x + 11 * s)},${f1(y - up * 0.6)}Q${f1(x + 5 * s)},${f1(y - up * 0.35)} ${f1(x)},${f1(y + 4.5 * s)}Q${f1(x - 5 * s)},${f1(y - up * 0.35)} ${f1(x - 11 * s)},${f1(y - up * 0.6)}Z" fill="${c}"/>`);
+  }
+  return out.join('');
+}
+
+/** the brand's ≋ as the wind: three long paper ribbons, and (in the film) the card it carries */
+function wind(k, T, [x0, y0, s], card = false) {
+  const out = [];
+  // the ≋'s three strips along a gentle arc A → C (in the film: from the writer's mitten up to the card)
+  const A = card ? [130, 520] : [x0, y0], C = card ? [x0 - 70, y0 + 40] : [x0 + 540 * s, y0 - 10 * s], B = card ? [560, 600] : [(A[0] + C[0]) / 2, y0 - 70 * s];
+  const at = (u) => [(1 - u) ** 2 * A[0] + 2 * (1 - u) * u * B[0] + u * u * C[0], (1 - u) ** 2 * A[1] + 2 * (1 - u) * u * B[1] + u * u * C[1]];
+  [0, 1, 2].forEach((i) => {
+    const line = [], u0 = 0.06 * i, u1 = 1 - 0.05 * (2 - i);
+    for (let q = 0; q <= 90; q++) {
+      const u = u0 + ((u1 - u0) * q) / 90, p = at(u), p2 = at(Math.min(1, u + 0.01)), l = Math.hypot(p2[0] - p[0], p2[1] - p[1]) || 1;
+      const nx = -(p2[1] - p[1]) / l, ny = (p2[0] - p[0]) / l, off = (i - 1) * 22 * s + Math.sin(u * Math.PI * 2 * (card ? 4 : 3.2) + i * 0.35) * 11 * s;
+      line.push([p[0] + nx * off, p[1] + ny * off]);
+    }
+    out.push(`<path d="${path(tear(ribbon(line, 9 * s, 0.5), 820 + i, { jag: 0.25, wander: 0.5 }))}" fill="${css(mixLab(T.rim, T.accent, 0.22), card ? 0.85 : 0.42)}" filter="url(#thin-${k})"/>`);
+  });
+  if (card) {
+    const cx = x0, cy = y0, w = 86 * s, h = 112 * s, R = 8 * s;
+    const body = [[cx - w / 2 + R, cy - h / 2], [cx + w / 2 - R, cy - h / 2], [cx + w / 2, cy - h / 2 + R], [cx + w / 2, cy + h / 2 - R], [cx + w / 2 - R, cy + h / 2], [cx - w / 2 + R, cy + h / 2], [cx - w / 2, cy + h / 2 - R], [cx - w / 2, cy - h / 2 + R]];
+    const cover = [[cx - w / 2 + 7 * s, cy - h / 2 + 7 * s], [cx + w / 2 - 7 * s, cy - h / 2 + 7 * s], [cx + w / 2 - 7 * s, cy - h / 2 + 50 * s], [cx - w / 2 + 7 * s, cy - h / 2 + 50 * s]];
+    out.push(`<radialGradient id="cardglow-${k}" cx="${f1(cx)}" cy="${f1(cy)}" r="${f1(150 * s)}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="${css([0.95, 0.06, 85], 0.55)}"/><stop offset="0.45" stop-color="${css(T.accent, 0.16)}"/><stop offset="1" stop-color="${css(T.accent, 0)}"/></radialGradient><circle cx="${f1(cx)}" cy="${f1(cy)}" r="${f1(150 * s)}" fill="url(#cardglow-${k})"/>`);
+    out.push(`<g transform="rotate(-8 ${f1(cx)} ${f1(cy)})"><path d="${path(tear(poly(body, 5), 851, { jag: 0.3, wander: 0.6 }))}" fill="${css([0.975, 0.01, 80])}" stroke="${css([0.66, 0.09, 45])}" stroke-width="${1.8 * s}" filter="url(#thin-${k})"/>
+      <path d="${path(poly(cover, 5))}" fill="${css([0.8, 0.075, 55])}"/><path d="${path(tear(ellipse(cx + 14 * s, cy - h / 2 + 24 * s, 9 * s, 9 * s, 16), 852, { jag: 0.2, wander: 0.4 }))}" fill="${css([0.92, 0.08, 85])}"/>
+      ${[0, 1, 2].map((q) => `<path d="M${f1(cx - w / 2 + 9 * s)},${f1(cy + 8 * s + q * 11 * s)}L${f1(cx + w / 2 - (q === 2 ? 30 : 10) * s)},${f1(cy + 8 * s + q * 11 * s)}" stroke="${css([0.45, 0.02, 60], 0.75)}" stroke-width="${1.6 * s}" stroke-linecap="round" filter="url(#graphite-${k})"/>`).join('')}
+    </g>`);
+  }
+  return out.join('');
+}
+
+/** the nearest paper of all: a few grass blades and seed heads at the bottom corners, darker than the ground */
+function fringe(k, T, P, big) {
+  const r = rng(1401), c = css([P.ground[0] * 0.7, P.ground[1] * 0.9, P.ground[2]]), out = [];
+  for (const [x0, x1, dir] of [[-30, 170, 1], [1430, 1640, -1]]) {
+    for (let i = 0; i < 6; i++) {
+      const x = x0 + r() * (x1 - x0), h = 60 + r() * (big ? 130 : 100), lean = dir * (24 + r() * 60), w = 16 + r() * 14;
+      const blade = [[x - w / 2, H + 10], [x + lean * 0.5 - w * 0.3, H - h * 0.55], [x + lean, H - h], [x + lean * 0.5 + w * 0.3, H - h * 0.5], [x + w / 2, H + 10]];
+      out.push(`<path d="${path(tear(spline(blade, 4), 1410 + i + x0, { jag: 0.4, wander: 0.8 }))}"/>`);
+      if (r() < 0.3) out.push(`<path d="${path(tear(ellipse(x + lean, H - h - 6, 4, 9, 14, lean * 0.01), 1450 + i, { jag: 0.4, wander: 0.6 }))}"/>`);
+    }
+  }
+  return `<g fill="${c}" filter="url(#near-${k})">${out.join('')}</g>`;
+}
+
+function lanterns(T, n, seed = 505) {
+  if (!n) return '';
+  const r = rng(seed), out = [];
+  for (let i = 0; i < n; i++) {
+    const x = 940 + r() * 560, y = 600 - r() * 330 * (n > 5 ? 1 : 0.7), s = 1.1 + r() * 0.7;
+    out.push(`<circle cx="${f1(x)}" cy="${f1(y)}" r="${f1(20 * s)}" fill="${css(T.accent, 0.14)}"/>`);
+    out.push(`<path d="${path(tear(poly([[x - 5 * s, y - 7 * s], [x + 5 * s, y - 7 * s], [x + 6.5 * s, y + 6 * s], [x - 6.5 * s, y + 6 * s]], 2), 520 + i, { jag: 0.25, wander: 0.3 }))}" fill="${css([0.72, 0.14, 52])}"/>`);
+    out.push(`<path d="${path(ellipse(x, y + 1 * s, 3 * s, 4.5 * s, 12))}" fill="${css([0.93, 0.11, 86])}"/>`);
+  }
+  return out.join('');
+}
+
+function puppet(k, T, slug, x, groundY, ppu) {
+  const p = window.PUPPETS[slug], night = T.ink[0] < 0.25;
+  const base = '../../../stickers/parts/' + slug + '/';
+  const tx = x - p.ground[0] * ppu, ty = groundY - p.ground[1] * ppu;
+  const parts = p.parts.filter((q) => !q.only || (q.only === 'dark' && night)).map((q) => `<image href="${base + q.img}" x="${q.x}" y="${q.y}" width="${q.w}" height="${q.h}"/>`).join('');
+  let halo = '';
+  const own = slug === 'night' && night; // 悄悄 is of the night: it carries its own light, undimmed
+  if (own) {
+    const cx = x, cy = groundY - p.height * ppu * 0.6, R = p.height * ppu * 0.6;
+    halo = `<radialGradient id="hush-${k}" cx="${f1(cx)}" cy="${f1(cy)}" r="${f1(R * 1.6)}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="${css([0.9, 0.1, 88], 0)}"/><stop offset="0.5" stop-color="${css([0.9, 0.1, 88], 0.04)}"/><stop offset="0.66" stop-color="${css([0.9, 0.1, 88], 0.26)}"/><stop offset="1" stop-color="${css([0.86, 0.1, 80], 0)}"/></radialGradient>
+      <circle cx="${f1(cx)}" cy="${f1(cy)}" r="${f1(R * 1.6)}" fill="url(#hush-${k})"/>
+`;
+  }
+  return `${halo}<g transform="translate(${f1(tx)} ${f1(ty)}) scale(${ppu})" filter="url(#pup${own ? 'self' : ''}-${k})">${parts}</g>`;
+}
+
+function frame(k, T, { big = false } = {}) {
+  const P = paletteOf(T), PL = PLACE, o = [];
+  o.push(`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice" role="img" aria-label="${T.name}">`);
+  o.push(defs(k, T, P));
+  o.push(`<rect width="${W}" height="${H}" fill="url(#sky-${k})"/>`);
+  o.push(stars(T));
+  o.push(disc(k, T));
+  o.push(clouds(k, T));
+  // the far range, then the nearer peaks with folds of light on the sun's side
+  o.push(`<g filter="url(#far-${k})" fill="${css(P.range)}">${PL.range.map((p) => `<path d="${path(tear(poly(p.pts, 8, false).concat([[p.pts[4][0], BASE], [p.pts[0][0], BASE]]), p.seed, { jag: 0.8, wander: 3 }))}"/>`).join('')}</g>`);
+  const side = (p) => (T.disc.x < p.cx ? -1 : 1);
+  const fold = css(mixLab(P.peaks, T.disc.halo, 0.2), 0.6), shadeFold = css(mixLab(P.peaks, T.ink, 0.12), 0.5);
+  o.push(`<g filter="url(#far-${k})">${PL.peaks.map((p) => {
+    const body = path(tear(poly(p.pts, 7, false).concat([[p.pts[4][0], BASE], [p.pts[0][0], BASE]]), p.seed, { jag: 0.7, wander: 2.5 }));
+    const s = side(p), [L, ls, top, rs, R] = p.pts, foot = [top[0] + s * p.hw * 0.08, HORIZON + 14];
+    const lit = s < 0 ? [top, ls, L, foot] : [top, rs, R, foot], dark = s < 0 ? [top, rs, R, foot] : [top, ls, L, foot];
+    return `<path d="${body}" fill="${css(P.peaks)}"/><path d="${path(lit)}" fill="${fold}"/><path d="${path(dark)}" fill="${shadeFold}"/>`;
+  }).join('')}</g>`);
+  // the sea, the disc's reflection cut in strips, slits of light
+  o.push(`<rect x="-20" y="${HORIZON}" width="${W + 40}" height="${H}" fill="${css(P.sea)}"/>`);
+  const rs = rng(41), refl = T.disc.kind === 'crescent' ? 0.5 : 0.85;
+  const rx = T.disc.y < 300 ? T.disc.x - 120 : T.disc.x;
+  for (let i = 0; i < 10; i++) {
+    const y = HORIZON + 5 + i * 8.5 + rs() * 3, w = T.disc.r * 1.5 * (1 - i * 0.07) * (0.55 + rs() * 0.5), x = rx + (rs() - 0.5) * 34;
+    if (T.disc.y < 300 && i > 4) break;
+    o.push(`<path d="${path(tear(ribbon([[x - w / 2, y], [x, y + 0.5], [x + w / 2, y]], 3.4), 430 + i, { jag: 0.4, wander: 0.6 }))}" fill="${css(T.disc.c, refl * (1 - i * 0.075))}"/>`);
+  }
+  for (let i = 0; i < 7; i++) { const y = HORIZON + 26 + i * 12, x = rs() * W; o.push(`<path d="M${f1(x)},${f1(y)}h${f1(50 + rs() * 120)}" stroke="${css(mixLab(P.sea, T.sky[3].slice(1), 0.6), 0.45)}" stroke-width="1.4" stroke-linecap="round"/>`); }
+  if (T.mist) o.push(`<path d="${path(tear(ribbon(spline([[-80, 616], [300, 604], [700, 618], [1100, 606], [1680, 614]], 20, false), 34, 0.3), 71, { jag: 1, wander: 6 }))}" fill="${css(T.mist, 0.42)}"/>`);
+  // the far shore and the headland, a lighthouse on it
+  o.push(`<g filter="url(#far-${k})" fill="${css(P.headland)}"><path d="${path(close(PL.shore, 612))}"/><path d="${path(close(PL.headland, 660))}"/>
+    <path d="${path(poly([[1404, 548], [1426, 548], [1422, 486], [1428, 482], [1415, 462], [1402, 482], [1408, 486]], 3))}"/></g>`);
+  if (T.beam) o.push(`<path d="M1415,476 L980,412 L990,520 Z" fill="${css(T.accent, 0.1)}"/><circle cx="1415" cy="476" r="11" fill="${css(T.accent, 0.35)}"/><circle cx="1415" cy="476" r="3.8" fill="${css([0.95, 0.08, 90])}"/>`);
+  else o.push(`<rect x="1409" y="472" width="12" height="7" fill="${css(mixLab(P.headland, T.disc.c, 0.3))}"/>`);
+  // the paper town on its hill
+  o.push(`<g filter="url(#cut-${k})" fill="${css(P.town)}"><path d="${path(close(PL.townHill))}"/>${PL.houses.map((h) => `<path d="${path(h.body)}"/>`).join('')}</g>`);
+  const roof = css(mixLab(P.town, [P.town[0] - 0.035, 0.1, 38], T.kappa * 0.55));
+  o.push(PL.houses.filter((h) => h.roof).map((h) => `<path d="${path(h.roof)}" fill="${roof}"/>`).join(''));
+  const lit = css([0.9, 0.12, 84]), unlit = css(mixLab(P.town, T.ink, 0.22));
+  o.push(PL.windows.map((w) => (w.on < T.windows ? `<circle cx="${f1(w.x + 3.2)}" cy="${f1(w.y + 4.2)}" r="11" fill="${css(T.accent, 0.13)}"/><rect x="${f1(w.x)}" y="${f1(w.y)}" width="${w.w}" height="${w.h}" rx="1" fill="${lit}"/>` : `<rect x="${f1(w.x)}" y="${f1(w.y)}" width="${w.w}" height="${w.h}" rx="1" fill="${unlit}" opacity="0.5"/>`)).join(''));
+  o.push(lanterns(T, T.lanterns + (big && T.lanterns ? 2 : 0)));
+  // rolling hills and their trees
+  const treeC = css([P.hills[0] - 0.035, P.hills[1] + 0.015, P.hills[2]]);
+  o.push(`<g filter="url(#cut-${k})"><path d="${path(close(PL.hills))}" fill="${css(P.hills)}"/>${PL.trees.map((t) => {
+    if (t.kind === 'cypress') return `<path d="${path(tear(ellipse(t.x, t.y - 28 * t.s, 7.5 * t.s, 30 * t.s, 22), t.seed, { jag: 0.6, wander: 1.5 }))}" fill="${treeC}"/>`;
+    return `<rect x="${f1(t.x - 1.6)}" y="${f1(t.y - 20 * t.s)}" width="3.2" height="${f1(20 * t.s)}" fill="${treeC}"/><path d="${path(tear(ellipse(t.x, t.y - 28 * t.s, 16 * t.s, 14 * t.s, 22), t.seed, { jag: 0.8, wander: 2 }))}" fill="${treeC}"/>`;
+  }).join('')}</g>`);
+  // the near hill and its lone tree; the low rise on the right
+  const trunk = [[204, 620], [208, 566], [214, 524], [226, 488], [238, 470], [246, 474], [234, 494], [224, 530], [220, 570], [222, 620]];
+  const canopy = [[240, 420, 74, 50], [178, 444, 50, 36], [302, 448, 54, 36], [250, 390, 46, 32], [206, 410, 40, 28]].map(([x, y, rx, ry], i) => path(tear(ellipse(x, y, rx, ry, 30), 960 + i, { jag: 1.6, wander: 5 })));
+  const nearC = css(P.near), canC = css([P.near[0] + 0.035, P.near[1] + 0.012, P.near[2]]);
+  o.push(`<g filter="url(#torn-${k})"><path d="${path(close(tear(PL.near, 1201, { jag: 1.2, wander: 4, closed: false })))}" fill="${nearC}"/><path d="${path(close(tear(PL.nearRight, 1202, { jag: 1.2, wander: 4, closed: false })))}" fill="${nearC}"/>
+    <path d="${path(tear(spline(trunk, 4), 1203, { jag: 0.5, wander: 1 }))}" fill="${canC}"/>${canopy.map((d) => `<path d="${d}" fill="${canC}"/>`).join('')}</g>`);
+  // in the air: birds, the ≋ wind
+  o.push(birds(T, P, T.disc.kind === 'sun' ? Math.min(1180, T.disc.x + 150) : 900, Math.min(360, T.disc.y - 140), T.birds + (big ? 2 : 0)));
+  if (T.wind) o.push(wind(k, T, big ? [900, 270, 1] : T.wind, big));
+  // the ground, and on it the puppets
+  const ground = tear(PL.ground, 1301, { jag: 1, wander: 3, closed: false });
+  o.push(`<path d="${path(close(ground))}" fill="${css(P.ground)}" filter="url(#torn-${k})"/>`);
+  o.push(pencil(PL.groundEdge.filter((_, i) => i % 2 === 0).map((p) => [p[0], p[1] + 12]), 1302, 2, 0.8).map((d) => `<path d="${d}" fill="none" stroke="${css(mixLab(P.ground, T.rim, 0.3), 0.45)}" stroke-width="1.4" filter="url(#graphite-${k})"/>`).join(''));
+  const cast = big ? [['tuck', 360], ['card', 600]] : T.cast;
+  for (const [slug, x] of cast) o.push(puppet(k, T, slug, x, yAt(PL.groundEdge, x) + 5, big ? 0.48 : 0.45));
+  o.push(fringe(k, T, P, big));
+  // drifting fibres, near the eye
+  const rf = rng(77 + k.length), fib = [];
+  for (let i = 0; i < (big ? 12 : 7); i++) { const x = rf() * W, y = 520 + rf() * 330, a = 2 + rf() * 3; fib.push(`<path d="M${f1(x)},${f1(y)}c${f1(a)},${f1(-a)} ${f1(a)},${f1(a)} ${f1(2 * a)},${f1(0)}s${f1(a)},${f1(-a)} ${f1(2 * a)},${f1(0)}" fill="none" stroke="${css(T.rim, 0.32)}" stroke-width="1" stroke-linecap="round" transform="rotate(${f1(rf() * 60 - 30)} ${f1(x)} ${f1(y)})"/>`); }
+  o.push(fib.join(''));
+  if (!NOGRAIN) o.push(`<rect width="${W}" height="${H}" filter="url(#grain-${k})" opacity="${T.ink[0] < 0.25 ? 0.12 : 0.1}" style="mix-blend-mode:soft-light"/>`);
+  o.push(`</svg>`);
+  return { svg: o.join(''), P };
+}
+
+/* ───────────── contrast: each puppet's paper (and its rim) against the papers behind and under it ───────────── */
+const PUPPET_PAPER = { tuck: [0.8, 0.045, 140], tag: [0.82, 0.04, 220], card: [0.84, 0.045, 290], dot: [0.86, 0.1, 95], night: [0.44, 0.06, 260] };
+function contrastTable(T, P) {
+  const rows = {}, night = T.ink[0] < 0.25;
+  for (const [slug, c] of Object.entries(PUPPET_PAPER)) {
+    const tint = slug === 'night' && night ? SELF_LIGHT : T.tint;
+    const y = lumOfSrgb(srgb(c).map((v, i) => Math.min(1, v * tint[i])));
+    rows[slug] = {};
+    for (const key of ['sea', 'hills', 'near', 'ground']) rows[slug][key] = +ratio(y, lumOfSrgb(srgb(P[key]))).toFixed(1);
+    rows[slug].rimOnNear = +ratio(lumOfSrgb(srgb([0.975, 0.012, 85]).map((v, i) => Math.min(1, v * tint[i]))), lumOfSrgb(srgb(P.near))).toFixed(1);
+  }
+  return rows;
+}
+
+/* ───────────── render ───────────── */
+
+const grid = document.getElementById('grid');
+const report = {};
+if (view === 'dusk') {
+  document.body.classList.add('single');
+  grid.innerHTML = `<figure class="frame">${frame('dusk-big', TIMES.dusk, { big: true }).svg}</figure>`;
+} else {
+  for (const [k, T] of Object.entries(TIMES)) {
+    const { svg, P } = frame(k, T);
+    const sw = [...T.sky.map(([, L, C, h]) => `<i class="sky" style="background:${css([L, C, h])}"></i>`), '<i class="gap"></i>', ...LAYERS.flatMap((l) => (l.key === 'headland' ? [`<i style="background:${css(P.sea)}"></i>`] : []).concat(`<i style="background:${css(P[l.key])}"></i>`)), '<i class="gap"></i>', `<i class="sky" style="background:${css(T.accent)}"></i>`].join('');
+    const fig = document.createElement('figure');
+    fig.innerHTML = `<div class="frame">${svg}</div><figcaption><b>${T.name} · ${T.zh}</b><span class="sw">${sw}</span></figcaption>`;
+    grid.append(fig);
+    report[k] = {
+      sky: T.sky.map(([o, L, C, h]) => `${o}: ${fmt([L, C, h])}`),
+      layers: Object.fromEntries([...LAYERS.map((l) => [l.key, fmt(P[l.key])]), ['sea', fmt(P.sea)]]),
+      haze: fmt(T.haze), ink: fmt(T.ink), disc: fmt(T.disc.c), accent: fmt(T.accent), rim: fmt(T.rim),
+      contrast: contrastTable(T, P),
+    };
+  }
+}
+window.__report = report;
+console.log(JSON.stringify(report));
+Promise.all([...document.querySelectorAll('image')].map((im) => new Promise((res) => { const i = new Image(); i.onload = i.onerror = res; i.src = new URL(im.getAttribute('href'), location.href).href; }))).then(() => setTimeout(() => { window.__ready = true; }, 300));
+</script>
+</body>
+</html>

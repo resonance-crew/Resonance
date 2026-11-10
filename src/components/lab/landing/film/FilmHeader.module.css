@@ -1,0 +1,282 @@
+/* A copy of SiteHeader.module.css for the film's header: bare over the stage in the hour's chrome ink; once the stage
+   has let go and the page's paper has come up under it, the site header itself (its band, its wave and its ink in the theme's colours, light or dark: the owner,
+   round 3); scrolling away in the picture book. */
+.header {
+  --film-chrome-ink: var(--film-cream);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.bg {
+  position: absolute;
+  inset: 0;
+  /* SiteHeader's band (its blur only once it shows: over the moving stage an unseen backdrop filter could still be
+     drawn on every frame) */
+  background: color-mix(in oklch, var(--color-cream) 92%, transparent);
+  opacity: 0;
+  transition: opacity 300ms ease;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+/* Phones: solid cream once scrolled in (same themed-bar reasoning as
+   AppHeader — a blurred translucent band under the themed status bar reads
+   as two mismatched colors). At rest it stays opacity 0 over the cream page. */
+@media (max-width: 720px) {
+  .bg {
+    background: var(--color-cream);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.waveStroke {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  width: 100%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 300ms ease;
+  overflow: visible;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: max(clamp(24px, 5vw, 80px), calc((100% - 1200px) / 2));
+  padding-right: max(clamp(24px, 5vw, 80px), calc((100% - 1200px) / 2));
+  pointer-events: auto;
+}
+
+.logo {
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 24px;
+  color: var(--film-chrome-ink);
+  transition: color 300ms ease;
+  letter-spacing: -0.02em;
+}
+
+.menuBtn {
+  background: none;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+  color: var(--film-chrome-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+}
+
+.navLink {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-text);
+  text-decoration: none;
+  opacity: 0.8;
+  transition: opacity 150ms;
+}
+
+.navLink:hover {
+  opacity: 1;
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* Box-centered isn't optically centered here: the globe icon and the round
+     avatar are both compact, high-contrast shapes that read a hair above the
+     header's true visual middle next to the serif brand wordmark. Nudge the
+     whole account cluster down slightly rather than the logo. */
+  transform: translateY(2.5px);
+}
+
+/* Compact header sizing for the organic language dropdown. The closed trigger
+   is frameless (Select `bare`) — globe + current language, no box, no chevron —
+   so it sizes to its content; only the open panel draws a border. */
+.langSelect {
+  width: auto;
+  font-size: 14px;
+}
+
+.langSelect button[role='combobox'] {
+  padding: 8px 12px;
+  font-size: 14px;
+  /* Tighter than the base 1.6: at this font-size, DM Sans/Noto Sans TC's
+     line-box padding sits asymmetric above/below the glyphs, which reads as
+     the label floating a hair above the globe icon it sits beside. */
+  line-height: 1;
+}
+
+.langSelect button[role='option'] {
+  /* Rows keep every menu's 20 a side (the sheet's own padding): the flag
+     clear of the left pen line, the ✓ clear of the right. */
+  font-size: 14px;
+}
+
+/* 登入 is in the HTML from the first paint, unseen while the account is unknown: its place is kept, so nothing
+   beside it moves when it shows (a signed-in visitor gets the way into the app in its place instead). */
+.signIn {
+  transition: opacity 180ms ease;
+}
+.signIn[data-pending] {
+  visibility: hidden;
+  opacity: 0;
+}
+
+/* Mobile: collapse the trigger to a frameless globe icon button (via the
+   Select `bare` prop), sitting beside the hamburger. The open panel still lists
+   the full language names, kept readable via menuMinWidth. */
+.langSelectCompact {
+  width: auto;
+}
+/* Which account cluster a screen gets is decided here, not after hydration:
+   both are in the HTML (see SiteHeader). Last in the file so it wins over
+   .account / .nav. */
+.phoneOnly {
+  display: none;
+}
+@media (max-width: 720px) {
+  .phoneOnly {
+    display: flex;
+  }
+  .wideOnly {
+    display: none;
+  }
+}
+
+/* ── the film's states, read from the page ── */
+.header :global(button[role='combobox']) {
+  color: var(--film-chrome-ink);
+}
+/* The night's band: as the stage leaves and until the end's fade reaches the header (`data-dusk`), a band in the
+   night's own sky — invisible over the night, but the night's cards scrolling away pass under it, not under the bare
+   wordmark. Over the fade's dark half the header is bare again (nothing passes under it there); the ink stays the
+   cream throughout. Its own layer, following the scroll (not the release: ▶ rests there, over the moon's glow), fading
+   out at dusk; the site's band (.bg) is only ever its cream, so no band changes colour while it fades. */
+.night {
+  position: absolute;
+  inset: 0;
+  background: var(--film-end-sky, var(--film-night-ground));
+  /* follows the scroll over the stage's first 4–18 px of leaving (runtime/index.ts `--film-night-band`): none where
+     ▶ rests at the track's end (the moon's glow is under the header there), in full before the first card reaches
+     the header's foot (≥ 22 px at every layout) — the last check */
+  opacity: var(--film-night-band, 0);
+  transition: none;
+  pointer-events: none;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+:global([data-film-page]):has([data-film-root][data-dusk]) .night {
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+/* once the site's band is due it goes at once: a fast move down (PageDown, a flick, a jump) never leaves it fading
+   over the paper (source order: same specificity as the dusk rule, so its `transition: none` cancels that fade) */
+:global([data-film-page]):has([data-film-root][data-paper]) .night {
+  opacity: 0;
+  transition: none;
+}
+/* In the dark scheme the stage's grain is cream specks that lift its sky (film.module.css .grain), and the sky under
+   the header is already a little past sky-0 (its gradient): the band wears the same grain over sky-0 lifted 1 % toward
+   the grain's ink, so it stays invisible there (the final review: (11.7,17.3,32.8) against the sky's (12.0,17.7,32.9)).
+   In light the stage's black grain already cancels the gradient's lift: the plain band matches. */
+.night::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-color: var(--grain-ink, oklch(0% 0 0));
+  opacity: 0;
+  -webkit-mask-image: url('./grain.png');
+  mask-image: url('./grain.png');
+  -webkit-mask-size: 128px 128px;
+  mask-size: 128px 128px;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+}
+@media (min-resolution: 2dppx) {
+  .night::before {
+    -webkit-mask-size: 64px 64px;
+    mask-size: 64px 64px;
+  }
+}
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-scheme='light'])) .night {
+    background: color-mix(in oklab, var(--film-end-sky, var(--film-night-ground)), var(--grain-ink) 1%);
+  }
+  :global(:root:not([data-scheme='light'])) .night::before {
+    opacity: calc(0.14 * var(--grain-scale, 1));
+  }
+}
+:global(:root[data-scheme='dark']) .night {
+  background: color-mix(in oklab, var(--film-end-sky, var(--film-night-ground)), var(--grain-ink) 1%);
+}
+:global(:root[data-scheme='dark']) .night::before {
+  opacity: calc(0.14 * var(--grain-scale, 1));
+}
+/* the inks cross over with the band (the wordmark already does: .brand); over the night's band they are the cream at
+   once — a fast scroll from the paper to above dusk never leaves the dark ink on the night */
+.menuBtn,
+.header :global(button[role='combobox']) {
+  transition: color 300ms ease;
+}
+:global([data-film-page]):has([data-film-root][data-released]:not([data-dusk])) .brand,
+:global([data-film-page]):has([data-film-root][data-released]:not([data-dusk])) .menuBtn,
+:global([data-film-page]):has([data-film-root][data-released]:not([data-dusk])) .header :global(button[role='combobox']) {
+  transition: none;
+}
+/* the site's band once the end's fade has turned to the page's paper under it (`data-paper`, runtime/index.ts) — not
+   at the stage's letting go, while the night still fills the screen */
+:global([data-film-page]):has([data-film-root][data-paper]) .bg,
+:global([data-film-page]):has([data-film-root][data-paper]) .waveStroke {
+  opacity: 1;
+}
+/* the site's band and its pen line only ever show under data-dusk (data-paper implies it); wherever dusk is off they
+   go at once, over the film, the night's hold or the released night alike: a fast move up (重看一次's glide, Home, a
+   jump) never leaves them fading there. data-dusk is set by the scroll handler with data-paper, so this can't lag the
+   frame loop; a slow scroll's fade-out over the dusk half and the fade-in on the paper keep theirs */
+:global([data-film-page]):has([data-film-root]:not([data-dusk])) .bg,
+:global([data-film-page]):has([data-film-root]:not([data-dusk])) .waveStroke {
+  transition: none;
+}
+@media (min-width: 720.02px) {
+  :global([data-film-page]):has([data-film-root][data-paper]) .bg {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+}
+:global([data-film-page]):has([data-film-root][data-paper]) .header {
+  --film-chrome-ink: var(--color-text);
+}
+:global([data-film-page]):has([data-film-root]:not([data-film='film'])) .header {
+  position: absolute;
+}

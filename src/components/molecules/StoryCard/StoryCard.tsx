@@ -48,12 +48,15 @@ function StoryImage({
   imageUrl,
   seed,
   slot,
+  grain = true,
 }: {
   label: string;
   family: number;
   imageUrl?: string;
   seed: number;
   slot?: ReactNode;
+  /** The cover's own grain (a live filter): left off on a card whose paper wears a still grain. */
+  grain?: boolean;
 }) {
   return (
     <OrganicImage
@@ -100,7 +103,7 @@ function StoryImage({
           )}
         </svg>
       )}
-      <GrainOverlay opacity={STORY_GRAIN.cover} />
+      {grain && <GrainOverlay opacity={STORY_GRAIN.cover} />}
     </OrganicImage>
   );
 }
@@ -178,6 +181,25 @@ export interface StoryCardProps {
   preview?: boolean;
   /** For `preview`: the id of what names the group (its caption). */
   labelledBy?: string;
+  /**
+   * The framed card at every width: on a phone too it keeps its hand-drawn
+   * outline and its padding rather than becoming a full-bleed band (a card
+   * that floats over something — the landing film's stage).
+   */
+  framed?: boolean;
+  /**
+   * The paper's grain as a still bitmap (a tile's URL) instead of the live
+   * noise filters (the paper's chalk and grain, the cover's): for a card that
+   * moves on every frame, which a filter would be drawn again for in WebKit.
+   * Cut to the card's outline, as ShapeGrain is.
+   */
+  stillGrain?: string;
+  /**
+   * In place of the byline (avatar, name, read time, arrow): what the card
+   * offers instead — the landing film's card for the visitor's own story
+   * carries its one action here.
+   */
+  foot?: ReactNode;
 }
 
 /**
@@ -199,6 +221,9 @@ export const StoryCard = memo(function StoryCard({
   bleed,
   preview = false,
   labelledBy,
+  framed = false,
+  stillGrain,
+  foot,
 }: StoryCardProps) {
   const [hoveredRaw, setHovered] = useState(false);
   const hovered = hoveredRaw && !preview;
@@ -251,6 +276,7 @@ export const StoryCard = memo(function StoryCard({
       className={styles.card}
       data-first={isFirst || undefined}
       data-preview={preview || undefined}
+      data-framed={framed || undefined}
       role={preview ? 'group' : undefined}
       aria-labelledby={preview ? labelledBy : undefined}
       style={{
@@ -277,10 +303,13 @@ export const StoryCard = memo(function StoryCard({
         // Both chromes render; the module CSS (640px) shows one, so the
         // server's paint is already the right one for the screen.
         <>
-          <div className={styles.mobileChrome} aria-hidden data-mascot="card-edge">
-            <GrainOverlay opacity={STORY_GRAIN.band} />
-            <MobileDividers d={dividerPath} stroke={bc1} isLast={isLast} isFirst={isFirst} />
-          </div>
+          {/* a framed card has no band to show */}
+          {!framed && (
+            <div className={styles.mobileChrome} aria-hidden data-mascot="card-edge">
+              <GrainOverlay opacity={STORY_GRAIN.band} />
+              <MobileDividers d={dividerPath} stroke={bc1} isLast={isLast} isFirst={isFirst} />
+            </div>
+          )}
           <div
             className={`${styles.desktopChrome} res-shape-stand-in`}
             aria-hidden
@@ -301,7 +330,7 @@ export const StoryCard = memo(function StoryCard({
               fillColor={cardInterior}
               strokeColor="transparent"
               strokeWidth={0}
-              chalkSeed={index}
+              chalkSeed={stillGrain ? null : index}
               segmentsH={[3, 4]} segmentsV={[5, 6]}
               curve={0.55} cornerJitter={0.7} cornerOffset={4}
             />
@@ -309,7 +338,23 @@ export const StoryCard = memo(function StoryCard({
               w={w} h={h} d={borderPath} color={cardHovered}
               x={pos.x} y={pos.y} on={hovered} duration={460}
             />
-            <ShapeGrain w={w} h={h} d={borderPath} opacity={STORY_GRAIN.paper} frequency={0.85} seed={seed} />
+            {stillGrain ? (
+              borderPath && (
+                <span
+                  aria-hidden="true"
+                  className={styles.stillGrain}
+                  style={
+                    {
+                      clipPath: `path('${borderPath}')`,
+                      '--still-grain': `url('${stillGrain}')`,
+                      opacity: `calc(${STORY_GRAIN.paper} * var(--grain-scale, 1))`,
+                    } as CSSProperties
+                  }
+                />
+              )
+            ) : (
+              <ShapeGrain w={w} h={h} d={borderPath} opacity={STORY_GRAIN.paper} frequency={0.85} seed={seed} />
+            )}
             <HandDrawnBorder
               w={w} h={h} R={R} seed={seed} mag={mag}
               strokeColor={bc1}
@@ -335,6 +380,7 @@ export const StoryCard = memo(function StoryCard({
             imageUrl={story!.imageUrl}
             seed={seed + 5}
             slot={coverSlot}
+            grain={!stillGrain}
           />
         )}
 
@@ -386,44 +432,50 @@ export const StoryCard = memo(function StoryCard({
           />
         </svg>
 
-        <div className={styles.authorRow} data-mascot="card-foot">
-          {loading ? (
-            <Skeleton width={30} height={30} circle />
-          ) : (
-            <HandDrawnAvatar
-              src={story!.avatarUrl}
-              initials={story!.authorInitials}
-              size={30}
-              // The card's own family, never the author's colour: on a card's paper another person's colour
-              // fought it (the owner, 2026-10-29). The profile and the thread keep the person's.
-              color={accentFill}
-              seed={Number(story!.avatarSeed) || story!.authorInitials.charCodeAt(0) * 13}
-            />
-          )}
-          <div style={{ flex: 1 }}>
+        {!loading && foot != null ? (
+          <div className={styles.foot} data-mascot="card-foot">
+            {foot}
+          </div>
+        ) : (
+          <div className={styles.authorRow} data-mascot="card-foot">
             {loading ? (
-              <>
-                <Skeleton width={96} height={13} />
-                <Skeleton width={56} height={11} style={{ marginTop: 6 }} />
-              </>
+              <Skeleton width={30} height={30} circle />
             ) : (
-              <>
-                <div className={styles.authorName}>{story!.author}</div>
-                <div className={styles.readTime}>{story!.readTime}</div>
-              </>
+              <HandDrawnAvatar
+                src={story!.avatarUrl}
+                initials={story!.authorInitials}
+                size={30}
+                // The card's own family, never the author's colour: on a card's paper another person's colour
+                // fought it (the owner, 2026-10-29). The profile and the thread keep the person's.
+                color={accentFill}
+                seed={Number(story!.avatarSeed) || story!.authorInitials.charCodeAt(0) * 13}
+              />
+            )}
+            <div style={{ flex: 1 }}>
+              {loading ? (
+                <>
+                  <Skeleton width={96} height={13} />
+                  <Skeleton width={56} height={11} style={{ marginTop: 6 }} />
+                </>
+              ) : (
+                <>
+                  <div className={styles.authorName}>{story!.author}</div>
+                  <div className={styles.readTime}>{story!.readTime}</div>
+                </>
+              )}
+            </div>
+            {loading ? (
+              <Skeleton width={18} height={18} circle />
+            ) : preview ? null : (
+              <Icon
+                name="arrow-right"
+                size={18}
+                strokeWidth={INK}
+                style={{ opacity: hovered ? 0.7 : 0.28, transition: 'opacity 180ms' }}
+              />
             )}
           </div>
-          {loading ? (
-            <Skeleton width={18} height={18} circle />
-          ) : preview ? null : (
-            <Icon
-              name="arrow-right"
-              size={18}
-              strokeWidth={INK}
-              style={{ opacity: hovered ? 0.7 : 0.28, transition: 'opacity 180ms' }}
-            />
-          )}
-        </div>
+        )}
 
         {!loading && quote && (
           <aside className={styles.systemNote} style={{ color: cardVar('note-ink', paletteIdx) }}>
