@@ -64,6 +64,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* colour-fixed: ShapeGrain's own noise grey, the same in either scheme (it carries no token) */
   background-color: oklch(80% 0 0);
   -webkit-mask-image: var(--still-grain);
   mask-image: var(--still-grain);

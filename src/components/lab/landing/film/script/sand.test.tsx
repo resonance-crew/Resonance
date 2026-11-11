@@ -14,6 +14,8 @@ vi.mock('@/i18n/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 vi.mock('@/components/providers/AuthProvider', () => ({ useAuth: () => ({ user: null, loading: false }) }));
+// the film's runtime stays out of it (Film.tsx would start it after hydration): only the page's paper is read here
+vi.mock('../runtime', () => ({ loadChangeStyle: () => Promise.resolve(undefined), startFilm: () => () => {} }));
 vi.mock('@/components/sections/SiteHeader/SiteHeaderAccount', () => ({ SiteHeaderAccountMenu: () => null, SiteHeaderSignedInNav: () => null }));
 
 import Page from '../Page';

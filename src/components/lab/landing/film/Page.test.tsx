@@ -14,6 +14,9 @@ vi.mock('@/i18n/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 vi.mock('@/components/providers/AuthProvider', () => ({ useAuth: () => ({ user: null, loading: false }) }));
+// the film's runtime (Film.tsx asks for it as its module loads and starts it after hydration): the page is what these
+// tests read — a director left running here would still be drawing after jsdom is gone
+vi.mock('./runtime', () => ({ loadChangeStyle: () => Promise.resolve(undefined), startFilm: () => () => {} }));
 vi.mock('@/components/sections/SiteHeader/SiteHeaderAccount', () => ({ SiteHeaderAccountMenu: () => null, SiteHeaderSignedInNav: () => null }));
 
 import Page from './Page';
