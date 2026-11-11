@@ -27,7 +27,7 @@ describe("the paper's sand", () => {
   it('reads a picture import either way a bundler gives it', () => {
     expect(pictureSrc('/a.png')).toBe('/a.png');
     expect(pictureSrc({ src: '/b.png' })).toBe('/b.png');
-    expect(SAND_TILE).toBeGreaterThan(60);
+    expect(SAND_TILE).toBeGreaterThan(40);
   });
 
   it('lays the sand on each paper once — cut once, painted, then sanded — and on nothing that is no paper', () => {

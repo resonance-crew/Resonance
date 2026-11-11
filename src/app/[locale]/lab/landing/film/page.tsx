@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import Page from '@/components/lab/landing/film/Page';
-import { loadFilm } from '@/components/lab/landing/film/data';
+import Page from '@/components/sections/LandingFilm/Page';
+import { loadFilm } from '@/components/sections/LandingFilm/data';
 
 export const revalidate = 300;
 export const metadata: Metadata = { robots: { index: false, follow: false } };

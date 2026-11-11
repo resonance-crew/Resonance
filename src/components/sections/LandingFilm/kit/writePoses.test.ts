@@ -1,7 +1,7 @@
 /**
  * The film's writing poses are found ahead (kit/writePoses.generated.ts) so no frame waits on the search: this makes
  * each again and compares. After a change to the search, the slip, the pencil or a puppet's rig:
- *   UPDATE_WRITE_POSES=1 npx vitest run src/components/lab/landing/film/kit/writePoses.test.ts
+ *   UPDATE_WRITE_POSES=1 npx vitest run src/components/sections/LandingFilm/kit/writePoses.test.ts
  */
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

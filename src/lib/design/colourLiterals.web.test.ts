@@ -33,7 +33,8 @@ const ALLOWED: { path: string; why: string }[] = [
   { path: 'src/lib/mascots/props.ts', why: "the landing puppets' props (a note, a pencil, a book): drawn art in its own colours in both schemes, as the reaction stickers" },
   { path: 'src/components/sections/PaperPalsPage/BlankPal.tsx', why: "the Paper Pals page's blank sixth: drawn paper art in its own colours in both schemes, as the cast's pictures" },
   { path: 'src/lib/mascots/engine.ts', why: "the landing stage's two pencils (each place says which reads on its background, by scheme) and the puppets' blush" },
-  { path: 'src/components/lab/', why: "the landing lab's prototypes (unlinked, noindex): drawn scenes in their own light — the film's hours of the day, its paper, its props — the same in both schemes, as the puppets' pictures; a prototype that becomes the landing page leaves this folder and this list" },
+  { path: 'src/components/lab/', why: "the landing lab's prototypes (unlinked, noindex): drawn scenes in their own light, the same in both schemes, as the puppets' pictures" },
+  { path: 'src/components/sections/LandingFilm/', why: "the landing page's film: a drawn world in its own light — the hours of the day, its paper, its props — the same in both schemes, as the puppets' pictures; the page after it (its stories, the closing band, the footer) wears the palette" },
 ];
 
 const allowed = (file: string) => ALLOWED.some((a) => (a.path.endsWith('/') ? file.startsWith(a.path) : file === a.path));

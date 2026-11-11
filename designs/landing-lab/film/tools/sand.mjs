@@ -4,7 +4,7 @@
  * filled with (World.tsx's `film-sand` pattern). Seeded, so a rerun writes the same files; each tile is seamless (the
  * noise is laid 3 × 3, softened a little so specks clump as grit does, and the middle cut out).
  *
- *   node designs/landing-lab/film/tools/sand.mjs      → src/components/lab/landing/film/sand-{dark,light}.png
+ *   node designs/landing-lab/film/tools/sand.mjs      → src/components/sections/LandingFilm/sand-{dark,light}.png
  */
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -13,7 +13,7 @@ import sharp from '/Users/ncchen/Documents/Resonance-landing/node_modules/sharp/
 const N = 128;
 /** The tile's side in pixels: the noise is laid on a 128 grid and drawn twice as large, so a speck is a soft round grain about a CSS pixel wide. */
 const PX = 256;
-const OUT = join(dirname(fileURLToPath(import.meta.url)), '../../../../src/components/lab/landing/film');
+const OUT = join(dirname(fileURLToPath(import.meta.url)), '../../../../src/components/sections/LandingFilm');
 
 function rng(seed) {
   let a = seed >>> 0;

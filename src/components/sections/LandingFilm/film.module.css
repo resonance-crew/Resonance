@@ -527,7 +527,8 @@
    comparisons (Page.tsx's mode script): `?sand=0` none, `?sand=2` plain to see. A flat paling into the sky (a change's
    haze) carries none. */
 .film {
-  --film-sand: 0.55;
+  /* the lightest strength tried, a touch lighter again (the owner, 2026-11-12: 「再弄淡一點點」) */
+  --film-sand: 0.45;
   --film-sand-show: visible;
 }
 .skySand {

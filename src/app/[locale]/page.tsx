@@ -1,17 +1,16 @@
 import type { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import { SiteHeader } from '@/components/sections/SiteHeader/SiteHeader';
-import { HeroSection } from '@/components/sections/HeroSection/HeroSection';
-import { CardFeedSection } from '@/components/sections/CardFeedSection/CardFeedSection';
-import { CTASection } from '@/components/sections/CTASection/CTASection';
-import { SiteFooter } from '@/components/sections/SiteFooter/SiteFooter';
-import { LandingStage } from '@/components/sections/LandingStage/LandingStage';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { latestForLanding } from '@/lib/db/firestore/landing';
+import Page from '@/components/sections/LandingFilm/Page';
+import { loadFilm } from '@/components/sections/LandingFilm/data';
 import { smartAppBanner } from '@/lib/appStores';
 import { siteUrl } from '@/lib/site';
 
-export const revalidate = 3600;
+/**
+ * Its stories are the landing film's own (data.ts): published, public cards. A card made private, anonymous or gone
+ * drops the page at once (`landingPagePaths` → revalidateLocalized); this bounds the rest — today's picks — to five
+ * minutes.
+ */
+export const revalidate = 300;
 
 /** The rest of the head is the locale layout's; this public page also offers the iOS app. */
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
@@ -19,31 +18,14 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   return { itunes: smartAppBanner(`${siteUrl()}/${locale}`) };
 }
 
-export default async function LandingPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+/**
+ * The landing page: the film of paper (sections/LandingFilm — 一張卡片，一整天; the owner chose it 2026-11-09 and made it
+ * the landing page 2026-11-12). Its header, its stories after the film, the closing band (#download) and the footer
+ * are all its own page; everything it hands the client is only what a card surface shows (data.ts).
+ */
+export default async function LandingPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   setRequestLocale(locale);
-
-  // Everything passed to the client below is serialized into this cached,
-  // public HTML — so only what a card surface shows (latestForLanding): no
-  // author for an anonymous card (not even its uid), no recommendation
-  // internals, and of each author only their byline.
-  const { cards, authors } = await latestForLanding(getAdminDb(), 6);
-
-  return (
-    <>
-      <SiteHeader />
-      <main>
-        <HeroSection />
-        <CardFeedSection cards={cards} authors={authors} />
-        <CTASection />
-      </main>
-      <SiteFooter />
-      {/* The paper puppets: client-only, loaded once the page is up (none of it is in this HTML). */}
-      <LandingStage />
-    </>
-  );
+  const model = await loadFilm(locale);
+  return <Page model={model} locale={locale} />;
 }

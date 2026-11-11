@@ -667,9 +667,10 @@ function scene2(ctx: BeatCtx, key: string, at: Pt | null, dot: boolean, fnNod?: 
  * in a change (the style fading them), the bow's strokes and the ripples are not drawn.
  */
 function scene3(ctx: BeatCtx, A0: number, key: string) {
-  // the meeting acted slower (round 3), its last pose held after it
-  const A = Math.min(MEET_ACTED, A0 / MEET_SLOW);
-  const t = Math.min(MEET_ACTED, onTwos(A0) / MEET_SLOW);
+  // the walk up at a walk's own pace, the meeting after it acted slower (round 3), its last pose held after it
+  const A = meetClock(A0);
+  const t = meetClock(onTwos(A0));
+  const tw = onTwos(A0);
   const whole = ctx.actorShift(3).alpha >= 1;
   const m = MARKS[3];
   const L3 = ctx.layoutOf(3);
@@ -701,16 +702,17 @@ function scene3(ctx: BeatCtx, A0: number, key: string) {
   const nightX =
     nightAt <= nightIn || nightAt >= nightOut ? nightAt : nightIn >= Math.min(dotBeside, dotIn) + 1.1 * (h('dot') + h('night')) ? nightIn : nightOut;
   const dotTo = Math.min(m.dotTo, cardTo + 1.2 * (h('card') + h('dot')), dotIn);
+  // (in the segment's own seconds: the walk is never slowed — the owner, 2026-11-12: 「走的有點像是慢動作」)
   const tuckKeys = [
-    [0.2, tuckFrom],
-    [3.2, tuckTo],
+    [MEET_WALK.tuck[0], tuckFrom],
+    [MEET_WALK.tuck[1], tuckTo],
   ] as const;
   const nodKeys = [
-    [0.5, cardFrom],
-    [3.5, cardTo],
+    [MEET_WALK.nod[0], cardFrom],
+    [MEET_WALK.nod[1], cardTo],
   ] as const;
-  const tx = walkAtX(t, tuckKeys);
-  const nx = walkAtX(t, nodKeys);
+  const tx = walkAtX(tw, tuckKeys);
+  const nx = walkAtX(tw, nodKeys);
   const tuckFace = faceOf(ghostAt(ctx, 'tuck', 'face', valleyFeet(ctx, tx), () => {}, 'stand', 3));
   const nodFace = faceOf(ghostAt(ctx, 'card', 'face', valleyFeet(ctx, nx), () => {}, 'stand', 3));
   const apex = ctx.toScreen(3, 1000, walkwayAt(1000) - 260, 0.9);
@@ -736,13 +738,13 @@ function scene3(ctx: BeatCtx, A0: number, key: string) {
     return e;
   };
   const T = act(ctx, 3, 'tuck', { x: tx, y: valleyY(ctx, tx) }, key, (P) => {
-    walkAt(P, t, tuckKeys, u);
-    if (t < 0.2) lookAt(P, apex[0], apex[1], 0.6);
+    walkAt(P, tw, tuckKeys, u);
+    if (tw < MEET_WALK.tuck[0]) lookAt(P, apex[0], apex[1], 0.6);
     meet(P, nodFace, 'L');
   });
   const N = act(ctx, 3, 'card', { x: nx, y: valleyY(ctx, nx) }, key, (P) => {
-    walkAt(P, t, nodKeys, u);
-    if (t < 0.5) lookAt(P, apex[0], apex[1], 0.6);
+    walkAt(P, tw, nodKeys, u);
+    if (tw < MEET_WALK.nod[0]) lookAt(P, apex[0], apex[1], 0.6);
     meet(P, tuckFace, 'R');
   });
   // a bow's motion lines (on its bottom frames)
@@ -1163,6 +1165,23 @@ export const READ_SLOW = 1.35;
 /** The meeting on the bridge: its acting (6.5 s of it) played 1.4× slower, then held. */
 export const MEET_SLOW = 1.4;
 const MEET_ACTED = 6.5;
+/**
+ * The walk up the bridge, in the meeting's own seconds (never slowed: a walk played slower reads as slow motion — the
+ * owner, 2026-11-12): 摺摺 and 聆聆 each [start, arrive]. The acting they arrive into (the look, the bow, the wave)
+ * keeps its slower pace after it.
+ */
+export const MEET_WALK = { tuck: [0.25, 2.45], nod: [0.5, 2.7] } as const;
+/** Where the acting stood when they arrived (the old clock's 3.4: the look turns full, the bow follows). */
+const MEET_ARRIVE = 3.4;
+/**
+ * The meeting's acting clock from its segment's seconds: up to the arrival as fast as the walk, then MEET_SLOW× slower,
+ * held at MEET_ACTED.
+ */
+export function meetClock(s: number): number {
+  const at = MEET_WALK.nod[1];
+  const a = s <= at ? (s / at) * MEET_ARRIVE : MEET_ARRIVE + (s - at) / MEET_SLOW;
+  return Math.min(MEET_ACTED, Math.max(0, a));
+}
 
 /* ───────────── the frames ───────────── */
 

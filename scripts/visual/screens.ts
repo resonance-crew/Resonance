@@ -62,7 +62,7 @@ export const REPLY_CARD_DRAFT: Record<string, string> = {
 
 export const SCREENS: Screen[] = [
   { id: 'landing', route: '/', as: null, fullPage: true, platforms: ['web'],
-    expect: 'The marketing landing page: hero, a feed of story cards, the download block with store badges, footer' },
+    expect: 'The landing page: the film of paper (layered wave hills at the blue hour, the hero line 用故事回應故事, two paper puppets, the player at its foot; the film is long — the stage stays at the top), then tonight\'s stories as story cards, the closing band with the QR code and store badges, footer' },
   { id: 'welcome', route: null, as: null, platforms: ['ios', 'android', 'mac'],
     expect: 'The signed-out start screen with its sign-in choices' },
   { id: 'signin', route: '/signin', as: null, platforms: ['web'],

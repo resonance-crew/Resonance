@@ -8,8 +8,11 @@
  * change — never a film of dust over the lens — and the puppets and the cards carry none of it. No filter anywhere.
  */
 
-/** The tile's side in world units (its bitmaps are 256 px, a speck two of them: about a CSS pixel on a wide screen). */
-export const SAND_TILE = 120;
+/**
+ * The tile's side in world units (its bitmaps are 256 px, a speck two of them): 72 — finer than the first 120 (the
+ * owner, 2026-11-12: 「顆粒弄小一點」), as many specks again on the same paper, each a little over half as wide.
+ */
+export const SAND_TILE = 72;
 
 /** A bundler's picture import: Next gives its data, Vite (the tests) its address. */
 export const pictureSrc = (m: string | { src: string }): string => (typeof m === 'string' ? m : m.src);

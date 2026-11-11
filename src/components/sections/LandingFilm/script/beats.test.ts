@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ghostPuppet } from '../runtime/actors';
 import { MITTEN_MIDDLE, type StickerPuppet } from '../kit/puppet';
-import { BEATS, BRIDGE_IN, FADE, MEET_RIPPLES, MEET_SLOW, PASS_SIZE, READ_RIPPLES, READ_SLOW, R1, RIPPLE_LIFE, W1, Y1, ghost, type ActorPose, type BeatCtx, type SlotId, type SlotPose } from './beats';
+import { BEATS, BRIDGE_IN, FADE, MEET_RIPPLES, MEET_SLOW, MEET_WALK, meetClock, PASS_SIZE, READ_RIPPLES, READ_SLOW, R1, RIPPLE_LIFE, W1, Y1, ghost, type ActorPose, type BeatCtx, type SlotId, type SlotPose } from './beats';
 import { WALK_FOOT, WALK_RISE, groundAt } from './ground';
 import { WATER_Y } from './world';
 import { computeLayout, finishLayout } from './layout';
@@ -503,7 +503,8 @@ describe('the beats, acted by ghosts', () => {
       [1440, 900],
     ]) {
       const { frame, L } = stage(w, h);
-      const m = frame('meet', 4.5 * MEET_SLOW);
+      // the bow's bottom (acting 4.75): after the walk up, at the meeting's slower pace
+      const m = frame('meet', MEET_WALK.nod[1] + (4.75 - 3.4) * MEET_SLOW);
       const t = m.actors.get('3:tuck')!;
       const n = m.actors.get('3:card')!;
       const tuck = ghostPuppet('tuck', L.pal);
@@ -512,6 +513,22 @@ describe('the beats, acted by ghosts', () => {
       expect(gap).toBeGreaterThan(0);
       expect(m.props.has('stroke-t-l')).toBe(true);
     }
+  });
+
+  it('walks up the bridge at a walk’s pace (never the meeting’s slower one), then acts the meeting slower', () => {
+    // the owner (2026-11-12): 「走的有點像是慢動作」 — the walk ends within 2.7 s of the meeting's start
+    expect(MEET_WALK.tuck[1] - MEET_WALK.tuck[0]).toBeLessThanOrEqual(2.3);
+    expect(MEET_WALK.nod[1]).toBeLessThanOrEqual(2.8);
+    const { frame } = stage(1440, 900);
+    const at = (s: number, id: string) => frame('meet', s).actors.get(id)!.screen[0];
+    // arrived: no further step after the walk's end
+    expect(Math.abs(at(MEET_WALK.tuck[1] + 0.3, '3:tuck') - at(MEET_WALK.tuck[1] + 1, '3:tuck'))).toBeLessThan(0.5);
+    expect(Math.abs(at(MEET_WALK.nod[1] + 0.3, '3:card') - at(MEET_WALK.nod[1] + 1, '3:card'))).toBeLessThan(0.5);
+    // the acting clock: continuous, as fast as the walk until they arrive, then slower, then held
+    expect(meetClock(0)).toBe(0);
+    expect(meetClock(MEET_WALK.nod[1])).toBeCloseTo(3.4, 6);
+    expect(meetClock(MEET_WALK.nod[1] + 1.4) - meetClock(MEET_WALK.nod[1])).toBeCloseTo(1, 6);
+    expect(meetClock(SEG.meet.dur)).toBe(6.5);
   });
 
   it('lets the valley’s two wait on the banks’ lips until the bridge comes up: in view on a phone as the valley arrives', () => {
