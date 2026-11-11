@@ -54,8 +54,10 @@ const ENTER_MAX_DELAY_MS = 420;
  * Column count mirroring the grid's CSS breakpoints (640 / 1024). Resolves
  * only on the client — `null` during SSR/hydration, where the CSS
  * fallback grid renders instead (and on a phone, where it is one column too).
+ * Exported for a list laid out as this one is from other data (the landing
+ * film's tonight's stories).
  */
-function useFeedColumns(): number | null {
+export function useFeedColumns(): number | null {
   const [cols, setCols] = useState<number | null>(null);
   useEffect(() => {
     const queries = [window.matchMedia('(min-width: 1024px)'), window.matchMedia('(min-width: 640px)')];

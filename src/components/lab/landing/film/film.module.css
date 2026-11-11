@@ -1,0 +1,1709 @@
+/*
+ * D · 一張卡片，一整天 (One Card, One Day). The page is the opening still by default — what a browser without scripts
+ * and a short landscape window get — and the film once the inline script (Page.tsx) has set `.film[data-film='film']`
+ * before the first paint. Frame 0 is the same in both.
+ *
+ * World units: one CSS length per unit, --u, so the server's frame 0 and the runtime agree (SPEC §3.1). The ground (y
+ * 885) lands at --ground-y, the horizon (y 614) at --hz. Colours come from the hour's --film-* variables (palette.ts):
+ * the server writes s = 0's, the director the rest.
+ */
+
+.page {
+  --film-night-ground: oklch(14% 0.035 266);
+  --film-cream: oklch(97% 0.015 85);
+  --film-graphite: oklch(25% 0.03 280);
+  /* where an anchor's heading lands under the fixed header: 20 px under its pen line (FilmHeader, 74 px) */
+  --film-head-clear: 94px;
+  --lip: 56px;
+  --pad: 24px;
+  --hero-bottom: 340px;
+  --pal: 88px;
+  --u: max(calc(100vw / 1900), calc((100svh - var(--lip) - var(--pad) - var(--hero-bottom) - 16px) / 515));
+  --ground-y: calc(100svh - var(--lip) - var(--pad));
+  --hz: calc(var(--ground-y) - 271 * var(--u));
+  /* the journey's world (scene 2): on a tall screen, once the hero is gone, drawn larger (×--zoom-2) */
+  --zoom-2: 1;
+  --u-2: calc(var(--u) * var(--zoom-2));
+  --pal-2: calc(var(--pal) * (1 + (var(--zoom-2) - 1) * 0.85));
+  /* the night (scene 4): its row of five fits a narrow phone, 18 px inside each edge (marks.ts NIGHT_ROW_PALS) */
+  --pal-4: min(var(--pal), calc((100vw - 36px) / 3.95));
+  position: relative;
+  background: var(--film-night-ground);
+  overflow-x: clip;
+}
+@media not all and (min-aspect-ratio: 11/10) {
+  .page {
+    --zoom-2: 1.4;
+  }
+}
+@media (min-width: 640px) and (max-aspect-ratio: 11/10) {
+  /* a tablet held upright: the world up under the hero's words (they end by 355 px), the puppets near the phone's
+     share of it (layout.ts computeLayout) */
+  .page {
+    --lip: 64px;
+    --hero-bottom: 380px;
+    --pal: 146px;
+    --zoom-2: 1.36;
+  }
+}
+@media (min-aspect-ratio: 11/10) {
+  .page {
+    --lip: 64px;
+    --pad: 32px;
+    --hero-bottom: 42svh;
+    --pal: clamp(112px, 14.7svh, 140px);
+  }
+}
+
+.defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.srOnly,
+.skipLink:not(:focus) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skipLink {
+  position: absolute;
+  z-index: 120;
+  top: 92px;
+  left: 16px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--film-cream);
+  color: var(--film-graphite);
+  font: 600 15px/1.2 var(--font-body);
+  text-decoration: none;
+}
+
+/* A short landscape window always gets the picture book: its first plate is a fixed 600 px tall (the page scrolls),
+   so the hero and the world each keep their room. */
+@media (max-height: 500px) {
+  .page {
+    --stage-h: 600px;
+    --lip: 64px;
+    --pad: 32px;
+    --hero-bottom: 250px;
+    --pal: 100px;
+    --u: max(calc(100vw / 1900), calc((var(--stage-h) - var(--lip) - var(--pad) - var(--hero-bottom) - 16px) / 515));
+    --ground-y: calc(var(--stage-h) - var(--lip) - var(--pad));
+  }
+}
+
+/* ───────────── the film and its stage ───────────── */
+
+.film {
+  position: relative;
+}
+.film[data-film='film'] {
+  /* the track (script/timeline TRACK_SVH) and the screen the stage lets go of */
+  height: calc(805svh + 100lvh);
+  overflow-anchor: none;
+  touch-action: pan-y pinch-zoom;
+}
+
+.stage {
+  position: relative;
+  height: 100svh;
+  min-height: 420px;
+  overflow: clip;
+  isolation: isolate;
+  background: var(--film-sky-3);
+}
+@media (max-height: 500px) {
+  .stage {
+    height: var(--stage-h);
+  }
+  .hero {
+    top: 92px;
+  }
+  .h1 {
+    font-size: 44px;
+  }
+  .h1[lang='en'] {
+    font-size: 36px;
+  }
+  .sub,
+  .sub[lang='en'] {
+    font-size: 15px;
+    max-width: 400px;
+  }
+  .film:not([data-film='film']) .slot[data-slot='story'] {
+    top: 92px;
+    right: 24px;
+    transform: scale(0.7);
+    transform-origin: 100% 0;
+  }
+}
+.film[data-film='film'] .stage {
+  position: sticky;
+  top: 0;
+  height: 100lvh;
+  contain: strict;
+}
+
+.probe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.probeU {
+  width: calc(var(--u) * 1000);
+  height: var(--ground-y);
+}
+.probePal {
+  width: var(--pal);
+  height: var(--hero-bottom);
+}
+.probeU2 {
+  width: calc(var(--u-2) * 1000);
+  height: var(--pal-2);
+}
+.probePal4 {
+  width: var(--pal-4);
+  height: 1px;
+}
+.probeLip {
+  width: var(--lip);
+  height: var(--pad);
+}
+.probeSvh {
+  width: 1px;
+  height: 100svh;
+}
+.probeLvh {
+  width: 1px;
+  height: 100lvh;
+}
+
+.sky {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(to bottom, var(--film-sky-0) 0, var(--film-sky-1) calc(var(--hz) * 0.55), var(--film-sky-2) calc(var(--hz) * 0.8), var(--film-sky-3) var(--hz));
+  background: linear-gradient(to bottom in oklab, var(--film-sky-0) 0, var(--film-sky-1) calc(var(--hz) * 0.55), var(--film-sky-2) calc(var(--hz) * 0.8), var(--film-sky-3) var(--hz));
+}
+
+.stars {
+  position: absolute;
+  pointer-events: none;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: var(--hz);
+  z-index: 1;
+  opacity: var(--film-stars);
+}
+.starDots {
+  fill: var(--film-cream);
+  opacity: 0.85;
+}
+.starGlint {
+  fill: var(--film-cream);
+  opacity: 0.9;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .film:not([data-resting]) .starGlint[data-twinkle] {
+    animation: twinkle 5.4s ease-in-out infinite;
+  }
+}
+/* the safety net: a device that can't keep up drops the small particles (fireflies, birds, the stars' twinkle) */
+.film[data-lowfx] .fireflies,
+.film[data-lowfx] .birds {
+  display: none;
+}
+.film[data-lowfx] .starGlint[data-twinkle] {
+  animation: none;
+}
+/* the end winds down: 5 s after the film is over nothing moves on its own but the puppets' breath and blinks */
+.film[data-still] .starGlint[data-twinkle],
+.film[data-still] .fireflies i {
+  animation-play-state: paused;
+}
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.disc {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  /* drawn at a nominal radius of 100 units; the director scales it to the hour's radius */
+  width: calc(1120 * var(--u));
+  height: calc(1120 * var(--u));
+  margin: calc(-560 * var(--u)) 0 0 calc(-560 * var(--u));
+  pointer-events: none;
+  will-change: transform;
+  /* frame 0: the blue hour's sun, still under the far range (its glow alone shows) */
+  transform: translate(74vw, calc(var(--hz) * 1.03)) scale(0.86);
+}
+@media not all and (min-aspect-ratio: 11/10) {
+  /* a tall screen's opening: a smaller sun, its top over the range */
+  .disc {
+    transform: translate(78vw, calc(var(--hz) * 0.76)) scale(0.54);
+  }
+}
+@media (min-width: 640px) and (max-aspect-ratio: 11/10) {
+  .disc {
+    transform: translate(78vw, calc(var(--hz) * 0.76)) scale(0.7);
+  }
+}
+.disc svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.discGlow {
+  opacity: var(--film-glow, 1);
+}
+.discFace {
+  fill: var(--film-c-disc);
+  stroke: var(--film-c-rim);
+  stroke-width: 1.2px;
+  vector-effect: non-scaling-stroke;
+}
+.sun {
+  opacity: var(--film-sun, 1);
+}
+.moon {
+  opacity: var(--film-moon, 0);
+}
+/* The moon's phase: the terminator's half-width is cos(phase) of the moon's (k = cos(115° × c): 1 full, 0 a half,
+   −0.42 the crescent). While k > 0 a white ellipse k wide lights the right half up to it (gibbous, convex); once k < 0 a
+   black one |k| wide takes the left half's middle away (the crescent). Neither is ever a round bite. */
+.moonGibbous {
+  transform: scaleX(max(0, cos(calc(var(--film-crescent, 0) * 115deg))));
+}
+.moonCrescent {
+  transform: scaleX(max(0, calc(-1 * cos(calc(var(--film-crescent, 0) * 115deg)))));
+}
+
+.clouds {
+  position: absolute;
+  pointer-events: none;
+  /* wide enough that its drift (the scroll, the journey's pan) never shows its edge */
+  left: -30%;
+  top: 0;
+  width: 160%;
+  height: var(--hz);
+  z-index: 3;
+  will-change: transform;
+}
+.clouds svg {
+  width: 100%;
+  height: 100%;
+}
+.clouds svg.cloudsTall {
+  position: absolute;
+  left: 21%;
+  top: 44svh;
+  width: 52%;
+  height: 11svh;
+  opacity: var(--film-cloud-streak);
+}
+@media (min-aspect-ratio: 11/10) {
+  .clouds svg.cloudsTall {
+    display: none;
+  }
+}
+.puffs {
+  opacity: var(--film-cloud-puff);
+}
+.streaks {
+  opacity: var(--film-cloud-streak);
+}
+.cloudFront {
+  fill: var(--film-c-cloud-front);
+  opacity: 0.78;
+}
+.streak {
+  fill: var(--film-c-streak);
+  opacity: 0.75;
+}
+
+/* ───────────── the planes ───────────── */
+
+.sets {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+.set {
+  position: absolute;
+  inset: 0;
+  --cam: 1000;
+  display: none;
+}
+.set[data-set='1'] {
+  display: block;
+}
+@media not all and (min-aspect-ratio: 11/10) {
+  .set[data-set='1'] {
+    --cam: 1330;
+  }
+  /* the journey on a tall screen: the hero has gone, so its world is drawn larger and its puppets nearer */
+  .set[data-set='2'] {
+    --u: var(--u-2);
+    --pal: var(--pal-2);
+  }
+}
+/* the night's puppets, smaller on a phone too narrow for their row */
+.set[data-set='4'] {
+  --pal: var(--pal-4);
+}
+
+.plane {
+  position: absolute;
+  left: calc(50% + (var(--x0) - var(--cam)) * var(--u));
+  top: calc(var(--ground-y) - 885 * var(--u));
+  width: calc(var(--pw) * var(--u));
+  height: calc(1400 * var(--u));
+}
+.plane > svg:first-child {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: calc(1400 * var(--u));
+  display: block;
+}
+.film[data-film='film'] .set[data-live] .plane {
+  will-change: transform;
+}
+/* a flat going into the haze (a change's `haze`): its paper again over itself, every paint the sky's high up, faded in
+   by the director (opacity only) — shown only while it hazes */
+.haze {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: calc(1400 * var(--u));
+  display: none;
+  opacity: 0;
+  will-change: opacity;
+  --film-c-range: var(--film-c-fly);
+  --film-c-peaks: var(--film-c-fly);
+  --film-c-headland: var(--film-c-fly);
+  --film-c-town: var(--film-c-fly);
+  --film-c-hills: var(--film-c-fly);
+  --film-c-near: var(--film-c-fly);
+  --film-c-ground: var(--film-c-fly);
+  --film-c-shade: var(--film-c-fly);
+  --film-c-bridge: var(--film-c-fly);
+  --film-c-bridge-pen: var(--film-c-fly);
+  --film-c-roof: var(--film-c-fly);
+  --film-c-tree: var(--film-c-fly);
+  --film-c-canopy: var(--film-c-fly);
+  --film-c-fold-lit: var(--film-c-fly);
+  --film-c-fold-dark: var(--film-c-fly);
+  --film-c-unlit: var(--film-c-fly);
+  --film-c-lit: var(--film-c-fly);
+  --film-c-window: var(--film-c-fly);
+  --film-c-accent: var(--film-c-fly);
+  --film-c-lamp: var(--film-c-fly);
+  --film-c-mist: var(--film-c-fly);
+  --film-c-speck: var(--film-c-fly);
+  --film-c-rim: var(--film-c-fly);
+  --film-c-ground-rim: var(--film-c-fly);
+  --film-c-pencil: var(--film-c-fly);
+  --film-c-sea: var(--film-c-fly);
+  --film-c-sea-line: var(--film-c-fly);
+}
+/* a flat in a scene change whose style asks for an apron (`apron` foot): its own paper runs on under its torn foot, so
+   no sea or sky shows under the new ground. A `cut` foot is a clip on its art (the director sets it on the <use>). */
+.apron {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--apron-top) * var(--u));
+  height: 160lvh;
+  display: none;
+}
+.plane[data-foot-mode='apron'] .apron {
+  display: block;
+  /* its own paper, darkening a little toward the foot (a hill, not a wall) */
+  background-image: linear-gradient(to bottom, transparent, color-mix(in oklab, transparent, var(--film-c-shade) 22%) 60%);
+}
+
+.reflect {
+  position: absolute;
+  left: 0;
+  top: calc(600 * var(--u));
+  width: calc(320 * var(--u));
+  height: calc(110 * var(--u));
+  margin-left: calc(-160 * var(--u));
+  opacity: var(--film-refl, 0);
+  will-change: transform;
+}
+.reflectStrip {
+  fill: var(--film-c-disc);
+}
+
+.fringeL,
+.fringeR {
+  position: absolute;
+  bottom: 0;
+  width: calc(420 * var(--u) * 0.72);
+  height: calc(330 * var(--u) * 0.72);
+  z-index: 3;
+}
+/* on a tall screen the grass keeps to its corners, never over the puppets */
+@media not all and (min-aspect-ratio: 11/10) {
+  .fringeL,
+  .fringeR {
+    width: calc(420 * var(--u) * 0.42);
+    height: calc(330 * var(--u) * 0.5);
+  }
+}
+.fringeL {
+  left: 0;
+}
+.fringeR {
+  right: 0;
+}
+
+/* ───────────── the lab's depth blur (?depth=blur) ───────────── */
+
+/* The owner's comparison (round 3): 「如果我們讓越遠的東西越模糊，會不會效果好一些呢？」. Set before the first paint
+   (Page.tsx's mode script); without it nothing here applies. A static blur on each far plane by its depth (--d): the
+   range ~3 px, the peaks ~2.4, the sea ~2.1, the headland ~1.8, the town ~1.1, the hills a hair; the nearest flats, the
+   bridge and the ground none — the puppets stand in the ground's plane, the props and the cards over it, all sharp. The
+   disc and the clouds a little. Each filter sits on a layer the director moves by transform and opacity alone (a
+   plane, the disc, the clouds), so the compositor blurs the raster it already has: never an SVG filter, and never on
+   anything repainted every frame — the stars twinkle (a repaint each frame), and blurred they took WebKit from 59 to
+   ~40 fps; as they are, ▶ through a change holds the same rate with the blur as without, Chromium and WebKit alike. */
+.film[data-depth='blur'] .plane:is([data-plane='range'], [data-plane='peaks'], [data-plane='sea'], [data-plane='headland'], [data-plane='town'], [data-plane='hills']) {
+  filter: blur(calc((0.74 - var(--d)) * 4.5px));
+}
+.film[data-depth='blur'] .disc {
+  filter: blur(1.2px);
+}
+.film[data-depth='blur'] .clouds {
+  filter: blur(1.6px);
+}
+/* a device the safety net finds slow (runtime/index.ts `data-lowfx`) drops the comparison: without the GPU's
+   compositing the blur triples a frame's time (the engineering review, round 3) */
+.film[data-depth='blur'][data-lowfx] :is(.plane, .disc, .clouds) {
+  filter: none;
+}
+
+/* ───────────── no borrowed props (script/look.ts) ───────────── */
+
+/* The owner (2026-11-10/11): the film read too much like Alto's Adventure; the waves were chosen. With its folded
+   peaks, lone tree and lighthouse (the server's paper) went the dark grass in the corners and the sky lanterns of the
+   night — its lights are the cards and the windows. Their elements stay for the lab's comparison (`peaks`, the film as
+   rounds 1–5 left it: script/look.ts), which shows them. */
+.film:not([data-look='peaks']) :is(.fringeL, .fringeR),
+.film:not([data-look='peaks']) .lantern {
+  display: none;
+}
+
+/* ───────────── the paper's sand ───────────── */
+
+/* The owner (2026-11-11): 「背景是不是可以加入這種沙沙的感覺」, and of the strengths tried, 「最淡的」. A fine grit on
+   the scenery's paper and the sky (script/sand.ts): each paper of the world filled a second time with the grit's
+   pattern (World.tsx PlaneGroup's `.fk-sand`, which reads the two variables below), so the sand is cut to each paper's
+   edge, travels with it, and is never on the puppets or the cards; the sky has its own sheet of it. The lab's
+   comparisons (Page.tsx's mode script): `?sand=0` none, `?sand=2` plain to see. A flat paling into the sky (a change's
+   haze) carries none. */
+.film {
+  --film-sand: 0.55;
+  --film-sand-show: visible;
+}
+.skySand {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: calc(2800 * var(--u));
+  height: calc(1400 * var(--u));
+  margin-left: calc(-1400 * var(--u));
+  pointer-events: none;
+  opacity: var(--film-sand, 0);
+}
+.film[data-sand='0'] {
+  --film-sand: 0;
+  --film-sand-show: hidden;
+}
+.film[data-sand='0'] .skySand {
+  display: none;
+}
+.film[data-sand='2'] {
+  --film-sand: 1;
+}
+.haze {
+  --film-sand-show: hidden;
+}
+
+/* ───────────── the puppets ───────────── */
+
+.actor {
+  --ax: var(--ax-wide);
+  --ay: var(--ay-wide);
+  --unit: var(--pal);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  z-index: 2;
+  transform: translate(calc(var(--ax) * var(--u)), calc(var(--ay) * var(--u)));
+}
+@media not all and (min-aspect-ratio: 11/10) {
+  .actor {
+    --ax: var(--ax-tall);
+    --ay: var(--ay-tall);
+  }
+}
+.actor > span,
+.carrierActor > span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(calc(var(--gx) * -100%), calc((var(--below) - 1) * 100%));
+}
+.actor[data-flip] > span {
+  transform: translate(calc(var(--gx) * -100%), calc((var(--below) - 1) * 100%)) scaleX(-1);
+}
+.actor[hidden],
+.carrierActor[hidden] {
+  display: none;
+}
+/* the film keeps its own light: the puppets stay as they are whatever the page's scheme */
+.actor img,
+.carrierActor img {
+  filter: none !important;
+}
+
+/* over the cards (點點 rides one), as they are over the stage's grain */
+.carrier {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+}
+.carrierActor {
+  --unit: var(--pal);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  display: none;
+  will-change: transform;
+}
+/* off the ground, 點點 wears a graphite contour (it crosses light sky and paper) */
+.carrierActor > span {
+  filter: drop-shadow(1px 0 0 var(--film-graphite)) drop-shadow(-1px 0 0 var(--film-graphite)) drop-shadow(0 1px 0 var(--film-graphite)) drop-shadow(0 -1px 0 var(--film-graphite));
+}
+
+/* ───────────── the particles ───────────── */
+
+.particles {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.wind {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 60%;
+  opacity: 0;
+}
+.windRibbon {
+  fill: none;
+  stroke: var(--film-c-wind);
+  stroke-width: 5px;
+  stroke-linecap: round;
+  stroke-dasharray: 0.62 0.38;
+}
+.birds {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 180px;
+  height: 70px;
+  opacity: 0;
+  will-change: transform;
+}
+.bird {
+  fill: var(--film-c-bird);
+}
+.birdLit {
+  fill: color-mix(in oklab, var(--film-c-bird), var(--film-c-rim) 45%);
+}
+.lantern {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;
+  opacity: 0;
+  will-change: transform;
+}
+.lantern svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.lanternPaper {
+  fill: oklch(72% 0.14 52);
+}
+.lanternFlame {
+  fill: oklch(93% 0.11 86);
+}
+.fireflies {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+.fireflies i {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: oklch(92% 0.13 90);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .film:not([data-resting]) .fireflies i {
+    animation: drift 6s ease-in-out infinite alternate;
+  }
+  /* the end winds down (5 s after the film is over): paused where they are — after the drift, whose shorthand would
+     otherwise set the play state running again (the same specificity) */
+  .film[data-still] .fireflies i {
+    animation-play-state: paused;
+  }
+}
+@keyframes drift {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(14px, -18px);
+    opacity: 0.4;
+  }
+}
+
+/* The paper's grain over the whole stage (SPEC §3.2 f): the scheme's grain ink through a tileable noise mask (128 px,
+   8 levels, 4 KB), its mean darkening 0.07 as the site's GrainOverlay at that strength — a bitmap, drawn once, never a
+   live feTurbulence (WebKit runs SVG filters on the CPU and redrew the stage's grain on every frame of a change). */
+.grain {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  background-color: var(--grain-ink, oklch(0% 0 0));
+  opacity: calc(0.14 * var(--grain-scale, 1));
+  -webkit-mask-image: url('./grain.png');
+  mask-image: url('./grain.png');
+  -webkit-mask-size: 128px 128px;
+  mask-size: 128px 128px;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  will-change: transform;
+}
+/* a card's grain (Paper): grey specks through the same tile, cut to its drawn outline (clip-path: path), as the site's
+   ShapeGrain mixes its paper toward a speckled grey — but drawn once, never a filter */
+.paperGrain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-color: oklch(50% 0 0);
+  -webkit-mask-image: url('./grain.png');
+  mask-image: url('./grain.png');
+  -webkit-mask-size: 128px 128px;
+  mask-size: 128px 128px;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+}
+@media (min-resolution: 2dppx) {
+  .paperGrain,
+  .grain {
+    -webkit-mask-size: 64px 64px;
+    mask-size: 64px 64px;
+  }
+}
+
+/* ───────────── the hero ───────────── */
+
+/* the hero's roof: a still box over the stage whose top is masked away at the header's pen line (74 px), so the hero
+   flying up through the first change passes under it, word by word, instead of over the header's logo; the hero's
+   top at rest (92 px at the least) is below it */
+.heroRoof {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+}
+.film[data-film='film'] .heroRoof {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 68px, #000 90px);
+  mask-image: linear-gradient(to bottom, transparent 68px, #000 90px);
+}
+/* no store badges on the first screen (the owner, round 3): the h1 and its line alone — on a phone and an upright
+   tablet a little lower than they stood over the badges (the words in the sky, not pressed under the header); a wide
+   screen keeps its place (lower, the line would pass over the sunrise's light at under 4.5:1 as it leaves) */
+.hero {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 7;
+  left: 20px;
+  right: 20px;
+  top: 108px;
+  color: var(--film-cream);
+  will-change: transform;
+}
+.hero[data-gone] .h1,
+.hero[data-gone] .sub {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.h1 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 44px;
+  line-height: 1.12;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--film-cream);
+}
+.h1[lang='en'] {
+  font-size: 38px;
+  letter-spacing: -0.01em;
+}
+.h1Line {
+  display: block;
+}
+.sub {
+  margin: 16px 0 0;
+  max-width: 340px;
+  font: 400 16px/1.55 var(--font-body);
+  /* cream at 96 % (the spec's 92 % fell a hair under 4.5:1 on the sunrise sky as the hero leaves) */
+  color: oklch(97% 0.015 85 / 0.96);
+  text-wrap: pretty;
+}
+.sub[lang='en'] {
+  font-size: 15px;
+  line-height: 1.5;
+}
+@media (min-width: 640px) and (max-aspect-ratio: 11/10) {
+  .hero {
+    left: 40px;
+    right: 40px;
+    top: 144px;
+  }
+  .h1 {
+    font-size: 72px;
+  }
+  .h1[lang='en'] {
+    font-size: 60px;
+  }
+  .h1Line {
+    display: inline;
+  }
+  .sub {
+    max-width: 560px;
+    font-size: 18px;
+  }
+}
+@media (min-aspect-ratio: 11/10) {
+  .hero {
+    left: max(40px, 7.8vw);
+    right: auto;
+    width: min(620px, 46vw);
+    top: clamp(104px, 16svh, 156px);
+  }
+  .h1 {
+    font-size: clamp(56px, 8.4svh, 80px);
+    white-space: nowrap;
+  }
+  /* English is longer: two lines, a little smaller and higher, so the words keep above the far range */
+  .hero:has(.h1[lang='en']) {
+    top: clamp(92px, 12.5svh, 140px);
+  }
+  .h1[lang='en'] {
+    font-size: clamp(40px, 5.6svh, 56px);
+    white-space: normal;
+    max-width: 9.6em;
+    text-wrap: balance;
+  }
+  .sub[lang='en'] {
+    font-size: 17px;
+    max-width: 480px;
+  }
+  .h1Line {
+    display: inline;
+  }
+  .sub {
+    max-width: 540px;
+    font-size: 19px;
+  }
+}
+
+/* ───────────── the DOM cards over the stage ───────────── */
+
+/* over the stage's grain (z 10): a card wears its own paper's grain, as the landing page's StoryCard does — the
+   stage's over it again greyed it (the art review, round 3) */
+.ui {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  pointer-events: none;
+}
+.slot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: auto;
+  transform-origin: 50% 50%;
+}
+/* The cards (the landing page's StoryCard, framed): the written card, the one the wind carries (its twin: the same
+   width, so the hand-over between the two is unseen) and the answer alike; the night's card; the sky's small ones */
+.slot[data-slot='story'],
+.slot[data-slot='a'],
+.slot[data-slot='b'] {
+  width: 320px;
+}
+.slot[data-slot='cta'] {
+  width: 380px;
+}
+.slot[data-slot^='sky'] {
+  width: 220px;
+}
+/* the ≋ (PairWave: a 4:3 box, its glyph 9/10 of the width): in the 72 px between the cards side by side 48 px wide; up
+   top, in the 84 px between the two (the director's 0.8), 44 */
+.slot[data-slot='wave'],
+.slot[data-slot='wave2'] {
+  width: 53px;
+  height: 40px;
+  pointer-events: none;
+}
+.slot[data-slot='wave2'] {
+  width: 61px;
+  height: 46px;
+}
+.slot[data-slot^='wave'] .pairWave {
+  width: 100%;
+  height: 100%;
+}
+@media not all and (min-aspect-ratio: 11/10) {
+  /* stacked, in the 48 px between the cards: 40 px wide (a tablet's 56: 48); up top, in the 40 px between the two
+     (the director's 0.5): 34 */
+  .slot[data-slot='wave'] {
+    width: 44px;
+    height: 33px;
+  }
+  .slot[data-slot='wave2'] {
+    width: 76px;
+    height: 57px;
+  }
+  @media (min-width: 640px) {
+    .slot[data-slot='wave'] {
+      width: 53px;
+      height: 40px;
+    }
+  }
+}
+@media not all and (min-aspect-ratio: 11/10) {
+  .slot[data-slot='story'],
+  .slot[data-slot='a'],
+  .slot[data-slot='b'] {
+    width: min(300px, calc(100% - 48px));
+  }
+  .slot[data-slot='cta'] {
+    width: min(300px, calc(100% - 56px));
+  }
+}
+@media (min-width: 640px) and (max-aspect-ratio: 11/10) {
+  /* a tablet held upright: the cards a little larger, as its puppets are */
+  .slot[data-slot='story'],
+  .slot[data-slot='a'],
+  .slot[data-slot='b'] {
+    width: 340px;
+  }
+  .slot[data-slot='cta'] {
+    width: 360px;
+  }
+}
+/* a short tall screen (a small phone): the written card has no room over the puppets for its cover, so it pops out
+   (and rides the wind) as the card's words — its tags, title, story and byline (marks.ts storySpot); its answer is
+   drawn alike, so the pair stays a pair */
+@media (max-height: 699.98px) and (max-aspect-ratio: 11/10) {
+  .film :is([data-slot='story'], [data-slot='a'], [data-slot='b']) article > div:not([aria-hidden]) > :first-child {
+    display: none;
+  }
+}
+.film[data-film='film'] .slot {
+  visibility: hidden;
+}
+.film[data-film='film'] .slot[data-live] {
+  visibility: visible;
+  will-change: transform;
+}
+/* without the film: the stage is the opening still, the card written there shown where it was revealed */
+.film:not([data-film='film']) .slot:not([data-slot='story']) {
+  display: none;
+}
+.film:not([data-film='film']) .slot[data-slot='story'] {
+  right: max(40px, 6vw);
+  left: auto;
+  top: clamp(104px, 16svh, 156px);
+}
+@media not all and (min-aspect-ratio: 11/10) {
+  /* under the hero's words (they end 52 px above the room the CSS keeps for them), its foot over the puppets' heads */
+  .film:not([data-film='film']) .slot[data-slot='story'] {
+    right: auto;
+    left: 50%;
+    top: calc(var(--hero-bottom) - 52px);
+    transform: translateX(-50%) scale(0.86);
+    transform-origin: 50% 0;
+  }
+}
+@media (max-height: 699.98px) and (max-aspect-ratio: 11/10) {
+  .film:not([data-film='film']) .slot[data-slot='story'] {
+    transform: translateX(-50%) scale(0.66);
+  }
+}
+/* the answer B: the nearest story by default; 聆聆's drawing in the lab's ?b=drawn */
+.bDrawn {
+  display: none;
+}
+.film[data-b='drawn'] .bDrawn {
+  display: block;
+}
+.film[data-b='drawn'] .bKin {
+  display: none;
+}
+/* The film's cards are the landing page's StoryCard (FilmCard.tsx), framed, laid out at their slot's width. Over the
+   stage a card keeps to what a glance takes in: two lines of its title and of its story (the end's list shows them
+   whole). */
+.filmCard,
+.drawnCard,
+.ctaCard {
+  display: block;
+  width: 100%;
+}
+.cardLink {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 22px;
+}
+.cardLink:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: 4px;
+}
+.slot article h3,
+.slot article p {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* the night sky's small cards: one line of the story */
+.slot[data-slot^='sky'] article p {
+  -webkit-line-clamp: 1;
+}
+/* the night's card moves on every frame of its growth: its button's paper grain (ShapeGrain, a live feTurbulence)
+   is left off — the card wears the still grain (the engineering review, round 3). The grain is a black path seen only
+   through its filter: the path goes, never the filter alone (that painted the button black). */
+.ctaCard [filter] {
+  display: none;
+}
+/* the card of the story not written yet: its cover a page being written (FilmCard CtaCover) — the card's own fill
+   without the stripes a card wears before its picture, which read as a picture that failed to load */
+.ctaCard svg[viewBox='0 0 320 200'] > line {
+  display: none;
+}
+.ctaCover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ctaRules {
+  stroke: var(--color-text);
+  opacity: 0.16;
+}
+.ctaInk {
+  stroke: var(--color-text);
+  opacity: 0.6;
+}
+.ctaPencilBody {
+  fill: var(--color-yellow);
+  stroke: var(--color-text);
+}
+.ctaPencilTip {
+  fill: var(--color-cream);
+  stroke: var(--color-text);
+}
+.ctaPencilBand {
+  stroke: var(--color-text);
+}
+/* a tall screen: a smaller card (the owner, round 4: 「這張卡片在手機上是不是要顯示小張一點」) — its cover a strip, and
+   on a short phone (an iPhone SE, any phone with its toolbars showing) none: the line, the word under it, the action */
+@media not all and (min-aspect-ratio: 11/10) {
+  .ctaCard [class*='imagePlaceholder'] {
+    padding-bottom: 34% !important;
+  }
+}
+@media (max-height: 619.98px) and (max-aspect-ratio: 11/10) {
+  .ctaCard article > div:not([aria-hidden]) > :first-child {
+    display: none;
+  }
+}
+.ctaWrite {
+  display: block;
+  text-decoration: none;
+}
+
+/* 聆聆's drawing (?b=drawn): the story card's shape in its lavender paper */
+.drawnCard {
+  position: relative;
+}
+.drawnPaper {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+.drawnInner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+}
+.drawnCover {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 256 / 158;
+}
+.drawnLines {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.drawnRule {
+  display: block;
+  width: 100%;
+  height: 6px;
+  overflow: visible;
+}
+.drawnByline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 8px;
+}
+.drawnDot {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: oklch(78% 0.05 290);
+}
+
+.pairWave {
+  display: block;
+  overflow: visible;
+}
+
+/* ───────────── the player ───────────── */
+
+/* Round 4 (the owner: 「這個播放欄…這塊背景是不是可以直接拿掉」): no bar and no paper of its own — the player floats
+   over the stage's foot, the scenery running on under it. Its ink is the film's cream on every hour's ground. */
+.lip {
+  position: relative;
+  z-index: 40;
+  color: var(--film-cream);
+  /* the organic button's face over the scenery: the cream, a quarter strong */
+  --film-btn: oklch(97% 0.015 85 / 0.2);
+}
+.film[data-film='film'] .lip {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--lip) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  pointer-events: none;
+  transition: transform 0.45s cubic-bezier(0.3, 0.7, 0.4, 1), opacity 0.3s ease;
+}
+/* the stage has let go (the page scrolls on): the player sinks away */
+.film[data-film='film'][data-released] .lip {
+  transform: translateY(calc(100% + 14px));
+  opacity: 0;
+}
+.lipRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--lip);
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 12px;
+  box-sizing: border-box;
+  pointer-events: auto;
+  transition: opacity 0.4s ease, visibility 0s linear 0s;
+}
+@media (min-width: 640px) {
+  .lipRow {
+    padding: 0 24px;
+  }
+}
+/* the film is over: the player goes, the arrow down takes its place (.lipNext) */
+.lip[data-ended] .lipRow {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.4s ease, visibility 0s linear 0.4s;
+}
+/* ▶ / ❚❚: the site's organic button (OrganicButton), its face a soft fill of the film's cream */
+.lipPlay {
+  display: inline-flex;
+  flex: none;
+}
+.lipPlay button,
+.bookPlay button {
+  min-height: 44px;
+  white-space: nowrap;
+}
+.lipPlay button:focus-visible,
+.bookPlay button:focus-visible,
+.lipNext:focus-visible {
+  outline: 2px solid var(--film-cream);
+  outline-offset: 2px;
+}
+.lipGlyph button {
+  min-width: 44px;
+  padding-left: 11px;
+  padding-right: 11px;
+}
+.lipWords {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 600 14px/1 var(--font-body);
+}
+.wideOnly {
+  display: none;
+}
+@media (min-width: 640px) {
+  .wideOnly {
+    display: inline-flex;
+  }
+}
+/* the progress line: a press seeks, a drag scrubs (Player.tsx); 44 px tall to the finger. A finger moving up or down
+   on it pans the page as anywhere else (a native slider's way: the engineering review, round 3) — only a sideways drag
+   scrubs */
+.progress {
+  position: relative;
+  flex: 1;
+  min-width: 64px;
+  height: 44px;
+  margin: 0 10px;
+  cursor: pointer;
+  outline: none;
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.progress:focus-visible {
+  outline: 2px solid var(--film-cream);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.progress > svg {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 100%;
+  height: 12px;
+  margin-top: -6px;
+  overflow: visible;
+}
+.progressLine {
+  fill: none;
+  stroke: oklch(97% 0.015 85 / 0.72);
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.progressTick {
+  position: absolute;
+  top: 50%;
+  width: 30px;
+  height: 44px;
+  margin: -22px 0 0 -15px;
+  cursor: pointer;
+}
+/* on a phone's short line four 30 px ticks took half of it: a finger's tap seeks where it lands, a tick only on its mark */
+@media (pointer: coarse) {
+  .progressTick {
+    width: 16px;
+    margin-left: -8px;
+  }
+}
+.progressTick::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 10px;
+  margin: -5px 0 0 -1px;
+  border-radius: 1px;
+  background: oklch(97% 0.015 85 / 0.8);
+}
+/* the dot's rail: as wide as the line, translated by the director (0 … 100 % of its own width along, and up and down
+   with the pen line's curve: transform only) */
+.progressRail {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+.progressDot {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  display: block;
+  margin: -10px 0 0 -10px;
+  overflow: visible;
+  transition: transform 0.15s ease;
+}
+/* a hand-drawn round in the card's own paper, a pen line of the film's cream round it */
+.progressDot path {
+  fill: var(--film-dot, var(--film-cream));
+  stroke: var(--film-cream);
+  stroke-linejoin: round;
+}
+/* while the line is pressed the dot grows a little: it is being held */
+.progress:active .progressDot {
+  transform: scale(1.3);
+}
+.sceneName {
+  font: 500 12px/1 var(--font-body);
+  opacity: 0.9;
+  white-space: nowrap;
+  min-width: 4.5em;
+}
+/* the film is over: a pen's arrow leading down to the stories, where the player was */
+.lipNext {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 6px);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 44px;
+  min-height: 52px;
+  padding: 4px 14px 0;
+  border: none;
+  border-radius: 16px;
+  background: none;
+  color: inherit;
+  font: 500 13px/1.2 var(--font-body);
+  white-space: nowrap;
+  cursor: pointer;
+  transform: translateX(-50%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.5s ease 0.25s, visibility 0s linear 0.75s;
+  -webkit-tap-highlight-color: transparent;
+}
+.film[data-film='film'] .lipNext {
+  display: inline-flex;
+}
+.lip[data-ended] .lipNext {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.5s ease 0.25s, visibility 0s linear 0s;
+}
+.lipNextArrow {
+  display: block;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .lip[data-ended] .lipNextArrow {
+    animation: lip-next 1.8s ease-in-out infinite;
+  }
+}
+@keyframes lip-next {
+  0%,
+  100% {
+    transform: translateY(-2px);
+  }
+  50% {
+    transform: translateY(5px);
+  }
+}
+/* without the film (no script, a short landscape window, a runtime that failed): the stage is the opening still, and
+   this row stands under it in the flow — a way to start the film, or the word to turn the phone upright */
+.bookRow {
+  display: none;
+}
+.film:not([data-film='film']) .lipRow {
+  display: none;
+}
+.film:not([data-film='film']) .lip {
+  background: var(--film-c-ground);
+}
+.film:not([data-film='film']) .bookRow {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+.bookTurn {
+  display: none;
+  font: 500 14px/1.4 var(--font-body);
+}
+@media (max-height: 500px) {
+  .bookPlay {
+    display: none;
+  }
+  .bookTurn {
+    display: inline;
+  }
+}
+@media (scripting: none) {
+  .film .bookPlay {
+    display: none;
+  }
+}
+
+.kinBanner {
+  display: none;
+}
+.film[data-b='kin'] .kinBanner {
+  display: block;
+  position: fixed;
+  z-index: 110;
+  left: 50%;
+  top: 92px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: oklch(92% 0.075 88);
+  color: var(--film-graphite);
+  font: 600 13px/1.35 var(--font-body);
+  text-align: center;
+}
+
+/* ───────────── the narration ───────────── */
+
+/* One item per scene, at its scene's place on the track: a screen reader's and the hash's, never on the page (round 4:
+   the picture book — these lines shown, with a plate of each scene — is gone). */
+.beats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 0;
+}
+.beat {
+  position: absolute;
+  left: 0;
+  top: calc(var(--y) * 1svh);
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  scroll-margin-top: 0;
+}
+.film:not([data-film='film']) .beat {
+  top: 0;
+}
+/* without the film the page is the site's own paper under the opening still */
+.page:has(.film:not([data-film='film'])) {
+  background: var(--color-cream-dark);
+}
+/* the end follows on the same paper: no night to fade from */
+.film:not([data-film='film']) ~ .end .endFade {
+  display: none;
+}
+.film:not([data-film='film']) ~ .end {
+  padding-top: 24px;
+}
+
+/* ───────────── the end: the site's own page after the film ───────────── */
+
+/* The page after the film is the landing page's (the owner, round 3): the theme's paper — light or dark as the visitor's
+   scheme and the site's setting say — reached by a fade from the night's ground over about a screen (no edge between
+   the film and the page), then the card section's heading and grid (CardFeedSection, CardLinkGrid), the closing band
+   (CTASection's look) and the footer. Its sides and foot are CardFeedSection's (a phone's bands bleed to them). */
+.end {
+  --end-pad-x: clamp(24px, 5vw, 80px);
+  /* the ≋ between A and B, in the accent (the brand's mark) on the page's paper */
+  --film-chrome-ink: var(--color-terracotta);
+  position: relative;
+  background: var(--color-cream-dark);
+  color: var(--color-text);
+  padding: 0 var(--end-pad-x) clamp(120px, 14vw, 180px);
+  overflow: hidden;
+}
+/* the night's ground (the stage's foot at the night, --film-end-ground: Page.tsx from the night's palette) into the
+   paper, eased so neither end shows where it starts. In light the mist between them is a dawn's — a violet, then a
+   warm rose (art review, round 3: through OKLCH alone its middle was a dull grey-mauve), the last steps mixed toward
+   the theme's own paper. Its top wears the stage's grain (`::before`), fading out, so the stage's foot and the fade's
+   top are one paper, specks and all (in the dark scheme the grain's cream specks lift the stage's foot). */
+.endFade {
+  --fade-from: var(--film-end-ground, var(--film-night-ground));
+  position: relative;
+  height: clamp(320px, 60svh, 640px);
+  margin: 0 calc(-1 * var(--end-pad-x)) 8px;
+  background: linear-gradient(
+    in oklch to bottom,
+    var(--fade-from) 0%,
+    color-mix(in oklch, var(--fade-from) 95%, oklch(24% 0.05 285)) 10%,
+    oklch(27% 0.055 292) 20%,
+    oklch(37% 0.06 305) 30%,
+    oklch(49% 0.065 325) 40%,
+    oklch(61% 0.065 350) 50%,
+    oklch(72% 0.055 15) 60%,
+    color-mix(in oklch, oklch(80% 0.045 35) 75%, var(--color-cream-dark)) 70%,
+    color-mix(in oklch, oklch(86% 0.035 50) 45%, var(--color-cream-dark)) 80%,
+    color-mix(in oklch, oklch(90% 0.03 60) 15%, var(--color-cream-dark)) 90%,
+    var(--color-cream-dark) 100%
+  );
+}
+.endFade::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 55% 0;
+  background-color: var(--grain-ink, oklch(0% 0 0));
+  opacity: calc(0.14 * var(--grain-scale, 1));
+  -webkit-mask-image: url('./grain.png'), linear-gradient(to bottom, #000, transparent);
+  mask-image: url('./grain.png'), linear-gradient(to bottom, #000, transparent);
+  -webkit-mask-size: 128px 128px, 100% 100%;
+  mask-size: 128px 128px, 100% 100%;
+  -webkit-mask-repeat: repeat, no-repeat;
+  mask-repeat: repeat, no-repeat;
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+  pointer-events: none;
+}
+@media (min-resolution: 2dppx) {
+  .endFade::before {
+    -webkit-mask-size: 64px 64px, 100% 100%;
+    mask-size: 64px 64px, 100% 100%;
+  }
+}
+/* at night on night paper (the dark scheme) the short way round reads as a murky red: straight through OKLab there;
+   and night into night paper carries almost no change of colour, so it is half as long (at 60svh it read as a screen
+   of empty dark: the final review) */
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-scheme='light'])) .endFade {
+    height: clamp(200px, 30svh, 360px);
+    background: linear-gradient(
+      in oklab to bottom,
+      var(--fade-from) 0%,
+      color-mix(in oklab, var(--fade-from) 97%, var(--color-cream-dark)) 10%,
+      color-mix(in oklab, var(--fade-from) 90%, var(--color-cream-dark)) 20%,
+      color-mix(in oklab, var(--fade-from) 78%, var(--color-cream-dark)) 30%,
+      color-mix(in oklab, var(--fade-from) 65%, var(--color-cream-dark)) 40%,
+      color-mix(in oklab, var(--fade-from) 50%, var(--color-cream-dark)) 50%,
+      color-mix(in oklab, var(--fade-from) 35%, var(--color-cream-dark)) 60%,
+      color-mix(in oklab, var(--fade-from) 22%, var(--color-cream-dark)) 70%,
+      color-mix(in oklab, var(--fade-from) 10%, var(--color-cream-dark)) 80%,
+      color-mix(in oklab, var(--fade-from) 3%, var(--color-cream-dark)) 90%,
+      var(--color-cream-dark) 100%
+    );
+  }
+}
+:global(:root[data-scheme='dark']) .endFade {
+  height: clamp(200px, 30svh, 360px);
+  background: linear-gradient(
+    in oklab to bottom,
+    var(--fade-from) 0%,
+    color-mix(in oklab, var(--fade-from) 97%, var(--color-cream-dark)) 10%,
+    color-mix(in oklab, var(--fade-from) 90%, var(--color-cream-dark)) 20%,
+    color-mix(in oklab, var(--fade-from) 78%, var(--color-cream-dark)) 30%,
+    color-mix(in oklab, var(--fade-from) 65%, var(--color-cream-dark)) 40%,
+    color-mix(in oklab, var(--fade-from) 50%, var(--color-cream-dark)) 50%,
+    color-mix(in oklab, var(--fade-from) 35%, var(--color-cream-dark)) 60%,
+    color-mix(in oklab, var(--fade-from) 22%, var(--color-cream-dark)) 70%,
+    color-mix(in oklab, var(--fade-from) 10%, var(--color-cream-dark)) 80%,
+    color-mix(in oklab, var(--fade-from) 3%, var(--color-cream-dark)) 90%,
+    var(--color-cream-dark) 100%
+  );
+}
+/* CardFeedSection's faint blob, low on the left */
+.endBlob {
+  position: absolute;
+  bottom: 40px;
+  left: -60px;
+  opacity: 0.15;
+  pointer-events: none;
+}
+.endHeading {
+  padding-top: 24px;
+}
+/* in the film, the skip link's and the hash's landing: the pill 20 px under the header's pen line */
+.film[data-film='film'] ~ .end .endHeading {
+  scroll-margin-top: calc(var(--film-head-clear) - 24px);
+}
+
+/* the closing band (CTASection.module.css's own): 重看一次 sized as the band's links are (a phone stacks them, one
+   width: CTASection's `.ctaRow > a`), the stores under its two buttons */
+.replayBox {
+  display: block;
+}
+@media (max-width: 640px) {
+  .replayBox {
+    width: 100%;
+    max-width: 288px;
+  }
+}
+.downloadApp {
+  justify-content: center;
+  margin-top: 40px;
+}
+.film[data-film='film'] ~ .download {
+  scroll-margin-top: 0;
+}
+
+/* ───────────── the live puppets and their props (the acting) ───────────── */
+
+/* the sticker kit's puppet DOM (film/kit/puppet.ts): root → body → face, one image per part */
+.stage :global(.fk-char) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+}
+.stage :global(.fk-char) img {
+  position: absolute;
+  display: block;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.stage :global(.fk-body),
+.stage :global(.fk-face),
+.stage :global(.fk-hand) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+}
+.stage :global(.fk-blush) {
+  position: absolute;
+  display: block;
+  opacity: 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, oklch(66% 0.13 40 / 0.75), oklch(66% 0.13 40 / 0));
+}
+/* the still stands until its character is live; then the live one takes its place */
+.actor:not([data-live]) > :global(.fk-char),
+.carrierActor:not([data-live]) > :global(.fk-char) {
+  display: none;
+}
+.actor[data-live] > span,
+.carrierActor[data-live] > span {
+  display: none;
+}
+.film[data-film='film'] .set[data-live] .actor[data-live] > :global(.fk-char) {
+  will-change: transform;
+}
+/* a still made of part images shows whole or not at all: unseen until every part it draws is decoded (whole.ts marks
+   it); without scripts there is no one to tell, so it stands as its parts arrive */
+.film [data-pal] {
+  transition: opacity 180ms ease;
+}
+.film [data-pal]:not([data-whole]) {
+  visibility: hidden;
+  opacity: 0;
+}
+@media (scripting: none) {
+  .film [data-pal]:not([data-whole]) {
+    visibility: visible;
+    opacity: 1;
+  }
+}
+/* off the ground, 點點 wears a graphite contour (it crosses light sky and paper) */
+.carrierActor > :global(.fk-char) {
+  filter: drop-shadow(1px 0 0 var(--film-graphite)) drop-shadow(-1px 0 0 var(--film-graphite)) drop-shadow(0 1px 0 var(--film-graphite)) drop-shadow(0 -1px 0 var(--film-graphite));
+}
+
+/* the props layer: over the planes and the particles, under the hero and the cards */
+.stage :global(.fk-props) {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+/* a scene change's tissue strips (script/changes: `strips`): inside the sets' stacking context, each slotted among the
+   planes by its own z-index (the box makes no stacking context of its own); transforms and opacity only */
+.stage :global(.fk-strips) {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.stage :global(.fk-strip) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  overflow: visible;
+  transform-origin: 50% 50%;
+  opacity: 0;
+}
+.stage :global(.fk-prop) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  line-height: 0;
+  will-change: transform;
+}
+.stage :global(.fk-prop) svg {
+  display: block;
+  overflow: visible;
+}

@@ -35,6 +35,50 @@
   }
 }
 
+/* A framed card (`framed`: one that floats over something, the landing
+   film's stage) stays the hand-drawn card at every width — on a phone too it
+   keeps its outline and its padding, never the full-bleed band. */
+@media (max-width: 640px) {
+  .card[data-framed] {
+    padding: 22px;
+    margin-left: 0;
+    margin-right: 0;
+    background: none;
+  }
+  .card[data-framed] .desktopChrome,
+  .card[data-framed] .skeletonChrome {
+    display: block;
+  }
+  .card[data-framed] .skeletonMobileChrome {
+    display: none;
+  }
+}
+
+/* The paper's grain as a still bitmap (`stillGrain`): grey specks through the
+   tile, cut to the drawn outline (its clip-path) as ShapeGrain's are — drawn
+   once, never a filter. Their grey is ShapeGrain's own: its noise is grey in
+   linear light (an sRGB ~188, oklch 80%, in either scheme — it carries no
+   token), so the card's paper darkens as much as the feed card's does (about
+   6 levels: the film's round-3 art review measured 15 at 50% grey). */
+.stillGrain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-color: oklch(80% 0 0);
+  -webkit-mask-image: var(--still-grain);
+  mask-image: var(--still-grain);
+  -webkit-mask-size: 128px 128px;
+  mask-size: 128px 128px;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+}
+@media (min-resolution: 2dppx) {
+  .stillGrain {
+    -webkit-mask-size: 64px 64px;
+    mask-size: 64px 64px;
+  }
+}
+
 /* The loaded card's two chromes, both in the HTML: the hand-drawn card on
    wider screens, the section's grain and wavy rules on phones. CSS picks one,
    so the server's paint is the right one before any script runs. */
@@ -177,6 +221,12 @@
   font-family: var(--font-body);
   font-size: 12px;
   color: var(--color-text-muted);
+}
+
+/* What the card offers in place of its byline (`foot`): under the separator,
+   where the byline would stand. */
+.foot {
+  padding-top: 8px;
 }
 
 .tagRow {

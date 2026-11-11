@@ -1,0 +1,270 @@
+/* The stories waiting for an answer: two shelves on a wide screen, a swipe row on a phone; 點點 on the top rule. */
+
+.shelf {
+  --unit: clamp(70px, 6.6vw, 96px);
+  position: relative;
+  background: var(--color-cream-dark);
+  padding: clamp(92px, 9vw, 124px) var(--page-side) clamp(48px, 5vw, 80px);
+}
+
+.inner {
+  position: relative;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.heading {
+  max-width: 40em;
+}
+
+.h2 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: clamp(30px, 3.6vw, 48px);
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  color: var(--color-text);
+}
+
+.sub {
+  margin: 10px 0 0;
+  font-family: var(--font-body);
+  font-size: clamp(15px, 1.3vw, 18px);
+  line-height: 1.7;
+  color: var(--color-text-muted);
+}
+
+/* 點點's strip: the top rule it hops along, with the air over it. */
+.strip {
+  position: relative;
+  height: calc(var(--unit) * 1.05);
+  margin-top: 4px;
+}
+
+.rule {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+}
+
+.still {
+  position: absolute;
+  bottom: 12px;
+  left: calc(var(--x) * 100%);
+  z-index: 2;
+  display: block;
+  translate: -50% 0;
+  transition: opacity 0.2s steps(2);
+}
+.still[data-gone] {
+  opacity: 0;
+}
+
+/* The rule and the shelves draw themselves as they come into view: the scroll moves paper, never puppets. Filled
+   forwards only: until a line enters the view it is simply drawn (a page captured whole, a jump to the end). */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .rule,
+    .shelfLine {
+      animation: rule-in linear forwards;
+      animation-timeline: view();
+      animation-range: entry 0% cover 32%;
+    }
+  }
+}
+@keyframes rule-in {
+  from {
+    clip-path: inset(-8px 100% -8px 0);
+  }
+  to {
+    clip-path: inset(-8px 0 -8px 0);
+  }
+}
+
+/* ── The cards: standing on their shelves, bottom-aligned ─────────── */
+
+.cards {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: clamp(16px, 2vw, 28px);
+  align-items: end;
+}
+
+.item {
+  min-width: 0;
+  padding-bottom: 4px;
+}
+
+.shelfLine {
+  grid-column: 1 / -1;
+  margin: 0 -14px clamp(34px, 4vw, 52px);
+}
+.shelfLine:last-child {
+  margin-bottom: 0;
+}
+
+.browseItem {
+  align-self: center;
+  display: flex;
+  justify-content: center;
+  padding: 0 0 12px;
+}
+
+.cardBox {
+  position: relative;
+}
+
+.card {
+  padding: 18px 20px 14px;
+}
+
+.cover {
+  margin: 0 0 14px;
+}
+
+.card .title {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.link {
+  color: inherit;
+  text-decoration: none;
+}
+/* The whole card opens its story; 「回應這個」 sits above that. */
+.link::after {
+  content: '';
+  position: absolute;
+  /* the card's whole paper, its padding too */
+  inset: -18px -20px -14px;
+  z-index: 1;
+  border-radius: 22px;
+}
+.link:focus-visible {
+  outline: none;
+}
+.link:focus-visible::after {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: 4px;
+}
+.cardBox:hover .link {
+  text-decoration: underline;
+  text-decoration-thickness: 1.2px;
+  text-underline-offset: 5px;
+}
+
+/* Ragged, not justified: a clamped excerpt full of Latin words and …… runs would open gaps between glyphs. */
+.card .excerpt {
+  --s-align: start;
+  margin: 0;
+  font-size: 16px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+.card .excerpt[data-cover] {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-top: 14px;
+}
+
+.byline {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+.author {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.answerThis {
+  z-index: 2;
+  min-height: 40px !important;
+  padding: 0 14px !important;
+  font-size: 14px !important;
+}
+
+/* ── Tablet: two to a shelf ───────────────────────────────────────── */
+
+@media (max-width: 1023px) and (min-width: 720px) {
+  .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* two to a shelf: the first shelf after the second card instead */
+  .shelfLine {
+    display: none;
+  }
+  .item {
+    margin-bottom: 28px;
+  }
+}
+
+/* ── A phone: one row to swipe, a card and the next one peeking in ── */
+
+@media (max-width: 719px) {
+  .cards {
+    display: flex;
+    align-items: stretch;
+    gap: 14px;
+    margin: 12px calc(var(--page-side) * -1) 0;
+    padding: 4px var(--page-side) 18px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: var(--page-side);
+    scrollbar-width: none;
+  }
+  .cards::-webkit-scrollbar {
+    display: none;
+  }
+  .item {
+    flex: 0 0 calc(100% - var(--page-side) - 54px);
+    scroll-snap-align: start;
+    padding-bottom: 0;
+  }
+  .cardBox,
+  .card {
+    height: 100%;
+    box-sizing: border-box;
+  }
+  .cardBody {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  /* a card without a picture reads further, so a row's cards come out about one height (no blank paper mid-card) */
+  .card .excerpt:not([data-cover]) {
+    -webkit-line-clamp: 7;
+    line-clamp: 7;
+  }
+  .foot {
+    margin-top: auto;
+    padding-top: 14px;
+  }
+  .shelfLine {
+    display: none;
+  }
+  .browseItem {
+    flex: 0 0 auto;
+    align-self: center;
+    padding: 0 var(--page-side) 0 2px;
+    scroll-snap-align: end;
+  }
+}

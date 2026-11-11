@@ -1,0 +1,448 @@
+/* ── 03 對頁 The spread: a story facing the story that answered it ─────────────────────────────────────────────── */
+
+.spread {
+  position: relative;
+  padding: clamp(40px, 6vw, 96px) 0 clamp(56px, 8vw, 120px);
+}
+
+.head {
+  margin-bottom: 0;
+}
+
+.book {
+  position: relative;
+  box-sizing: border-box;
+  max-width: 1340px;
+  margin: clamp(28px, 4vw, 52px) auto 0;
+  padding-inline: var(--sheet-pad);
+}
+
+/* The sky pool where the waves cross the fold: a box round it big enough for the whole blob (the live one is drawn
+   inside it), under both pages' words, over the sheet's paper. */
+.drift {
+  position: absolute;
+  z-index: 0;
+  left: -90px;
+  right: -90px;
+  top: calc(30% + var(--gutter) * 0.25 - 190px);
+  height: 380px;
+  pointer-events: none;
+}
+
+.blob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  opacity: 0.34;
+}
+
+/* a phone's pool, round the ≋ between the stacked pages (none wider: the gutter has the pool there) */
+.footDrift {
+  display: none;
+}
+
+.sample {
+  display: inline-block;
+  padding: 1px 8px 2px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--soft-pen) 14%, transparent);
+  font-family: var(--font-body);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--color-text-muted);
+}
+
+/* One sheet, two pages, the fold between them: --gutter is 1.6 units. */
+.pages {
+  --gutter: calc(var(--pal-unit) * 1.6);
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--gutter) minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    'a gutter b'
+    'foot foot foot';
+}
+
+.sheetBorder {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.sheetBorder > svg {
+  position: absolute;
+  inset: 0;
+}
+
+.page {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: clamp(32px, 4vw, 60px) clamp(24px, 3.6vw, 56px) 12px;
+  min-width: 0;
+}
+
+.page[data-side='a'] {
+  grid-area: a;
+  padding-right: 8px;
+}
+
+.page[data-side='b'] {
+  grid-area: b;
+  padding-left: 8px;
+  translate: var(--pull, 0px) 0;
+}
+
+@media (hover: hover) and (pointer: fine) and (min-width: 900px) {
+  .page[data-side='b'] {
+    cursor: grab;
+    touch-action: pan-y;
+    user-select: none;
+  }
+  .pages[data-pulled] .page[data-side='b'] {
+    cursor: grabbing;
+  }
+}
+
+/* let go: it hops back in five stop-motion steps, as a paper cut-out would */
+.pages[data-settling] .page[data-side='b'] {
+  transition: translate 0.42s steps(5, jump-end);
+}
+
+.label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.labelWord {
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  color: var(--button-on-tonal);
+}
+
+.answers {
+  font-family: var(--font-story-serif);
+  letter-spacing: 0.04em;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-story-serif);
+  font-weight: 600;
+  font-size: clamp(26px, 2.8vw, 40px);
+  line-height: 1.35;
+  letter-spacing: 0.03em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.title[data-script='latin'] {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.rippleChar {
+  display: inline-block;
+  font-weight: inherit;
+  transform-origin: 50% 60%;
+}
+
+.opening {
+  margin: 0;
+  font-family: var(--font-story-serif);
+  font-weight: 400;
+  font-size: clamp(18px, 1.8vw, 26px);
+  line-height: 1.75;
+  letter-spacing: 0.03em;
+  text-wrap: pretty;
+}
+
+.opening[data-script='latin'] {
+  font-family: var(--font-heading);
+  font-style: italic;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: auto 0 0;
+  padding-top: 6px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.byline {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+/* ── The fold ── */
+
+/* No stacking context of its own: its pool lies under both pages (z 1), its pen lines in the gap between them. */
+.gutter {
+  grid-area: gutter;
+  grid-row: 1 / 3;
+  position: relative;
+  pointer-events: none;
+}
+
+.fold {
+  position: absolute;
+  left: 50%;
+  top: 28px;
+  width: 8px;
+  height: calc(100% - 28px - 12px);
+  translate: -50% 0;
+  overflow: visible;
+  color: color-mix(in oklch, var(--soft-pen) 60%, transparent);
+}
+
+/* The three waves cross the fold; pulled, their right ends go with page B. */
+.waves {
+  position: absolute;
+  left: 4%;
+  top: 30%;
+  width: calc(92% + var(--pull, 0px));
+  height: calc(var(--gutter) * 0.5);
+  overflow: visible;
+}
+
+.pages[data-settling] .waves {
+  transition: width 0.42s steps(5, jump-end);
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    /* the fold drawn from the top down, the waves across it from page A's side: clips that open */
+    .pages[data-fx] .fold {
+      animation: foldDraw linear both;
+      animation-timeline: view();
+      animation-range: entry 5% cover 45%;
+    }
+    .pages[data-fx] .waves path {
+      animation: wavesDraw linear both;
+      animation-timeline: --spread;
+      animation-range: entry 35% cover 55%;
+    }
+    .pages[data-fx] .waves path:nth-child(2) {
+      animation-range: entry 42% cover 60%;
+    }
+    .pages[data-fx] .waves path:nth-child(3) {
+      animation-range: entry 49% cover 65%;
+    }
+  }
+}
+
+.pages {
+  view-timeline-name: --spread;
+}
+
+@keyframes foldDraw {
+  from {
+    clip-path: inset(-4px -4px 100% -4px);
+  }
+  to {
+    clip-path: inset(-4px -4px -4px -4px);
+  }
+}
+
+@keyframes wavesDraw {
+  from {
+    clip-path: inset(-4px 100% -4px -4px);
+  }
+  to {
+    clip-path: inset(-4px -4px -4px -4px);
+  }
+}
+
+/* A word in pencil under the waves, for a mouse: page B gives a little if pulled. */
+.pullHint {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) and (min-width: 900px) {
+  .pullHint {
+    display: block;
+    position: absolute;
+    left: 50%;
+    top: calc(30% + var(--gutter) * 0.58);
+    translate: -50% 0;
+    font-family: var(--copy-serif);
+    font-weight: 300;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+    color: color-mix(in oklch, var(--soft-pen) 80%, transparent);
+    rotate: -3deg;
+    transition: opacity 0.3s ease;
+  }
+  .pages[data-pulled] .pullHint {
+    opacity: 0;
+  }
+}
+
+/* ── The foot rule: the two's floor ── */
+
+.foot {
+  grid-area: foot;
+  position: relative;
+  z-index: 2;
+  height: calc(var(--pal-unit) * 1.55 + 14px);
+}
+
+/* The stage: 6 units over the fold's foot, its ends fading into the pages (whoever walks off goes into the paper). */
+.footStage {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: min(100%, calc(var(--pal-unit) * 6.4));
+  translate: -50% 0;
+  --unit: var(--pal-unit);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 9%, #000 91%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 9%, #000 91%, transparent);
+}
+
+.footRule {
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  bottom: 10px;
+}
+
+.footWaves {
+  display: none;
+}
+
+.footStill {
+  position: absolute;
+  bottom: 14px;
+  translate: -50% 0;
+  transition: opacity 0.25s ease;
+}
+
+.footStill[data-side='l'] {
+  left: calc(50% - var(--pal-unit) * 1);
+}
+
+.footStill[data-side='r'] {
+  left: calc(50% + var(--pal-unit) * 0.95);
+}
+
+.footStill[data-live] {
+  opacity: 0;
+}
+
+/* ── tablet: narrower pages, a narrower fold ── */
+
+@media (min-width: 720px) and (max-width: 1023px) {
+  .pages {
+    --gutter: 140px;
+  }
+  .page {
+    padding-inline: 28px 8px;
+  }
+  .page[data-side='b'] {
+    padding-inline: 8px 28px;
+  }
+  .opening {
+    font-size: 20px;
+  }
+}
+
+/* ── a phone (and a narrow tablet): the pages stacked, the fold turned sideways between them ── */
+
+@media (max-width: 719px) {
+  .pages {
+    --unit: 80px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'a'
+      'foot'
+      'b';
+  }
+  .gutter {
+    display: none;
+  }
+  .page[data-side='a'],
+  .page[data-side='b'] {
+    padding: 28px 22px 10px;
+  }
+  .page[data-side='b'] {
+    padding-top: 18px;
+    padding-bottom: 28px;
+  }
+  .foot {
+    height: calc(80px * 1.8 + 14px);
+  }
+  /* the stage inside the paper, its ends fading before the sheet's outline: whoever comes on comes out of the page */
+  .footStage {
+    --unit: 80px;
+    width: calc(100% - 40px);
+  }
+  .footRule {
+    left: 20px;
+    right: 20px;
+  }
+  .footDrift {
+    display: block;
+    position: absolute;
+    z-index: 0;
+    left: 50%;
+    width: 260px;
+    translate: -50% 0;
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+  }
+  .footBlob {
+    position: absolute;
+    left: 50%;
+    top: 54%;
+    translate: -50% -50%;
+    opacity: 0.32;
+  }
+  .footWaves {
+    display: block;
+    position: absolute;
+    left: 50%;
+    bottom: 34px;
+    width: 46px;
+    translate: -50% 0;
+  }
+  .footWaves svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .footStill[data-side='l'] {
+    left: calc(50% - 82px);
+  }
+  .footStill[data-side='r'] {
+    left: calc(50% + 74px);
+  }
+  .title {
+    font-size: 25px;
+  }
+  .opening {
+    font-size: 18px;
+  }
+}

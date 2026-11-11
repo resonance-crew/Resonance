@@ -93,3 +93,40 @@ describe('StoryCard as the writer\'s preview', () => {
     expect(screen.getByRole('heading', { name: 'A quiet realization' }).closest('article')).not.toHaveAttribute('data-preview');
   });
 });
+
+// The landing film floats real cards over its stage: framed at every width, its grain still (the card moves on every
+// frame, and WebKit draws a filter again each time), and its last card offering an action in place of a byline.
+describe('StoryCard over a moving stage', () => {
+  it('stays the framed card on a phone: no band chrome, marked for the CSS that keeps its outline', () => {
+    const { container } = render(<StoryCard story={story} framed />);
+    const card = container.querySelector('article')!;
+    expect(card).toHaveAttribute('data-framed');
+    // one chrome only: the hand-drawn card's (its band's grain and wavy rules are never drawn)
+    expect(card.querySelectorAll('[data-mascot="card-edge"]')).toHaveLength(1);
+    expect(card.querySelector('[data-mascot="card-edge"] path[stroke="var(--card-border-0)"]')).toBeTruthy();
+    // the feed's card keeps both, CSS showing one
+    const feed = render(<StoryCard story={story} />).container.querySelector('article')!;
+    expect(feed).not.toHaveAttribute('data-framed');
+    expect(feed.querySelectorAll('[data-mascot="card-edge"]')).toHaveLength(2);
+  });
+
+  it('wears a still grain cut to its outline, and no live noise filter anywhere', () => {
+    const { container } = render(<StoryCard story={story} framed stillGrain="/grain.png" />);
+    const card = container.querySelector('article')!;
+    expect(card.querySelector('feTurbulence')).toBeNull();
+    expect(card.querySelector('[filter]')).toBeNull();
+    const grain = card.querySelector('[data-mascot="card-edge"] > span[aria-hidden]') as HTMLElement;
+    const outline = card.querySelector('[data-mascot="card-edge"] path[stroke="var(--card-border-0)"]')!.getAttribute('d');
+    expect(grain.style.clipPath).toBe(`path('${outline}')`);
+    expect(grain.style.getPropertyValue('--still-grain')).toBe("url('/grain.png')");
+    // without it, the card's paper is the live grain it always was
+    expect(render(<StoryCard story={story} />).container.querySelector('feTurbulence')).toBeTruthy();
+  });
+
+  it('carries its foot in place of the byline', () => {
+    render(<StoryCard story={{ ...story, tags: [] }} framed preview foot={<button type="button">Write your story</button>} />);
+    expect(screen.getByRole('button', { name: 'Write your story' })).toBeInTheDocument();
+    expect(screen.queryByText('friend')).toBeNull();
+    expect(screen.queryByText('3 min')).toBeNull();
+  });
+});

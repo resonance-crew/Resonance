@@ -1,0 +1,1825 @@
+/* ── 一天的戲 · One Day ─────────────────────────────────────────────────────
+   One day across the page: each scene's paper a step along a ramp of palette tokens (cream → cream-dark → a gold
+   afternoon → the terracotta dusk → night), every one of them a token, so the dark scheme plays the same day as an
+   evening show. Every scene ends on a floor (Flats). No shadows anywhere: what floats is told by its pen line. */
+
+@property --p2 {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+@property --p3 {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
+.page {
+  --paper-hero: var(--color-cream);
+  --paper-stories: var(--color-cream-dark);
+  --paper-answer: color-mix(in oklab, var(--color-yellow) 34%, var(--color-cream-dark));
+  --paper-dusk: var(--color-terracotta-light);
+  --paper-night: oklch(25% 0.045 262); /* colour-fixed: the night band is night in either scheme (as /paper-pals' 悄悄) */
+  --gutter: clamp(16px, 5vw, 80px);
+  --flats-h: clamp(84px, 9vw, 128px);
+  --shelf-pen: color-mix(in oklch, var(--soft-pen) 88%, transparent);
+  --shelf-pen-light: color-mix(in oklch, var(--soft-pen) 40%, transparent);
+  --shelf-lip: color-mix(in oklab, var(--soft-pen) 13%, var(--color-cream-dark));
+  background: var(--paper-hero);
+  color: var(--color-text);
+  overflow-x: clip;
+}
+
+/* The evening show (the dark scheme): every step still a token, the afternoon a little warmer than the papers around
+   it, the night a step bluer and deeper than the evening's own paper so the day still ends in it; the stage's frame
+   and the shelves' pens at full strength, or they sink into the dark papers. */
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-scheme='light'])) .page {
+    --paper-answer: color-mix(in oklab, var(--color-yellow) 52%, var(--color-cream-dark));
+    --paper-night: oklch(14.5% 0.05 264); /* colour-fixed: a deeper night in the dark scheme */
+    --shelf-lip: color-mix(in oklab, var(--soft-pen) 16%, var(--color-cream-dark));
+  }
+  :global(:root:not([data-scheme='light'])) .answer {
+    --stage-pen: color-mix(in oklch, var(--soft-pen) 90%, transparent);
+  }
+}
+:global(:root[data-scheme='dark']) .page {
+  --paper-answer: color-mix(in oklab, var(--color-yellow) 52%, var(--color-cream-dark));
+  --paper-night: oklch(14.5% 0.05 264); /* colour-fixed: a deeper night in the dark scheme */
+  --shelf-lip: color-mix(in oklab, var(--soft-pen) 16%, var(--color-cream-dark));
+}
+:global(:root[data-scheme='dark']) .answer {
+  --stage-pen: color-mix(in oklch, var(--soft-pen) 90%, transparent);
+}
+
+.paper {
+  position: relative;
+}
+
+.h2 {
+  font-family: var(--font-heading);
+  font-size: clamp(30px, 4.2vw, 50px);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.sectionHead {
+  position: relative;
+  z-index: 2;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.sectionSub {
+  font-family: var(--font-body);
+  font-size: clamp(16px, 1.6vw, 18px);
+  line-height: 1.7;
+  color: var(--color-text-muted);
+  margin: 12px 0 0;
+  max-width: 34em;
+  text-wrap: pretty;
+}
+
+.arrowLink {
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--button-on-tonal);
+  text-decoration: none;
+  border-radius: 8px;
+  padding: 6px 2px;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0% 1.5px;
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  transition: background-size 220ms ease;
+}
+.arrowLink:hover {
+  background-size: 100% 1.5px;
+}
+.arrowLink:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: 3px;
+}
+
+/* ── Pills (PillLink / PillButton) ──────────────────────────────────── */
+
+.pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 30px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.pill[data-size='sm'] {
+  padding: 9px 16px;
+  font-size: 13px;
+}
+.pill:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: 2px;
+  border-radius: 16px;
+}
+.pill:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+.pillLabel {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.restGlyph {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* ── The stills: where a stage is coming they wait unseen until each one comes on ──
+   (data-stills: Save-Data, reduced motion, a stage that failed — or, should none have started 12 s in, anyway). */
+
+.still {
+  position: absolute;
+  bottom: 0;
+  left: var(--x, 50%);
+  translate: -50% 0;
+  display: block;
+  transition: opacity 0.35s ease;
+}
+.inflow {
+  position: relative;
+  left: auto;
+  translate: none;
+}
+.still[data-live] {
+  opacity: 0;
+}
+
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  [data-scene]:not([data-stills]) .still[data-managed] {
+    animation: stillsLate 0.35s ease 12s both;
+  }
+  /* a stage is coming: each waits unseen for its own entrance — but should its character never come (a place the
+     stage refused, parts that never loaded), it stands there anyway after a while */
+  [data-scene][data-staged]:not([data-stills]) .still[data-managed] {
+    opacity: 0;
+    animation: stillsLate 0.35s ease 14s both;
+  }
+  [data-scene][data-staged] .still[data-managed][data-live] {
+    animation: none;
+    opacity: 0;
+  }
+}
+@keyframes stillsLate {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Resting (the page's pause): no stage runs, every puppet stands still where the server drew it, nothing loops.
+   (It must outweigh the staged rule above, 0,5,0: html + three attributes on the scene + the still's two = 0,6,1.) */
+:global(html[data-pals-rest]) [data-scene][data-staged]:not([data-stills]) .still[data-managed],
+:global(html[data-pals-rest]) [data-scene] .still[data-managed] {
+  animation: none;
+  opacity: 1;
+}
+:global(html[data-pals-rest]) .stageSet[data-beat='1'] .beatStill1,
+:global(html[data-pals-rest]) .stageSet[data-beat='2'] .beatStill2,
+:global(html[data-pals-rest]) .stageSet[data-beat='3'] .beatStill3a,
+:global(html[data-pals-rest]) .stageSet[data-beat='3'] .beatStill3b {
+  display: block;
+}
+:global(html[data-pals-rest]) .page :is(.still, .callPal, .blankPal) * {
+  animation-play-state: paused !important;
+}
+
+/* ── Floors and flats ───────────────────────────────────────────────── */
+
+.flats {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--flats-h);
+  pointer-events: none;
+  z-index: 1;
+}
+.flat {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+.flatBack2,
+.flatBack1 {
+  left: -8%;
+  width: 116%;
+}
+.flatFront {
+  left: 0;
+  width: 100%;
+}
+
+/* The scene change: the two flats slide past each other as the scroll carries the floor through the view. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .flatBack2 {
+      animation: slideA linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
+    }
+    .flatBack1 {
+      animation: slideB linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
+    }
+  }
+}
+@keyframes slideA {
+  from {
+    transform: translateX(-5%);
+  }
+  to {
+    transform: translateX(5%);
+  }
+}
+@keyframes slideB {
+  from {
+    transform: translateX(4.5%);
+  }
+  to {
+    transform: translateX(-4.5%);
+  }
+}
+
+/* ── Morning · the cover plate ──────────────────────────────────────── */
+
+.hero {
+  position: relative;
+  z-index: 1;
+  --unit: 118px;
+  /* the whole set — words, cards, puppets, floor — inside the first screen (1366 × 768 included) */
+  min-height: min(100svh, 940px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--app-header-h) + clamp(12px, 3.2vh, 48px)) var(--gutter) calc(var(--flats-h) * 0.26);
+  background: var(--paper-hero);
+}
+
+.heroDrift {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.heroBlob {
+  position: absolute;
+  top: 12%;
+  right: -3%;
+  opacity: 0.26;
+}
+
+.heroGrid {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.1fr);
+  grid-template-areas: 'text set';
+  column-gap: clamp(32px, 5vw, 88px);
+}
+
+.heroText {
+  grid-area: text;
+  align-self: center;
+  padding: 0 0 clamp(20px, 4vh, 56px);
+}
+
+.h1 {
+  font-family: var(--font-heading);
+  font-size: clamp(54px, min(7.4vw, 13.4svh), 112px);
+  font-weight: 800;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.h1Line {
+  display: block;
+  white-space: nowrap;
+}
+:global(html[lang='en']) .h1 {
+  font-size: clamp(46px, min(6.2vw, 11.2svh), 92px);
+  letter-spacing: -0.03em;
+}
+
+.accent {
+  position: relative;
+  display: inline-block;
+  color: var(--color-terracotta);
+}
+.accentWave {
+  position: absolute;
+  left: -1%;
+  bottom: -0.04em;
+  width: 102%;
+  height: 0.14em;
+  overflow: visible;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .accentWave {
+    animation: penIn 0.9s cubic-bezier(0.4, 0, 0.2, 1) 0.35s both;
+  }
+}
+@keyframes penIn {
+  from {
+    clip-path: inset(-50% 100% -50% 0);
+  }
+  to {
+    clip-path: inset(-50% 0 -50% 0);
+  }
+}
+
+.heroSub {
+  font-family: var(--font-body);
+  font-size: clamp(17px, 1.55vw, 21px);
+  line-height: 1.7;
+  color: var(--color-text-muted);
+  margin: clamp(16px, 2.2vh, 28px) 0 0;
+  max-width: 25em;
+  text-wrap: pretty;
+}
+
+.clause {
+  display: inline-block;
+}
+
+.heroText .heroApp {
+  justify-content: flex-start;
+  margin-top: clamp(20px, 2.8vh, 36px);
+}
+
+.heroLinks {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin-top: clamp(14px, 2.2vh, 28px);
+}
+
+/* The set, standing on the floor (the grid's foot is the floor line): the story (A) and its answer (B) joined by
+   the logo's waves, 摺摺 beside the story, 點點 peeking over the answer from behind it. Placed in the set's own
+   width (a size container), so it is one picture at every width. */
+.plate {
+  grid-area: set;
+  align-self: end;
+  position: relative;
+  container-type: inline-size;
+  --dx: 0;
+}
+.plateStage {
+  position: relative;
+  height: calc(47.5cqw + var(--unit) * 0.62);
+}
+.plateA,
+.plateB {
+  position: absolute !important;
+  bottom: -2px;
+  width: 38cqw;
+  aspect-ratio: 4 / 5;
+  transform-origin: 50% 100%;
+  z-index: 1;
+}
+.plateA {
+  left: 7cqw;
+  rotate: -2deg;
+  transform: translateX(calc(var(--dx) * -5px));
+  transition: transform 0.4s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.plateB {
+  right: 1cqw;
+  rotate: 3deg;
+}
+.plateWaves {
+  position: absolute;
+  z-index: 1;
+  left: 45.5cqw;
+  width: 13cqw;
+  bottom: 24cqw;
+  height: calc(var(--unit) * 0.34);
+  transform: translateX(calc(var(--dx) * -3px));
+  transition: transform 0.4s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .plateWaves path {
+    animation: penIn 0.7s ease-out both;
+    animation-delay: calc(1.1s + var(--i) * 0.18s);
+  }
+}
+/* 摺摺 on the floor at the story's side (a little in front of its corner) */
+.plateTuck {
+  position: absolute;
+  z-index: 2;
+  /* never so near the set's edge that the stage can't stand it there */
+  left: max(3cqw, var(--unit) * 0.48);
+  bottom: 0;
+  width: 0;
+  height: 100%;
+}
+/* 點點 behind the answer, its eyes over the card's top */
+.plateDot {
+  position: absolute;
+  z-index: 0;
+  left: 82cqw;
+  bottom: calc(47.5cqw - var(--unit) * 0.5);
+  width: 0;
+  height: 100%;
+}
+.plateTuck .still,
+.plateDot .still {
+  left: 0;
+}
+
+/* the pause: a glyph and a word in the muted ink under the floor's end, on the apron (no fill: not an action) */
+.heroRest {
+  position: absolute;
+  z-index: 3;
+  right: max(var(--gutter), (100% - 1200px) / 2);
+  top: calc(100% - var(--flats-h) * 0.26 + 2px);
+}
+.quietToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: none;
+  background: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  transition: color 0.2s ease;
+}
+.quietToggle:hover {
+  color: var(--color-text);
+}
+.quietToggle:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: -2px;
+}
+
+/* ── Fiction cards (pictures of cards) and the waves ────────────────── */
+
+.fiction {
+  display: block;
+}
+.fictionInk {
+  position: absolute;
+  inset: 8% 7%;
+  width: 86%;
+  height: 84%;
+  overflow: visible;
+}
+
+.waves {
+  display: block;
+  overflow: visible;
+}
+
+/* ── Noon · now showing ─────────────────────────────────────────────── */
+
+.stories {
+  position: relative;
+  z-index: 0;
+  --unit: 108px;
+  background: var(--paper-stories);
+  padding: clamp(64px, 8vw, 112px) var(--gutter) calc(var(--flats-h) * 0.26 + clamp(56px, 7vw, 88px));
+}
+
+.kami {
+  position: relative;
+  z-index: 2;
+  max-width: 1200px;
+  margin: calc(var(--unit) * 1.15) auto 0;
+}
+.kamiWindow {
+  position: relative;
+}
+.kamiFrame,
+.kamiPeek,
+.kamiStack,
+.kamiControls {
+  display: none;
+}
+
+/* Desktop and tablet: the six stand on drawn shelves, bottom-aligned as books stand (their widths differ a little, so
+   do their heights), three to a shelf (two on a tablet); the top shelf keeps room at its end for 點點. */
+.shelf {
+  --gap: 40px;
+  --dot-room: calc(var(--unit) * 0.95);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  container-type: inline-size;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  column-gap: var(--gap);
+  row-gap: calc(var(--unit) * 0.62 + 22px);
+}
+.shelfItem {
+  --per: 3;
+  --w: 0.333;
+  --room: 0px;
+  position: relative;
+  z-index: 0;
+  flex: 0 0 calc((100% - (var(--per) - 1) * var(--gap) - var(--room)) * var(--w) - 0.5px);
+  min-width: 0;
+}
+.shelfItem:nth-child(-n + 3) {
+  --room: var(--dot-room);
+}
+.shelfItem:nth-child(1) { --w: 0.34; }
+.shelfItem:nth-child(2) { --w: 0.3; }
+.shelfItem:nth-child(3) { --w: 0.36; }
+.shelfItem:nth-child(4) { --w: 0.315; }
+.shelfItem:nth-child(5) { --w: 0.365; }
+.shelfItem:nth-child(6) { --w: 0.32; }
+
+/* the plank: drawn by each row's first card, edge to edge of the view, under the row */
+.shelfBand {
+  display: none;
+  position: absolute;
+  z-index: -1;
+  left: calc((100cqw - 100vw) / 2);
+  width: 100vw;
+  top: calc(100% - 4px);
+  height: 24px;
+  overflow: visible;
+  pointer-events: none;
+}
+.shelfItem:nth-child(3n + 1) .shelfBand {
+  display: block;
+}
+.shelfReader {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  z-index: 2;
+}
+/* 點點's place: the top shelf's end, past its last card */
+.shelfEnd {
+  position: absolute;
+  left: calc(100cqw - var(--dot-room));
+  width: var(--dot-room);
+  bottom: 0;
+  height: 100%;
+}
+
+@media (min-width: 720px) and (max-width: 1023px) {
+  .shelfItem:nth-child(n) {
+    --per: 2;
+    --room: 0px;
+  }
+  .shelfItem:nth-child(-n + 2) {
+    --room: var(--dot-room);
+  }
+  .shelfItem:nth-child(1) { --w: 0.53; }
+  .shelfItem:nth-child(2) { --w: 0.47; }
+  .shelfItem:nth-child(3) { --w: 0.48; }
+  .shelfItem:nth-child(4) { --w: 0.52; }
+  .shelfItem:nth-child(5) { --w: 0.51; }
+  .shelfItem:nth-child(6) { --w: 0.49; }
+  .shelfItem:nth-child(3n + 1) .shelfBand {
+    display: none;
+  }
+  .shelfItem:nth-child(2n + 1) .shelfBand {
+    display: block;
+  }
+}
+
+.tileLink {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 20px;
+  transition: transform 0.25s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.tileLink:hover {
+  transform: translateY(-3px);
+}
+.tileLink:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: 4px;
+}
+.tile {
+  display: block;
+}
+.tileCover {
+  margin: 12px 12px 0;
+  border-radius: 14px;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  /* while its picture comes: the card's own family, a shade deeper than its paper (never a grey box) */
+  background: var(--cover-wash);
+}
+.tileCover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.tileBody {
+  padding: 20px 22px 18px;
+}
+.tileTitle {
+  font-family: var(--font-story-serif);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+  margin: 0 0 10px;
+}
+.tileBody[data-script='latin'] .tileTitle {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+.tileExcerpt {
+  font-family: var(--font-story-sans);
+  font-size: 15px;
+  line-height: 1.8;
+  letter-spacing: 0.02em;
+  color: var(--color-text-muted);
+  margin: 0 0 16px;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tileBody[data-script='latin'] .tileExcerpt {
+  font-family: var(--font-body);
+  line-height: 1.6;
+  letter-spacing: 0;
+}
+.tileByline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+.tileAvatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--avatar);
+  color: var(--avatar-pen);
+  font-size: 11px;
+  font-weight: 700;
+}
+.tileAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.tileName {
+  font-weight: 600;
+  color: var(--color-text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tileMinutes {
+  white-space: nowrap;
+}
+.tileMinutes::before {
+  content: '·';
+  margin-right: 8px;
+}
+
+.storiesAll {
+  position: relative;
+  z-index: 2;
+  max-width: 1200px;
+  margin: calc(var(--unit) * 0.7) auto 0;
+  display: flex;
+  justify-content: center;
+}
+
+/* ── Late afternoon · the answer ────────────────────────────────────── */
+
+.answer {
+  position: relative;
+  z-index: 0;
+  --unit: 112px;
+  --stage-paper: color-mix(in oklab, var(--color-card-bg) 62%, var(--paper-answer));
+  --stage-pen: color-mix(in oklch, var(--soft-pen) 60%, transparent);
+  background: var(--paper-answer);
+  padding: clamp(64px, 8vw, 112px) var(--gutter) calc(var(--flats-h) * 0.26 + clamp(48px, 6vw, 80px));
+}
+
+.play {
+  position: relative;
+  z-index: 2;
+  max-width: 1200px;
+  margin: clamp(32px, 5vw, 56px) auto 0;
+}
+
+/* The printed comic (JS off, reduced motion, short screens): three panels, each its picture over its words. */
+.stageWrap {
+  display: none;
+}
+.beats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(20px, 3vw, 36px);
+}
+.beat {
+  position: relative;
+}
+.panel {
+  position: relative;
+  height: 236px;
+  margin-bottom: 20px;
+}
+.panelSet {
+  position: absolute !important;
+  inset: 0;
+  --card-w: 92px;
+}
+.panelSet > div {
+  position: absolute !important;
+  inset: 0;
+}
+.panelFloor {
+  position: absolute;
+  left: 6%;
+  width: 88%;
+  bottom: 14px;
+  height: 10px;
+  overflow: visible;
+}
+.panelSet .still {
+  bottom: 19px;
+}
+.panelCardMid,
+.panelCardRight,
+.panelCardL,
+.panelCardR {
+  position: absolute !important;
+  width: var(--card-w);
+  aspect-ratio: 4 / 5;
+}
+.panelCardMid {
+  left: calc(50% - var(--card-w) / 2);
+  bottom: 22px;
+  rotate: -2deg;
+}
+.panelSet .panelOnCard {
+  --x: 50%;
+  bottom: calc(22px + var(--card-w) * 1.25 - 3px);
+}
+.panelHeart {
+  position: absolute;
+  left: 12%;
+  bottom: 96px;
+  width: 50px;
+}
+.panelArrow {
+  position: absolute;
+  left: 32%;
+  bottom: 104px;
+  font-size: 22px;
+  color: var(--color-terracotta);
+}
+.panelCardRight {
+  left: 44%;
+  bottom: 40px;
+  rotate: 4deg;
+}
+.panelWriter {
+  --x: 86%;
+}
+.panelCardL {
+  left: 7%;
+  bottom: 84px;
+  --card-w: 76px;
+  rotate: -3deg;
+}
+.panelCardR {
+  right: 7%;
+  bottom: 84px;
+  --card-w: 76px;
+  rotate: 3deg;
+}
+.panelWaves {
+  position: absolute;
+  left: calc(7% + 86px);
+  width: calc(86% - 172px);
+  bottom: 120px;
+  height: 24px;
+}
+.panelTuck {
+  --x: 38%;
+}
+.panelNod {
+  --x: 63%;
+}
+.panelNote {
+  position: absolute;
+  left: calc(50% - 12px);
+  bottom: 52px;
+  width: 24px;
+  rotate: -8deg;
+}
+/* the comic's blank card is already written */
+.panel [data-blank] .fictionLine,
+.panel [data-blank] .fictionTitle {
+  clip-path: none;
+  opacity: 1;
+}
+
+.beatText {
+  max-width: 26em;
+}
+.beatTitle {
+  font-family: var(--font-heading);
+  font-size: clamp(22px, 2.4vw, 30px);
+  font-weight: 800;
+  line-height: 1.25;
+  margin: 0 0 10px;
+  text-wrap: balance;
+}
+.beatLine {
+  font-family: var(--font-body);
+  font-size: clamp(16px, 1.5vw, 18px);
+  line-height: 1.75;
+  color: var(--color-text-muted);
+  margin: 0;
+  text-wrap: pretty;
+}
+
+/* The stage set: everything in it is placed by the stage's own size (a size container). */
+.stageSet {
+  position: absolute;
+  inset: 0;
+  container-type: size;
+  /* the puppets at the page's size (摺摺 ≈ 120 px on a desktop), the cards as large as the stage allows under a
+     sitter's room, standing on the floor */
+  --unit: clamp(92px, 17.5cqw, 120px);
+  --cards-top: calc(var(--unit) * 1.04);
+  --card-w: min(37cqw, calc((100cqh - var(--cards-top) - 52px) / 1.25));
+  --floor-y: calc(var(--cards-top) + var(--card-w) * 1.25 + 2px);
+}
+.stageA,
+.stageB {
+  position: absolute !important;
+  z-index: 1;
+  top: var(--cards-top);
+  width: var(--card-w);
+  aspect-ratio: 4 / 5;
+}
+.stageA {
+  left: calc(25cqw - var(--card-w) / 2);
+  rotate: -2deg;
+}
+/* B: where the heart was, then — the slide is the scroll's — next to A */
+.stageB {
+  left: calc(75cqw - var(--card-w) / 2);
+  transform: translateX(calc((1 - var(--p3)) * 4cqw)) rotate(calc((1 - var(--p3)) * 6deg - 1.5deg));
+}
+.stageHeart {
+  position: absolute;
+  left: 18%;
+  top: 22%;
+  width: 64%;
+  overflow: visible;
+  opacity: calc(min(1, var(--p2) * 4) - clamp(0, (var(--p2) - 0.45) * 3, 1));
+  transform: scale(calc(0.7 + 0.3 * min(1, var(--p2) * 4) + max(0, var(--p2) - 0.45) * 1.3));
+}
+.stageBCard,
+.stageBDone {
+  position: absolute !important;
+  inset: 0;
+  opacity: clamp(0, (var(--p2) - 0.5) * 2.6, 1);
+  transform: scale(calc(0.72 + 0.28 * clamp(0, (var(--p2) - 0.5) * 2.6, 1)));
+}
+/* ③: the answer, published — its own family's paper over the dashed draft */
+.stageBDone {
+  opacity: var(--p3);
+}
+.stageWaves {
+  position: absolute;
+  z-index: 1;
+  left: calc(25cqw + var(--card-w) / 2 + 2cqw);
+  width: calc(50cqw - var(--card-w) - 4cqw);
+  top: calc(var(--cards-top) + var(--card-w) * 0.42);
+  /* the logo's proportions (24 : 14) */
+  height: calc((50cqw - var(--card-w) - 4cqw) * 0.6);
+}
+.stageWaves path {
+  clip-path: inset(-60% calc((1 - clamp(0, (var(--p3) - 0.35 - var(--i) * 0.14) * 2.6, 1)) * 100%) -60% 0);
+}
+.stageFloor {
+  position: absolute;
+  z-index: 0;
+  left: 2.5%;
+  width: 95%;
+  /* its line (74 % down its 44 px) just under the cards */
+  top: calc(var(--floor-y) - 32.6px);
+  height: 44px;
+  overflow: visible;
+}
+
+/* B's lines are written in as 聆聆's pencil moves (cued), its title last */
+.stageSet [data-blank] .fictionLine {
+  clip-path: inset(-60% 100% -60% 0);
+  transition: clip-path 0.5s ease-out;
+  transition-delay: calc(var(--i) * 0.42s);
+}
+.stageSet [data-blank] .fictionTitle {
+  opacity: 0;
+  transition: opacity 0.6s ease 2.2s;
+}
+.stageSet[data-written] [data-blank] .fictionLine {
+  clip-path: inset(-60% 0 -60% 0);
+}
+.stageSet[data-written] [data-blank] .fictionTitle {
+  opacity: 0.35;
+}
+
+/* Where nothing comes alive (Save-Data), each beat's picture stands still on the stage. */
+.beatStill {
+  display: none;
+}
+[data-stills] .stageSet[data-beat='1'] .beatStill1,
+[data-stills] .stageSet[data-beat='2'] .beatStill2,
+[data-stills] .stageSet[data-beat='3'] .beatStill3a,
+[data-stills] .stageSet[data-beat='3'] .beatStill3b {
+  display: block;
+}
+.beatStill1 {
+  --x: 25cqw;
+  bottom: calc(100cqh - var(--cards-top) - 4px);
+}
+.beatStill2 {
+  --x: 52cqw;
+}
+.beatStill3a {
+  --x: 42cqw;
+}
+.beatStill3b {
+  --x: 58cqw;
+}
+.beatStill2,
+.beatStill3a,
+.beatStill3b {
+  z-index: 2;
+  bottom: calc(100cqh - var(--floor-y) + 1px);
+}
+
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) and (min-height: 520px) {
+  .play {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    column-gap: clamp(32px, 4vw, 72px);
+  }
+  .stageWrap {
+    display: block;
+  }
+  /* the stage stands in the middle of what the header leaves, level with the beat being read */
+  .play {
+    --stage-h: min(calc(93svh - var(--app-header-h)), 500px);
+  }
+  .stageWrap {
+    align-self: start;
+    position: sticky;
+    top: calc(var(--app-header-h) + (100svh - var(--app-header-h) - var(--stage-h)) / 2);
+  }
+  .stage {
+    height: var(--stage-h);
+  }
+  .panel {
+    display: none;
+  }
+  .beats {
+    display: block;
+    padding: 18svh 0 22svh;
+  }
+  .beat {
+    min-height: 66svh;
+    display: flex;
+    align-items: center;
+  }
+  .beatText {
+    opacity: 0.38;
+    transition: opacity 0.4s ease;
+  }
+  .beat[data-on] .beatText {
+    opacity: 1;
+  }
+
+  /* the beats move the paper: --p2 (the heart becomes a card), --p3 (the slide, the waves) */
+  .stageSet {
+    transition: --p2 0.9s ease, --p3 0.9s ease;
+  }
+  .stageSet[data-beat='2'] {
+    --p2: 1;
+  }
+  .stageSet[data-beat='3'] {
+    --p2: 1;
+    --p3: 1;
+  }
+}
+
+/* Where scroll can drive it, the paper is scrubbed by the beats' own scrolling (the puppets are still only cued). */
+@supports (timeline-scope: --a) and (animation-timeline: view()) {
+  @media (scripting: enabled) and (prefers-reduced-motion: no-preference) and (min-height: 520px) {
+    .play {
+      timeline-scope: --beat2, --beat3;
+    }
+    .beat[data-n='2'] {
+      view-timeline-name: --beat2;
+    }
+    .beat[data-n='3'] {
+      view-timeline-name: --beat3;
+    }
+    .stageSet,
+    .stageSet[data-beat] {
+      transition: none;
+      animation: scrubP2 linear both, scrubP3 linear both;
+      animation-timeline: --beat2, --beat3;
+      animation-range: entry 25% cover 45%, entry 25% cover 45%;
+    }
+  }
+  /* a phone: the beats come up under the stage, and the paper turns while the beat's words come up to it */
+  @media (scripting: enabled) and (prefers-reduced-motion: no-preference) and (min-height: 520px) and (max-width: 899px) {
+    .stageSet,
+    .stageSet[data-beat] {
+      animation-range: entry 5% entry 72%, entry 5% entry 72%;
+    }
+  }
+}
+@keyframes scrubP2 {
+  from {
+    --p2: 0;
+  }
+  to {
+    --p2: 1;
+  }
+}
+@keyframes scrubP3 {
+  from {
+    --p3: 0;
+  }
+  to {
+    --p3: 1;
+  }
+}
+
+/* ── Dusk · your turn ───────────────────────────────────────────────── */
+
+.dusk {
+  position: relative;
+  z-index: 0;
+  --unit: 112px;
+  background: var(--paper-dusk);
+  padding: clamp(72px, 9vw, 120px) var(--gutter) calc(var(--flats-h) * 0.26);
+}
+.duskGrid {
+  position: relative;
+  z-index: 2;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  /* the words, then the set right beside them (牽牽 a step from the write button), the rest of the floor free */
+  grid-template-columns: minmax(0, 560px) auto;
+  justify-content: start;
+  grid-template-areas: 'text set';
+  column-gap: clamp(24px, 4vw, 72px);
+}
+.duskText {
+  grid-area: text;
+  align-self: center;
+  max-width: 540px;
+  padding-bottom: calc(var(--unit) * 0.4);
+}
+.duskLine {
+  font-family: var(--font-body);
+  font-size: clamp(17px, 1.6vw, 20px);
+  line-height: 1.75;
+  margin: 18px 0 0;
+  max-width: 26em;
+  color: var(--color-text);
+  text-wrap: pretty;
+}
+.duskButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 32px;
+}
+/* the set, on the floor (the grid's foot): 牽牽 · the blank last page · the blank sixth */
+.duskSet {
+  grid-area: set;
+  align-self: end;
+  justify-self: start;
+  position: relative;
+  width: calc(var(--unit) * 3.7);
+  max-width: 100%;
+  height: calc(var(--unit) * 2.62);
+  margin-top: 40px;
+}
+.duskTag {
+  position: absolute;
+  z-index: 2;
+  left: calc(var(--unit) * 0.5);
+  bottom: 0;
+  width: 0;
+  height: 100%;
+}
+.duskTag .still {
+  left: 0;
+}
+.blankCard {
+  position: absolute !important;
+  z-index: 1;
+  left: calc(var(--unit) * 1.08);
+  bottom: -2px;
+  width: calc(var(--unit) * 1.75);
+  aspect-ratio: 4 / 5;
+  rotate: -2deg;
+  transform-origin: 50% 100%;
+}
+.blankCard > div {
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  box-sizing: border-box;
+}
+.blankWords {
+  font-family: var(--font-handwritten);
+  font-size: clamp(20px, 2vw, 26px);
+  line-height: 1.5;
+  text-align: center;
+  color: var(--color-text-muted);
+  text-wrap: balance;
+}
+.blankStand {
+  position: absolute;
+  z-index: 2;
+  left: calc(var(--unit) * 2.62);
+  bottom: 0;
+  transform-origin: 50% 100%;
+  transition: rotate 0.45s cubic-bezier(0.3, 0.7, 0.4, 1.2);
+}
+.blankPal {
+  position: relative;
+  display: block;
+}
+.blankPal svg {
+  display: block;
+  overflow: visible;
+}
+/* the write button hovered or focused: the blank sixth tips back and turns its face up toward it (rig units: the
+   drawing is about a quarter of them a px) */
+.blankFace {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  transition: transform 0.45s cubic-bezier(0.3, 0.7, 0.4, 1.2);
+}
+.dusk:has([data-write]:hover, [data-write]:focus-visible) .blankFace {
+  transform: translate(-36px, -40px) rotate(-12deg);
+}
+.dusk:has([data-write]:hover, [data-write]:focus-visible) .blankStand {
+  rotate: -9deg;
+}
+.blankArmR {
+  transform-box: view-box;
+  transform-origin: 258px 184px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .blankEyes {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: blankBlink 6.1s step-end 1.7s infinite;
+  }
+}
+@keyframes blankBlink {
+  0% {
+    transform: scaleY(1);
+  }
+  95.5% {
+    transform: scaleY(0.12);
+  }
+  97.5% {
+    transform: scaleY(1);
+  }
+}
+
+/* ── Night · the curtain call and the footer ────────────────────────── */
+
+.night {
+  position: relative;
+  /* colour-fixed: on the night band in either scheme */
+  --night-ink: oklch(94% 0.02 85);
+  --night-muted: oklch(80% 0.025 85);
+  --night-pen: oklch(82% 0.03 85 / 0.5);
+  --night-pill: oklch(36% 0.05 262);
+  --night-moon: oklch(92% 0.07 92);
+  --night-moon-pen: oklch(80% 0.08 82);
+  --night-star: oklch(96% 0.03 90);
+  /* through the hole: the dusk's paper behind the night, a little in its shade */
+  --night-hole: color-mix(in oklab, var(--paper-dusk) 74%, var(--paper-night));
+  --night-cut: oklch(86% 0.04 80 / 0.7);
+  --field-border-focus: var(--night-moon);
+  --toward-ink: oklch(100% 0 0); /* colour-fixed: the hover ink moves toward the light at night */
+  background: var(--paper-night);
+  color: var(--night-ink);
+  view-timeline-name: --night;
+  padding: clamp(56px, 7vw, 96px) var(--gutter) 28px;
+  overflow: hidden;
+}
+.sky {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+/* the sky over the heading (the band's top padding), and its two sides beside the centred words */
+.skyTop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: clamp(56px, 7vw, 96px);
+}
+.skySides {
+  position: absolute;
+  inset: 0 0 52% 0;
+}
+/* the sky over the curtain call, behind the five */
+.skyCall {
+  position: absolute;
+  inset: 0 0 46% 0;
+  pointer-events: none;
+}
+.star {
+  position: absolute;
+  width: var(--s);
+  height: var(--s);
+  border-radius: 50%;
+  background: var(--night-star);
+}
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .star {
+      animation: starOn linear both;
+      animation-timeline: --night;
+      animation-range: entry calc(4% + var(--i) * 2.3%) entry calc(9% + var(--i) * 2.3%);
+    }
+  }
+}
+@keyframes starOn {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.moon {
+  position: absolute;
+  left: clamp(18px, 9vw, 160px);
+  top: clamp(28px, 6vw, 72px);
+  width: clamp(44px, 6vw, 76px);
+  rotate: -12deg;
+  overflow: visible;
+}
+
+.nightShow {
+  position: relative;
+  z-index: 2;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.nightShow .h2 {
+  color: var(--night-ink);
+}
+.nightSub {
+  font-family: var(--font-body);
+  font-size: clamp(16px, 1.5vw, 18px);
+  line-height: 1.7;
+  color: var(--night-muted);
+  margin: 14px 0 0;
+  max-width: 30em;
+  text-wrap: pretty;
+}
+.nightApp {
+  margin: 28px 0 22px;
+}
+
+.call {
+  position: relative;
+  --unit: 100px;
+  width: min(100%, 860px);
+  margin: clamp(36px, 4.5vw, 64px) auto 0;
+  /* 悄悄 (about a unit), the gap, its hole (three quarters of one), the floor */
+  height: calc(var(--unit) * 2.5);
+}
+.callRow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 11px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: calc(var(--unit) * 0.14);
+}
+.callPal {
+  position: relative;
+  display: block;
+}
+.callHush {
+  position: relative;
+  display: block;
+  margin-left: calc(var(--unit) * 0.95);
+}
+/* the hole 悄悄 was cut from: its outline at its size (the torso's box in the still's frame), right above it */
+.hole {
+  position: absolute;
+  left: 10.582%;
+  width: 79.365%;
+  bottom: calc(100% + var(--unit) * 0.34);
+  aspect-ratio: 375 / 317.5;
+  overflow: visible;
+}
+.callFloor {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  bottom: 0;
+  height: 40px;
+  overflow: visible;
+}
+.hushLine {
+  font-family: var(--font-heading);
+  font-size: clamp(18px, 1.9vw, 22px);
+  font-weight: 600;
+  color: var(--night-moon);
+  text-decoration: none;
+  margin-top: 22px;
+  align-self: center;
+  border-radius: 8px;
+  padding: 4px 6px;
+}
+/* in Chinese the line is set in the Ming serif first, so 「……」 sits centred as CJK punctuation does */
+:global(html[lang='zh-TW']) .hushLine {
+  font-family: var(--font-story-serif);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.hushLine:hover {
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1.5px;
+}
+.hushLine:focus-visible {
+  outline: 2px solid var(--night-moon);
+  outline-offset: 3px;
+}
+
+.foot {
+  position: relative;
+  z-index: 2;
+  max-width: 1200px;
+  margin: clamp(56px, 7vw, 96px) auto 0;
+  padding-top: 28px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    'brand links'
+    'small small'
+    'end end';
+  align-items: center;
+  gap: 18px 32px;
+}
+.footRule {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 8px;
+  overflow: visible;
+}
+.footBrand {
+  grid-area: brand;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 18px;
+}
+.footLinks {
+  grid-area: links;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px 26px;
+}
+.footLink {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--night-muted);
+  text-decoration: none;
+  border-radius: 6px;
+}
+.footLink:hover {
+  color: var(--night-ink);
+}
+.footLink:focus-visible {
+  outline: 2px solid var(--night-moon);
+  outline-offset: 3px;
+}
+.footSmall {
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--night-muted);
+  margin: 0;
+}
+.foot > .footSmall {
+  grid-area: small;
+}
+.footEnd {
+  grid-area: end;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+
+/* ── Phones and tablets ─────────────────────────────────────────────── */
+
+@media (max-width: 899px) {
+  .hero {
+    --unit: 96px;
+  }
+  .answer {
+    --unit: 92px;
+  }
+  .beats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .panel {
+    max-width: 420px;
+  }
+
+  @media (scripting: enabled) and (prefers-reduced-motion: no-preference) and (min-height: 520px) {
+    .play {
+      display: block;
+    }
+    .stageWrap {
+      position: sticky;
+      top: calc(var(--app-header-h) - 4px);
+      z-index: 3;
+      background: var(--paper-answer);
+      padding: 6px 0 12px;
+      margin: 0 calc(var(--gutter) * -1);
+      padding-left: var(--gutter);
+      padding-right: var(--gutter);
+      /* the stage's height from its width: a sitter's room, the cards, the floor's foot */
+      --su: clamp(74px, calc((100vw - 2 * var(--gutter)) * 0.135), 100px);
+    }
+    /* the paper reaches up under the header's wave, so nothing scrolling behind shows through the seam */
+    .stageWrap::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 100%;
+      height: 32px;
+      background: var(--paper-answer);
+    }
+    .stage {
+      position: relative !important;
+      top: auto;
+      height: min(calc(var(--su) * 1.04 + (100vw - 2 * var(--gutter)) * 0.4625 + 38px), 48svh);
+    }
+    .stageSet {
+      --unit: clamp(74px, 13.5cqw, 100px);
+      --card-w: min(37cqw, calc((100cqh - var(--cards-top) - 38px) / 1.25));
+    }
+    .beats {
+      padding: 6svh 0 18svh;
+    }
+    .beat {
+      min-height: 54svh;
+      align-items: flex-start;
+      padding-top: 3svh;
+    }
+  }
+}
+
+@media (max-width: 899px) {
+  .hero {
+    min-height: 0;
+    padding-top: calc(var(--app-header-h) + 28px);
+  }
+  .heroGrid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'text'
+      'set';
+    row-gap: 12px;
+  }
+  .heroText {
+    padding-bottom: 0;
+  }
+  .plate {
+    width: min(100%, 560px);
+    justify-self: center;
+  }
+  .h1 {
+    font-size: clamp(54px, 10.5vw, 92px);
+  }
+  :global(html[lang='en']) .h1 {
+    font-size: clamp(44px, 8.6vw, 76px);
+  }
+  .duskGrid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'text'
+      'set';
+    row-gap: 0;
+  }
+  .duskText {
+    padding-bottom: 0;
+  }
+  .duskSet {
+    justify-self: center;
+    margin-top: 36px;
+  }
+  /* the blob behind the set, as on a desktop */
+  .heroBlob {
+    top: auto;
+    bottom: 4%;
+    right: -12%;
+  }
+}
+
+@media (max-width: 719px) {
+  .hero {
+    --unit: 80px;
+    padding-top: calc(var(--app-header-h) + 12px);
+  }
+  .heroGrid {
+    row-gap: 4px;
+  }
+  .heroText {
+    align-self: start;
+    padding: 4px 0 0;
+  }
+  .h1 {
+    font-size: clamp(46px, 15.5vw, 64px);
+  }
+  :global(html[lang='en']) .h1 {
+    font-size: clamp(36px, 11.2vw, 52px);
+  }
+  .heroSub {
+    font-size: 16px;
+    margin-top: 14px;
+  }
+  .heroText .heroApp {
+    margin-top: 18px;
+  }
+  .heroLinks {
+    margin-top: 10px;
+    gap: 8px 18px;
+  }
+  .heroBlob {
+    bottom: 2%;
+    right: -30%;
+  }
+
+  .stories {
+    --unit: 80px;
+  }
+  .kami {
+    --stack: 24px;
+    margin-top: calc(var(--unit) * 1.05);
+  }
+  .kamiFrame {
+    display: block;
+    position: absolute !important;
+    inset: 0 var(--stack) 0 0;
+    z-index: 1;
+  }
+  .kamiStill {
+    position: absolute;
+    left: 27%;
+    top: 0;
+  }
+  .kamiStill .still {
+    bottom: -3px;
+  }
+  .kamiPeek {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: calc((100% - var(--stack)) * 0.8);
+    z-index: 0;
+  }
+  .kamiPeek .still {
+    bottom: calc(var(--unit) * -0.42);
+  }
+  .kamiStack {
+    display: block;
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: var(--stack);
+    z-index: 0;
+  }
+  .kamiEdge {
+    position: absolute;
+    top: calc(18px + var(--k) * 9px);
+    bottom: calc(18px + var(--k) * 9px);
+    left: calc(var(--k) * 7px - 10px);
+    width: 16px;
+    background: var(--edge);
+    border: 1.2px solid var(--edge-pen);
+    border-left: none;
+    border-radius: 0 12px 12px 0;
+    z-index: calc(3 - var(--k));
+  }
+  .shelf {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    gap: 12px;
+    margin-right: var(--stack);
+    padding: 14px;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-padding: 14px;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .shelf::-webkit-scrollbar {
+    display: none;
+  }
+  .shelfItem {
+    flex: 0 0 100%;
+    scroll-snap-align: start;
+    display: flex;
+  }
+  .shelfItem > .tileLink {
+    flex: 1;
+    display: flex;
+  }
+  .shelfItem .tile {
+    flex: 1;
+  }
+  .shelfItem .shelfBand,
+  .shelfItem:nth-child(n) .shelfBand,
+  .shelfReader,
+  .shelfEnd {
+    display: none;
+  }
+  .tileLink:hover {
+    transform: none;
+  }
+  .tileExcerpt {
+    -webkit-line-clamp: 5;
+  }
+  .kamiControls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 14px var(--stack) 0 0;
+  }
+  .kamiPos {
+    margin: 0;
+    white-space: nowrap;
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--color-text-muted);
+  }
+
+  .dusk {
+    --unit: 84px;
+  }
+  .duskButtons {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .duskButtons > a {
+    justify-content: center;
+  }
+
+  /* a phone's night: the moon in the sky's corner above the heading, no stars beside words that fill the width */
+  .night {
+    padding-top: 104px;
+  }
+  .skyTop {
+    height: 96px;
+  }
+  .skySides {
+    display: none;
+  }
+  .moon {
+    left: auto;
+    right: 26px;
+    top: 24px;
+    width: 46px;
+  }
+  .call {
+    --unit: clamp(52px, 15vw, 66px);
+    height: calc(var(--unit) * 3);
+  }
+  .callRow {
+    gap: calc(var(--unit) * 0.06);
+  }
+  .callHush {
+    margin-left: calc(var(--unit) * 0.35);
+  }
+  .foot {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'brand'
+      'links'
+      'small'
+      'end';
+  }
+  .footLinks {
+    justify-content: flex-start;
+    display: grid;
+    grid-template-columns: repeat(2, max-content);
+    gap: 10px 32px;
+  }
+}
+
+@media (max-width: 380px) {
+  .h1 {
+    font-size: 44px;
+  }
+}
+
+@media (max-width: 359px) {
+  .kamiControls .pill {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .kamiPos {
+    font-size: 12px;
+  }
+}
