@@ -668,7 +668,6 @@ function scene2(ctx: BeatCtx, key: string, at: Pt | null, dot: boolean, fnNod?: 
  */
 function scene3(ctx: BeatCtx, A0: number, key: string) {
   // the walk up at a walk's own pace, the meeting after it acted slower (round 3), its last pose held after it
-  const A = meetClock(A0);
   const t = meetClock(onTwos(A0));
   const tw = onTwos(A0);
   const whole = ctx.actorShift(3).alpha >= 1;
@@ -756,7 +755,8 @@ function scene3(ctx: BeatCtx, A0: number, key: string) {
   // the two connected: the ≋ rises between them
   const [hx1, hy1] = T.headPoint();
   const [hx2, hy2] = N.headPoint();
-  if (whole) ripples(ctx, 'meet', A, MEET_RIPPLES, (hx1 + hx2) / 2, Math.min(hy1, hy2) - 6, 0.3 * Math.abs(hx2 - hx1) + 16);
+  // (the ripples on the segment's own seconds, each starting as the acting reaches it: a rest never stops one mid-air)
+  if (whole) ripples(ctx, 'meet', A0, MEET_RIPPLES.map(meetStart), (hx1 + hx2) / 2, Math.min(hy1, hy2) - 6, 0.3 * Math.abs(hx2 - hx1) + 16);
   // 點點 hops twice behind 聆聆, then watches the two
   // the pause between its two hops is whole in the view too (it may have hopped in from out of sight)
   const dotMid = Math.min((dotFrom + dotTo) / 2, Math.max(dotTo, dotIn));
@@ -1156,14 +1156,38 @@ export const BRIDGE_IN = { rise: [0.1, 0.92] as const, drop: 126 };
 
 /* ───────────── the pace ───────────── */
 
-/** Act time played slower from `from` on (k× slower): the same acting, given more time. */
-const slowAfter = (A: number, from: number, k: number) => (A <= from ? A : from + (A - from) / k);
-/** The catch: the card flies at its own pace and lands at 1.6; what follows is acted 1.4× slower. */
-export const CATCH = { at: 1.6, slow: 1.4 } as const;
-/** The reading, acted 1.35× slower. */
-export const READ_SLOW = 1.35;
-/** The meeting on the bridge: its acting (6.5 s of it) played 1.4× slower, then held. */
-export const MEET_SLOW = 1.4;
+/** A quiet moment in an act: at act second `at` the acting stops, its pose held, for `rest` seconds. */
+export type Rest = readonly [at: number, rest: number];
+
+/**
+ * An act's clock with its quiet moments (留白): every motion at its own pace — one act second a second — and the room
+ * between them made by holding a pose (`rests`, in act order), never by playing a motion slower. The owner
+ * (2026-11-12): 「走的有點像是慢動作」 — rounds 3–5 had given the catch, the reading and the meeting their room by
+ * playing them 1.35–1.4× slower, which slowed every walk, hop, nod and wave in them too; 「還是稍微有這個留白」.
+ */
+export function restClock(s: number, rests: readonly Rest[]): number {
+  let a = s;
+  for (const [at, rest] of rests) {
+    if (a <= at) break;
+    a = Math.max(at, a - rest);
+  }
+  return a;
+}
+/** The segment second at which an act's clock reaches act second `a` (the end of any rest at `a` not counted). */
+export const restStart = (a: number, rests: readonly Rest[]) => a + rests.reduce((n, [at, rest]) => (at < a ? n + rest : n), 0);
+
+/** The catch: the card flies at its own pace and lands at 1.6; once 聆聆 has brought it in to its chest, a moment. */
+export const CATCH = { at: 1.6, rests: [[2.45, 0.6]] as readonly Rest[] } as const;
+/** The reading: a moment before the first nod, and one after the two nods, before it is moved. */
+export const READ_RESTS: readonly Rest[] = [
+  [0.9, 0.4],
+  [2.4, 0.5],
+];
+/** The meeting, after the walk up: a moment as they face each other, and one after the bow (and 點點's hop), before the waves. */
+export const MEET_RESTS: readonly Rest[] = [
+  [3.4, 0.8],
+  [5.6, 0.8],
+];
 const MEET_ACTED = 6.5;
 /**
  * The walk up the bridge, in the meeting's own seconds (never slowed: a walk played slower reads as slow motion — the
@@ -1171,17 +1195,19 @@ const MEET_ACTED = 6.5;
  * keeps its slower pace after it.
  */
 export const MEET_WALK = { tuck: [0.25, 2.45], nod: [0.5, 2.7] } as const;
-/** Where the acting stood when they arrived (the old clock's 3.4: the look turns full, the bow follows). */
+/** Where the acting stands when they arrive (the look turns full, the bow follows). */
 const MEET_ARRIVE = 3.4;
 /**
- * The meeting's acting clock from its segment's seconds: up to the arrival as fast as the walk, then MEET_SLOW× slower,
- * held at MEET_ACTED.
+ * The meeting's acting clock from its segment's seconds, every motion at its own pace: the walk up (and 點點's hops
+ * meanwhile) as the segment runs; from the arrival the meeting with its quiet moments (MEET_RESTS); held at MEET_ACTED.
  */
 export function meetClock(s: number): number {
   const at = MEET_WALK.nod[1];
-  const a = s <= at ? (s / at) * MEET_ARRIVE : MEET_ARRIVE + (s - at) / MEET_SLOW;
+  const a = s <= at ? s : restClock(MEET_ARRIVE + (s - at), MEET_RESTS);
   return Math.min(MEET_ACTED, Math.max(0, a));
 }
+/** The segment second at which the meeting's clock reaches act second `a` (≥ the arrival). */
+export const meetStart = (a: number) => MEET_WALK.nod[1] + restStart(a, MEET_RESTS) - MEET_ARRIVE;
 
 /* ───────────── the frames ───────────── */
 
@@ -1313,9 +1339,9 @@ export const BEATS: Record<SegId, Frame> = {
    */
   catch(A0, ctx) {
     const a = ctx.slot('a');
-    // the card's flight keeps a card's pace; 聆聆's and 點點's acting after the catch plays slower, then a quiet moment
-    const A = slowAfter(A0, CATCH.at, CATCH.slow);
-    const t = slowAfter(onTwos(A0), CATCH.at, CATCH.slow);
+    // every motion at its own pace (the card's flight a card's); a quiet moment once it is held (CATCH.rests)
+    const A = restClock(A0, CATCH.rests);
+    const t = restClock(onTwos(A0), CATCH.rests);
     const key = stepOf('catch', A0, ctx);
     const start = carried(ctx, SEG.catch.t0);
     const C = catching(ctx);
@@ -1366,8 +1392,8 @@ export const BEATS: Record<SegId, Frame> = {
   /** 6 · read: 聆聆 reads the card — a small paper in its left mitten, in front of its chest — 點點 reading along; the ripples ≋ rise — never a heart. */
   read(A0, ctx) {
     const a = ctx.slot('a');
-    // read slowly, then a quiet moment (all on twos: the ripples too)
-    const t = slowAfter(onTwos(A0), 0, READ_SLOW);
+    // read at a reader's pace with its quiet moments (READ_RESTS), then a last one (all on twos: the ripples too)
+    const t = restClock(onTwos(A0), READ_RESTS);
     const key = stepOf('read', A0, ctx);
     const wp = readHold(ctx.ghost('card', 'w', 2));
     const N = act(ctx, 2, 'card', { x: MARKS[2].card }, key, (P) => {
@@ -1384,7 +1410,8 @@ export const BEATS: Record<SegId, Frame> = {
     drawHeld(ctx.props.get('slip-a', 'slip', lookOf(a)), N, held, 1, 'L').ink(1);
     const at = paperOf(N, held);
     const [hx, hy] = N.headPoint();
-    ripples(ctx, 'read', t, READ_RIPPLES, hx, hy, N.rig.torso.w * N.k * 0.45);
+    // (on the segment's own seconds, each starting as the reading reaches it: a rest never stops one mid-air)
+    ripples(ctx, 'read', onTwos(A0), READ_RIPPLES.map((r) => restStart(r, READ_RESTS)), hx, hy, N.rig.torso.w * N.k * 0.45);
     act(ctx, 2, 'dot', { x: dotBy2(ctx) }, key, (P) => {
       // reading along, then looking up at 聆聆
       if (t < 2.2) lookAt(P, at.cx, at.cy);

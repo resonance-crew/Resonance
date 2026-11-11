@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ghostPuppet } from '../runtime/actors';
 import { MITTEN_MIDDLE, type StickerPuppet } from '../kit/puppet';
-import { BEATS, BRIDGE_IN, FADE, MEET_RIPPLES, MEET_SLOW, MEET_WALK, meetClock, PASS_SIZE, READ_RIPPLES, READ_SLOW, R1, RIPPLE_LIFE, W1, Y1, ghost, type ActorPose, type BeatCtx, type SlotId, type SlotPose } from './beats';
+import { BEATS, BRIDGE_IN, FADE, MEET_RESTS, MEET_RIPPLES, MEET_WALK, meetClock, meetStart, PASS_SIZE, READ_RESTS, READ_RIPPLES, R1, CATCH, restClock, restStart, RIPPLE_LIFE, W1, Y1, ghost, type ActorPose, type BeatCtx, type SlotId, type SlotPose } from './beats';
 import { WALK_FOOT, WALK_RISE, groundAt } from './ground';
 import { WATER_Y } from './world';
 import { computeLayout, finishLayout } from './layout';
@@ -384,8 +384,9 @@ describe('the beats, acted by ghosts', () => {
         // each leaves only once the one before has gone
         for (let i = 1; i < waves.length; i++) expect(waves[i] - waves[i - 1]).toBeGreaterThanOrEqual(RIPPLE_LIFE - 0.06);
       }
-      // the reading's last wave has gone by the act's end (acted READ_SLOW× slower): none is cut off as the reply begins
-      expect(READ_RIPPLES[READ_RIPPLES.length - 1] + RIPPLE_LIFE).toBeLessThanOrEqual(SEG.read.dur / READ_SLOW + 1e-6);
+      // the reading's last wave has gone by the act's end (its quiet moments counted): none is cut off as the reply begins
+      expect(restStart(READ_RIPPLES[READ_RIPPLES.length - 1], READ_RESTS) + RIPPLE_LIFE).toBeLessThanOrEqual(SEG.read.dur + 1e-6);
+      expect(meetStart(MEET_RIPPLES[MEET_RIPPLES.length - 1]) + RIPPLE_LIFE).toBeLessThanOrEqual(SEG.meet.dur + 1e-6);
     }
   });
 
@@ -503,8 +504,8 @@ describe('the beats, acted by ghosts', () => {
       [1440, 900],
     ]) {
       const { frame, L } = stage(w, h);
-      // the bow's bottom (acting 4.75): after the walk up, at the meeting's slower pace
-      const m = frame('meet', MEET_WALK.nod[1] + (4.75 - 3.4) * MEET_SLOW);
+      // the bow's bottom (acting 4.75): after the walk up and the moment they face each other
+      const m = frame('meet', meetStart(4.75));
       const t = m.actors.get('3:tuck')!;
       const n = m.actors.get('3:card')!;
       const tuck = ghostPuppet('tuck', L.pal);
@@ -524,11 +525,37 @@ describe('the beats, acted by ghosts', () => {
     // arrived: no further step after the walk's end
     expect(Math.abs(at(MEET_WALK.tuck[1] + 0.3, '3:tuck') - at(MEET_WALK.tuck[1] + 1, '3:tuck'))).toBeLessThan(0.5);
     expect(Math.abs(at(MEET_WALK.nod[1] + 0.3, '3:card') - at(MEET_WALK.nod[1] + 1, '3:card'))).toBeLessThan(0.5);
-    // the acting clock: continuous, as fast as the walk until they arrive, then slower, then held
+    // the acting clock: the segment's own seconds while they walk, then the meeting from its arrival, held at its end
     expect(meetClock(0)).toBe(0);
-    expect(meetClock(MEET_WALK.nod[1])).toBeCloseTo(3.4, 6);
-    expect(meetClock(MEET_WALK.nod[1] + 1.4) - meetClock(MEET_WALK.nod[1])).toBeCloseTo(1, 6);
+    expect(meetClock(1.2)).toBeCloseTo(1.2, 6);
+    expect(meetClock(MEET_WALK.nod[1] + 1e-6)).toBeCloseTo(3.4, 4);
     expect(meetClock(SEG.meet.dur)).toBe(6.5);
+    // and everything in it ends inside the segment, with a moment left after the last wave
+    expect(meetStart(6.5)).toBeLessThanOrEqual(SEG.meet.dur - 0.8);
+  });
+
+  it('gives the catch, the reading and the meeting their room by holding a pose, never by playing a motion slower', () => {
+    // the owner (2026-11-12): 「動畫還有哪裡也有一樣被調慢的問題」 — every clock runs one act second a second, or stands
+    for (const [rests, dur] of [
+      [CATCH.rests, SEG.catch.dur],
+      [READ_RESTS, SEG.read.dur],
+      [MEET_RESTS, SEG.meet.dur],
+    ] as const) {
+      for (let s = 0; s < dur; s += 0.05) {
+        const rate = (restClock(s + 0.01, rests) - restClock(s, rests)) / 0.01;
+        // (a step straddling a rest's edge runs part of it: between 0 and 1, never above)
+        expect(rate, `rate at ${s}`).toBeLessThanOrEqual(1 + 1e-6);
+        expect(rate < 1e-6 || Math.abs(rate - 1) < 1e-6 || restClock(s + 0.01, rests) === restClock(s + 0.02, rests) || restClock(s - 0.01, rests) === restClock(s, rests), `rate ${rate} at ${s}`).toBe(true);
+      }
+      // the quiet moments last a breath, not a stall
+      for (const [, rest] of rests) {
+        expect(rest).toBeGreaterThanOrEqual(0.3);
+        expect(rest).toBeLessThanOrEqual(1);
+      }
+    }
+    // and no rest falls inside a hop (a hop held mid-air would hang): 點點's in the reading (3.0–3.5) and the meeting (5.1–5.6)
+    for (const [at] of READ_RESTS) expect(at <= 3.0 || at >= 3.5).toBe(true);
+    for (const [at] of MEET_RESTS) expect(at <= 5.1 || at >= 5.6).toBe(true);
   });
 
   it('lets the valley’s two wait on the banks’ lips until the bridge comes up: in view on a phone as the valley arrives', () => {
@@ -585,8 +612,8 @@ describe('the beats, acted by ghosts', () => {
         const night = frame('yours', A);
         for (const [key, p] of night.actors) inside(key, p.screen[0], key.split(':')[1] as PalSlug, L4.pal, `${w}×${h} yours ${A}`);
       }
-      // the meeting's old moments, acted slower now
-      for (const A of [0, 1.4, 2.5, 4.5, 6].map((a) => a * MEET_SLOW)) {
+      // the meeting's moments, as its clock reaches them
+      for (const A of [0, 1.4, 2.5, meetStart(4.5), meetStart(6)]) {
         const meet = frame('meet', A);
         for (const [key, p] of meet.actors) inside(key, p.screen[0], key.split(':')[1] as PalSlug, L.pal, `${w}×${h} meet ${A}`);
       }
