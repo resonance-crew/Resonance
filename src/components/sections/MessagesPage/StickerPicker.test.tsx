@@ -53,7 +53,7 @@ beforeEach(() => {
   watcher.observed.clear();
   URL.createObjectURL = vi.fn(() => `blob:anim-${Math.random()}`);
   URL.revokeObjectURL = vi.fn();
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(new Blob(['webp']))));
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('webp')));
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -109,7 +109,7 @@ describe('the sticker picker', () => {
     const answers = new Map<string, () => void>();
     vi.stubGlobal(
       'fetch',
-      vi.fn((url: string) => new Promise<Response>((resolve) => answers.set(url, () => resolve(new Response(new Blob(['webp'])))))),
+      vi.fn((url: string) => new Promise<Response>((resolve) => answers.set(url, () => resolve(new Response('webp'))))),
     );
     renderWithIntl(<StickerPicker recents={[]} onPick={() => {}} />);
     // The last pack's last two: no test before fetched them (a file is kept for the page's life once read).
