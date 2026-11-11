@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { computeLayout, finishLayout, type Layout } from '../layout';
 import { HEADER_PEN, PLACE_OF, camOf, journeyCamEnd } from '../marks';
 import type { SceneN } from '../timeline';
@@ -9,6 +9,10 @@ import { changeInfo, changePlanes, type SetPlane } from './info';
 import { hourAt, mixLab, paintAt, skyAt } from '../palette';
 import { SEG, lerp, smooth } from '../timeline';
 import { CLEAR_UNDER_PEN, type ChangeInfo, type ChangeN, type ChangePlane, type PlaneMove } from './types';
+
+// These tests walk every plane of every scene change through hundreds of moments on several screens: about a second
+// each here, three to four times that on a CI runner — over the default five (one timed out there, 2026-11-11).
+vi.setConfig({ testTimeout: 30_000 });
 
 /** The screens: a phone (toolbar shown and hidden), a small phone, a tablet, a desktop, a laptop. */
 const SCREENS: [number, number, number][] = [
