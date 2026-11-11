@@ -507,6 +507,53 @@
   filter: none;
 }
 
+/* ───────────── no borrowed props (script/look.ts) ───────────── */
+
+/* The owner (2026-11-10/11): the film read too much like Alto's Adventure; the waves were chosen. With its folded
+   peaks, lone tree and lighthouse (the server's paper) went the dark grass in the corners and the sky lanterns of the
+   night — its lights are the cards and the windows. Their elements stay for the lab's comparison (`peaks`, the film as
+   rounds 1–5 left it: script/look.ts), which shows them. */
+.film:not([data-look='peaks']) :is(.fringeL, .fringeR),
+.film:not([data-look='peaks']) .lantern {
+  display: none;
+}
+
+/* ───────────── the paper's sand ───────────── */
+
+/* The owner (2026-11-11): 「背景是不是可以加入這種沙沙的感覺」, and of the strengths tried, 「最淡的」. A fine grit on
+   the scenery's paper and the sky (script/sand.ts): each paper of the world filled a second time with the grit's
+   pattern (World.tsx PlaneGroup's `.fk-sand`, which reads the two variables below), so the sand is cut to each paper's
+   edge, travels with it, and is never on the puppets or the cards; the sky has its own sheet of it. The lab's
+   comparisons (Page.tsx's mode script): `?sand=0` none, `?sand=2` plain to see. A flat paling into the sky (a change's
+   haze) carries none. */
+.film {
+  --film-sand: 0.55;
+  --film-sand-show: visible;
+}
+.skySand {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: calc(2800 * var(--u));
+  height: calc(1400 * var(--u));
+  margin-left: calc(-1400 * var(--u));
+  pointer-events: none;
+  opacity: var(--film-sand, 0);
+}
+.film[data-sand='0'] {
+  --film-sand: 0;
+  --film-sand-show: hidden;
+}
+.film[data-sand='0'] .skySand {
+  display: none;
+}
+.film[data-sand='2'] {
+  --film-sand: 1;
+}
+.haze {
+  --film-sand-show: hidden;
+}
+
 /* ───────────── the puppets ───────────── */
 
 .actor {

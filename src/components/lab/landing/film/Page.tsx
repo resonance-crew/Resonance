@@ -18,6 +18,7 @@ import { Player } from './Player';
 import { paletteAt, paletteCss, hourAt } from './script/palette';
 import { FILM_END } from './script/timeline';
 import { SKY_CARDS } from './script/marks';
+import type { Look } from './script/look';
 import { ActorStill, Clouds, Disc, Particles, Sets, Sky, WorldDefs } from './World';
 import { WATCH_STILLS_SCRIPT } from './whole';
 import styles from './film.module.css';
@@ -26,8 +27,8 @@ import styles from './film.module.css';
  *  行為」; the picture book is gone) — except in a short landscape window, which has no room for its stage and shows
  *  the opening still (`book`). No script: the still too. And the lab's comparisons: `?b=drawn` (聆聆's answer drawn, not
  *  the nearest story), `?b=kin` (the note saying B is the nearest story, over the film), `?depth=blur` (the farther,
- *  the blurrier). */
-const MODE_SCRIPT = `(function(){try{var d=document.currentScript&&document.currentScript.parentElement;if(!d)return;var q=new URLSearchParams(location.search);var mm=function(x){return !!(window.matchMedia&&matchMedia(x).matches)};d.setAttribute('data-film',mm('(max-height: 500px)')?'book':'film');var b=q.get('b');if(b==='kin'||b==='drawn')d.setAttribute('data-b',b);if(q.get('depth')==='blur')d.setAttribute('data-depth','blur')}catch(e){}})();`;
+ *  the blurrier), `?sand=0|2` (the paper's sand, none or plain to see: script/sand.ts). */
+const MODE_SCRIPT = `(function(){try{var d=document.currentScript&&document.currentScript.parentElement;if(!d)return;var q=new URLSearchParams(location.search);var mm=function(x){return !!(window.matchMedia&&matchMedia(x).matches)};d.setAttribute('data-film',mm('(max-height: 500px)')?'book':'film');var b=q.get('b');if(b==='kin'||b==='drawn')d.setAttribute('data-b',b);if(q.get('depth')==='blur')d.setAttribute('data-depth','blur');var sd=q.get('sand');if(sd==='0'||sd==='2')d.setAttribute('data-sand',sd)}catch(e){}})();`;
 
 /** The night's ground, where the stage's foot stands as it lets go: the page after the film fades from it. */
 const endGround = (dim: boolean) => {
@@ -97,15 +98,16 @@ function Slots({ model, locale }: { model: FilmModel; locale: string }) {
   );
 }
 
-export default function Page({ model, locale }: { model: FilmModel; locale: string }) {
+export default function Page({ model, locale, look = 'waves' }: { model: FilmModel; locale: string; look?: Look }) {
   const c = copyFor(locale);
   return (
     <div className={styles.page} data-film-page="">
       <style dangerouslySetInnerHTML={{ __html: lightCss() }} />
-      <WorldDefs />
+      <WorldDefs look={look} />
       <FilmHeader />
       <main>
-        <div className={styles.film} data-film-root="" suppressHydrationWarning>
+        {/* the lab's comparison (`peaks`, script/look.ts): the server drew its paper; the mark shows its grass and lanterns */}
+        <div className={styles.film} data-film-root="" data-look={look === 'waves' ? undefined : look} suppressHydrationWarning>
           <script dangerouslySetInnerHTML={{ __html: MODE_SCRIPT }} />
           <a className={styles.skipLink} href="#stories">
             {c.lip.skipLink}
@@ -124,7 +126,7 @@ export default function Page({ model, locale }: { model: FilmModel; locale: stri
             <Sky />
             <Disc />
             <Clouds />
-            <Sets />
+            <Sets look={look} />
             <Particles />
             <Hero locale={locale} />
             <Slots model={model} locale={locale} />

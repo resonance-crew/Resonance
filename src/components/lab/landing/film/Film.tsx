@@ -56,6 +56,8 @@ export function Film({ model }: { model: FilmModel }) {
       const b = q.get('b');
       if (b === 'kin' || b === 'drawn') root.dataset.b = b;
       if (q.get('depth') === 'blur') root.dataset.depth = 'blur';
+      const sand = q.get('sand');
+      if (sand === '0' || sand === '2') root.dataset.sand = sand;
     }
 
     const bookHandle = () => {

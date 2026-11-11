@@ -6,12 +6,16 @@
  * paper is flat cut shapes (a torn edge, origami folds on the peaks, no shade under a layer) and the grain is one
  * overlay. A server component: none of the geometry ships to the browser.
  */
-import type { CSSProperties } from 'react';
+import { Fragment, type CSSProperties } from 'react';
 import { MASCOT_CAST } from '@/lib/mascots/cast.generated';
 import { stillOf, type Still } from '@/lib/mascots/pals/still';
 import { ellipse, path, ribbon, rng, tear, type Pt } from './script/geom';
 import { ARMS_FRONT, CAST_OF, PLACE_OF, markOf, type PalSlug } from './script/marks';
 import type { SceneN } from './script/timeline';
+import type { Look } from './script/look';
+import { SAND_TILE, pictureSrc } from './script/sand';
+import sandDark from './sand-dark.png';
+import sandLight from './sand-light.png';
 import { CUT_STEP, FRINGE_DEPTH, PLANE_ORDER, REST_PLACES, REST_PLANES, cutClip, cutSamples, fringeArt, groundAt, placeArt, restClip, type PlaceId, type PlaneArt } from './script/world';
 import { Island } from './Island';
 import { islandHtml } from './islands';
@@ -27,6 +31,7 @@ const PAINTS = `
 .ff-range{fill:var(--film-c-range)}.ff-peaks{fill:var(--film-c-peaks)}.ff-sea{fill:var(--film-c-sea)}
 .ff-headland{fill:var(--film-c-headland)}.ff-town{fill:var(--film-c-town)}.ff-hills{fill:var(--film-c-hills)}
 .ff-near{fill:var(--film-c-near)}.ff-ground{fill:var(--film-c-ground)}
+.ff-swell-b{fill:color-mix(in oklab,var(--film-c-range),var(--film-c-peaks) 52%)}.ff-swell-d{fill:color-mix(in oklab,var(--film-c-peaks),var(--film-c-headland) 42%)}
 .ff-bridge{fill:var(--film-c-bridge)}.ff-bridge-wall{fill:color-mix(in oklab,var(--film-c-bridge),var(--film-c-ground) 38%)}.ff-roof{fill:var(--film-c-roof)}.ff-tree{fill:var(--film-c-tree)}
 .ff-canopy{fill:var(--film-c-canopy)}.ff-fold-lit{fill:var(--film-c-fold-lit);opacity:.6}.ff-fold-dark{fill:var(--film-c-fold-dark);opacity:.5}
 .ff-lit{fill:var(--film-c-lit)}.ff-accent{fill:var(--film-c-accent)}
@@ -35,7 +40,9 @@ const PAINTS = `
 .ff-trail{fill:color-mix(in oklab,var(--film-c-near),var(--film-c-rim) 34%)}
 .ff-flower{fill:var(--film-c-rim);opacity:.85}.ff-flower-warm{fill:var(--film-c-accent)}
 .fs-sea-line{fill:none;stroke:var(--film-c-sea-line);stroke-width:1.2px;stroke-linecap:round;opacity:.45}
+.fs-swell-line{fill:none;stroke:color-mix(in oklab,var(--film-c-rim) 52%,var(--film-c-range));stroke-width:1.3px;stroke-linecap:round;stroke-linejoin:round;opacity:.4}
 .fx-ns{vector-effect:non-scaling-stroke}
+.fk-sand{fill:url(#film-sand);opacity:var(--film-sand,0);visibility:var(--film-sand-show,hidden)}
 @media not all and (min-aspect-ratio:11/10){.ff-lonetree,.art-wide{display:none}}
 @media (min-aspect-ratio:11/10){.art-tall{display:none}}
 `.replace(/\n/g, '');
@@ -48,8 +55,8 @@ const restId = (place: PlaceId, plane: string) => `${groupId(place, plane)}-rest
 
 /** Each place's cut-out clips: world units, the user space of the <use> that wears one. */
 /** Each flown-away place's silhouettes at rest (script/world.ts `restClip`): world units, as the cut-outs. */
-function RestClips({ place }: { place: PlaceId }) {
-  const art = placeArt(place);
+function RestClips({ place, look }: { place: PlaceId; look: Look }) {
+  const art = placeArt(place, look);
   return (
     <>
       {art.planes.map((plane) => {
@@ -64,10 +71,10 @@ function RestClips({ place }: { place: PlaceId }) {
   );
 }
 
-function CutClips({ place }: { place: PlaceId }) {
+function CutClips({ place, look }: { place: PlaceId; look: Look }) {
   return (
     <>
-      {placeArt(place)
+      {placeArt(place, look)
         .planes.filter((plane) => !plane.src)
         .map((plane) => {
           const d = cutClip(plane, 7100 + PLACES.indexOf(place) * 101 + PLANE_ORDER.indexOf(plane.id) * 13);
@@ -81,13 +88,32 @@ function CutClips({ place }: { place: PlaceId }) {
   );
 }
 
+/** The paints that are paper (a hill, the sea, a roof, a tree): what the paper's sand lies on (script/sand.ts). */
+const PAPER = /(^| )ff-(range|swell-b|peaks|swell-d|sea|headland|town|hills|near|ground|bridge|bridge-wall|roof|tree|canopy|trail)( |$)/;
+
+/**
+ * A plane's parts, in order. A paper part is cut once, unpainted, and used twice: with its paint, then with the
+ * paper's sand (`.fk-sand`: its strength the film's `--film-sand`) — so the sand lies on each paper exactly once,
+ * cut to its edge, and the next paper laid over it covers it as it covers the paper.
+ */
 function PlaneGroup({ place, plane }: { place: PlaceId; plane: PlaneArt }) {
   const gid = groupId(place, plane.id);
   return (
     <g id={gid}>
-      {plane.parts.map((p, i) => (
-        <path key={i} d={p.d} className={p.cls} style={p.op != null ? { opacity: p.op } : undefined} />
-      ))}
+      {plane.parts.map((p, i) => {
+        const style = p.op != null ? { opacity: p.op } : undefined;
+        if (!PAPER.test(p.cls)) return <path key={i} d={p.d} className={p.cls} style={style} />;
+        const pid = `${gid}-${i}`;
+        return (
+          <Fragment key={i}>
+            <defs>
+              <path id={pid} d={p.d} />
+            </defs>
+            <use href={`#${pid}`} className={p.cls} style={style} />
+            <use href={`#${pid}`} className="fk-sand" />
+          </Fragment>
+        );
+      })}
     </g>
   );
 }
@@ -97,24 +123,29 @@ function PlaneGroup({ place, plane }: { place: PlaceId; plane: PlaneArt }) {
  * island (Island.tsx): its inside, drawn here once per process as HTML (staticHtml.ts, every path compacted and a path
  * drawn twice used again), is in the page's HTML and never in the RSC payload — the world's paper travels once.
  */
-let defsIsland: string | null = null;
-export function WorldDefs() {
-  defsIsland ??= islandHtml('film-world-defs', toHtml(<WorldDefsArt />, { path: compactPath }, true));
-  return <Island id={defsIsland} as="svg" className={styles.defs} aria-hidden="true" focusable="false" width="0" height="0" />;
+const defsIslands = new Map<Look, string>();
+export function WorldDefs({ look = 'waves' }: { look?: Look }) {
+  let id = defsIslands.get(look);
+  if (!id) {
+    // the lab's comparison (`peaks`: script/look.ts) is an island of its own
+    id = islandHtml(look === 'waves' ? 'film-world-defs' : `film-world-defs-${look}`, toHtml(<WorldDefsArt look={look} />, { path: compactPath }, true));
+    defsIslands.set(look, id);
+  }
+  return <Island id={id} as="svg" className={styles.defs} aria-hidden="true" focusable="false" width="0" height="0" />;
 }
 
 /** The hidden <svg>'s inside (the island's HTML). */
-function WorldDefsArt() {
+function WorldDefsArt({ look }: { look: Look }) {
   return (
     <>
       <style>{PAINTS}</style>
       <defs>
-        {PLACES.map((place) => placeArt(place).planes.filter((plane) => !plane.src).map((plane) => <PlaneGroup key={`${place}-${plane.id}`} place={place} plane={plane} />))}
+        {PLACES.map((place) => placeArt(place, look).planes.filter((plane) => !plane.src).map((plane) => <PlaneGroup key={`${place}-${plane.id}`} place={place} plane={plane} />))}
         {PLACES.map((place) => (
-          <CutClips key={place} place={place} />
+          <CutClips key={place} place={place} look={look} />
         ))}
         {REST_PLACES.map((place) => (
-          <RestClips key={place} place={place} />
+          <RestClips key={place} place={place} look={look} />
         ))}
         <g id="film-fringe-l">
           <path d={fringeArt('left')} className="ff-fringe" />
@@ -122,6 +153,12 @@ function WorldDefsArt() {
         <g id="film-fringe-r">
           <path d={fringeArt('right')} className="ff-fringe" />
         </g>
+        {/* the paper's sand (script/sand.ts): one tile of fine grit, dark and pale, each paper is
+            filled with a second time (PlaneGroup's `.fk-sand`) and the sky once (Sky) */}
+        <pattern id="film-sand" width={SAND_TILE} height={SAND_TILE} patternUnits="userSpaceOnUse">
+          <image href={pictureSrc(sandDark)} width={SAND_TILE} height={SAND_TILE} />
+          <image href={pictureSrc(sandLight)} width={SAND_TILE} height={SAND_TILE} />
+        </pattern>
         <radialGradient id="film-glow" r="0.5" cx="0.5" cy="0.5">
           {/* the sun (and the moon) into the sky: one soft gradient from the disc's edge (0.18 of the way) out — no rings
               (round 5, the owner: 「太陽這邊和天空做個漸層就好了，不要用這個很多圈的設計」) */}
@@ -176,7 +213,12 @@ export function Sky() {
   const st = starsPath();
   return (
     <>
-      <div className={styles.sky} data-sky="" />
+      <div className={styles.sky} data-sky="">
+        {/* the sky's share of the paper's sand: the same tile, in the world's units */}
+        <svg className={styles.skySand} viewBox="0 0 2800 1400" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <rect width="2800" height="1400" fill="url(#film-sand)" />
+        </svg>
+      </div>
       <svg className={styles.stars} viewBox="0 0 1600 560" preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">
         <path d={st.dots} className={styles.starDots} />
         <path d={st.glints} className={styles.starGlint} />
@@ -321,7 +363,7 @@ export function ActorStill({ slug, scene, at, x0, phase, carrier }: { slug: PalS
 /* ───────────── the scene sets ───────────── */
 
 /** A plane of a set: its <use> of the place's group, sized in world units by the stage's --u. */
-function Plane({ place, plane, children }: { place: PlaceId; plane: PlaneArt; children?: React.ReactNode }) {
+function Plane({ place, plane, look, children }: { place: PlaceId; plane: PlaneArt; look: Look; children?: React.ReactNode }) {
   const back = plane.depth < 0.35;
   const src = plane.src ?? place;
   const href = `#${groupId(src, plane.id)}`;
@@ -329,7 +371,7 @@ function Plane({ place, plane, children }: { place: PlaceId; plane: PlaneArt; ch
   // shows under it) — shown only when the change's style asks for it (`data-foot-mode`)
   const apron = !back && plane.id !== 'bridge';
   // its cut-out foot (a change's `cut`): the clip each <use> wears then, and the foot's samples for the runtime
-  const tallArt = plane.tall ? placeArt(plane.tall).planes.find((p) => p.id === plane.id) : undefined;
+  const tallArt = plane.tall ? placeArt(plane.tall, look).planes.find((p) => p.id === plane.id) : undefined;
   const ys = cutSamples(plane);
   const ysTall = tallArt ? cutSamples(tallArt) : null;
   const cut = ys ? cutId(src, plane.id) : undefined;
@@ -390,18 +432,18 @@ function reflectStrips() {
 }
 
 /** The four scene sets (only the current one, and the incoming during a change, is shown). */
-export function Sets({ phase = 0 }: { phase?: number }) {
+export function Sets({ phase = 0, look = 'waves' }: { phase?: number; look?: Look }) {
   const scenes: SceneN[] = [1, 2, 3, 4];
   return (
     <div className={styles.sets} aria-hidden="true">
       {scenes.map((n) => {
         const place = PLACE_OF[n];
-        const art = placeArt(place);
+        const art = placeArt(place, look);
         const ground = art.planes.find((p) => p.id === 'ground')!;
         return (
           <div key={n} className={styles.set} data-set={n} data-place={place}>
             {art.planes.map((plane) => (
-              <Plane key={plane.id} place={place} plane={plane}>
+              <Plane key={plane.id} place={place} plane={plane} look={look}>
                 {plane.id === 'ground' &&
                   CAST_OF[n].map((slug, i) => {
                     const xw = markOf(n, slug, 'wide');

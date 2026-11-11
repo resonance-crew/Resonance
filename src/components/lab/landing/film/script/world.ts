@@ -12,6 +12,7 @@
 import { DX, HOME, JOURNEY_GROUND, VALLEY_LEFT, VALLEY_LEFT_T, VALLEY_RIGHT, VALLEY_RIGHT_T, WALK, groundEdge, mirrorX, tileKeys, walkwayAt, within, type PlaceId } from './ground';
 import { closeDown, ellipse, path, peaks, poly, ribbon, rng, spline, tear, yAt, type Peak, type Pt } from './geom';
 import { lerp } from './timeline';
+import type { Look } from './look';
 
 export type { PlaceId };
 export type PlaneId = 'range' | 'peaks' | 'sea' | 'headland' | 'town' | 'hills' | 'near' | 'bridge' | 'ground';
@@ -268,6 +269,53 @@ function peakParts(list: Peak[], paint: string, jag: number, wander: number, sun
   return out;
 }
 
+/** A swell of the far land: how high its line rides over the horizon, how far it swings, how long a wave is. */
+interface Swell {
+  cls: string;
+  mean: number;
+  amp: number;
+  len: number;
+  phase: number;
+  seed: number;
+}
+
+/**
+ * The far land as waves (script/look.ts): where the folded peaks stood, four swells one behind
+ * another — the mark's ≋ laid across the horizon. Each is a strip of paper whose top is one even wave line (its reach
+ * breathing a little along it, so it is cut by hand, never ruled), torn finely; the four run nearly in step, each a
+ * little shorter and a little later than the one behind it, as the mark's three lines do. Nothing folded, nothing
+ * pointed: no lit and dark faces.
+ */
+function swellParts(list: Swell[], x0: number, w: number): ArtPart[] {
+  const TAU = Math.PI * 2;
+  return list.map((sw) => {
+    const edge: Pt[] = [];
+    for (let x = x0 - 40; x <= x0 + w + 40 + 1e-6; x += 12) {
+      const u = (x / sw.len) * TAU + sw.phase;
+      const breath = 0.86 + 0.14 * Math.sin(u / 2.9 + sw.phase * 1.9);
+      edge.push([x, HORIZON - sw.mean - sw.amp * breath * Math.sin(u)]);
+    }
+    const torn = tear(edge, sw.seed, { amp: 1.2, jag: 0.5, wander: 2, closed: false });
+    return [
+      { d: D([...torn, [x0 + w + 40, WORLD_BOTTOM], [x0 - 40, WORLD_BOTTOM]], 0), cls: sw.cls },
+      // its wave line, drawn: the paper's cut edge catching the light — four of them, the mark's ≋ over the land
+      { d: path(torn, false, 0), cls: 'fs-swell-line fx-ns' },
+    ];
+  }).flat();
+}
+
+/** The two far planes' swells: the range's two (the palest, the longest), the peaks' two nearer and shorter. */
+const SWELLS = {
+  range: (seed: number, phase: number): Swell[] => [
+    { cls: 'ff-range', mean: 150, amp: 40, len: 640, phase, seed },
+    { cls: 'ff-swell-b', mean: 104, amp: 32, len: 590, phase: phase + 0.7, seed: seed + 1 },
+  ],
+  peaks: (seed: number, phase: number): Swell[] => [
+    { cls: 'ff-peaks', mean: 62, amp: 25, len: 540, phase: phase + 1.4, seed: seed + 2 },
+    { cls: 'ff-swell-d', mean: 26, amp: 17, len: 490, phase: phase + 2.1, seed: seed + 3 },
+  ],
+};
+
 interface House {
   body: Pt[];
   roof: Pt[];
@@ -405,8 +453,9 @@ function headlandParts(shore: Pt[], head: Pt[], lighthouseX: number | null): Art
   ];
 }
 
-function homeArt(): PlaceArt {
+function homeArt(look: Look = 'waves'): PlaceArt {
   const sunX = 1500;
+  const plain = look === 'peaks';
   const range = [...peaks(11, -120, 1720, HORIZON, 120, 230, 7), ...peaks(12, -560, -160, HORIZON, 110, 200, 2), ...peaks(13, 1760, 2160, HORIZON, 110, 210, 2)].map((p) => shiftPeak(p, DX));
   const pk = [...peaks(23, -120, 1720, HORIZON, 50, 120, 11), ...peaks(24, -560, -150, HORIZON, 50, 110, 3), ...peaks(25, 1740, 2160, HORIZON, 50, 110, 3)].map((p) => shiftPeak(p, DX));
   const townHill = spline(HOME.townHill, 10, false);
@@ -425,13 +474,14 @@ function homeArt(): PlaceArt {
     sunX,
     groundEdge: gr.edge.map(([x, y]): Pt => [x, y + 5]),
     planes: [
-      { id: 'range', depth: PLANE_DEPTH.range, foot: FOOT.back, x0, w, parts: peakParts(range, 'ff-range', 0.8, 3, sunX, false), edges: [level(x0, w, HORIZON)] },
-      { id: 'peaks', depth: PLANE_DEPTH.peaks, foot: FOOT.back, x0, w, parts: peakParts(pk, 'ff-peaks', 0.7, 2.5, sunX, true), edges: [level(x0, w, HORIZON)] },
+      { id: 'range', depth: PLANE_DEPTH.range, foot: FOOT.back, x0, w, parts: plain ? peakParts(range, 'ff-range', 0.8, 3, sunX, false) : swellParts(SWELLS.range(3101, 0.6), x0, w), edges: [level(x0, w, HORIZON)] },
+      { id: 'peaks', depth: PLANE_DEPTH.peaks, foot: FOOT.back, x0, w, parts: plain ? peakParts(pk, 'ff-peaks', 0.7, 2.5, sunX, true) : swellParts(SWELLS.peaks(3101, 0.6), x0, w), edges: [level(x0, w, HORIZON)] },
       { id: 'sea', depth: PLANE_DEPTH.sea, foot: FOOT.back, x0, w, parts: seaParts(x0, w, true), edges: [level(x0, w, SEA_TOP)] },
-      { id: 'headland', depth: PLANE_DEPTH.headland, foot: FOOT.headland, x0, w, parts: headlandParts(shore, head, 1415 + DX), edges: [shore, head] },
+      // no lighthouse on the headland, no lone tree on the near hill (the lab's `peaks` keeps both)
+      { id: 'headland', depth: PLANE_DEPTH.headland, foot: FOOT.headland, x0, w, parts: headlandParts(shore, head, plain ? 1415 + DX : null), edges: [shore, head] },
       { id: 'town', depth: PLANE_DEPTH.town, foot: FOOT.town, x0, w, parts: townParts(townHill, tw, 1601), edges: [townHill] },
       { id: 'hills', depth: PLANE_DEPTH.hills, foot: FOOT.hills, x0, w, parts: hillsParts(hills, tr, 1701), edges: [hills] },
-      { id: 'near', depth: PLANE_DEPTH.near, foot: FOOT.near, x0, w, parts: nearParts([near, nearR], loneTree(DX), 1801, 'ff-canopy ff-lonetree'), edges: [near, nearR] },
+      { id: 'near', depth: PLANE_DEPTH.near, foot: FOOT.near, x0, w, parts: nearParts([near, nearR], plain ? loneTree(DX) : '', 1801, 'ff-canopy ff-lonetree'), edges: [near, nearR] },
       { id: 'ground', depth: PLANE_DEPTH.ground, foot: FOOT.ground, x0, w, parts: groundParts(gr, 1901), edges: [gr.torn] },
     ],
   };
@@ -511,7 +561,8 @@ const JOURNEY_PERIOD = 2000;
 /** The near plane's second tile sits early, so its lone tree stands beside 聆聆 (ground x ≈ 3600) at the road's end. */
 const JOURNEY_NEAR_TILE = 1626;
 
-function journeyArt(): PlaceArt {
+function journeyArt(look: Look = 'waves'): PlaceArt {
+  const plain = look === 'peaks';
   const M = mirrorX;
   const tile = (keys: Pt[]) => tileKeys(keys, JOURNEY_PERIOD);
   const sunX = 1400;
@@ -535,21 +586,21 @@ function journeyArt(): PlaceArt {
     ...[0, JOURNEY_NEAR_TILE].map((o, i) => tear(spline(nearHill.map(([x, y]): Pt => [x + o, y]), 9, false), 1211 + i * 2, { jag: 1.2, wander: 4, closed: false })),
   ];
   // mirrored about x 1000: the mock's x → 1800 − x (and the second tile's copy beside 聆聆)
-  const tree = loneTree(1800, true) + loneTree(1800 + JOURNEY_NEAR_TILE, true);
+  const tree = plain ? loneTree(1800, true) + loneTree(1800 + JOURNEY_NEAR_TILE, true) : '';
   const gr = groundShape(JOURNEY_GROUND, 54, 1311);
   const xFar = -260;
   const wFar = 3000;
   const x0 = -260;
   const w = 4560;
   const headEdges = [0, JOURNEY_PERIOD].map((o) => [spline(shore.map(([x, y]): Pt => [x + o, y]), 7, false), spline(head.map(([x, y]): Pt => [x + o, y]), 7, false)]);
-  const headlands = headEdges.flatMap(([sh, hd], i) => headlandParts(sh, hd, 2000 - 1415 - DX + i * JOURNEY_PERIOD));
+  const headlands = headEdges.flatMap(([sh, hd], i) => headlandParts(sh, hd, plain ? 2000 - 1415 - DX + i * JOURNEY_PERIOD : null));
   return {
     id: 'journey',
     sunX,
     groundEdge: gr.edge.map(([x, y]): Pt => [x, y + 5]),
     planes: [
-      { id: 'range', depth: PLANE_DEPTH.range, foot: FOOT.back, x0: xFar, w: wFar, parts: peakParts(range, 'ff-range', 0.8, 3, sunX, false), edges: [level(xFar, wFar, HORIZON)] },
-      { id: 'peaks', depth: PLANE_DEPTH.peaks, foot: FOOT.back, x0: xFar, w: wFar, parts: peakParts(pk, 'ff-peaks', 0.7, 2.5, sunX, true), edges: [level(xFar, wFar, HORIZON)] },
+      { id: 'range', depth: PLANE_DEPTH.range, foot: FOOT.back, x0: xFar, w: wFar, parts: plain ? peakParts(range, 'ff-range', 0.8, 3, sunX, false) : swellParts(SWELLS.range(3201, 2.4), xFar, wFar), edges: [level(xFar, wFar, HORIZON)] },
+      { id: 'peaks', depth: PLANE_DEPTH.peaks, foot: FOOT.back, x0: xFar, w: wFar, parts: plain ? peakParts(pk, 'ff-peaks', 0.7, 2.5, sunX, true) : swellParts(SWELLS.peaks(3201, 2.4), xFar, wFar), edges: [level(xFar, wFar, HORIZON)] },
       { id: 'sea', depth: PLANE_DEPTH.sea, foot: FOOT.back, x0: xFar, w: wFar, parts: seaParts(xFar, wFar, false), edges: [level(xFar, wFar, SEA_TOP)] },
       { id: 'headland', depth: PLANE_DEPTH.headland, foot: FOOT.headland, x0, w, parts: headlands, edges: headEdges.flat() },
       { id: 'town', depth: PLANE_DEPTH.town, foot: FOOT.town, x0, w, parts: townParts(townHill, { houses: [...tw1.houses, ...tw2.houses], windows: [...tw1.windows, ...tw2.windows] }, 1611), edges: [townHill] },
@@ -566,7 +617,7 @@ function journeyArt(): PlaceArt {
           const parts = nearParts(nearEdges, tree, 1811, 'ff-canopy ff-lonetree');
           const at = parts.findIndex((pt) => pt.cls.includes('ff-lonetree'));
           const extra = nearEdges.slice(2).flatMap((e, i) => roadside(e, 2311 + i * 7));
-          return [...parts.slice(0, at), ...extra, ...parts.slice(at)];
+          return at < 0 ? [...parts, ...extra] : [...parts.slice(0, at), ...extra, ...parts.slice(at)];
         })(),
         edges: nearEdges,
       },
@@ -586,8 +637,8 @@ export const WATER_Y = 925;
  * it — its bridge 810…1190 and the banks' feet closer, so both feet and the whole arch are in a phone's view (the far
  * layers are the wide one's, drawn by home's groups).
  */
-function valleyArt(tall = false): PlaceArt {
-  const home = homeArt();
+function valleyArt(tall = false, look: Look = 'waves'): PlaceArt {
+  const home = homeArt(look);
   const sunX = 700;
   const pk = [...peaks(23, -120, 1720, HORIZON, 50, 120, 11), ...peaks(24, -560, -150, HORIZON, 50, 110, 3), ...peaks(25, 1740, 2160, HORIZON, 50, 110, 3)].map((p) => shiftPeak(p, DX));
   const keep = (id: PlaneId): PlaneArt => ({ ...home.planes.find((p) => p.id === id)!, src: 'home' });
@@ -647,7 +698,8 @@ function valleyArt(tall = false): PlaceArt {
     walkway,
     planes: [
       keep('range'),
-      { id: 'peaks', depth: PLANE_DEPTH.peaks, foot: FOOT.back, x0, w, parts: peakParts(pk, 'ff-peaks', 0.7, 2.5, sunX, true), edges: [level(x0, w, HORIZON)], ...(tall ? { src: 'valley' as PlaceId } : {}) },
+      // (the swells have no lit side: home's own, as its range; the lab's peaks are lit from the valley's sun)
+      look === 'peaks' ? { id: 'peaks', depth: PLANE_DEPTH.peaks, foot: FOOT.back, x0, w, parts: peakParts(pk, 'ff-peaks', 0.7, 2.5, sunX, true), edges: [level(x0, w, HORIZON)], ...(tall ? { src: 'valley' as PlaceId } : {}) } : keep('peaks'),
       keep('sea'),
       keep('headland'),
       keep('town'),
@@ -658,14 +710,15 @@ function valleyArt(tall = false): PlaceArt {
   };
 }
 
-const memo = new Map<PlaceId, PlaceArt>();
+const memo = new Map<string, PlaceArt>();
 
-/** A place's art (memoized: it is the same paper every time). */
-export function placeArt(id: PlaceId): PlaceArt {
-  let p = memo.get(id);
+/** A place's art (memoized: it is the same paper every time), as a look cuts it (the film's waves; the lab's `peaks`). */
+export function placeArt(id: PlaceId, look: Look = 'waves'): PlaceArt {
+  const key = `${id}:${look}`;
+  let p = memo.get(key);
   if (!p) {
-    p = id === 'home' ? homeArt() : id === 'journey' ? journeyArt() : valleyArt(id === 'valleyT');
-    memo.set(id, p);
+    p = id === 'home' ? homeArt(look) : id === 'journey' ? journeyArt(look) : valleyArt(id === 'valleyT', look);
+    memo.set(key, p);
   }
   return p;
 }
