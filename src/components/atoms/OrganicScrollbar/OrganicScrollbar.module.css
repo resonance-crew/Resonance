@@ -12,6 +12,13 @@
   z-index: 2;
 }
 
+/* The page's (OrganicScrollbar `page`): over the page at the window's right edge, over its header too (z 100) —
+   the bar is the window's, as a system's floating bar would be. */
+.pageRail {
+  position: fixed;
+  z-index: 101;
+}
+
 .rail[data-hidden] {
   display: none;
 }

@@ -10,6 +10,8 @@ const PAGE = 0.9;
 const LINE = 16;
 /** How far the column stands in from its list's top and bottom, in px. */
 const INSET = 4;
+/** The keys that scroll a page. */
+const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
 /** With autoHide: how long the bar stays once the list stops scrolling or the pointer leaves it, in ms. */
 export const LINGER = 900;
 
@@ -20,9 +22,25 @@ export const LINGER = 900;
  */
 export const organicScrollTarget = styles.target;
 
+/** The page's scroller, read as a list's would be. */
+const pageScroller = () => (typeof document === 'undefined' ? null : ((document.scrollingElement as HTMLElement | null) ?? document.documentElement));
+
+/** Scrolls to `top` at once: the page's root has smooth scrolling (globals.css), which would make a drag trail behind. */
+function scrollToNow(el: HTMLElement, top: number, page: boolean) {
+  if (page) window.scrollTo({ top, behavior: 'instant' });
+  else el.scrollTop = top;
+}
 export interface OrganicScrollbarProps {
-  /** The overflow container it scrolls (which also takes {@link organicScrollTarget}). */
-  targetRef: RefObject<HTMLElement | null>;
+  /** The overflow container it scrolls (which also takes {@link organicScrollTarget}). Not with `page`. */
+  targetRef?: RefObject<HTMLElement | null>;
+  /**
+   * The page's own bar instead of a list's: it follows the window's scroll, floats over the page at its right edge
+   * (fixed, over whatever is drawn there — the landing film's sky), and leaves the wheel to the page. The page hides
+   * its native bar itself (from its first paint: the landing film's Page.tsx). With `autoHide`, the visitor's own
+   * scrolling (wheel, scroll keys), the column pointed at and a drag wake it — not the page scrolling by itself, nor a
+   * pointer over the page, which is always over the page.
+   */
+  page?: boolean;
   seed?: number;
   /**
    * Hidden at rest: the bar fades in while the pointer is over the list or its column, while the list
@@ -57,7 +75,7 @@ const prefersReducedMotion = () =>
  * forced colours give the system bar back (see {@link organicScrollTarget}).
  * With `autoHide` it shows only while wanted (the 私訊 list).
  */
-export function OrganicScrollbar({ targetRef, seed = 47, autoHide = false }: OrganicScrollbarProps) {
+export function OrganicScrollbar({ targetRef, page = false, seed = 47, autoHide = false }: OrganicScrollbarProps) {
   const railRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
   // The thumb's length (0 = no bar): the only thing React draws; where it stands is written straight to its style.
@@ -82,16 +100,19 @@ export function OrganicScrollbar({ targetRef, seed = 47, autoHide = false }: Org
     }, LINGER);
   }, [autoHide]);
 
+  /** What it scrolls: the list, or the page. */
+  const scroller = useCallback(() => (page ? pageScroller() : (targetRef?.current ?? null)), [page, targetRef]);
+
   /** The scroller's geometry on the track as it is now, or null for no bar. */
   const geometry = useCallback(() => {
-    const el = targetRef.current;
+    const el = scroller();
     if (!el) return null;
     // The column runs the list's height, less its inset at each end — measured on the list, since a
     // column with no bar to show takes no room of its own to measure.
     const trackH = el.clientHeight - 2 * INSET;
     const g = thumbGeometry({ scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight }, trackH);
     return g ? { ...g, trackH, el } : null;
-  }, [targetRef]);
+  }, [scroller]);
 
   const place = useCallback(() => {
     const g = geometry();
@@ -111,9 +132,25 @@ export function OrganicScrollbar({ targetRef, seed = 47, autoHide = false }: Org
   // A thumb of a new length stands where the scroller is before it is painted.
   useLayoutEffect(() => place(), [place, h]);
 
+  // The page's: its scrolling, the window's size, the body's (the page growing as it loads).
+  useEffect(() => {
+    if (!page) return;
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    const ro = new ResizeObserver(schedule);
+    ro.observe(document.body);
+    return () => {
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      ro.disconnect();
+      if (frame.current != null) cancelAnimationFrame(frame.current);
+      frame.current = null;
+    };
+  }, [page, schedule]);
+
   // Scrolling, and any change of size: the list's box (the track is its height), every child in it (items loading in).
   useEffect(() => {
-    const el = targetRef.current;
+    const el = page ? null : (targetRef?.current ?? null);
     if (!el) return;
     el.addEventListener('scroll', schedule, { passive: true });
     const ro = new ResizeObserver(schedule);
@@ -135,11 +172,42 @@ export function OrganicScrollbar({ targetRef, seed = 47, autoHide = false }: Org
       if (frame.current != null) cancelAnimationFrame(frame.current);
       frame.current = null;
     };
-  }, [targetRef, schedule]);
+  }, [page, targetRef, schedule]);
+
+  // autoHide, the page's: the visitor scrolling it (a wheel or a trackpad, its momentum too; a scroll key) and the
+  // column pointed at — never a scroll the page makes by itself (the landing film plays by scrolling), as a system's
+  // floating bar shows for the hand alone.
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!autoHide || !page || !rail) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (SCROLL_KEYS.has(e.key)) wake();
+    };
+    const railIn = () => {
+      over.current.rail = true;
+      wake();
+    };
+    const railOut = () => {
+      over.current.rail = false;
+      wake();
+    };
+    window.addEventListener('wheel', wake, { passive: true });
+    window.addEventListener('keydown', onKey);
+    rail.addEventListener('pointerenter', railIn);
+    rail.addEventListener('pointerleave', railOut);
+    return () => {
+      window.removeEventListener('wheel', wake);
+      window.removeEventListener('keydown', onKey);
+      rail.removeEventListener('pointerenter', railIn);
+      rail.removeEventListener('pointerleave', railOut);
+      if (linger.current != null) clearTimeout(linger.current);
+      linger.current = null;
+    };
+  }, [autoHide, page, wake]);
 
   // autoHide: the list scrolling, the pointer coming or going over the list or the column.
   useEffect(() => {
-    const el = targetRef.current;
+    const el = page ? null : (targetRef?.current ?? null);
     const rail = railRef.current;
     if (!autoHide || !el || !rail) return;
     const pointer = (part: 'list' | 'rail', on: boolean) => () => {
@@ -164,14 +232,15 @@ export function OrganicScrollbar({ targetRef, seed = 47, autoHide = false }: Org
       if (linger.current != null) clearTimeout(linger.current);
       linger.current = null;
     };
-  }, [autoHide, targetRef, wake]);
+  }, [autoHide, page, targetRef, wake]);
 
-  // A wheel over the column scrolls the list (React's onWheel can't stop the page behind it: it is passive).
+  // A wheel over the column scrolls the list (React's onWheel can't stop the page behind it: it is passive). The
+  // page's bar leaves the wheel to the page, which it scrolls anyway.
   useEffect(() => {
     const rail = railRef.current;
-    if (!rail) return;
+    if (!rail || page) return;
     const onWheel = (e: WheelEvent) => {
-      const el = targetRef.current;
+      const el = targetRef?.current;
       if (!el) return;
       const unit = e.deltaMode === 1 ? LINE : e.deltaMode === 2 ? el.clientHeight : 1;
       e.preventDefault();
@@ -179,7 +248,7 @@ export function OrganicScrollbar({ targetRef, seed = 47, autoHide = false }: Org
     };
     rail.addEventListener('wheel', onWheel, { passive: false });
     return () => rail.removeEventListener('wheel', onWheel);
-  }, [targetRef]);
+  }, [page, targetRef]);
 
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
     if (e.button !== 0) return;
@@ -197,7 +266,9 @@ export function OrganicScrollbar({ targetRef, seed = 47, autoHide = false }: Org
     }
     // The track above or below it: a page up or down.
     const by = (e.clientY < box.top ? -1 : 1) * g.el.clientHeight * PAGE;
-    if (typeof g.el.scrollBy === 'function') g.el.scrollBy({ top: by, behavior: prefersReducedMotion() ? 'instant' : 'smooth' });
+    const behavior = prefersReducedMotion() ? 'instant' : 'smooth';
+    if (page) window.scrollBy({ top: by, behavior });
+    else if (typeof g.el.scrollBy === 'function') g.el.scrollBy({ top: by, behavior });
     else g.el.scrollTop += by;
   }
 
@@ -214,7 +285,7 @@ export function OrganicScrollbar({ targetRef, seed = 47, autoHide = false }: Org
     if (!g || !railRef.current) return;
     const railTop = railRef.current.getBoundingClientRect().top;
     // Instant, 1:1 with the pointer.
-    g.el.scrollTop = scrollTopForThumb(e.clientY - railTop - d.grab, g.trackH, g.h, g.max);
+    scrollToNow(g.el, scrollTopForThumb(e.clientY - railTop - d.grab, g.trackH, g.h, g.max), page);
   }
 
   /** Ends a drag however it ended: released, cancelled, its capture lost, the window left. */
@@ -253,8 +324,9 @@ export function OrganicScrollbar({ targetRef, seed = 47, autoHide = false }: Org
   return (
     <div
       ref={railRef}
-      className={styles.rail}
+      className={page ? `${styles.rail} ${styles.pageRail}` : styles.rail}
       style={{ top: INSET, bottom: INSET }}
+      data-page-scrollbar={page || undefined}
       data-hidden={h > 0 ? undefined : ''}
       data-dragging={dragging || undefined}
       data-auto-hide={autoHide || undefined}

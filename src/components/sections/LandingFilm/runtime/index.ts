@@ -99,6 +99,7 @@ export function startFilm(root: HTMLElement, { model, style }: { model: FilmMode
     if (on !== paper) {
       paper = on;
       root.toggleAttribute('data-paper', on);
+      director.paperUp = on;
     }
     const d = y >= duskY;
     if (d !== dusk) {
@@ -334,8 +335,11 @@ export function startFilm(root: HTMLElement, { model, style }: { model: FilmMode
     touching = false;
     if (resumeAt) resumeAt = performance.now() + RESUME_MS;
   };
-  const onMouseDown = (e: MouseEvent) => {
-    if (e.clientX >= document.documentElement.clientWidth) handBack();
+  // a press on the scrollbar: the drawn one floating over the page (script/scrollbar.ts), or the system's (forced
+  // colours keep it). A pointer event, which the drawn bar's own press can't keep from us as it keeps the mouse's.
+  const onBarPress = (e: PointerEvent) => {
+    const onBar = !!(e.target as Element | null)?.closest?.('[data-page-scrollbar]');
+    if (onBar || e.clientX >= document.documentElement.clientWidth) handBack();
   };
   const inFilm = () => yFilm() < (TRACK_SVH + 100) * svh;
   const onKey = (e: KeyboardEvent) => {
@@ -359,7 +363,7 @@ export function startFilm(root: HTMLElement, { model, style }: { model: FilmMode
   window.addEventListener('touchstart', onTouch, { passive: true });
   window.addEventListener('touchend', onTouchEnd, { passive: true });
   window.addEventListener('touchcancel', onTouchEnd, { passive: true });
-  window.addEventListener('mousedown', onMouseDown);
+  window.addEventListener('pointerdown', onBarPress);
   window.addEventListener('keydown', onKey);
   // a mouse really moving over a card, or the keyboard's focus on one, during ▶ gives the page back (a card sliding
   // under a resting mouse doesn't: the browser's hover after a scroll comes with no movement)
@@ -692,7 +696,7 @@ export function startFilm(root: HTMLElement, { model, style }: { model: FilmMode
     window.removeEventListener('touchstart', onTouch);
     window.removeEventListener('touchend', onTouchEnd);
     window.removeEventListener('touchcancel', onTouchEnd);
-    window.removeEventListener('mousedown', onMouseDown);
+    window.removeEventListener('pointerdown', onBarPress);
     window.removeEventListener('keydown', onKey);
     window.removeEventListener('scroll', onScroll);
     window.removeEventListener('resize', onResize);

@@ -359,4 +359,102 @@ describe('OrganicScrollbar', () => {
     expect(organicScrollTarget).toBeTruthy();
     expect(el.className).toBe(organicScrollTarget);
   });
+
+  // The landing page's bar (the owner, 2026-11-12: floating over the film, fading when idle).
+  describe('page', () => {
+    const doc = { scrollTop: 0, scrollHeight: 4000, clientHeight: 400 };
+    const isRoot = (el: Element) => el === document.documentElement;
+    let calls: ScrollToOptions[] = [];
+    beforeEach(() => {
+      Object.assign(doc, { scrollTop: 0, scrollHeight: 4000, clientHeight: 400 });
+      calls = [];
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const top = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop')!;
+      const sh = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight')!;
+      const ch = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight')!;
+      stub(HTMLElement.prototype, 'scrollTop', {
+        get(this: HTMLElement) {
+          return isRoot(this) ? doc.scrollTop : top.get!.call(this);
+        },
+        set(this: HTMLElement, v: number) {
+          if (isRoot(this)) throw new Error('the page is scrolled through window.scrollTo, never its root');
+          top.set!.call(this, v);
+        },
+      });
+      stub(HTMLElement.prototype, 'scrollHeight', { get(this: HTMLElement) { return isRoot(this) ? doc.scrollHeight : sh.get!.call(this); } });
+      stub(HTMLElement.prototype, 'clientHeight', { get(this: HTMLElement) { return isRoot(this) ? doc.clientHeight : ch.get!.call(this); } });
+      // The page scrolls as a browser's would: the root's place, then a scroll event on the window.
+      const move = (opts: ScrollToOptions, by = false) => {
+        calls.push(opts);
+        const to = by ? doc.scrollTop + (opts.top ?? 0) : (opts.top ?? 0);
+        doc.scrollTop = Math.min(Math.max(to, 0), doc.scrollHeight - doc.clientHeight);
+        window.dispatchEvent(new Event('scroll'));
+      };
+      vi.stubGlobal('scrollTo', (o: ScrollToOptions) => move(o));
+      vi.stubGlobal('scrollBy', (o: ScrollToOptions) => move(o, true));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+    const wait = (ms: number) => act(() => vi.advanceTimersByTime(ms));
+    const scrollPage = (top: number) => {
+      act(() => window.scrollTo({ top }));
+      flush();
+    };
+
+    function mountPage() {
+      const { container } = renderWithIntl(<OrganicScrollbar page autoHide seed={53} />);
+      flush();
+      const rail = container.querySelector<HTMLElement>('[data-page-scrollbar]')!;
+      return { rail, thumb: () => rail.querySelector<HTMLElement>('[class*="thumb"]') };
+    }
+
+    it('follows the window: a thumb for the page’s share, moved as the page scrolls, on a column of its own over the page', () => {
+      const { rail, thumb } = mountPage();
+      expect(rail.className).toMatch(/pageRail/);
+      // 400 of 4000 on a 392 track: the 39px share
+      expect(thumb()!.style.height).toBe('39px');
+      scrollPage(1800);
+      expect(thumbTop(thumb()!)).toBeCloseTo(((392 - 39) * 1800) / 3600);
+    });
+
+    it('wakes for the visitor’s own scrolling — a wheel, a scroll key, the column pointed at — never for the page scrolling by itself, and fades a moment after', () => {
+      const { rail } = mountPage();
+      expect(rail).toHaveAttribute('data-auto-hide');
+      // the landing film plays by scrolling the page
+      scrollPage(600);
+      expect(rail).not.toHaveAttribute('data-awake');
+      act(() => {
+        window.dispatchEvent(new WheelEvent('wheel', { deltaY: 40 }));
+      });
+      expect(rail).toHaveAttribute('data-awake');
+      wait(LINGER);
+      expect(rail).not.toHaveAttribute('data-awake');
+      fireEvent.keyDown(window, { key: 'PageDown' });
+      expect(rail).toHaveAttribute('data-awake');
+      wait(LINGER);
+      fireEvent.keyDown(window, { key: 'a' });
+      expect(rail).not.toHaveAttribute('data-awake');
+      fireEvent.pointerEnter(rail);
+      wait(LINGER * 2);
+      expect(rail).toHaveAttribute('data-awake');
+      fireEvent.pointerLeave(rail);
+      wait(LINGER);
+      expect(rail).not.toHaveAttribute('data-awake');
+    });
+
+    it('drags the page at once (the root’s smooth scrolling never trails the thumb) and leaves the wheel over its column to the page', () => {
+      const { rail, thumb } = mountPage();
+      const top = RAIL_TOP + thumbTop(thumb()!);
+      fireEvent.pointerDown(rail, { clientY: top + 10, button: 0, pointerId: 1 });
+      fireEvent.pointerMove(rail, { clientY: top + 10 + 35.3, pointerId: 1 });
+      expect(calls.at(-1)).toEqual({ top: expect.closeTo(360, 0), behavior: 'instant' });
+      fireEvent.pointerUp(rail, { pointerId: 1 });
+      const wheel = new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true });
+      act(() => {
+        rail.dispatchEvent(wheel);
+      });
+      expect(wheel.defaultPrevented).toBe(false);
+    });
+  });
 });

@@ -18,6 +18,7 @@ import { path, rng, ribbon, tear, type Pt } from '../script/geom';
 import { groundAt } from '../script/ground';
 import { finishLayout, type Layout, type Rect } from '../script/layout';
 import { hourAt, paletteAt } from '../script/palette';
+import { scrollbarCss } from '../script/scrollbar';
 import { HEADER_PEN, camOf, ctaSpot, journeyCamEnd, moonSpot, nightHeadsY, placeOf } from '../script/marks';
 import { SEG, TRACK_SVH, changeAt, clamp01, lerp, smooth, span, type SceneN } from '../script/timeline';
 import type { ClockState } from './clock';
@@ -236,6 +237,14 @@ export class Director {
   private readonly strips: { el: SVGSVGElement; path: SVGPathElement; paint: string; z: string }[] = [];
   private readonly stripBox: HTMLElement | null = null;
   private stripsOn: boolean | null = null;
+  /** The page's scrollbar (script/scrollbar.ts): the server's frame-0 rule, rewritten with the light; its text as the
+   *  server wrote it (given back on destroy), and the hour's palette it was last written for. */
+  private readonly sbStyle: HTMLStyleElement | null;
+  private readonly sbServer: string;
+  private sbVars: Record<string, string> | null = null;
+  private sbKey = '';
+  private sbText = '';
+  private sbPaper = false;
 
   constructor(
     private readonly root: HTMLElement,
@@ -245,6 +254,8 @@ export class Director {
     style?: ChangeStyle,
   ) {
     this.style = style ?? DEFAULT_STYLE;
+    this.sbStyle = root.closest('[data-film-page]')?.querySelector<HTMLStyleElement>('style[data-film-scrollbar]') ?? null;
+    this.sbServer = this.sbStyle?.textContent ?? '';
     this.cast = new Cast(stage);
     for (const id of SLOT_IDS) {
       const el = stage.querySelector<HTMLElement>(`[data-slot="${id}"]`);
@@ -398,6 +409,9 @@ export class Director {
     this.paint.clear();
     this.paintQueue = [];
     this.header?.style.removeProperty('--film-chrome-ink');
+    if (this.sbStyle) this.sbStyle.textContent = this.sbServer;
+    this.sbKey = '';
+    this.sbVars = null;
     this.shownSets = '';
     this.paletteKey = '';
     this.planeKey = '';
@@ -622,6 +636,7 @@ export class Director {
     this.renderSets(s);
     this.renderStrips(s);
     this.renderLight(this.hourS(s), dim, inp.released, !!changeAt(s));
+    this.writeScrollbar();
     this.renderHero(s);
     // the beats: the owner's frame places the cards and the actors
     this.cast.beginFrame();
@@ -898,6 +913,7 @@ export class Director {
     // the light (the sky, the stars, the disc, the clouds, the wind and the birds, the ≋'s ink): on what wears it, never
     // on the root either — the sky's step then restyles a handful of small trees, not every card, puppet and plane
     const vars = paletteAt(step / 12, { dim });
+    this.sbVars = vars;
     for (const [k, v] of Object.entries(vars)) {
       if (!LIGHT_VAR.test(k)) continue;
       for (const el of this.lightOn) this.paint.set(el, k, v);
@@ -907,6 +923,23 @@ export class Director {
       if (released) this.header.style.removeProperty('--film-chrome-ink');
       else this.header.style.setProperty('--film-chrome-ink', vars['--film-chrome-ink']);
     }
+  }
+
+  /** The stories' paper is up (`data-paper`, runtime/index.ts): the bar is the theme's; down again, the film's at once. */
+  set paperUp(on: boolean) {
+    if (on === this.sbPaper) return;
+    this.sbPaper = on;
+    this.writeScrollbar();
+  }
+
+  private writeScrollbar() {
+    if (!this.sbStyle || (!this.sbPaper && !this.sbVars)) return;
+    const key = this.sbPaper ? 'paper' : this.paletteKey;
+    // (and again when someone else wrote it: a film stopped after this one started hands the server's rule back)
+    if (key === this.sbKey && this.sbStyle.textContent === this.sbText) return;
+    this.sbKey = key;
+    this.sbText = this.sbPaper || !this.sbVars ? '' : scrollbarCss(this.sbVars);
+    this.sbStyle.textContent = this.sbText;
   }
 
   /** The hour's paints on one plane (or the grass, the tissue strips, the birds): only what changed is written. */

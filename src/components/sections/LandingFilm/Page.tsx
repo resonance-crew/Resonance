@@ -21,6 +21,8 @@ import { SKY_CARDS } from './script/marks';
 import type { Look } from './script/look';
 import { ActorStill, Clouds, Disc, Particles, Sets, Sky, WorldDefs } from './World';
 import { WATCH_STILLS_SCRIPT } from './whole';
+import { NATIVE_BAR_OFF, scrollbarCss } from './script/scrollbar';
+import { PageScrollbar } from './PageScrollbar';
 import styles from './film.module.css';
 
 /** Before the first paint: the film — always (round 4, the owner: 「全部都是…進入到首頁，它就是點擊播放而已…就不會有兩種
@@ -37,6 +39,18 @@ const endGround = (dim: boolean) => {
   // and the page's paper coming up under it: the night's own colour over the night, FilmHeader.module.css)
   return `;--film-end-ground:${night['--film-c-ground']};--film-end-sky:${night['--film-sky-0']};`;
 };
+
+/** The page's scrollbar in frame 0's light (script/scrollbar.ts), light and dim; the runtime rewrites it as the light
+ *  moves and empties it once the stories' paper is up. */
+function scrollbarFrame0(): string {
+  const h = hourAt(0);
+  const dark = (scope: string) => scrollbarCss(paletteAt(h, { dim: true }), scope);
+  return [
+    scrollbarCss(paletteAt(h)),
+    `@media (prefers-color-scheme: dark){${dark(":root:not([data-scheme='light'])")}}`,
+    dark(":root[data-scheme='dark']"),
+  ].join('');
+}
 
 /** Frame 0's light (s = 0, the blue hour), light and dim. */
 function lightCss(): string {
@@ -103,6 +117,9 @@ export default function Page({ model, locale, look = 'waves' }: { model: FilmMod
   return (
     <div className={styles.page} data-film-page="">
       <style dangerouslySetInnerHTML={{ __html: lightCss() }} />
+      <style dangerouslySetInnerHTML={{ __html: NATIVE_BAR_OFF }} />
+      <style data-film-scrollbar="" dangerouslySetInnerHTML={{ __html: scrollbarFrame0() }} />
+      <PageScrollbar />
       <WorldDefs look={look} />
       <FilmHeader />
       <main>
