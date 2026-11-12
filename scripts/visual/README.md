@@ -60,6 +60,9 @@ Visual: card-other, card-anonymous: the response bar's note button is shorter (�
 Visual: android/thread: the composer's ＋ sits inside the capsule
 ```
 
+A commit that changes no screen may say so, `Visual: none — why`: it names no screen. A line with
+no targets before a colon names every screen, as `*` does — so write the targets.
+
 The review lists, for every changed capture, the trailers that name it ("Intended change: …"), and
 a change no trailer names is judged `unsure` at best, so the report surfaces it. The report shows
 the same lines beside each capture.

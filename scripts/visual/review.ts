@@ -70,10 +70,19 @@ function baselineCommit(runDir: string): string | undefined {
   return (info?.platforms ?? []).map((p) => readJson<{ commit: string }>(join(BASELINE_DIR, p, 'meta.json'))?.commit).find(Boolean);
 }
 
+/**
+ * The commits a run's trailers come from: since the baseline's, up to HEAD while HEAD descends from
+ * the run's commit — so a trailer committed after the run (the work it captured, committed with its
+ * `Visual:` line; or an empty commit naming a change already made) explains it on `compare --run` —
+ * else up to the run's own commit.
+ */
 function commitRange(runDir: string): string | null {
   const since = baselineCommit(runDir);
-  const head = readJson<RunInfo>(join(runDir, 'run.json'))?.commit || 'HEAD';
-  return since ? `${since}..${head}` : null;
+  if (!since) return null;
+  const ran = readJson<RunInfo>(join(runDir, 'run.json'))?.commit || 'HEAD';
+  const own = git('rev-parse', ran);
+  const head = own && git('merge-base', ran, 'HEAD') === own ? 'HEAD' : ran;
+  return `${since}..${head}`;
 }
 
 /** Every `Visual:` trailer since the baseline, as [targets, reason, commit]. */
@@ -87,12 +96,19 @@ export function intendedChanges(runDir: string): { targets: string[]; reason: st
       const [commit, values = ''] = line.split('\t');
       return values.split('\x1f').filter(Boolean).map((value) => ({ commit, value }));
     })
-    .map(({ commit, value }) => {
-      // "card, ios/thread: why" — targets before the first colon; without them, every screen.
-      const match = /^\s*([*a-z0-9/-]+(?:\s*,\s*[*a-z0-9/-]+)*)\s*:(.*)$/i.exec(value);
-      const targets = match ? match[1].split(',').map((t) => t.trim()).filter(Boolean) : ['*'];
-      return { targets, reason: (match ? match[2] : value).trim(), commit };
-    });
+    .map(({ commit, value }) => ({ ...readTrailer(value), commit }));
+}
+
+/**
+ * One `Visual:` value: "card, ios/thread: why" — the targets before the first colon; without them,
+ * every screen. `none` (`Visual: none — checked on a phone in Chrome`) names no screen: it says the
+ * commit changes none, and read as "every screen" it would explain any change at all.
+ */
+export function readTrailer(value: string): { targets: string[]; reason: string } {
+  if (/^\s*none\b/i.test(value)) return { targets: [], reason: value.trim() };
+  const match = /^\s*([*a-z0-9/-]+(?:\s*,\s*[*a-z0-9/-]+)*)\s*:(.*)$/i.exec(value);
+  const targets = match ? match[1].split(',').map((t) => t.trim()).filter(Boolean) : ['*'];
+  return { targets, reason: (match ? match[2] : value).trim() };
 }
 
 /** Whether a trailer's target (`*`, `card`, `ios/card`, `ios/iphone/card`) names this capture. */
