@@ -1,0 +1,125 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { PNG } from 'pngjs';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { LOOKS, samePicture, secondLook, wantsSecondLook, type Shot } from './secondLook';
+
+const W = 160;
+const H = 120;
+
+/** A cream page with ink blocks `[x, y, w, h]`: a loaded card has a title and lines, a skeleton none. */
+function page(blocks: [number, number, number, number][]): Buffer {
+  const png = new PNG({ width: W, height: H });
+  for (let i = 0; i < W * H; i++) png.data.set([247, 241, 232, 255], i * 4);
+  for (const [bx, by, bw, bh] of blocks) {
+    for (let y = by; y < by + bh; y++) for (let x = bx; x < bx + bw; x++) png.data.set([40, 36, 32, 255], (y * W + x) * 4);
+  }
+  return PNG.sync.write(png);
+}
+
+const LOADED = page([[10, 10, 90, 12], [10, 40, 140, 6], [10, 54, 120, 6]]);
+const SKELETON = page([]);
+const OTHER = page([[10, 80, 60, 20]]);
+const KEY = 'android/phone/card@light-zh-TW.png';
+
+const shot = (png: Buffer, settled = true): Shot => ({ png, settled });
+/** A retake that answers the given pictures in turn, counting its calls. */
+function takes(...pngs: Buffer[]) {
+  const fn = Object.assign(async () => shot(pngs[Math.min(fn.calls++, pngs.length - 1)]), { calls: 0 });
+  return fn;
+}
+
+let baseline: string;
+const put = (key: string, png: Buffer) => {
+  const file = join(baseline, key);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, png);
+};
+const options = (over = {}) => ({ key: KEY, baselineDir: baseline, wait: async () => {}, ...over });
+
+beforeEach(() => {
+  baseline = mkdtempSync(join(tmpdir(), 'second-look-'));
+});
+afterEach(() => rmSync(baseline, { recursive: true, force: true }));
+
+describe('samePicture', () => {
+  it("is the comparison's rule: the same page drawn again, but not another page", () => {
+    expect(samePicture(LOADED, page([[10, 10, 90, 12], [10, 40, 140, 6], [10, 54, 120, 6]]))).toBe(true);
+    expect(samePicture(LOADED, SKELETON)).toBe(false);
+  });
+
+  it('leaves out what a capture skips, and forgives a screen its allowance', () => {
+    expect(samePicture(SKELETON, OTHER, [{ x: 0, y: 70, width: W, height: 40 }])).toBe(true);
+    expect(samePicture(SKELETON, OTHER, [], 0.5)).toBe(true);
+  });
+});
+
+describe('a second look', () => {
+  it('is not taken when the capture is its baseline', async () => {
+    put(KEY, LOADED);
+    const retake = takes(SKELETON);
+    expect(await secondLook(shot(LOADED), retake, options())).toEqual({ png: LOADED, settled: true, retaken: false });
+    expect(retake.calls).toBe(0);
+  });
+
+  it('keeps a real change: the same picture again', async () => {
+    put(KEY, LOADED);
+    const retake = takes(OTHER);
+    const look = await secondLook(shot(OTHER), retake, options());
+    expect(look).toMatchObject({ settled: true, retaken: false });
+    expect(look.png.equals(OTHER)).toBe(true);
+    expect(retake.calls).toBe(1);
+  });
+
+  it('catches a capture taken before the page loaded (the 2.5.0 Android cards): keeps the later one, marked retaken', async () => {
+    put(KEY, LOADED);
+    const retake = takes(LOADED);
+    const look = await secondLook(shot(SKELETON), retake, options());
+    expect(look).toMatchObject({ settled: true, retaken: true });
+    expect(look.png.equals(LOADED)).toBe(true);
+  });
+
+  it('looks once more when the later look is another change, and keeps it once it holds', async () => {
+    put(KEY, LOADED);
+    const retake = takes(OTHER, OTHER);
+    const look = await secondLook(shot(SKELETON), retake, options());
+    expect(look).toMatchObject({ settled: true, retaken: true });
+    expect(look.png.equals(OTHER)).toBe(true);
+    expect(retake.calls).toBe(2);
+  });
+
+  it(`calls a page that keeps changing over ${LOOKS} looks unsettled`, async () => {
+    put(KEY, LOADED);
+    const busy = page([[0, 0, 30, 30]]);
+    const retake = takes(OTHER, busy);
+    const look = await secondLook(shot(SKELETON), retake, options());
+    expect(look).toMatchObject({ settled: false, retaken: true });
+    expect(retake.calls).toBe(LOOKS - 1);
+  });
+
+  it("keeps the first look's own word that it never settled", async () => {
+    put(KEY, LOADED);
+    expect(await secondLook(shot(OTHER, false), takes(OTHER), options())).toMatchObject({ settled: false });
+  });
+
+  it('waits the given time before each further look', async () => {
+    put(KEY, LOADED);
+    const waits: number[] = [];
+    await secondLook(shot(SKELETON), takes(OTHER, OTHER), options({ waitMs: 1234, wait: async (ms: number) => void waits.push(ms) }));
+    expect(waits).toEqual([1234, 1234]);
+  });
+
+  it('looks again at a new screen on a platform with a baseline, never on a machine’s first run', () => {
+    expect(wantsSecondLook(KEY, LOADED, [], baseline)).toBe(false);
+    put('android/phone/home@light-zh-TW.png', LOADED);
+    expect(wantsSecondLook(KEY, LOADED, [], baseline)).toBe(true);
+    expect(wantsSecondLook('ios/iphone/card@light-zh-TW.png', LOADED, [], baseline)).toBe(false);
+  });
+
+  it("skips what the baseline asked to skip too (its .ignore.json)", () => {
+    put(KEY, SKELETON);
+    writeFileSync(join(baseline, KEY.replace(/\.png$/, '.ignore.json')), JSON.stringify([{ x: 0, y: 70, width: W, height: 40 }]));
+    expect(wantsSecondLook(KEY, OTHER, [], baseline)).toBe(false);
+  });
+});

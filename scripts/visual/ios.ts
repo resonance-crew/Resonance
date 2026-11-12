@@ -14,6 +14,7 @@ import { execFile, spawn, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { lookNote, secondLook, type Look } from './secondLook';
 import { screensFor, shotName, type Account, type Screen, type Variant } from './screens';
 import { ROOT, SEED_PASSWORD, run, settle, shotPath, sleep, variantsFor, type Capture, type CaptureContext } from './util';
 
@@ -152,14 +153,16 @@ function launch(udid: string, args: string[]) {
   simctl('launch', udid, BUNDLE_ID, ...args);
 }
 
-async function shoot(udid: string, ctx: CaptureContext): Promise<{ png: Buffer; settled: boolean }> {
+async function shoot(udid: string, ctx: CaptureContext, key: string): Promise<Look> {
   const file = join(ctx.runDir, '_logs', `ios-${udid}.png`);
+  const take = () =>
+    settle(() => {
+      run('xcrun', ['simctl', 'io', udid, 'screenshot', '--type=png', file]);
+      return Promise.resolve(readFileSync(file));
+    }, { timeoutMs: 40_000, intervalMs: 1000 });
   // A launch draws its cover, restores the account and asks the stack: never judged before this.
   await sleep(4000);
-  return settle(() => {
-    run('xcrun', ['simctl', 'io', udid, 'screenshot', '--type=png', file]);
-    return Promise.resolve(readFileSync(file));
-  }, { timeoutMs: 40_000, intervalMs: 1000 });
+  return secondLook(await take(), take, { key });
 }
 
 export const captureIos: Capture = async (ctx) => {
@@ -185,10 +188,12 @@ export const captureIos: Capture = async (ctx) => {
         for (const screen of group) {
           launch(udid, launchArgs(ctx, account, screen.route, v, screen.app?.ios));
           const name = shotName(screen, v);
-          const { png, settled } = await shoot(udid, ctx);
-          writeFileSync(shotPath(ctx.runDir, 'ios', device.id, name), png);
-          if (!settled) unsettled.push(`ios/${device.id}/${name}`);
-          ctx.log(`  ios/${device.id}/${name}${settled ? '' : '  (never settled)'}`);
+          const key = `ios/${device.id}/${name}`;
+          const look = await shoot(udid, ctx, key);
+          writeFileSync(shotPath(ctx.runDir, 'ios', device.id, name), look.png);
+          if (!look.settled) unsettled.push(key);
+          if (look.retaken) ctx.retaken.push(key);
+          ctx.log(`  ${key}${lookNote(look)}`);
         }
       }
     }

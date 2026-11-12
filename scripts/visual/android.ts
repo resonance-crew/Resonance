@@ -30,6 +30,7 @@ import { existsSync, mkdirSync, openSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { lookNote, secondLook, type Look } from './secondLook';
 import { screensFor, shotName, type Account, type Screen, type Variant } from './screens';
 import { ROOT, SEED_PASSWORD, pixelsApart, settle, shotPath, sleep, variantsFor, type Capture, type CaptureContext } from './util';
 
@@ -198,12 +199,12 @@ async function steady(serial: string): Promise<{ png: Buffer; settled: boolean }
   }
 }
 
-async function shoot(serial: string, ctx: CaptureContext, screen: Screen, first: boolean) {
+async function shoot(serial: string, ctx: CaptureContext, screen: Screen, first: boolean, key: string): Promise<Look> {
   await launch(serial, ctx, screen.as, screen.route, screen.app?.android);
   // A cold start reads the account and the page over the network (an account's first launch also signs in).
   await sleep(first ? 8000 : 4000);
   await demoBar(serial);
-  return steady(serial);
+  return secondLook(await steady(serial), () => steady(serial), { key });
 }
 
 /**
@@ -235,11 +236,13 @@ async function captureDevice(device: AndroidDevice, ctx: CaptureContext, screens
       let first = true;
       for (const screen of screens.filter((s) => s.as === account)) {
         const name = shotName(screen, v);
-        const { png, settled } = await shoot(serial, ctx, screen, first);
+        const key = `android/${device.id}/${name}`;
+        const look = await shoot(serial, ctx, screen, first, key);
         first = false;
-        writeFileSync(shotPath(ctx.runDir, 'android', device.id, name), png);
-        if (!settled) unsettled.push(`android/${device.id}/${name}`);
-        ctx.log(`  android/${device.id}/${name}${settled ? '' : '  (never settled)'}`);
+        writeFileSync(shotPath(ctx.runDir, 'android', device.id, name), look.png);
+        if (!look.settled) unsettled.push(key);
+        if (look.retaken) ctx.retaken.push(key);
+        ctx.log(`  ${key}${lookNote(look)}`);
       }
     }
   }

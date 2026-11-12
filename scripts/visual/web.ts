@@ -9,7 +9,9 @@
 import { writeFileSync } from 'node:fs';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { SCREENS, screensFor, shotName, type Account, type Screen, type Variant } from './screens';
+import { lookNote, secondLook, type Look } from './secondLook';
 import { SEED_PASSWORD, ignorePath, settle, shotPath, variantsFor, type Capture, type CaptureContext, type Rect } from './util';
+import { checksPath, consoleNoise, judgePage, measurePage, type Finding } from './webChecks';
 
 export type WebDevice = { id: string; phone: boolean; width: number; height: number; touch: boolean };
 
@@ -85,6 +87,15 @@ function trackRequests(page: Page) {
 
 const idle = new WeakMap<Page, ReturnType<typeof trackRequests>>();
 
+/** The console's errors and the uncaught exceptions since the page's screen began (webChecks.ts), less the capture's own. */
+const errors = new WeakMap<Page, string[]>();
+function trackErrors(page: Page) {
+  const list: string[] = [];
+  page.on('console', (m) => m.type() === 'error' && !consoleNoise(m.text(), m.location().url) && list.push(m.text()));
+  page.on('pageerror', (e) => list.push(`${e.name}: ${e.message}`));
+  return list;
+}
+
 /** Every key any screen writes to the site's localStorage (`web.storage`). */
 const STORED = [...new Set(SCREENS.flatMap((s) => Object.keys(s.web?.storage ?? {})))];
 
@@ -105,8 +116,17 @@ async function keep(page: Page, screen: Screen) {
   );
 }
 
-async function shoot(page: Page, ctx: CaptureContext, screen: Screen, v: Variant): Promise<{ png: Buffer; settled: boolean; ignore: Rect[] }> {
+async function shoot(
+  page: Page,
+  ctx: CaptureContext,
+  screen: Screen,
+  v: Variant,
+  device: WebDevice,
+  key: string,
+): Promise<Look & { ignore: Rect[]; findings: Finding[] }> {
   if (!idle.has(page)) idle.set(page, trackRequests(page));
+  if (!errors.has(page)) errors.set(page, trackErrors(page));
+  errors.get(page)!.length = 0;
   await keep(page, screen);
   const route = screen.web?.route ?? screen.route;
   await page.goto(`${ctx.devUrl}/${v.locale}${route === '/' ? '' : route}`, { waitUntil: 'load', timeout: 120_000 });
@@ -123,11 +143,16 @@ async function shoot(page: Page, ctx: CaptureContext, screen: Screen, v: Variant
     await ready();
   }
   const mask = (screen.mask ?? []).map((s) => page.locator(s));
-  const shot = await settle(
-    () => page.screenshot({ fullPage: screen.fullPage, animations: 'disabled', caret: 'hide', mask, scale: 'device' }),
-    { timeoutMs: 30_000, intervalMs: 600 },
-  );
-  return { ...shot, ignore: await ignored(page, !!screen.fullPage) };
+  const take = () =>
+    settle(() => page.screenshot({ fullPage: screen.fullPage, animations: 'disabled', caret: 'hide', mask, scale: 'device' }), {
+      timeoutMs: 30_000,
+      intervalMs: 600,
+    });
+  const first = await take();
+  const ignore = await ignored(page, !!screen.fullPage);
+  const look = await secondLook(first, take, { key, ignore });
+  const findings = judgePage(await measurePage(page, { touch: device.touch }), errors.get(page)!, { touch: device.touch });
+  return { ...look, ignore: look.retaken ? await ignored(page, !!screen.fullPage) : ignore, findings };
 }
 
 /**
@@ -169,12 +194,16 @@ export const captureWeb: Capture = async (ctx) => {
             if (account) await signIn(page, ctx, v, account);
             for (const screen of screens.filter((s) => s.as === account)) {
               const name = shotName(screen, v);
-              const { png, settled, ignore } = await shoot(page, ctx, screen, v);
+              const key = `web/${device.id}/${name}`;
+              const look = await shoot(page, ctx, screen, v, device, key);
               const file = shotPath(ctx.runDir, 'web', device.id, name);
-              writeFileSync(file, png);
-              if (ignore.length) writeFileSync(ignorePath(file), JSON.stringify(ignore));
-              if (!settled) unsettled.push(`web/${device.id}/${name}`);
-              ctx.log(`  web/${device.id}/${name}${settled ? '' : '  (never settled)'}`);
+              writeFileSync(file, look.png);
+              if (look.ignore.length) writeFileSync(ignorePath(file), JSON.stringify(look.ignore));
+              if (look.findings.length) writeFileSync(checksPath(file), JSON.stringify(look.findings, null, 2));
+              if (!look.settled) unsettled.push(key);
+              if (look.retaken) ctx.retaken.push(key);
+              const checks = look.findings.length ? `  (${look.findings.map((f) => f.check).join(', ')})` : '';
+              ctx.log(`  ${key}${lookNote(look)}${checks}`);
             }
           } finally {
             await context.close();

@@ -34,6 +34,8 @@ export type CaptureContext = {
   /** Device ids to capture (empty: all of the platform's). */
   devices: string[];
   log: (line: string) => void;
+  /** Keys of captures whose first look was too early, kept from a later look (secondLook.ts); the capturers add to it. */
+  retaken: string[];
 };
 
 /** Captures one platform; answers the keys of captures that never stopped changing (taken anyway). */

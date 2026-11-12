@@ -87,6 +87,7 @@ async function capture(args: string[]) {
     only: list(flag(args, 'only')),
     devices: list(flag(args, 'device')),
     unsettled: [],
+    retaken: [],
   };
   writeJson(join(runDir, 'run.json'), info);
 
@@ -95,7 +96,7 @@ async function capture(args: string[]) {
     stack = args.includes('--no-stack')
       ? { devUrl: process.env.VISUAL_DEV_URL || `http://localhost:${PORTS.dev}`, stop: () => {} }
       : await startStack(join(runDir, '_logs'), log);
-    const ctx = { runDir, devUrl: stack.devUrl, ports: PORTS, only: info.only, devices: info.devices, log };
+    const ctx = { runDir, devUrl: stack.devUrl, ports: PORTS, only: info.only, devices: info.devices, log, retaken: info.retaken! };
     // The apps' builds start now, beside the first phase's captures, so a later phase finds its app
     // ready (each build is made once; the Xcode ones take turns). A failed one fails its phase.
     const headStart: Promise<unknown>[] = [];
@@ -127,7 +128,7 @@ async function flows(runDir: string, platforms: Platform[], devUrl: string) {
   const failed: string[] = [];
   for (const platform of (['android', 'ios'] as const).filter((p) => platforms.includes(p))) {
     log(`\n== flows on ${platform}`);
-    const results = await runFlows(platform, { runDir: join(runDir, '_flows'), devUrl, ports: PORTS, only: [], devices: [], log });
+    const results = await runFlows(platform, { runDir: join(runDir, '_flows'), devUrl, ports: PORTS, only: [], devices: [], log, retaken: [] });
     failed.push(...results.filter((r) => !r.passed).map((r) => `${platform}/${r.flow}`));
   }
   log(failed.length ? `Flows failed: ${failed.join(', ')} (reports in ${join(runDir, '_flows')})` : 'Flows: all passed');

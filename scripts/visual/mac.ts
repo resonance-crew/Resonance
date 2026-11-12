@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { PNG } from 'pngjs';
 import { BUNDLE_ID, byAccount, inXcodeLine, launchArgs, prepareProject, runLogged } from './ios';
+import { lookNote, secondLook, type Look } from './secondLook';
 import { BASE_VARIANT, screensFor, shotName } from './screens';
 import { ROOT, run, settle, shotPath, sleep, type Capture, type CaptureContext } from './util';
 
@@ -97,13 +98,15 @@ function cut(png: Buffer): Buffer {
   return PNG.sync.write(out);
 }
 
-async function shoot(window: MacWindow, ctx: CaptureContext): Promise<{ png: Buffer; settled: boolean }> {
+async function shoot(window: MacWindow, ctx: CaptureContext, key: string): Promise<Look> {
   const file = join(ctx.runDir, '_logs', 'mac-window.png');
+  const take = () =>
+    settle(() => {
+      run('screencapture', ['-o', '-x', '-t', 'png', '-l', String(window.id), file]);
+      return Promise.resolve(cut(readFileSync(file)));
+    }, { timeoutMs: 40_000, intervalMs: 1000 });
   await sleep(4000);
-  return settle(() => {
-    run('screencapture', ['-o', '-x', '-t', 'png', '-l', String(window.id), file]);
-    return Promise.resolve(cut(readFileSync(file)));
-  }, { timeoutMs: 40_000, intervalMs: 1000 });
+  return secondLook(await take(), take, { key });
 }
 
 export const captureMac: Capture = async (ctx) => {
@@ -122,10 +125,12 @@ export const captureMac: Capture = async (ctx) => {
       const window = await launch(launchArgs(ctx, account, screen.route, v, screen.app?.mac ?? screen.app?.ios));
       try {
         const name = shotName(screen, v);
-        const { png, settled } = await shoot(window, ctx);
-        writeFileSync(shotPath(ctx.runDir, 'mac', 'mac', name), png);
-        if (!settled) unsettled.push(`mac/mac/${name}`);
-        ctx.log(`  mac/mac/${name}${settled ? '' : '  (never settled)'}`);
+        const key = `mac/mac/${name}`;
+        const look = await shoot(window, ctx, key);
+        writeFileSync(shotPath(ctx.runDir, 'mac', 'mac', name), look.png);
+        if (!look.settled) unsettled.push(key);
+        if (look.retaken) ctx.retaken.push(key);
+        ctx.log(`  ${key}${lookNote(look)}`);
       } finally {
         quit(window.pid);
         await sleep(1000);

@@ -36,6 +36,8 @@ export type RunInfo = {
   only: string[];
   devices: string[];
   unsettled: string[];
+  /** Captures whose first look was early and were taken again (secondLook.ts); absent in older runs. */
+  retaken?: string[];
 };
 
 export function compareRun(runDir: string): Result[] {

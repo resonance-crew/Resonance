@@ -227,6 +227,7 @@ async function main() {
       only: (flag(args, 'only') ?? '').split(',').map((s) => s.trim()).filter(Boolean),
       devices: [],
       log,
+      retaken: [],
     };
     if (args.includes('--hold')) return await hold(platform, ctx);
     const results = await runFlows(platform, ctx);
