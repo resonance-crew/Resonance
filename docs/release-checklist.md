@@ -1,0 +1,57 @@
+# Release checklist
+
+For a store release (iOS, Mac, Android) and for a push that ships the web. Go down the list in order;
+each step names the check that proves it is done, and a step that fails stops the release there.
+A push to `main` **is** a production deploy (Vercel's Git integration), so nothing here is pushed,
+uploaded or submitted without the owner's word for that step.
+
+## 1. CI is green on the commit you release
+
+Nothing ships from a commit whose CI is red, still running or missing.
+
+```bash
+gh run list --commit "$(git rev-parse HEAD)" --workflow CI --json status,conclusion,url
+```
+
+Green is one run with `"status":"completed","conclusion":"success"`. An empty list means CI has
+not run on that commit yet: it is not green.
+
+- CI runs on a push to `main` (and on a pull request) — after Vercel has started deploying the same
+  commit. So after a push, wait for the run (`gh run watch <id> --exit-status`) and report its
+  result with the push; when it is red, say so and fix it before anything else ships.
+- Store builds come from a commit whose run is already green: push, wait for green, then build.
+- The local suite (`npm run lint && npm run typecheck && npm test`) runs on the Node in `.nvmrc`, the
+  one CI and Vercel use (`src/lib/nodeVersion.test.ts` fails on any other).
+
+Why: the 2.5.0 release commit `0cffdc6c` passed the local suite and failed `npm test` on CI (Node 22
+there, 24 locally); nobody read CI until the next day (`6534ba4c`).
+
+## 2. What has to be live before what
+
+| First | Then | Why, and the check |
+|---|---|---|
+| Firestore rules and indexes (`cd firebase && firebase deploy --only firestore:rules,firestore:indexes`) | the web that needs them (the push) | the client's writes are refused, or left unguarded, until the rules are there; on 2026-10-20 a push put the web live before its rules. Check: the deploy's output names the released ruleset |
+| The web, deployed and Ready | an iOS / Mac build whose associated domains claim a path the live site's `apple-app-site-association` doesn't yet | Apple's CDN refreshes it within a day and can't be flushed (round 23). Check: `vercel inspect <deployment url> --wait --timeout 10m 2>&1 \| grep -i status` is Ready, and `curl -s https://app-site-association.cdn-apple.com/a/v1/resonance.channel` lists the paths |
+| Rules first, then the backfills a release relies on (`npx tsx scripts/backfill.ts <name>` dry run, then `--apply` on the owner's go) | the builds that read the data that way | anything left owed from an earlier round (rules, a backfill) is done or named to the owner first |
+| Play's Photo and video permissions declaration | an Android release that reads the gallery (`READ_MEDIA_IMAGES`) | it only shows as an error on a closed or production track's review page; the owner fills it |
+
+## 3. The release run
+
+`npm run visual -- capture --flows --review` (screens, Maestro flows, review): the owner looks at what
+it flagged. It closes the simulators and emulators it uses, so only one runs at a time and never while
+the owner is using one. A new picture becomes the baseline only on the owner's word
+(`npm run visual -- accept --run <id> --only …`), never unasked.
+
+## 4. Builds
+
+- One commit bumps the versions: `apps/ios/project.yml` (`MARKETING_VERSION`, and `CURRENT_PROJECT_VERSION`
+  — one build number for iOS and the Mac) and `apps/android/app/build.gradle.kts` (`versionName`,
+  `versionCode`). It goes through step 1 like any other.
+- Build from a clean export of that commit, never from a checkout other sessions use: `git archive`,
+  `node_modules` and `keys/` linked, `apps/android/local.properties` and `native/fonts` copied,
+  `npm run native:editor` and `npm run native:mascots` (both git-ignored outputs), then `xcodegen`.
+
+## 5. Upload and submit
+
+Only after the owner's explicit yes at that moment — a store submission can't be taken back. Say what
+goes where (platform, version and build, track or review) before asking.
