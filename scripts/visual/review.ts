@@ -85,30 +85,56 @@ function commitRange(runDir: string): string | null {
   return `${since}..${head}`;
 }
 
-/** Every `Visual:` trailer since the baseline, as [targets, reason, commit]. */
+/**
+ * Every `Visual:` line since the baseline, as [targets, reason, commit] — read from the whole message,
+ * not only git's trailer block: the house writes `Visual:` in a paragraph of its own above
+ * `Co-Authored-By`, which git's trailer parsing (the last paragraph only) never saw.
+ */
 export function intendedChanges(runDir: string): { targets: string[]; reason: string; commit: string }[] {
   const range = commitRange(runDir);
   if (!range) return [];
-  const log = git('log', '--no-merges', '--format=%h%x09%(trailers:key=Visual,valueonly,separator=%x1f)', range);
-  return log
-    .split('\n')
-    .flatMap((line) => {
-      const [commit, values = ''] = line.split('\t');
-      return values.split('\x1f').filter(Boolean).map((value) => ({ commit, value }));
-    })
-    .map(({ commit, value }) => ({ ...readTrailer(value), commit }));
+  return visualLines(git('log', '--no-merges', '--format=%h%x1f%B%x1e', range)).map(({ commit, value }) => ({ ...readTrailer(value), commit }));
 }
 
+/** The `Visual:` lines of `git log --format=%h%x1f%B%x1e` output, each with its commit. */
+export function visualLines(log: string): { commit: string; value: string }[] {
+  return log
+    .split('\x1e')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .flatMap((entry) => {
+      const [commit, body = ''] = entry.split('\x1f');
+      return [...body.matchAll(/^Visual:[ \t]*(.+)$/gim)].map((m) => ({ commit: commit.trim(), value: m[1].trim() }));
+    });
+}
+
+const SCREEN_IDS = new Set(SCREENS.map((s) => s.id));
+const PLATFORM_IDS = new Set(['web', 'ios', 'android', 'mac']);
+/** `*`, a screen id, `<platform>/<screen>` or `<platform>/<device>/<screen>` of a real screen. */
+const isTarget = (t: string) => {
+  if (t === '*') return true;
+  const parts = t.split('/');
+  return parts.length <= 3 && SCREEN_IDS.has(parts[parts.length - 1]) && (parts.length === 1 || PLATFORM_IDS.has(parts[0]));
+};
+
 /**
- * One `Visual:` value: "card, ios/thread: why" — the targets before the first colon; without them,
- * every screen. `none` (`Visual: none — checked on a phone in Chrome`) names no screen: it says the
- * commit changes none, and read as "every screen" it would explain any change at all.
+ * One `Visual:` value: "card, ios/thread: why" — the targets before the first colon. A line written
+ * more loosely ("landing (desktop web): why", "landing (web) — why") names the screens among its first
+ * words, before the colon or the dash. `none` (`Visual: none — checked on a phone in Chrome`), or a
+ * line naming no screen at all, names none: read as "every screen" it would explain any change since
+ * the baseline. Every screen is `*`, written out.
  */
 export function readTrailer(value: string): { targets: string[]; reason: string } {
-  if (/^\s*none\b/i.test(value)) return { targets: [], reason: value.trim() };
-  const match = /^\s*([*a-z0-9/-]+(?:\s*,\s*[*a-z0-9/-]+)*)\s*:(.*)$/i.exec(value);
-  const targets = match ? match[1].split(',').map((t) => t.trim()).filter(Boolean) : ['*'];
-  return { targets, reason: (match ? match[2] : value).trim() };
+  const text = value.trim();
+  if (/^none\b/i.test(text)) return { targets: [], reason: text };
+  const strict = /^([*a-z0-9/-]+(?:\s*,\s*[*a-z0-9/-]+)*)\s*:(.*)$/i.exec(text);
+  if (strict) {
+    const targets = strict[1].split(',').map((t) => t.trim()).filter(Boolean);
+    if (targets.every(isTarget)) return { targets, reason: strict[2].trim() };
+  }
+  const head = /^(.*?)(?::|\s[—–-]\s)/.exec(text)?.[1] ?? '';
+  const targets = head.split(/[\s,()]+/).filter(isTarget);
+  return { targets, reason: text.slice(head.length).replace(/^\s*(?::|[—–-])\s*/, '').trim() || text };
 }
 
 /** Whether a trailer's target (`*`, `card`, `ios/card`, `ios/iphone/card`) names this capture. */

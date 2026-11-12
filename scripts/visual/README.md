@@ -60,8 +60,12 @@ Visual: card-other, card-anonymous: the response bar's note button is shorter (�
 Visual: android/thread: the composer's ＋ sits inside the capsule
 ```
 
-A commit that changes no screen may say so, `Visual: none — why`: it names no screen. A line with
-no targets before a colon names every screen, as `*` does — so write the targets.
+The lines are read from the whole message, so a paragraph of their own above `Co-Authored-By` is
+fine (git's own trailer parsing reads only the last paragraph, and so missed most of them). A line
+names the screens before its colon; written loosely (`landing (desktop web): why`, `landing (web) —
+why`) it names the screen ids among its first words. A commit that changes no screen says
+`Visual: none — why`, and a line naming no screen the harness knows names none: every screen is `*`,
+written out, never a line read as one.
 
 The review lists, for every changed capture, the trailers that name it ("Intended change: …"), and
 a change no trailer names is judged `unsure` at best, so the report surfaces it. The report shows
