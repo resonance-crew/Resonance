@@ -37,8 +37,10 @@ there, 24 locally); nobody read CI until the next day (`6534ba4c`).
 
 ## 3. The release run
 
-`npm run visual -- capture --flows --review` (screens, Maestro flows, review): the owner looks at what
-it flagged. It closes the simulators and emulators it uses, so only one runs at a time and never while
+`npm run visual -- capture --flows --review` (screens, Maestro flows, review): its last line is
+`Visual PASS …` or `Visual FAIL …` and its exit code says the same — a FAIL stops the release until
+it is fixed and the run passes (`scripts/visual/README.md`, What fails a run). The owner looks at what
+it flagged and at the changes waiting for their OK. It closes the simulators and emulators it uses, so only one runs at a time and never while
 the owner is using one. A new picture becomes the baseline only on the owner's word
 (`npm run visual -- accept --run <id> --only … --reason "<their words>"`), never unasked; each accept
 is a row of [visual-accept-log.md](visual-accept-log.md), committed with it.

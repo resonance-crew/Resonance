@@ -9,6 +9,7 @@ import { join, relative } from 'node:path';
 import { BASELINE_DIR, readJson } from './util';
 import { intendedChanges, names, readVerdicts, type Verdict } from './review';
 import type { Result, RunInfo } from './compare';
+import { judgeRun, type Note, type Summary } from './gate';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -19,7 +20,17 @@ function figure(label: string, src: string | null) {
   return `<figure><figcaption>${label}</figcaption><a href="${esc(src)}" target="_blank"><img loading="lazy" src="${esc(src)}" alt="${label}"></a></figure>`;
 }
 
-function item(runDir: string, r: Result, v: Verdict | undefined, runId: string, intended: string[]) {
+/** The run's verdict at the top: what fails it, or that nothing does (gate.ts). */
+function verdictBlock(s: Summary) {
+  const notes = (list: Note<string>[]) => list.map((n) => `<li><code>${esc(n.key)}</code> ${esc(n.kind)}: ${esc(n.detail)}</li>`).join('');
+  const head = s.pass
+    ? `<p class="verdict pass">PASS — nothing broken, unsettled or unexplained${s.awaiting.length ? ` · ${s.awaiting.length} change${s.awaiting.length > 1 ? 's' : ''} a Visual: trailer names, for the owner to look at` : ''}</p>`
+    : `<p class="verdict fail">FAIL — ${s.problems.length} problem${s.problems.length > 1 ? 's' : ''}</p><ul class="problems">${notes(s.problems)}</ul>`;
+  const warnings = s.warnings.length ? `<details><summary class="warn">${s.warnings.length} warning${s.warnings.length > 1 ? 's' : ''}</summary><ul>${notes(s.warnings)}</ul></details>` : '';
+  return head + warnings;
+}
+
+function item(runDir: string, r: Result, v: Verdict | undefined, runId: string, intended: string[], s: Summary) {
   const base = r.status === 'changed' || r.status === 'missing' ? relative(runDir, join(BASELINE_DIR, r.key)) : null;
   const now = r.status === 'missing' ? null : r.key;
   const diff = r.status === 'changed' && !r.sizes ? `_diff/${r.key}` : null;
@@ -30,11 +41,16 @@ function item(runDir: string, r: Result, v: Verdict | undefined, runId: string, 
   const note = v?.note ? `<p class="note">${esc(v.note)}</p>` : '';
   const meant = intended.length
     ? `<p class="meta">Intended: ${intended.map(esc).join(' · ')}</p>`
-    : r.status === 'changed' ? '<p class="meta">Intended: no Visual: trailer names this screen</p>' : '';
+    : r.status === 'changed' ? '<p class="meta problem">Intended: no Visual: trailer names this screen — this fails the run</p>' : '';
+  // What the verdict says of this capture (its missing trailer is said above).
+  const own = [...s.problems.map((n) => ({ n, cls: 'problem' })), ...s.warnings.map((n) => ({ n, cls: 'warn' }))].filter(
+    ({ n }) => n.key === r.key && n.kind !== 'unexplained',
+  );
+  const notes = own.map(({ n, cls }) => `<p class="meta ${cls}">${esc(n.kind)}: ${esc(n.detail)}</p>`).join('');
   const accept = r.status === 'missing' ? '' : `<code>npm run visual -- accept --run ${esc(runId)} --only ${esc(r.key)} --reason "&lt;the owner’s words&gt;"</code>`;
   return `<article data-status="${r.status}" data-verdict="${v?.verdict ?? ''}">
   <header><h3>${esc(r.key)}</h3><span class="tag s-${r.status}">${r.status}</span>${tag}<span class="meta">${ratio}${sizes}</span></header>
-  ${note}${meant}
+  ${note}${meant}${notes}
   <div class="row">${figure('Baseline', base)}${figure('Now', now)}${r.status === 'changed' ? figure('Diff', diff) : ''}</div>
   ${accept}
 </article>`;
@@ -51,6 +67,7 @@ export function writeReport(runDir: string, results: Result[]): string {
   const count = (s: string) => results.filter((r) => r.status === s).length;
   const broken = [...verdicts.values()].filter((v) => v.verdict === 'broken').length;
   const unsettled = info?.unsettled ?? [];
+  const { summary } = judgeRun(runDir, results);
   const html = `<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Visual run ${esc(info?.id ?? '')}</title>
@@ -72,16 +89,18 @@ figure img{width:100%;max-height:640px;object-fit:contain;object-position:top;bo
 figure.empty div{color:var(--muted)}code{font-size:12px;color:var(--muted);word-break:break-all}
 .thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
 .thumbs a{font-size:11px;color:var(--muted);text-decoration:none;word-break:break-all}.thumbs img{width:100%;height:220px;object-fit:cover;object-position:top;border:1px solid var(--line);border-radius:4px}
-.warn{color:var(--amber)}
+.warn{color:var(--amber)}.problem{color:var(--red)}
+.verdict{font-weight:600;font-size:16px;margin:12px 0}.verdict.pass{color:var(--green)}.verdict.fail{color:var(--red)}.problems{color:var(--red)}
 </style></head><body><main>
 <h1>Release screenshots · ${esc(info?.id ?? '')}</h1>
 <p class="sub">${esc((info?.platforms ?? []).join(', '))} · commit ${esc(info?.commit?.slice(0, 8) ?? '?')}${info?.dirty ? ' (with uncommitted changes)' : ''} · ${count('changed')} changed · ${count('new')} new · ${count('missing')} missing · ${unchanged.length} unchanged${verdicts.size ? ` · review: ${broken} broken` : ''}</p>
+${verdictBlock(summary)}
 ${unsettled.length ? `<p class="warn">Never stopped changing (taken anyway): ${unsettled.map(esc).join(', ')}</p>` : ''}
 <div class="chips" role="group" aria-label="Filter">
 <button aria-pressed="true" data-f="">All needing a look (${attention.length})</button><button aria-pressed="false" data-f="broken">Broken</button><button aria-pressed="false" data-f="changed">Changed</button><button aria-pressed="false" data-f="new">New</button><button aria-pressed="false" data-f="missing">Missing</button>
 </div>
 <h2>Needs a look</h2>
-${attention.map((r) => item(runDir, r, verdicts.get(r.key), info?.id ?? '', intendedFor(r.key))).join('\n') || '<p class="sub">Nothing changed.</p>'}
+${attention.map((r) => item(runDir, r, verdicts.get(r.key), info?.id ?? '', intendedFor(r.key), summary)).join('\n') || '<p class="sub">Nothing changed.</p>'}
 <details><summary><h2 style="display:inline">Unchanged (${unchanged.length})</h2></summary>
 <div class="thumbs">${unchanged.map((r) => `<a href="${esc(r.key)}" target="_blank"><img loading="lazy" src="${esc(r.key)}" alt="">${esc(r.key)}</a>`).join('')}</div>
 </details>

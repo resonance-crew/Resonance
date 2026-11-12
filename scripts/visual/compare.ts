@@ -35,9 +35,12 @@ export type RunInfo = {
   /** The run's --only screens and --device devices (empty: all): a baseline outside them isn't missing. */
   only: string[];
   devices: string[];
+  /** Captures that never held still, even after a second look: they fail the run (gate.ts). */
   unsettled: string[];
   /** Captures whose first look was early and were taken again (secondLook.ts); absent in older runs. */
   retaken?: string[];
+  /** The Maestro flows that failed (`--flows`); absent when none ran. */
+  flowsFailed?: string[];
 };
 
 export function compareRun(runDir: string): Result[] {

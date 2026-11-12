@@ -10,11 +10,15 @@
  *   review   [--run <id>] [--agy | --gemini] [--all]   --all: unchanged captures too
  *   accept   --reason "<the owner's words>" [--run <id>] [--only <key|screen>,…]
  *            refused without --reason; each accept is a row of docs/visual-accept-log.md (acceptLog.ts)
+ *
+ * capture, compare and review end with the run's verdict — `Visual PASS|FAIL <id>: …` as the last
+ * line, summary.json beside the report, exit code 1 on a FAIL (gate.ts says what fails a run).
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { acceptReason, appendAcceptLog, REASON_REQUIRED } from './acceptLog';
 import { compareRun, type RunInfo } from './compare';
+import { gateLines, judgeRun } from './gate';
 import { writeReport } from './report';
 import { reviewWithAgy, reviewWithGemini, writeReviewPack } from './review';
 import { startStack, type Stack } from './stack';
@@ -111,19 +115,35 @@ async function capture(args: string[]) {
       info.unsettled.push(...unsettled.flat());
       writeJson(join(runDir, 'run.json'), info);
     }
-    if (args.includes('--flows')) await flows(runDir, platforms, stack.devUrl);
+    if (args.includes('--flows')) {
+      info.flowsFailed = await flows(runDir, platforms, stack.devUrl);
+      writeJson(join(runDir, 'run.json'), info);
+    }
   } finally {
     stack?.stop();
   }
   finish(runDir);
   if (args.includes('--review')) await review(runDir, ['--agy']);
+  gate(runDir);
+}
+
+/**
+ * The run's verdict, last on the console: the problems, then one `Visual PASS|FAIL` line naming
+ * summary.json — and exit code 1 on a FAIL (gate.ts says what fails a run).
+ */
+function gate(runDir: string) {
+  const { summary, file } = judgeRun(runDir, compareRun(runDir));
+  log('');
+  for (const line of gateLines(summary, file)) log(line);
+  if (!summary.pass) process.exitCode = 1;
 }
 
 /**
  * The Maestro flows (scripts/visual/flows.ts) on the apps this capture took, after every capture:
- * one device at a time, as the captures. Reports in `<run>/_flows/` (out of the captures' way); a failed flow fails the command.
+ * one device at a time, as the captures. Reports in `<run>/_flows/` (out of the captures' way); the
+ * failed ones are answered, kept in run.json, and fail the run (gate.ts).
  */
-async function flows(runDir: string, platforms: Platform[], devUrl: string) {
+async function flows(runDir: string, platforms: Platform[], devUrl: string): Promise<string[]> {
   const { runFlows } = await import('./flows');
   const failed: string[] = [];
   for (const platform of (['android', 'ios'] as const).filter((p) => platforms.includes(p))) {
@@ -132,7 +152,7 @@ async function flows(runDir: string, platforms: Platform[], devUrl: string) {
     failed.push(...results.filter((r) => !r.passed).map((r) => `${platform}/${r.flow}`));
   }
   log(failed.length ? `Flows failed: ${failed.join(', ')} (reports in ${join(runDir, '_flows')})` : 'Flows: all passed');
-  if (failed.length) process.exitCode = 1;
+  return failed;
 }
 
 async function review(runDir: string, args: string[]) {
@@ -187,10 +207,16 @@ async function main() {
   switch (command) {
     case 'capture':
       return capture(args);
-    case 'compare':
-      return finish(runDirOf(args));
-    case 'review':
-      return review(runDirOf(args), args);
+    case 'compare': {
+      const runDir = runDirOf(args);
+      finish(runDir);
+      return gate(runDir);
+    }
+    case 'review': {
+      const runDir = runDirOf(args);
+      await review(runDir, args);
+      return gate(runDir);
+    }
     case 'accept':
       return accept(args);
     default:

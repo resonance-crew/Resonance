@@ -65,7 +65,9 @@ no targets before a colon names every screen, as `*` does — so write the targe
 
 The review lists, for every changed capture, the trailers that name it ("Intended change: …"), and
 a change no trailer names is judged `unsure` at best, so the report surfaces it. The report shows
-the same lines beside each capture.
+the same lines beside each capture. A change no trailer names also **fails the run** (see What
+fails a run): name it in the commit, or, when the commit is already made, in a commit of its own
+(`git commit --allow-empty -m "docs: 📸 …" -m "Visual: card: why"`), then `compare --run <id>` again.
 
 ## A release, step by step
 
@@ -74,16 +76,66 @@ the same lines beside each capture.
    `VISUAL_FIRESTORE_PORT`, `VISUAL_DEV_PORT` move them), captures in three phases of two at a time —
    the web beside the Mac app, the two AVDs together, the two simulators together — each phase
    freeing its devices before the next, then runs the Maestro flows on the Android phone and the iPhone
-   (reports in `visual/runs/<id>/_flows/`; a failed flow fails the command), then hands what changed
-   to `agy`.
-2. Open `visual/runs/<id>/index.html`. It lists broken first, then unsure, changed, missing and new,
-   each with baseline · now · diff, the verdict and the intended change. Unchanged captures are
-   thumbnails at the bottom.
+   (reports in `visual/runs/<id>/_flows/`), then hands what changed to `agy`. Its last line is the
+   run's verdict, `Visual PASS …` or `Visual FAIL …`, and its exit code says the same (see What fails
+   a run).
+2. Open `visual/runs/<id>/index.html`. It opens on the verdict and its problems, then lists broken
+   first, then unsure, changed, missing and new, each with baseline · now · diff, the verdict and the
+   intended change. Unchanged captures are thumbnails at the bottom.
 3. Fix what's broken and capture again (`--only` the screens involved), or, once the owner says so,
    accept what's right (see Accepting).
 
 The first run on a machine has no baseline: every capture is new. Review it with `--all`, look the
 report over, and accept it.
+
+## What fails a run
+
+`capture`, `compare` and `review` end with the run's verdict (`gate.ts`): one line per problem, then
+one line that is always last —
+
+```
+Visual FAIL 20261113-020000: 1 unexplained, 1 unsettled · 3 changed, 0 new, 0 missing, 278 unchanged · 2 warnings → visual/runs/20261113-020000/summary.json
+```
+
+— `visual/runs/<id>/summary.json` with every problem and warning by capture, the same at the top of
+the report, and exit code 1 on a FAIL. So an agent can stop on it: the run passes or it doesn't.
+
+| Fails the run | When |
+| --- | --- |
+| `broken` | the review judged a capture broken (only when a review ran) |
+| `unsettled` | a capture never held still, even after a second look (below) |
+| `unexplained` | a capture changed and no `Visual:` trailer since the baseline names its screen |
+| `flow` | a Maestro flow failed (`--flows`) |
+| `check` | a web check raised to `fail` found something (below; none is yet) |
+
+Warnings are said and never fail: a capture *taken again* because its first look was early, a
+baseline capture the run didn't take (*missing*), a web check still at `warn`. A changed capture a
+trailer names is neither: it waits for the owner's look and `accept --reason`. `compare --run <id>`
+judges again after a trailer is added or verdicts come in another way.
+
+**The second look** (`secondLook.ts`). Two frames alike only say a page holds still, and a page
+still waiting holds still too: the 2.5.0 release run kept three Android cards taken before they
+loaded, and `settle` had flagged nothing in 55 runs. So a capture that differs from its baseline —
+or a new screen on a platform with a baseline — is taken again after a few seconds (web 2, the apps
+5). The same picture again: the change is real and stays. Another one: the first look was early,
+the later one is kept, and it is looked at once more, three looks in all; still moving then, it is
+`unsettled`. A machine's first run has nothing to go by and takes no second look. It costs a few
+seconds per changed capture, nothing for an unchanged one.
+
+**The web's checks** (`webChecks.ts`). The web's pass measures each page it captures and writes
+what it finds beside the capture (`<capture>.checks.json`; the log line names the checks):
+
+| Check | What it finds | Level |
+| --- | --- | --- |
+| `overflow` | the page is wider than the window, and what sticks out | warn |
+| `wrapped-label` | a button of ≤ 40 characters whose words break onto a second line | warn |
+| `console` | a console error or an uncaught exception while the page loaded (the aborted puppet requests left out) | warn |
+| `touch-target` | on the phone and tablet, a control under 44 × 44 (a link inside running text aside) | warn |
+| `contrast` | words under WCAG AA, from `window.__contrastAudit()` (dev and emulator builds have it) | warn |
+
+Every check starts at `warn`: a check that fails runs before it has been seen clean only teaches
+everyone to ignore the verdict. Once a full web run shows none of a kind (or what it shows is fixed),
+raise it to `fail` in `WEB_CHECKS`.
 
 ## Accepting
 
@@ -183,8 +235,9 @@ phone is where text is tightest; every other device takes light zh-TW (`PHONE_VA
 - **Waiting for the real page**: a capture is taken again and again until two in a row match
   (`settle` in `util.ts`). A page waiting for a compile or a read holds still too, so the web first
   waits for its requests to drain (bar the realtime channels), and Android checks a settled frame
-  is still the same 3.5 s later after warming the API routes. A capture that never settles is taken
-  anyway and listed at the top of the report.
+  is still the same 3.5 s later after warming the API routes. Then a capture that differs from the
+  baseline gets a second look (What fails a run). A capture that never settles is taken anyway,
+  listed at the top of the report, and fails the run.
 - **Accounts**: each account signs in fresh (web: a new browser context; iOS: a launch of its own,
   `-signedOut YES` for the signed-out start; Android: `pm clear`), so nothing carries over.
 - **Things that move by themselves**: the landing page's paper puppets are kept from loading
