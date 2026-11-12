@@ -193,12 +193,6 @@ interface Stage {
    * width (stage widths), its top when it has them covered; null elsewhere.
    */
   heap: { w: number; top: number } | null;
-  /**
-   * Where the stage really ends (stage heights, ≥ 1): the large viewport's foot. The film is laid out on the small one
-   * (1 = 100svh) but the stage is 100lvh tall, so on a phone whose browser has hidden its address bar a strip below 1
-   * shows — what waits "under the floor" waits under this, not under 1.
-   */
-  under: number;
 }
 const ASPECT = 10;
 const CUMULUS = 3;
@@ -210,7 +204,6 @@ const DUCK = 0.45;
 
 function stageOf(info: ChangeInfo): Stage {
   const L = computeLayout(info.w, info.h, info.lvh);
-  const under = underOf(info);
   // the journey's puppets are drawn larger on a tall screen (film.module.css --pal-2)
   const zoom = info.from === 2 && L.name === 'tall' ? 1 + ((L.tablet ? 1.36 : 1.4) - 1) * 0.85 : 1;
   // their feet: the ground's line (world y 885); in the valley two of them stand on the bridge's top (walkwayAt(1000))
@@ -232,17 +225,13 @@ function stageOf(info: ChangeInfo): Stage {
   return {
     cover,
     heap,
-    depth: Math.max(0.14, lipTop + 0.03 - cover, under + 0.02 - cover),
+    depth: Math.max(0.14, lipTop + 0.03 - cover, 1.02 - cover),
     duck: DUCK * pal,
     lag: (1.6 * L.pal) / info.h,
     wOf: (h: number) => Math.max(MIN_W, (ASPECT * h * info.h) / info.w),
     hOf: (fw: number) => (fw * info.w) / (CUMULUS * info.h),
-    under,
   };
 }
-
-/** The stage's real foot in stage heights (Stage.under): the large viewport's over the small one's, never under 1. */
-export const underOf = (info: ChangeInfo) => Math.max(1, info.lvh / info.h);
 
 /* ───────────── the moves of the planes ───────────── */
 
@@ -327,9 +316,9 @@ function riseFar(pl: ChangePlane, [a, b]: [number, number], p: number, horizon: 
 }
 
 /** A new plane rising into place from behind the floor, settling with a bounce. */
-function riseIn(pl: ChangePlane, [a, b]: [number, number], p: number, dir: number, under: number): PlaneMove {
+function riseIn(pl: ChangePlane, [a, b]: [number, number], p: number, dir: number): PlaneMove {
   const u = span(p, a, b);
-  const below = Math.max(0, under + 0.02 - pl.top);
+  const below = Math.max(0, 1.02 - pl.top);
   if (u <= 0) return { y: below, alpha: 1, foot: 'paper' };
   if (u >= 1) return { y: 0, alpha: 1, foot: 'paper' };
   const y = below * (1 - backOut(u, BACK_S));
@@ -483,7 +472,7 @@ const Z = { glint: 10, mist: 11, bank: 22, near: 52 } as const;
 
 /** The bank's line (its top) at p: up over the floor by BANK_COVER, then rising on as it thins. */
 function bankTop(p: number, st: Stage): number {
-  const start = st.under;
+  const start = 1.0;
   if (p <= BANK_COVER) return start - (start - st.cover) * easeOut(span(p, 0, BANK_COVER));
   return st.cover - BANK_RISE * (p - BANK_COVER);
 }
@@ -493,7 +482,7 @@ function strips(p: number, info: ChangeInfo, st: Stage, win: Map<PlaneId, [numbe
   const t = TONES[n];
   const out: StripMove[] = [];
   const cloud = (y: number, h: number, w: number, x: number, alpha: number, [crest, body]: Pair, z: number, rot: number) => {
-    const a = y - 0.5 * h > st.under + 0.02 || y + 0.5 * h < -0.02 ? 0 : clamp01(alpha);
+    const a = y - 0.5 * h > 1.02 || y + 0.5 * h < -0.02 ? 0 : clamp01(alpha);
     // one piece of paper a cloud (round 5, the owner: 「雲朵也不要疊很多層…一層就好了」): the crest's lighter copy is
     // no longer laid over the body (its strip stays in the list, unseen: the strips keep their order)
     out.push({ x, y, w, h, rot, alpha: a, paint: body, z });
@@ -546,7 +535,7 @@ function strips(p: number, info: ChangeInfo, st: Stage, win: Map<PlaneId, [numbe
     const fw = tall ? c.fw[0] : c.fw[1];
     const h = st.hOf(fw);
     // up from under the floor to a little under the cards, thinning away before it nears the header
-    const y = st.under + 0.6 * h - (st.under - 0.18 + 0.6 * h) * u;
+    const y = 1.0 + 0.6 * h - (0.82 + 0.6 * h) * u;
     const a = open && u > 0 && u < 1 ? c.a * smooth(span(u, 0, 0.1)) * (1 - smooth(span(u, 0.68, 1))) : 0;
     cloud(y, h, fw, c.x + c.dx * u, a, t.near[k % t.near.length], Z.near + 2 * k, k % 2 ? 1.2 : -1);
   });
@@ -583,7 +572,7 @@ function strips(p: number, info: ChangeInfo, st: Stage, win: Map<PlaneId, [numbe
     // over a kept plane (c3's hills) the mist comes up as the night falls; over a rising one, as it settles
     const [a0, a1] = w0 ?? [0.3, 0.5];
     const shown = smooth(span(p, a0 + 0.55 * (a1 - a0), a1 + 0.04)) * (1 - smooth(span(p, n === 3 ? 0.78 : 0.88, n === 3 ? 0.96 : 0.99)));
-    const rise = pl && w0 ? riseIn(pl, w0, p, 1, st.under).y : 0;
+    const rise = pl && w0 ? riseIn(pl, w0, p, 1).y : 0;
     const line = f.byGround ? (groundNew?.top ?? 0.85) : (pl?.top ?? 0.7);
     out.push({
       x: f.x + 0.04 * Math.sin(Math.PI * p + k),
@@ -656,13 +645,13 @@ export const flats: ChangeStyle = {
       if (role === 'cloth') return { y: (seaOld - seaNew) * (1 - k), alpha: smooth(span(p, 0, 0.03)), foot: 'paper' };
       const w = win.get(pl.id) ?? [0.6, 1];
       if (role === 'far' || pl.id === 'headland') return riseFar(pl, w, p, horizon);
-      return riseIn(pl, w, p, i % 2 === 0 ? -1 : 1, st.under);
+      return riseIn(pl, w, p, i % 2 === 0 ? -1 : 1);
     });
 
     const up = groundUp(win, p);
     const ground = groundOf(info.new);
     const gw = win.get('ground');
-    const gy = ground && gw ? riseIn(ground, gw, p, 1, st.under).y : 0;
+    const gy = ground && gw ? riseIn(ground, gw, p, 1).y : 0;
     const order = flats.order(info);
     return {
       old,

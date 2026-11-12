@@ -16,6 +16,9 @@
   --film-head-clear: 94px;
   --lip: 56px;
   --pad: 24px;
+  /* what a phone's browser gives back when it hides its address bar (the large viewport over the small one; 0 on a
+     desktop): the stage stays the small viewport's height at the screen's foot, and this much more sky opens over it */
+  --bar: calc(100lvh - 100svh);
   --hero-bottom: 340px;
   --pal: 88px;
   --u: max(calc(100vw / 1900), calc((100svh - var(--lip) - var(--pad) - var(--hero-bottom) - 16px) / 515));
@@ -109,6 +112,11 @@
   height: calc(805svh + 100lvh);
   overflow-anchor: none;
   touch-action: pan-y pinch-zoom;
+  /* the stage lies at the track's end and is held up from there, its foot on the screen's (see .stage below); its
+     other children are out of flow */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
 
 .stage {
@@ -144,11 +152,21 @@
     transform-origin: 100% 0;
   }
 }
+/* The stage is the small viewport's height (the world is laid out on it: --u, --ground-y) and stands on the screen's
+   foot, as the player does — `bottom: 0`, which a browser keeps on the visible foot while its address bar slides away,
+   with no resize and no step (a `dvh` would be updated late, in jumps). So when a phone's bar hides, nothing of the
+   scene moves and nothing under the ground is uncovered: the height it gives back (--bar) opens over the stage, as sky
+   — the stage paints that far above its box (the clip below), the sky, the stars and the grain run up into it, and what
+   flies up out of a change goes on through it to the screen's top. (The owner, 2026-11-12: the extra height is the
+   sky's, never a strip under the ground.) */
 .film[data-film='film'] .stage {
   position: sticky;
-  top: 0;
-  height: 100lvh;
-  contain: strict;
+  bottom: 0;
+  flex: none;
+  height: 100svh;
+  overflow: visible;
+  clip-path: inset(calc(-1 * var(--bar)) 0 0 0);
+  contain: layout style;
 }
 
 .probe {
@@ -189,20 +207,22 @@
 
 .sky {
   position: absolute;
-  inset: 0;
+  /* up into the room a hidden address bar gives back (--bar): the zenith's colour, then the gradient as it was */
+  inset: calc(-1 * var(--bar)) 0 0 0;
   z-index: 0;
   pointer-events: none;
-  background: linear-gradient(to bottom, var(--film-sky-0) 0, var(--film-sky-1) calc(var(--hz) * 0.55), var(--film-sky-2) calc(var(--hz) * 0.8), var(--film-sky-3) var(--hz));
-  background: linear-gradient(to bottom in oklab, var(--film-sky-0) 0, var(--film-sky-1) calc(var(--hz) * 0.55), var(--film-sky-2) calc(var(--hz) * 0.8), var(--film-sky-3) var(--hz));
+  background: linear-gradient(to bottom, var(--film-sky-0) var(--bar), var(--film-sky-1) calc(var(--bar) + var(--hz) * 0.55), var(--film-sky-2) calc(var(--bar) + var(--hz) * 0.8), var(--film-sky-3) calc(var(--bar) + var(--hz)));
+  background: linear-gradient(to bottom in oklab, var(--film-sky-0) var(--bar), var(--film-sky-1) calc(var(--bar) + var(--hz) * 0.55), var(--film-sky-2) calc(var(--bar) + var(--hz) * 0.8), var(--film-sky-3) calc(var(--bar) + var(--hz)));
 }
 
 .stars {
   position: absolute;
   pointer-events: none;
   left: 0;
-  top: 0;
+  /* the stars' field runs up into the room over the stage too (--bar) */
+  top: calc(-1 * var(--bar));
   width: 100%;
-  height: var(--hz);
+  height: calc(var(--hz) + var(--bar));
   z-index: 1;
   opacity: var(--film-stars);
 }
@@ -533,10 +553,11 @@
 }
 .skySand {
   position: absolute;
-  top: 0;
+  /* with the sky, up into the room over the stage (--bar) */
+  top: calc(-1 * var(--bar));
   left: 50%;
   width: calc(2800 * var(--u));
-  height: calc(1400 * var(--u));
+  height: calc(1400 * var(--u) + var(--bar));
   margin-left: calc(-1400 * var(--u));
   pointer-events: none;
   opacity: var(--film-sand, 0);
@@ -717,7 +738,8 @@
    live feTurbulence (WebKit runs SVG filters on the CPU and redrew the stage's grain on every frame of a change). */
 .grain {
   position: absolute;
-  inset: 0;
+  /* over the room above the stage too (--bar) */
+  inset: calc(-1 * var(--bar)) 0 0 0;
   z-index: 10;
   pointer-events: none;
   background-color: var(--grain-ink, oklch(0% 0 0));
@@ -763,9 +785,18 @@
   z-index: 7;
   pointer-events: none;
 }
+/* the header stands at the screen's top, which is over the stage's by what the address bar has given back so far
+   (100dvh − 100svh, 0 … --bar): the roof runs up through that room and its mask keeps to the header's pen line there
+   (a dvh is updated late and in steps as the bar slides — fine for where a line of words fades, never for the scene) */
 .film[data-film='film'] .heroRoof {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 68px, #000 90px);
-  mask-image: linear-gradient(to bottom, transparent 68px, #000 90px);
+  --roof: calc(var(--bar) - (100dvh - 100svh));
+  inset: calc(-1 * var(--bar)) 0 0 0;
+  -webkit-mask-image: linear-gradient(to bottom, transparent calc(var(--roof) + 68px), #000 calc(var(--roof) + 90px));
+  mask-image: linear-gradient(to bottom, transparent calc(var(--roof) + 68px), #000 calc(var(--roof) + 90px));
+}
+/* (the hero is laid out from its roof's top: it keeps its place on the stage) */
+.film[data-film='film'] .heroRoof > .hero {
+  margin-top: var(--bar);
 }
 /* no store badges on the first screen (the owner, round 3): the h1 and its line alone — on a phone and an upright
    tablet a little lower than they stood over the badges (the words in the sky, not pressed under the header); a wide

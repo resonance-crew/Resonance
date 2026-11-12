@@ -89,7 +89,7 @@ export class Particles {
     const alpha = on ? lerp(0.42, 0.85, smooth(span(s, SEG.wind.t0, SEG.wind.t1))) * fadeOut * Math.max(0.15, enter) : 0;
     this.css.set(svg, 'opacity', alpha.toFixed(3));
     if (!on || !chip) return;
-    const box = `0 0 ${Math.round(L.w)} ${Math.round(L.lvh * 0.6)}`;
+    const box = `0 0 ${Math.round(L.w)} ${Math.round(L.h * 0.6)}`;
     if (box !== this.windBox) {
       svg.setAttribute('viewBox', box);
       this.windBox = box;
@@ -125,7 +125,7 @@ export class Particles {
     this.css.set(el, 'opacity', on ? (bell(k) * 0.9).toFixed(3) : '0');
     if (!on) return;
     const x = lerp(L.w * 1.05, -L.w * 0.2, k);
-    const y = L.lvh * (L.name === 'wide' ? 0.16 : 0.13) + Math.sin(k * Math.PI * 2) * 14;
+    const y = L.h * (L.name === 'wide' ? 0.16 : 0.13) + Math.sin(k * Math.PI * 2) * 14;
     // large enough that each reads as a folded paper bird (two creased wings, a tail), not a V of strokes
     const sc = L.name === 'wide' ? 1.7 : 1.3;
     this.css.set(el, 'transform', `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0) scale(${sc})`);

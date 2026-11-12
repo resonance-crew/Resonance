@@ -378,27 +378,6 @@ describe('flats (the paper theatre)', () => {
       }
     }
   });
-
-  it('keeps what waits under the floor under the stage’s real foot, where a phone with its address bar hidden sees no strip of it', () => {
-    let checked = 0;
-    for (const { info, tag } of INFOS) {
-      const under = info.lvh / info.h;
-      if (under <= 1) continue;
-      // the new flats that rise from under the floor, before they start (the new sea lies under the old one's cloth)
-      const f = flats.frame(0.001, info);
-      info.new.forEach((pl, i) => {
-        const m = f.new[i];
-        if (pl.id === 'sea' || m.alpha <= 0 || m.y <= 0.05) return;
-        expect(pl.top + m.y, `${tag} ${pl.id}`).toBeGreaterThanOrEqual(under);
-        checked++;
-      });
-      // the bank, once it has come over the floor, runs down to that foot: no strip of the ground let go under it
-      const bank = flats.frame(BANK_COVER, info).strips.filter((st) => st.z >= 22 && st.z < 40 && st.alpha > 0);
-      expect(bank.length, tag).toBeGreaterThan(0);
-      expect(Math.max(...bank.map((st) => st.y + st.h / 2)), tag).toBeGreaterThanOrEqual(under);
-    }
-    expect(checked).toBeGreaterThan(5);
-  });
 });
 
 describe('the middle flats’ silhouettes at rest (world.ts restClip)', () => {
