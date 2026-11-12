@@ -151,7 +151,7 @@ and humans alike).
 
 ## Getting started
 
-You need Node.js 22 and npm. To run against local Firebase emulators (recommended; nothing touches
+You need Node.js 24 (the version in `.nvmrc`, the same one CI and Vercel use) and npm. To run against local Firebase emulators (recommended; nothing touches
 real data) you also need Java 21 and the [Firebase CLI](https://firebase.google.com/docs/cli)
 (`npm install -g firebase-tools`).
 
