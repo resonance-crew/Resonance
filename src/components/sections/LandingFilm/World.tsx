@@ -159,16 +159,6 @@ function WorldDefsArt({ look }: { look: Look }) {
           <image href={pictureSrc(sandDark)} width={SAND_TILE} height={SAND_TILE} />
           <image href={pictureSrc(sandLight)} width={SAND_TILE} height={SAND_TILE} />
         </pattern>
-        <radialGradient id="film-glow" r="0.5" cx="0.5" cy="0.5">
-          {/* the sun (and the moon) into the sky: one soft gradient from the disc's edge (0.18 of the way) out — no rings
-              (round 5, the owner: 「太陽這邊和天空做個漸層就好了，不要用這個很多圈的設計」) */}
-          <stop offset="0" stopColor="var(--film-c-halo)" stopOpacity="0.8" />
-          <stop offset="0.18" stopColor="var(--film-c-halo)" stopOpacity="0.62" />
-          <stop offset="0.32" stopColor="var(--film-c-halo)" stopOpacity="0.36" />
-          <stop offset="0.52" stopColor="var(--film-c-halo)" stopOpacity="0.16" />
-          <stop offset="0.76" stopColor="var(--film-c-halo)" stopOpacity="0.05" />
-          <stop offset="1" stopColor="var(--film-c-halo)" stopOpacity="0" />
-        </radialGradient>
         {/* the lighthouse's lamp at night: a warm light, brightest at the glass, fading into the dark */}
         <radialGradient id="film-lamp-glow" r="0.5" cx="0.5" cy="0.5">
           <stop offset="0" stopColor="oklch(96% 0.07 88)" stopOpacity="0.95" />
@@ -230,7 +220,9 @@ export function Sky() {
   );
 }
 
-/** The disc at a nominal radius of 100 (the director scales and places it): its glow (one gradient into the sky), the sun's flat disc, the moon and its crescent. */
+/** The disc at a nominal radius of 100 (the director scales and places it): the sun's flat disc, the moon and its
+ *  crescent. Its glow is the sky's own (film.module.css `.sky`): a layer of its own 5.5 times the disc's width, scaled
+ *  by the director, left a phone's Chrome to drop part of its raster — the glow cut off along a straight edge. */
 export function Disc() {
   const sun = path(tear(ellipse(0, 0, 100, 100, 64), 312, { jag: 1.2, wander: 5 }), true, 0);
   const outer = path(tear(ellipse(0, 0, 100, 100, 56), 310, { jag: 1, wander: 4 }), true, 0);
@@ -238,8 +230,7 @@ export function Disc() {
   const term = path(tear(ellipse(0, 0, 108, 108, 56), 311, { amp: 0.6, jag: 0.6, wander: 1.6 }), true, 0);
   return (
     <div className={styles.disc} data-disc="" aria-hidden="true">
-      <svg viewBox="-560 -560 1120 1120" focusable="false">
-        <circle r="550" fill="url(#film-glow)" className={styles.discGlow} />
+      <svg viewBox="-120 -120 240 240" focusable="false">
         <g className={styles.sun}>
           <path d={sun} className={styles.discFace} />
         </g>
@@ -248,8 +239,8 @@ export function Disc() {
               width is the phase's — adding light past the middle while it is gibbous (convex, never a bite), then
               taking it from the lit half for the crescent */}
           <mask id="film-cres">
-            <rect x="-560" y="-560" width="1120" height="1120" fill="#000" />
-            <rect x="-560" y="-560" width="560" height="1120" fill="#fff" />
+            <rect x="-120" y="-120" width="240" height="240" fill="#000" />
+            <rect x="-120" y="-120" width="120" height="240" fill="#fff" />
             <path d={term} fill="#fff" className={styles.moonGibbous} />
             <path d={term} fill="#000" className={styles.moonCrescent} />
           </mask>

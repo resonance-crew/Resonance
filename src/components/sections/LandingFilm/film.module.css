@@ -212,7 +212,38 @@
   z-index: 0;
   pointer-events: none;
   background: linear-gradient(to bottom, var(--film-sky-0) var(--bar), var(--film-sky-1) calc(var(--bar) + var(--hz) * 0.55), var(--film-sky-2) calc(var(--bar) + var(--hz) * 0.8), var(--film-sky-3) calc(var(--bar) + var(--hz)));
-  background: linear-gradient(to bottom in oklab, var(--film-sky-0) var(--bar), var(--film-sky-1) calc(var(--bar) + var(--hz) * 0.55), var(--film-sky-2) calc(var(--bar) + var(--hz) * 0.8), var(--film-sky-3) calc(var(--bar) + var(--hz)));
+  /* the sun (and the moon) into the sky: one soft gradient from the disc's edge (0.18 of the way) out — no rings (round 5,
+     the owner: 「太陽這邊和天空做個漸層就好了，不要用這個很多圈的設計」). It is the sky's own paint, at the disc's place
+     (--film-glow-x/-y, the director's, frame 0 below) its radius 5.5 of the disc's (--film-glow-r): drawn on the disc, it
+     was a layer of its own 5.5 times the disc's width, rescaled every frame, and a phone's Chrome dropped part of its
+     raster — the glow cut off along a straight edge (2026-11-12). */
+  background:
+    radial-gradient(
+      circle var(--film-glow-r) at var(--film-glow-x) calc(var(--film-glow-y) + var(--bar)),
+      color-mix(in srgb, var(--film-c-halo) calc(80% * var(--film-glow, 1)), transparent) 0%,
+      color-mix(in srgb, var(--film-c-halo) calc(62% * var(--film-glow, 1)), transparent) 18%,
+      color-mix(in srgb, var(--film-c-halo) calc(36% * var(--film-glow, 1)), transparent) 32%,
+      color-mix(in srgb, var(--film-c-halo) calc(16% * var(--film-glow, 1)), transparent) 52%,
+      color-mix(in srgb, var(--film-c-halo) calc(5% * var(--film-glow, 1)), transparent) 76%,
+      transparent 100%
+    ),
+    linear-gradient(to bottom in oklab, var(--film-sky-0) var(--bar), var(--film-sky-1) calc(var(--bar) + var(--hz) * 0.55), var(--film-sky-2) calc(var(--bar) + var(--hz) * 0.8), var(--film-sky-3) calc(var(--bar) + var(--hz)));
+  /* frame 0, as `.disc`'s: the blue hour's sun, still under the far range */
+  --film-glow-x: 74vw;
+  --film-glow-y: calc(var(--hz) * 1.03);
+  --film-glow-r: calc(550 * var(--u) * 0.86);
+}
+@media not all and (min-aspect-ratio: 11/10) {
+  .sky {
+    --film-glow-x: 78vw;
+    --film-glow-y: calc(var(--hz) * 0.76);
+    --film-glow-r: calc(550 * var(--u) * 0.54);
+  }
+}
+@media (min-width: 640px) and (max-aspect-ratio: 11/10) {
+  .sky {
+    --film-glow-r: calc(550 * var(--u) * 0.7);
+  }
 }
 
 .stars {
@@ -267,10 +298,10 @@
   left: 0;
   top: 0;
   z-index: 2;
-  /* drawn at a nominal radius of 100 units; the director scales it to the hour's radius */
-  width: calc(1120 * var(--u));
-  height: calc(1120 * var(--u));
-  margin: calc(-560 * var(--u)) 0 0 calc(-560 * var(--u));
+  /* drawn at a nominal radius of 100 units; the director scales it to the hour's radius (its glow is the sky's) */
+  width: calc(240 * var(--u));
+  height: calc(240 * var(--u));
+  margin: calc(-120 * var(--u)) 0 0 calc(-120 * var(--u));
   pointer-events: none;
   will-change: transform;
   /* frame 0: the blue hour's sun, still under the far range (its glow alone shows) */
@@ -291,9 +322,6 @@
   width: 100%;
   height: 100%;
   overflow: visible;
-}
-.discGlow {
-  opacity: var(--film-glow, 1);
 }
 .discFace {
   fill: var(--film-c-disc);

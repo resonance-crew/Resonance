@@ -203,6 +203,8 @@ export class Director {
   private heroRect: Rect = { x: 0, y: 0, w: 0, h: 0 };
   private heroTy = 0;
   private readonly disc: HTMLElement | null;
+  /** The sky, which paints the disc's glow (film.module.css `.sky`). */
+  private readonly sky: HTMLElement | null;
   private readonly clouds: HTMLElement | null;
   private readonly dot: HTMLElement | null;
   private paletteKey = '';
@@ -315,6 +317,7 @@ export class Director {
     this.props = new PropKit(layer);
     this.hero = stage.querySelector('[data-hero]');
     this.disc = stage.querySelector('[data-disc]');
+    this.sky = stage.querySelector('[data-sky]');
     this.clouds = stage.querySelector('[data-clouds]');
     this.dot = root.querySelector('[data-progress-dot]');
     const el = (q: string) => stage.querySelector<HTMLElement>(q);
@@ -1009,7 +1012,11 @@ export class Director {
     this.css.set(this.disc, '--film-sun', String(sun));
     this.css.set(this.disc, '--film-moon', moon.toFixed(3));
     this.css.set(this.disc, '--film-crescent', cres.toFixed(3));
-    this.css.set(this.disc, '--film-glow', (sun ? 1 : 0.55).toFixed(2));
+    // the glow is the sky's paint (a layer of its own this wide lost raster on a phone): its centre, its radius 5.5 discs
+    this.css.set(this.sky, '--film-glow-x', `${d.x.toFixed(1)}px`);
+    this.css.set(this.sky, '--film-glow-y', `${d.y.toFixed(1)}px`);
+    this.css.set(this.sky, '--film-glow-r', `${(5.5 * d.r * L.u).toFixed(1)}px`);
+    this.css.set(this.sky, '--film-glow', (sun ? 1 : 0.55).toFixed(2));
   }
 
   /** The hero leaves with the first change (as the style moves it); once it's gone its words are visually hidden. */
