@@ -32,6 +32,7 @@ When building UI in this repo, **always reach for these primitives before writin
 | The final confirm of the irreversible / the button that opens that flow | `<OrganicButton variant="danger">` / `variant="dangerTonal"` — see rule 14 |
 | A dialog's quiet way at the start of its foot (the link editor's 移除連結: it undoes something small, not a danger) | `<OrganicButton variant="quiet">` — its words alone in the muted ink, no fill; never red |
 | A dialog's foot: a choice / only a way out | `<ModalActions busy?>` (way out, then the verb) / `Modal closeButton` or `<ModalCloseRow>` (from `molecules/Modal/ModalActions`); a confirm is `<ConfirmModal error? titlePending?>` |
+| Ask for something in a dialog (a field, a choice), or anything that would rise from the screen's foot | `<Modal>` on the web, the apps' own modal dialog (the one their confirmations use), a popover at its control on a wide screen — **never a bottom sheet**, on any platform (the owner, round 17: 「button sheet 现在不在我们的整个设计里面……应该要做成 model」; `src/lib/design/noBottomSheets.test.ts` refuses the apps' system sheets). A panel in the keyboard's place (the composer's stickers and attach) is not a sheet |
 | Vertical/horizontal separator | `<Divider seed={N} />` |
 | Wrap something in a hand-drawn surface | `<HandDrawnDashedSurface seed={N} state="idle|hover|focus">` |
 | Emphasize a word with a curvy underline | `<Emphasis color="…">…</Emphasis>` |
