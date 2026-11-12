@@ -8,10 +8,12 @@
  *            --review: the agy review straight after (what a release runs, with --flows)
  *   compare  [--run <id>]          recompute the comparison and the report
  *   review   [--run <id>] [--agy | --gemini] [--all]   --all: unchanged captures too
- *   accept   [--run <id>] [--only <key|screen>,…]
+ *   accept   --reason "<the owner's words>" [--run <id>] [--only <key|screen>,…]
+ *            refused without --reason; each accept is a row of docs/visual-accept-log.md (acceptLog.ts)
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { acceptReason, appendAcceptLog, REASON_REQUIRED } from './acceptLog';
 import { compareRun, type RunInfo } from './compare';
 import { writeReport } from './report';
 import { reviewWithAgy, reviewWithGemini, writeReviewPack } from './review';
@@ -141,12 +143,26 @@ async function review(runDir: string, args: string[]) {
   log(`Report: ${writeReport(runDir, results)}`);
 }
 
-/** Copies a run's captures into the baseline: all of them, or the keys / screen ids given. */
+/**
+ * Copies a run's captures into the baseline: all of them, or the keys / screen ids given — only with
+ * a `--reason` (the owner's words, or what the accept rests on), recorded in docs/visual-accept-log.md.
+ */
 function accept(args: string[]) {
+  const reason = acceptReason(args);
+  if (!reason) {
+    console.error(REASON_REQUIRED);
+    process.exitCode = 1;
+    return;
+  }
   const runDir = runDirOf(args);
   const info = readJson<RunInfo>(join(runDir, 'run.json'))!;
   const only = list(flag(args, 'only'));
   const keys = listPngs(runDir).filter((k) => !only.length || only.some((o) => k === o || k.split('/').pop()!.startsWith(`${o}@`)));
+  if (!keys.length) {
+    console.error(`Nothing in ${info.id} matches ${only.length ? `--only ${only.join(',')}` : 'the run'}: nothing was accepted.`);
+    process.exitCode = 1;
+    return;
+  }
   for (const key of keys) {
     const to = join(BASELINE_DIR, key);
     mkdirSync(join(to, '..'), { recursive: true });
@@ -157,9 +173,11 @@ function accept(args: string[]) {
     else rmSync(ignorePath(to), { force: true });
   }
   for (const platform of new Set(keys.map((k) => k.split('/')[0]))) {
-    writeJson(join(BASELINE_DIR, platform, 'meta.json'), { commit: info.commit, run: info.id, acceptedAt: new Date().toISOString() });
+    writeJson(join(BASELINE_DIR, platform, 'meta.json'), { commit: info.commit, run: info.id, acceptedAt: new Date().toISOString(), reason });
   }
+  appendAcceptLog({ at: new Date(), run: info.id, commit: info.commit, dirty: info.dirty, keys, only, reason });
   log(`Accepted ${keys.length} capture(s) from ${info.id} into ${BASELINE_DIR}`);
+  log(`Recorded in docs/visual-accept-log.md — commit it with the accept: git commit -- docs/visual-accept-log.md`);
   finish(runDir);
 }
 
@@ -175,7 +193,7 @@ async function main() {
     case 'accept':
       return accept(args);
     default:
-      log('Usage: npm run visual -- capture [web android ios mac] [--only ids] [--device ids] [--no-stack] [--flows] [--review] | compare | review [--agy | --gemini] [--all] | accept [--only keys]  (each with --run <id>)');
+      log('Usage: npm run visual -- capture [web android ios mac] [--only ids] [--device ids] [--no-stack] [--flows] [--review] | compare | review [--agy | --gemini] [--all] | accept --reason "<the owner\'s words>" [--only keys]  (each with --run <id>)');
       process.exit(command ? 1 : 0);
   }
 }

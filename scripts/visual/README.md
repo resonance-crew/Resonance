@@ -17,8 +17,8 @@ npm run visual -- review --run <id> --agy --all   # every capture: a first look 
 npm run visual -- review --run <id>          # just write review/REVIEW.md, a brief any agent can follow by hand
 npm run visual -- review --run <id> --gemini # the Gemini API instead (GEMINI_API_KEY, GEMINI_MODEL)
 npm run visual -- compare --run <id>         # redraw the report (after verdicts came in another way)
-npm run visual -- accept --run <id>          # the run becomes the baseline
-npm run visual -- accept --run <id> --only card,web/phone/home@dark-zh-TW.png   # only these screens / captures
+npm run visual -- accept --run <id> --reason "<the owner's words>"   # the run becomes the baseline
+npm run visual -- accept --run <id> --only card,web/phone/home@dark-zh-TW.png --reason "…"   # only these screens / captures
 ```
 
 Every command prints `Run <id>: …`; pass that id with `--run` (the default, `visual/latest`, is
@@ -28,7 +28,7 @@ Everything lands in `visual/` (git-ignored):
 
 ```
 visual/baseline/<platform>/<device>/<screen>@<theme>-<locale>.png   the accepted pictures
-visual/baseline/<platform>/meta.json                                the commit and run they were accepted from
+visual/baseline/<platform>/meta.json                                the commit, run and reason of the latest accept
 visual/runs/<id>/<platform>/<device>/…png                           a run's captures
 visual/runs/<id>/_diff/…png                                         changed pixels in red
 visual/runs/<id>/results.json   index.html                          the comparison and its report (open in a browser)
@@ -76,10 +76,32 @@ the same lines beside each capture.
 2. Open `visual/runs/<id>/index.html`. It lists broken first, then unsure, changed, missing and new,
    each with baseline · now · diff, the verdict and the intended change. Unchanged captures are
    thumbnails at the bottom.
-3. Fix what's broken and capture again (`--only` the screens involved), or accept what's right.
+3. Fix what's broken and capture again (`--only` the screens involved), or, once the owner says so,
+   accept what's right (see Accepting).
 
 The first run on a machine has no baseline: every capture is new. Review it with `--all`, look the
 report over, and accept it.
+
+## Accepting
+
+A capture becomes the baseline only on the owner's OK, never unasked, and `accept` holds to it:
+
+```bash
+npm run visual -- accept --run <id> --only card,home --reason "owner, in chat: the new card and home look right, make them the baseline"
+```
+
+- Without `--reason` — or with a blank one, or with another flag where its words should be — it
+  refuses, says why and accepts nothing (exit code 1). The reason is the owner's words, quoted, or
+  what the accept rests on when it isn't a new look (`after updating Xcode 27.3: the same screens
+  re-rendered, owner's OK in chat`).
+- An `--only` that matches no capture of the run accepts nothing either (exit code 1), rather than
+  quietly doing nothing.
+- Each accept appends one row to [docs/visual-accept-log.md](../../docs/visual-accept-log.md), which
+  is in git (`visual/` isn't): the time (UTC), the run and the commit it captured (`(dirty)` when the
+  tree had changes), the platforms, what `--only` named (*all* for the whole run), how many captures
+  and the reason. Commit that row with the work it accepts: `git commit -- docs/visual-accept-log.md`.
+  The platform's `meta.json` keeps the reason of its latest accept too.
+- The report's per-capture command (`index.html`) carries a `--reason "<the owner's words>"` to fill in.
 
 ## The review with Antigravity (`--agy`)
 

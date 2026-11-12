@@ -31,7 +31,7 @@ function item(runDir: string, r: Result, v: Verdict | undefined, runId: string, 
   const meant = intended.length
     ? `<p class="meta">Intended: ${intended.map(esc).join(' · ')}</p>`
     : r.status === 'changed' ? '<p class="meta">Intended: no Visual: trailer names this screen</p>' : '';
-  const accept = r.status === 'missing' ? '' : `<code>npm run visual -- accept --run ${esc(runId)} --only ${esc(r.key)}</code>`;
+  const accept = r.status === 'missing' ? '' : `<code>npm run visual -- accept --run ${esc(runId)} --only ${esc(r.key)} --reason "&lt;the owner’s words&gt;"</code>`;
   return `<article data-status="${r.status}" data-verdict="${v?.verdict ?? ''}">
   <header><h3>${esc(r.key)}</h3><span class="tag s-${r.status}">${r.status}</span>${tag}<span class="meta">${ratio}${sizes}</span></header>
   ${note}${meant}

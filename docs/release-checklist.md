@@ -40,7 +40,8 @@ there, 24 locally); nobody read CI until the next day (`6534ba4c`).
 `npm run visual -- capture --flows --review` (screens, Maestro flows, review): the owner looks at what
 it flagged. It closes the simulators and emulators it uses, so only one runs at a time and never while
 the owner is using one. A new picture becomes the baseline only on the owner's word
-(`npm run visual -- accept --run <id> --only …`), never unasked.
+(`npm run visual -- accept --run <id> --only … --reason "<their words>"`), never unasked; each accept
+is a row of [visual-accept-log.md](visual-accept-log.md), committed with it.
 
 ## 4. Builds
 
