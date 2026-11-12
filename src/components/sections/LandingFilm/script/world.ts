@@ -45,6 +45,14 @@ export const WORLD_BOTTOM = 1400;
  * flat lifting away in a change reads as a strip of paper with two torn edges — never as a block cut by the screen.
  */
 export const FLAT_BOTTOM = 1190;
+/**
+ * How deep the paper nearest the foot is drawn — the ground's, and the backdrop's for the moments in a change when
+ * no ground stands in front of it. The world is laid out on the small viewport (100svh), but the stage is the large
+ * one (100lvh): when a phone's browser hides its address bar the strip between the two shows, and on a short phone
+ * that strip reaches world y ≈ 2000 (885 + (lip + pad + the bar) / u, u ≈ 0.2 px a unit). The planes keep their
+ * nominal foot (FOOT, what a change pivots and clips by); only their paper runs on.
+ */
+export const PAPER_DEEP = 2600;
 
 /** A part of a plane: a path and how it is painted (`ff-*` fill / `fs-*` stroke classes), its opacity a variable. */
 export interface ArtPart {
@@ -253,7 +261,7 @@ function peakParts(list: Peak[], paint: string, jag: number, wander: number, sun
   let lit = '';
   let dark = '';
   for (const p of list) {
-    body += D(tear(poly(p.pts, 15, false).concat([[p.pts[4][0], WORLD_BOTTOM], [p.pts[0][0], WORLD_BOTTOM]]), p.seed, { jag, wander }), 0);
+    body += D(tear(poly(p.pts, 15, false).concat([[p.pts[4][0], PAPER_DEEP], [p.pts[0][0], PAPER_DEEP]]), p.seed, { jag, wander }), 0);
     if (!folds) continue;
     const s = sunX < p.cx ? -1 : 1;
     const [L, ls, top, rs, R] = p.pts;
@@ -297,7 +305,7 @@ function swellParts(list: Swell[], x0: number, w: number): ArtPart[] {
     }
     const torn = tear(edge, sw.seed, { amp: 1.2, jag: 0.5, wander: 2, closed: false });
     return [
-      { d: D([...torn, [x0 + w + 40, WORLD_BOTTOM], [x0 - 40, WORLD_BOTTOM]], 0), cls: sw.cls },
+      { d: D([...torn, [x0 + w + 40, PAPER_DEEP], [x0 - 40, PAPER_DEEP]], 0), cls: sw.cls },
       // its wave line, drawn: the paper's cut edge catching the light — four of them, the mark's ≋ over the land
       { d: path(torn, false, 0), cls: 'fs-swell-line fx-ns' },
     ];
@@ -425,7 +433,7 @@ function seaParts(x0: number, w: number, mist: boolean): ArtPart[] {
     lines += `M${x.toFixed(0)},${y}h${(50 + r() * 120).toFixed(0)}`;
   }
   const out: ArtPart[] = [
-    { d: `M${x0},${SEA_TOP}h${w}V${WORLD_BOTTOM}H${x0}Z`, cls: 'ff-sea' },
+    { d: `M${x0},${SEA_TOP}h${w}V${PAPER_DEEP}H${x0}Z`, cls: 'ff-sea' },
     { d: lines, cls: 'fs-sea-line fx-ns' },
   ];
   if (mist) {
@@ -505,7 +513,7 @@ function nearParts(edges: Pt[][], tree: string, seed: number, treeCls = 'ff-cano
 }
 
 function groundParts(gr: { edge: Pt[]; torn: Pt[]; tufts: string }, seed: number): ArtPart[] {
-  return [{ d: D(strip(gr.torn, seed)), cls: 'ff-ground' }, { d: gr.tufts, cls: 'ff-ground' }];
+  return [{ d: D(strip(gr.torn, seed, PAPER_DEEP)), cls: 'ff-ground' }, { d: gr.tufts, cls: 'ff-ground' }];
 }
 
 /** A small round fleck (an ellipse as two arcs: a few bytes). */
@@ -659,10 +667,18 @@ function valleyArt(tall = false, look: Look = 'waves'): PlaceArt {
     const x = lerp(wa + (wb - wa) * 0.22, wb - (wb - wa) * 0.22 - len, r());
     lines += `M${x.toFixed(0)},${WATER_Y + 16 + i * 13}h${len.toFixed(0)}`;
   }
+  // the river's bed: the banks run on under the water and meet, so the river is a pool held between them — never two
+  // cliffs with the water running down past the stage's foot (what a phone showed once its address bar hid, the stage
+  // then reaching below the world laid out for it: PAPER_DEEP). Its ends start inside the banks' paper, a little under
+  // their last keys, so only the curve under the water is seen
+  const bedKeys: Pt[] = tall
+    ? [[930, 1000], [962, 1040], [980, 1056], [1000, 1062], [1020, 1056], [1038, 1040], [1070, 1000]]
+    : [[800, 1000], [840, 1040], [890, 1074], [950, 1094], [1000, 1100], [1050, 1094], [1110, 1074], [1160, 1040], [1200, 1000]];
+  const bed = tear(spline(bedKeys, 9, false), 1333, { jag: 0.8, wander: 2.4, amp: 2, closed: false });
   const ground: ArtPart[] = [
     { d: D(strip(water, 1340)), cls: 'ff-sea' },
     { d: lines, cls: 'fs-sea-line fx-ns' },
-    { d: D(strip(left.torn, 1931)) + D(strip(right.torn, 1932)), cls: 'ff-ground' },
+    { d: D(strip(left.torn, 1931, PAPER_DEEP)) + D(strip(right.torn, 1932, PAPER_DEEP)) + D(strip(bed, 1933, PAPER_DEEP)), cls: 'ff-ground' },
     { d: left.tufts + right.tufts, cls: 'ff-ground' },
   ];
   // the bridge: the walkway's gentle bow as its deck; under it a wall whose arch — half an ellipse — springs from the
