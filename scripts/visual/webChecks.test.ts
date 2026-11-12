@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { WEB_CHECKS, checksPath, consoleNoise, judgePage, lineCount, type PageMeasure } from './webChecks';
 
-const quiet: PageMeasure = { viewport: 390, scrollWidth: 390, pastEdge: [], labels: [], small: [], contrast: null };
+const quiet: PageMeasure = { blank: false, viewport: 390, scrollWidth: 390, pastEdge: [], labels: [], small: [], contrast: null };
 const line = (top: number, height = 20) => ({ top, bottom: top + height });
 
 describe('lineCount', () => {
@@ -60,8 +60,15 @@ describe('judgePage', () => {
     expect(f).toMatchObject({ check: 'contrast', detail: '1 under AA: “已儲存” 3.21:1 (needs 4.5) at span.status' });
   });
 
-  it('starts every check as a warning', () => {
-    expect(Object.values(WEB_CHECKS).map((c) => c.level)).toEqual(['warn', 'warn', 'warn', 'warn', 'warn']);
+  it('fails a run on a blank page', () => {
+    expect(judgePage({ ...quiet, blank: true }, [], { touch: false })).toEqual([
+      { check: 'blank', level: 'fail', detail: 'the page shows no words and no picture' },
+    ]);
+  });
+
+  it('fails a run only on what a full web run was seen clean of; warns of the rest', () => {
+    const levels = Object.fromEntries(Object.entries(WEB_CHECKS).map(([check, { level }]) => [check, level]));
+    expect(levels).toEqual({ blank: 'fail', overflow: 'fail', 'wrapped-label': 'fail', console: 'warn', 'touch-target': 'warn', contrast: 'warn' });
   });
 });
 

@@ -110,7 +110,7 @@ the report, and exit code 1 on a FAIL. So an agent can stop on it: the run passe
 | `unsettled` | a capture never held still, even after a second look (below) |
 | `unexplained` | a capture changed and no `Visual:` trailer since the baseline names its screen |
 | `flow` | a Maestro flow failed (`--flows`) |
-| `check` | a web check raised to `fail` found something (below; none is yet) |
+| `check` | a web check at `fail` found something (below: `blank`, `overflow`, `wrapped-label`) |
 
 Warnings are said and never fail: a capture *taken again* because its first look was early, a
 baseline capture the run didn't take (*missing*), a web check still at `warn`. A changed capture a
@@ -131,15 +131,21 @@ what it finds beside the capture (`<capture>.checks.json`; the log line names th
 
 | Check | What it finds | Level |
 | --- | --- | --- |
-| `overflow` | the page is wider than the window, and what sticks out | warn |
-| `wrapped-label` | a button of ≤ 40 characters whose words break onto a second line | warn |
-| `console` | a console error or an uncaught exception while the page loaded (the aborted puppet requests left out) | warn |
+| `blank` | the page shows no words and no picture (taken again twice first) | fail |
+| `overflow` | the page is wider than the window, and what sticks out | fail |
+| `wrapped-label` | a button of ≤ 40 characters whose words break onto a second line | fail |
+| `console` | a console error or an uncaught exception while the page loaded (the aborted puppet requests left out; a failed resource names its address) | warn |
 | `touch-target` | on the phone and tablet, a control under 44 × 44 (a link inside running text aside) | warn |
 | `contrast` | words under WCAG AA, from `window.__contrastAudit()` (dev and emulator builds have it) | warn |
 
-Every check starts at `warn`: a check that fails runs before it has been seen clean only teaches
-everyone to ignore the verdict. Once a full web run shows none of a kind (or what it shows is fixed),
-raise it to `fail` in `WEB_CHECKS`.
+A check fails runs only once it has been seen clean — one that fails every run only teaches everyone
+to ignore the verdict. The first full web run (2026-11-13, 110 captures) found no overflow and no
+wrapped label, so those two fail, with `blank`, which is never right. It warned of the rest: 82
+touch targets (the phone and tablet header's icons are 34 × 34), 19 words under contrast (the
+landing film's skip link, a thread's quoted words at 3.95:1, 刪除帳號 at 4.18:1, …) and 10 console
+errors, all meant (the 404 page's own 404, and the Firestore emulator's permission-denied as an
+anonymous card's page reads it through the rules before asking the server). When what a check
+shows is fixed, or accepted as it is, raise it to `fail` in `WEB_CHECKS`.
 
 ## Accepting
 
@@ -239,8 +245,12 @@ phone is where text is tightest; every other device takes light zh-TW (`PHONE_VA
 - **Waiting for the real page**: a capture is taken again and again until two in a row match
   (`settle` in `util.ts`). A page waiting for a compile or a read holds still too, so the web first
   waits for its requests to drain (bar the realtime channels), and Android checks a settled frame
-  is still the same 3.5 s later after warming the API routes. Then a capture that differs from the
-  baseline gets a second look (What fails a run). A capture that never settles is taken anyway,
+  is still the same 3.5 s later after warming the API routes. The web asks for every page once
+  before it captures any (`next dev` compiles a route on its first request and then reloads every
+  open page in full), and takes a page again when it reloaded itself during the capture or came up
+  with no words and no picture (the dev server's 404 page navigates to itself once more after
+  loading, and now and then stays empty). Then a capture that differs from the baseline gets a
+  second look (What fails a run). A capture that never settles is taken anyway,
   listed at the top of the report, and fails the run.
 - **Accounts**: each account signs in fresh (web: a new browser context; iOS: a launch of its own,
   `-signedOut YES` for the signed-out start; Android: `pm clear`), so nothing carries over.

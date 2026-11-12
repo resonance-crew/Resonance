@@ -7,7 +7,7 @@
  * (`window.__emulatorSignIn`, which emulator builds expose).
  */
 import { writeFileSync } from 'node:fs';
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type Frame, type Page } from 'playwright';
 import { SCREENS, screensFor, shotName, type Account, type Screen, type Variant } from './screens';
 import { lookNote, secondLook, type Look } from './secondLook';
 import { SEED_PASSWORD, ignorePath, settle, shotPath, variantsFor, type Capture, type CaptureContext, type Rect } from './util';
@@ -91,7 +91,11 @@ const idle = new WeakMap<Page, ReturnType<typeof trackRequests>>();
 const errors = new WeakMap<Page, string[]>();
 function trackErrors(page: Page) {
   const list: string[] = [];
-  page.on('console', (m) => m.type() === 'error' && !consoleNoise(m.text(), m.location().url) && list.push(m.text()));
+  page.on('console', (m) => {
+    if (m.type() !== 'error' || consoleNoise(m.text(), m.location().url)) return;
+    // A resource that failed says which, so an expected answer (the 404 page's own 404) can be told apart.
+    list.push(/^Failed to load resource/.test(m.text()) ? `${m.text()} — ${m.location().url}` : m.text());
+  });
   page.on('pageerror', (e) => list.push(`${e.name}: ${e.message}`));
   return list;
 }
@@ -116,6 +120,23 @@ async function keep(page: Page, screen: Screen) {
   );
 }
 
+/**
+ * Opens a screen's page. A navigation the last page starts by itself while this one begins (the sign-in
+ * page on a phone reloads itself once for its popup) aborts this one: it is asked for again, twice at most.
+ */
+async function open(page: Page, ctx: CaptureContext, url: string) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await page.goto(url, { waitUntil: 'load', timeout: 120_000 });
+      return;
+    } catch (error) {
+      if (attempt > 2 || !/net::ERR_ABORTED/.test(String(error))) throw error;
+      ctx.log(`  ${url}: the navigation was aborted, asking again`);
+      await page.waitForTimeout(1000);
+    }
+  }
+}
+
 async function shoot(
   page: Page,
   ctx: CaptureContext,
@@ -126,10 +147,38 @@ async function shoot(
 ): Promise<Look & { ignore: Rect[]; findings: Finding[] }> {
   if (!idle.has(page)) idle.set(page, trackRequests(page));
   if (!errors.has(page)) errors.set(page, trackErrors(page));
+  // `next dev` reloads every open page in full when it compiles something new (Fast Refresh), and its
+  // 404 page navigates to itself once more after loading, now and then staying empty: a page that
+  // navigated while it was being taken, or came up with no words and no picture, is taken again.
+  let navigated = false;
+  const onNavigation = (frame: Frame) => frame === page.mainFrame() && (navigated = true);
+  page.on('framenavigated', onNavigation);
+  try {
+    for (let attempt = 1; ; attempt++) {
+      const look = await shootOnce(page, ctx, screen, v, device, key, () => (navigated = false));
+      const blank = look.findings.some((f) => f.check === 'blank');
+      if ((!navigated && !blank) || attempt === 3) return look;
+      ctx.log(`  ${key}: ${blank ? 'the page came up empty' : 'the page reloaded itself while it was taken'}, taking it again`);
+    }
+  } finally {
+    page.off('framenavigated', onNavigation);
+  }
+}
+
+async function shootOnce(
+  page: Page,
+  ctx: CaptureContext,
+  screen: Screen,
+  v: Variant,
+  device: WebDevice,
+  key: string,
+  /** Called once the page is ready: what navigates after it spoils the capture. */
+  watch: () => void,
+): Promise<Look & { ignore: Rect[]; findings: Finding[] }> {
   errors.get(page)!.length = 0;
   await keep(page, screen);
   const route = screen.web?.route ?? screen.route;
-  await page.goto(`${ctx.devUrl}/${v.locale}${route === '/' ? '' : route}`, { waitUntil: 'load', timeout: 120_000 });
+  await open(page, ctx, `${ctx.devUrl}/${v.locale}${route === '/' ? '' : route}`);
   const ready = async () => {
     await idle.get(page)!();
     await page.evaluate(() => document.fonts.ready);
@@ -142,6 +191,7 @@ async function shoot(
     await page.locator(screen.web.click).locator('visible=true').first().click();
     await ready();
   }
+  watch();
   const mask = (screen.mask ?? []).map((s) => page.locator(s));
   const take = () =>
     settle(() => page.screenshot({ fullPage: screen.fullPage, animations: 'disabled', caret: 'hide', mask, scale: 'device' }), {
@@ -178,11 +228,23 @@ function ignored(page: Page, fullPage: boolean): Promise<Rect[]> {
   );
 }
 
+/**
+ * Asks once for every page the screens open, before any is captured: `next dev` compiles a route on
+ * its first request and then reloads every open page in full, which would land on a capture.
+ */
+async function warmUp(ctx: CaptureContext, screens: Screen[]) {
+  ctx.log('  compiling the pages the screens open…');
+  for (const route of new Set(screens.map((s) => s.web?.route ?? s.route))) {
+    if (route != null) await fetch(`${ctx.devUrl}/zh-TW${route === '/' ? '' : route}`).catch(() => {});
+  }
+}
+
 export const captureWeb: Capture = async (ctx) => {
   const browser = await chromium.launch();
   const unsettled: string[] = [];
   try {
     const screens = screensFor('web', ctx.only);
+    await warmUp(ctx, screens);
     for (const device of WEB_DEVICES.filter((d) => !ctx.devices.length || ctx.devices.includes(d.id))) {
       for (const v of variantsFor(device.phone)) {
         // One context per account: a signed-out screen never sees someone's session.

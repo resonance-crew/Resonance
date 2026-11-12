@@ -2,6 +2,7 @@
  * What the web's pass asserts on each page it captures, beyond the picture. It already walks every
  * screen at three sizes and five variants; these turn that walk into checks a script can read:
  *
+ *   blank          the page shows no words and no picture (a failed render, a page caught mid-reload)
  *   overflow       the page is wider than the window (something runs off a phone's edge)
  *   wrapped-label  a short button's words break onto a second line
  *   console        an error in the browser's console, or an uncaught exception, while the page loaded
@@ -9,19 +10,21 @@
  *   contrast       words under WCAG AA on what they stand on (`window.__contrastAudit()`, dev builds)
  *
  * The page only measures (`measurePage`); judging is plain code (`judgePage`), tested on its own.
- * Each check starts as a warning: a check that fails a run must first be seen clean, or every run
- * fails and the gate is ignored. Raise one to `fail` in WEB_CHECKS once a full web run shows none.
+ * A check fails a run only once it has been seen clean, or every run fails and the gate is ignored:
+ * `blank` (never right) and the two a full web run found nothing for (2026-11-13) fail; the rest
+ * warn until a run shows none of them (or what it shows is fixed), then go to `fail` in WEB_CHECKS.
  * A capture's findings are written beside it (`<capture>.checks.json`); gate.ts and the report read them.
  */
 import type { Page } from 'playwright';
 
-export type WebCheck = 'overflow' | 'wrapped-label' | 'console' | 'touch-target' | 'contrast';
+export type WebCheck = 'blank' | 'overflow' | 'wrapped-label' | 'console' | 'touch-target' | 'contrast';
 export type Level = 'fail' | 'warn';
 export type Finding = { check: WebCheck; level: Level; detail: string };
 
 export const WEB_CHECKS: Record<WebCheck, { level: Level; what: string }> = {
-  overflow: { level: 'warn', what: 'the page is wider than the window' },
-  'wrapped-label': { level: 'warn', what: "a short button's words break onto two lines" },
+  blank: { level: 'fail', what: 'the page shows no words and no picture' },
+  overflow: { level: 'fail', what: 'the page is wider than the window' },
+  'wrapped-label': { level: 'fail', what: "a short button's words break onto two lines" },
   console: { level: 'warn', what: 'an error in the console while the page loaded' },
   'touch-target': { level: 'warn', what: 'a control smaller than 44 × 44 on a touch screen' },
   contrast: { level: 'warn', what: 'words under WCAG AA contrast' },
@@ -36,6 +39,8 @@ export const checksPath = (png: string) => png.replace(/\.png$/, '.checks.json')
 
 export type Box = { top: number; bottom: number };
 export type PageMeasure = {
+  /** No words and no picture on the page (web.ts takes it again; still so, it fails the run). */
+  blank: boolean;
   /** The window's width (the document's client width) and how wide the page scrolls. */
   viewport: number;
   scrollWidth: number;
@@ -73,6 +78,7 @@ const list = <T>(items: T[], show: (item: T) => string, max = 5) =>
 
 export function judgePage(m: PageMeasure, consoleErrors: string[], { touch }: { touch: boolean }): Finding[] {
   const out: Finding[] = [];
+  if (m.blank) out.push(finding('blank', 'the page shows no words and no picture'));
   if (m.scrollWidth > m.viewport + 1) {
     const past = m.pastEdge.length ? ` — past the edge: ${list(m.pastEdge, (p) => `${p.name} (to ${Math.round(p.right)})`, 3)}` : '';
     out.push(finding('overflow', `the page is ${m.scrollWidth} px wide in a ${m.viewport} px window${past}`));
@@ -92,8 +98,13 @@ export function judgePage(m: PageMeasure, consoleErrors: string[], { touch }: { 
   return out;
 }
 
-/** What the page shows, measured in the browser (a self-contained function: Playwright sends its source). */
-export function measurePage(page: Page, { touch }: { touch: boolean }): Promise<PageMeasure> {
+/**
+ * What the page shows, measured in the browser (a self-contained function: Playwright sends its source).
+ * tsx compiles named functions with esbuild's keepNames, wrapping each in `__name(…)`, a helper the
+ * page doesn't have: it is given a stand-in first (a string, so nothing compiles it).
+ */
+export async function measurePage(page: Page, { touch }: { touch: boolean }): Promise<PageMeasure> {
+  await page.evaluate('globalThis.__name ??= (fn) => fn');
   return page.evaluate(
     async ({ touch, minTarget, shortLabel }) => {
       const visible = (el: Element) => {
@@ -107,6 +118,7 @@ export function measurePage(page: Page, { touch }: { touch: boolean }): Promise<
         const cls = typeof el.className === 'string' ? el.className.split(/\s+/).filter(Boolean)[0] : '';
         return el.tagName.toLowerCase() + (cls ? `.${cls}` : '');
       };
+      const blank = !document.body || (document.body.innerText.trim() === '' && !document.querySelector('img, svg, canvas, video'));
       const root = document.documentElement;
       const viewport = root.clientWidth;
       const scrollWidth = root.scrollWidth;
@@ -160,7 +172,7 @@ export function measurePage(page: Page, { touch }: { touch: boolean }): Promise<
       const audit = (window as unknown as { __contrastAudit?: () => Promise<Audit> }).__contrastAudit;
       const contrast = audit ? (await audit().catch(() => null))?.failures.map(({ text, ratio, min, where }) => ({ text, ratio, min, where })) ?? null : null;
 
-      return { viewport, scrollWidth, pastEdge, labels, small, contrast };
+      return { blank, viewport, scrollWidth, pastEdge, labels, small, contrast };
     },
     { touch, minTarget: MIN_TARGET, shortLabel: SHORT_LABEL },
   );
