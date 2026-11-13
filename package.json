@@ -33,7 +33,12 @@
     "lane": "bash scripts/lane.sh",
     "acceptance": "tsx scripts/round/acceptance.ts",
     "agents:models": "tsx scripts/round/agent-models.ts",
-    "test:loop": "vitest run -c scripts/round/vitest.config.ts"
+    "test:loop": "vitest run -c scripts/round/vitest.config.ts",
+    "release:preflight": "tsx scripts/release/preflight.ts",
+    "release:bump": "tsx scripts/release/bump-version.ts",
+    "release:export": "bash scripts/release/clean-export.sh",
+    "ops:daily": "tsx scripts/ops/daily-check.ts",
+    "test:release": "vitest run -c scripts/release/vitest.config.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1055.0",
