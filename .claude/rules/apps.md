@@ -1,0 +1,24 @@
+---
+paths:
+  - "apps/**"
+  - "native/**"
+  - "scripts/apps/**"
+  - "scripts/native/**"
+---
+
+# The native apps
+
+How each screen looks on a phone, a tablet and the Mac: [layout.md](layout.md) (it loads with any app UI file). No bottom sheets, on any platform.
+
+## Native apps (`apps/`)
+
+The iOS (SwiftUI, `apps/ios`) and Android (Compose) apps are a migration of this site — the iOS target also builds the Mac app (Mac Catalyst, same bundle id; `App/MacApp.swift`, apps/README.md "The Mac app") —; see `apps/README.md` (one HTTP setup with a `Resonance/<version>` User-Agent; sign-out clears Firestore's local data, notifications and the push memo; notification permission is asked in context — our explanation, then the system's question — after the first note, message or publish, from the feed's picks invite and the conversations list's connection-cards invite, or when a Settings → 通知 switch is turned on; a failed listener is a retry, not "gone"). iOS takes Universal Links for both hosts (`applinks:` in both entitlements files; round 23): every incoming URL goes through the root `onOpenURL` — Google's sign-in callback first — into `session.links` (`LinkInbox`), which `MainTabView` opens with `.onChange(of:initial: true)`, so a cold launch's link waits out the restore, sign-in or onboarding and opens once (`IncomingLink`: a Route opens in the app, a claimed path Route can't map in the in-app browser, anything else just brings the app forward; Mac Catalyst also listens for the browsing activity, the inbox ignoring the same link twice within a second).
+They take their design tokens, strings, icons and editor from the web through `npm run apps:generate` — so renaming or removing a key in `src/messages/*.json`, redrawing an icon (absolute M/L/C/Z paths only: `scripts/apps/icons.ts` refuses anything else; a filled path may say `fill-rule="evenodd"`, how the selected tabs' solid twins `*-fill` knock their details out), the reaction stickers (`scripts/apps/reactions.ts`), or changing `tokens.css`, means regenerating (CI fails on stale output).
+Both apps keep the signed-in account's last answers on disk (latest feed page, today's picks, Me, the published shelf, the block list) for an instant cold start, and send v1 GETs through a per-account HTTP cache that honours `private` + ETag and re-asks after the viewer's own writes (see apps/README.md).
+The apps read `src/messages` at runtime as-is, with a small ICU subset (`{name}`, `plural` with `=N`/`one`/`other`/`#`); `scripts/apps/l10n.ts` refuses anything else.
+The phones' tab bar is icons alone (52 tall, round 16): the selected tab wears its icon's solid twin in the accent, no wash behind it, an unread badge ringed in the bar's paper; the home feed slides it away on a scroll down and back on any scroll up, at the top or the end, a tab change or a return to the app — never while VoiceOver, TalkBack or Switch Control is on.
+The tablets' header capsule keeps its segments, its selected icon the solid twin too.
+
+**Builds before letters** (the store builds from 7136d72: version 2.0.0, build ≤ 6 on iOS / ≤ 7 on Android; every later 2.0.0 build is iOS ≥ 7, Android ≥ 8 — keep it so — and no other version is old, whatever its build number) are told apart by their User-Agent (`isPreLetterBuild`, `src/lib/api/v1/clientBuild.ts`; one that doesn't parse is never old) and get, from `src/lib/api/v1/preLetter.ts`: `isConnected: true` on `GET /users/{handle}` while that person's letter waits for the viewer's answer (never to its writer, never across a block — their thread and composer open, and the answer connects the two); a 403 instead of the 409 on a note past the unanswered limit; and that 403's and publish's anonymous-for-connections 400's message in the app's language (they show a server message as is).
+The rules also let an unpublished draft be anonymous + connections (those builds keep a web draft's audience beside their anonymous switch; publish refuses it).
+None changes the v1 contract; remove them once those builds are retired.

@@ -24,9 +24,34 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
-      # The native apps' generated tokens, string accessors and icons must match the web.
-      - run: npx tsx scripts/native/tokens.ts && npx tsx scripts/apps/l10n.ts && npx tsx scripts/apps/icons.ts
-      - run: git diff --exit-code -- apps native
+      # Everything the apps take from the web that git tracks must match it: tokens, strings, icons,
+      # reactions, the sticker catalog, the OpenAPI document (apps:generate less its git-ignored builds).
+      - run: npm run apps:generate:tracked
+      - name: Generated output is current
+        run: |
+          git diff --exit-code
+          untracked="$(git ls-files --others --exclude-standard)"
+          if [ -n "$untracked" ]; then echo "Generated files not committed:"; echo "$untracked"; exit 1; fi
+
+  # The commits this push or pull request brings: a UI commit names its screens (`Visual:`), a
+  # data-layer change comes with a test (scripts/ci/commitRules.ts).
+  commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Commit rules
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: npm run -s rules:commits -- "$BASE..$HEAD_SHA"
 
   # Firestore rules + Admin SDK purge suites against the local emulators.
   emulator:

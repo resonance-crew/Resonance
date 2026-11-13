@@ -1,0 +1,51 @@
+---
+paths:
+  - "src/lib/push/**"
+  - "src/app/api/cron/**"
+  - "src/app/api/v1/messages/**"
+  - "src/app/api/v1/notes/**"
+  - "src/app/api/v1/me/**"
+  - "src/components/sections/AppHeader/**"
+  - "src/app/**/notifications/**"
+  - "apps/ios/Resonance/Features/Notifications/**"
+  - "apps/ios/Resonance/Features/NotifyAsk/**"
+  - "apps/android/**/Notif*"
+  - "apps/android/**/push/**"
+  - "docs/specs/notification-asks.md"
+---
+
+# Push
+
+**Push** (`src/lib/push`): every `notifications/*` row is also pushed to the recipient's devices through FCM (`pushNotification`: once-only via `pushedAt`, blocks re-checked, the bell's own `app.notifications.*` copy in each device's language, `data.route` a site path the apps open).
+Every bell row is written by the server, which rings it with `ringAfter()` after its response — or writes it already `pushedAt` when the chat push rings instead (a conversation's first message, a note in the thread) — and the rules refuse client creates of notifications and connections.
+Pushes that open a conversation carry `data.fromUserId`.
+A note or resonance bell on an anonymous card carries `payload.anonymous: true`, and its push routes to `/card/{cardId}`, without `fromUserId` — never the writer's thread, whose unread count they can watch drop as the card's author opens it.
+The web's bell links carry the sender's id (`u`): a pen name released by a rename or a deleted account can be taken by someone else, and `ThreadView` then finds the sender by id and moves to their current name (or says they are gone), as both apps' threads do by `fromUserId`.
+The bell lists read the flag too — the web's (`bellHref` in `AppHeader/bellLink.ts`, mirroring `pushRoute`) and both apps' `NotificationsScreen`: such a row opens the card, shows the note's words, offers no reply and marks no conversation read.
+An account keeps at most 20 devices (`MAX_DEVICES`); multicasts go 500 tokens at a time.
+What a push says comes from the records, not the row: the sender's current pen name and, for a note, the note's own text.
+
+**Opt-in pushes** (both off until the person turns them on in settings — `notificationSettings/{uid}`, App Store 4.5.4 — and push only: never a bell row, since clients draw an unknown bell type badly; no `notificationId`; Android channel `picks` (`PICKS_CHANNEL`, named `native.channelNewCards`; builds without it fall back to `activity`), iOS `threadId: 'picks'`):
+- *A card for tonight* (`push/picks.ts`, `/api/cron/push-picks`): per reader with `picks` on and a device — skipped when they asked for their picks themselves today (`recommendations/{uid}.askedOn`, written after the feed's response once a day — also when the request only waited on a build, a warm or failed one included — and by a build of theirs; a warm build doesn't set it), had one today (UTC) or three in the seven days ending today.
+  The card is the first stored pick that isn't theirs, they didn't answer with a published resonance, wasn't pushed to them in 30 days, and is published and public now; a named card across a block either way is skipped, an anonymous one never for a block.
+  Claimed in `pickPushes/{uid}` (`{ recent ≤ 30, sentAt }`) in a transaction before sending.
+  Title `app.notifications.pickTitle`; body = the card's title (60 code points), then the stored reason on zh-TW devices or `pickBody` on others; never a pen name.
+  `data: { type: 'pick', cardId, route: '/card/{slug||id}' }`, Android `tag: 'picks'` (tonight's replaces the last).
+  The stored picks are read through `lib/recommend/stored.ts`, which reaches no LLM — keep it that way (`regions.test.ts`).
+- *A new card from a connection* (`push/connectionCards.ts`, `announceNewCard` in the publish route's after-work, first publish only, once the slug has settled): a published, public, non-anonymous card by an author with a pen name (a resonance too, except to the author of the card it answers) goes to each connection with `connectionCards` on — not across a mute by the recipient or a block either way, not once the card (read again before each push) is no longer public, named and published.
+  At most three a day per recipient, once per card (`connectionCardPushes/{uid}`: `{ day, cards }`, claimed in a transaction); the first 500 connections only (logged past that).
+  Title `app.notifications.newCard` ({handle}), body the card's title, `data: { type: 'new_card', cardId, route }`.
+
+**Message pushes off**: Settings → 通知 → 私訊與小紙條 (`notificationSettings/{uid}.messages === false`, `wantsMessagePushes`) silences the chat push, the unsend push and a note bell's push (the bell row is still written); resonances always ring.
+The apps ask in context, never at signup (docs/specs/notification-asks.md; iOS `NotificationAsks`, Android `NotifyAsks`): after a first note or message, or a card published, our own dialog explains why before the system's question (先不要: again after 3 days, never after 3); the picks invite stands above the home feed once a reader has opened 5 card pages, the connection-cards invite atop the conversations list once there is a connection — each until answered, never a framed sheet (round 24, in the thread's grey `bubble-theirs`): a band of the list it heads on a phone and in the Mac's conversations pane, a borderless card in the content's margins on a tablet (see Phone, tablet and Mac; docs/specs/notification-asks.md) (`-notifyAsk reply|publish` / `-notifyInvite …` force them in an iOS debug build).
+
+**Chat push** (`push/chat.ts`, `pushMessage`, run with `after()` from `POST /api/v1/messages` beside the unfurl — each logs and gives up alone — and from `POST /api/v1/notes` for a note that went into the thread): every message rings, not only a conversation's first (whose bell row is written already `pushedAt`, so the chat push is the only buzz).
+It re-reads the message, stays silent across a block either way, when the recipient muted the connection or turned message pushes off (`connections/{pair}.muted` holds `{ by: recipientUid }`; a letter between two people not yet connected has none, and rings), takes the title from the sender's current pen name and the body from the stored text (140 code points, else the localized `app.notifications.messageCard`).
+A device registered with `chat-push` on Android gets a data-only high-priority message (`type: 'message'`, `conversationId, messageId, fromUserId, fromHandle, title, body, route, sentAt`, and the sender's avatar as far as their profile has one: `fromAvatarUrl` — only a picture on our own storage, `storageKeyOf` —, `fromInitials`, `fromColor`) and draws a `MessagingStyle` notification of its own, each line under the sender's face (`ChatAvatar`: the photo, else the initials on their colour — never the system's letter); every other device gets a plain notification push on the `messages` channel (`MESSAGES_CHANNEL`) with `tag`/`threadId` = the conversation, so a conversation replaces and groups its own.
+A note's message adds `kind: 'note'` to both kinds of push (the server only sends a kind it knows).
+A sticker's body is `app.notifications.messageSticker` with its name in the device's language (`stickerName` — never the stored fallback words, which are in the recipient's profile language); the data-only kind adds `kind: 'sticker'`, `stickerPack`, `stickerId` (the plain push's data none: `kind` there has meant a note).
+A sticker sent less than 10 s (`STICKER_RUN_MS`, `lib/api/v1/messageParts`) after the sender's previous message in the conversation, a sticker too, rings quietly — found by one query of that window's messages (the `sentAt` single-field index, at most 10, stickers only): the plain push without a sound (iOS `interruption-level: passive`, no `sound`; Android message priority normal, notification priority `low`, `defaultSound: false` — the channel decides on Android 8+), and nothing at all for a `chat-push` build (data can't be made silent for builds already installed; its notification keeps the run's first line).
+An album rings once, for its first picture (`index` 0): its words, else `app.notifications.messageAlbum` ({count}, ICU plural); the others ring nothing (`SentMessage.silent` spares the push its reads; `pushMessage` asks the stored message again) — should the first never arrive, the album rings nothing.
+A resent `clientId` pushes and unfurls nothing.
+The plain push carries the message's own `apns-collapse-id` (its id, when ≤ 64), merging nothing but letting an unsend replace it.
+**An unsend** (`pushUnsend`, after POST …/unsend's response) re-reads the message (unsent, from that sender), stays silent across a block or a mute as above, and never says the words: a `chat-push` Android device gets data only, `type: 'unsend'`, `conversationId, messageId, fromUserId, toUserId` (it redraws its notification without that line, or removes it); every other device, only while the unsent message is still the conversation's newest (`lastMessage.unsent` with its sender and time), a quiet replacement — the same `tag` / `threadId` / collapse id, `type: 'message'`, body `app.notifications.messageUnsent` ({handle}), no sound, Android notification priority `min`, iOS `interruption-level: passive` and `apns-priority: 5`.
