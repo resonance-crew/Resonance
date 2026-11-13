@@ -33,6 +33,16 @@ final class LinkInbox {
     }
 
     static let repeatWindow: TimeInterval = 1
+
+    #if DEBUG
+    /// `-openLink <url>` (debug builds): a link handed to the app as it launches, as a tapped universal link would
+    /// be — the Maestro flows' way in on the simulator, where a debug build claims no associated domain
+    /// (maestro/flows/open-link.yaml). Nil for no value, a blank one or one that isn't a URL at all.
+    static func launchLink(_ value: String?) -> URL? {
+        guard let text = value?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
+        return URL(string: text)
+    }
+    #endif
 }
 
 /// What a link into the app opens.
