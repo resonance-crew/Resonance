@@ -1,0 +1,77 @@
+---
+paths:
+  - "src/components/**"
+  - "src/styles/**"
+  - "src/app/**/*.tsx"
+  - "src/app/**/*.css"
+  - "src/lib/design/**"
+  - "apps/ios/Packages/DesignSystem/**"
+  - "apps/android/core/design/**"
+  - "designs/DESIGN.md"
+  - ".claude/skills/resonance-ui/**"
+---
+
+# Design system
+
+The component contract (which primitive for what) is the resonance-ui skill (`.claude/skills/resonance-ui/SKILL.md`); the territory is `designs/DESIGN.md`. Messages' own surfaces: [messages-ui.md](messages-ui.md); the writer and workspace: [writer-ui.md](writer-ui.md); phone, tablet and Mac: [layout.md](layout.md).
+
+## Component Hierarchy
+
+Components follow a three-tier atomic structure:
+
+- **`atoms/`** — Primitive visual elements. Many generate procedural SVG shapes (e.g., `HandDrawnBorder`, `OrganiBlob`, `ShapeGrain`) using utilities in `src/lib/design/`.
+- **`molecules/`** — Composed components (`StoryCard`, `CardEditor`, `CardDetail`, `EmbedStoryCard`, `Modal`, `Panel`, `PageShell`).
+- **`sections/`** — Full page sections (`AppHeader`, `HeroSection`, `CardFeedSection`, …).
+
+When building UI, reuse existing primitives (`OrganicButton`, `Panel`, `Field`, `Icon`, `TagPill`, `PageShell`) instead of inline styles or duplicated SVG.
+
+## Design System
+
+### Tokens, story type, the toast, fonts
+
+All design tokens are CSS variables in `src/styles/tokens.css`, using the **OKLCH color space**.
+A story's type (its title and prose) has its own vocabulary there — `--font-story-serif` / `--font-story-sans`, `--measure` and the `--story-*` numbers (plain px or unitless ratios, so the apps get them all) — and its rules are written once in `src/styles/story.css` (global hook classes `.story-prose` with `data-script` / `data-density`, `.story-title`, `.story-link`, `.story-picture`, `.story-embed`, `.story-latin-mark`), the single source for the reader (`StoryMarkdown`), the web writer (`MarkdownEditor`) and the apps' editor island (inlined by `build-editor.mjs`); `src/lib/text/script.ts` (`storyType`) says whether a story is set as CJK or Latin and its `lang` (designs/DESIGN.md, Story reader).
+A word that something happened, or its undo, is the shell's one toast: `useToast().show({ message, announce?, action? })` (`providers/ToastProvider`, mounted once in AppShell; face `atoms/InkPill`).
+Fonts: Playfair Display (headings) + DM Sans (body) + Noto Serif/Sans TC, self-hosted with next/font in `src/styles/fonts.ts` (variables --font-playfair, --font-dm-sans, --font-noto-serif-tc, --font-noto-sans-tc on `<html>`, from which tokens.css builds --font-heading / --font-body).
+
+### One pen
+
+Hand-drawn border stroke widths must use the `INK` / `INK_LIGHT` / `INK_STRONG` "one pen" tokens from `src/lib/design/strokes.ts` — never hardcode `strokeWidth`.
+
+### Tweaks, blobs
+
+A runtime `TweaksPanel` provider (`src/components/providers/TweaksPanel.tsx`) exposes accent color, heading font and grain as live CSS variable overrides — useful for design iteration.
+A section's blobs drift and come to rest (`atoms/DriftingBlobs` running `lib/design/driftingBlobs`: one canvas, no library — each blob a cluster of metaballs whose union is traced by marching squares, so two that meet grow a neck, blend colours and fuse; 30 fps, paused off-screen).
+The owner's rule: one or two to a section, each where the section has room — the SVG `OrganiBlob`s marked `data-drift` are the server HTML's stand-ins and the places the live blobs rest at; each strays a little, a `visitor` may come in and melt into the largest (growing it at most 6 %), and after `SETTLE` (16 s) they are back exactly where they began and the canvas stops (only a hover wakes it); `responsive` draws them at 80 % on a tablet and 62 % on a phone and leaves out a stand-in marked `data-drift-phone="off"`; reduced motion shows the stand-ins alone; a live blob's stand-in fades out whatever opacity it was given inline (its strength, read once before it fades), or its grain would stay beside the live colour.
+
+### Banded lists, washes, shapes
+
+A list whose rows part by curves is banded (round 23, the owner's — no outline per row, which crowded a phone): the bell's rows everywhere and a phone's conversation list (web ≤ 720, the apps' compact width; tablets, two panes and the thread search keep `RowWash`'s blob) — rows touching, 12 above and below their content, each parted from the next by `rowBoundary(…, steps)` (±2; `steps = max(4, round(w / 100))`, default 4 for the menus) seeded by the key of the row below (the band over a part's title ends on that title's key, the last on `bands:end`, so a new row on top moves no other curve), nothing drawn at rest: a fine pointer's hover 6 %, a press 12 % from 80 ms, cancelled by a scroll (a quick tap still flashes 80 ms) — never `:active` — the titles on bare paper 4 clear of the curves; a phone's band runs edge to edge, the content on the page's margin (web `--page-pad-x`, apps 20); a wide window's (the apps' tablets and the Mac — the web's bell is a phone's page or a dialog's list) is the reading column's, cut at its sides 20 past the content with corners rounded 16, the row's tap the column's too (round 24: the owner found a band reaching the window's edges odd) (web `lib/design/listBands` + `atoms/BandWash` — `bandHost`, `useBandPress`; iOS `ListBands.swift`; Android `ListBands.kt`, `delayedPress`); in the web's Modal the scroll body is clipped to the paper's wobble (`useModalPaper()`).
+A phone's conversation list starts 4 under the bar's foot (web `.listPane` padding-top 0).
+A hover wash on a hand-drawn surface is `<BrushWash>` (atoms/BrushWash: a transform-grown disc clipped to the shape's own outline) — never an animated SVG mask radius over filtered shapes.
+`HandDrawnBorder` memoizes its path by value (inline `segmentsH={[3, 4]}` is fine); a shape repeated many times with a few chalk seeds uses `sharedChalk` and one `<ChalkFilters seeds>` per page, as the thought map does (whose world is memoized apart from its camera: keep camera values out of it).
+Server HTML is the finished page: a shape not yet measured shows its CSS stand-in (`.res-shape-stand-in`, `data-shape-pending`), and both phone and desktop chromes render with CSS choosing one.
+
+### Menus — one sheet, flat, no shadow anywhere
+
+Every menu is one sheet (round 17: `OrganicMenu`'s `MenuPanel`, the avatar menu — its exact twin —, `Select`'s open list laid over its box (the field itself keeps its outline: it is an input), the selection bubble, a mouse's reaction tray): `atoms/PaperSheet` — round 18, the owner's: the page is flat, so is every menu — the theme's menu paper (`--sheet-paper`) inside one hand-drawn pen line at INK, no grain, no dividers and **no shadow anywhere** (no `filter`/`box-shadow` lift on a sheet, a chip, the toast or anything else: what floats is told by its line, as a card is).
+The line is the header's quiet grey (`--sheet-pen` = `--field-border-hover`) — a menu a button drops is an aside, never the accent — except a card's own menu (a `hue`: the card box's and the trash's ⋯, 更換封面), on its card's menu paper inside its card's pen, and a `Select`'s open list, whose pen is the focus colour (`--field-border-focus`: while open it is the one thing to look at).
+As wide as its longest row and 20 each side (168 at least; a held message's list 216–280), rows 44 with 20 each side, each row's ink a BrushWash cut to its band inside the wobble (`RowBrushes`, the one strength `menuRowWash`), under the pen line, every wash see-through; a pointer's opening inks no row (the keyboard's starts on the first, a `Select`'s on its chosen option); no scrim for a menu a button opened. 封鎖 (`warn`) rests on the warning yellow (`--menu-warn-rest`, laid on nearly whole at night, where the yellow is a deep olive) in the text ink; a row that removes something (`danger`: 刪除, 永久刪除, 刪除對話) rests on a red wash, its glyph and words in `--danger-fill` (`--color-danger` is under 4.5:1 on the menu paper) — `menuRowRest`, each one's ink spreading in its own colour; 登出 is a plain row.
+The toast (`atoms/InkPill`, md) is made as a card is: the accent's light wash inside a pen line of the accent, a card's corners (16); the thread's way-back pill (sm) the same face, round.
+A menu laid under a finger still down (the held message's: `OrganicMenuPanel` / `ReactionTray` `freshPress`) takes no choice, and no ink, from that finger's lift — only a press that began on a row since it came (D4).
+A menu whose trigger sits in something that scrolls floats (`OrganicMenu` `floating`: a body portal over everything, kept 12 inside the window and inside its trigger's `data-dialog-host` — the writer's pane, so the ＋ menu never meets the divider's grip); a glyph-only tool is `BareIconButton`.
+
+### Dialogs — never a bottom sheet
+
+A modal draws no ✕ (`Modal`): the backdrop and Escape close it, a named close stays for screen readers, and one with nothing else at its foot (a list, a picker) takes `closeButton`.
+No bottom sheets, on any platform (the owner, round 17: 「button sheet 现在不在我们的整个设计里面……应该要做成 model」): what would rise from the foot is the modal dialog, a popover at its control on a wide screen, or a panel in the keyboard's place — `src/lib/design/noBottomSheets.test.ts` refuses the apps' system sheets (SwiftUI `.sheet` / `presentationDetents`, UIKit's sheet controller, Compose's `ModalBottomSheet`).
+
+## Organic/Procedural SVG
+
+The visual identity relies on hand-drawn aesthetics generated at runtime:
+
+- `src/lib/design/wobRect.ts` — wobbly rounded rectangles via seeded bezier curves
+- `src/lib/design/prng.ts` — seeded PRNG for deterministic per-element randomness
+- `src/lib/design/wavyPath.ts` — wavy SVG path generation (plus `wobCircle.ts`)
+
+Shapes use a `seed` prop so they render consistently across SSR and client hydration.
