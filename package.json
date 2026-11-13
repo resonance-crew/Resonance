@@ -30,6 +30,7 @@
     "visual": "tsx scripts/visual/run.ts",
     "release:preflight": "tsx scripts/release/preflight.ts",
     "release:bump": "tsx scripts/release/bump-version.ts",
+    "release:export": "bash scripts/release/clean-export.sh",
     "test:release": "vitest run -c scripts/release/vitest.config.ts"
   },
   "dependencies": {
