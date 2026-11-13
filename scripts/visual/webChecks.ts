@@ -8,6 +8,9 @@
  *   console        an error in the browser's console, or an uncaught exception, while the page loaded
  *   touch-target   on a touch screen, a control smaller than 44 × 44 (a link inside running text aside)
  *   contrast       words under WCAG AA on what they stand on (`window.__contrastAudit()`, dev builds)
+ *   film           on the landing film's pages: the runtime never ready, a puppet never on stage, or a pinned
+ *                  still standing in another scene than its screen says (`film` in screens.ts)
+ *   film-frames    the film scrolled through from its top drew slowly (`__film.stats()`; a dev build's numbers)
  *
  * The page only measures (`measurePage`); judging is plain code (`judgePage`), tested on its own.
  * A check fails a run only once it has been seen clean, or every run fails and the gate is ignored:
@@ -17,7 +20,7 @@
  */
 import type { Page } from 'playwright';
 
-export type WebCheck = 'blank' | 'overflow' | 'wrapped-label' | 'console' | 'touch-target' | 'contrast';
+export type WebCheck = 'blank' | 'overflow' | 'wrapped-label' | 'console' | 'touch-target' | 'contrast' | 'film' | 'film-frames';
 export type Level = 'fail' | 'warn';
 export type Finding = { check: WebCheck; level: Level; detail: string };
 
@@ -28,7 +31,13 @@ export const WEB_CHECKS: Record<WebCheck, { level: Level; what: string }> = {
   console: { level: 'warn', what: 'an error in the console while the page loaded' },
   'touch-target': { level: 'warn', what: 'a control smaller than 44 × 44 on a touch screen' },
   contrast: { level: 'warn', what: 'words under WCAG AA contrast' },
+  film: { level: 'fail', what: "the landing film not ready, its cast not on stage, or a still in another scene" },
+  'film-frames': { level: 'warn', what: 'the landing film drew slowly when scrolled through (a dev build)' },
 };
+
+/** Frame times past which a scroll through the film is called slow: p95 over two 60 Hz frames, or one frame in ten over 50 ms. */
+export const SLOW_P95_MS = 34;
+export const SLOW_SHARE = 0.1;
 
 /** A control's smallest side on a touch screen (Apple's 44 pt; the house's 44-tall rows and buttons). */
 export const MIN_TARGET = 44;
@@ -52,6 +61,15 @@ export type PageMeasure = {
   small: { name: string; width: number; height: number }[];
   /** `window.__contrastAudit()`'s failures, when the build has it. */
   contrast: { text: string; ratio: number; min: number; where: string }[] | null;
+  /** The landing film's handle (`window.__film`), when the page has one; `frames` after a scroll through it. */
+  film: {
+    ready: boolean;
+    scene: number;
+    resting: boolean;
+    actors: number;
+    live: number;
+    frames?: { frames: number; p50: number; p95: number; long: number };
+  } | null;
 };
 
 /** How many lines a set of text boxes makes: boxes overlapping by half the smaller one's height share a line. */
@@ -76,7 +94,7 @@ const finding = (check: WebCheck, detail: string): Finding => ({ check, level: W
 const list = <T>(items: T[], show: (item: T) => string, max = 5) =>
   items.slice(0, max).map(show).join(', ') + (items.length > max ? `, and ${items.length - max} more` : '');
 
-export function judgePage(m: PageMeasure, consoleErrors: string[], { touch }: { touch: boolean }): Finding[] {
+export function judgePage(m: PageMeasure, consoleErrors: string[], { touch, scene }: { touch: boolean; scene?: number }): Finding[] {
   const out: Finding[] = [];
   if (m.blank) out.push(finding('blank', 'the page shows no words and no picture'));
   if (m.scrollWidth > m.viewport + 1) {
@@ -95,6 +113,21 @@ export function judgePage(m: PageMeasure, consoleErrors: string[], { touch }: { 
   if (m.contrast?.length) {
     out.push(finding('contrast', `${m.contrast.length} under AA: ${list(m.contrast, (c) => `“${c.text}” ${c.ratio.toFixed(2)}:1 (needs ${c.min}) at ${c.where}`, 3)}`));
   }
+  const film = m.film;
+  if (film) {
+    const wrong = [
+      !film.ready ? 'the runtime never said it was ready' : null,
+      film.live < film.actors ? `${film.actors - film.live} of ${film.actors} puppets never came on stage` : null,
+      scene != null && film.scene !== scene ? `it stands in scene ${film.scene}, not ${scene}` : null,
+    ].filter(Boolean);
+    if (wrong.length) out.push(finding('film', wrong.join('; ')));
+    const f = film.frames;
+    if (f?.frames && (f.p95 > SLOW_P95_MS || f.long / f.frames > SLOW_SHARE)) {
+      out.push(finding('film-frames', `scrolled through: p95 ${Math.round(f.p95)} ms, ${f.long} of ${f.frames} frames over 50 ms`));
+    }
+  } else if (scene != null) {
+    out.push(finding('film', 'no landing film on the page'));
+  }
   return out;
 }
 
@@ -103,10 +136,10 @@ export function judgePage(m: PageMeasure, consoleErrors: string[], { touch }: { 
  * tsx compiles named functions with esbuild's keepNames, wrapping each in `__name(…)`, a helper the
  * page doesn't have: it is given a stand-in first (a string, so nothing compiles it).
  */
-export async function measurePage(page: Page, { touch }: { touch: boolean }): Promise<PageMeasure> {
+export async function measurePage(page: Page, { touch, frames = false }: { touch: boolean; frames?: boolean }): Promise<PageMeasure> {
   await page.evaluate('globalThis.__name ??= (fn) => fn');
   return page.evaluate(
-    async ({ touch, minTarget, shortLabel }) => {
+    async ({ touch, minTarget, shortLabel, frames }) => {
       const visible = (el: Element) => {
         const r = el.getBoundingClientRect();
         const s = getComputedStyle(el);
@@ -172,8 +205,37 @@ export async function measurePage(page: Page, { touch }: { touch: boolean }): Pr
       const audit = (window as unknown as { __contrastAudit?: () => Promise<Audit> }).__contrastAudit;
       const contrast = audit ? (await audit().catch(() => null))?.failures.map(({ text, ratio, min, where }) => ({ text, ratio, min, where })) ?? null : null;
 
-      return { blank, viewport, scrollWidth, pastEdge, labels, small, contrast };
+      type FilmHandle = { ready: boolean; state: () => { scene: number; resting: boolean }; stats: () => { frames: number; p50: number; p95: number; long: number } };
+      const handle = (window as unknown as { __film?: FilmHandle }).__film;
+      let film: PageMeasure['film'] = null;
+      if (handle) {
+        const state = handle.state();
+        film = {
+          ready: !!handle.ready,
+          scene: state.scene,
+          resting: state.resting,
+          actors: document.querySelectorAll('[data-actor]').length,
+          live: document.querySelectorAll('[data-actor][data-live]').length,
+        };
+        const stage = document.querySelector('[data-film-root]');
+        if (frames && stage) {
+          // A third of a window at a time, two frames each, from the film's top to its end: what a reader's scroll asks for.
+          const next = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+          const before = handle.stats();
+          const end = stage.getBoundingClientRect().bottom + window.scrollY;
+          for (let y = 0; y < end; y += window.innerHeight / 3) {
+            window.scrollTo(0, y);
+            await next();
+          }
+          const after = handle.stats();
+          window.scrollTo(0, 0);
+          await next();
+          film.frames = { frames: after.frames - before.frames, p50: after.p50, p95: after.p95, long: after.long - before.long };
+        }
+      }
+
+      return { blank, viewport, scrollWidth, pastEdge, labels, small, contrast, film };
     },
-    { touch, minTarget: MIN_TARGET, shortLabel: SHORT_LABEL },
+    { touch, minTarget: MIN_TARGET, shortLabel: SHORT_LABEL, frames },
   );
 }

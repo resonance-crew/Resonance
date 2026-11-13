@@ -147,6 +147,34 @@ errors, all meant (the 404 page's own 404, and the Firestore emulator's permissi
 anonymous card's page reads it through the rules before asking the server). When what a check
 shows is fixed, or accepted as it is, raise it to `fail` in `WEB_CHECKS`.
 
+## The landing film
+
+The landing page is a film the scroll plays (`src/components/sections/LandingFilm`): a stage held at
+the top of the window over a track about eight windows long, the acts drawn by where the scroll is.
+A whole-page capture took its first frame and then a screenful of empty track for every few seconds
+of it — a change to the film hardly showed, and one that only changed its pace (a longer track) moved
+the whole capture. So the film is taken three ways:
+
+- **Compared, as any screen**: `landing` (its first frame, the window a visitor meets), and its end —
+  `landing-stories` (tonight's stories, `#stories` at the window's top) and `landing-footer` (the
+  closing band and the footer). These are the site's own pages and change rarely.
+- **Looked at, never compared**: one still of each scene — `film-write` (11.5 s), `film-answer` (27 s),
+  `film-meet` (50 s), `film-yours` (63 s) — on every web device in light zh-TW, in the run's `_glance/`
+  (out of the comparison and of `accept`), shown in the report under "Looked at, not compared" and
+  handed to the review to judge on their own. The film's art is still being drawn: a baseline of it
+  would change with every brush stroke, on every device, and each change would wait for the owner's
+  OK. When a round is about the film, the lab's own tools compare its frames side by side
+  (`designs/landing-lab/film/tools/shots.mjs`, `changes.mjs`).
+- **Checked, every run**: the `film` check fails a film page whose runtime never says it is ready,
+  whose puppets don't all come on stage, or a still standing in another scene than its screen names
+  (`screens.test.ts` also checks each still's second against the film's timeline, so a scene that
+  moves fails there first); `film-frames` warns when the film, scrolled through from its top on the
+  `landing` screen, draws slowly (`__film.stats()`, a dev build's numbers: a change, not a budget).
+
+A still is the film's lab frame: `?rest=1` holds every act at the floor of its moment and `?t=` puts
+the scroll there (runtime/index.ts). Two fresh loads of the same moment came out pixel for pixel the
+same on a phone and a desktop, puppets included (2026-11-13).
+
 ## Accepting
 
 A capture becomes the baseline only on the owner's OK, never unasked, and `accept` holds to it:
@@ -210,7 +238,9 @@ The reference machine (2026-10-31): MacBook (Apple silicon, arm64, 24 GB), macOS
 
 Phones take three variants because dark mode and English break the same way at every width and the
 phone is where text is tightest; every other device takes light zh-TW (`PHONE_VARIANTS` in
-`screens.ts`). 22 web screens and 19 app screens give 110 + 76 + 19 + 76 = 281 captures.
+`screens.ts`). 24 web screens and 19 app screens give 120 + 76 + 19 + 76 = 291 captures compared
+with the baseline, and the landing film's 4 stills × 3 web devices = 12 more only looked at (The
+landing film, below).
 
 ### Setting the devices up on another machine
 
@@ -254,8 +284,9 @@ phone is where text is tightest; every other device takes light zh-TW (`PHONE_VA
   listed at the top of the report, and fails the run.
 - **Accounts**: each account signs in fresh (web: a new browser context; iOS: a launch of its own,
   `-signedOut YES` for the signed-out start; Android: `pm clear`), so nothing carries over.
-- **Things that move by themselves**: the landing page's paper puppets are kept from loading
-  (requests to `/mascots/` aborted); the reading puppets are off by default.
+- **Things that move by themselves**: the landing film is held still (`?rest=1`: every act stands at
+  its moment, no idle life) with its cast on stage — the paper puppets load (`/mascots/`) and a capture
+  waits until every one is live; the reading puppets are off by default.
 - **The comparison** (`diff.ts`): not a share of the page's pixels, which a window drawn a pixel
   lower fills with red edges while a heading moved across the page hardly registers. A pixel
   differs past pixelmatch's threshold (YIQ 0.1). The page is cut into 16 px cells; a cell with

@@ -92,6 +92,23 @@ describe('the gate', () => {
     ]);
   });
 
+  it('judges a capture only looked at by its checks and the review: never as changed or missing', () => {
+    const still = 'web/phone/film-meet@light-zh-TW.png';
+    const other = 'web/desktop/film-yours@light-zh-TW.png';
+    const findings: Record<string, Finding[]> = {
+      [still]: [{ check: 'film', level: 'fail', detail: '1 of 9 puppets never came on stage' }],
+      [other]: [{ check: 'touch-target', level: 'warn', detail: '1 under 44 × 44' }],
+    };
+    const s = judge(input({ glances: [still, other], findingsFor: (key) => findings[key] ?? [], verdicts: new Map([verdict(other, 'broken', 'the sky is blank')]) }));
+    expect(s.problems).toEqual([
+      { kind: 'check', key: still, detail: 'film: 1 of 9 puppets never came on stage' },
+      { kind: 'broken', key: other, detail: 'the sky is blank' },
+    ]);
+    expect(s.warnings.map((w) => w.key)).toEqual([other]);
+    expect(s.counts).toMatchObject({ glances: 2, changed: 0, missing: 0 });
+    expect(summaryLine(s, 'f.json')).toContain('· 0 changed, 0 new, 0 missing, 2 unchanged, 2 looked at · 1 warning →');
+  });
+
   it('reads an older run without retakes or flows', () => {
     const old = info();
     delete old.retaken;

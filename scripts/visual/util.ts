@@ -15,6 +15,11 @@ export const ROOT = resolve(__dirname, '../..');
 export const VISUAL_DIR = join(ROOT, 'visual');
 export const BASELINE_DIR = join(VISUAL_DIR, 'baseline');
 export const RUNS_DIR = join(VISUAL_DIR, 'runs');
+/**
+ * Inside a run: the captures only looked at, never compared (the landing film's pinned stills — `film` in
+ * screens.ts). The leading `_` keeps them out of `listPngs`, so neither the comparison nor `accept` sees them.
+ */
+export const GLANCE_DIR = '_glance';
 
 /** The private stack the captures run against, beside any shared emulators (see stack.ts). */
 export const PORTS = {

@@ -2,15 +2,18 @@
  * The web's captures: Playwright's own Chromium (pinned by the playwright
  * version, so a browser update never moves a pixel) at three fixed sizes, each
  * with its device scale, colour scheme and locale set, reduced motion on, CSS
- * animations finished, the caret hidden and the landing page's paper puppets
- * kept from loading. Each account signs in once per device and variant
- * (`window.__emulatorSignIn`, which emulator builds expose).
+ * animations finished and the caret hidden. Each account signs in once per
+ * device and variant (`window.__emulatorSignIn`, which emulator builds expose).
+ * The landing film is held at its moment (`?rest=1&t=`, screens.ts) with its
+ * cast on stage; its pinned stills go to the run's `_glance/` (looked at, not
+ * compared).
  */
 import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Frame, type Page } from 'playwright';
-import { SCREENS, screensFor, shotName, type Account, type Screen, type Variant } from './screens';
+import { BASE_VARIANT, SCREENS, screensFor, shotName, type Account, type Screen, type Variant } from './screens';
 import { lookNote, secondLook, type Look } from './secondLook';
-import { SEED_PASSWORD, ignorePath, settle, shotPath, variantsFor, type Capture, type CaptureContext, type Rect } from './util';
+import { GLANCE_DIR, SEED_PASSWORD, ignorePath, settle, shotPath, variantsFor, type Capture, type CaptureContext, type Rect } from './util';
 import { checksPath, consoleNoise, judgePage, measurePage, type Finding } from './webChecks';
 
 export type WebDevice = { id: string; phone: boolean; width: number; height: number; touch: boolean };
@@ -35,8 +38,8 @@ async function newContext(browser: Browser, device: WebDevice, v: Variant): Prom
     locale: v.locale,
     timezoneId: 'Asia/Taipei',
   });
-  // The landing stage brings a puppet only once its pictures load: none ever do here.
-  await context.route('**/mascots/**', (route) => route.abort());
+  // The paper puppets load (`/mascots/`): they are the landing film's cast. (The old landing stage, whose visits
+  // came and went at random, had them kept away; no captured page has it now, and the reading stage is off.)
   await context.addInitScript((css) => {
     addEventListener('DOMContentLoaded', () => {
       const style = document.createElement('style');
@@ -178,7 +181,8 @@ async function shootOnce(
   errors.get(page)!.length = 0;
   await keep(page, screen);
   const route = screen.web?.route ?? screen.route;
-  await open(page, ctx, `${ctx.devUrl}/${v.locale}${route === '/' ? '' : route}`);
+  const query = screen.web?.query ? `?${screen.web.query}` : '';
+  await open(page, ctx, `${ctx.devUrl}/${v.locale}${route === '/' ? '' : route}${query}`);
   const ready = async () => {
     await idle.get(page)!();
     await page.evaluate(() => document.fonts.ready);
@@ -186,9 +190,22 @@ async function shootOnce(
     await page.waitForFunction(() => !document.querySelector('[data-shape-pending]'), null, { timeout: 15_000 }).catch(() => {});
   };
   await ready();
+  if (await page.locator('[data-film-root]').count()) {
+    // The landing film: its runtime ready (摺摺 and 點點 live), then the rest of its cast on stage (the others go live
+    // on idle, by 20 s at the latest) — film checks say so when one never did.
+    await page.waitForFunction(() => (window as { __film?: { ready: boolean } }).__film?.ready, null, { timeout: 60_000 }).catch(() => {});
+    await page.waitForFunction(() => !document.querySelector('[data-actor]:not([data-live])'), null, { timeout: 30_000 }).catch(() => {});
+  }
   if (screen.web?.click) {
     // The first one on screen: a phone and a desktop header may both be in the page, CSS showing one.
     await page.locator(screen.web.click).locator('visible=true').first().click();
+    await ready();
+  }
+  if (screen.web?.scrollTo) {
+    await page.evaluate((to) => {
+      if (to === 'bottom') window.scrollTo(0, document.documentElement.scrollHeight);
+      else document.querySelector(to)?.scrollIntoView({ block: 'start', behavior: 'instant' as ScrollBehavior });
+    }, screen.web.scrollTo);
     await ready();
   }
   watch();
@@ -201,7 +218,8 @@ async function shootOnce(
   const first = await take();
   const ignore = await ignored(page, !!screen.fullPage);
   const look = await secondLook(first, take, { key, ignore });
-  const findings = judgePage(await measurePage(page, { touch: device.touch }), errors.get(page)!, { touch: device.touch });
+  const measure = await measurePage(page, { touch: device.touch, frames: screen.web?.frames });
+  const findings = judgePage(measure, errors.get(page)!, { touch: device.touch, scene: screen.film?.scene });
   return { ...look, ignore: look.retaken ? await ignored(page, !!screen.fullPage) : ignore, findings };
 }
 
@@ -254,11 +272,13 @@ export const captureWeb: Capture = async (ctx) => {
           const page = await context.newPage();
           try {
             if (account) await signIn(page, ctx, v, account);
-            for (const screen of screens.filter((s) => s.as === account)) {
+            // The film's stills: light zh-TW on every device (its art is the same in both schemes and languages).
+            const base = v.theme === BASE_VARIANT.theme && v.locale === BASE_VARIANT.locale;
+            for (const screen of screens.filter((s) => s.as === account && (base || !s.film))) {
               const name = shotName(screen, v);
               const key = `web/${device.id}/${name}`;
               const look = await shoot(page, ctx, screen, v, device, key);
-              const file = shotPath(ctx.runDir, 'web', device.id, name);
+              const file = shotPath(screen.film ? join(ctx.runDir, GLANCE_DIR) : ctx.runDir, 'web', device.id, name);
               writeFileSync(file, look.png);
               if (look.ignore.length) writeFileSync(ignorePath(file), JSON.stringify(look.ignore));
               if (look.findings.length) writeFileSync(checksPath(file), JSON.stringify(look.findings, null, 2));

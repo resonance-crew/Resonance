@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { REPLY_CARD_DRAFT, SCREENS, screensFor, shotName, BASE_VARIANT } from './screens';
+import { FILM_END, sceneAtS } from '../../src/components/sections/LandingFilm/script/timeline';
 import en from '../../src/messages/en.json';
 import zhTW from '../../src/messages/zh-TW.json';
 
@@ -50,6 +51,26 @@ describe('the release screenshots’ screens', () => {
       route: '/home',
       click: `a[aria-label="${zhTW.app.nav.notifications}"], a[aria-label="${en.app.nav.notifications}"]`,
     });
+  });
+
+  // The landing film: its first frame and its end compared; one still per scene only looked at, each at a moment
+  // that stands in the scene it names — a change to the film's timeline that moves a scene fails here first.
+  it('takes the landing film as its first frame, its end, and a pinned still of each scene', () => {
+    const ids = screensFor('web').map((s) => s.id);
+    expect(ids).toEqual(expect.arrayContaining(['landing', 'landing-stories', 'landing-footer', 'film-write', 'film-answer', 'film-meet', 'film-yours']));
+    const stills = SCREENS.filter((s) => s.film);
+    expect(stills.map((s) => s.film!.scene)).toEqual([1, 2, 3, 4]);
+    for (const s of stills) {
+      expect(s.platforms).toEqual(['web']);
+      expect(s.film!.t).toBeLessThan(FILM_END);
+      expect(sceneAtS(s.film!.t).n, `${s.id} at ${s.film!.t} s`).toBe(s.film!.scene);
+      expect(s.web?.query).toBe(`rest=1&t=${s.film!.t}`);
+    }
+    for (const id of ['landing', 'landing-stories', 'landing-footer']) {
+      const s = SCREENS.find((x) => x.id === id)!;
+      expect(s.fullPage, `${id} is one window, never the whole film`).toBeFalsy();
+      expect(s.web?.query).toBe('rest=1&t=0');
+    }
   });
 
   it('gives the apps their arguments as launch arguments can carry them', () => {

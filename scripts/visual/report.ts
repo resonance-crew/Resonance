@@ -6,7 +6,8 @@
  */
 import { writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { BASELINE_DIR, readJson } from './util';
+import { BASELINE_DIR, GLANCE_DIR, listPngs, readJson } from './util';
+import { SCREENS } from './screens';
 import { intendedChanges, names, readVerdicts, type Verdict } from './review';
 import type { Result, RunInfo } from './compare';
 import { judgeRun, type Note, type Summary } from './gate';
@@ -28,6 +29,26 @@ function verdictBlock(s: Summary) {
     : `<p class="verdict fail">FAIL — ${s.problems.length} problem${s.problems.length > 1 ? 's' : ''}</p><ul class="problems">${notes(s.problems)}</ul>`;
   const warnings = s.warnings.length ? `<details><summary class="warn">${s.warnings.length} warning${s.warnings.length > 1 ? 's' : ''}</summary><ul>${notes(s.warnings)}</ul></details>` : '';
   return head + warnings;
+}
+
+/** The captures only looked at (the landing film's pinned stills): each with what it should show, the review's word and its checks. */
+function glanceBlock(s: Summary, keys: string[], verdicts: Map<string, Verdict>) {
+  if (!keys.length) return '';
+  const expect = new Map(SCREENS.map((sc) => [sc.id, sc.expect]));
+  const cells = keys.map((key) => {
+    const v = verdicts.get(key);
+    const notes = [...s.problems.map((n) => ({ n, cls: 'problem' })), ...s.warnings.map((n) => ({ n, cls: 'warn' }))]
+      .filter(({ n }) => n.key === key)
+      .map(({ n, cls }) => `<p class="meta ${cls}">${esc(n.detail)}</p>`)
+      .join('');
+    const src = `${GLANCE_DIR}/${key}`;
+    return `<figure class="glance"><a href="${esc(src)}" target="_blank"><img loading="lazy" src="${esc(src)}" alt=""></a>
+<figcaption><code>${esc(key)}</code>${v ? ` <span class="tag v-${v.verdict}">${v.verdict}</span>` : ''}</figcaption>
+<p class="meta">${esc(expect.get(key.split('/').pop()!.split('@')[0]) ?? '')}</p>${v?.note ? `<p class="note">${esc(v.note)}</p>` : ''}${notes}</figure>`;
+  });
+  return `<h2>Looked at, not compared (${keys.length})</h2>
+<p class="sub">The landing film held at a moment of each scene (\`?rest=1&t=\`): no baseline — its art changes faster than one could follow. Judged by its checks and the review alone.</p>
+<div class="glances">${cells.join('\n')}</div>`;
 }
 
 function item(runDir: string, r: Result, v: Verdict | undefined, runId: string, intended: string[], s: Summary) {
@@ -68,6 +89,7 @@ export function writeReport(runDir: string, results: Result[]): string {
   const broken = [...verdicts.values()].filter((v) => v.verdict === 'broken').length;
   const unsettled = info?.unsettled ?? [];
   const { summary } = judgeRun(runDir, results);
+  const glances = listPngs(join(runDir, GLANCE_DIR));
   const html = `<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Visual run ${esc(info?.id ?? '')}</title>
@@ -90,6 +112,8 @@ figure.empty div{color:var(--muted)}code{font-size:12px;color:var(--muted);word-
 .thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
 .thumbs a{font-size:11px;color:var(--muted);text-decoration:none;word-break:break-all}.thumbs img{width:100%;height:220px;object-fit:cover;object-position:top;border:1px solid var(--line);border-radius:4px}
 .warn{color:var(--amber)}.problem{color:var(--red)}
+.glances{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}.glance{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+.glance img{width:100%;max-height:520px;object-fit:contain;object-position:top;border:1px solid var(--line);border-radius:6px;background:#fff}
 .verdict{font-weight:600;font-size:16px;margin:12px 0}.verdict.pass{color:var(--green)}.verdict.fail{color:var(--red)}.problems{color:var(--red)}
 </style></head><body><main>
 <h1>Release screenshots · ${esc(info?.id ?? '')}</h1>
@@ -101,6 +125,7 @@ ${unsettled.length ? `<p class="warn">Never stopped changing (taken anyway): ${u
 </div>
 <h2>Needs a look</h2>
 ${attention.map((r) => item(runDir, r, verdicts.get(r.key), info?.id ?? '', intendedFor(r.key), summary)).join('\n') || '<p class="sub">Nothing changed.</p>'}
+${glanceBlock(summary, glances, verdicts)}
 <details><summary><h2 style="display:inline">Unchanged (${unchanged.length})</h2></summary>
 <div class="thumbs">${unchanged.map((r) => `<a href="${esc(r.key)}" target="_blank"><img loading="lazy" src="${esc(r.key)}" alt="">${esc(r.key)}</a>`).join('')}</div>
 </details>

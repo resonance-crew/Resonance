@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { WEB_CHECKS, checksPath, consoleNoise, judgePage, lineCount, type PageMeasure } from './webChecks';
 
-const quiet: PageMeasure = { blank: false, viewport: 390, scrollWidth: 390, pastEdge: [], labels: [], small: [], contrast: null };
+const quiet: PageMeasure = { blank: false, viewport: 390, scrollWidth: 390, pastEdge: [], labels: [], small: [], contrast: null, film: null };
 const line = (top: number, height = 20) => ({ top, bottom: top + height });
 
 describe('lineCount', () => {
@@ -68,7 +68,50 @@ describe('judgePage', () => {
 
   it('fails a run only on what a full web run was seen clean of; warns of the rest', () => {
     const levels = Object.fromEntries(Object.entries(WEB_CHECKS).map(([check, { level }]) => [check, level]));
-    expect(levels).toEqual({ blank: 'fail', overflow: 'fail', 'wrapped-label': 'fail', console: 'warn', 'touch-target': 'warn', contrast: 'warn' });
+    expect(levels).toEqual({
+      blank: 'fail',
+      overflow: 'fail',
+      'wrapped-label': 'fail',
+      console: 'warn',
+      'touch-target': 'warn',
+      contrast: 'warn',
+      film: 'fail',
+      'film-frames': 'warn',
+    });
+  });
+});
+
+describe('the landing film’s checks', () => {
+  const film = { ready: true, scene: 2, resting: true, actors: 9, live: 9 };
+
+  it('passes a film ready, its cast on stage, standing in the scene its still names', () => {
+    expect(judgePage({ ...quiet, film }, [], { touch: true, scene: 2 })).toEqual([]);
+  });
+
+  it('fails one never ready, a puppet left as its still, or a still in another scene — said together', () => {
+    const [f] = judgePage({ ...quiet, film: { ...film, ready: false, live: 7, scene: 3 } }, [], { touch: true, scene: 2 });
+    expect(f).toEqual({
+      check: 'film',
+      level: 'fail',
+      detail: 'the runtime never said it was ready; 2 of 9 puppets never came on stage; it stands in scene 3, not 2',
+    });
+  });
+
+  it('fails a still whose page has no film at all', () => {
+    expect(judgePage(quiet, [], { touch: false, scene: 1 })[0]).toMatchObject({ check: 'film', detail: 'no landing film on the page' });
+  });
+
+  it('asks nothing of a film page that pins no scene but its cast', () => {
+    expect(judgePage({ ...quiet, film: { ...film, scene: 4 } }, [], { touch: false })).toEqual([]);
+  });
+
+  it('warns when a scroll through it drew slowly, and not when it drew well', () => {
+    const slow = { ...film, frames: { frames: 200, p50: 16, p95: 48, long: 30 } };
+    expect(judgePage({ ...quiet, film: slow }, [], { touch: false })).toEqual([
+      { check: 'film-frames', level: 'warn', detail: 'scrolled through: p95 48 ms, 30 of 200 frames over 50 ms' },
+    ]);
+    const smooth = { ...film, frames: { frames: 200, p50: 16, p95: 18, long: 2 } };
+    expect(judgePage({ ...quiet, film: smooth }, [], { touch: false })).toEqual([]);
   });
 });
 

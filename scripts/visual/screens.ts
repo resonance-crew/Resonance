@@ -35,7 +35,17 @@ export type Screen = {
    * for it, written to the site's localStorage before the page opens and taken away before the next
    * screen (a conversation's draft, `lib/data/chatDrafts`).
    */
-  web?: { route?: string; click?: string; storage?: Record<string, string> };
+  web?: {
+    route?: string;
+    /** The page's query, without `?` (the landing film's lab flags: `rest=1` holds every act at its moment). */
+    query?: string;
+    click?: string;
+    /** Brought to the top of the window before the capture (`'bottom'`: the page scrolled to its foot). */
+    scrollTo?: string;
+    /** After the capture, the landing film scrolled through from its top and its frame times read (`film-frames`). */
+    frames?: boolean;
+    storage?: Record<string, string>;
+  };
   /**
    * The apps' own debug launch arguments for it, after the account and the route (apps/README.md):
    * iOS's `-key value` pairs, Android's `am start` extras (`--es key value`). The Mac takes `mac`, else
@@ -44,7 +54,17 @@ export type Screen = {
   app?: { ios?: string[]; android?: string[]; mac?: string[] };
   /** Share of pixels that may differ (beyond diff.ts's shift) before an area counts as changed: for a screen that moves a little by itself. */
   maxDiff?: number;
+  /**
+   * A still of the landing film, pinned at second `t` (`?rest=1&t=`): taken on every web device in light
+   * zh-TW, its cast live, checked (the scene it stands in, the cast, nothing blank) and shown in the
+   * report and to the review — never compared with a baseline, since the film's art changes faster than
+   * a baseline could follow (scripts/visual/README.md, "The landing film").
+   */
+  film?: { t: number; scene: 1 | 2 | 3 | 4 };
 };
+
+/** The landing film's moment `t`: the lab's exact frame (`rest=1`) at that second (`t`), the page's own address otherwise. */
+const filmAt = (t: number) => ({ query: `rest=1&t=${t}` });
 
 /**
  * alice's draft in her conversation with bob (the web's `thread-reply`): answering bob's newest
@@ -61,8 +81,23 @@ export const REPLY_CARD_DRAFT: Record<string, string> = {
 };
 
 export const SCREENS: Screen[] = [
-  { id: 'landing', route: '/', as: null, fullPage: true, platforms: ['web'],
-    expect: 'The landing page: the film of paper (layered wave hills at the blue hour, the hero line 用故事回應故事, two paper puppets, the player at its foot; the film is long — the stage stays at the top), then tonight\'s stories as story cards, the closing band with the QR code and store badges, footer' },
+  // The landing page is a film the scroll plays (sections/LandingFilm): a whole-page capture took its first frame and
+  // then a screenful of empty track for every few seconds of it. So: its first frame and its end, compared as any
+  // screen; its four scenes as pinned stills only looked at (`film`).
+  { id: 'landing', route: '/', as: null, platforms: ['web'], web: { ...filmAt(0), frames: true },
+    expect: 'The landing film\'s first frame: the header over the blue hour, the hero line 用故事回應故事 and its sentence, layered wave hills, houses with lit windows, 摺摺 and 點點 by them, the player (▶ and the line with its scene ticks) at the foot' },
+  { id: 'landing-stories', route: '/', as: null, platforms: ['web'], web: { ...filmAt(0), scrollTo: '#stories' },
+    expect: 'After the film, tonight\'s stories: the heading and the public cards as story cards on the page\'s paper' },
+  { id: 'landing-footer', route: '/', as: null, platforms: ['web'], web: { ...filmAt(0), scrollTo: 'bottom' },
+    expect: 'The landing page\'s foot: the closing band (the download badges, a QR code where a mouse shows it) and the footer' },
+  { id: 'film-write', route: '/', as: null, platforms: ['web'], web: filmAt(11.5), film: { t: 11.5, scene: 1 },
+    expect: 'The landing film at 11.5 s (scene 1, the blue hour): the card 摺摺 wrote, carried off on the wind with 點點 riding on its top edge, 摺摺 left by the houses, the hero line over the sky' },
+  { id: 'film-answer', route: '/', as: null, platforms: ['web'], web: filmAt(27), film: { t: 27, scene: 2 },
+    expect: 'The landing film at 27 s (scene 2, daylight by the water): 聆聆 reading the card that came on the wind, 點點 beside it' },
+  { id: 'film-meet', route: '/', as: null, platforms: ['web'], web: filmAt(50), film: { t: 50, scene: 3 },
+    expect: 'The landing film at 50 s (scene 3, dusk): the two cards side by side over the sky, the puppets meeting on the bridge' },
+  { id: 'film-yours', route: '/', as: null, platforms: ['web'], web: filmAt(63), film: { t: 63, scene: 4 },
+    expect: 'The landing film at 63 s (scene 4, night): stars over the dark hills and houses, a card waiting — the next story is the visitor\'s' },
   { id: 'welcome', route: null, as: null, platforms: ['ios', 'android', 'mac'],
     expect: 'The signed-out start screen with its sign-in choices' },
   { id: 'signin', route: '/signin', as: null, platforms: ['web'],

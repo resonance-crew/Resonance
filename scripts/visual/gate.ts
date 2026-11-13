@@ -14,12 +14,14 @@
  * baseline the run didn't take (missing), a web check still at `warn`.
  *
  * A changed capture a trailer names is neither: it waits for the owner's OK (`accept --reason`).
+ * The captures only looked at (`_glance/`, the landing film's stills) count by their checks and the
+ * review's verdict alone: they have no baseline to change from.
  */
 import { existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Result, RunInfo } from './compare';
 import { intendedChanges, names, readVerdicts, type Verdict } from './review';
-import { ROOT, readJson, writeJson } from './util';
+import { GLANCE_DIR, ROOT, listPngs, readJson, writeJson } from './util';
 import { checksPath, type Finding } from './webChecks';
 
 export type ProblemKind = 'broken' | 'unsettled' | 'unexplained' | 'flow' | 'check';
@@ -29,7 +31,7 @@ export type Note<K> = { kind: K; key: string; detail: string };
 export type Summary = {
   run: string;
   pass: boolean;
-  counts: { changed: number; new: number; missing: number; unchanged: number; problems: number; warnings: number; awaiting: number };
+  counts: { changed: number; new: number; missing: number; unchanged: number; glances: number; problems: number; warnings: number; awaiting: number };
   problems: Note<ProblemKind>[];
   warnings: Note<WarningKind>[];
   /** Changed captures a trailer names: the owner's to look at, then `accept --reason`. */
@@ -40,6 +42,8 @@ export type Summary = {
 export type GateInput = {
   info: RunInfo | null;
   results: Result[];
+  /** The captures only looked at (`_glance/`), by key. */
+  glances?: string[];
   verdicts: Map<string, Verdict>;
   /** The `Visual:` trailers naming a capture's screen. */
   intendedFor: (key: string) => string[];
@@ -48,7 +52,7 @@ export type GateInput = {
   report: string;
 };
 
-export function judge({ info, results, verdicts, intendedFor, findingsFor, report }: GateInput): Summary {
+export function judge({ info, results, glances = [], verdicts, intendedFor, findingsFor, report }: GateInput): Summary {
   const problems: Note<ProblemKind>[] = [];
   const warnings: Note<WarningKind>[] = [];
   const awaiting: string[] = [];
@@ -62,6 +66,15 @@ export function judge({ info, results, verdicts, intendedFor, findingsFor, repor
     if (r.status === 'missing') warnings.push({ kind: 'missing', key: r.key, detail: 'in the baseline, not taken by this run' });
     for (const f of r.status === 'missing' ? [] : findingsFor(r.key)) {
       const note = { kind: 'check' as const, key: r.key, detail: `${f.check}: ${f.detail}` };
+      if (f.level === 'fail') problems.push(note);
+      else warnings.push(note);
+    }
+  }
+  for (const key of glances) {
+    const verdict = verdicts.get(key);
+    if (verdict?.verdict === 'broken') problems.push({ kind: 'broken', key, detail: verdict.note || 'the review judged it broken' });
+    for (const f of findingsFor(key)) {
+      const note = { kind: 'check' as const, key, detail: `${f.check}: ${f.detail}` };
       if (f.level === 'fail') problems.push(note);
       else warnings.push(note);
     }
@@ -80,6 +93,7 @@ export function judge({ info, results, verdicts, intendedFor, findingsFor, repor
       new: count('new'),
       missing: count('missing'),
       unchanged: count('unchanged'),
+      glances: glances.length,
       problems: problems.length,
       warnings: warnings.length,
       awaiting: awaiting.length,
@@ -103,7 +117,8 @@ export function summaryLine(s: Summary, summaryFile: string): string {
   const c = s.counts;
   const owner = c.awaiting ? ` · ${plural(c.awaiting, 'change')} for the owner to look at` : '';
   const warn = c.warnings ? ` · ${plural(c.warnings, 'warning')}` : '';
-  return `Visual ${s.pass ? 'PASS' : 'FAIL'} ${s.run}: ${why}${owner} · ${c.changed} changed, ${c.new} new, ${c.missing} missing, ${c.unchanged} unchanged${warn} → ${summaryFile}`;
+  const glanced = c.glances ? `, ${c.glances} looked at` : '';
+  return `Visual ${s.pass ? 'PASS' : 'FAIL'} ${s.run}: ${why}${owner} · ${c.changed} changed, ${c.new} new, ${c.missing} missing, ${c.unchanged} unchanged${glanced}${warn} → ${summaryFile}`;
 }
 
 /** Judges a run from its folder (results, run.json, verdicts, trailers, findings), writes summary.json and returns it. */
@@ -113,11 +128,12 @@ export function judgeRun(runDir: string, results: Result[]): { summary: Summary;
   const summary = judge({
     info,
     results,
+    glances: listPngs(join(runDir, GLANCE_DIR)),
     verdicts: readVerdicts(runDir),
     intendedFor: (key) => changes.filter((c) => c.targets.some((t) => names(t, key))).map((c) => `${c.reason} (${c.commit})`),
     findingsFor: (key) => {
-      const file = checksPath(join(runDir, key));
-      return existsSync(file) ? (readJson<Finding[]>(file) ?? []) : [];
+      const file = [checksPath(join(runDir, key)), checksPath(join(runDir, GLANCE_DIR, key))].find(existsSync);
+      return file ? (readJson<Finding[]>(file) ?? []) : [];
     },
     report: relative(ROOT, join(runDir, 'index.html')),
   });

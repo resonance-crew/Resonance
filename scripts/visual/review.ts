@@ -27,7 +27,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
-import { BASELINE_DIR, ROOT, git, readJson, writeJson } from './util';
+import { BASELINE_DIR, GLANCE_DIR, ROOT, git, listPngs, readJson, writeJson } from './util';
 import { SCREENS } from './screens';
 import type { Result, RunInfo } from './compare';
 
@@ -40,7 +40,8 @@ export type Verdict = {
 
 type Item = {
   key: string;
-  status: Result['status'];
+  /** `glance`: a capture only looked at, with no baseline (the landing film's stills, in the run's `_glance/`). */
+  status: Result['status'] | 'glance';
   expect: string;
   /** The `Visual:` trailers naming this capture's screen (each "reason (commit)"). */
   intended: string[];
@@ -153,7 +154,7 @@ function items(runDir: string, results: Result[], all = false): Item[] {
   const changes = intendedChanges(runDir);
   return results
     .filter((r) => r.status === 'changed' || r.status === 'new' || (all && r.status === 'unchanged'))
-    .map((r) => {
+    .map((r): Item => {
       const id = r.key.split('/').pop()!.split('@')[0];
       return {
         key: r.key,
@@ -165,7 +166,19 @@ function items(runDir: string, results: Result[], all = false): Item[] {
         diff: r.status === 'changed' && existsSync(join(runDir, '_diff', r.key)) ? join(runDir, '_diff', r.key) : null,
         areas: (r.areas ?? []).slice(0, 5).map((a) => `${a.width}×${a.height} px at (${a.x}, ${a.y})`),
       };
-    });
+    })
+    .concat(
+      listPngs(join(runDir, GLANCE_DIR)).map((key): Item => ({
+        key,
+        status: 'glance',
+        expect: byId.get(key.split('/').pop()!.split('@')[0]) ?? '',
+        intended: [],
+        baseline: null,
+        current: join(runDir, GLANCE_DIR, key),
+        diff: null,
+        areas: [],
+      })),
+    );
 }
 
 function releaseNotes(runDir: string): string {
@@ -181,6 +194,7 @@ function describe(it: Item, n: number, path: (p: string) => string): string {
     `- Should show: ${it.expect}`,
     ...it.intended.map((reason) => `- Intended change: ${reason}`),
     it.status === 'changed' && !it.intended.length ? '- Intended change: none named for this screen' : null,
+    it.status === 'glance' ? '- No baseline: judge it on its own, "ok" or "broken" (a moment of the landing film, held still)' : null,
     it.baseline ? `- Baseline: ${path(it.baseline)}` : null,
     `- Current: ${path(it.current)}`,
     it.diff ? `- Diff (changed pixels in red and boxed; pale yellow only moved a pixel or two, ignore it): ${path(it.diff)}` : null,
