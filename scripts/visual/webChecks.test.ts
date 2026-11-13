@@ -24,6 +24,13 @@ describe('judgePage', () => {
     expect(judgePage({ ...quiet, labels: [{ text: '共振', boxes: [line(10)] }] }, [], { touch: true })).toEqual([]);
   });
 
+  // CLAUDE.md, Phone, tablet and Mac: a phone's lists are bands, never framed cards (shipped twice, 2026-11-01 and -09).
+  it('says, on the phone, which card or band stops short of the window’s edges, and only warns', () => {
+    const [f] = judgePage({ ...quiet, framed: [{ name: '邀請你接收新卡片', left: 16, right: 374 }] }, [], { touch: true });
+    expect(f).toEqual({ check: 'phone-bands', level: 'warn', detail: '1 not edge to edge: 邀請你接收新卡片 (16–374 of 390)' });
+    expect(judgePage({ ...quiet, framed: [] }, [], { touch: true })).toEqual([]);
+  });
+
   it('says how wide a page runs past the window, and what sticks out', () => {
     const [f] = judgePage({ ...quiet, scrollWidth: 431, pastEdge: [{ name: 'div.tags', right: 430.6 }] }, [], { touch: true });
     expect(f).toEqual({ check: 'overflow', level: WEB_CHECKS.overflow.level, detail: 'the page is 431 px wide in a 390 px window — past the edge: div.tags (to 431)' });
@@ -77,6 +84,7 @@ describe('judgePage', () => {
       contrast: 'warn',
       film: 'fail',
       'film-frames': 'warn',
+      'phone-bands': 'warn',
     });
   });
 });

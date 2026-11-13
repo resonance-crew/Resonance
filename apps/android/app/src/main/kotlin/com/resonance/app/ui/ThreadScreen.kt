@@ -522,10 +522,17 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                 ?.let(::publicCards)?.firstOrNull()
                 ?.let { model.attachCard(ThreadModel.Attachment(it.id, it.title, it.imageUrl, keptPrivate = it.keptPrivate)) }
         }
-        if (DebugLaunch.threadPanel == "stickers") {
+        // `attach`: the ＋'s panel (on a fresh install its gallery asks for access first — 允許存取); `keyboard`: the field
+        // focused with the keyboard up (the screenshots' soft-keyboard state, `thread-keyboard`).
+        val launched = DebugLaunch.launchPanel(DebugLaunch.threadPanel)
+        if (launched != null) {
             DebugLaunch.threadPanel = null
             withFrameNanos { }
-            onStickers()
+            when (launched) {
+                DebugLaunch.LaunchPanel.Stickers -> onStickers()
+                DebugLaunch.LaunchPanel.Attach -> onAttach()
+                DebugLaunch.LaunchPanel.Keyboard -> focusField()
+            }
         }
     }
     // A draft is kept a moment after typing stops, and as the thread is left or covered (round 22 §4.4).

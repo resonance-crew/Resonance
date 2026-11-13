@@ -3,8 +3,13 @@
  * harness's own phone — the `Visual iPhone` simulator or the `visual-phone` AVD — against the
  * private stack, the world reseeded before every flow so each starts from the same data.
  *
- *   npx tsx scripts/visual/flows.ts <android|ios> [--only sign-in,send-message] [--run <id>] [--no-stack]
+ *   npx tsx scripts/visual/flows.ts <android|ios> [--only sign-in,send-message] [--tags composer,links] [--device phone|tablet] [--run <id>] [--no-stack] [--wait]
  *   npx tsx scripts/visual/flows.ts <android|ios> --hold   # stack + device + app up, for drafting a flow
+ *
+ * --tags: only the flows carrying one of these tags (each flow's `tags:`: smoke, composer, media, links, tablet, …),
+ * so a round runs the group its change touches. --device tablet: the harness's tablet (the `Visual iPad`, the
+ * `visual-tablet` AVD) instead of the phone, and only the flows tagged `tablet` (the ones written to hold on two
+ * panes and popovers).
  *
  * Reports land in `visual/flows/<run>/<platform>/`: `<flow>.xml` (JUnit) and `<flow>/` (Maestro's
  * commands, logs and the flow's `takeScreenshot`s). `VISUAL_SKIP_BUILD=1` reuses the last build.
@@ -12,10 +17,11 @@
  * already has the stack up (run.ts).
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { createConnection } from 'node:net';
 import { join } from 'node:path';
+import { LockBusy, acquire, resourcesFor } from './lock';
 import { startStack, seed, type Stack } from './stack';
 import { PORTS, ROOT, SEED_PASSWORD, VISUAL_DIR, sleep, type CaptureContext } from './util';
 
@@ -25,9 +31,43 @@ export type FlowResult = { flow: string; passed: boolean; seconds: number };
 const FLOWS_DIR = join(ROOT, 'maestro/flows');
 /** The flows in the order a run takes them; any other top-level flow follows, by name. */
 const ORDER = [
-  'sign-in', 'send-message', 'send-sticker', 'react-reply', 'unsend-message', 'chat-draft', 'answer-letter',
-  'leave-note', 'resonate', 'open-notification', 'publish-card', 'trash-restore',
+  'sign-in', 'send-message', 'send-sticker', 'react-reply', 'unsend-message', 'chat-draft', 'composer-toggle',
+  'sticker-replies', 'send-picture', 'answer-letter', 'leave-note', 'resonate', 'open-notification', 'open-link',
+  'publish-card', 'trash-restore',
 ];
+
+export type FlowDevice = 'phone' | 'tablet';
+
+/** A flow file's `tags:` (the YAML header before `---`): a list of words, one `- tag` a line. */
+export function flowTags(yaml: string): string[] {
+  const header = yaml.split(/^---\s*$/m)[0];
+  const lines = header.split('\n');
+  const at = lines.findIndex((l) => /^tags:\s*$/.test(l));
+  if (at < 0) return [];
+  const tags: string[] = [];
+  for (const line of lines.slice(at + 1)) {
+    const m = /^\s+-\s+(\S+)\s*$/.exec(line);
+    if (!m) break;
+    tags.push(m[1]);
+  }
+  return tags;
+}
+
+const tagsOf = (flow: string) => flowTags(readFileSync(join(FLOWS_DIR, `${flow}.yaml`), 'utf8'));
+
+/**
+ * Narrows flows to the ones carrying any of `tags` (none: all), and on the tablet to the ones tagged `tablet`.
+ * A tag no flow carries is an error: a typo would otherwise run nothing and pass.
+ */
+export function withTags(flows: string[], tags: string[], device: FlowDevice = 'phone', tagsFor: (flow: string) => string[] = tagsOf): string[] {
+  const known = new Set(flows.flatMap(tagsFor));
+  const unknown = tags.filter((t) => !known.has(t));
+  if (unknown.length) throw new Error(`No flow is tagged ${unknown.join(', ')} (tags: ${[...known].sort().join(', ')})`);
+  return flows.filter((f) => {
+    const own = tagsFor(f);
+    return (!tags.length || tags.some((t) => own.includes(t))) && (device === 'phone' || own.includes('tablet'));
+  });
+}
 
 /** Where Maestro lives (the official installer's place unless MAESTRO_BIN says otherwise) and the Java it runs on. */
 const MAESTRO = process.env.MAESTRO_BIN || join(homedir(), '.maestro/bin/maestro');
@@ -68,10 +108,10 @@ export function flowEnv(ports: typeof PORTS): Record<string, string> {
 /** A device brought up for the flows: its id for `maestro --device`, and how to put it away. */
 type Device = { id: string; prepareFlow: () => Promise<void>; close: () => Promise<void> };
 
-async function iosDevice(ctx: CaptureContext): Promise<Device> {
+async function iosDevice(ctx: CaptureContext, kind: FlowDevice): Promise<Device> {
   const ios = await import('./ios');
   await ios.build(ctx);
-  const phone = ios.IOS_DEVICES.find((d) => d.phone)!;
+  const phone = ios.IOS_DEVICES.find((d) => d.phone === (kind === 'phone'))!;
   const { udid, booted } = await ios.simulator(phone, ctx);
   spawnSync('xcrun', ['simctl', 'terminate', udid, ios.BUNDLE_ID], { stdio: 'ignore' });
   spawnSync('xcrun', ['simctl', 'install', udid, ios.APP], { stdio: 'ignore' });
@@ -81,14 +121,14 @@ async function iosDevice(ctx: CaptureContext): Promise<Device> {
     prepareFlow: async () => {},
     close: async () => {
       spawnSync('xcrun', ['simctl', 'terminate', udid, ios.BUNDLE_ID], { stdio: 'ignore' });
-      if (booted) ios.shutDown(udid);
+      if (booted) ios.shutDown(udid, phone.name, ctx.log);
     },
   };
 }
 
-async function androidDevice(ctx: CaptureContext): Promise<Device> {
+async function androidDevice(ctx: CaptureContext, kind: FlowDevice): Promise<Device> {
   const android = await import('./android');
-  const phone = android.ANDROID_DEVICES.find((d) => d.phone)!;
+  const phone = android.ANDROID_DEVICES.find((d) => d.phone === (kind === 'phone'))!;
   const serial = android.serialOf(phone);
   await Promise.all([android.build(ctx), android.warmUp(ctx)]);
   const booted = await android.boot(phone, ctx);
@@ -129,7 +169,7 @@ async function androidDevice(ctx: CaptureContext): Promise<Device> {
       for (const ime of enabled) await android.shell(serial, `ime enable ${ime}`).catch(() => {});
       if (quiet && !enabled.includes(quiet)) await android.shell(serial, `ime disable ${quiet}`).catch(() => {});
       if (defaultIme && defaultIme !== 'null') await android.shell(serial, `ime set ${defaultIme}`).catch(() => {});
-      if (booted && process.env.VISUAL_KEEP_DEVICES !== '1') await android.kill(serial);
+      if (booted && process.env.VISUAL_KEEP_DEVICES !== '1') await android.kill(serial, ctx.log);
     },
   };
 }
@@ -160,13 +200,18 @@ function maestroTest(deviceId: string, flow: string, outDir: string, ports: type
  * installs the app, brings up the harness's phone, reseeds before each flow. `ctx.runDir` is the
  * run's folder (`visual/flows/<run>`); reports go to `<runDir>/<platform>/`.
  */
-export async function runFlows(platform: FlowPlatform, ctx: CaptureContext): Promise<FlowResult[]> {
+export async function runFlows(platform: FlowPlatform, ctx: CaptureContext, { tags = [], device: kind = 'phone' }: { tags?: string[]; device?: FlowDevice } = {}): Promise<FlowResult[]> {
   if (!existsSync(MAESTRO)) throw new Error(`No Maestro at ${MAESTRO}: install it (maestro/README.md) or set MAESTRO_BIN`);
-  const flows = flowsToRun(ctx.only);
-  const outDir = join(ctx.runDir, platform);
+  const flows = withTags(flowsToRun(ctx.only), tags, kind);
+  if (!flows.length) {
+    ctx.log(`  no flow to run on the ${platform} ${kind}${tags.length ? ` tagged ${tags.join(', ')}` : ''}`);
+    return [];
+  }
+  // The tablet's reports beside the phone's (`ios-tablet/`), never over them.
+  const outDir = join(ctx.runDir, kind === 'phone' ? platform : `${platform}-tablet`);
   mkdirSync(join(ctx.runDir, '_logs'), { recursive: true });
   mkdirSync(outDir, { recursive: true });
-  const device = platform === 'ios' ? await iosDevice(ctx) : await androidDevice(ctx);
+  const device = platform === 'ios' ? await iosDevice(ctx, kind) : await androidDevice(ctx, kind);
   const results: FlowResult[] = [];
   try {
     for (const flow of flows) {
@@ -185,8 +230,8 @@ export async function runFlows(platform: FlowPlatform, ctx: CaptureContext): Pro
 }
 
 /** Brings the stack, the phone and the app up and keeps them so until Ctrl-C (drafting a flow with the MCP). */
-async function hold(platform: FlowPlatform, ctx: CaptureContext) {
-  const device = platform === 'ios' ? await iosDevice(ctx) : await androidDevice(ctx);
+async function hold(platform: FlowPlatform, ctx: CaptureContext, kind: FlowDevice) {
+  const device = platform === 'ios' ? await iosDevice(ctx, kind) : await androidDevice(ctx, kind);
   await device.prepareFlow();
   ctx.log(`\nReady: ${platform} device ${device.id}, stack on auth ${ctx.ports.auth} / firestore ${ctx.ports.firestore} / api ${ctx.ports.dev}.`);
   ctx.log(`Flows take: ${Object.entries(flowEnv(ctx.ports)).map(([k, v]) => `-e ${k}=${v}`).join(' ')} --device ${device.id}`);
@@ -207,13 +252,23 @@ async function main() {
   const args = process.argv.slice(2);
   const platform = args[0] as FlowPlatform;
   if (platform !== 'ios' && platform !== 'android') {
-    console.log('Usage: npx tsx scripts/visual/flows.ts <android|ios> [--only sign-in,send-message] [--run <id>] [--no-stack] [--hold]');
+    console.log('Usage: npx tsx scripts/visual/flows.ts <android|ios> [--only sign-in,send-message] [--tags composer,links] [--device phone|tablet] [--run <id>] [--no-stack] [--wait] [--hold]');
     process.exit(platform ? 1 : 0);
   }
   const id = flag(args, 'run') ?? new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
   const runDir = join(VISUAL_DIR, 'flows', id);
   mkdirSync(join(runDir, '_logs'), { recursive: true });
   const log = (line: string) => console.log(line);
+  // The same locks as a capture's (lock.ts): this phone and, unless --no-stack, the stack's ports.
+  let lock;
+  try {
+    lock = await acquire(resourcesFor([platform], args.includes('--no-stack') ? null : PORTS), { wait: args.includes('--wait'), log });
+  } catch (error) {
+    if (!(error instanceof LockBusy)) throw error;
+    console.error(error.message);
+    process.exitCode = 1;
+    return;
+  }
   let stack: Stack | undefined;
   let failed = 0;
   try {
@@ -229,11 +284,14 @@ async function main() {
       log,
       retaken: [],
     };
-    if (args.includes('--hold')) return await hold(platform, ctx);
-    const results = await runFlows(platform, ctx);
+    const kind = (flag(args, 'device') ?? 'phone') as FlowDevice;
+    if (kind !== 'phone' && kind !== 'tablet') throw new Error(`--device takes phone or tablet, not "${kind}"`);
+    const tags = (flag(args, 'tags') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (args.includes('--hold')) return await hold(platform, ctx, kind);
+    const results = await runFlows(platform, ctx, { tags, device: kind });
     failed = results.filter((r) => !r.passed).length;
     log(`\nFlows ${id} ${platform}: ${results.length - failed} passed · ${failed} failed`);
-    log(`Reports: ${join(runDir, platform)}`);
+    log(`Reports: ${join(runDir, kind === 'phone' ? platform : `${platform}-tablet`)}`);
   } finally {
     if (stack) {
       stack.stop();
@@ -241,6 +299,7 @@ async function main() {
       // run started right after this one doesn't find the old stack still answering (and then gone).
       if (!args.includes('--no-stack')) await portsFree([PORTS.auth, PORTS.firestore, PORTS.dev], 30_000);
     }
+    lock.release();
   }
   if (failed) process.exitCode = 1;
 }

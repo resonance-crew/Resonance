@@ -3,6 +3,8 @@ appId: com.resonance.stories
 name: sign-in
 tags:
   - auth
+  - smoke
+  - tablet
 ---
 - runFlow:
     when:

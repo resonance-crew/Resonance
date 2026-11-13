@@ -145,4 +145,13 @@ describe('the one line', () => {
     expect(lines).toHaveLength(12);
     expect(lines[10]).toBe('  … and 2 more in f.json');
   });
+
+  it('warns, never fails, when the owner’s device went down during the run, and says so above the verdict', () => {
+    const s = judge(input({ info: info({ devicesLost: ['emulator emulator-5554'] }) }));
+    expect(s.pass).toBe(true);
+    expect(s.warnings).toEqual([expect.objectContaining({ kind: 'device', key: 'emulator emulator-5554' })]);
+    const lines = gateLines(s, 'f.json');
+    expect(lines[0]).toMatch(/^  ! emulator emulator-5554: running when the run began, gone by its end — not shut down by the harness/);
+    expect(lines.at(-1)).toMatch(/^Visual PASS .* · 1 warning → f\.json$/);
+  });
 });

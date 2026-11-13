@@ -61,6 +61,13 @@ export type Screen = {
    * a baseline could follow (scripts/visual/README.md, "The landing film").
    */
   film?: { t: number; scene: 1 | 2 | 3 | 4 };
+  /**
+   * Only in the extended set (`--variants extended`, variants.ts): a state worth a look after a change near it
+   * and before a release, not on every run.
+   */
+  set?: 'extended';
+  /** The system's soft keyboard on screen (Android: shown beside the AVD's hardware keyboard for this screen). */
+  keyboard?: boolean;
 };
 
 /** The landing film's moment `t`: the lab's exact frame (`rest=1`) at that second (`t`), the page's own address otherwise. */
@@ -134,6 +141,16 @@ export const SCREENS: Screen[] = [
     web: { storage: REPLY_CARD_DRAFT },
     app: { ios: ['-visualRide', 'replyCard'], android: ['--es', 'visualRide', 'replyCard'] },
     expect: "The thread with bob, alice's composer answering bob's newest message (his note 你的信讓我想起我自己的十年前。) with her card 我也在雨裡走過 riding: both rows inside the capsule's outline over its text line — the reply's wavy rule and the card's tile over the ＋, their words where the text starts, each ✕ over Send — Send the 52 × 48 block at the bottom right, nothing riding above the capsule" },
+  // The extended set's composer states (escaped bugs #14 and #9/#11 in the 2026-11-13 audit): the ＋'s panel, where a
+  // fresh install's gallery asks for access first (the 允許存取 a large display size hid), and the soft keyboard up — the
+  // AVDs' hardware keyboard never shows one. Android only: iOS's attach panel is the system's photo picker over the
+  // simulator's own library, which the flows add pictures to (maestro/flows/send-picture.yaml).
+  { id: 'thread-attach', route: '/messages/bob', as: 'alice', platforms: ['android'], set: 'extended',
+    app: { android: ['--es', 'threadPanel', 'attach'] },
+    expect: "The thread with bob, the ＋'s attach panel open in the keyboard's place: its wavy grip, 圖片｜卡片 floating, and (a fresh install) the gallery's ask for access — its words whole and the 允許存取 button in full view, nothing cut at any text size" },
+  { id: 'thread-keyboard', route: '/messages/bob', as: 'alice', platforms: ['android'], set: 'extended', keyboard: true,
+    app: { android: ['--es', 'threadPanel', 'keyboard'] },
+    expect: "The thread with bob, the composer's field focused and the system's soft keyboard up: the capsule stands right on the keyboard, the foot's paper reaching it with no strip of another paper or gap, bob's newest message still in view above" },
   { id: 'thread-letter', route: '/messages/carol', as: 'alice',
     expect: "carol's letter to alice (not connected): her note quoting alice's card 搬家後的第一個安靜夜晚, and the hint that replying connects them" },
   // The web's bell is a link: a phone follows it to the 通知 page (round 23 §4), wider it opens its dialog over the feed.
@@ -164,8 +181,14 @@ export type Variant = { theme: Theme; locale: Locale };
 export const BASE_VARIANT: Variant = { theme: 'light', locale: 'zh-TW' };
 export const PHONE_VARIANTS: Variant[] = [BASE_VARIANT, { theme: 'dark', locale: 'zh-TW' }, { theme: 'light', locale: 'en' }];
 
-export function screensFor(platform: Platform, only?: string[]): Screen[] {
-  return SCREENS.filter((s) => (!s.platforms || s.platforms.includes(platform)) && (!only?.length || only.includes(s.id)));
+/**
+ * A platform's screens (`only`: these ids). The extended set's own screens (`set: 'extended'`) only when `extended`;
+ * variants.ts says which device takes which screen in which variant.
+ */
+export function screensFor(platform: Platform, only?: string[], extended = false): Screen[] {
+  return SCREENS.filter(
+    (s) => (!s.platforms || s.platforms.includes(platform)) && (!only?.length || only.includes(s.id)) && (extended || s.set !== 'extended'),
+  );
 }
 
 /** `<screen>@<theme>-<locale>`: the file name of one capture inside its device's folder. */

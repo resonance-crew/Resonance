@@ -1,0 +1,64 @@
+# The composer's ☺ ↔ ⌨ (escaped bugs #9 and #11, round 24: ⌨ sometimes didn't bring the keyboard back; on a
+# windowed iPad the thread jumped as the panel came and went). alice, in her thread with bob, focuses the field,
+# opens the sticker panel (貼圖), comes back to the keyboard (鍵盤) and types — which only lands when the field has
+# the focus again — twice over; bob's newest message stays in view above the capsule throughout.
+# (On Android the runner turns the keyboard apps off, so "the keyboard back" is the field's focus: the words typed
+# after ⌨ reach it or the flow fails.)
+appId: com.resonance.stories
+name: composer-toggle
+tags:
+  - chat
+  - composer
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /messages/bob
+- extendedWaitUntil:
+    visible: 你的信讓我想起我自己的十年前。
+    timeout: 30000
+- tapOn: 與 bob 的對話|想說的話⋯
+# ☺ (貼圖) shows while the field holds no words; the panel takes the keyboard's place and ☺ turns to ⌨ (鍵盤).
+- tapOn: 貼圖
+- extendedWaitUntil:
+    visible: 心暖暖
+    timeout: 10000
+- assertVisible: 你的信讓我想起我自己的十年前。
+- tapOn: 鍵盤
+- extendedWaitUntil:
+    notVisible: 心暖暖
+    timeout: 10000
+- inputText: 鍵盤回來了 Maestro
+- extendedWaitUntil:
+    visible: .*鍵盤回來了 Maestro.*
+    timeout: 5000
+- assertVisible:
+    text: 你的信讓我想起我自己的十年前。
+    above:
+      text: .*鍵盤回來了 Maestro.*
+- takeScreenshot: composer-toggle-first
+# Again, from words erased: the round-24 bug came "sometimes", and a second turn is where a kept state shows.
+- eraseText: 30
+- extendedWaitUntil:
+    visible: 貼圖
+    timeout: 5000
+- tapOn: 貼圖
+- extendedWaitUntil:
+    visible: 心暖暖
+    timeout: 10000
+- tapOn: 鍵盤
+- extendedWaitUntil:
+    notVisible: 心暖暖
+    timeout: 10000
+- inputText: 又回來了 Maestro
+- extendedWaitUntil:
+    visible: .*又回來了 Maestro.*
+    timeout: 5000
+- assertVisible: 你的信讓我想起我自己的十年前。
+- tapOn: 送出
+- extendedWaitUntil:
+    notVisible: 傳送中⋯
+    timeout: 15000
+- assertVisible: 又回來了 Maestro
+- takeScreenshot: composer-toggle

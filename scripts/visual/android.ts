@@ -30,9 +30,13 @@ import { existsSync, mkdirSync, openSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import en from '../../src/messages/en.json';
+import zhTW from '../../src/messages/zh-TW.json';
+import { forgetBooted, mayShutDown, noteBooted } from './devices';
 import { lookNote, secondLook, type Look } from './secondLook';
-import { screensFor, shotName, type Account, type Screen, type Variant } from './screens';
-import { ROOT, SEED_PASSWORD, pixelsApart, settle, shotPath, sleep, variantsFor, type Capture, type CaptureContext } from './util';
+import { shotName, type Account, type Screen, type Variant } from './screens';
+import { ROOT, SEED_PASSWORD, pixelsApart, settle, shotPath, sleep, type Capture, type CaptureContext } from './util';
+import { devicesFor, groups, plan, stateOf, type DeviceState } from './variants';
 
 const execFileAsync = promisify(execFile);
 
@@ -76,9 +80,13 @@ async function booted(serial: string): Promise<boolean> {
 
 /**
  * Asks the emulator to quit and waits until adb no longer lists it: it takes up to 20 s to go,
- * and a boot on the same port meanwhile would meet the one still leaving.
+ * and a boot on the same port meanwhile would meet the one still leaving. Only one this run booted,
+ * and only the harness's own (devices.ts): anything else is left running and said.
  */
-export async function kill(serial: string) {
+export async function kill(serial: string, log: (line: string) => void = console.log) {
+  const may = mayShutDown(serial, null);
+  if (!may.ok) return log(`  left running: ${may.why}`);
+  forgetBooted(serial);
   await adb(serial, 'emu', 'kill').catch(() => {});
   const end = Date.now() + 40_000;
   while (Date.now() < end) {
@@ -106,7 +114,10 @@ export async function boot(device: AndroidDevice, ctx: CaptureContext): Promise<
   child.unref();
   const end = Date.now() + 240_000;
   while (Date.now() < end) {
-    if (await booted(serial)) return true;
+    if (await booted(serial)) {
+      noteBooted(serial);
+      return true;
+    }
     await sleep(2000);
   }
   if (child.pid) process.kill(child.pid, 'SIGTERM');
@@ -182,11 +193,36 @@ async function launch(serial: string, ctx: CaptureContext, account: Account | nu
 }
 
 /**
+ * What the app's skeletons are named for TalkBack (`L10n.Home.moreLoading`: the card page's story, the
+ * conversations, the bell, settings' lists): read from the strings the app itself reads.
+ */
+const LOADING_WORDS = [zhTW.home.moreLoading, en.home.moreLoading];
+
+/** Whether a window's hierarchy (`uiautomator dump`) still shows a skeleton: a node named or reading a loading word. */
+export function stillLoading(xml: string, words: readonly string[] = LOADING_WORDS): boolean {
+  const escape = (w: string) => w.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  return words.some((w) => xml.includes(`content-desc="${escape(w)}"`) || xml.includes(`text="${escape(w)}"`));
+}
+
+/** The window's hierarchy, or null when uiautomator can't give it (a window still changing; then nothing is judged by it). */
+async function hierarchy(serial: string): Promise<string | null> {
+  try {
+    const xml = await adb(serial, 'exec-out', 'uiautomator', 'dump', '/dev/tty');
+    return xml.includes('<hierarchy') ? xml : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * A frame that holds still is not yet the page: with the animations off, the launch's waves,
  * a loader and a page's skeleton all hold still while the account and the page are read, and
  * none can be told from a quiet page by its pixels (a private card in the writer is as bare as
  * the splash). So a settled frame counts only once it is still the same a few seconds later —
- * longer than any of those stands while the dev server is warm ([warmUp]).
+ * longer than any of those stands while the dev server is warm ([warmUp]) — and once the window's
+ * hierarchy names no skeleton (`stillLoading`: the 2.5.0 release run kept three cards taken before
+ * they loaded, a skeleton that held still for longer than both looks). One still loading at the
+ * end is unsettled, which fails the run.
  */
 async function steady(serial: string): Promise<{ png: Buffer; settled: boolean }> {
   const end = Date.now() + 90_000;
@@ -194,7 +230,9 @@ async function steady(serial: string): Promise<{ png: Buffer; settled: boolean }
     const shot = await settle(() => screencap(serial), { intervalMs: 1000, timeoutMs: 45_000 });
     await sleep(3500);
     const again = await screencap(serial);
-    if (again.equals(shot.png) || pixelsApart(again, shot.png) === 0) return { png: again, settled: shot.settled };
+    const still = again.equals(shot.png) || pixelsApart(again, shot.png) === 0;
+    const loading = still && stillLoading((await hierarchy(serial)) ?? '');
+    if (still && !loading) return { png: again, settled: shot.settled };
     if (Date.now() > end) return { png: again, settled: false };
   }
 }
@@ -223,27 +261,84 @@ export async function warmUp(ctx: CaptureContext) {
   }
 }
 
-async function captureDevice(device: AndroidDevice, ctx: CaptureContext, screens: Screen[]): Promise<string[]> {
+/**
+ * What a device state (variants.ts) changes on the AVD — the font scale, the display size, the rotation — put on
+ * before its screens and taken back after, to what the device had before (an AVD someone else brought up keeps
+ * its own settings). Answers the function that takes it back.
+ */
+export async function wearState(run: (command: string) => Promise<string>, state: DeviceState['android'] = {}, wait = sleep): Promise<() => Promise<void>> {
+  const undo: string[] = [];
+  if (state.fontScale != null) {
+    const was = (await run('settings get system font_scale')).trim();
+    undo.push(was && was !== 'null' ? `settings put system font_scale ${was}` : 'settings delete system font_scale');
+    await run(`settings put system font_scale ${state.fontScale}`);
+  }
+  if (state.density != null) {
+    // `wm density` says "Physical density: 420" and, when one is set, "Override density: 504".
+    const was = /Override density: (\d+)/.exec(await run('wm density'))?.[1];
+    undo.push(was ? `wm density ${was}` : 'wm density reset');
+    await run(`wm density ${state.density}`);
+  }
+  if (state.rotation != null) {
+    const auto = (await run('settings get system accelerometer_rotation')).trim();
+    const user = (await run('settings get system user_rotation')).trim();
+    undo.push(`settings put system user_rotation ${/^\d$/.test(user) ? user : 0}`, `settings put system accelerometer_rotation ${auto === '1' ? 1 : 0}`);
+    await run('settings put system accelerometer_rotation 0');
+    await run(`settings put system user_rotation ${state.rotation}`);
+  }
+  // A new density or rotation redraws the system; the next screen's cold start waits on it anyway, plus a moment.
+  if (undo.length) await wait(2000);
+  return async () => {
+    for (const command of undo.reverse()) await run(command).catch(() => '');
+  };
+}
+
+/** The soft keyboard beside the AVD's hardware one, for a screen that wants it on screen (`keyboard` in screens.ts). */
+const softKeyboard = (serial: string, on: boolean) => shell(serial, `settings put secure show_ime_with_hard_keyboard ${on ? 1 : 0}`);
+
+/** One device (a base device or a state of it, variants.ts) of the AVD on `serial`: its shots, by variant and account. */
+async function captureDevice(id: string, serial: string, ctx: CaptureContext): Promise<string[]> {
+  const unsettled: string[] = [];
+  let worn: Variant | null = null;
+  for (const { variant: v, screens } of groups(plan('android', id, ctx.set ?? 'release', ctx.only))) {
+    if (worn?.theme !== v.theme) await wear(serial, v);
+    worn = v;
+    await reset(serial, v);
+    let first = true;
+    for (const screen of screens) {
+      const name = shotName(screen, v);
+      const key = `android/${id}/${name}`;
+      if (screen.keyboard) await softKeyboard(serial, true);
+      let look: Look;
+      try {
+        look = await shoot(serial, ctx, screen, first, key);
+      } finally {
+        if (screen.keyboard) await softKeyboard(serial, false);
+      }
+      first = false;
+      writeFileSync(shotPath(ctx.runDir, 'android', id, name), look.png);
+      if (!look.settled) unsettled.push(key);
+      if (look.retaken) ctx.retaken.push(key);
+      ctx.log(`  ${key}${lookNote(look)}`);
+    }
+  }
+  return unsettled;
+}
+
+/** An AVD's whole share of the run: the app installed once, then its devices one after the other, each state worn and taken back. */
+async function captureLane(device: AndroidDevice, ids: string[], ctx: CaptureContext): Promise<string[]> {
   const serial = serialOf(device);
   const unsettled: string[] = [];
   await holdStill(serial, ctx);
   await adb(serial, 'install', '-r', '-t', APK);
-  const accounts = [...new Set(screens.map((s) => s.as))];
-  for (const v of variantsFor(device.phone)) {
-    await wear(serial, v);
-    for (const account of accounts) {
-      await reset(serial, v);
-      let first = true;
-      for (const screen of screens.filter((s) => s.as === account)) {
-        const name = shotName(screen, v);
-        const key = `android/${device.id}/${name}`;
-        const look = await shoot(serial, ctx, screen, first, key);
-        first = false;
-        writeFileSync(shotPath(ctx.runDir, 'android', device.id, name), look.png);
-        if (!look.settled) unsettled.push(key);
-        if (look.retaken) ctx.retaken.push(key);
-        ctx.log(`  ${key}${lookNote(look)}`);
-      }
+  for (const id of ids) {
+    const state = stateOf('android', id);
+    const takeBack = state ? await wearState((c) => shell(serial, c), state.android) : null;
+    if (state) ctx.log(`  ${id}: ${state.why}`);
+    try {
+      unsettled.push(...(await captureDevice(id, serial, ctx)));
+    } finally {
+      await takeBack?.();
     }
   }
   await shell(serial, `am force-stop ${PACKAGE}`);
@@ -251,13 +346,15 @@ async function captureDevice(device: AndroidDevice, ctx: CaptureContext, screens
 }
 
 export const captureAndroid: Capture = async (ctx) => {
-  const devices = ANDROID_DEVICES.filter((d) => !ctx.devices.length || ctx.devices.includes(d.id));
-  const screens = screensFor('android', ctx.only);
+  const ids = devicesFor('android', ctx.set ?? 'release', ctx.devices);
+  // Each AVD with the devices it takes: itself and its states (a state names the AVD it runs on).
+  const lanes = ANDROID_DEVICES.map((d) => ({ device: d, ids: ids.filter((id) => id === d.id || stateOf('android', id)?.on === d.id) })).filter((l) => l.ids.length);
+  const devices = lanes.map((l) => l.device);
   const started: AndroidDevice[] = [];
   // Only the emulators this run booted; one that was already running is left as it was.
   const shutDown = async (device: AndroidDevice) => {
     if (!started.includes(device)) return;
-    await kill(serialOf(device));
+    await kill(serialOf(device), ctx.log);
     started.splice(started.indexOf(device), 1);
   };
   try {
@@ -265,15 +362,15 @@ export const captureAndroid: Capture = async (ctx) => {
       // Both AVDs at once (VISUAL_PARALLEL=0: one at a time, for a machine short of memory): the
       // build and the boots overlap, then each device runs its screens beside the other.
       await Promise.all([build(ctx), warmUp(ctx), ...devices.map(async (d) => (await boot(d, ctx)) && started.push(d))]);
-      return (await Promise.all(devices.map((d) => captureDevice(d, ctx, screens)))).flat();
+      return (await Promise.all(lanes.map((l) => captureLane(l.device, l.ids, ctx)))).flat();
     }
     // One AVD at a time: booted, captured and shut down before the next one boots.
     await Promise.all([build(ctx), warmUp(ctx)]);
     const unsettled: string[] = [];
-    for (const device of devices) {
-      if (await boot(device, ctx)) started.push(device);
-      unsettled.push(...(await captureDevice(device, ctx, screens)));
-      await shutDown(device);
+    for (const lane of lanes) {
+      if (await boot(lane.device, ctx)) started.push(lane.device);
+      unsettled.push(...(await captureLane(lane.device, lane.ids, ctx)));
+      await shutDown(lane.device);
     }
     return unsettled;
   } finally {

@@ -14,10 +14,11 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PNG } from 'pngjs';
-import { BUNDLE_ID, byAccount, inXcodeLine, launchArgs, prepareProject, runLogged } from './ios';
+import { BUNDLE_ID, inXcodeLine, launchArgs, prepareProject, runLogged } from './ios';
 import { lookNote, secondLook, type Look } from './secondLook';
-import { BASE_VARIANT, screensFor, shotName } from './screens';
+import { shotName } from './screens';
 import { ROOT, run, settle, shotPath, sleep, type Capture, type CaptureContext } from './util';
+import { devicesFor, groups, plan, stateOf } from './variants';
 
 const MAC_BUNDLE_ID = `${BUNDLE_ID}.macdev`;
 const IOS_DIR = join(ROOT, 'apps/ios');
@@ -25,8 +26,9 @@ const DERIVED = join(IOS_DIR, 'build/visual-mac');
 const APP = join(DERIVED, 'Build/Products/Debug-maccatalyst/Resonance.app');
 const WINDOWS_SOURCE = join(ROOT, 'scripts/visual/macWindows.swift');
 const WINDOWS_TOOL = join(DERIVED, 'macWindows');
-/** The window in the Mac's points (the store's screenshot size), captured at 2×. */
+/** The window in the Mac's points (the store's screenshot size), captured at 2×; a device state (variants.ts) may name another. */
 const WINDOW = { width: 1440, height: 900 };
+type Size = { width: number; height: number };
 
 type MacWindow = { id: number; pid: number; width: number; height: number; layer: number };
 
@@ -54,20 +56,20 @@ function windows(): MacWindow[] {
 }
 
 /** Opens a new copy of the app and answers its process and main window, once the window is at its size. */
-async function launch(args: string[]): Promise<MacWindow> {
+async function launch(args: string[], size: Size = WINDOW): Promise<MacWindow> {
   const before = new Set(windows().map((w) => w.pid));
   // A Mac with a mouse shows every scroll bar the app hides (`.hidden`); the system's setting, for this copy alone.
   // The window state is neither restored nor saved (`ApplePersistenceIgnoreState`): a capture's pinned size kept
   // would open the app at 1440 × 900 the next time anyone opens it.
-  run('open', ['-n', '-g', APP, '--args', ...args, '-macWindowSize', `${WINDOW.width}x${WINDOW.height}`, '-AppleShowScrollBars', 'WhenScrolling',
+  run('open', ['-n', '-g', APP, '--args', ...args, '-macWindowSize', `${size.width}x${size.height}`, '-AppleShowScrollBars', 'WhenScrolling',
     '-ApplePersistenceIgnoreState', 'YES']);
   const end = Date.now() + 60_000;
   while (Date.now() < end) {
     await sleep(500);
-    const found = windows().find((w) => !before.has(w.pid) && w.layer === 0 && w.width >= WINDOW.width && w.height >= WINDOW.height);
+    const found = windows().find((w) => !before.has(w.pid) && w.layer === 0 && w.width >= size.width && w.height >= size.height);
     if (found) return found;
   }
-  throw new Error(`The Mac app's window never came at ${WINDOW.width}x${WINDOW.height}`);
+  throw new Error(`The Mac app's window never came at ${size.width}x${size.height}`);
 }
 
 /** Stops the copy this capture opened, and only it. */
@@ -83,10 +85,10 @@ function quit(pid: number) {
 /** The window's close / minimise / zoom buttons (capture pixels): grey or coloured as macOS thinks the window active. */
 const WINDOW_BUTTONS = { width: 160, height: 64 };
 
-function cut(png: Buffer): Buffer {
+function cut(png: Buffer, size: Size = WINDOW): Buffer {
   const image = PNG.sync.read(png);
-  const width = WINDOW.width * 2;
-  const height = WINDOW.height * 2;
+  const width = size.width * 2;
+  const height = size.height * 2;
   const out = new PNG({ width: Math.min(width, image.width), height: Math.min(height, image.height) });
   PNG.bitblt(image, out, 0, 0, out.width, out.height, 0, 0);
   // Painted over with the bar's own paper beside them: a window launched in the background still
@@ -98,42 +100,48 @@ function cut(png: Buffer): Buffer {
   return PNG.sync.write(out);
 }
 
-async function shoot(window: MacWindow, ctx: CaptureContext, key: string): Promise<Look> {
+async function shoot(window: MacWindow, ctx: CaptureContext, key: string, size: Size): Promise<Look> {
   const file = join(ctx.runDir, '_logs', 'mac-window.png');
   const take = () =>
     settle(() => {
       run('screencapture', ['-o', '-x', '-t', 'png', '-l', String(window.id), file]);
-      return Promise.resolve(cut(readFileSync(file)));
+      return Promise.resolve(cut(readFileSync(file), size));
     }, { timeoutMs: 40_000, intervalMs: 1000 });
   await sleep(4000);
   return secondLook(await take(), take, { key });
 }
 
 export const captureMac: Capture = async (ctx) => {
-  const screens = screensFor('mac', ctx.only);
+  const set = ctx.set ?? 'release';
+  const ids = devicesFor('mac', set, ctx.devices).filter((id) => plan('mac', id, set, ctx.only).length);
   const unsettled: string[] = [];
-  if (!screens.length || (ctx.devices.length && !ctx.devices.includes('mac'))) return unsettled;
+  if (!ids.length) return unsettled;
   mkdirSync(join(ctx.runDir, '_logs'), { recursive: true });
   await build(ctx);
-  const v = BASE_VARIANT;
-  for (const [account, group] of byAccount(screens)) {
-    // The account signs in on a launch of its own; a screen's launch only restores it.
-    const signIn = await launch(launchArgs(ctx, account, null, v));
-    await sleep(10_000);
-    quit(signIn.pid);
-    for (const screen of group) {
-      const window = await launch(launchArgs(ctx, account, screen.route, v, screen.app?.mac ?? screen.app?.ios));
-      try {
-        const name = shotName(screen, v);
-        const key = `mac/mac/${name}`;
-        const look = await shoot(window, ctx, key);
-        writeFileSync(shotPath(ctx.runDir, 'mac', 'mac', name), look.png);
-        if (!look.settled) unsettled.push(key);
-        if (look.retaken) ctx.retaken.push(key);
-        ctx.log(`  ${key}${lookNote(look)}`);
-      } finally {
-        quit(window.pid);
-        await sleep(1000);
+  for (const id of ids) {
+    // The window's size: the store's 1440 × 900, or a state's own (a narrow window, variants.ts).
+    const state = stateOf('mac', id);
+    const size = state?.mac ?? WINDOW;
+    if (state) ctx.log(`  ${id}: ${state.why}`);
+    for (const { variant: v, account, screens } of groups(plan('mac', id, set, ctx.only))) {
+      // The account signs in on a launch of its own; a screen's launch only restores it.
+      const signIn = await launch(launchArgs(ctx, account, null, v), size);
+      await sleep(10_000);
+      quit(signIn.pid);
+      for (const screen of screens) {
+        const window = await launch(launchArgs(ctx, account, screen.route, v, screen.app?.mac ?? screen.app?.ios), size);
+        try {
+          const name = shotName(screen, v);
+          const key = `mac/${id}/${name}`;
+          const look = await shoot(window, ctx, key, size);
+          writeFileSync(shotPath(ctx.runDir, 'mac', id, name), look.png);
+          if (!look.settled) unsettled.push(key);
+          if (look.retaken) ctx.retaken.push(key);
+          ctx.log(`  ${key}${lookNote(look)}`);
+        } finally {
+          quit(window.pid);
+          await sleep(1000);
+        }
       }
     }
   }

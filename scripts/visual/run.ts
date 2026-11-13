@@ -3,11 +3,16 @@
  * compared with this machine's baseline, judged by a model, accepted by hand.
  * See scripts/visual/README.md.
  *
- *   capture [web android ios mac] [--only home,card] [--device phone] [--no-stack] [--flows] [--review]
- *            --flows: the Maestro flows on Android then iOS once the captures are done (stack still up)
+ *   capture [web android ios mac] [--only home,card] [--device phone] [--variants release|extended] [--no-stack] [--flows] [--review] [--wait]
+ *            --variants extended: the release set plus the device states and variants of variants.ts (large text,
+ *            the tablets turned and in the dark, a narrow Mac window, the composer's extra states)
+ *            --flows: the Maestro flows on Android then iOS once the captures are done (stack still up);
+ *            --tags a,b: only the flows tagged so; with --variants extended the `tablet` flows on the tablets too
  *            --review: the agy review straight after (what a release runs, with --flows)
+ *            --wait: queue behind another run holding the same devices or ports (lock.ts), instead of refusing
  *   compare  [--run <id>]          recompute the comparison and the report
  *   review   [--run <id>] [--agy | --gemini] [--all]   --all: unchanged captures too
+ *   plan     [--variants release|extended]   how many captures each set takes, by platform, and roughly how long
  *   accept   --reason "<the owner's words>" [--run <id>] [--only <key|screen>,…]
  *            refused without --reason; each accept is a row of docs/visual-accept-log.md (acceptLog.ts)
  *
@@ -18,12 +23,15 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { acceptReason, appendAcceptLog, REASON_REQUIRED } from './acceptLog';
 import { compareRun, type RunInfo } from './compare';
+import { describe, foreign, lostDevices, runningDevices, type RunningDevice } from './devices';
 import { gateLines, judgeRun } from './gate';
+import { LockBusy, acquire, resourcesFor, type Lock } from './lock';
 import { writeReport } from './report';
 import { reviewWithAgy, reviewWithGemini, writeReviewPack } from './review';
 import { startStack, type Stack } from './stack';
 import { BASELINE_DIR, PORTS, RUNS_DIR, VISUAL_DIR, git, ignorePath, listPngs, readJson, writeJson, type Capture } from './util';
 import type { Platform } from './screens';
+import { DEVICE_STATES, EXTRA_VARIANTS, VARIANT_SETS, estimate, variantSetOf } from './variants';
 
 /** Every platform, in the order the report lists them. */
 const PLATFORMS: Platform[] = ['web', 'android', 'ios', 'mac'];
@@ -78,6 +86,10 @@ async function capture(args: string[]) {
   // Always in PHASES' order, whatever order they were named in.
   const named = args.filter((a): a is Platform => PLATFORMS.includes(a as Platform));
   const platforms = PLATFORMS.filter((p) => !named.length || named.includes(p));
+  const set = variantSetOf(flag(args, 'variants'));
+  // One run at a time on these devices and these ports (lock.ts): refused, or queued with --wait, before anything starts.
+  const lock = await lockFor(platforms, !args.includes('--no-stack'), args.includes('--wait'));
+  if (!lock) return;
   const id = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
   const runDir = join(RUNS_DIR, id);
   mkdirSync(runDir, { recursive: true });
@@ -92,15 +104,21 @@ async function capture(args: string[]) {
     devices: list(flag(args, 'device')),
     unsettled: [],
     retaken: [],
+    variants: set,
   };
   writeJson(join(runDir, 'run.json'), info);
+  if (set !== 'release') log(`Variants: ${set} (${estimate(set).captures} captures in all, about ${estimate(set).minutes} min; npm run visual -- plan)`);
 
+  // The others' devices as the run starts: the harness never shuts one down, and says if one went down anyway (devices.ts).
+  const apps = platforms.some((p) => p !== 'web');
+  const before: RunningDevice[] = apps ? runningDevices() : [];
+  if (foreign(before).length) log(`Left alone while this runs: ${foreign(before).map(describe).join(', ')}`);
   let stack: Stack | undefined;
   try {
     stack = args.includes('--no-stack')
       ? { devUrl: process.env.VISUAL_DEV_URL || `http://localhost:${PORTS.dev}`, stop: () => {} }
       : await startStack(join(runDir, '_logs'), log);
-    const ctx = { runDir, devUrl: stack.devUrl, ports: PORTS, only: info.only, devices: info.devices, log, retaken: info.retaken! };
+    const ctx = { runDir, devUrl: stack.devUrl, ports: PORTS, only: info.only, devices: info.devices, log, retaken: info.retaken!, set };
     // The apps' builds start now, beside the first phase's captures, so a later phase finds its app
     // ready (each build is made once; the Xcode ones take turns). A failed one fails its phase.
     const headStart: Promise<unknown>[] = [];
@@ -116,15 +134,35 @@ async function capture(args: string[]) {
       writeJson(join(runDir, 'run.json'), info);
     }
     if (args.includes('--flows')) {
-      info.flowsFailed = await flows(runDir, platforms, stack.devUrl);
+      info.flowsFailed = await flows(runDir, platforms, stack.devUrl, list(flag(args, 'tags')), set === 'extended');
       writeJson(join(runDir, 'run.json'), info);
     }
   } finally {
     stack?.stop();
+    if (apps) {
+      const lost = lostDevices(before, runningDevices());
+      if (lost.length) {
+        info.devicesLost = lost.map(describe);
+        writeJson(join(runDir, 'run.json'), info);
+      }
+    }
+    lock.release();
   }
   finish(runDir);
   if (args.includes('--review')) await review(runDir, ['--agy']);
   gate(runDir);
+}
+
+/** The run's locks (lock.ts), or null after saying why it doesn't start (exit code 1). */
+async function lockFor(platforms: Platform[], ownStack: boolean, wait: boolean): Promise<Lock | null> {
+  try {
+    return await acquire(resourcesFor(platforms, ownStack ? PORTS : null), { wait, log });
+  } catch (error) {
+    if (!(error instanceof LockBusy)) throw error;
+    console.error(error.message);
+    process.exitCode = 1;
+    return null;
+  }
 }
 
 /**
@@ -140,16 +178,20 @@ function gate(runDir: string) {
 
 /**
  * The Maestro flows (scripts/visual/flows.ts) on the apps this capture took, after every capture:
- * one device at a time, as the captures. Reports in `<run>/_flows/` (out of the captures' way); the
- * failed ones are answered, kept in run.json, and fail the run (gate.ts).
+ * one device at a time, as the captures (`--tags`: only those flows; the extended set also runs the
+ * `tablet`-tagged flows on the iPad and the Android tablet). Reports in `<run>/_flows/` (out of the
+ * captures' way); the failed ones are answered, kept in run.json, and fail the run (gate.ts).
  */
-async function flows(runDir: string, platforms: Platform[], devUrl: string): Promise<string[]> {
+async function flows(runDir: string, platforms: Platform[], devUrl: string, tags: string[], tablets: boolean): Promise<string[]> {
   const { runFlows } = await import('./flows');
   const failed: string[] = [];
   for (const platform of (['android', 'ios'] as const).filter((p) => platforms.includes(p))) {
-    log(`\n== flows on ${platform}`);
-    const results = await runFlows(platform, { runDir: join(runDir, '_flows'), devUrl, ports: PORTS, only: [], devices: [], log, retaken: [] });
-    failed.push(...results.filter((r) => !r.passed).map((r) => `${platform}/${r.flow}`));
+    for (const device of tablets ? (['phone', 'tablet'] as const) : (['phone'] as const)) {
+      log(`\n== flows on the ${platform} ${device}${tags.length ? ` (tags ${tags.join(', ')})` : ''}`);
+      const ctx = { runDir: join(runDir, '_flows'), devUrl, ports: PORTS, only: [], devices: [], log, retaken: [] };
+      const results = await runFlows(platform, ctx, { tags, device });
+      failed.push(...results.filter((r) => !r.passed).map((r) => `${platform}${device === 'tablet' ? '-tablet' : ''}/${r.flow}`));
+    }
   }
   log(failed.length ? `Flows failed: ${failed.join(', ')} (reports in ${join(runDir, '_flows')})` : 'Flows: all passed');
   return failed;
@@ -202,6 +244,24 @@ function accept(args: string[]) {
   finish(runDir);
 }
 
+/** What each variant set takes and costs (variants.ts), without taking anything. */
+function planOf(args: string[]) {
+  const sets = flag(args, 'variants') ? [variantSetOf(flag(args, 'variants'))] : VARIANT_SETS;
+  const release = estimate('release');
+  for (const set of sets) {
+    const e = estimate(set);
+    const by = Object.entries(e.byPlatform).map(([p, n]) => `${p} ${n}`).join(', ');
+    const more = set === 'release' ? '' : ` — ${e.captures - release.captures} more than release, about ${e.minutes - release.minutes} min more`;
+    log(`${set}: ${e.captures} captures (${by}), about ${e.minutes} min of captures${more}`);
+  }
+  if (sets.includes('extended')) {
+    log('\nThe extended set adds:');
+    for (const s of DEVICE_STATES) log(`  ${s.platform}/${s.id} (on ${s.on}): ${s.screens.length} screens — ${s.why}`);
+    for (const x of EXTRA_VARIANTS) log(`  ${x.platform}/${x.device} ${x.variants.map((v) => `${v.theme}-${v.locale}`).join(', ')}: ${x.screens.length} screens — ${x.why}`);
+    log('  and its own screens (screens.ts `set: extended`) on their devices: thread-attach, thread-keyboard');
+  }
+}
+
 async function main() {
   const [command, ...args] = process.argv.slice(2);
   switch (command) {
@@ -219,8 +279,10 @@ async function main() {
     }
     case 'accept':
       return accept(args);
+    case 'plan':
+      return planOf(args);
     default:
-      log('Usage: npm run visual -- capture [web android ios mac] [--only ids] [--device ids] [--no-stack] [--flows] [--review] | compare | review [--agy | --gemini] [--all] | accept --reason "<the owner\'s words>" [--only keys]  (each with --run <id>)');
+      log('Usage: npm run visual -- capture [web android ios mac] [--only ids] [--device ids] [--variants release|extended] [--no-stack] [--flows] [--review] [--wait] | compare | review [--agy | --gemini] [--all] | accept --reason "<the owner\'s words>" [--only keys]  (each with --run <id>) | plan [--variants …]');
       process.exit(command ? 1 : 0);
   }
 }

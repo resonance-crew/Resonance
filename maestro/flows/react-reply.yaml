@@ -6,6 +6,7 @@ name: react-reply
 tags:
   - chat
   - reactions
+  - composer
 ---
 - runFlow:
     file: common/launch.yaml

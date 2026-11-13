@@ -8,7 +8,8 @@ import { createConnection } from 'node:net';
 import { dirname, join, relative, resolve } from 'node:path';
 import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
-import { BASE_VARIANT, PHONE_VARIANTS, type Platform, type Variant } from './screens';
+import type { Platform } from './screens';
+import type { VariantSet } from './variants';
 
 export const ROOT = resolve(__dirname, '../..');
 /** Git-ignored: baselines are this machine's (fonts and antialiasing differ between machines and OS versions). */
@@ -41,6 +42,8 @@ export type CaptureContext = {
   log: (line: string) => void;
   /** Keys of captures whose first look was too early, kept from a later look (secondLook.ts); the capturers add to it. */
   retaken: string[];
+  /** Which variants and device states the run takes (variants.ts; `--variants`, default release). */
+  set?: VariantSet;
 };
 
 /** Captures one platform; answers the keys of captures that never stopped changing (taken anyway). */
@@ -48,8 +51,6 @@ export type Capture = (ctx: CaptureContext) => Promise<string[]>;
 
 /** The seeded accounts' password, read from the seed script (importing it would run it). */
 export const SEED_PASSWORD = /SEED_PASSWORD = '([^']+)'/.exec(readFileSync(join(ROOT, 'scripts/seed-emulator.ts'), 'utf8'))![1];
-
-export const variantsFor = (phone: boolean): Variant[] => (phone ? PHONE_VARIANTS : [BASE_VARIANT]);
 
 export function shotPath(runDir: string, platform: Platform, device: string, name: string): string {
   const file = join(runDir, platform, device, name);

@@ -266,8 +266,22 @@ object DebugLaunch {
      * a reply to the other person's newest message, with the viewer's newest published card. Taken once.
      */
     var threadRide: String? = null
-    /** The next conversation opened opens this panel (`--es threadPanel stickers`, the screenshots' `thread-stickers`). Taken once. */
+    /**
+     * The next conversation opened opens this panel (`--es threadPanel stickers`, the screenshots' `thread-stickers`;
+     * `attach` the ＋'s panel, `keyboard` the field focused with the keyboard up — [launchPanel]). Taken once.
+     */
     var threadPanel: String? = null
+
+    /** What the composer opens for a screen check (`--es threadPanel …`). */
+    enum class LaunchPanel { Stickers, Attach, Keyboard }
+
+    /** [threadPanel]'s word as a panel; anything else opens nothing. */
+    fun launchPanel(value: String?): LaunchPanel? = when (value?.trim()?.lowercase()) {
+        "stickers" -> LaunchPanel.Stickers
+        "attach" -> LaunchPanel.Attach
+        "keyboard" -> LaunchPanel.Keyboard
+        else -> null
+    }
     /** What the writer's link sheet's field starts with when it opens on no link (screen checks: an IME's keys are slow to drive). */
     var linkDraft: String? = null
     /** Pictures in AVIF go through [AvifDecoder] whatever the Android version (its check on a recent emulator). */

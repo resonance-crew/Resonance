@@ -12,6 +12,7 @@ import { PNG } from 'pngjs';
 import { compareImages, type Area } from './diff';
 import { BASELINE_DIR, ignorePath, listPngs, readJson, writeJson, type Rect } from './util';
 import { SCREENS, type Platform } from './screens';
+import { inSet, type VariantSet } from './variants';
 
 export type Status = 'unchanged' | 'changed' | 'new' | 'missing';
 export type Result = {
@@ -41,6 +42,10 @@ export type RunInfo = {
   retaken?: string[];
   /** The Maestro flows that failed (`--flows`); absent when none ran. */
   flowsFailed?: string[];
+  /** The variant set the run took (variants.ts); absent in older runs, which took the release set. */
+  variants?: VariantSet;
+  /** Others' simulators and emulators running when the run began and gone by its end (devices.ts); a warning. */
+  devicesLost?: string[];
 };
 
 export function compareRun(runDir: string): Result[] {
@@ -75,7 +80,10 @@ export function compareRun(runDir: string): Result[] {
     return (
       platforms.has(platform as Platform) &&
       (!info?.devices?.length || info.devices.includes(device)) &&
-      (!info?.only?.length || info.only.includes(name.split('@')[0]))
+      (!info?.only?.length || info.only.includes(name.split('@')[0])) &&
+      // An extended run's captures in the baseline aren't missing from a release run (variants.ts), and a device
+      // named on its own (--device phone-large) is in scope whatever the set.
+      (inSet(key, info?.variants ?? 'release') || !!info?.devices?.includes(device))
     );
   };
   for (const key of baseline) {

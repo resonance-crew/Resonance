@@ -12,6 +12,8 @@ layer on the iOS simulator and the Android emulator — Maestro, [maestro/README
 ```bash
 npm run visual -- capture --flows --review   # the release run: web + mac, android phone + tablet, iphone + ipad, the flows, then the agy review
 npm run visual -- capture web --only home,card --device phone   # a slice, while working on something
+npm run visual -- capture --flows --review --variants extended   # the release run plus the extended set (large text, turned and dark tablets, a narrow Mac window)
+npm run visual -- plan                       # how many captures each set takes, and about how long
 npm run visual -- review --run <id> --agy    # review a run with Antigravity (only what changed or is new)
 npm run visual -- review --run <id> --agy --all   # every capture: a first look over a new baseline
 npm run visual -- review --run <id>          # just write review/REVIEW.md, a brief any agent can follow by hand
@@ -123,8 +125,23 @@ loaded, and `settle` had flagged nothing in 55 runs. So a capture that differs f
 or a new screen on a platform with a baseline — is taken again after a few seconds (web 2, the apps
 5). The same picture again: the change is real and stays. Another one: the first look was early,
 the later one is kept, and it is looked at once more, three looks in all; still moving then, it is
-`unsettled`. A machine's first run has nothing to go by and takes no second look. It costs a few
-seconds per changed capture, nothing for an unchanged one.
+`unsettled`. On the apps every capture without a baseline gets the second look too — a machine's
+first run, a new screen, the extended set's first run — or a skeleton taken there would be the
+baseline the next run trusts (the web's pass has its own guards: requests drained, a blank page
+retaken). It costs a few seconds per changed or new capture, nothing for an unchanged one.
+
+**Android's skeletons** are told by name, not by pixels: the app names each skeleton for TalkBack
+(`L10n.Home.moreLoading`, 載入中… / Loading… — the card page's story, the conversations, the bell, a
+thread, settings' lists), and a settled frame counts only once `uiautomator dump` shows no node so
+named (`stillLoading` in android.ts); still there after 90 s, the capture is `unsettled`.
+
+What can still pass, precisely: on **iOS and the Mac** nothing reads the screen's hierarchy (simctl and
+screencapture give pixels only), so a page still loading after the 4 s wait, the settle and both looks
+(about 15 s in all) is kept as it is — a change from the baseline, which fails the run as
+`unexplained` unless a `Visual:` trailer names that screen, and then waits for the owner's look like any
+named change. On **Android** the home feed's, a profile's and the card box's skeletons carry no name yet
+(the same `semantics { contentDescription = L10n.Home.moreLoading }` would make them count), so those
+screens rely on the looks alone, as iOS does.
 
 **The web's checks** (`webChecks.ts`). The web's pass measures each page it captures and writes
 what it finds beside the capture (`<capture>.checks.json`; the log line names the checks):
@@ -137,6 +154,7 @@ what it finds beside the capture (`<capture>.checks.json`; the log line names th
 | `console` | a console error or an uncaught exception while the page loaded (the aborted puppet requests left out; a failed resource names its address) | warn |
 | `touch-target` | on the phone and tablet, a control under 44 × 44 (a link inside running text aside) | warn |
 | `contrast` | words under WCAG AA, from `window.__contrastAudit()` (dev and emulator builds have it) | warn |
+| `phone-bands` | on the phone, a list's card (an `article` beside another, a card grid's item; a `data-framed` one aside) or a band (`[data-band]`) that stops short of the window's edges — a phone's lists are bands, not cards; not inside a dialog, a menu or the landing film | warn |
 
 A check fails runs only once it has been seen clean — one that fails every run only teaches everyone
 to ignore the verdict. The first full web run (2026-11-13, 110 captures) found no overflow and no
@@ -145,7 +163,38 @@ touch targets (the phone and tablet header's icons are 34 × 34), 19 words under
 landing film's skip link, a thread's quoted words at 3.95:1, 刪除帳號 at 4.18:1, …) and 10 console
 errors, all meant (the 404 page's own 404, and the Firestore emulator's permission-denied as an
 anonymous card's page reads it through the rules before asking the server). When what a check
-shows is fixed, or accepted as it is, raise it to `fail` in `WEB_CHECKS`.
+shows is fixed, or accepted as it is, raise it to `fail` in `WEB_CHECKS`. `phone-bands` came later
+(2026-11-13): a phone slice of home, card, profile, me, messages, notifications and settings in all three
+variants found nothing, so it can go to `fail` once a full web run agrees.
+
+## One run at a time, and the owner's devices
+
+Two runs on the same devices hurt each other: the second finds the first one's simulators up and
+leaves them running, the first shuts them down under it, and each reseeds (empties) the other's
+database. So a run holds a lock on what it uses (`lock.ts`) — `android`, `ios`, `mac` for the devices
+it captures, `port-<n>` for each of its stack's three ports — in one folder for the whole machine
+(`VISUAL_LOCK_DIR`, else the temp dir: every worktree's run sees every other's). One that finds a
+lock held does not start:
+
+```
+Visual: the ios devices in use by another run — pid 4242, `visual capture ios` in /Users/…/Resonance-loop-step2, since 2026-11-13T03:46:00.000Z (14 min).
+Two runs on the same devices shut down each other's simulators and reseed each other's stack, so this one does not start.
+Wait for it and run again, or add --wait to queue behind it; a web-only slice can move its stack instead (VISUAL_AUTH_PORT, VISUAL_FIRESTORE_PORT, VISUAL_DEV_PORT).
+```
+
+(exit code 1); with `--wait` it says once what it waits for and starts when the other run is done.
+A web slice on its own ports takes only those ports, so two of them run side by side. A lock whose
+run was killed outright is taken over (its pid is gone). `scripts/visual/flows.ts` takes the same
+locks.
+
+The harness shuts down only what it booted, and only its own (`devices.ts`: `Visual iPhone`,
+`Visual iPad`, `emulator-5600`, `emulator-5602`); every shutdown goes through that check, and anything
+else is left running and said. A run with an app in it lists everyone else's simulators and
+emulators as it starts ("Left alone while this runs: …") and again as it ends: one that went down
+meanwhile — the 2026-11-10 release run saw the owner's go, which nothing in the harness names: a Mac
+short of memory, or CoreSimulator restarting, takes devices down by itself — is a `device` warning,
+printed above the verdict line and kept in `run.json` (`devicesLost`), so the owner hears it from the
+run.
 
 ## The landing film
 
@@ -242,6 +291,44 @@ phone is where text is tightest; every other device takes light zh-TW (`PHONE_VA
 with the baseline, and the landing film's 4 stills × 3 web devices = 12 more only looked at (The
 landing film, below).
 
+### The extended set (`--variants extended`)
+
+The release set above is what every release run takes. The bugs that still reached the owner in rounds 17–24
+sat in states it never has (the 2026-11-13 audit, §5): a large font or display size on Android, an iPad in
+landscape or in a window, a tablet in the dark, the Android soft keyboard. `--variants extended` takes the
+release set and those states on top, each aimed at the few screens where it bites (`variants.ts`):
+
+| Device (folder) | On | Screens | Setting | For |
+| --- | --- | --- | --- | --- |
+| `android/phone-large` | the phone AVD | card, thread-reply, thread-attach, settings, write-draft, notifications | font 1.5, `wm density 504` (343 dp across) | #14 允許存取 gone at display size + font 1.5; #3 the writer's status line cut |
+| `android/phone-largest` | the phone AVD | the same six | font 2.0 | #3 |
+| `android/tablet-portrait` | the tablet AVD | home, messages, thread, thread-stickers, card, notifications | `user_rotation 1` | the tablet was landscape only |
+| `ios/ipad-landscape` | `Visual iPad` | home, messages, thread, thread-stickers, thread-reply, card, notifications, write-draft | `-visualOrientation landscape` | #11 (the iPad was upright only) |
+| `mac/mac-window` | the Mac app | home, messages, thread, thread-stickers, card | a 600 × 800 window | #11, #13: an iPad in a window, as near as the harness gets |
+| `ios/ipad`, `android/tablet`, `web/tablet` | — | five each | dark zh-TW | the tablets in the dark |
+| `android/phone`, `android/tablet` | — | `thread-attach`, `thread-keyboard` (screens.ts `set: extended`) | `--es threadPanel attach` / `keyboard`; the soft keyboard shown beside the hardware one for that screen | #14; #9/#11 the keyboard against the composer |
+
+`npm run visual -- plan` prints what each set takes: release 303 captures (291 compared + 12 film stills), about
+25 min of captures; extended 353, 50 more, about 3 min more by the clock — the extra captures land mostly on
+the tablets' and the Mac's lanes, which wait for the phones anyway (about 8 more minutes of device time).
+
+A state is a device of its own: its captures live in its folder and have their own baseline, so a release
+run never counts them missing, and `--device phone-large` takes one alone whatever the set. Each state is
+worn before its screens and taken back after, to what the device had (`wearState` in `android.ts`). An iPad
+in landscape may come out of `simctl io screenshot` lying on its side; `landscapeUp` (ios.ts) stands it up —
+if the first run's pictures are upside down, its turn is the other way.
+
+Left out, and why: **a windowed iPad itself** — neither simctl nor the app can put an iPad's scene in a
+window, so `mac/mac-window` (the iPad's layouts at 77 %) stands in for its width, and a windowed iPad with a
+hardware keyboard stays a check on the owner's device; **iOS's attach panel** — it is the system's photo
+picker over the simulator's library, which the flows add pictures to (`maestro/flows/send-picture.yaml`), so
+it would change from run to run; **motion** — still captured at rest; the flows assert what a jump would
+break (`maestro/flows/composer-toggle.yaml`). The soft keyboard is Gboard's own drawing: an update of the
+AVD's Gboard changes `thread-keyboard`, an accept with the reason "Gboard updated".
+
+When to run it: before a release (`capture --flows --review --variants extended`), and on a slice after a
+change near one of those states (`capture android --device phone-large --only settings`).
+
 ### Setting the devices up on another machine
 
 - **Web**: `npm ci`, then `npx playwright install chromium` (the browser pinned by the playwright
@@ -275,7 +362,8 @@ landing film, below).
 - **Waiting for the real page**: a capture is taken again and again until two in a row match
   (`settle` in `util.ts`). A page waiting for a compile or a read holds still too, so the web first
   waits for its requests to drain (bar the realtime channels), and Android checks a settled frame
-  is still the same 3.5 s later after warming the API routes. The web asks for every page once
+  is still the same 3.5 s later after warming the API routes, with no skeleton left in its window
+  (What fails a run, Android's skeletons). The web asks for every page once
   before it captures any (`next dev` compiles a route on its first request and then reloads every
   open page in full), and takes a page again when it reloaded itself during the capture or came up
   with no words and no picture (the dev server's 404 page navigates to itself once more after
@@ -336,7 +424,8 @@ while the web and the Mac app are captured, and the two Xcode builds (Mac, simul
 they share the project and Swift's package caches. Phases (`PHASES` in `run.ts`): web + Mac, then
 Android's phone and tablet together, then the iPhone and iPad together (`VISUAL_PARALLEL=0` runs a
 platform's devices one at a time, for a machine short of memory); an AVD or simulator this run
-booted is shut down when its screens are done (`VISUAL_KEEP_DEVICES=1` keeps the simulators up).
+booted is shut down when its screens are done (`VISUAL_KEEP_DEVICES=1` keeps the simulators up), and
+nothing else ever is (One run at a time, and the owner's devices).
 The flows still run one platform at a time after the captures: each reseeds (and so empties) the
 stack's database, which would pull the data from under the other platform's flow. The stack's `next dev` builds into `.next-visual/<port>` with its own
 tsconfig, so it never meets another dev server's `.next` and never rewrites `tsconfig.json`.
