@@ -17,9 +17,13 @@ come, are Playwright's.
 | `react-reply` | alice | holds bob's note: the tray's 感動 (你回應了感動), then 回覆 and a reply that quotes the note |
 | `unsend-message` | alice | sends a message, holds it, 收回 → the dialog's 收回: 你收回了一則訊息 |
 | `chat-draft` | alice | types to bob and leaves unsent: the list shows the words after a pen, the thread keeps them |
+| `composer-toggle` | alice | `/messages/bob`: the field, ☺ (貼圖) → the panel, ⌨ (鍵盤) → words typed land in the field (the focus came back), twice; bob's note stays above the capsule (escaped bugs #9, #11) |
+| `sticker-replies` | alice | sends 心暖暖, answers bob's 謝謝 (the row names 貼圖：謝謝), then her own 心暖暖: the row now names it and no longer 謝謝 (#10) |
+| `send-picture` | alice | `addMedia` puts `assets/paper.png` in the library; ＋ (附上圖片或卡片) → Android's 允許存取 and the system's question / iOS's inline picker → the picture rides (移除第 1 張圖片) → 送出 → 查看圖片 in the thread |
 | `answer-letter` | alice | `/messages/carol`: carol's letter (her note quoting alice's card, 回覆後，你們就能開始聊天); alice's reply connects them, the hint goes |
 | `leave-note` | alice | bob's card `rain-walk`: 寄小紙條, writes, 寄出, 紙條寄出了 |
 | `resonate` | alice | carol's card `carol-note`: 共振 → the picker → 寫給十年前的自己 → 共振: 已共振, her card listed under carol's; 收藏 → 取消收藏 |
+| `open-link` | alice | links into the app (#8): bob's card by its link; a crafted thread link (a note id with a `/`) opens the thread alone; a card key with a `/` names no page; the app still routes: bob's profile by its link. Android: `openLink` with `autoVerify`; iOS: a relaunch with `-openLink` (`common/open-link.yaml` says why) |
 | `open-notification` | alice | the tab bar's 通知: carol's letter and bob's note unread with their words; carol's row opens their conversation (her note quoting alice's card, 回覆後，你們就能開始聊天) |
 | `publish-card` | alice | `/write`: title, Return, a line of story, ✓, 公開, 發布 → the card's page with its title, story and share |
 | `trash-restore` | alice | her card `letter`: ⋯ → 刪除 → 這張卡片在垃圾桶裡 → 還原 → public again (its share back) |
@@ -31,8 +35,31 @@ Each one ends with a `takeScreenshot` of its end state (the trash flow also of t
 ```bash
 npx tsx scripts/visual/flows.ts android                      # every flow on the visual-phone AVD
 npx tsx scripts/visual/flows.ts ios --only sign-in,send-message   # some, on the Visual iPhone simulator
+npx tsx scripts/visual/flows.ts ios --tags composer          # the group a change touches (tags below)
+npx tsx scripts/visual/flows.ts android --device tablet      # the flows tagged `tablet`, on the visual-tablet AVD
 VISUAL_SKIP_BUILD=1 npx tsx scripts/visual/flows.ts ios      # the last build, installed again
 ```
+
+**Tags** (each flow's `tags:`), so a round runs the group its change touches rather than all of them:
+
+| Tag | Flows | Run it after a change to |
+| --- | --- | --- |
+| `smoke` | sign-in, send-message, open-notification, publish-card | anything, as a quick look |
+| `composer` | send-message, send-sticker, react-reply, chat-draft, composer-toggle, sticker-replies | the composer, its panels, its rows |
+| `media` | send-picture | pictures, the attach panel, the gallery |
+| `links` | open-link | Route, links, App Links / Universal Links |
+| `tablet` | sign-in, send-message, send-sticker, sticker-replies, open-notification | written to hold on two panes and popovers: `--device tablet` runs these alone |
+
+plus the older ones by area (`chat`, `stickers`, `reactions`, `letters`, `card`, `notifications`,
+`writer`, `trash`, `auth`). A tag no flow carries is refused, not run as nothing. `capture --flows
+--tags composer` takes the same filter; `capture --flows --variants extended` also runs the `tablet` flows
+on the iPad and the Android tablet (reports in `_flows/ios-tablet/`, `_flows/android-tablet/`).
+
+The flows hold the same locks as a capture (scripts/visual/README.md, One run at a time): a second run
+on the same devices refuses, or queues with `--wait`.
+
+`maestro check-syntax <flow>` reads a flow without a device (an unknown command or property is an
+error): every file here passes it.
 
 The runner starts its own stack (ports `VISUAL_AUTH_PORT` / `VISUAL_FIRESTORE_PORT` /
 `VISUAL_DEV_PORT`, default 9299 / 8280 / 3150), builds and installs the Debug app, brings up the
@@ -108,7 +135,10 @@ name); add it to `ORDER` in `scripts/visual/flows.ts` to place it.
   `與 bob 的對話|想說的話⋯`, `寄(一張)?小紙條(給作者)?`); a field whose hint is drawn rather than
   said gets an id — `accessibilityIdentifier` on iOS, `Modifier.flowTag("…")` on Android (a test tag
   shown as the resource id in debug builds, `apps/android/.../ui/FlowTag.kt`). Ids so far:
-  `emulator-email`, `emulator-password`, `note-field`.
+  `emulator-email`, `emulator-password`, `note-field`. A selector's words are checked against
+  `src/messages` and the seed by `scripts/visual/flows.test.ts`, so a renamed string fails in `npm test`.
+- **Tags**: every flow has some; a new one joins a group above, and `tablet` only once it has passed on
+  a tablet.
 - **Typing**: Android flows type with no keyboard app (the runner turns them off and back on), so
   keys reach the field as they are; text with Chinese goes through Maestro's own input method on
   both platforms. Use zh-TW plus a little ASCII ("… Maestro") so a flow's own words are easy to find.

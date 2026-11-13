@@ -1,0 +1,65 @@
+# A picture picked and sent (the picker had no flow; Maestro's addMedia puts one in the device's library first).
+# alice opens the ＋ (附上圖片或卡片) in her thread with bob; on Android a fresh install's gallery asks first (允許存取,
+# then the system's question), on iOS the system's photo picker sits in the panel. She picks the picture: it rides
+# in the capsule (移除第 1 張圖片), Send sends it, and the thread shows it (查看圖片) with nothing left 傳送中⋯.
+# Note: addMedia leaves the picture in the harness's own simulator / AVD library for good (the release screenshots'
+# attach screen is Android-only for that reason: screens.ts thread-attach).
+appId: com.resonance.stories
+name: send-picture
+tags:
+  - chat
+  - media
+---
+- addMedia:
+    - assets/paper.png
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /messages/bob
+- extendedWaitUntil:
+    visible: 你的信讓我想起我自己的十年前。
+    timeout: 30000
+- tapOn: 附上圖片或卡片
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      # The app's own ask, then the system's (its words are the system's language: the AVD's, English by default).
+      - extendedWaitUntil:
+          visible: 允許存取
+          timeout: 10000
+      - tapOn: 允許存取
+      - tapOn:
+          text: (Allow all|Allow|允許全部|全部允許|允許)
+          optional: true
+      # The gallery's cells are named 圖片 like the panel's 圖片 tab, which comes first: the first cell is the second.
+      - extendedWaitUntil:
+          visible:
+            text: 圖片
+            index: 1
+          timeout: 10000
+      - tapOn:
+          text: 圖片
+          index: 1
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      # The system's PhotosPicker, inline in the panel: its cells are the system's, named by kind and date.
+      - extendedWaitUntil:
+          visible: (Photo|照片|相片).*
+          timeout: 15000
+      - tapOn: (Photo|照片|相片).*
+- extendedWaitUntil:
+    visible: 移除第 1 張圖片
+    timeout: 10000
+- takeScreenshot: send-picture-riding
+- tapOn: 送出
+- extendedWaitUntil:
+    visible: 查看圖片
+    timeout: 20000
+- extendedWaitUntil:
+    notVisible: 傳送中⋯
+    timeout: 30000
+- takeScreenshot: send-picture

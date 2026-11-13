@@ -4,6 +4,8 @@ appId: com.resonance.stories
 name: open-notification
 tags:
   - notifications
+  - smoke
+  - tablet
 ---
 - runFlow:
     file: common/launch.yaml

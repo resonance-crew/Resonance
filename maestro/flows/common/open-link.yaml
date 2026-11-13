@@ -1,0 +1,47 @@
+# Opens ${LINK} (a site path with its query: /card/rain-walk, /messages/bob?note=…) in the running app, as a
+# link tapped in another app would — signed in as ${ACCOUNT}, after common/launch.yaml.
+#
+#   - runFlow:
+#       file: common/open-link.yaml
+#       env:
+#         ACCOUNT: alice
+#         LINK: /card/rain-walk
+#
+# Android: the site's App Link (https://resonance.channel…, the manifest's autoVerify filter), verified for the
+# debug build by Maestro (`autoVerify`) since the emulator can't fetch assetlinks.json; it reaches the running
+# activity (singleTop, onNewIntent), which routes by the path alone.
+# iOS: a debug build on the simulator claims no associated domain, so `openLink` would open Safari. The app is
+# launched again with `-openLink <url>` instead (LinkInbox.launchLink, debug builds only), which hands the URL to
+# the same inbox a universal link reaches — on the local stack's own origin, the site's host for that build
+# (AppConfig.emulator, IncomingLink.of). A cold launch with a link is the harder path anyway: the link waits out
+# the restore (round 23 §7).
+appId: com.resonance.stories
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - openLink:
+          link: https://resonance.channel${LINK}
+          autoVerify: true
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          stopApp: true
+          arguments:
+            -emulator: "YES"
+            -emulatorAuthPort: ${AUTH_PORT}
+            -emulatorFirestorePort: ${FIRESTORE_PORT}
+            -emulatorApiPort: ${API_PORT}
+            -visualCapture: "YES"
+            -appearance.scheme: light
+            -appearance.mascots: "NO"
+            -appLanguage: zh-TW
+            -AppleLanguages: (zh-Hant)
+            -AppleLocale: zh_TW
+            -askForNotifications: "NO"
+            -email: ${ACCOUNT}@resonance.test
+            -password: ${PASSWORD}
+            -openLink: http://127.0.0.1:${API_PORT}${LINK}

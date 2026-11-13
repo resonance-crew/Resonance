@@ -5,6 +5,7 @@ appId: com.resonance.stories
 name: chat-draft
 tags:
   - chat
+  - composer
 ---
 - runFlow:
     file: common/launch.yaml

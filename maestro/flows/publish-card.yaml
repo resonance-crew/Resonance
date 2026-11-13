@@ -4,6 +4,7 @@ appId: com.resonance.stories
 name: publish-card
 tags:
   - writer
+  - smoke
 ---
 - runFlow:
     file: common/launch.yaml

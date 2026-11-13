@@ -5,6 +5,8 @@ name: send-sticker
 tags:
   - chat
   - stickers
+  - composer
+  - tablet
 ---
 - runFlow:
     file: common/launch.yaml

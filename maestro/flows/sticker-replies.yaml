@@ -1,0 +1,76 @@
+# Replying to two different stickers in a row (escaped bug #10, round 24: the reply row kept showing the first —
+# iOS's @State, Android's produceState not keyed). alice sends 心暖暖 to bob, holds his 謝謝 and answers it (the reply
+# row names 貼圖：謝謝), then holds her own 心暖暖 and answers that instead: the row now names 貼圖：心暖暖 and no longer
+# 謝謝. She sends words with it; her bubble quotes the second sticker.
+# Each sticker is named 貼圖：<name> for VoiceOver and TalkBack, in the thread and in the reply row alike
+# (messages.stickerLabel), so a name standing twice is the thread's and the row's.
+appId: com.resonance.stories
+name: sticker-replies
+tags:
+  - chat
+  - stickers
+  - composer
+  - tablet
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /messages/bob
+- extendedWaitUntil:
+    visible: 你的信讓我想起我自己的十年前。
+    timeout: 30000
+- assertVisible: 貼圖：謝謝
+- tapOn: 貼圖
+- extendedWaitUntil:
+    visible: 心暖暖
+    timeout: 10000
+- tapOn: 心暖暖
+- extendedWaitUntil:
+    visible: 貼圖：心暖暖
+    timeout: 10000
+- extendedWaitUntil:
+    notVisible: 傳送中⋯
+    timeout: 15000
+# The first: bob's 謝謝.
+- longPressOn: 貼圖：謝謝
+- extendedWaitUntil:
+    visible: 回覆
+    timeout: 15000
+- tapOn: 回覆
+- extendedWaitUntil:
+    visible: 回覆 bob
+    timeout: 5000
+- assertVisible:
+    text: .*貼圖：謝謝.*
+    index: 1
+- assertNotVisible:
+    text: .*貼圖：心暖暖.*
+    index: 1
+- takeScreenshot: sticker-replies-first
+# The second, straight after: alice's own 心暖暖. The row must follow it.
+- longPressOn: 貼圖：心暖暖
+- extendedWaitUntil:
+    visible: 回覆
+    timeout: 15000
+- tapOn: 回覆
+- extendedWaitUntil:
+    visible: 回覆自己
+    timeout: 5000
+- assertVisible:
+    text: .*貼圖：心暖暖.*
+    index: 1
+- assertNotVisible:
+    text: .*貼圖：謝謝.*
+    index: 1
+- takeScreenshot: sticker-replies-second
+- tapOn: 與 bob 的對話|想說的話⋯
+- inputText: 兩張都可愛 Maestro
+- tapOn: 送出
+- extendedWaitUntil:
+    visible: 兩張都可愛 Maestro
+    timeout: 10000
+- extendedWaitUntil:
+    notVisible: 傳送中⋯
+    timeout: 15000
+- takeScreenshot: sticker-replies

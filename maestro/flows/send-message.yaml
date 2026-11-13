@@ -4,6 +4,9 @@ appId: com.resonance.stories
 name: send-message
 tags:
   - chat
+  - composer
+  - smoke
+  - tablet
 ---
 - runFlow:
     file: common/launch.yaml

@@ -1,0 +1,54 @@
+# Links into the app (escaped bug #8, round 23: a crafted Universal Link could end the app). alice, signed in at
+# home, opens bob's card by its link, then two crafted ones — a thread link whose note id holds a "/" (Firestore
+# would read it as a path and end the app) and a card key decoded with a "/" in it — and after each the app is
+# still there and still routes: the thread opens without the note, and bob's profile link opens his profile.
+appId: com.resonance.stories
+name: open-link
+tags:
+  - links
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /home
+- extendedWaitUntil:
+    visible: 我也在雨裡走過
+    timeout: 30000
+# A card's link: its page, in the app.
+- runFlow:
+    file: common/open-link.yaml
+    env:
+      ACCOUNT: alice
+      LINK: /card/rain-walk
+- extendedWaitUntil:
+    visible: 一場雨後的散步
+    timeout: 30000
+- assertVisible: .*雨停的時候，巷口的積水映出整排路燈。.*
+- takeScreenshot: open-link-card
+# Crafted: a note id with a "/" (%2F) and a card id cut short — the conversation opens alone, the app stays.
+- runFlow:
+    file: common/open-link.yaml
+    env:
+      ACCOUNT: alice
+      LINK: /messages/bob?note=a%2Fb&card=
+- extendedWaitUntil:
+    visible: 你的信讓我想起我自己的十年前。
+    timeout: 30000
+- takeScreenshot: open-link-crafted-thread
+# Crafted: a card key with a "/" in it names no page here (iOS: the site's page in the in-app browser; Android:
+# whatever the path routes to). Whatever it shows, the app must still be alive: the next link opens bob's profile.
+- runFlow:
+    file: common/open-link.yaml
+    env:
+      ACCOUNT: alice
+      LINK: /card/a%2Fb
+- runFlow:
+    file: common/open-link.yaml
+    env:
+      ACCOUNT: alice
+      LINK: /u/bob
+- extendedWaitUntil:
+    visible: bob 的測試帳號
+    timeout: 30000
+- takeScreenshot: open-link
