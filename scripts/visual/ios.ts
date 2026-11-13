@@ -16,8 +16,10 @@ import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { mayShutDown, noteBooted } from './devices';
 import { lookNote, secondLook, type Look } from './secondLook';
-import { screensFor, shotName, type Account, type Screen, type Variant } from './screens';
-import { ROOT, SEED_PASSWORD, run, settle, shotPath, sleep, variantsFor, type Capture, type CaptureContext } from './util';
+import { PNG } from 'pngjs';
+import { screensFor, shotName, type Account, type Variant } from './screens';
+import { ROOT, SEED_PASSWORD, run, settle, shotPath, sleep, type Capture, type CaptureContext } from './util';
+import { devicesFor, groups, plan, stateOf } from './variants';
 
 export const BUNDLE_ID = 'com.resonance.stories';
 const IOS_DIR = join(ROOT, 'apps/ios');
@@ -94,12 +96,6 @@ export function launchArgs(ctx: CaptureContext, account: Account | null, route: 
   return args;
 }
 
-/** The screens in the order they are taken: by account, so each signs in once (its first launch). */
-export function byAccount(screens: Screen[]): [Account | null, Screen[]][] {
-  const accounts = [...new Set(screens.map((s) => s.as))];
-  return accounts.map((a) => [a, screens.filter((s) => s.as === a)]);
-}
-
 function simctl(...args: string[]): string {
   return run('xcrun', ['simctl', ...args]);
 }
@@ -160,12 +156,32 @@ function launch(udid: string, args: string[]) {
   simctl('launch', udid, BUNDLE_ID, ...args);
 }
 
-async function shoot(udid: string, ctx: CaptureContext, key: string): Promise<Look> {
+/**
+ * A capture the scene turned to landscape (`-visualOrientation`) can come out of `simctl io screenshot` in the
+ * screen's own upright frame, the page lying on its side: stood up again, a quarter turn the other way. A capture
+ * already wider than tall is left as it is.
+ */
+export function landscapeUp(png: Buffer, turn: 'left' | 'right' = 'left'): Buffer {
+  const image = PNG.sync.read(png);
+  if (image.width >= image.height) return png;
+  const out = new PNG({ width: image.height, height: image.width });
+  for (let y = 0; y < image.height; y++) {
+    for (let x = 0; x < image.width; x++) {
+      // left: (x, y) → (y, W-1-x); right: (x, y) → (H-1-y, x).
+      const [nx, ny] = turn === 'left' ? [y, image.width - 1 - x] : [image.height - 1 - y, x];
+      image.data.copy(out.data, (ny * out.width + nx) * 4, (y * image.width + x) * 4, (y * image.width + x) * 4 + 4);
+    }
+  }
+  return PNG.sync.write(out);
+}
+
+async function shoot(udid: string, ctx: CaptureContext, key: string, landscape: boolean): Promise<Look> {
   const file = join(ctx.runDir, '_logs', `ios-${udid}.png`);
   const take = () =>
     settle(() => {
       run('xcrun', ['simctl', 'io', udid, 'screenshot', '--type=png', file]);
-      return Promise.resolve(readFileSync(file));
+      const png = readFileSync(file);
+      return Promise.resolve(landscape ? landscapeUp(png) : png);
     }, { timeoutMs: 40_000, intervalMs: 1000 });
   // A launch draws its cover, restores the account and asks the stack: never judged before this.
   await sleep(4000);
@@ -173,31 +189,42 @@ async function shoot(udid: string, ctx: CaptureContext, key: string): Promise<Lo
 }
 
 export const captureIos: Capture = async (ctx) => {
-  const devices = IOS_DEVICES.filter((d) => !ctx.devices.length || ctx.devices.includes(d.id));
-  const screens = screensFor('ios', ctx.only);
+  const set = ctx.set ?? 'release';
+  const ids = devicesFor('ios', set, ctx.devices);
+  // Each simulator with the devices it takes: itself and its states (variants.ts), one after the other on it.
+  const lanes = IOS_DEVICES.map((d) => ({ device: d, ids: ids.filter((id) => id === d.id || stateOf('ios', id)?.on === d.id) }))
+    .filter((l) => l.ids.some((id) => plan('ios', id, set, ctx.only).length));
   const unsettled: string[] = [];
-  if (!devices.length || !screens.length) return unsettled;
+  if (!lanes.length || !screensFor('ios', ctx.only, set === 'extended').length) return unsettled;
   mkdirSync(join(ctx.runDir, '_logs'), { recursive: true });
   await build(ctx);
   // Both simulators at once (VISUAL_PARALLEL=0: one at a time), each booted, captured and shut down.
-  const captureOn = async (device: IosDevice) => {
+  const captureOn = async ({ device, ids }: (typeof lanes)[number]) => {
     const { udid, booted } = await simulator(device, ctx);
     spawnSync('xcrun', ['simctl', 'terminate', udid, BUNDLE_ID], { stdio: 'ignore' });
     simctl('install', udid, APP);
-    for (const v of variantsFor(device.phone)) {
-      // The system's appearance too: the app follows its own choice, the status bar the system's.
-      simctl('ui', udid, 'appearance', v.theme);
-      for (const [account, group] of byAccount(screens)) {
+    for (const id of ids) {
+      const state = stateOf('ios', id);
+      if (state) ctx.log(`  ${id}: ${state.why}`);
+      // A state's own launch arguments follow every launch's (the scene's orientation, VisualCapture); the iPad's
+      // own captures ask for upright, so a landscape state before them on this simulator never carries over.
+      const own = state?.ios ? ['-visualOrientation', state.ios.orientation] : device.phone ? [] : ['-visualOrientation', 'portrait'];
+      const landscape = state?.ios?.orientation === 'landscape';
+      let theme: Variant['theme'] | null = null;
+      for (const { variant: v, account, screens } of groups(plan('ios', id, set, ctx.only))) {
+        // The system's appearance too: the app follows its own choice, the status bar the system's.
+        if (theme !== v.theme) simctl('ui', udid, 'appearance', v.theme);
+        theme = v.theme;
         // The account signs in on a launch of its own (switching from whoever was there), so a
         // screen's launch only restores it.
-        launch(udid, launchArgs(ctx, account, null, v));
+        launch(udid, [...launchArgs(ctx, account, null, v), ...own]);
         await sleep(10_000);
-        for (const screen of group) {
-          launch(udid, launchArgs(ctx, account, screen.route, v, screen.app?.ios));
+        for (const screen of screens) {
+          launch(udid, [...launchArgs(ctx, account, screen.route, v, screen.app?.ios), ...own]);
           const name = shotName(screen, v);
-          const key = `ios/${device.id}/${name}`;
-          const look = await shoot(udid, ctx, key);
-          writeFileSync(shotPath(ctx.runDir, 'ios', device.id, name), look.png);
+          const key = `ios/${id}/${name}`;
+          const look = await shoot(udid, ctx, key, landscape);
+          writeFileSync(shotPath(ctx.runDir, 'ios', id, name), look.png);
           if (!look.settled) unsettled.push(key);
           if (look.retaken) ctx.retaken.push(key);
           ctx.log(`  ${key}${lookNote(look)}`);
@@ -207,7 +234,7 @@ export const captureIos: Capture = async (ctx) => {
     spawnSync('xcrun', ['simctl', 'terminate', udid, BUNDLE_ID], { stdio: 'ignore' });
     if (booted) shutDown(udid, device.name, ctx.log);
   };
-  if (process.env.VISUAL_PARALLEL === '0') for (const device of devices) await captureOn(device);
-  else await Promise.all(devices.map(captureOn));
+  if (process.env.VISUAL_PARALLEL === '0') for (const lane of lanes) await captureOn(lane);
+  else await Promise.all(lanes.map(captureOn));
   return unsettled;
 };

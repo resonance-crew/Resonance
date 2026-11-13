@@ -11,9 +11,10 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Frame, type Page } from 'playwright';
-import { BASE_VARIANT, SCREENS, screensFor, shotName, type Account, type Screen, type Variant } from './screens';
+import { SCREENS, screensFor, shotName, type Account, type Screen, type Variant } from './screens';
 import { lookNote, secondLook, type Look } from './secondLook';
-import { GLANCE_DIR, SEED_PASSWORD, ignorePath, settle, shotPath, variantsFor, type Capture, type CaptureContext, type Rect } from './util';
+import { GLANCE_DIR, SEED_PASSWORD, ignorePath, settle, shotPath, type Capture, type CaptureContext, type Rect } from './util';
+import { devicesFor, groups, plan } from './variants';
 import { checksPath, consoleNoise, judgePage, measurePage, type Finding } from './webChecks';
 
 export type WebDevice = { id: string; phone: boolean; width: number; height: number; touch: boolean };
@@ -260,36 +261,33 @@ async function warmUp(ctx: CaptureContext, screens: Screen[]) {
 export const captureWeb: Capture = async (ctx) => {
   const browser = await chromium.launch();
   const unsettled: string[] = [];
+  const set = ctx.set ?? 'release';
   try {
-    const screens = screensFor('web', ctx.only);
-    await warmUp(ctx, screens);
-    for (const device of WEB_DEVICES.filter((d) => !ctx.devices.length || ctx.devices.includes(d.id))) {
-      for (const v of variantsFor(device.phone)) {
-        // One context per account: a signed-out screen never sees someone's session.
-        const accounts = [...new Set(screens.map((s) => s.as))];
-        for (const account of accounts) {
-          const context = await newContext(browser, device, v);
-          const page = await context.newPage();
-          try {
-            if (account) await signIn(page, ctx, v, account);
-            // The film's stills: light zh-TW on every device (its art is the same in both schemes and languages).
-            const base = v.theme === BASE_VARIANT.theme && v.locale === BASE_VARIANT.locale;
-            for (const screen of screens.filter((s) => s.as === account && (base || !s.film))) {
-              const name = shotName(screen, v);
-              const key = `web/${device.id}/${name}`;
-              const look = await shoot(page, ctx, screen, v, device, key);
-              const file = shotPath(screen.film ? join(ctx.runDir, GLANCE_DIR) : ctx.runDir, 'web', device.id, name);
-              writeFileSync(file, look.png);
-              if (look.ignore.length) writeFileSync(ignorePath(file), JSON.stringify(look.ignore));
-              if (look.findings.length) writeFileSync(checksPath(file), JSON.stringify(look.findings, null, 2));
-              if (!look.settled) unsettled.push(key);
-              if (look.retaken) ctx.retaken.push(key);
-              const checks = look.findings.length ? `  (${look.findings.map((f) => f.check).join(', ')})` : '';
-              ctx.log(`  ${key}${lookNote(look)}${checks}`);
-            }
-          } finally {
-            await context.close();
+    await warmUp(ctx, screensFor('web', ctx.only, set === 'extended'));
+    for (const id of devicesFor('web', set, ctx.devices)) {
+      const device = WEB_DEVICES.find((d) => d.id === id)!;
+      // By variant and account (variants.ts): one context per account, so a signed-out screen never sees
+      // someone's session. The film's stills are light zh-TW only (their art is the same in both schemes and languages).
+      for (const { variant: v, account, screens } of groups(plan('web', id, set, ctx.only))) {
+        const context = await newContext(browser, device, v);
+        const page = await context.newPage();
+        try {
+          if (account) await signIn(page, ctx, v, account);
+          for (const screen of screens) {
+            const name = shotName(screen, v);
+            const key = `web/${device.id}/${name}`;
+            const look = await shoot(page, ctx, screen, v, device, key);
+            const file = shotPath(screen.film ? join(ctx.runDir, GLANCE_DIR) : ctx.runDir, 'web', device.id, name);
+            writeFileSync(file, look.png);
+            if (look.ignore.length) writeFileSync(ignorePath(file), JSON.stringify(look.ignore));
+            if (look.findings.length) writeFileSync(checksPath(file), JSON.stringify(look.findings, null, 2));
+            if (!look.settled) unsettled.push(key);
+            if (look.retaken) ctx.retaken.push(key);
+            const checks = look.findings.length ? `  (${look.findings.map((f) => f.check).join(', ')})` : '';
+            ctx.log(`  ${key}${lookNote(look)}${checks}`);
           }
+        } finally {
+          await context.close();
         }
       }
     }

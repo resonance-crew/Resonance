@@ -12,6 +12,8 @@ layer on the iOS simulator and the Android emulator — Maestro, [maestro/README
 ```bash
 npm run visual -- capture --flows --review   # the release run: web + mac, android phone + tablet, iphone + ipad, the flows, then the agy review
 npm run visual -- capture web --only home,card --device phone   # a slice, while working on something
+npm run visual -- capture --flows --review --variants extended   # the release run plus the extended set (large text, turned and dark tablets, a narrow Mac window)
+npm run visual -- plan                       # how many captures each set takes, and about how long
 npm run visual -- review --run <id> --agy    # review a run with Antigravity (only what changed or is new)
 npm run visual -- review --run <id> --agy --all   # every capture: a first look over a new baseline
 npm run visual -- review --run <id>          # just write review/REVIEW.md, a brief any agent can follow by hand
@@ -270,6 +272,44 @@ phone is where text is tightest; every other device takes light zh-TW (`PHONE_VA
 `screens.ts`). 24 web screens and 19 app screens give 120 + 76 + 19 + 76 = 291 captures compared
 with the baseline, and the landing film's 4 stills × 3 web devices = 12 more only looked at (The
 landing film, below).
+
+### The extended set (`--variants extended`)
+
+The release set above is what every release run takes. The bugs that still reached the owner in rounds 17–24
+sat in states it never has (the 2026-11-13 audit, §5): a large font or display size on Android, an iPad in
+landscape or in a window, a tablet in the dark, the Android soft keyboard. `--variants extended` takes the
+release set and those states on top, each aimed at the few screens where it bites (`variants.ts`):
+
+| Device (folder) | On | Screens | Setting | For |
+| --- | --- | --- | --- | --- |
+| `android/phone-large` | the phone AVD | card, thread-reply, thread-attach, settings, write-draft, notifications | font 1.5, `wm density 504` (343 dp across) | #14 允許存取 gone at display size + font 1.5; #3 the writer's status line cut |
+| `android/phone-largest` | the phone AVD | the same six | font 2.0 | #3 |
+| `android/tablet-portrait` | the tablet AVD | home, messages, thread, thread-stickers, card, notifications | `user_rotation 1` | the tablet was landscape only |
+| `ios/ipad-landscape` | `Visual iPad` | home, messages, thread, thread-stickers, thread-reply, card, notifications, write-draft | `-visualOrientation landscape` | #11 (the iPad was upright only) |
+| `mac/mac-window` | the Mac app | home, messages, thread, thread-stickers, card | a 600 × 800 window | #11, #13: an iPad in a window, as near as the harness gets |
+| `ios/ipad`, `android/tablet`, `web/tablet` | — | five each | dark zh-TW | the tablets in the dark |
+| `android/phone`, `android/tablet` | — | `thread-attach`, `thread-keyboard` (screens.ts `set: extended`) | `--es threadPanel attach` / `keyboard`; the soft keyboard shown beside the hardware one for that screen | #14; #9/#11 the keyboard against the composer |
+
+`npm run visual -- plan` prints what each set takes: release 303 captures (291 compared + 12 film stills), about
+25 min of captures; extended 353, 50 more, about 3 min more by the clock — the extra captures land mostly on
+the tablets' and the Mac's lanes, which wait for the phones anyway (about 8 more minutes of device time).
+
+A state is a device of its own: its captures live in its folder and have their own baseline, so a release
+run never counts them missing, and `--device phone-large` takes one alone whatever the set. Each state is
+worn before its screens and taken back after, to what the device had (`wearState` in `android.ts`). An iPad
+in landscape may come out of `simctl io screenshot` lying on its side; `landscapeUp` (ios.ts) stands it up —
+if the first run's pictures are upside down, its turn is the other way.
+
+Left out, and why: **a windowed iPad itself** — neither simctl nor the app can put an iPad's scene in a
+window, so `mac/mac-window` (the iPad's layouts at 77 %) stands in for its width, and a windowed iPad with a
+hardware keyboard stays a check on the owner's device; **iOS's attach panel** — it is the system's photo
+picker over the simulator's library, which the flows add pictures to (`maestro/flows/send-picture.yaml`), so
+it would change from run to run; **motion** — still captured at rest; the flows assert what a jump would
+break (`maestro/flows/composer-toggle.yaml`). The soft keyboard is Gboard's own drawing: an update of the
+AVD's Gboard changes `thread-keyboard`, an accept with the reason "Gboard updated".
+
+When to run it: before a release (`capture --flows --review --variants extended`), and on a slice after a
+change near one of those states (`capture android --device phone-large --only settings`).
 
 ### Setting the devices up on another machine
 

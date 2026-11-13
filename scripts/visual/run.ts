@@ -3,12 +3,15 @@
  * compared with this machine's baseline, judged by a model, accepted by hand.
  * See scripts/visual/README.md.
  *
- *   capture [web android ios mac] [--only home,card] [--device phone] [--no-stack] [--flows] [--review] [--wait]
+ *   capture [web android ios mac] [--only home,card] [--device phone] [--variants release|extended] [--no-stack] [--flows] [--review] [--wait]
+ *            --variants extended: the release set plus the device states and variants of variants.ts (large text,
+ *            the tablets turned and in the dark, a narrow Mac window, the composer's extra states)
  *            --flows: the Maestro flows on Android then iOS once the captures are done (stack still up)
  *            --review: the agy review straight after (what a release runs, with --flows)
  *            --wait: queue behind another run holding the same devices or ports (lock.ts), instead of refusing
  *   compare  [--run <id>]          recompute the comparison and the report
  *   review   [--run <id>] [--agy | --gemini] [--all]   --all: unchanged captures too
+ *   plan     [--variants release|extended]   how many captures each set takes, by platform, and roughly how long
  *   accept   --reason "<the owner's words>" [--run <id>] [--only <key|screen>,…]
  *            refused without --reason; each accept is a row of docs/visual-accept-log.md (acceptLog.ts)
  *
@@ -27,6 +30,7 @@ import { reviewWithAgy, reviewWithGemini, writeReviewPack } from './review';
 import { startStack, type Stack } from './stack';
 import { BASELINE_DIR, PORTS, RUNS_DIR, VISUAL_DIR, git, ignorePath, listPngs, readJson, writeJson, type Capture } from './util';
 import type { Platform } from './screens';
+import { DEVICE_STATES, EXTRA_VARIANTS, VARIANT_SETS, estimate, variantSetOf } from './variants';
 
 /** Every platform, in the order the report lists them. */
 const PLATFORMS: Platform[] = ['web', 'android', 'ios', 'mac'];
@@ -81,6 +85,7 @@ async function capture(args: string[]) {
   // Always in PHASES' order, whatever order they were named in.
   const named = args.filter((a): a is Platform => PLATFORMS.includes(a as Platform));
   const platforms = PLATFORMS.filter((p) => !named.length || named.includes(p));
+  const set = variantSetOf(flag(args, 'variants'));
   // One run at a time on these devices and these ports (lock.ts): refused, or queued with --wait, before anything starts.
   const lock = await lockFor(platforms, !args.includes('--no-stack'), args.includes('--wait'));
   if (!lock) return;
@@ -98,8 +103,10 @@ async function capture(args: string[]) {
     devices: list(flag(args, 'device')),
     unsettled: [],
     retaken: [],
+    variants: set,
   };
   writeJson(join(runDir, 'run.json'), info);
+  if (set !== 'release') log(`Variants: ${set} (${estimate(set).captures} captures in all, about ${estimate(set).minutes} min; npm run visual -- plan)`);
 
   // The others' devices as the run starts: the harness never shuts one down, and says if one went down anyway (devices.ts).
   const apps = platforms.some((p) => p !== 'web');
@@ -110,7 +117,7 @@ async function capture(args: string[]) {
     stack = args.includes('--no-stack')
       ? { devUrl: process.env.VISUAL_DEV_URL || `http://localhost:${PORTS.dev}`, stop: () => {} }
       : await startStack(join(runDir, '_logs'), log);
-    const ctx = { runDir, devUrl: stack.devUrl, ports: PORTS, only: info.only, devices: info.devices, log, retaken: info.retaken! };
+    const ctx = { runDir, devUrl: stack.devUrl, ports: PORTS, only: info.only, devices: info.devices, log, retaken: info.retaken!, set };
     // The apps' builds start now, beside the first phase's captures, so a later phase finds its app
     // ready (each build is made once; the Xcode ones take turns). A failed one fails its phase.
     const headStart: Promise<unknown>[] = [];
@@ -232,6 +239,24 @@ function accept(args: string[]) {
   finish(runDir);
 }
 
+/** What each variant set takes and costs (variants.ts), without taking anything. */
+function planOf(args: string[]) {
+  const sets = flag(args, 'variants') ? [variantSetOf(flag(args, 'variants'))] : VARIANT_SETS;
+  const release = estimate('release');
+  for (const set of sets) {
+    const e = estimate(set);
+    const by = Object.entries(e.byPlatform).map(([p, n]) => `${p} ${n}`).join(', ');
+    const more = set === 'release' ? '' : ` — ${e.captures - release.captures} more than release, about ${e.minutes - release.minutes} min more`;
+    log(`${set}: ${e.captures} captures (${by}), about ${e.minutes} min of captures${more}`);
+  }
+  if (sets.includes('extended')) {
+    log('\nThe extended set adds:');
+    for (const s of DEVICE_STATES) log(`  ${s.platform}/${s.id} (on ${s.on}): ${s.screens.length} screens — ${s.why}`);
+    for (const x of EXTRA_VARIANTS) log(`  ${x.platform}/${x.device} ${x.variants.map((v) => `${v.theme}-${v.locale}`).join(', ')}: ${x.screens.length} screens — ${x.why}`);
+    log('  and its own screens (screens.ts `set: extended`) on their devices: thread-attach, thread-keyboard');
+  }
+}
+
 async function main() {
   const [command, ...args] = process.argv.slice(2);
   switch (command) {
@@ -249,8 +274,10 @@ async function main() {
     }
     case 'accept':
       return accept(args);
+    case 'plan':
+      return planOf(args);
     default:
-      log('Usage: npm run visual -- capture [web android ios mac] [--only ids] [--device ids] [--no-stack] [--flows] [--review] | compare | review [--agy | --gemini] [--all] | accept --reason "<the owner\'s words>" [--only keys]  (each with --run <id>)');
+      log('Usage: npm run visual -- capture [web android ios mac] [--only ids] [--device ids] [--variants release|extended] [--no-stack] [--flows] [--review] [--wait] | compare | review [--agy | --gemini] [--all] | accept --reason "<the owner\'s words>" [--only keys]  (each with --run <id>) | plan [--variants …]');
       process.exit(command ? 1 : 0);
   }
 }
