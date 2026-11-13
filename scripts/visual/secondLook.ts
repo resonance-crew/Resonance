@@ -3,8 +3,7 @@
  * page still waiting holds still too — a skeleton, a loader, an empty list before its read: the
  * 2.5.0 release run kept three Android cards taken before they loaded, and in 55 runs `settle` never
  * flagged one. The baseline is the best word there is for what the page should be, so a capture
- * that differs from it (or a new screen on a platform that has a baseline) is taken again after a
- * few seconds. The same picture again: the change is real, and stays. Another one: the first look
+ * that differs from it (or has none: see wantsSecondLook) is taken again after a few seconds. The same picture again: the change is real, and stays. Another one: the first look
  * was too early — the later one is kept and the capture is marked *retaken* — and it is looked at
  * once more, up to three looks; still moving by then, it is *unsettled*, which fails the run.
  *
@@ -41,13 +40,17 @@ export function samePicture(a: Buffer, b: Buffer, ignore: Rect[] = [], allowance
 }
 
 /**
- * Whether a capture wants another look: it differs from its baseline, or it has none on a platform
- * that has one (a new screen). A machine's first run has no baseline at all: nothing to go by, no
- * second look (it is reviewed whole, `review --all`).
+ * Whether a capture wants another look: it differs from its baseline, or it has none. On the web a
+ * capture without one gets another look only on a platform that has a baseline (a new screen): the
+ * web's pass waits for its requests to drain and retakes a blank page itself. The apps have neither
+ * (a skeleton holds still as well as a page does), so on them every capture without a baseline is
+ * looked at again — a machine's first run, a new screen, the extended set's first run — or a capture
+ * taken before load would be the baseline the next run trusts.
  */
 export function wantsSecondLook(key: string, png: Buffer, ignore: Rect[] = [], baselineDir = BASELINE_DIR): boolean {
   const file = join(baselineDir, key);
-  if (!existsSync(file)) return existsSync(join(baselineDir, key.split('/')[0]));
+  const platform = key.split('/')[0];
+  if (!existsSync(file)) return platform !== 'web' || existsSync(join(baselineDir, platform));
   const skip = [...ignore, ...(readJson<Rect[]>(ignorePath(file)) ?? [])];
   return !samePicture(readFileSync(file), png, skip, allowanceOf(key));
 }

@@ -30,6 +30,8 @@ import { existsSync, mkdirSync, openSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import en from '../../src/messages/en.json';
+import zhTW from '../../src/messages/zh-TW.json';
 import { forgetBooted, mayShutDown, noteBooted } from './devices';
 import { lookNote, secondLook, type Look } from './secondLook';
 import { shotName, type Account, type Screen, type Variant } from './screens';
@@ -191,11 +193,36 @@ async function launch(serial: string, ctx: CaptureContext, account: Account | nu
 }
 
 /**
+ * What the app's skeletons are named for TalkBack (`L10n.Home.moreLoading`: the card page's story, the
+ * conversations, the bell, settings' lists): read from the strings the app itself reads.
+ */
+const LOADING_WORDS = [zhTW.home.moreLoading, en.home.moreLoading];
+
+/** Whether a window's hierarchy (`uiautomator dump`) still shows a skeleton: a node named or reading a loading word. */
+export function stillLoading(xml: string, words: readonly string[] = LOADING_WORDS): boolean {
+  const escape = (w: string) => w.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  return words.some((w) => xml.includes(`content-desc="${escape(w)}"`) || xml.includes(`text="${escape(w)}"`));
+}
+
+/** The window's hierarchy, or null when uiautomator can't give it (a window still changing; then nothing is judged by it). */
+async function hierarchy(serial: string): Promise<string | null> {
+  try {
+    const xml = await adb(serial, 'exec-out', 'uiautomator', 'dump', '/dev/tty');
+    return xml.includes('<hierarchy') ? xml : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * A frame that holds still is not yet the page: with the animations off, the launch's waves,
  * a loader and a page's skeleton all hold still while the account and the page are read, and
  * none can be told from a quiet page by its pixels (a private card in the writer is as bare as
  * the splash). So a settled frame counts only once it is still the same a few seconds later —
- * longer than any of those stands while the dev server is warm ([warmUp]).
+ * longer than any of those stands while the dev server is warm ([warmUp]) — and once the window's
+ * hierarchy names no skeleton (`stillLoading`: the 2.5.0 release run kept three cards taken before
+ * they loaded, a skeleton that held still for longer than both looks). One still loading at the
+ * end is unsettled, which fails the run.
  */
 async function steady(serial: string): Promise<{ png: Buffer; settled: boolean }> {
   const end = Date.now() + 90_000;
@@ -203,7 +230,9 @@ async function steady(serial: string): Promise<{ png: Buffer; settled: boolean }
     const shot = await settle(() => screencap(serial), { intervalMs: 1000, timeoutMs: 45_000 });
     await sleep(3500);
     const again = await screencap(serial);
-    if (again.equals(shot.png) || pixelsApart(again, shot.png) === 0) return { png: again, settled: shot.settled };
+    const still = again.equals(shot.png) || pixelsApart(again, shot.png) === 0;
+    const loading = still && stillLoading((await hierarchy(serial)) ?? '');
+    if (still && !loading) return { png: again, settled: shot.settled };
     if (Date.now() > end) return { png: again, settled: false };
   }
 }

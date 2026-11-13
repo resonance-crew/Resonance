@@ -125,8 +125,23 @@ loaded, and `settle` had flagged nothing in 55 runs. So a capture that differs f
 or a new screen on a platform with a baseline — is taken again after a few seconds (web 2, the apps
 5). The same picture again: the change is real and stays. Another one: the first look was early,
 the later one is kept, and it is looked at once more, three looks in all; still moving then, it is
-`unsettled`. A machine's first run has nothing to go by and takes no second look. It costs a few
-seconds per changed capture, nothing for an unchanged one.
+`unsettled`. On the apps every capture without a baseline gets the second look too — a machine's
+first run, a new screen, the extended set's first run — or a skeleton taken there would be the
+baseline the next run trusts (the web's pass has its own guards: requests drained, a blank page
+retaken). It costs a few seconds per changed or new capture, nothing for an unchanged one.
+
+**Android's skeletons** are told by name, not by pixels: the app names each skeleton for TalkBack
+(`L10n.Home.moreLoading`, 載入中… / Loading… — the card page's story, the conversations, the bell, a
+thread, settings' lists), and a settled frame counts only once `uiautomator dump` shows no node so
+named (`stillLoading` in android.ts); still there after 90 s, the capture is `unsettled`.
+
+What can still pass, precisely: on **iOS and the Mac** nothing reads the screen's hierarchy (simctl and
+screencapture give pixels only), so a page still loading after the 4 s wait, the settle and both looks
+(about 15 s in all) is kept as it is — a change from the baseline, which fails the run as
+`unexplained` unless a `Visual:` trailer names that screen, and then waits for the owner's look like any
+named change. On **Android** the home feed's, a profile's and the card box's skeletons carry no name yet
+(the same `semantics { contentDescription = L10n.Home.moreLoading }` would make them count), so those
+screens rely on the looks alone, as iOS does.
 
 **The web's checks** (`webChecks.ts`). The web's pass measures each page it captures and writes
 what it finds beside the capture (`<capture>.checks.json`; the log line names the checks):
@@ -344,7 +359,8 @@ change near one of those states (`capture android --device phone-large --only se
 - **Waiting for the real page**: a capture is taken again and again until two in a row match
   (`settle` in `util.ts`). A page waiting for a compile or a read holds still too, so the web first
   waits for its requests to drain (bar the realtime channels), and Android checks a settled frame
-  is still the same 3.5 s later after warming the API routes. The web asks for every page once
+  is still the same 3.5 s later after warming the API routes, with no skeleton left in its window
+  (What fails a run, Android's skeletons). The web asks for every page once
   before it captures any (`next dev` compiles a route on its first request and then reloads every
   open page in full), and takes a page again when it reloaded itself during the capture or came up
   with no words and no picture (the dev server's 404 page navigates to itself once more after

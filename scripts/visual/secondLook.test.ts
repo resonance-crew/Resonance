@@ -110,11 +110,24 @@ describe('a second look', () => {
     expect(waits).toEqual([1234, 1234]);
   });
 
-  it('looks again at a new screen on a platform with a baseline, never on a machine’s first run', () => {
-    expect(wantsSecondLook(KEY, LOADED, [], baseline)).toBe(false);
-    put('android/phone/home@light-zh-TW.png', LOADED);
+  it('looks again at a web capture with no baseline only on a platform that has one', () => {
+    const web = 'web/phone/card@light-zh-TW.png';
+    expect(wantsSecondLook(web, LOADED, [], baseline)).toBe(false);
+    put('web/phone/home@light-zh-TW.png', LOADED);
+    expect(wantsSecondLook(web, LOADED, [], baseline)).toBe(true);
+  });
+
+  // A first run (or the extended set's first, or a new screen) on an app has nothing to go by: a skeleton taken there
+  // would become the baseline the next run trusts. So every app capture without a baseline is looked at again.
+  it('looks again at every app capture with no baseline, a machine’s first run included', async () => {
     expect(wantsSecondLook(KEY, LOADED, [], baseline)).toBe(true);
-    expect(wantsSecondLook('ios/iphone/card@light-zh-TW.png', LOADED, [], baseline)).toBe(false);
+    expect(wantsSecondLook('ios/ipad-landscape/card@light-zh-TW.png', LOADED, [], baseline)).toBe(true);
+    const retake = takes(LOADED);
+    const look = await secondLook(shot(SKELETON), retake, options());
+    expect(look).toEqual({ png: LOADED, settled: true, retaken: true });
+    // A page that holds: one more look, kept as it was.
+    const steady = await secondLook(shot(LOADED), takes(LOADED), options());
+    expect(steady).toEqual({ png: LOADED, settled: true, retaken: false });
   });
 
   it("skips what the baseline asked to skip too (its .ignore.json)", () => {
