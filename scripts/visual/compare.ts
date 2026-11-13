@@ -41,6 +41,8 @@ export type RunInfo = {
   retaken?: string[];
   /** The Maestro flows that failed (`--flows`); absent when none ran. */
   flowsFailed?: string[];
+  /** Others' simulators and emulators running when the run began and gone by its end (devices.ts); a warning. */
+  devicesLost?: string[];
 };
 
 export function compareRun(runDir: string): Result[] {

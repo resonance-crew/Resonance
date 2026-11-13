@@ -3,7 +3,7 @@
  * harness's own phone — the `Visual iPhone` simulator or the `visual-phone` AVD — against the
  * private stack, the world reseeded before every flow so each starts from the same data.
  *
- *   npx tsx scripts/visual/flows.ts <android|ios> [--only sign-in,send-message] [--run <id>] [--no-stack]
+ *   npx tsx scripts/visual/flows.ts <android|ios> [--only sign-in,send-message] [--run <id>] [--no-stack] [--wait]
  *   npx tsx scripts/visual/flows.ts <android|ios> --hold   # stack + device + app up, for drafting a flow
  *
  * Reports land in `visual/flows/<run>/<platform>/`: `<flow>.xml` (JUnit) and `<flow>/` (Maestro's
@@ -16,6 +16,7 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { createConnection } from 'node:net';
 import { join } from 'node:path';
+import { LockBusy, acquire, resourcesFor } from './lock';
 import { startStack, seed, type Stack } from './stack';
 import { PORTS, ROOT, SEED_PASSWORD, VISUAL_DIR, sleep, type CaptureContext } from './util';
 
@@ -81,7 +82,7 @@ async function iosDevice(ctx: CaptureContext): Promise<Device> {
     prepareFlow: async () => {},
     close: async () => {
       spawnSync('xcrun', ['simctl', 'terminate', udid, ios.BUNDLE_ID], { stdio: 'ignore' });
-      if (booted) ios.shutDown(udid);
+      if (booted) ios.shutDown(udid, phone.name, ctx.log);
     },
   };
 }
@@ -129,7 +130,7 @@ async function androidDevice(ctx: CaptureContext): Promise<Device> {
       for (const ime of enabled) await android.shell(serial, `ime enable ${ime}`).catch(() => {});
       if (quiet && !enabled.includes(quiet)) await android.shell(serial, `ime disable ${quiet}`).catch(() => {});
       if (defaultIme && defaultIme !== 'null') await android.shell(serial, `ime set ${defaultIme}`).catch(() => {});
-      if (booted && process.env.VISUAL_KEEP_DEVICES !== '1') await android.kill(serial);
+      if (booted && process.env.VISUAL_KEEP_DEVICES !== '1') await android.kill(serial, ctx.log);
     },
   };
 }
@@ -214,6 +215,16 @@ async function main() {
   const runDir = join(VISUAL_DIR, 'flows', id);
   mkdirSync(join(runDir, '_logs'), { recursive: true });
   const log = (line: string) => console.log(line);
+  // The same locks as a capture's (lock.ts): this phone and, unless --no-stack, the stack's ports.
+  let lock;
+  try {
+    lock = await acquire(resourcesFor([platform], args.includes('--no-stack') ? null : PORTS), { wait: args.includes('--wait'), log });
+  } catch (error) {
+    if (!(error instanceof LockBusy)) throw error;
+    console.error(error.message);
+    process.exitCode = 1;
+    return;
+  }
   let stack: Stack | undefined;
   let failed = 0;
   try {
@@ -241,6 +252,7 @@ async function main() {
       // run started right after this one doesn't find the old stack still answering (and then gone).
       if (!args.includes('--no-stack')) await portsFree([PORTS.auth, PORTS.firestore, PORTS.dev], 30_000);
     }
+    lock.release();
   }
   if (failed) process.exitCode = 1;
 }

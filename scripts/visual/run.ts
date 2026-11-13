@@ -3,9 +3,10 @@
  * compared with this machine's baseline, judged by a model, accepted by hand.
  * See scripts/visual/README.md.
  *
- *   capture [web android ios mac] [--only home,card] [--device phone] [--no-stack] [--flows] [--review]
+ *   capture [web android ios mac] [--only home,card] [--device phone] [--no-stack] [--flows] [--review] [--wait]
  *            --flows: the Maestro flows on Android then iOS once the captures are done (stack still up)
  *            --review: the agy review straight after (what a release runs, with --flows)
+ *            --wait: queue behind another run holding the same devices or ports (lock.ts), instead of refusing
  *   compare  [--run <id>]          recompute the comparison and the report
  *   review   [--run <id>] [--agy | --gemini] [--all]   --all: unchanged captures too
  *   accept   --reason "<the owner's words>" [--run <id>] [--only <key|screen>,…]
@@ -18,7 +19,9 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { acceptReason, appendAcceptLog, REASON_REQUIRED } from './acceptLog';
 import { compareRun, type RunInfo } from './compare';
+import { describe, foreign, lostDevices, runningDevices, type RunningDevice } from './devices';
 import { gateLines, judgeRun } from './gate';
+import { LockBusy, acquire, resourcesFor, type Lock } from './lock';
 import { writeReport } from './report';
 import { reviewWithAgy, reviewWithGemini, writeReviewPack } from './review';
 import { startStack, type Stack } from './stack';
@@ -78,6 +81,9 @@ async function capture(args: string[]) {
   // Always in PHASES' order, whatever order they were named in.
   const named = args.filter((a): a is Platform => PLATFORMS.includes(a as Platform));
   const platforms = PLATFORMS.filter((p) => !named.length || named.includes(p));
+  // One run at a time on these devices and these ports (lock.ts): refused, or queued with --wait, before anything starts.
+  const lock = await lockFor(platforms, !args.includes('--no-stack'), args.includes('--wait'));
+  if (!lock) return;
   const id = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
   const runDir = join(RUNS_DIR, id);
   mkdirSync(runDir, { recursive: true });
@@ -95,6 +101,10 @@ async function capture(args: string[]) {
   };
   writeJson(join(runDir, 'run.json'), info);
 
+  // The others' devices as the run starts: the harness never shuts one down, and says if one went down anyway (devices.ts).
+  const apps = platforms.some((p) => p !== 'web');
+  const before: RunningDevice[] = apps ? runningDevices() : [];
+  if (foreign(before).length) log(`Left alone while this runs: ${foreign(before).map(describe).join(', ')}`);
   let stack: Stack | undefined;
   try {
     stack = args.includes('--no-stack')
@@ -121,10 +131,30 @@ async function capture(args: string[]) {
     }
   } finally {
     stack?.stop();
+    if (apps) {
+      const lost = lostDevices(before, runningDevices());
+      if (lost.length) {
+        info.devicesLost = lost.map(describe);
+        writeJson(join(runDir, 'run.json'), info);
+      }
+    }
+    lock.release();
   }
   finish(runDir);
   if (args.includes('--review')) await review(runDir, ['--agy']);
   gate(runDir);
+}
+
+/** The run's locks (lock.ts), or null after saying why it doesn't start (exit code 1). */
+async function lockFor(platforms: Platform[], ownStack: boolean, wait: boolean): Promise<Lock | null> {
+  try {
+    return await acquire(resourcesFor(platforms, ownStack ? PORTS : null), { wait, log });
+  } catch (error) {
+    if (!(error instanceof LockBusy)) throw error;
+    console.error(error.message);
+    process.exitCode = 1;
+    return null;
+  }
 }
 
 /**

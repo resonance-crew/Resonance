@@ -30,6 +30,7 @@ import { existsSync, mkdirSync, openSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { forgetBooted, mayShutDown, noteBooted } from './devices';
 import { lookNote, secondLook, type Look } from './secondLook';
 import { screensFor, shotName, type Account, type Screen, type Variant } from './screens';
 import { ROOT, SEED_PASSWORD, pixelsApart, settle, shotPath, sleep, variantsFor, type Capture, type CaptureContext } from './util';
@@ -76,9 +77,13 @@ async function booted(serial: string): Promise<boolean> {
 
 /**
  * Asks the emulator to quit and waits until adb no longer lists it: it takes up to 20 s to go,
- * and a boot on the same port meanwhile would meet the one still leaving.
+ * and a boot on the same port meanwhile would meet the one still leaving. Only one this run booted,
+ * and only the harness's own (devices.ts): anything else is left running and said.
  */
-export async function kill(serial: string) {
+export async function kill(serial: string, log: (line: string) => void = console.log) {
+  const may = mayShutDown(serial, null);
+  if (!may.ok) return log(`  left running: ${may.why}`);
+  forgetBooted(serial);
   await adb(serial, 'emu', 'kill').catch(() => {});
   const end = Date.now() + 40_000;
   while (Date.now() < end) {
@@ -106,7 +111,10 @@ export async function boot(device: AndroidDevice, ctx: CaptureContext): Promise<
   child.unref();
   const end = Date.now() + 240_000;
   while (Date.now() < end) {
-    if (await booted(serial)) return true;
+    if (await booted(serial)) {
+      noteBooted(serial);
+      return true;
+    }
     await sleep(2000);
   }
   if (child.pid) process.kill(child.pid, 'SIGTERM');
@@ -257,7 +265,7 @@ export const captureAndroid: Capture = async (ctx) => {
   // Only the emulators this run booted; one that was already running is left as it was.
   const shutDown = async (device: AndroidDevice) => {
     if (!started.includes(device)) return;
-    await kill(serialOf(device));
+    await kill(serialOf(device), ctx.log);
     started.splice(started.indexOf(device), 1);
   };
   try {

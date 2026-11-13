@@ -14,6 +14,7 @@ import { execFile, spawn, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { mayShutDown, noteBooted } from './devices';
 import { lookNote, secondLook, type Look } from './secondLook';
 import { screensFor, shotName, type Account, type Screen, type Variant } from './screens';
 import { ROOT, SEED_PASSWORD, run, settle, shotPath, sleep, variantsFor, type Capture, type CaptureContext } from './util';
@@ -118,15 +119,21 @@ export async function simulator(device: IosDevice, ctx: CaptureContext): Promise
   const booted = found?.state !== 'Booted';
   // Waited for without holding up the other simulator booting beside it.
   await promisify(execFile)('xcrun', ['simctl', 'bootstatus', udid, '-b'], { cwd: ROOT });
+  if (booted) noteBooted(udid);
   // An ISO time (simctl takes it only with milliseconds) sets the iPad's date beside it: the seed's day.
   simctl('status_bar', udid, 'override', '--time', '2026-09-01T09:41:00.000+08:00', '--dataNetwork', 'wifi', '--wifiMode', 'active', '--wifiBars', '3',
     '--cellularMode', 'active', '--cellularBars', '4', '--operatorName', '', '--batteryState', 'charged', '--batteryLevel', '100');
   return { udid, booted };
 }
 
-/** A simulator this run booted goes down once its screens are taken (VISUAL_KEEP_DEVICES=1 keeps it up). */
-export function shutDown(udid: string) {
+/**
+ * A simulator this run booted goes down once its screens are taken (VISUAL_KEEP_DEVICES=1 keeps it up);
+ * anything else is refused and said (devices.ts: never the owner's, never one another run booted).
+ */
+export function shutDown(udid: string, name: string, log: (line: string) => void = console.log) {
   if (process.env.VISUAL_KEEP_DEVICES === '1') return;
+  const may = mayShutDown(udid, name);
+  if (!may.ok) return log(`  left running: ${may.why}`);
   spawnSync('xcrun', ['simctl', 'shutdown', udid], { stdio: 'ignore' });
 }
 
@@ -198,7 +205,7 @@ export const captureIos: Capture = async (ctx) => {
       }
     }
     spawnSync('xcrun', ['simctl', 'terminate', udid, BUNDLE_ID], { stdio: 'ignore' });
-    if (booted) shutDown(udid);
+    if (booted) shutDown(udid, device.name, ctx.log);
   };
   if (process.env.VISUAL_PARALLEL === '0') for (const device of devices) await captureOn(device);
   else await Promise.all(devices.map(captureOn));

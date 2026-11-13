@@ -11,7 +11,8 @@
  *   flow         a Maestro flow failed
  *   check        a web check raised to `fail` (webChecks.ts) found something
  * Warnings (said, never failing): a capture taken again because its first look was early, a
- * baseline the run didn't take (missing), a web check still at `warn`.
+ * baseline the run didn't take (missing), a web check still at `warn`, someone else's simulator or
+ * emulator that went down while the run ran (devices.ts: the harness never shuts one down).
  *
  * A changed capture a trailer names is neither: it waits for the owner's OK (`accept --reason`).
  * The captures only looked at (`_glance/`, the landing film's stills) count by their checks and the
@@ -25,7 +26,7 @@ import { GLANCE_DIR, ROOT, listPngs, readJson, writeJson } from './util';
 import { checksPath, type Finding } from './webChecks';
 
 export type ProblemKind = 'broken' | 'unsettled' | 'unexplained' | 'flow' | 'check';
-export type WarningKind = 'retaken' | 'missing' | 'check';
+export type WarningKind = 'retaken' | 'missing' | 'check' | 'device';
 export type Note<K> = { kind: K; key: string; detail: string };
 
 export type Summary = {
@@ -82,6 +83,9 @@ export function judge({ info, results, glances = [], verdicts, intendedFor, find
   for (const key of info?.unsettled ?? []) problems.push({ kind: 'unsettled', key, detail: 'never held still, even after a second look' });
   for (const key of info?.retaken ?? []) {
     if (!(info?.unsettled ?? []).includes(key)) warnings.push({ kind: 'retaken', key, detail: 'the first look was early (taken again; the later one is kept)' });
+  }
+  for (const device of info?.devicesLost ?? []) {
+    warnings.push({ kind: 'device', key: device, detail: 'running when the run began, gone by its end — not shut down by the harness (memory, or CoreSimulator restarting?): boot it again' });
   }
   for (const flow of info?.flowsFailed ?? []) problems.push({ kind: 'flow', key: flow, detail: 'the Maestro flow failed (its report is in _flows/)' });
   const count = (s: string) => results.filter((r) => r.status === s).length;
@@ -145,6 +149,8 @@ export function judgeRun(runDir: string, results: Result[]): { summary: Summary;
 /** What a script reads on the console: the problems (at most `max`), then the one line, which is last. */
 export function gateLines(summary: Summary, file: string, max = 10): string[] {
   const lines = summary.problems.slice(0, max).map((p) => `  ✗ ${p.kind} ${p.key}: ${p.detail}`);
+  // The owner's own devices going down is said whatever else happened: they would otherwise find out by looking.
+  for (const w of summary.warnings.filter((w) => w.kind === 'device')) lines.push(`  ! ${w.key}: ${w.detail}`);
   if (summary.problems.length > max) lines.push(`  … and ${summary.problems.length - max} more in ${file}`);
   return [...lines, summaryLine(summary, file)];
 }

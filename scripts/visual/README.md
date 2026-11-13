@@ -147,6 +147,35 @@ errors, all meant (the 404 page's own 404, and the Firestore emulator's permissi
 anonymous card's page reads it through the rules before asking the server). When what a check
 shows is fixed, or accepted as it is, raise it to `fail` in `WEB_CHECKS`.
 
+## One run at a time, and the owner's devices
+
+Two runs on the same devices hurt each other: the second finds the first one's simulators up and
+leaves them running, the first shuts them down under it, and each reseeds (empties) the other's
+database. So a run holds a lock on what it uses (`lock.ts`) — `android`, `ios`, `mac` for the devices
+it captures, `port-<n>` for each of its stack's three ports — in one folder for the whole machine
+(`VISUAL_LOCK_DIR`, else the temp dir: every worktree's run sees every other's). One that finds a
+lock held does not start:
+
+```
+Visual: the ios devices in use by another run — pid 4242, `visual capture ios` in /Users/…/Resonance-loop-step2, since 2026-11-13T03:46:00.000Z (14 min).
+Two runs on the same devices shut down each other's simulators and reseed each other's stack, so this one does not start.
+Wait for it and run again, or add --wait to queue behind it; a web-only slice can move its stack instead (VISUAL_AUTH_PORT, VISUAL_FIRESTORE_PORT, VISUAL_DEV_PORT).
+```
+
+(exit code 1); with `--wait` it says once what it waits for and starts when the other run is done.
+A web slice on its own ports takes only those ports, so two of them run side by side. A lock whose
+run was killed outright is taken over (its pid is gone). `scripts/visual/flows.ts` takes the same
+locks.
+
+The harness shuts down only what it booted, and only its own (`devices.ts`: `Visual iPhone`,
+`Visual iPad`, `emulator-5600`, `emulator-5602`); every shutdown goes through that check, and anything
+else is left running and said. A run with an app in it lists everyone else's simulators and
+emulators as it starts ("Left alone while this runs: …") and again as it ends: one that went down
+meanwhile — the 2026-11-10 release run saw the owner's go, which nothing in the harness names: a Mac
+short of memory, or CoreSimulator restarting, takes devices down by itself — is a `device` warning,
+printed above the verdict line and kept in `run.json` (`devicesLost`), so the owner hears it from the
+run.
+
 ## The landing film
 
 The landing page is a film the scroll plays (`src/components/sections/LandingFilm`): a stage held at
@@ -336,7 +365,8 @@ while the web and the Mac app are captured, and the two Xcode builds (Mac, simul
 they share the project and Swift's package caches. Phases (`PHASES` in `run.ts`): web + Mac, then
 Android's phone and tablet together, then the iPhone and iPad together (`VISUAL_PARALLEL=0` runs a
 platform's devices one at a time, for a machine short of memory); an AVD or simulator this run
-booted is shut down when its screens are done (`VISUAL_KEEP_DEVICES=1` keeps the simulators up).
+booted is shut down when its screens are done (`VISUAL_KEEP_DEVICES=1` keeps the simulators up), and
+nothing else ever is (One run at a time, and the owner's devices).
 The flows still run one platform at a time after the captures: each reseeds (and so empties) the
 stack's database, which would pull the data from under the other platform's flow. The stack's `next dev` builds into `.next-visual/<port>` with its own
 tsconfig, so it never meets another dev server's `.next` and never rewrites `tsconfig.json`.
