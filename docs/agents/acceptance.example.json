@@ -1,0 +1,69 @@
+{
+  "round": 24,
+  "spec": "/Users/ncchen/Documents/Resonance-notes/2026-11-09-round24/spec-2-stickers-reply.md",
+  "signedOff": {
+    "by": "owner",
+    "words": "（第二部分，2026-11-10 清晨口述；簽核那句話沒有留在筆記裡，這裡是範例的位置）",
+    "at": "2026-11-10"
+  },
+  "items": [
+    {
+      "id": "r24-1",
+      "section": "§A",
+      "ask": "我如果選擇回覆一個貼圖之後，再選擇回覆另外一個貼圖，沒辦法切換到要回覆成新的那個貼圖，不知道為什麼只有貼圖有這個問題",
+      "lanes": ["web", "ios", "android"],
+      "verify": {
+        "web": "npx vitest run src/components/sections/MessagesPage/ThreadComposer.test.tsx",
+        "ios": "cd apps/ios && xcodebuild test -quiet -project Resonance.xcodeproj -scheme Resonance -destination \"platform=iOS Simulator,name=${IOS_SIMULATOR:-iPhone 17 Pro}\" -derivedDataPath ../../.dd-ios -only-testing:ResonanceTests/RoundTwentyFourStickerTests -skipPackagePluginValidation -skipMacroValidation",
+        "android": "cd apps/android && ./gradlew --console=plain :app:testDebugUnitTest --tests com.resonance.app.ui.StickerQuoteTest"
+      },
+      "passes": false
+    },
+    {
+      "id": "r24-2",
+      "section": "§B",
+      "ask": "因為點點這個貼圖，它的本身的高度啊、在畫面裡面所佔的比例就比較低，所以變成說上半部有一部分都是空白的",
+      "lanes": ["web", "ios", "android"],
+      "verify": {
+        "web": "npx vitest run src/lib/chat/stickerBox.test.ts src/components/sections/MessagesPage/StickerPart.test.tsx",
+        "ios": "cd apps/ios && xcodebuild test -quiet -project Resonance.xcodeproj -scheme Resonance -destination \"platform=iOS Simulator,name=${IOS_SIMULATOR:-iPhone 17 Pro}\" -derivedDataPath ../../.dd-ios -only-testing:ResonanceTests/RoundTwentyFourStickerTests -skipPackagePluginValidation -skipMacroValidation",
+        "android": "cd apps/android && ./gradlew --console=plain :core:kit:testDebugUnitTest --tests com.resonance.kit.chat.StickerCatalogTest :app:testDebugUnitTest --tests com.resonance.app.ui.StickerComposerTest"
+      },
+      "passes": false
+    },
+    {
+      "id": "r24-3",
+      "section": "§C",
+      "ask": "這一個回覆的區塊裡面，點點看起來是站在二分之一以下的這個位置",
+      "lanes": ["web", "ios", "android"],
+      "verify": {
+        "web": "npx vitest run src/lib/chat/stickerBox.test.ts",
+        "ios": "cd apps/ios/Packages/ResonanceKit && swift test --filter StickersTests",
+        "android": "cd apps/android && ./gradlew --console=plain :app:testDebugUnitTest --tests com.resonance.app.ui.StickerQuoteTest"
+      },
+      "passes": false
+    },
+    {
+      "id": "r24-4",
+      "section": "§D",
+      "ask": "我想請你幫我把左邊這一條垂直的線回覆的這個線改成這種回覆的這個圖案。就是這一個由下往左邊的這個箭頭的符號，因為用這一條線，它看起來會怪怪的",
+      "lanes": ["web", "ios", "android"],
+      "verify": {
+        "web": "npx vitest run src/components/sections/MessagesPage/ComposerCapsule.test.tsx src/components/sections/MessagesPage/ThreadComposer.test.tsx",
+        "ios": "cd apps/ios && xcodebuild test -quiet -project Resonance.xcodeproj -scheme Resonance -destination \"platform=iOS Simulator,name=${IOS_SIMULATOR:-iPhone 17 Pro}\" -derivedDataPath ../../.dd-ios -only-testing:ResonanceTests/RoundTwentyThreeTests -skipPackagePluginValidation -skipMacroValidation",
+        "android": "cd apps/android && ./gradlew --console=plain :app:testDebugUnitTest --tests com.resonance.app.ui.StickerComposerTest"
+      },
+      "passes": false
+    },
+    {
+      "id": "r24-5",
+      "section": "spec-1-invites.md, Android",
+      "ask": "我的圖片的權限還沒授予。然後你可以看到它這個按鈕提醒權限的按鈕是顯示不出來的，可能我的手機的這個裝置顯示大小的設定的關係",
+      "lanes": ["android"],
+      "verify": {
+        "android": "cd apps/android && ./gradlew --console=plain :app:testDebugUnitTest --tests com.resonance.app.ui.GalleryPromptTest"
+      },
+      "passes": false
+    }
+  ]
+}
