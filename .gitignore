@@ -45,5 +45,5 @@ apps/android/**/build/
 apps/android/local.properties
 
 # Release screenshots (scripts/visual): this machine's baselines and runs
-/visual/
+/visual
 /.next-visual/

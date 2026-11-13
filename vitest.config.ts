@@ -19,6 +19,12 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./test/setup.ts'],
-    include: ['src/**/*.{test,spec}.{ts,tsx}', 'scripts/visual/**/*.test.ts'],
+    include: [
+      'src/**/*.{test,spec}.{ts,tsx}',
+      'scripts/visual/**/*.test.ts',
+      'scripts/round/**/*.test.ts',
+      'scripts/release/**/*.test.ts',
+      'scripts/ops/**/*.test.ts',
+    ],
   },
 });
