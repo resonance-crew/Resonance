@@ -26,6 +26,12 @@ not run on that commit yet: it is not green.
   commit. So after a push, wait for the run (`gh run watch <id> --exit-status`) and report its
   result with the push; when it is red, say so and fix it before anything else ships.
 - Store builds come from a commit whose run is already green: push, wait for green, then build.
+- CI's `commits` job is part of green: every commit touching UI carries a `Visual:` line, and a range
+  that changes the data layer brings a test (`scripts/ci/commitRules.ts`). Check before the push:
+  `npm run -s rules:commits -- origin/main..HEAD`.
+- The push is the owner's: the owner types `! git push`, or — after the owner's explicit words — the
+  agent runs `OWNER_OK='<those exact words>' git push` (docs/rules/hooks.md). The guard hook refuses
+  any other form.
 - The local suite (`npm run lint && npm run typecheck && npm test`) runs on the Node in `.nvmrc`, the
   one CI and Vercel use (`src/lib/nodeVersion.test.ts` fails on any other).
 

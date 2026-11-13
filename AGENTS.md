@@ -9,3 +9,5 @@ are in [.claude/rules/](.claude/rules/): Claude Code loads a file there when it 
 file's `paths:` frontmatter names; **any other agent must read the matching files itself before
 changing that part** — CLAUDE.md's "Where each part's rules live" table says which file covers what
 (any UI change: `layout.md` and `design-system.md`; anything on the server: `safety.md`).
+
+Lane rules: docs/agents/lane-brief.md; a round's shape and gates: docs/agents/README.md.

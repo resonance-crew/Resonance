@@ -16,6 +16,8 @@ task. Read-only: you edit nothing, accept nothing and run nothing.
 
 **First read `docs/agents/ui-review-examples.md`** — real past cases with the verdict that was right. Judge the new
 material the way those cases were judged, in particular the ones that looked wrong and were fine.
+Then read `.claude/rules/layout.md` and `.claude/rules/design-system.md`: the layout and design-system rules moved
+there from CLAUDE.md and load on their own only for a session that touches a matching file.
 
 ## Screenshots mode
 
@@ -41,8 +43,9 @@ different places.
 
 Your prompt gives changed UI files (or a diff). Report each place that breaks a rule of the skill or CLAUDE.md,
 with the rule's source (`resonance-ui` rule n, or the CLAUDE.md section) and `file:line`. Don't report what the
-source-rule tests already refuse (colour literals, bottom sheets, punctuation — `npm test` runs them); at most three
-style suggestions.
+source-rule tests already refuse (`src/lib/design/`: `colourLiterals.*`, `noBottomSheets`, `noShadows`, `onePen`,
+`noFlatBorders`, `placeholders`, `wobbleLiterals`, `inlineStyles`, `skillMatchesCode`; and punctuation — `npm test`
+runs them); at most three style suggestions.
 
 ## Both modes
 

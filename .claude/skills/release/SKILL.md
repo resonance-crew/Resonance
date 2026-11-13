@@ -61,7 +61,9 @@ A yes covers what was named, once. A later step needs its own.
    `cd firebase && firebase deploy --only firestore:rules,firestore:indexes`. Backfills: dry run
    `npx tsx scripts/backfill.ts <name>`, then `--apply` on the go. Tick each in owed.md.
 
-5. **Push (G2)**, rebased onto `origin/main`. Then wait for both:
+5. **Push (G2)**, rebased onto `origin/main` — 念誠 types `! git push`, or after 念誠's explicit words
+   `OWNER_OK='<those exact words>' git push` (the guard hook refuses any other form: docs/rules/hooks.md).
+   Then wait for both:
    ```bash
    gh run watch <run id> --exit-status                                  # CI on that commit
    vercel ls resonance --prod --format json                             # the new deployment's url

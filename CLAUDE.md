@@ -8,6 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **`.claude/rules/*.md`**: each part's rules — how it is built and what it must keep. Claude Code loads a file when you work on a path its `paths:` names. **Any other agent, or a session about to change a part it hasn't read: read the matching file first** — the map below says which.
 - **`docs/rules/`**: the full command list, the project's hooks. The UI component contract is the `resonance-ui` skill; the design's territory is `designs/DESIGN.md`.
 
+**Rounds run with agents** — `docs/agents/README.md`: the four human gates, `round-build` / `round-verify` (`.claude/workflows`), the lane brief, the acceptance list, the agents in `.claude/agents`. A lane follows `docs/agents/lane-brief.md`, never a brief written again.
+
 ## Commands
 
 ```bash
@@ -26,6 +28,9 @@ npm run native:editor   # typecheck + build the native apps' editor island (nati
 npm run apps:generate   # regenerate what the native apps take from the web (tokens, strings, OpenAPI, editor)
 npm run visual -- capture [web android ios mac] [--only <screen ids>] [--device <id>] [--flows] [--review]   # release screenshots: every screen of scripts/visual/screens.ts on web (phone/tablet/desktop), iPhone, iPad, the Mac app and Android phone/tablet, against a private seeded stack, two at a time (web + Mac, the AVDs, the simulators), diffed with this machine's baseline (areas moved more than 2 px, `scripts/visual/diff.ts`) (visual/, git-ignored); `--review` hands what changed to Antigravity's CLI (`agy`); `review --run <id> --agy`, `accept --run <id> [--only …] --reason "<the owner's words>"` (refused without one; logged in docs/visual-accept-log.md) — scripts/visual/README.md says which devices, sizes and settings, and why
 npx tsx scripts/visual/flows.ts <android|ios> [--only <flow>]   # Maestro interaction flows (maestro/flows) on the harness's own phone simulator/AVD — maestro/README.md
+npm run visual -- capture … [--variants release|extended] [--flows [--tags <tags>]] [--wait]   # --variants extended adds large text on the Android phone, the tablets turned and in the dark, a narrow Mac window and the composer's extra states (scripts/visual/variants.ts); one run at a time per device and port (lock.ts: refused, or --wait to queue); never shuts down a device it didn't boot
+npm run visual -- plan   # how many captures each variant set takes, and about how long
+npx tsx scripts/visual/flows.ts <android|ios> … [--tags smoke|composer|media|links|…] [--device phone|tablet] [--wait]   # a tagged group of flows, or the tablets — maestro/README.md
 ```
 
 The whole list — backfills, the integrity check, the share image, stickers, the promo film — with every flag: [docs/rules/commands.md](docs/rules/commands.md).
@@ -98,6 +103,8 @@ These are non-negotiable — both rules exist because their violation has alread
   A new screen joins `SCREENS` in `scripts/visual/screens.ts`.
   Before a release (a store build, or a push that ships the web) the whole run goes through: `npm run visual -- capture --flows --review` (screens, then the Maestro flows, then the review), and the owner looks at what it flagged.
 - **Data-layer changes** (repositories, `client/*` read-write modules, adapters, page data fetching): ship with an integration-style test that fails without the change. A Server-Render→Firestore migration once broke the home feed and card pages while the whole suite stayed green.
+- **A bug found on a device** gets, besides its unit test, a Maestro flow (the tap the flows never made) or a capture variant (the state the screenshots never have — `scripts/visual/variants.ts`) in the same change; its commit says which, or why neither can hold it.
+- **Releases**: a store release is started only by the owner, with `/release` (`.claude/skills/release/SKILL.md`, `disable-model-invocation`); it runs `npm run release:preflight` before and after the release run, and asks for an explicit yes before any upload or submission. Something a release depends on that a push doesn't do (a rules deploy, a backfill) goes into `docs/release/owed.md` as an open item.
 
 ## Preferences (偏好)
 
