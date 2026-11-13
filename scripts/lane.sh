@@ -17,6 +17,7 @@
 #   node_modules           a symlink to the main checkout's (no npm install per lane)
 #   .env*                  copies of the git-ignored env files (the tracked .env.example is already there)
 #   apps/android/local.properties, native/editor/dist, native/mascots/dist   copies (git-ignored)
+#   visual                 a symlink to the main checkout's screenshots folder (its baseline and runs)
 #
 # Prints KEY='value' lines on stdout (eval-able; the workflows and lane agents read them), hints on stderr.
 #
@@ -122,6 +123,21 @@ for rel in apps/android/local.properties; do
     note "copied $rel"
   fi
 done
+# The screenshots' baseline is this machine's and git-ignored (scripts/visual/util.ts: <checkout>/visual):
+# a lane links the main checkout's, so a slice compares against the real baseline and its run lands
+# beside the others (never `accept` from a lane — that is the owner's OK).
+if [ -d "$main/visual" ] && [ ! -e "$worktree/visual" ]; then
+  ln -s "../$name/visual" "$worktree/visual"
+  note "linked visual (the baseline and runs)"
+fi
+# .gitignore's `/visual/` matches the folder, not a link to it; until it says `/visual`, the repository's
+# shared exclude file keeps the link out of `git status` (it changes nothing for the main checkout's folder).
+if [ -L "$worktree/visual" ] && git -C "$worktree" check-ignore -q visual 2>/dev/null; then :; elif [ -L "$worktree/visual" ]; then
+  exclude="$(git -C "$main" rev-parse --path-format=absolute --git-common-dir)/info/exclude"
+  mkdir -p "$(dirname "$exclude")"
+  printf '%s\n%s\n' "# scripts/lane.sh: lanes link the main checkout's screenshots folder" '/visual' >> "$exclude"
+  note "added /visual to $exclude"
+fi
 for rel in native/editor/dist native/mascots/dist; do
   if [ -d "$main/$rel" ] && [ ! -e "$worktree/$rel" ]; then
     mkdir -p "$(dirname "$worktree/$rel")"

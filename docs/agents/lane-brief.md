@@ -36,7 +36,7 @@ Work and commit **only** in `{worktree}` on `{branch}`. First, from any checkout
 scripts/lane.sh {round} {lane} {base}     # idempotent: makes or finds the worktree, tops up its setup, prints the values
 ```
 
-It links `node_modules` to the main checkout's and copies `.env*`, `apps/android/local.properties` and
+It links `node_modules` and `visual/` (the screenshots' baseline and runs) to the main checkout's and copies `.env*`, `apps/android/local.properties` and
 `native/*/dist` when missing. If the worktree already existed (an earlier agent of this lane), read
 `git log {base}..HEAD` first and continue from there; don't undo another agent's commits. Then, as your lane needs:
 `npm run apps:generate` after changing strings, icons or tokens (commit the generated output that belongs to your

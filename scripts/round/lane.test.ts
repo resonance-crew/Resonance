@@ -33,7 +33,7 @@ beforeEach(() => {
   git(main, 'config', 'user.email', 'test@example.com');
   git(main, 'config', 'user.name', 'Test');
   git(main, 'config', 'commit.gpgsign', 'false');
-  writeFileSync(join(main, '.gitignore'), 'node_modules\n.env\n.env.local\napps/android/local.properties\nnative/editor/dist\n');
+  writeFileSync(join(main, '.gitignore'), 'node_modules\n.env\n.env.local\napps/android/local.properties\nnative/editor/dist\n/visual/\n');
   writeFileSync(join(main, '.env.example'), 'TRACKED=1\n');
   writeFileSync(join(main, 'README.md'), 'hello\n');
   git(main, 'add', '.');
@@ -46,6 +46,7 @@ beforeEach(() => {
   writeFileSync(join(main, 'apps', 'android', 'local.properties'), 'sdk.dir=/sdk\n');
   mkdirSync(join(main, 'native', 'editor', 'dist'), { recursive: true });
   writeFileSync(join(main, 'native', 'editor', 'dist', 'editor.html'), '<html></html>\n');
+  mkdirSync(join(main, 'visual', 'baseline'), { recursive: true });
 });
 
 afterEach(() => {
@@ -78,6 +79,10 @@ describe('scripts/lane.sh', () => {
     expect(readFileSync(join(wt, '.env.local'), 'utf8')).toBe('LOCAL=1\n');
     expect(readFileSync(join(wt, 'apps/android/local.properties'), 'utf8')).toBe('sdk.dir=/sdk\n');
     expect(existsSync(join(wt, 'native/editor/dist/editor.html'))).toBe(true);
+    expect(readlinkSync(join(wt, 'visual'))).toBe('../Resonance/visual');
+    expect(existsSync(join(wt, 'visual', 'baseline'))).toBe(true);
+    // Nothing the setup made shows as a change in the lane (the test repo ignores `/visual/`, as the house's does).
+    expect(git(wt, 'status', '--porcelain')).toBe('');
     // The main checkout is untouched: same branch, nothing staged or changed.
     expect(git(main, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe('main');
     expect(git(main, 'status', '--porcelain')).toBe('');
