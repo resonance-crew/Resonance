@@ -66,3 +66,9 @@ is a row of [visual-accept-log.md](visual-accept-log.md), committed with it.
 
 Only after the owner's explicit yes at that moment — a store submission can't be taken back. Say what
 goes where (platform, version and build, track or review) before asking.
+
+## 6. After
+
+The submission's result still comes by e-mail. A daily report — CI on `main`, the production
+deployment and its error logs, the stores' review states, the moderation queue and the integrity
+check — is prepared but not switched on: [ops/daily-check.md](ops/daily-check.md).

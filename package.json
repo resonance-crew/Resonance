@@ -31,6 +31,7 @@
     "release:preflight": "tsx scripts/release/preflight.ts",
     "release:bump": "tsx scripts/release/bump-version.ts",
     "release:export": "bash scripts/release/clean-export.sh",
+    "ops:daily": "tsx scripts/ops/daily-check.ts",
     "test:release": "vitest run -c scripts/release/vitest.config.ts"
   },
   "dependencies": {
