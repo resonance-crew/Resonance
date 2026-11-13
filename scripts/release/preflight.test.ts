@@ -103,6 +103,14 @@ describe('runPreflight', () => {
     expect(results.find((r) => r.id === 'visual')).toMatchObject({ status: 'FAIL', detail: expect.stringContaining('run full was taken at eeeeeeee') });
   });
 
+  it('--rev judges that commit and leaves this checkout\'s tree out', async () => {
+    const other = 'f'.repeat(40);
+    const ciRuns = vi.fn(() => [{ status: 'completed', conclusion: 'success', url: 'u' }]);
+    const results = await runPreflight(mock({ ciRuns, porcelain: () => [' M x'] }), read, { rev: other });
+    expect(ciRuns).toHaveBeenCalledWith(other);
+    expect(results[0]).toMatchObject({ id: 'tree', status: 'WARN' });
+  });
+
   it('owed items, a dirty tree and unreadable rules', async () => {
     const results = await runPreflight(
       mock({ porcelain: () => [' M apps/ios/project.yml'], deployedRules: async () => ({ error: 'no Firebase service account in .env' }) }),

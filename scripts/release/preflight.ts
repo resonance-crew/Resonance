@@ -4,8 +4,11 @@
  * preflight itself couldn't run. It only reads: git, `gh`, `vercel`, the deployed Firestore
  * ruleset, docs/release/owed.md and the visual harness's folder (visual/, this machine's).
  *
- *   npx tsx scripts/release/preflight.ts [--visual-dir <dir>] [--json]
+ *   npx tsx scripts/release/preflight.ts [--rev <commit>] [--visual-dir <dir>] [--json]
  *   npm run release:preflight
+ *
+ * `--rev` judges another commit than this checkout's HEAD (`--rev main` from a lane): its files
+ * are read from git, and the tree check, which is about this checkout, only warns.
  *
  * Checks, in the order a release meets them (docs/release-checklist.md):
  *   tree        no tracked change (untracked files only warn)
@@ -20,7 +23,7 @@
  *               docs/versions changed since)
  *   accept-log  every platform's baseline meta.json has its row in docs/visual-accept-log.md
  */
-import { adapters as realAdapters, readText, type Adapters } from './adapters';
+import { adapters as realAdapters, git, readText, type Adapters } from './adapters';
 import {
   associatedDomains,
   checkAcceptLog,
@@ -45,7 +48,7 @@ export const ACCEPT_LOG = 'docs/visual-accept-log.md';
 export const RULES = 'firebase/firestore.rules';
 
 type Read = (path: string) => string | null;
-export type Options = { visualDir?: string };
+export type Options = { visualDir?: string; /** Judge this commit instead of HEAD. */ rev?: string };
 
 /** A check whose command couldn't answer (gh offline, not logged in) fails, saying so. */
 function guarded(id: string, f: () => CheckResult): CheckResult {
@@ -58,9 +61,13 @@ function guarded(id: string, f: () => CheckResult): CheckResult {
 }
 
 export async function runPreflight(a: Adapters, read: Read, opts: Options = {}): Promise<CheckResult[]> {
-  const head = a.head();
+  const head = opts.rev ?? a.head();
   const results: CheckResult[] = [];
-  results.push(guarded('tree', () => checkTree(a.porcelain())));
+  results.push(
+    opts.rev && opts.rev !== a.head()
+      ? { id: 'tree', status: 'WARN', detail: `judging ${head.slice(0, 8)}, not this checkout's HEAD: its working tree isn't checked`, fix: 'run preflight in the checkout that builds it' }
+      : guarded('tree', () => checkTree(a.porcelain())),
+  );
   results.push(guarded('ci', () => checkCi(head, a.ciRuns(head))));
   results.push(checkVersions(read(IOS_PROJECT) ?? '', read(ANDROID_GRADLE) ?? '').result);
   results.push(
@@ -100,9 +107,21 @@ function flag(args: string[], name: string): string | undefined {
 
 async function main() {
   const args = process.argv.slice(2);
-  const head = realAdapters.head();
-  console.log(`Release preflight at ${head.slice(0, 8)} (${realAdapters.porcelain().length ? 'tree has changes' : 'clean tree'})`);
-  const results = await runPreflight(realAdapters, readText, { visualDir: flag(args, 'visual-dir') });
+  const revArg = flag(args, 'rev');
+  const rev = revArg ? git('rev-parse', '--verify', `${revArg}^{commit}`) : undefined;
+  const head = rev ?? realAdapters.head();
+  // A commit's own files, read from git, when judging one that isn't checked out.
+  const read = rev
+    ? (p: string) => {
+        try {
+          return git('show', `${rev}:${p}`);
+        } catch {
+          return null;
+        }
+      }
+    : readText;
+  console.log(`Release preflight at ${head.slice(0, 8)}${rev ? ` (${revArg})` : ` (${realAdapters.porcelain().length ? 'tree has changes' : 'clean tree'})`}`);
+  const results = await runPreflight(realAdapters, read, { visualDir: flag(args, 'visual-dir'), rev });
   const { line, exitCode } = summarize(results);
   if (args.includes('--json')) console.log(JSON.stringify({ head, results, line, exitCode }, null, 2));
   else for (const r of results) for (const l of formatResult(r)) console.log(l);

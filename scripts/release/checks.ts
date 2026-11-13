@@ -113,7 +113,7 @@ export function checkWeb(args: {
   }
   const web = changedSince.filter(shipsWeb);
   if (!web.length) return pass(id, `production ${at} holds HEAD's web: only apps/ or docs/ changed since`);
-  return fail(id, `production ${at} predates ${web.length} web change(s) in HEAD: ${web.slice(0, 4).join(', ')}${web.length > 4 ? ', …' : ''}`, 'push main on the owner\'s word, wait for Ready (vercel inspect <url> --wait), then build');
+  return fail(id, `production ${at} predates ${web.length} web change(s) in ${short(head)}: ${web.slice(0, 4).join(', ')}${web.length > 4 ? ', …' : ''}`, 'push main on the owner\'s word, wait for Ready (vercel inspect <url> --wait), then build');
 }
 
 // --- Firestore rules ------------------------------------------------------------------------

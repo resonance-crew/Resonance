@@ -83,7 +83,7 @@ describe('web', () => {
   });
 
   it('fails when production is older, elsewhere, not Ready or missing', () => {
-    expect(checkWeb({ head: HEAD, associatedDomains: domains, deployment: ready, isAncestor: true, changedSince: ['src/a.ts', 'apps/x'] })).toMatchObject({ status: 'FAIL', detail: expect.stringContaining('1 web change(s) in HEAD: src/a.ts') });
+    expect(checkWeb({ head: HEAD, associatedDomains: domains, deployment: ready, isAncestor: true, changedSince: ['src/a.ts', 'apps/x'] })).toMatchObject({ status: 'FAIL', detail: expect.stringContaining('1 web change(s) in aaaaaaaa: src/a.ts') });
     expect(checkWeb({ head: HEAD, associatedDomains: domains, deployment: ready, isAncestor: false, changedSince: [] }).status).toBe('FAIL');
     expect(checkWeb({ head: HEAD, associatedDomains: domains, deployment: ready, isAncestor: null, changedSince: [] }).status).toBe('FAIL');
     expect(checkWeb({ head: HEAD, associatedDomains: domains, deployment: { ...ready, state: 'BUILDING' }, isAncestor: true, changedSince: [] })).toMatchObject({ status: 'FAIL', fix: expect.stringContaining('vercel inspect') });
