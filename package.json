@@ -30,6 +30,7 @@
     "visual": "tsx scripts/visual/run.ts",
     "lane": "bash scripts/lane.sh",
     "acceptance": "tsx scripts/round/acceptance.ts",
+    "agents:models": "tsx scripts/round/agent-models.ts",
     "test:loop": "vitest run -c scripts/round/vitest.config.ts"
   },
   "dependencies": {

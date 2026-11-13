@@ -1,0 +1,8 @@
+{
+  "lane-web": "opus",
+  "lane-ios": "opus",
+  "lane-android": "opus",
+  "critic": "opus",
+  "post-merge-reviewer": "opus",
+  "ui-reviewer": "opus"
+}
