@@ -219,7 +219,7 @@ async function shootOnce(
   const first = await take();
   const ignore = await ignored(page, !!screen.fullPage);
   const look = await secondLook(first, take, { key, ignore });
-  const measure = await measurePage(page, { touch: device.touch, frames: screen.web?.frames });
+  const measure = await measurePage(page, { touch: device.touch, phone: device.phone, frames: screen.web?.frames });
   const findings = judgePage(measure, errors.get(page)!, { touch: device.touch, scene: screen.film?.scene });
   return { ...look, ignore: look.retaken ? await ignored(page, !!screen.fullPage) : ignore, findings };
 }

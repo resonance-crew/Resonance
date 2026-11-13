@@ -154,6 +154,7 @@ what it finds beside the capture (`<capture>.checks.json`; the log line names th
 | `console` | a console error or an uncaught exception while the page loaded (the aborted puppet requests left out; a failed resource names its address) | warn |
 | `touch-target` | on the phone and tablet, a control under 44 × 44 (a link inside running text aside) | warn |
 | `contrast` | words under WCAG AA, from `window.__contrastAudit()` (dev and emulator builds have it) | warn |
+| `phone-bands` | on the phone, a list's card (an `article` beside another, a card grid's item; a `data-framed` one aside) or a band (`[data-band]`) that stops short of the window's edges — a phone's lists are bands, not cards; not inside a dialog, a menu or the landing film | warn |
 
 A check fails runs only once it has been seen clean — one that fails every run only teaches everyone
 to ignore the verdict. The first full web run (2026-11-13, 110 captures) found no overflow and no
@@ -162,7 +163,9 @@ touch targets (the phone and tablet header's icons are 34 × 34), 19 words under
 landing film's skip link, a thread's quoted words at 3.95:1, 刪除帳號 at 4.18:1, …) and 10 console
 errors, all meant (the 404 page's own 404, and the Firestore emulator's permission-denied as an
 anonymous card's page reads it through the rules before asking the server). When what a check
-shows is fixed, or accepted as it is, raise it to `fail` in `WEB_CHECKS`.
+shows is fixed, or accepted as it is, raise it to `fail` in `WEB_CHECKS`. `phone-bands` came later
+(2026-11-13): a phone slice of home, card, profile, me, messages, notifications and settings in all three
+variants found nothing, so it can go to `fail` once a full web run agrees.
 
 ## One run at a time, and the owner's devices
 

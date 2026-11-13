@@ -11,6 +11,8 @@
  *   film           on the landing film's pages: the runtime never ready, a puppet never on stage, or a pinned
  *                  still standing in another scene than its screen says (`film` in screens.ts)
  *   film-frames    the film scrolled through from its top drew slowly (`__film.stats()`; a dev build's numbers)
+ *   phone-bands    on the phone, a card in a list or a band that stops short of the window's edges: a phone's
+ *                  lists are bands, not cards (CLAUDE.md, Phone, tablet and Mac) — the framed card was shipped twice
  *
  * The page only measures (`measurePage`); judging is plain code (`judgePage`), tested on its own.
  * A check fails a run only once it has been seen clean, or every run fails and the gate is ignored:
@@ -20,7 +22,7 @@
  */
 import type { Page } from 'playwright';
 
-export type WebCheck = 'blank' | 'overflow' | 'wrapped-label' | 'console' | 'touch-target' | 'contrast' | 'film' | 'film-frames';
+export type WebCheck = 'blank' | 'overflow' | 'wrapped-label' | 'console' | 'touch-target' | 'contrast' | 'film' | 'film-frames' | 'phone-bands';
 export type Level = 'fail' | 'warn';
 export type Finding = { check: WebCheck; level: Level; detail: string };
 
@@ -33,6 +35,8 @@ export const WEB_CHECKS: Record<WebCheck, { level: Level; what: string }> = {
   contrast: { level: 'warn', what: 'words under WCAG AA contrast' },
   film: { level: 'fail', what: "the landing film not ready, its cast not on stage, or a still in another scene" },
   'film-frames': { level: 'warn', what: 'the landing film drew slowly when scrolled through (a dev build)' },
+  // Warn until a full web run shows it clean (the README's rule for a new check), then fail.
+  'phone-bands': { level: 'warn', what: "on a phone, a list's card or band that doesn't run edge to edge" },
 };
 
 /** Frame times past which a scroll through the film is called slow: p95 over two 60 Hz frames, or one frame in ten over 50 ms. */
@@ -59,6 +63,12 @@ export type PageMeasure = {
   labels: { text: string; boxes: Box[] }[];
   /** Controls under MIN_TARGET on either side (touch screens only). */
   small: { name: string; width: number; height: number }[];
+  /**
+   * On the phone: a list's cards (an `article` beside another, a card grid's items; a framed one — `data-framed`,
+   * the landing film's — aside) and the bands' washes (`[data-band]`) that stop short of either edge of the window.
+   * Absent in older captures' measures.
+   */
+  framed?: { name: string; left: number; right: number }[];
   /** `window.__contrastAudit()`'s failures, when the build has it. */
   contrast: { text: string; ratio: number; min: number; where: string }[] | null;
   /** The landing film's handle (`window.__film`), when the page has one; `frames` after a scroll through it. */
@@ -107,6 +117,9 @@ export function judgePage(m: PageMeasure, consoleErrors: string[], { touch, scen
   }
   const errors = [...new Set(consoleErrors.map((e) => e.replace(/\s+/g, ' ').trim().slice(0, 200)))];
   if (errors.length) out.push(finding('console', list(errors, (e) => e, 3)));
+  if (m.framed?.length) {
+    out.push(finding('phone-bands', `${m.framed.length} not edge to edge: ${list(m.framed, (f) => `${f.name} (${Math.round(f.left)}–${Math.round(f.right)} of ${m.viewport})`, 3)}`));
+  }
   if (touch && m.small.length) {
     out.push(finding('touch-target', `${m.small.length} under ${MIN_TARGET} × ${MIN_TARGET}: ${list(m.small, (s) => `${s.name} (${Math.round(s.width)} × ${Math.round(s.height)})`)}`));
   }
@@ -136,10 +149,10 @@ export function judgePage(m: PageMeasure, consoleErrors: string[], { touch, scen
  * tsx compiles named functions with esbuild's keepNames, wrapping each in `__name(…)`, a helper the
  * page doesn't have: it is given a stand-in first (a string, so nothing compiles it).
  */
-export async function measurePage(page: Page, { touch, frames = false }: { touch: boolean; frames?: boolean }): Promise<PageMeasure> {
+export async function measurePage(page: Page, { touch, phone = false, frames = false }: { touch: boolean; phone?: boolean; frames?: boolean }): Promise<PageMeasure> {
   await page.evaluate('globalThis.__name ??= (fn) => fn');
   return page.evaluate(
-    async ({ touch, minTarget, shortLabel, frames }) => {
+    async ({ touch, phone, minTarget, shortLabel, frames }) => {
       const visible = (el: Element) => {
         const r = el.getBoundingClientRect();
         const s = getComputedStyle(el);
@@ -201,6 +214,23 @@ export async function measurePage(page: Page, { touch, frames = false }: { touch
         }
       }
 
+      const framed: { name: string; left: number; right: number }[] = [];
+      if (phone) {
+        // Not inside a dialog or a menu (their rows sit on the dialog's paper), nor the landing film's stage.
+        const aside = (el: Element) => !!el.closest('[role="dialog"], [role="menu"], [role="listbox"], [data-film-root]');
+        const cards = [...document.querySelectorAll('article')].filter(
+          (el) => !el.hasAttribute('data-framed') && !aside(el) && ([...(el.parentElement?.children ?? [])].some((c) => c !== el && c.tagName === 'ARTICLE') || !!el.closest('[data-card-grid]')),
+        );
+        // A band's wash may rest see-through: its box is what counts, so not `visible` (which asks for opacity).
+        const bands = [...document.querySelectorAll('[data-band]')].filter((el) => !aside(el) && !el.closest('[aria-hidden="true"]:not([data-band])'));
+        for (const el of [...cards.filter(visible), ...bands]) {
+          const r = el.getBoundingClientRect();
+          if (r.width <= 0 || r.height <= 0 || r.bottom < 0 || r.top > window.innerHeight) continue;
+          if (r.left > 1 || r.right < viewport - 1) framed.push({ name: nameOf(el.closest('a, [role="button"], li, article') ?? el), left: r.left, right: r.right });
+          if (framed.length >= 10) break;
+        }
+      }
+
       type Audit = { failures: { text: string; ratio: number; min: number; where: string }[] };
       const audit = (window as unknown as { __contrastAudit?: () => Promise<Audit> }).__contrastAudit;
       const contrast = audit ? (await audit().catch(() => null))?.failures.map(({ text, ratio, min, where }) => ({ text, ratio, min, where })) ?? null : null;
@@ -234,8 +264,8 @@ export async function measurePage(page: Page, { touch, frames = false }: { touch
         }
       }
 
-      return { blank, viewport, scrollWidth, pastEdge, labels, small, contrast, film };
+      return { blank, viewport, scrollWidth, pastEdge, labels, small, framed, contrast, film };
     },
-    { touch, minTarget: MIN_TARGET, shortLabel: SHORT_LABEL, frames },
+    { touch, phone, minTarget: MIN_TARGET, shortLabel: SHORT_LABEL, frames },
   );
 }
