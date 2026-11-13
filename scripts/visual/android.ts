@@ -290,8 +290,18 @@ export async function wearState(run: (command: string) => Promise<string>, state
   if (undo.length) await wait(2000);
   return async () => {
     for (const command of undo.reverse()) await run(command).catch(() => '');
+    // Held until the change is on disk: the settings provider writes a moment after a change, and `adb emu kill`
+    // doesn't wait for it. Taken back just before the AVD shut down, the last state came back worn at the next boot
+    // (a cold one, from the same userdata) — 2026-11-13: the phone stayed at font 2.0, every later capture of it large.
+    if (undo.length) {
+      await wait(SETTINGS_ON_DISK_MS);
+      await run('sync').catch(() => '');
+    }
   };
 }
+
+/** How long a changed setting may take to reach the AVD's disk (the settings provider delays its write, 2 s at most). */
+export const SETTINGS_ON_DISK_MS = 3000;
 
 /** The soft keyboard beside the AVD's hardware one, for a screen that wants it on screen (`keyboard` in screens.ts). */
 const softKeyboard = (serial: string, on: boolean) => shell(serial, `settings put secure show_ime_with_hard_keyboard ${on ? 1 : 0}`);

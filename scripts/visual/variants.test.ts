@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ANDROID_DEVICES, wearState } from './android';
+import { ANDROID_DEVICES, SETTINGS_ON_DISK_MS, wearState } from './android';
 import { IOS_DEVICES, landscapeUp } from './ios';
 import { PNG } from 'pngjs';
 import { SCREENS, screensFor, shotName, type Platform } from './screens';
@@ -112,7 +112,28 @@ describe('a state worn on the AVD', () => {
       'settings put system user_rotation 0',
       'wm density reset',
       'settings put system font_scale 1.0',
+      'sync',
     ]);
+  });
+
+  // 2026-11-13: the phone's last state was taken back and the AVD killed at once; the write never reached the disk
+  // and the next boot (cold, the same userdata) came up at font 2.0 — every capture of the phone large from then on.
+  it('holds the take-back until the settings are on disk, before anything can shut the AVD down', async () => {
+    const order: string[] = [];
+    const run = async (c: string) => (order.push(c), c === 'settings get system font_scale' ? '1.0' : '');
+    const wait = async (ms: number) => void order.push(`wait ${ms}`);
+    const takeBack = await wearState(run, { fontScale: 2 }, wait);
+    order.length = 0;
+    await takeBack();
+    expect(order).toEqual(['settings put system font_scale 1.0', `wait ${SETTINGS_ON_DISK_MS}`, 'sync']);
+    expect(SETTINGS_ON_DISK_MS).toBeGreaterThan(2000);
+  });
+
+  it('waits for nothing when the state changed nothing', async () => {
+    const order: string[] = [];
+    const takeBack = await wearState(async (c) => (order.push(c), ''), {}, async (ms) => void order.push(`wait ${ms}`));
+    await takeBack();
+    expect(order).toEqual([]);
   });
 
   it('keeps an override someone else set', async () => {
@@ -121,7 +142,7 @@ describe('a state worn on the AVD', () => {
     const takeBack = await wearState(run, { density: 504, fontScale: 2 }, async () => {});
     said.length = 0;
     await takeBack();
-    expect(said).toEqual(['wm density 480', 'settings delete system font_scale']);
+    expect(said).toEqual(['wm density 480', 'settings delete system font_scale', 'sync']);
   });
 });
 

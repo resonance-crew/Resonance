@@ -314,7 +314,9 @@ the tablets' and the Mac's lanes, which wait for the phones anyway (about 8 more
 
 A state is a device of its own: its captures live in its folder and have their own baseline, so a release
 run never counts them missing, and `--device phone-large` takes one alone whatever the set. Each state is
-worn before its screens and taken back after, to what the device had (`wearState` in `android.ts`). An iPad
+worn before its screens and taken back after, to what the device had (`wearState` in `android.ts`); the take-back
+waits three seconds and syncs, because Android writes a setting to disk a moment after the change and an AVD killed
+before that boots next time still worn (2026-11-13: the phone left at font 2.0). An iPad
 in landscape may come out of `simctl io screenshot` lying on its side; `landscapeUp` (ios.ts) stands it up —
 if the first run's pictures are upside down, its turn is the other way.
 
