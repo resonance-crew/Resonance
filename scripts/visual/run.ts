@@ -6,7 +6,8 @@
  *   capture [web android ios mac] [--only home,card] [--device phone] [--variants release|extended] [--no-stack] [--flows] [--review] [--wait]
  *            --variants extended: the release set plus the device states and variants of variants.ts (large text,
  *            the tablets turned and in the dark, a narrow Mac window, the composer's extra states)
- *            --flows: the Maestro flows on Android then iOS once the captures are done (stack still up)
+ *            --flows: the Maestro flows on Android then iOS once the captures are done (stack still up);
+ *            --tags a,b: only the flows tagged so; with --variants extended the `tablet` flows on the tablets too
  *            --review: the agy review straight after (what a release runs, with --flows)
  *            --wait: queue behind another run holding the same devices or ports (lock.ts), instead of refusing
  *   compare  [--run <id>]          recompute the comparison and the report
@@ -133,7 +134,7 @@ async function capture(args: string[]) {
       writeJson(join(runDir, 'run.json'), info);
     }
     if (args.includes('--flows')) {
-      info.flowsFailed = await flows(runDir, platforms, stack.devUrl);
+      info.flowsFailed = await flows(runDir, platforms, stack.devUrl, list(flag(args, 'tags')), set === 'extended');
       writeJson(join(runDir, 'run.json'), info);
     }
   } finally {
@@ -177,16 +178,20 @@ function gate(runDir: string) {
 
 /**
  * The Maestro flows (scripts/visual/flows.ts) on the apps this capture took, after every capture:
- * one device at a time, as the captures. Reports in `<run>/_flows/` (out of the captures' way); the
- * failed ones are answered, kept in run.json, and fail the run (gate.ts).
+ * one device at a time, as the captures (`--tags`: only those flows; the extended set also runs the
+ * `tablet`-tagged flows on the iPad and the Android tablet). Reports in `<run>/_flows/` (out of the
+ * captures' way); the failed ones are answered, kept in run.json, and fail the run (gate.ts).
  */
-async function flows(runDir: string, platforms: Platform[], devUrl: string): Promise<string[]> {
+async function flows(runDir: string, platforms: Platform[], devUrl: string, tags: string[], tablets: boolean): Promise<string[]> {
   const { runFlows } = await import('./flows');
   const failed: string[] = [];
   for (const platform of (['android', 'ios'] as const).filter((p) => platforms.includes(p))) {
-    log(`\n== flows on ${platform}`);
-    const results = await runFlows(platform, { runDir: join(runDir, '_flows'), devUrl, ports: PORTS, only: [], devices: [], log, retaken: [] });
-    failed.push(...results.filter((r) => !r.passed).map((r) => `${platform}/${r.flow}`));
+    for (const device of tablets ? (['phone', 'tablet'] as const) : (['phone'] as const)) {
+      log(`\n== flows on the ${platform} ${device}${tags.length ? ` (tags ${tags.join(', ')})` : ''}`);
+      const ctx = { runDir: join(runDir, '_flows'), devUrl, ports: PORTS, only: [], devices: [], log, retaken: [] };
+      const results = await runFlows(platform, ctx, { tags, device });
+      failed.push(...results.filter((r) => !r.passed).map((r) => `${platform}${device === 'tablet' ? '-tablet' : ''}/${r.flow}`));
+    }
   }
   log(failed.length ? `Flows failed: ${failed.join(', ')} (reports in ${join(runDir, '_flows')})` : 'Flows: all passed');
   return failed;
