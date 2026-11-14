@@ -48,12 +48,12 @@ tags:
 - extendedWaitUntil:
     visible: 回覆 bob
     timeout: 5000
-- assertVisible:
-    text: .*貼圖：謝謝.*
-    index: 1
-- assertNotVisible:
-    text: .*貼圖：心暖暖.*
-    index: 1
+- runFlow:
+    file: common/reply-row.yaml
+    env:
+      NAMES: 貼圖：謝謝
+      NOT: 貼圖：心暖暖
+      WHOM: 回覆 bob
 - takeScreenshot: sticker-replies-first
 # The second, straight after: alice's own 心暖暖. The row must follow it. Answering took the thread to its end
 # again and the reply row grew the capsule over the newest message (心暖暖 is on screen, under the row): brought
@@ -71,12 +71,12 @@ tags:
 - extendedWaitUntil:
     visible: 回覆自己
     timeout: 5000
-- assertVisible:
-    text: .*貼圖：心暖暖.*
-    index: 1
-- assertNotVisible:
-    text: .*貼圖：謝謝.*
-    index: 1
+- runFlow:
+    file: common/reply-row.yaml
+    env:
+      NAMES: 貼圖：心暖暖
+      NOT: 貼圖：謝謝
+      WHOM: 回覆自己
 - takeScreenshot: sticker-replies-second
 - tapOn: 與 bob 的對話|想說的話⋯
 - inputText: 兩張都可愛 Maestro

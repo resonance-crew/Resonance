@@ -1,0 +1,23 @@
+# The reply row above the capsule names ${NAMES} (a sticker's 貼圖：<name>) for ${WHOM} (回覆 bob, 回覆自己) and not
+# ${NOT}: the row itself, not the thread, which may show either sticker or neither, wherever it was scrolled.
+#
+#   - runFlow:
+#       file: common/reply-row.yaml
+#       env:
+#         NAMES: 貼圖：謝謝
+#         NOT: 貼圖：心暖暖
+#         WHOM: 回覆 bob
+#
+# Both apps lay the row's sticker and its words (回覆 bob) side by side in one element: the sticker is found as a
+# child of the element holding those words. (Counting the name's matches on screen, as the flow first did, broke
+# whenever the thread's own sticker scrolled out of view.)
+appId: com.resonance.stories
+---
+- assertVisible:
+    text: ${NAMES}
+    childOf:
+      containsChild: ${WHOM}
+- assertNotVisible:
+    text: ${NOT}
+    childOf:
+      containsChild: ${WHOM}
