@@ -505,9 +505,11 @@ fun <T> TopTabs(
                         haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                         onSelect(item.id)
                     }
+                    // Named whether or not its label shows: the label's own text is cleared below, so
+                    // it is never read twice — and without this a labelled tab had no name at all.
                     .semantics {
                         this.selected = selected
-                        if (!labels) contentDescription = item.title
+                        contentDescription = item.title
                     },
                 contentAlignment = Alignment.Center,
             ) {

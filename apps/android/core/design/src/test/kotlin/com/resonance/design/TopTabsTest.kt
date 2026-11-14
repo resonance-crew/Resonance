@@ -1,14 +1,67 @@
 package com.resonance.design
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import com.resonance.design.generated.IconName
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 
 /** The header's tabs on medium and expanded windows (design note B2, round 5 part C): what they hold and how they fit. */
+@RunWith(RobolectricTestRunner::class)
 class TopTabsTest {
+    @get:Rule val compose = createComposeRule()
+
+    @Before fun fonts() {
+        AppFonts.init(RuntimeEnvironment.getApplication())
+        Grain.init(RuntimeEnvironment.getApplication())
+    }
+
+    // Each tab is a Tab named by its title whether its label shows or not (TalkBack, and the flows'
+    // tapOn: 通知 on a tablet), and the label's text is never a second node to read.
+    private fun eachTabIsNamed(labels: Boolean) {
+        val tabs = topTabsOrder(listOf(
+            OrganicTabItem("feed", "首頁", IconName.Sparkle),
+            OrganicTabItem("messages", "私訊", IconName.Chat),
+            OrganicTabItem("notifications", "通知", IconName.Bell, badge = 3),
+            OrganicTabItem("cards", "卡片盒", IconName.Cards),
+        ))
+        val chosen = mutableListOf<String>()
+        compose.setContent {
+            TopTabs(tabs, "feed", { chosen += it }, List(4) { 96.dp }, labels, "主要導覽")
+        }
+        for (title in listOf("首頁", "私訊", "通知", "卡片盒")) {
+            compose.onAllNodesWithContentDescription(title).assertCountEquals(1)
+            compose.onAllNodesWithText(title).assertCountEquals(0)
+        }
+        compose.onNodeWithContentDescription("首頁")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
+            .assertIsSelected()
+        compose.onNodeWithContentDescription("通知").performClick()
+        assertEquals(listOf("notifications"), chosen)
+    }
+
+    @Test fun labelledTabsAreNamed() = eachTabIsNamed(labels = true)
+
+    @Test fun glyphTabsAreNamed() = eachTabIsNamed(labels = false)
+
     @Test fun theSegmentsAreTheFourTabsWithoutThePen() {
         // The bar's order (Navigation's tabItems): the pen in the middle. The group holds the four
         // tabs alone (the owner's revision): the pen stays a chip at a root header's end.
