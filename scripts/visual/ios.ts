@@ -20,6 +20,7 @@ import { PNG } from 'pngjs';
 import { screensFor, shotName, type Account, type Variant } from './screens';
 import { ROOT, SEED_PASSWORD, run, settle, shotPath, sleep, type Capture, type CaptureContext } from './util';
 import { devicesFor, groups, plan, stateOf } from './variants';
+import { MAESTRO, maestroEnv } from './flows';
 
 export const BUNDLE_ID = 'com.resonance.stories';
 const IOS_DIR = join(ROOT, 'apps/ios');
@@ -36,10 +37,10 @@ export const IOS_DEVICES: IosDevice[] = [
 
 /** Runs a long tool (xcodegen, xcodebuild) with its output in this run's logs; throws with the log's path. */
 /** A long command (a build) without holding up the captures running beside it; its output to `logFile`. */
-export function runLogged(command: string, args: string[], logFile: string, cwd = ROOT): Promise<void> {
+export function runLogged(command: string, args: string[], logFile: string, cwd = ROOT, env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const out = openSync(logFile, 'a');
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: ['ignore', out, out] });
+    const child = spawn(command, args, { cwd, env, stdio: ['ignore', out, out] });
     child.on('error', reject);
     child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${command} ${args[0]} failed (exit ${code}): see ${logFile}`))));
   });
@@ -156,32 +157,36 @@ function launch(udid: string, args: string[]) {
   simctl('launch', udid, BUNDLE_ID, ...args);
 }
 
-/**
- * A capture the scene turned to landscape (`-visualOrientation`) can come out of `simctl io screenshot` in the
- * screen's own upright frame, the page lying on its side: stood up again, a quarter turn the other way. A capture
- * already wider than tall is left as it is.
- */
-export function landscapeUp(png: Buffer, turn: 'left' | 'right' = 'left'): Buffer {
-  const image = PNG.sync.read(png);
-  if (image.width >= image.height) return png;
-  const out = new PNG({ width: image.height, height: image.width });
-  for (let y = 0; y < image.height; y++) {
-    for (let x = 0; x < image.width; x++) {
-      // left: (x, y) → (y, W-1-x); right: (x, y) → (H-1-y, x).
-      const [nx, ny] = turn === 'left' ? [y, image.width - 1 - x] : [image.height - 1 - y, x];
-      image.data.copy(out.data, (ny * out.width + nx) * 4, (y * image.width + x) * 4, (y * image.width + x) * 4 + 4);
-    }
-  }
-  return PNG.sync.write(out);
+/** Whether the simulator stands wider than tall: its screenshot's own size (simctl reads no orientation). */
+function isLandscape(udid: string, file: string): boolean {
+  run('xcrun', ['simctl', 'io', udid, 'screenshot', '--type=png', file]);
+  const { width, height } = PNG.sync.read(readFileSync(file));
+  return width > height;
 }
 
-async function shoot(udid: string, ctx: CaptureContext, key: string, landscape: boolean): Promise<Look> {
+/**
+ * Turns the simulator itself (simctl can't): `maestro/device/orientation.yaml`, Maestro's setOrientation through
+ * XCUIDevice. LANDSCAPE_LEFT stands the iPad on its long side with the status bar along the top, and `simctl io
+ * screenshot` then gives the turned screen upright (2360 × 1640). Checked by the screenshot's own shape, so a
+ * turn that didn't take is an error rather than a set of pictures that lie.
+ */
+export async function turn(udid: string, landscape: boolean, ctx: CaptureContext): Promise<void> {
+  const file = join(ctx.runDir, '_logs', `ios-${udid}-turn.png`);
+  if (isLandscape(udid, file) === landscape) return;
+  const orientation = landscape ? 'LANDSCAPE_LEFT' : 'PORTRAIT';
+  await runLogged(MAESTRO, ['--device', udid, 'test', join(ROOT, 'maestro/device/orientation.yaml'), '-e', `ORIENTATION=${orientation}`, '--no-ansi'],
+    join(ctx.runDir, '_logs', 'ios-turn.log'), ROOT, maestroEnv());
+  await sleep(1500);
+  if (isLandscape(udid, file) !== landscape) throw new Error(`the simulator ${udid} did not turn ${orientation.toLowerCase()} (see _logs/ios-turn.log)`);
+}
+
+async function shoot(udid: string, ctx: CaptureContext, key: string): Promise<Look> {
   const file = join(ctx.runDir, '_logs', `ios-${udid}.png`);
   const take = () =>
     settle(() => {
       run('xcrun', ['simctl', 'io', udid, 'screenshot', '--type=png', file]);
       const png = readFileSync(file);
-      return Promise.resolve(landscape ? landscapeUp(png) : png);
+      return Promise.resolve(png);
     }, { timeoutMs: 40_000, intervalMs: 1000 });
   // A launch draws its cover, restores the account and asks the stack: never judged before this.
   await sleep(4000);
@@ -203,32 +208,37 @@ export const captureIos: Capture = async (ctx) => {
     const { udid, booted } = await simulator(device, ctx);
     spawnSync('xcrun', ['simctl', 'terminate', udid, BUNDLE_ID], { stdio: 'ignore' });
     simctl('install', udid, APP);
+    // Upright to begin with: a run cut off while the iPad was turned leaves it turned.
+    if (!device.phone) await turn(udid, false, ctx);
     for (const id of ids) {
       const state = stateOf('ios', id);
       if (state) ctx.log(`  ${id}: ${state.why}`);
-      // A state's own launch arguments follow every launch's (the scene's orientation, VisualCapture); the iPad's
-      // own captures ask for upright, so a landscape state before them on this simulator never carries over.
-      const own = state?.ios ? ['-visualOrientation', state.ios.orientation] : device.phone ? [] : ['-visualOrientation', 'portrait'];
       const landscape = state?.ios?.orientation === 'landscape';
-      let theme: Variant['theme'] | null = null;
-      for (const { variant: v, account, screens } of groups(plan('ios', id, set, ctx.only))) {
-        // The system's appearance too: the app follows its own choice, the status bar the system's.
-        if (theme !== v.theme) simctl('ui', udid, 'appearance', v.theme);
-        theme = v.theme;
-        // The account signs in on a launch of its own (switching from whoever was there), so a
-        // screen's launch only restores it.
-        launch(udid, [...launchArgs(ctx, account, null, v), ...own]);
-        await sleep(10_000);
-        for (const screen of screens) {
-          launch(udid, [...launchArgs(ctx, account, screen.route, v, screen.app?.ios), ...own]);
-          const name = shotName(screen, v);
-          const key = `ios/${id}/${name}`;
-          const look = await shoot(udid, ctx, key, landscape);
-          writeFileSync(shotPath(ctx.runDir, 'ios', id, name), look.png);
-          if (!look.settled) unsettled.push(key);
-          if (look.retaken) ctx.retaken.push(key);
-          ctx.log(`  ${key}${lookNote(look)}`);
+      if (landscape) await turn(udid, true, ctx);
+      try {
+        let theme: Variant['theme'] | null = null;
+        for (const { variant: v, account, screens } of groups(plan('ios', id, set, ctx.only))) {
+          // The system's appearance too: the app follows its own choice, the status bar the system's.
+          if (theme !== v.theme) simctl('ui', udid, 'appearance', v.theme);
+          theme = v.theme;
+          // The account signs in on a launch of its own (switching from whoever was there), so a
+          // screen's launch only restores it.
+          launch(udid, launchArgs(ctx, account, null, v));
+          await sleep(10_000);
+          for (const screen of screens) {
+            launch(udid, launchArgs(ctx, account, screen.route, v, screen.app?.ios));
+            const name = shotName(screen, v);
+            const key = `ios/${id}/${name}`;
+            const look = await shoot(udid, ctx, key);
+            writeFileSync(shotPath(ctx.runDir, 'ios', id, name), look.png);
+            if (!look.settled) unsettled.push(key);
+            if (look.retaken) ctx.retaken.push(key);
+            ctx.log(`  ${key}${lookNote(look)}`);
+          }
         }
+      } finally {
+        // Upright again whatever happened, before the next state or the shutdown.
+        if (landscape) await turn(udid, false, ctx);
       }
     }
     spawnSync('xcrun', ['simctl', 'terminate', udid, BUNDLE_ID], { stdio: 'ignore' });

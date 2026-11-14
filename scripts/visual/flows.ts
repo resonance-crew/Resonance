@@ -70,7 +70,7 @@ export function withTags(flows: string[], tags: string[], device: FlowDevice = '
 }
 
 /** Where Maestro lives (the official installer's place unless MAESTRO_BIN says otherwise) and the Java it runs on. */
-const MAESTRO = process.env.MAESTRO_BIN || join(homedir(), '.maestro/bin/maestro');
+export const MAESTRO = process.env.MAESTRO_BIN || join(homedir(), '.maestro/bin/maestro');
 const ANDROID_STUDIO_JBR = '/Applications/Android Studio.app/Contents/jbr/Contents/Home';
 
 export function maestroEnv(): NodeJS.ProcessEnv {

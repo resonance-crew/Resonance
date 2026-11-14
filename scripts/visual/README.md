@@ -303,7 +303,7 @@ release set and those states on top, each aimed at the few screens where it bite
 | `android/phone-large` | the phone AVD | card, thread-reply, thread-attach, settings, write-draft, notifications | font 1.5, `wm density 504` (343 dp across) | #14 允許存取 gone at display size + font 1.5; #3 the writer's status line cut |
 | `android/phone-largest` | the phone AVD | the same six | font 2.0 | #3 |
 | `android/tablet-portrait` | the tablet AVD | home, messages, thread, thread-stickers, card, notifications | `user_rotation 1` | the tablet was landscape only |
-| `ios/ipad-landscape` | `Visual iPad` | home, messages, thread, thread-stickers, thread-reply, card, notifications, write-draft | `-visualOrientation landscape` | #11 (the iPad was upright only) |
+| `ios/ipad-landscape` | `Visual iPad` | home, messages, thread, thread-stickers, thread-reply, card, notifications, write-draft | the simulator turned to landscape (Maestro's `setOrientation`) | #11 (the iPad was upright only) |
 | `mac/mac-window` | the Mac app | home, messages, thread, thread-stickers, card | a 600 × 800 window | #11, #13: an iPad in a window, as near as the harness gets |
 | `ios/ipad`, `android/tablet`, `web/tablet` | — | five each | dark zh-TW | the tablets in the dark |
 | `android/phone`, `android/tablet` | — | `thread-attach`, `thread-keyboard` (screens.ts `set: extended`) | `--es threadPanel attach` / `keyboard`; the soft keyboard shown beside the hardware one for that screen | #14; #9/#11 the keyboard against the composer |
@@ -316,9 +316,15 @@ A state is a device of its own: its captures live in its folder and have their o
 run never counts them missing, and `--device phone-large` takes one alone whatever the set. Each state is
 worn before its screens and taken back after, to what the device had (`wearState` in `android.ts`); the take-back
 waits three seconds and syncs, because Android writes a setting to disk a moment after the change and an AVD killed
-before that boots next time still worn (2026-11-13: the phone left at font 2.0). An iPad
-in landscape may come out of `simctl io screenshot` lying on its side; `landscapeUp` (ios.ts) stands it up —
-if the first run's pictures are upside down, its turn is the other way.
+before that boots next time still worn (2026-11-13: the phone left at font 2.0). The iPad
+in landscape is the simulator itself turned: simctl can't rotate one, so `turn` (ios.ts) runs
+`maestro/device/orientation.yaml` (Maestro's `setOrientation`, `LANDSCAPE_LEFT`; not a flow, outside `maestro/flows`)
+before the state's screens and `PORTRAIT` after, in a `finally` so a capture that throws still leaves it upright,
+and once more as the iPad's lane begins (a run cut off mid-state left it turned). Each turn is checked by the
+screenshot's own shape and fails the run if it didn't take. `simctl io screenshot` then gives the turned screen
+upright, 2360 × 1640, the status bar along the top and the app in its wide layout. (The first try,
+`-visualOrientation` asking the app's scene to turn with `requestGeometryUpdate`, did nothing on the iPad
+simulator: the app stayed upright and the pictures were the upright screen laid on its side. 2026-11-14.)
 
 Left out, and why: **a windowed iPad itself** — neither simctl nor the app can put an iPad's scene in a
 window, so `mac/mac-window` (the iPad's layouts at 77 %) stands in for its width, and a windowed iPad with a

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ANDROID_DEVICES, SETTINGS_ON_DISK_MS, wearState } from './android';
-import { IOS_DEVICES, landscapeUp } from './ios';
-import { PNG } from 'pngjs';
+import { IOS_DEVICES } from './ios';
 import { SCREENS, screensFor, shotName, type Platform } from './screens';
 import { BASE_DEVICES, DEVICE_STATES, devicesFor, estimate, groups, inSet, namedScreens, plan, variantSetOf } from './variants';
 import { WEB_DEVICES } from './web';
@@ -143,24 +142,5 @@ describe('a state worn on the AVD', () => {
     said.length = 0;
     await takeBack();
     expect(said).toEqual(['wm density 480', 'settings delete system font_scale', 'sync']);
-  });
-});
-
-describe('a landscape iPad capture', () => {
-  const png = (w: number, h: number) => {
-    const p = new PNG({ width: w, height: h });
-    p.data.fill(255);
-    // A red pixel at the top left.
-    p.data.set([255, 0, 0, 255], 0);
-    return PNG.sync.write(p);
-  };
-
-  it('stands a sideways capture up, and leaves a wide one as it is', () => {
-    const turned = PNG.sync.read(landscapeUp(png(2, 3)));
-    expect([turned.width, turned.height]).toEqual([3, 2]);
-    // Turned left: the top left goes to the bottom left.
-    expect([...turned.data.subarray((1 * 3 + 0) * 4, (1 * 3 + 0) * 4 + 4)]).toEqual([255, 0, 0, 255]);
-    const wide = png(3, 2);
-    expect(landscapeUp(wide)).toBe(wide);
   });
 });

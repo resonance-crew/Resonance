@@ -1,0 +1,8 @@
+# Turns the simulator itself (not the app's scene) to ${ORIENTATION}: PORTRAIT or LANDSCAPE_LEFT (the home
+# indicator on the right, the status bar along the top of the turned screen). simctl can't rotate a simulator;
+# Maestro's setOrientation does, through XCUIDevice. The extended set's `ipad-landscape` turns the Visual iPad with
+# this before its captures and back after (scripts/visual/ios.ts, `turn`). Not a flow: outside maestro/flows, never
+# in a flow run, and it needs no app running.
+appId: com.resonance.stories
+---
+- setOrientation: ${ORIENTATION}

@@ -61,46 +61,18 @@ struct ResonanceApp: App {
 /// ends, nothing on its way in or out (UIKit's animations off in `init`, SwiftUI's here) and no scroll
 /// indicators where a screen doesn't choose its own, so two captures of one screen are the same
 /// picture. (A Mac with a mouse still shows `.hidden` ones: mac.ts launches with `-AppleShowScrollBars`.)
-///
-/// `-visualOrientation landscape|portrait` (with it, an iPad): the scene turned to that orientation as it shows —
-/// simctl can't rotate a simulator, and the iPad's captures were upright only (scripts/visual/screens.ts, the
-/// extended set's `ipad-landscape`).
+/// The extended set's landscape iPad turns the simulator itself (scripts/visual/ios.ts, `turn`), not the scene.
 struct VisualCapture: ViewModifier {
     static let on = UserDefaults.standard.bool(forKey: "visualCapture")
-    static let orientation = VisualOrientation(UserDefaults.standard.string(forKey: "visualOrientation"))
 
     func body(content: Content) -> some View {
         if Self.on {
             content
                 .transaction { $0.disablesAnimations = true; $0.animation = nil }
                 .scrollIndicators(.never)
-                .onAppear { Self.orientation?.apply() }
         } else {
             content
         }
-    }
-}
-
-/// The orientation a capture asks for (`-visualOrientation`); nil for none, or a word it doesn't know.
-enum VisualOrientation: Equatable {
-    case portrait, landscape
-
-    init?(_ value: String?) {
-        switch value?.trimmingCharacters(in: .whitespaces).lowercased() {
-        case "portrait": self = .portrait
-        case "landscape": self = .landscape
-        default: return nil
-        }
-    }
-
-    var mask: UIInterfaceOrientationMask { self == .landscape ? .landscapeRight : .portrait }
-
-    @MainActor func apply() {
-        #if !targetEnvironment(macCatalyst)
-        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { _ in }
-        }
-        #endif
     }
 }
 #endif

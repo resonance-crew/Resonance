@@ -54,7 +54,7 @@ export type DeviceState = {
   why: string;
   /** Android: `settings put system font_scale`, `wm density`, and `user_rotation` (0 the device's natural way, 1 a quarter turn). */
   android?: { fontScale?: number; density?: number; rotation?: 0 | 1 };
-  /** iOS: the debug build's `-visualOrientation` (VisualCapture in ResonanceApp.swift). */
+  /** iOS: the simulator itself turned (ios.ts `turn`: Maestro's setOrientation, maestro/device/orientation.yaml), upright again after. */
   ios?: { orientation: 'landscape' | 'portrait' };
   /** Mac: the window's size in the Mac's points (`-macWindowSize`). */
   mac?: { width: number; height: number };
