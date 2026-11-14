@@ -32,7 +32,14 @@ tags:
 - extendedWaitUntil:
     notVisible: 傳送中⋯
     timeout: 15000
-# The first: bob's 謝謝.
+# The first: bob's 謝謝. Sending 心暖暖 took the thread to its end, the panel still open, and 謝謝 is far above:
+# scrolled back into the middle of the thread before it is held (a hold at the screen's edge or under the
+# header lands on something else).
+- scrollUntilVisible:
+    element: 貼圖：謝謝
+    direction: UP
+    centerElement: true
+    timeout: 20000
 - longPressOn: 貼圖：謝謝
 - extendedWaitUntil:
     visible: 回覆
@@ -48,7 +55,14 @@ tags:
     text: .*貼圖：心暖暖.*
     index: 1
 - takeScreenshot: sticker-replies-first
-# The second, straight after: alice's own 心暖暖. The row must follow it.
+# The second, straight after: alice's own 心暖暖. The row must follow it. Answering took the thread to its end
+# again and the reply row grew the capsule over the newest message (心暖暖 is on screen, under the row): brought
+# up into the middle before it is held.
+- scrollUntilVisible:
+    element: 貼圖：心暖暖
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
 - longPressOn: 貼圖：心暖暖
 - extendedWaitUntil:
     visible: 回覆
