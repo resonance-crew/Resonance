@@ -112,6 +112,9 @@ describe('guard.sh (PreToolUse)', () => {
   });
 });
 
+// These two run vitest itself through the hook (the real rule tests take ~6 s): past vitest's default 5 s.
+const SPAWNS_VITEST = 60_000;
+
 describe('ui-rules.sh (PostToolUse)', () => {
   it('returns at once for a file no rule reads', () => {
     const r = hook('ui-rules.sh', { tool_name: 'Edit', tool_input: { file_path: join(ROOT, 'docs/release-checklist.md') } });
@@ -123,7 +126,7 @@ describe('ui-rules.sh (PostToolUse)', () => {
     const r = hook('ui-rules.sh', { tool_name: 'Edit', tool_input: { file_path: join(ROOT, 'src/components/atoms/Field/Field.module.css') } });
     expect(r.err).toBe('');
     expect(r.code).toBe(0);
-  });
+  }, SPAWNS_VITEST);
 
   it('hands a broken rule back to Claude with exit 2', () => {
     const project = join(tmp, 'ui');
@@ -134,7 +137,7 @@ describe('ui-rules.sh (PostToolUse)', () => {
     expect(r.code).toBe(2);
     expect(r.err).toMatch(/UI rules broken after editing src\/components\/a\.module\.css/);
     expect(r.err).toMatch(/casts no shadow/);
-  });
+  }, SPAWNS_VITEST);
 });
 
 describe('gate.sh (Stop)', () => {
