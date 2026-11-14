@@ -46,11 +46,16 @@ tags:
     when:
       platform: iOS
     commands:
-      # The system's PhotosPicker, inline in the panel: its cells are the system's, named by kind and date.
+      # The system's PhotosPicker, inline in the panel: its cells are the system's (照片, <date>, <time>), drawn by
+      # another process. Maestro reads them with bounds inside the picker, not the screen (the first cell at
+      # 0,10 — the top of the thread, where a tap on the cell's name opened bob's profile), so the cell is
+      # waited for by its name and tapped where it is drawn: the grid's first cell, just under the panel's
+      # handle (拖曳調整高度) on a fresh install's panel height.
       - extendedWaitUntil:
-          visible: (Photo|照片|相片).*
+          visible: 照片, .*
           timeout: 15000
-      - tapOn: (Photo|照片|相片).*
+      - tapOn:
+          point: 16%,78%
 - extendedWaitUntil:
     visible: 移除第 1 張圖片
     timeout: 10000
