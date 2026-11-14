@@ -67,17 +67,27 @@ tags:
     element: 登入
     direction: DOWN
 - tapOn: 登入
-# iOS offers to keep the password (the system's sheet, over the app): not now.
+# iOS offers to keep the password (the system's sheet, over the app): not now. On the iPhone Maestro reads the
+# sheet's buttons. On the iPad the sheet is a card in the middle drawn by another process, and while it is up
+# Maestro reads nothing at all, neither the sheet nor the app under it: when neither the sheet's words nor the
+# feed can be read, 稍後再說 is tapped where the iPad draws it (the left button, 41% / 58% upright).
 - runFlow:
     when:
       platform: iOS
     commands:
       - extendedWaitUntil:
           visible: 稍後再說|Not Now|我也在雨裡走過
-          timeout: 30000
+          timeout: 15000
+          optional: true
       - tapOn:
           text: 稍後再說|Not Now
           optional: true
+      - runFlow:
+          when:
+            notVisible: 我也在雨裡走過
+          commands:
+            - tapOn:
+                point: 41%,58%
 # The home feed: alice's own newest card is its first.
 - extendedWaitUntil:
     visible: 我也在雨裡走過
