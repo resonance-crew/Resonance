@@ -25,23 +25,32 @@ tags:
     when:
       platform: Android
     commands:
-      # The app's own ask, then the system's (its words are the system's language: the AVD's, English by default).
+      # A device that never gave the app its photos: the app's own ask (允許存取), then the system's (its words are
+      # the system's language: the AVD's, English by default). One that gave them already (the harness's AVD keeps
+      # the grant across `pm clear`) shows the gallery at once. Either way the panel shows one of them, above its
+      # tabs (圖片 / 卡片): the gallery's cells are named 圖片 like the 圖片 tab, which sits level with 卡片, so a cell is
+      # a 圖片 above 卡片.
       - extendedWaitUntil:
-          visible: 允許存取
+          visible:
+            text: 允許存取|圖片
+            above: 卡片
           timeout: 10000
-      - tapOn: 允許存取
-      - tapOn:
-          text: (Allow all|Allow|允許全部|全部允許|允許)
-          optional: true
-      # The gallery's cells are named 圖片 like the panel's 圖片 tab, which comes first: the first cell is the second.
+      - runFlow:
+          when:
+            visible: 允許存取
+          commands:
+            - tapOn: 允許存取
+            - tapOn:
+                text: (Allow all|Allow|允許全部|全部允許|允許)
+                optional: true
       - extendedWaitUntil:
           visible:
             text: 圖片
-            index: 1
+            above: 卡片
           timeout: 10000
       - tapOn:
           text: 圖片
-          index: 1
+          above: 卡片
 - runFlow:
     when:
       platform: iOS
