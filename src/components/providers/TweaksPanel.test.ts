@@ -54,8 +54,12 @@ describe('without site storage', () => {
 
   it('reads what an older version saved, minus what no longer exists', () => {
     localStorage.setItem('resonance-tweaks', JSON.stringify({ accentColor: 'sage', cardDensity: 'airy', grainIntensity: 3 }));
-    // Saved before the puppets' switch: they stay off.
-    expect(loadTweaks()).toEqual({ accentColor: 'sage', scheme: 'system', fontFamily: 'default', grainIntensity: 3, mascots: false });
+    // Saved before the puppets' switch and 自動翻譯 (round 25): both stay off.
+    expect(loadTweaks()).toEqual({ accentColor: 'sage', scheme: 'system', fontFamily: 'default', grainIntensity: 3, mascots: false, autoTranslate: false });
+    localStorage.setItem('resonance-tweaks', JSON.stringify({ autoTranslate: true }));
+    expect(loadTweaks().autoTranslate).toBe(true);
+    localStorage.setItem('resonance-tweaks', JSON.stringify({ autoTranslate: 'yes' }));
+    expect(loadTweaks().autoTranslate).toBe(false);
     localStorage.setItem('resonance-tweaks', JSON.stringify({ mascots: true }));
     expect(loadTweaks().mascots).toBe(true);
     localStorage.setItem('resonance-tweaks', JSON.stringify({ mascots: 'yes' }));

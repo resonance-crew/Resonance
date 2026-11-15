@@ -35,9 +35,10 @@ vi.mock('@/components/providers/AppChrome', () => ({
   useAppChrome: () => ({ setMobileHeader: vi.fn() }),
 }));
 const mockUpdateTweaks = vi.fn();
+const mockTweaks = { autoTranslate: false };
 vi.mock('@/components/providers/TweaksPanel', () => ({
   useTweaks: () => ({
-    state: { accentColor: 'terracotta', scheme: 'system', fontFamily: 'default', grainIntensity: 1 },
+    state: { accentColor: 'terracotta', scheme: 'system', fontFamily: 'default', grainIntensity: 1, mascots: false, autoTranslate: mockTweaks.autoTranslate },
     update: mockUpdateTweaks,
   }),
 }));
@@ -422,6 +423,42 @@ describe('SettingsClient notifications', () => {
   });
 });
 
+
+describe('SettingsClient language', () => {
+  const openLanguage = async () => {
+    renderWithIntl(<SettingsClient initial={initial} />);
+    await userEvent.click(screen.getByRole('tab', { name: 'Language' }));
+  };
+  afterEach(() => {
+    mockTweaks.autoTranslate = false;
+  });
+
+  it('has 自動翻譯 after the writing language, off by default and explained by its hint (round 25 §F4)', async () => {
+    await openLanguage();
+    const sw = screen.getByRole('switch', { name: 'Auto-translate' });
+    expect(sw).toHaveAttribute('aria-checked', 'false');
+    expect(sw).toHaveAccessibleDescription('Titles, excerpts and stories in another language are shown translated by AI into the interface language');
+    // after 我主要書寫的語言
+    const writing = screen.getByText('Primary writing language');
+    expect(writing.compareDocumentPosition(sw) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('turns it on in this browser’s tweaks — no account field is saved', async () => {
+    await openLanguage();
+    await userEvent.click(screen.getByRole('switch', { name: 'Auto-translate' }));
+    expect(mockUpdateTweaks).toHaveBeenCalledWith({ autoTranslate: true });
+    expect(updateProfile).not.toHaveBeenCalled();
+  });
+
+  it('shows it on when this browser has it on, and turns it off', async () => {
+    mockTweaks.autoTranslate = true;
+    await openLanguage();
+    const sw = screen.getByRole('switch', { name: 'Auto-translate' });
+    expect(sw).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(sw);
+    expect(mockUpdateTweaks).toHaveBeenCalledWith({ autoTranslate: false });
+  });
+});
 
 describe('SettingsClient appearance', () => {
   const openAppearance = async () => {
