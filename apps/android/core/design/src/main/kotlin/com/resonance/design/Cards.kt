@@ -440,6 +440,11 @@ private fun ColumnScope.StoryCardBody(
             BasicText(content.authorName, style = AppFonts.body(13f, 600, lineHeight = 1.4f), modifier = Modifier.mascotMark("$foot:name"))
             BasicText(content.readTime, style = AppFonts.body(12f, lineHeight = 1.4f, color = Tokens.TextMuted), modifier = Modifier.mascotMark("$foot:time"))
         }
+        // Its title and excerpt an AI's translation (round 25 §F7): the globe at 12 in the meta ink, named for TalkBack.
+        if (content.translatedLang != null) OrganicIcon(
+            IconName.Globe, Modifier.semantics { contentDescription = L10n.Card.Translate.mark },
+            size = 12.dp, color = Tokens.TextMuted, strokeWidth = Tokens.Ink.value,
+        )
         if (!preview) OrganicIcon(IconName.ArrowRight, Modifier.mascotMark("$foot:arrow"), size = 18.dp, color = Tokens.Text.copy(alpha = 0.28f), strokeWidth = Tokens.Ink.value)
     }
     if (!content.reason.isNullOrEmpty()) {

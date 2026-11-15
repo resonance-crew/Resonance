@@ -1,6 +1,17 @@
 package com.resonance.app.ui
 
 import com.resonance.app.AppearanceStore
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import com.resonance.kit.story.StoryParser
+import com.resonance.kit.l10n.Strings
+import com.resonance.design.Toasts
+import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.flow.map
 import androidx.compose.runtime.CompositionLocalProvider
 import com.resonance.design.LocalMascotMarks
@@ -196,6 +207,24 @@ class CardPageModel(private val session: Session, private val key: String, previ
     private var reading: Job? = null
 
     /**
+     * The story's translation into the interface's language (round 25 §F), for a page that gets the line (§F3);
+     * kept with the page, so 顯示原文 holds for the visit. Made again only when the story itself changed.
+     */
+    var translator by mutableStateOf<StoryTranslator?>(null)
+        private set
+
+    /** The line for [d] as it is now, in the interface [language]: the same translator while its story is the same. */
+    fun translatorFor(d: com.resonance.api.models.CardDetail, language: String): StoryTranslator? {
+        val target = StoryTranslator.targetFor(d, language) ?: return null.also { if (translator != null) translator = null }
+        translator?.let { t -> if (t.target == target && t.isFor(d.card.title, d.story)) return t }
+        val made = StoryTranslator(target, d.card.title, d.story, viewModelScope) { to ->
+            session.reading.translate(d.card.slug ?: d.card.id, to)
+        }
+        translator = made
+        return made
+    }
+
+    /**
      * A move from the ⋯ drawn at once, before the server answers (round 21): the card in the trash (its
      * banner, its days from now), private, or answering nothing. Returns the way back, for a refusal —
      * which puts the page as it was unless a read has replaced it since (that read says how it is).
@@ -262,6 +291,7 @@ class CardPageModel(private val session: Session, private val key: String, previ
             CardMove.MakePrivate -> d.copy(card = d.card.copy(visibility = FeedCard.Visibility.`private`), visibility = com.resonance.api.models.CardDetail.Visibility.`private`)
             CardMove.Unresonate -> d.copy(card = d.card.copy(referenceCardId = null), referenceCard = null)
         }
+
 
         /**
          * Whether a page read at `readAt`, as of change `readFor`, still shows `cardId` as it is: read
@@ -373,6 +403,32 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     var listCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val scope = rememberCoroutineScope()
     val reduced = context.prefersReducedMotion()
+    // Round 25 §F: the interface's language, the switch, and where the translate line is on screen.
+    val language = Strings.language.tag
+    val autoTranslate by remember { AppearanceStore.shared.state.map { it.autoTranslate } }.collectAsStateWithLifecycle(AppearanceStore.shared.state.value.autoTranslate)
+    var lineCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val pageView = LocalView.current
+    // The line's translator follows the page as read (made in an effect, never while composing).
+    LaunchedEffect(detail, language) { detail?.let { model.translatorFor(it, language) } }
+    val translatorNow = model.translator
+    LaunchedEffect(translatorNow, autoTranslate) {
+        val t = translatorNow ?: return@LaunchedEffect
+        if (!autoTranslate) return@LaunchedEffect
+        t.auto(inView = { lineOnScreen(lineCoords, pageView.height) }) {
+            // Scrolled past the line: nothing moves; the shell's toast offers it, keeping the reader's place.
+            toasts.show(
+                L10n.Card.Translate.ready,
+                action = Toasts.Action(L10n.Card.Translate.show, "${L10n.Card.Translate.ready} · ${L10n.Card.Translate.show}") {
+                    scope.launch { keepingPlace(list) { t.showReady() } }
+                },
+            )
+        }
+    }
+    // A polite word when the translation comes in (TalkBack), as the line's own live region says its new state.
+    LaunchedEffect(translatorNow?.swaps) {
+        val t = translatorNow ?: return@LaunchedEffect
+        if (t.swaps > 0 && t.showing) pageView.announce(L10n.Card.Translate.announce)
+    }
     val density = LocalDensity.current
     // The heading being read (CardToc's): the last whose top has passed a line 96 under the bar —
     // from where the article is in the list and where each heading is in the article, so it follows
@@ -437,13 +493,22 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                 val relatedLayout = cardListLayout()
                 LazyColumn(Modifier.fillMaxSize().onPlaced { listCoords = it }, state = list, contentPadding = PaddingValues(top = top, bottom = 40.dp)) {
                     item(key = "article") {
-                        // The story's type, read off its title and words together (StoryScripts), in this window's numbers.
-                        val text = model.storyText ?: remember(card.title, d.story) { StoryScripts.storyType(card.title, d.story) }
+                        // The translate line (round 25 §F2), for a page that gets one: what it shows, in its own type.
+                        val translator = model.translator?.takeIf { it.isFor(card.title, d.story) }
+                        val translated = translator?.takeIf { it.showing }?.translation
+                        // The story's type, read off its title and words together (StoryScripts), in this window's numbers —
+                        // the translation's own when it shows.
+                        val original = model.storyText ?: remember(card.title, d.story) { StoryScripts.storyType(card.title, d.story) }
+                        val text = if (translated == null) original else remember(translated) { StoryScripts.storyType(translated.title, translated.story) }
                         val type = StoryType.of(text.script, cls)
+                        val shownBlocks = if (translated == null) blocks else translatedBlocks(translated.story)
+                        val fade = rememberSwapFade(translator?.swaps ?: 0, reduced)
                         Column(heading.onItem.then(byline.onItem).onPlaced { articleCoords = it }.padding(start = columns.start, end = columns.end).mascotMark("column").padding(top = articleTop)) {
                             if (trashedOwn) TrashedCardBanner(card, d.anonymous, compact = cls == LayoutClass.Compact, focusTicket = trashedHere, onDeleted = popToRoot)
                             ArticleHead(
-                                card, d.anonymous, type, text.lang, titleModifier = heading.onHeading, bylineModifier = byline.onHeading,
+                                card, d.anonymous, type, text.lang, titleModifier = heading.onHeading.graphicsLayer { alpha = fade.value }, bylineModifier = byline.onHeading,
+                                title = translated?.title ?: card.title,
+                                line = translator?.let { t -> { TranslateLine(t, type.metaSize, type.metaGap.dp, Modifier.onGloballyPositioned { lineCoords = it }) } },
                                 actions = if (actionsSlot == CardActionsSlot.Byline && !trashedOwn) {
                                     { CardPageActions(session, d, sharing, open, onShare = share, onTrashed = { trashedHere++ }, onMoving = model::drawNow, seed = card.accentHue ?: 55.0) }
                                 } else null,
@@ -451,10 +516,10 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                 privateCard = isPrivateCard(d) || isSharedPrivateCard(d),
                             ) { open(Route.Author(it)) }
                             // The story alone is what the bar's progress measures (not the cover, title or lists).
-                            Box(Modifier.onGloballyPositioned(progress::story).mascotMark("story")) {
+                            Box(Modifier.onGloballyPositioned(progress::story).mascotMark("story").graphicsLayer { alpha = fade.value }) {
                                 // Its words follow the system's text size up to 2× (the cards in it keep the interface's).
                                 ReadingTextScale {
-                                    StoryMarkdown(blocks, type, text.lang, openUrl, linkCards, headingAnchor = if (railed) anchors::anchor else null) { href, title, style ->
+                                    StoryMarkdown(shownBlocks, type, text.lang, openUrl, linkCards, headingAnchor = if (railed) anchors::anchor else null) { href, title, style ->
                                         CardEmbed(embeds.embedFor(href), href, title, style, open)
                                     }
                                 }
@@ -646,6 +711,10 @@ private fun ArticleHead(
     actions: (@Composable () -> Unit)? = null,
     /** The owner's 私人卡: its meta line ends with the lock and 私人卡 (round 9 §1). */
     privateCard: Boolean = false,
+    /** The title shown: the card's, or its translation's (round 25 §F2). */
+    title: String = card.title,
+    /** The translate line under the byline (round 25 §F2), its own row at the story's start column; null: none. */
+    line: (@Composable () -> Unit)? = null,
     openAuthor: (String) -> Unit,
 ) {
     if (card.imageUrl != null) {
@@ -658,10 +727,14 @@ private fun ArticleHead(
         Spacer(Modifier.height(type.coverGap.dp))
     }
     ReadingTextScale {
-        StoryTitle(card.title, type, lang, titleModifier.semantics { heading() })
+        StoryTitle(title, type, lang, titleModifier.semantics { heading() })
     }
     Spacer(Modifier.height(type.metaGap.dp))
     StoryByline(card, anonymous, type, bylineModifier, actions, privateCard, openAuthor)
+    if (line != null) {
+        Spacer(Modifier.height(type.metaGap.dp))
+        line()
+    }
     Spacer(Modifier.height(type.leadGap.dp))
 }
 
@@ -1005,3 +1078,47 @@ internal fun easesProgress(jump: Float, scrolling: Boolean, interrupted: Boolean
 /** The smallest change of the reading progress that eases rather than snaps (2 % of the story). */
 internal const val PROGRESS_JUMP = 0.02f
 private const val PROGRESS_EASE_MILLIS = 120
+
+/** Whether the translate line is on screen now (between the window's top and [windowHeight]). */
+internal fun lineOnScreen(line: LayoutCoordinates?, windowHeight: Int): Boolean {
+    val c = line?.takeIf { it.isAttached } ?: return false
+    val b = c.boundsInWindow()
+    return b.bottom > 0f && b.top < windowHeight && b.height > 0f
+}
+
+/**
+ * Swaps the story's text ([swap]) keeping the reader where they were in it (round 25 §F4, the toast's 看譯文): the
+ * same share of the article above the screen's top before and after — its blocks are the same blocks, translated.
+ */
+internal suspend fun keepingPlace(list: LazyListState, swap: () -> Unit) {
+    val before = list.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "article" }
+    if (before == null || before.offset >= 0) return swap()
+    val share = -before.offset.toFloat() / before.size.coerceAtLeast(1)
+    swap()
+    // The new text is laid out at the next frame: then the same share of it goes above the top.
+    withFrameNanos { }
+    val after = list.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "article" } ?: return
+    val want = -(share * after.size)
+    list.scrollBy(after.offset - want)
+}
+
+/** The translated story's blocks, parsed off the main thread (a story of up to 30,000 characters); empty meanwhile. */
+@Composable
+private fun translatedBlocks(story: String): List<com.resonance.kit.story.StoryBlock> {
+    val parsed by produceState(emptyList<com.resonance.kit.story.StoryBlock>(), story) {
+        value = withContext(Dispatchers.Default) { StoryParser.parse(story) }
+    }
+    return parsed
+}
+
+/** The title's and story's 180 ms fade as the text swaps (round 25 §F2): none under reduced motion, none at the first. */
+@Composable
+private fun rememberSwapFade(swaps: Int, reduced: Boolean): Animatable<Float, AnimationVector1D> {
+    val fade = remember { Animatable(1f) }
+    LaunchedEffect(swaps) {
+        if (swaps == 0 || reduced) return@LaunchedEffect fade.snapTo(1f)
+        fade.snapTo(0f)
+        fade.animateTo(1f, tween(180))
+    }
+    return fade
+}

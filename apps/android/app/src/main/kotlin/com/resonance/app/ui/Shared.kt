@@ -1,5 +1,7 @@
 package com.resonance.app.ui
 
+import com.resonance.api.models.SummaryTranslation
+import com.resonance.kit.story.StoryTranslation
 import com.resonance.design.CoverFraming
 import com.resonance.design.avatarFill
 import androidx.compose.animation.core.animate
@@ -132,12 +134,13 @@ internal class HeadingUnderBar {
  * The recommender's reason is left out on purpose: the web never explains a
  * pick (home/page.tsx), so the card's margin-note slot stays empty everywhere.
  */
-fun FeedCard.story(): StoryCardContent {
+fun FeedCard.story(translated: SummaryTranslation? = null, translatedLang: String? = null): StoryCardContent {
     val a = author.takeUnless { anonymous }
     return StoryCardContent(
         id = id,
-        title = title,
-        excerpt = excerpt,
+        title = translated?.title ?: title,
+        excerpt = translated?.excerpt ?: excerpt,
+        translatedLang = translatedLang.takeIf { translated != null },
         authorName = a?.handle ?: L10n.Card.anonymousAuthor,
         authorInitials = a?.initials ?: "·",
         authorImageUrl = a?.avatarUrl,
@@ -150,6 +153,20 @@ fun FeedCard.story(): StoryCardContent {
         reason = null,
         imageFrame = framing,
     )
+}
+
+/**
+ * A feed card's content as the reader sees it (round 25 §F7): with 自動翻譯 on and the card not theirs, the title and
+ * excerpt an AI made for the interface's language when the server sent them — made once per card and setting, never
+ * fetched, so nothing moves after the card is drawn.
+ */
+@Composable
+internal fun rememberStory(card: FeedCard): StoryCardContent {
+    val reader = LocalSummaryReader.current
+    return remember(card, reader) {
+        val t = StoryTranslation.summary(card, reader.language, reader.on, reader.viewerId)
+        card.story(t, StoryTranslation.targetOf(reader.language))
+    }
 }
 
 /** Where the card's cover is looked at (round 25 §G1, `imageFrame`), as the design draws it; null: centred. */
@@ -219,7 +236,7 @@ fun LazyListScope.storyCards(
     val palettes = cardRunFamilies(cards, leading)
     itemsIndexed(cards, key = { _, c -> keyPrefix + c.id }, contentType = { _, _ -> "storyCard" }) { i, card ->
         // Mapped once per card (its strings and accent), not on every recomposition of the list.
-        val content = remember(card) { card.story() }
+        val content = rememberStory(card)
         StoryCard(
             content, runPosition(i, leading, cards.size), i == cards.lastIndex,
             Modifier.entering(entering, i).plainClickable { open(Route.Card(card.routeKey, card)) }.pointerHoverIcon(PointerIcon.Hand),
@@ -275,7 +292,7 @@ internal fun LazyListScope.borderedCards(
                         val card = cards[i]
                         Column(Modifier.entering(entering, i)) {
                             Box {
-                                BorderedStoryCard(remember(card) { card.story() }, runPosition(i, leading, cards.size), Modifier.plainClickable { open(tap(card)) }, palette = palettes[i])
+                                BorderedStoryCard(rememberStory(card), runPosition(i, leading, cards.size), Modifier.plainClickable { open(tap(card)) }, palette = palettes[i])
                                 overlay?.invoke(this, card, i)
                             }
                             caption?.invoke(card)

@@ -237,6 +237,14 @@ class ReadingApi(private val api: DefaultApi) {
      * readCount: always 204, whatever it counted ([com.resonance.kit.reading.CardReads] asks it).
      */
     suspend fun countRead(id: String) = call { api.countCardRead(id) }
+    /**
+     * A public story translated into [to] (round 25 §F5: `en` or `zh-TW`), for its reader: 429 when today's are spent,
+     * 503 when it couldn't be made (ask again later), 404 for a card that isn't published and public.
+     */
+    suspend fun translate(key: String, to: String): com.resonance.api.models.TranslationResponse = call {
+        val target = if (to == "zh-TW") com.resonance.api.models.TranslationRequest.To.zhTW else com.resonance.api.models.TranslationRequest.To.en
+        api.translateCard(key, com.resonance.api.models.TranslationRequest(target))
+    }
     suspend fun resonances(id: String): List<FeedCard> = call { api.getCardResonances(id).cards }
     suspend fun related(id: String): List<FeedCard> = call { api.getRelatedCards(id).cards }
     suspend fun links(id: String): List<FeedCard> = call { api.getCardLinks(id).cards }

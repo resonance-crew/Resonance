@@ -34,6 +34,11 @@ class AppearanceStore(private val prefs: SharedPreferences, private val nightMod
         val scheme: AppearanceScheme = AppearanceScheme.System,
         val accent: AppearanceAccent = AppearanceAccent.Terracotta,
         val mascots: Boolean = false,
+        /**
+         * 自動翻譯 (round 25 §F4): stories, and the feed's titles and excerpts, in another language shown translated by AI
+         * into the interface's — off until turned on, kept on this device.
+         */
+        val autoTranslate: Boolean = false,
     )
 
     private val _state = MutableStateFlow(read())
@@ -43,6 +48,7 @@ class AppearanceStore(private val prefs: SharedPreferences, private val nightMod
         AppearanceScheme.of(prefs.getString(SCHEME_KEY, null)),
         AppearanceAccent.of(prefs.getString(ACCENT_KEY, null)),
         prefs.getBoolean(MASCOTS_KEY, false),
+        prefs.getBoolean(AUTO_TRANSLATE_KEY, false),
     )
 
     fun setScheme(scheme: AppearanceScheme) {
@@ -62,6 +68,12 @@ class AppearanceStore(private val prefs: SharedPreferences, private val nightMod
         if (on == _state.value.mascots) return
         prefs.edit().putBoolean(MASCOTS_KEY, on).apply()
         _state.value = _state.value.copy(mascots = on)
+    }
+
+    fun setAutoTranslate(on: Boolean) {
+        if (on == _state.value.autoTranslate) return
+        prefs.edit().putBoolean(AUTO_TRANSLATE_KEY, on).apply()
+        _state.value = _state.value.copy(autoTranslate = on)
     }
 
     /** Whether the screens are dark now: the choice, or for 跟隨系統 what [configuration] says. */
@@ -87,6 +99,7 @@ class AppearanceStore(private val prefs: SharedPreferences, private val nightMod
         const val SCHEME_KEY = "appearance.scheme"
         const val ACCENT_KEY = "appearance.accent"
         const val MASCOTS_KEY = "appearance.mascots"
+        const val AUTO_TRANSLATE_KEY = "translate.auto"
 
         /** The process's store (ResonanceApp makes it before any screen). */
         lateinit var shared: AppearanceStore
