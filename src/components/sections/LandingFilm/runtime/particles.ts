@@ -25,10 +25,6 @@ export class StyleBook {
     m.set(prop, v);
     (el as HTMLElement | SVGElement).style.setProperty(prop, v);
   }
-  /** Whether a value of `prop` has been written on the element. */
-  has(el: Element, prop: string): boolean {
-    return this.m.get(el)?.has(prop) ?? false;
-  }
   /** Forgets one element's cached values (something else wrote its style). */
   forget(el: Element) {
     this.m.delete(el);
