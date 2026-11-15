@@ -172,6 +172,12 @@ export const SCREENS: Screen[] = [
   // Round 25 §G1: a cover framed off its centre — the lamp at the picture's right edge stays in view on every shape.
   { id: 'card-framed', route: '/card/harbour-lamp', as: 'bob', platforms: ['web'],
     expect: "alice's card 港邊的那盞燈: its cover cut on its frame — the lamp and its glow in view right of centre, not the empty sky" },
+  // Round 25 §G2: the publish step of a card with a picture cover — 調整位置 left of 更換封面 — and the dialog it opens.
+  { id: 'publish-cover', route: '/write/harbour-lamp', as: 'alice', platforms: ['web'], web: { query: 'step=publish' },
+    expect: "alice's 港邊的那盞燈 on its publish step (更新這張卡片): the cover with two chips at its foot, 調整位置 left of 更換封面, in the card's own paper and pen" },
+  { id: 'cover-frame', route: '/write/harbour-lamp', as: 'alice', platforms: ['web'],
+    web: { query: 'step=publish', click: 'button[aria-label="調整位置"], button[aria-label="Adjust"]' },
+    expect: '調整封面 over the publish step: the harbour picture under a frame in the feed card’s shape, dimmed outside it, the lamp right of centre; the zoom slider, 重設, then 取消 · 完成' },
   { id: 'write-new', route: '/write', as: 'dora',
     expect: "A newcomer's empty writer: the title and story placeholders (on wide screens beside her empty thought map)" },
   // At the desktop split the thought map sits beside the writer, and its camera
