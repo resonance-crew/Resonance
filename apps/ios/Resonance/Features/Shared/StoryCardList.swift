@@ -48,7 +48,8 @@ struct StoryCardList: View {
     private func cell(_ i: Int, key: String, position: Int, palette: Int, bordered: Bool) -> some View {
         let card = cards[i]
         return NavigationLink(value: Route.card(card.routeKey)) {
-            StoryCardView(card.story, position: position, isLast: i == cards.count - 1, underBar: underBar && i == 0, bordered: bordered,
+            StoryCardView(Self.content(card, translate: TranslationSettings.shared.autoTranslate, viewer: session.uid),
+                          position: position, isLast: i == cards.count - 1, underBar: underBar && i == 0, bordered: bordered,
                           palette: palette)
                 // Its 0.62 cut from the cover's frame (round 25 §G1).
                 .coverFraming(card.coverFraming)
@@ -63,6 +64,19 @@ struct StoryCardList: View {
             if i == cards.count - 1 { onAppearLast?() }
             CoverPrefetch.ahead(Self.coversAhead(of: i, in: cards))
         }
+    }
+
+    /// The card as the list draws it: with 自動翻譯 on, someone else's card the server sent a translation for shows
+    /// its title and excerpt in the interface's language, marked (round 25 §F7). Nothing is fetched for it, and
+    /// nothing moves once the card is drawn.
+    static func content(_ card: FeedCard, translate: Bool, viewer: String?, interface: Strings.Language = Strings.shared.language) -> StoryCardContent {
+        var content = card.story
+        if let t = StoryTranslationRule.summary(card, on: translate, interface: interface, viewer: viewer) {
+            content.title = t.title
+            content.excerpt = t.excerpt
+            content.translation = (interface.rawValue, L10n.Card.Translate.mark)
+        }
+        return content
     }
 
     /// How many covers past a card on screen are fetched ahead of the reader.

@@ -468,9 +468,12 @@ private struct NotificationSettings: View {
     }
 }
 
-/// Language: the interface language, as a radio list (the web's select).
+/// Language: the interface language, as a radio list (the web's select), then 自動翻譯 (round 25 §F4): stories,
+/// titles and excerpts in another language shown translated by AI into the interface's — off until turned on, kept
+/// on this device.
 private struct LanguageSettings: View {
     @Environment(SessionStore.self) private var session
+    private var translation: TranslationSettings { .shared }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -483,6 +486,11 @@ private struct LanguageSettings: View {
                 WavyDivider(seed: 67).padding(.vertical, 2)
                 row(.en, "English", flag: "gb", seed: 73)
             }
+            WavyDivider(seed: 79).padding(.vertical, 2)
+            NotificationSwitchRow(label: L10n.Settings.Language.autoTranslateStories,
+                                  hint: L10n.Settings.Language.autoTranslateStoriesHint, seed: 83,
+                                  isOn: Binding(get: { translation.autoTranslate }, set: { translation.setAutoTranslate($0) }))
+                .padding(.top, 12)
         }
     }
 
