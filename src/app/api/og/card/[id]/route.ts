@@ -12,6 +12,7 @@ import {
 import { LINK_IMAGE_SIZE, coverVersion, drawnCard, drawnCardVersion } from '@/lib/linkImage/model';
 import { renderDrawnCard } from '@/lib/linkImage/render';
 import { storageKeyOf } from '@/lib/storage/publicUrl';
+import { coverFrameOf } from '@/lib/images/coverFrame';
 
 export const runtime = 'nodejs';
 
@@ -45,9 +46,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const data = snap?.data();
   if (!data || data.visibility !== 'public' || data.publishedAt == null) return shareImageFallback();
   // A cover is shared as itself (lib/og's cardImage names the same one).
-  const media = data.media as { type?: unknown; url?: unknown } | undefined;
+  const media = data.media as { type?: unknown; url?: unknown; frame?: unknown } | undefined;
   if (media?.type === 'image' && typeof media.url === 'string' && media.url) {
-    return shareImageResponse(req, path, media.url, { version: coverVersion, crop: LINK_IMAGE_SIZE });
+    // Cut where its author framed it (lib/images/coverFrame), as every shape the cover is drawn in is.
+    const frame = coverFrameOf(media.frame);
+    return shareImageResponse(req, path, media.url, { version: (url) => coverVersion(url, frame), crop: { ...LINK_IMAGE_SIZE, frame } });
   }
 
   const card = mapCard(id, data);

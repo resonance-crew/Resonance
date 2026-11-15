@@ -55,7 +55,7 @@ function cardImage(card: Card, author: User | null, base: string, storageBases: 
   const cover = card.media?.type === 'image' && card.media.url ? card.media.url : null;
   if (cover && !storageKeyOf(cover, storageBases)) return { url: cover };
   // An anonymous card's image is drawn from the card alone.
-  const version = cover ? coverVersion(cover) : drawnCardVersion(drawnCard(card, card.anonymous ? null : author, storageBases));
+  const version = cover ? coverVersion(cover, card.media?.frame) : drawnCardVersion(drawnCard(card, card.anonymous ? null : author, storageBases));
   return { url: `${path}?v=${version}`, ...LINK_IMAGE_SIZE };
 }
 
