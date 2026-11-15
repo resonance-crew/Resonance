@@ -271,8 +271,9 @@ struct CardScreen: View {
             }
             // Also resumes a load that was cut short when the page left mid-way.
             if let model, model.detail == nil { await model.load() }
-            startTranslator()
         }
+        // The card has loaded: the translate line, when the story is one to offer it for.
+        .onChange(of: model?.phase == .loaded, initial: true) { _, loaded in if loaded { startTranslator() } }
         // The translated story measured after the toast's 看譯文: back to where the reader was.
         .onChange(of: meter.story) { _, story in
             guard let share = keptPlace, story.height > 0 else { return }
