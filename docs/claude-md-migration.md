@@ -49,8 +49,7 @@ npx tsx scripts/ci/claudeMdCoverage.ts        # old CLAUDE.md at 343c6f21 agains
 
 | Sentence | Why |
 | --- | --- |
-
-None.
+| `all still under reduced motion, Save-Data, Low Power or battery saver` | Round 25 (2026-11-15), the owner: 「省电模式应该没有影响这么大」 — Low Power Mode and battery saver no longer hold the sticker picker still, so the picker's sentence in `.claude/rules/messages-ui.md` now says reduced motion (and the web's Save-Data) only. The rest of the sentence is unchanged |
 
 ## Where each old line went
 

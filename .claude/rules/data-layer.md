@@ -24,6 +24,7 @@ paths:
 - **Anonymity**: an anonymous card's document names its author, so the rules let only the author read or list it; every public client list must say `where('anonymous', '==', false)` (composite indexes exist for each).
   Everyone else gets an anonymous card from the server, which leaves the author out: signed in through `/api/v1`, signed out through `GET /api/cards/view` (the card page falls back to it) and `GET /api/cards/latest` (the home feed).
   Card links are server-only; a link into someone's anonymous card shows on their profile only to them.
+  So are a story's kept translations (`cards/{id}/translations/{to}`, round 25: the rules refuse every read and write, the author's too — a reader gets one through `POST /api/v1/cards/{key}/translation`, which asks who may read the card) and the card's own `summaryTranslations` (the feed's translated title and excerpt: the rules take it from no client); `deleteCard` deletes the kept translations in its own transaction by their exact paths, the account purge with the card's tree.
   Notes are readable by their recipient only; a note on a named card is also a message in the two people's conversation (below), one on an anonymous card never is — not even between two people already connected — and never opens, counts toward or answers a letter (Safety).
   A block never hides an anonymous card nor refuses what is aimed at one (Safety).
   An anonymous card is public or private, never for connections only (Safety).

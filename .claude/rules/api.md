@@ -55,6 +55,8 @@ Who may reach whom, blocks, anonymity and the trash — every server path re-che
 | `POST /api/v1/invites/{id}/accept` | accept a legacy invite: invite, connection and bell in one transaction, then the push. Open until its `expiresAt` (every sender wrote one, a week ahead): past it — or without one, which no writer of ours sent — it is 409 `conflict` and closed as `expired`; the web inbox (`listIncomingPendingInvites`) lists only invites before their date and drops a row that answers 409, saying `inviteInbox.closed`; needs a pen name (asked before the blocks) |
 | `GET /api/v1/openapi.json` | the v1 contract, for tools and client generators |
 
+**The feed's translated title and excerpt** (round 25 §F7): after the response of a publish and of an applied edit, beside the index, a public card's title and list excerpt are translated in one model call with a timeout (`makeSummaryTranslations` → the card's server-written `summaryTranslations = { of, en?, "zh-TW"? }`; best effort — a failure leaves the card without until its next edit or `scripts/backfill.ts summary-translations`). An applied edit pays for it from the reindex budget, spent just before the call; a publish spends nothing more than its own bucket. A list answers them as `FeedCard.summaryTranslations` only for a card that is public, published and not in the trash, and only while the stored hash `of` still matches the title and excerpt the list shows (`presentSummaryTranslations`) — so an edit from a build that doesn't make them never shows a stale one; the reader's 自動翻譯 switch decides whether a client shows them. No list route asks a model.
+
 ## Rate limits, auth, the contract
 
 **Rate limits** (`src/lib/api/rateLimit.ts`): costly or far-reaching endpoints spend a per-user budget (`spend()` in v1 routes, `limited()` elsewhere) kept in server-only `rateLimits/{uid}_{bucket}`; over budget answers 429 `rate_limited`.
@@ -63,6 +65,7 @@ A new LLM, upload or notify endpoint should take a bucket.
 `trash` and `restore` are separate (200 a day each), so clearing many cards never spends what an undo needs.
 `react` (300 a day), `unsend` and `stopShare` (100 a day each) bound the quiet writes on someone else's thread.
 `read` (500 a day) bounds counting reads on others' cards.
+`translate` (40 a day) is spent only when a story's translation is made, never by one already kept for the card.
 
 API routes authenticate with the `__session` cookie **or** `Authorization: Bearer <Firebase ID token>` (native apps) — both via `getCurrentUser()`.
 
