@@ -114,6 +114,29 @@ export function OrganicImage({
     });
   }, [w, h, R, seed, mag]);
 
+  const picture = src ? (
+    // Plain <img>: the surrounding clip-path + outward `bleed` mask the
+    // image organically; next/image's wrapper/sizing fights that layout.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      key={retryOf === src ? 'retry' : 'first'}
+      ref={imgRef}
+      src={src}
+      onLoad={() => setSettled(src)}
+      onError={() => failed(src)}
+      alt={alt}
+      loading={priority ? 'eager' : 'lazy'}
+      decoding={priority ? undefined : 'async'}
+      fetchPriority={priority ? 'high' : undefined}
+      data-frame={framed ? '' : undefined}
+      style={
+        framed
+          ? { position: 'absolute', ...framed, maxWidth: 'none' }
+          : { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }
+      }
+    />
+  ) : null;
+
   return (
     <div
       ref={ref}
@@ -131,27 +154,14 @@ export function OrganicImage({
           land on image pixels rather than on empty space. */}
       <div style={{ position: 'absolute', inset: clip ? -bleed : 0 }}>
         {shimmering && <Skeleton radius={0} height="100%" style={{ position: 'absolute', inset: 0 }} />}
-        {src && (
-          // Plain <img>: the surrounding clip-path + outward `bleed` mask the
-          // image organically; next/image's wrapper/sizing fights that layout.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={retryOf === src ? 'retry' : 'first'}
-            ref={imgRef}
-            src={src}
-            onLoad={() => setSettled(src)}
-            onError={() => failed(src)}
-            alt={alt}
-            loading={priority ? 'eager' : 'lazy'}
-            decoding={priority ? undefined : 'async'}
-            fetchPriority={priority ? 'high' : undefined}
-            data-frame={framed ? '' : undefined}
-            style={
-              framed
-                ? { position: 'absolute', ...framed, maxWidth: 'none' }
-                : { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }
-            }
-          />
+        {picture && framed ? (
+          // A framed cover's percentages are of the ratio box itself (coverImageBox), not of this bled wrapper —
+          // W + 2b by H + 2b would draw it out of shape and off its crop — so it sits in the box, back in by `bleed`.
+          <div data-frame-box="" style={{ position: 'absolute', inset: clip ? bleed : 0 }}>
+            {picture}
+          </div>
+        ) : (
+          picture
         )}
         {children}
       </div>

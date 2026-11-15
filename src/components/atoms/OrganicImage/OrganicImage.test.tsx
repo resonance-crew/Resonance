@@ -56,3 +56,34 @@ describe('a cover that fails to load', () => {
     expect(container.querySelector('img')).not.toBe(first);
   });
 });
+
+// Round 25 post-merge: a framed cover's percentages (coverImageBox) are of the ratio box, but the picture sat in
+// the wrapper that bleeds past it on every side — drawn out of its shape and off the crop the stage showed.
+describe('a framed cover', () => {
+  const W = 320;
+  const RATIO = 0.62;
+  beforeEach(() => {
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(W);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(Math.round(W * RATIO));
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  const px = (v: string) => Number.parseFloat(v);
+  const pct = (v: string) => Number.parseFloat(v) / 100;
+
+  it('is drawn in its own shape, its percentages of the ratio box', () => {
+    const frame = { cx: 0.3, cy: 0.4, zoom: 1.4, ar: 1.5 };
+    const { container } = render(<OrganicImage src="https://img.example.com/image/framed.avif" ratio={RATIO} frame={frame} />);
+    const img = container.querySelector<HTMLImageElement>('img[data-frame]')!;
+    // The box the percentages are of: the img's containing block, from the bled wrapper and its own inset.
+    const bled = container.firstElementChild!.firstElementChild as HTMLElement;
+    const bleed = -px(bled.style.inset || '0');
+    expect(bleed).toBeGreaterThan(0); // the clip is measured, so the wrapper does bleed
+    const holder = img.parentElement!;
+    const inset = holder === bled ? 0 : px(holder.style.inset || '0');
+    const boxW = W + 2 * bleed - 2 * inset;
+    const boxH = Math.round(W * RATIO) + 2 * bleed - 2 * inset;
+    const drawnAspect = (pct(img.style.width) * boxW) / (pct(img.style.height) * boxH);
+    expect(Math.abs(drawnAspect / frame.ar - 1)).toBeLessThan(0.01);
+  });
+});
