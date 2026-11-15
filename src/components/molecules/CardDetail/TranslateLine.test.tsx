@@ -24,9 +24,9 @@ const ZH: TranslatableCard = {
 const EN_TRANSLATION = { to: 'en', title: 'A walk in the rain', story: 'It rained that day; we walked the river a long time.\n\n## By the river\n\nThe water was close.' };
 
 /** A card page in miniature: the line, then the shown title and story, as CardDetailClient lays them out. */
-function Page({ card = ZH, isOwner = false, signedIn = true, locale = 'en', onSignIn = () => {} }: { card?: TranslatableCard; isOwner?: boolean; signedIn?: boolean; locale?: string; onSignIn?: () => void }) {
+function Page({ card = ZH, isOwner = false, signedIn = true, authLoading = false, locale = 'en', onSignIn = () => {} }: { card?: TranslatableCard; isOwner?: boolean; signedIn?: boolean; authLoading?: boolean; locale?: string; onSignIn?: () => void }) {
   const storyRef = useRef<HTMLDivElement>(null);
-  const tr = useStoryTranslation({ card, isOwner, signedIn, locale, storyRef, onSignIn });
+  const tr = useStoryTranslation({ card, isOwner, signedIn, authLoading, locale, storyRef, onSignIn });
   return (
     <>
       <TranslateLine tr={tr} />
@@ -85,6 +85,18 @@ describe('which stories get the line (§F3)', () => {
     expect(translateOffer({ ...ZH, publishedAt: null }, { isOwner: false, locale: 'en' })).toBeNull();
     expect(translateOffer(ZH, { isOwner: false, locale: 'zh-TW' })).toBeNull();
     expect(translateOffer({ ...ZH, story: '雨'.repeat(30_001) }, { isOwner: false, locale: 'en' })).toBeNull();
+  });
+
+  it('counts only the story toward the 30,000 characters, as the server and the apps do', () => {
+    expect(translateOffer({ ...ZH, thoughtCore: '雨中的散步，長長的標題', story: '雨'.repeat(30_000) }, { isOwner: false, locale: 'en' })).toBe('en');
+  });
+
+  it('while auth settles: no line (it could be the owner’s own card), and nothing goes to sign-in', () => {
+    const onSignIn = vi.fn();
+    const { container } = draw({ isOwner: false, signedIn: false, authLoading: true, onSignIn });
+    expect(container.querySelector('[data-translate]')).toBeNull();
+    expect(onSignIn).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('draws nothing where there is no offer', () => {

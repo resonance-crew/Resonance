@@ -33,7 +33,8 @@ export interface TranslatableCard {
  */
 export function translateOffer(card: TranslatableCard, { isOwner, locale }: { isOwner: boolean; locale: string }): TranslationTarget | null {
   if (isOwner || !card.publishedAt || card.visibility !== 'public' || card.trashedAt) return null;
-  if (card.thoughtCore.length + card.story.length > TRANSLATE_MAX_CHARS) return null;
+  // the story alone, as the server (api/v1/translation) and both apps count it
+  if (card.story.length > TRANSLATE_MAX_CHARS) return null;
   const to = translateTarget(locale);
   return translationTargets(card.thoughtCore, card.story).includes(to) ? to : null;
 }
@@ -112,6 +113,7 @@ export function useStoryTranslation({
   card,
   isOwner,
   signedIn,
+  authLoading = false,
   locale,
   storyRef,
   onSignIn,
@@ -119,6 +121,8 @@ export function useStoryTranslation({
   card: TranslatableCard | null;
   isOwner: boolean;
   signedIn: boolean;
+  /** While auth settles, who is reading is not known (the owner? signed in?): nothing is offered, a tap does nothing. */
+  authLoading?: boolean;
   locale: string;
   storyRef: RefObject<HTMLElement | null>;
   onSignIn: () => void;
@@ -126,7 +130,7 @@ export function useStoryTranslation({
   const t = useTranslations('card.translate');
   const toast = useToast();
   const auto = useAutoTranslate();
-  const to = card ? translateOffer(card, { isOwner, locale }) : null;
+  const to = card && !authLoading ? translateOffer(card, { isOwner, locale }) : null;
   const key = card ? (card.slug || card.id) : '';
   const [state, setState] = useState<TranslateState>('can');
   const [translation, setTranslation] = useState<Translation | null>(null);

@@ -184,6 +184,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
     card: data?.card ?? null,
     isOwner,
     signedIn: !!user,
+    authLoading: loading,
     locale,
     storyRef,
     onSignIn: () => router.push('/signin'),
