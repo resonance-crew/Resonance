@@ -52,6 +52,11 @@
  *       (after previews learn a site, as YouTube's videos in round 5); a dry run also lists every published
  *       paragraph whose card-ness the words rule changed (round 16: a lone link with words of its own reads as
  *       those words) — card id, where the paragraph starts, its link
+ *   npx tsx scripts/backfill.ts summary-translations [--apply] [--emulator]
+ *       published public cards a list may show get their title and excerpt translated by AI (round 25:
+ *       into English for a Chinese story, 繁體中文 for a Latin-script one, both for Japanese or Korean), as a
+ *       publish makes them — one small OpenAI call each, two at a time; needs OPENAI_API_KEY to apply (on the
+ *       emulator no model is asked: every card answers `offline`) — production runs are the owner's call
  *
  * Production credentials come from .env; `--emulator` runs against the local
  * emulators (EMULATOR_FIRESTORE_PORT etc., see scripts/emulator-env.mjs) and
@@ -191,6 +196,11 @@ async function main() {
     case 'card-tombstones': {
       const { backfillCardTombstones } = await import('./backfills/cardTombstones');
       await backfillCardTombstones(db, { apply });
+      return;
+    }
+    case 'summary-translations': {
+      const { backfillSummaryTranslations } = await import('./backfills/summaryTranslations');
+      await backfillSummaryTranslations(db, { apply });
       return;
     }
     case 'link-previews': {
