@@ -390,7 +390,14 @@ change near one of those states (`capture android --device phone-large --only se
   with the other picture — one shift per cell, never per pixel, so a badge's "2" turned "3" (every
   stroke with ink beside it) still counts. The search runs on both pictures blurred 3 × 3, so a thin
   pen line moved by part of a pixel (the Mac app's 77 % scale after a one-pixel shift) lines up
-  too. A cell not forgiven with 6 pixels apart is changed; touching changed cells make an area, and
+  too, and so does text antialiased again at another fraction of a pixel (after a macOS update its
+  edges still differ by up to ~70 grey levels blurred and lined up: the blurred pictures are compared
+  at 0.2, with 4 pixels of slack a cell). What the blur would even out is held another way: a cell
+  with more than 6 pixels apart on *flat paper* — nothing but one colour within 3 px, in either
+  picture — is never forgiven, since antialiasing only lives on edges both pictures share. So a
+  fill that changed colour, a hairline that came or went, an emoji drawn a duller red (the Mac's 🇹🇼
+  in run 20261115-000009) still count. What it can't tell: text whose ink alone turned lighter or
+  darker by less than ~70 levels reads as the same text antialiased again. A cell not forgiven with 6 pixels apart is changed; touching changed cells make an area, and
   any area — one cell is enough, the size of a badge's digit — makes the capture changed, however
   small beside the page. A capture can name regions to skip (`<capture>.ignore.json`, kept with it
   on `accept`): the web names the cards' cover titles (SVG text scaled to the cover, whose glyphs

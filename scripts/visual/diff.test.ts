@@ -1,5 +1,16 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { PNG } from 'pngjs';
 import { describe, expect, it } from 'vitest';
 import { compareImages } from './diff';
+
+/** A pair of crops from a real run (scripts/visual/fixtures/diff): the baseline's, then the run's. */
+function pair(name: string) {
+  const read = (tag: string) => PNG.sync.read(readFileSync(join(__dirname, 'fixtures/diff', `${name}.${tag}.png`)));
+  const a = read('before');
+  const b = read('after');
+  return { a: a.data as unknown as Uint8Array, b: b.data as unknown as Uint8Array, width: a.width, height: a.height };
+}
 
 const W = 400;
 const H = 300;
@@ -107,5 +118,31 @@ describe('compareImages', () => {
     const { x, y } = areas[0];
     const at = (Math.max(0, y - 4) * W + Math.max(0, x - 4)) * 4;
     expect([...diff.slice(at, at + 3)]).toEqual([200, 0, 0]);
+  });
+  // Run 20261115-000009 failed 8 captures nobody changed: the Mac's and the iPhone's text, drawn at
+  // another fraction of a pixel after a macOS update, antialiased again.
+  it.each(['mac-bubble', 'mac-bubble-2', 'iphone-sticker'])('forgives text antialiased again with nothing changed (%s, real pixels)', (name) => {
+    const { a, b, width, height } = pair(name);
+    const result = compareImages(a, b, width, height);
+    expect(result.areas).toEqual([]);
+    expect(result.shiftedRatio).toBeGreaterThan(0);
+  });
+
+  it("still finds the same run's real change: the Mac drawing the flag emoji a duller red (real pixels)", () => {
+    const { a, b, width, height } = pair('mac-flag');
+    expect(compareImages(a, b, width, height).areas.length).toBeGreaterThan(0);
+  });
+
+  it('finds a hairline rule that came or went on flat paper, which blurring evens out', () => {
+    const ruled = page(LAYOUT);
+    for (let x = 40; x < 360; x++) ruled.set([170, 165, 160, 255], (150 * W + x) * 4);
+    expect(compareImages(page(LAYOUT), ruled, W, H).areas.length).toBeGreaterThan(0);
+    expect(compareImages(ruled, page(LAYOUT), W, H).areas.length).toBeGreaterThan(0);
+  });
+
+  it('finds a fill that changed colour by a little more than the threshold', () => {
+    const tinted = page(LAYOUT);
+    for (let y = 120; y < 180; y++) for (let x = 40; x < 180; x++) tinted.set([217, 211, 202, 255], (y * W + x) * 4);
+    expect(compareImages(page(LAYOUT), tinted, W, H).areas.length).toBeGreaterThan(0);
   });
 });

@@ -13,7 +13,16 @@
  *    within a pixel or two, but no one shift turns the one into the other. The search runs on
  *    both pictures blurred 3 × 3: a thin line moved by part of a pixel spreads its ink over two
  *    pixels instead of one (the Mac app draws at 77 %), so its exact colours are found nowhere,
- *    though blurred the two look the same.
+ *    though blurred the two look the same. Text drawn at another fraction of a pixel is the same
+ *    words antialiased again: blurred and lined up, its edges still differ by up to ~70 grey levels
+ *    (run 20261115-000009: 8 captures failed on Mac and iPhone text nobody changed), so the blurred
+ *    pictures are compared at 0.2 and a cell may keep CELL_SLACK pixels apart.
+ * 2b. A cell is never forgiven when more than FLAT_SLACK of its pixels apart sit on flat paper —
+ *    nothing but one colour within SHIFT + 1 px, in either picture. Antialiasing only lives on
+ *    edges both pictures share, and no shift of SHIFT px brings ink onto paper that far from any:
+ *    so a fill that changed colour, a hairline that came or went, an emoji drawn another red are
+ *    changes, even where blurring would have evened them out (a 1 px rule blurred 3 × 3 is a third
+ *    of its contrast, under any tolerance that forgives text).
  * 3. A cell not forgiven with at least CELL_MIN pixels apart is changed, and touching changed
  *    cells make one area (a one-cell area counts: a badge's digit at 2× fills one cell). Cells
  *    under a capture's own `ignore` regions never count: noise it names itself, as the cards'
@@ -29,15 +38,20 @@ export const SHIFT = 2;
 export const CELL = 16;
 export const CELL_MIN = 6;
 export const MIN_CELLS = 1;
-/** Pixels of a cell that may stay apart under its best shift (a stray antialiased one). */
-export const CELL_SLACK = 2;
+/** Pixels of a cell that may stay apart under its best shift (stray antialiased ones). */
+export const CELL_SLACK = 4;
+/** Pixels apart on flat paper (2b) a cell may hold and still be forgiven by a shift. */
+export const FLAT_SLACK = 6;
+/** Largest spread of any channel, in levels, that still counts as one flat colour (2b). */
+const FLAT_RANGE = 10;
 /** pixelmatch's default threshold, as its YIQ delta. */
 const MAX_DELTA = 35215 * 0.1 * 0.1;
 /**
  * The same on the blurred pictures, looser: a 3 × 3 blur evens a line moved half a pixel out to
- * within about 30 grey levels, not to nothing; a stroke that changed stays 100 or more apart.
+ * within about 30 grey levels, text antialiased again to within ~55 (70 at the worst), not to
+ * nothing; a stroke that changed stays 100 or more apart. Flat paper is held by 2b instead.
  */
-const SOFT_DELTA = 35215 * 0.13 * 0.13;
+const SOFT_DELTA = 35215 * 0.2 * 0.2;
 
 export type Area = { x: number; y: number; width: number; height: number; cells: number };
 
@@ -88,6 +102,35 @@ function bestShift(a: Uint8Array, b: Uint8Array, cx: number, cy: number, width: 
     }
   }
   return best;
+}
+
+/** Whether the pixel at (x, y) has nothing but one colour within `r` px (every channel within FLAT_RANGE). */
+function flatAround(src: Uint8Array, x: number, y: number, width: number, height: number, r: number): boolean {
+  const lo = [255, 255, 255], hi = [0, 0, 0];
+  for (let yy = Math.max(0, y - r); yy <= Math.min(height - 1, y + r); yy++) {
+    for (let xx = Math.max(0, x - r); xx <= Math.min(width - 1, x + r); xx++) {
+      const j = (yy * width + xx) * 4;
+      for (let k = 0; k < 3; k++) {
+        const v = src[j + k];
+        if (v < lo[k]) lo[k] = v;
+        if (v > hi[k]) hi[k] = v;
+        if (hi[k] - lo[k] > FLAT_RANGE) return false;
+      }
+    }
+  }
+  return true;
+}
+
+/** How many pixels apart in the cell at (cx, cy) sit on flat paper in either picture (2b). */
+function apartOnPaper(a: Uint8Array, b: Uint8Array, apartAt: Uint8Array, cx: number, cy: number, width: number, height: number): number {
+  let n = 0;
+  for (let y = cy * CELL; y < Math.min(height, cy * CELL + CELL); y++) {
+    for (let x = cx * CELL; x < Math.min(width, cx * CELL + CELL); x++) {
+      if (!apartAt[y * width + x]) continue;
+      if (flatAround(a, x, y, width, height, SHIFT + 1) || flatAround(b, x, y, width, height, SHIFT + 1)) n++;
+    }
+  }
+  return n;
 }
 
 /** A 3 × 3 box blur (opaque captures: alpha kept as it is). */
@@ -154,7 +197,9 @@ export function compareImages(
     const softB = blurred(b, width, height);
     for (let c = 0; c < perCell.length; c++) {
       if (!perCell[c] || forgiven[c]) continue;
-      if (bestShift(softA, softB, c % cols, Math.floor(c / cols), width, height, CELL_SLACK) <= CELL_SLACK) forgiven[c] = 1;
+      const cx = c % cols, cy = Math.floor(c / cols);
+      if (perCell[c] >= CELL_MIN && apartOnPaper(a, b, apartAt, cx, cy, width, height) > FLAT_SLACK) continue;
+      if (bestShift(softA, softB, cx, cy, width, height, CELL_SLACK) <= CELL_SLACK) forgiven[c] = 1;
     }
   }
   let real = 0;
