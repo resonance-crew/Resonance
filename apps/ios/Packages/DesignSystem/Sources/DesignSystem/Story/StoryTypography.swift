@@ -16,7 +16,7 @@ import UIKit
 /// what is around them (the byline, the meta line, buttons) is interface type under the 1.25× cap.
 ///
 /// A CJK story: Noto Serif TC 600 for its title and headings (+0.02em, never negative) over Noto
-/// Sans TC (+0.03em, justified, strict line breaks), each with its own Latin and digits; an
+/// Sans TC (+0.03em, flush left, strict line breaks), each with its own Latin and digits; an
 /// apostrophe inside a Latin word in the Latin face (`latinMarkFamily`). A Latin story: Playfair
 /// 700 with lining figures over DM Sans, no tracking, ragged.
 public nonisolated struct StoryTypography: Hashable, Sendable {
@@ -87,9 +87,9 @@ public nonisolated struct StoryTypography: Hashable, Sendable {
     public var bodyTracking: CGFloat { cjk ? Tokens.storyTracking : 0 }
     /// `strong` (`--story-bold`).
     public var boldWeight: UIFont.Weight { AppFonts.weight(css: Tokens.storyBold) }
-    /// How the body's lines meet the column: justified as Chinese is printed (clreq; the last line
-    /// of a paragraph stays as it falls), a Latin story ragged (WCAG 1.4.8).
-    public var alignment: NSTextAlignment { cjk ? .justified : .natural }
+    /// How the body's lines meet the column: flush to its start edge and ragged at the end, in every
+    /// script (round 25 §H, the owner: 「全部靠左」 — story.css `--s-align: start`; WCAG 1.4.8).
+    public var alignment: NSTextAlignment { .natural }
     /// The gap after a paragraph, a list, a quote or a code block, in em (`--story-para-gap`).
     public var paragraphGap: CGFloat { Tokens.storyParaGap }
     /// A list's indent: its marker's gutter, in em (`--story-list-indent`).
@@ -248,9 +248,8 @@ public nonisolated struct StoryTypography: Hashable, Sendable {
 }
 
 nonisolated extension StoryTypography {
-    /// How the lines of `role` meet the column: the body justified in a CJK story (its last line
-    /// left as it falls) and ragged in a Latin one; the title and headings start-aligned in both,
-    /// as story.css sets them (`text-align: start`).
+    /// How the lines of `role` meet the column: start-aligned for every role and script, as
+    /// story.css sets them (`text-align: start`; a story's body is no longer justified, round 25).
     public func alignment(_ role: Role) -> NSTextAlignment {
         role == .body ? alignment : .natural
     }

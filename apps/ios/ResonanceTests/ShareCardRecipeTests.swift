@@ -104,6 +104,8 @@ import UIKit
             #expect((at("\(path).figures") as? String == "lining") == type.lining, "\(path).figures")
             let align = at("\(path).align") as? String
             #expect(type.alignment == (align == "justify" ? .justified : .natural), "\(path).align")
+            // Round 25 §H: the quoted words follow the story, flush left in every script.
+            #expect((align ?? "start") == "start" && type.alignment == .natural, "\(path).align")
         }
         // And they are the reader's, so a card shared from the page quotes it in the page's type.
         let story = StoryTypography(script: script, compact: false)

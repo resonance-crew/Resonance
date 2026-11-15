@@ -40,12 +40,13 @@ import UIKit
         #expect(close(t.titleSize * t.titleLeading, c.13))
     }
 
-    @Test func aCJKStoryIsAMingTitleOverAHeiBodyJustifiedAndALatinOnePlayfairOverDMSansRagged() {
+    @Test func aCJKStoryIsAMingTitleOverAHeiBodyFlushLeftAndALatinOnePlayfairOverDMSansRagged() {
         let zh = StoryTypography(script: .cjk, layout: .expanded)
         #expect(zh.titleFamily == .headingCJK && zh.headingFamily == .headingCJK && zh.bodyFamily == .bodyCJK)
         #expect(zh.titleWeight == .semibold && zh.headingWeight == .semibold && zh.boldWeight == .semibold)
         #expect(zh.titleTracking == 0.02 && zh.headingTracking == 0.02 && zh.bodyTracking == 0.03)
-        #expect(zh.alignment == .justified)
+        // Round 25 §H (「全部靠左」): a CJK story's body starts at the column's start edge, never justified.
+        #expect(zh.alignment == .natural)
         let en = StoryTypography(script: .latin, layout: .medium)
         #expect(en.titleFamily == .heading && en.bodyFamily == .body)
         #expect(en.titleWeight == .bold && en.boldWeight == .semibold)
@@ -115,10 +116,10 @@ import UIKit
             && StoryTypography.Role.body.textStyle == .body)
     }
 
-    @Test func aCJKParagraphIsJustifiedALatinOneRaggedAndTitlesAndHeadingsStartAligned() {
+    @Test func aCJKParagraphALatinOneTitlesAndHeadingsAreAllStartAligned() {
         let zhType = StoryTypography(script: .cjk, compact: false)
         let zh = zhType.paragraphStyle(lineBox: 33.3)
-        #expect(zh.alignment == .justified)
+        #expect(zh.alignment == .natural)
         #expect(zh.minimumLineHeight == 33.3 && zh.maximumLineHeight == 33.3)
         let en = StoryTypography(script: .latin, compact: false).paragraphStyle(lineBox: 33)
         #expect(en.alignment == .natural)
@@ -129,7 +130,11 @@ import UIKit
             #expect(zhType.paragraphStyle(lineBox: 50.4, role: role).alignment == .natural)
             #expect(zhType.alignment(role) == .natural)
         }
-        #expect(zhType.alignment(.body) == .justified)
+        #expect(zhType.alignment(.body) == .natural)
+        for script in StoryScript.allCases {
+            let type = StoryTypography(script: script, compact: false)
+            #expect(type.alignment == .natural && type.alignment(.body) == .natural)
+        }
         // Tracking as UIKit's kern: em × the grown size; the title's +0.02em, the body's +0.03em, Latin none.
         #expect(close(zhType.kern(.body, pointSize: 20), 0.6, 0.0001))
         #expect(close(zhType.kern(.title, pointSize: 40), 0.8, 0.0001))

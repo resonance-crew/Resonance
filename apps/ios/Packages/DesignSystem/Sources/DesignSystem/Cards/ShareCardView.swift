@@ -260,8 +260,7 @@ struct ShareAvatar: View {
     }
 }
 
-/// Text on the card, set as the story sets it (its face, tracking, CSS line box, justified CJK spread
-/// between characters) within a line budget, the last line cut with an ellipsis — laid out by TextKit
+/// Text on the card, set as the story sets it (its face, tracking, CSS line box, flush left) within a line budget, the last line cut with an ellipsis — laid out by TextKit
 /// and drawn into a Canvas, so `ImageRenderer` draws it (a UIKit text view it would leave blank).
 struct ShareText: View {
     let layout: ShareTextLayout
@@ -310,7 +309,7 @@ public final class ShareTextLayout {
             let mark = AppFonts.uiFont(latin, size: size, weight: type.weight, lining: type.lining)
             for index in StoryScript.latinMarks(text) { attributed.addAttribute(.font, value: mark, range: NSRange(location: index, length: 1)) }
         }
-        storage = NSTextStorage(attributedString: StoryJustification.prepared(attributed))
+        storage = NSTextStorage(attributedString: attributed)
         container = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
         container.lineFragmentPadding = 0
         container.maximumNumberOfLines = maxLines
@@ -319,12 +318,15 @@ public final class ShareTextLayout {
         manager.delegate = boxes
         manager.addTextContainer(container)
         storage.addLayoutManager(manager)
-        StoryJustification.apply(storage: storage, layoutManager: manager, container: container)
         manager.ensureLayout(for: container)
     }
 
     /// The lines it takes (at most its budget).
-    public var lineCount: Int { StoryJustification.lines(manager, container).count }
+    public var lineCount: Int {
+        var count = 0
+        manager.enumerateLineFragments(forGlyphRange: manager.glyphRange(for: container)) { _, _, _, _, _ in count += 1 }
+        return count
+    }
 
     /// Whether its words ran past the budget (the last line ends in an ellipsis).
     public var truncated: Bool {
