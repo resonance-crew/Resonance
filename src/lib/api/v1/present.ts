@@ -2,8 +2,10 @@ import type { DocumentData, Firestore } from 'firebase-admin/firestore';
 import type { Card } from '@/lib/db/types';
 import { linkPreviewsOf } from '@/lib/links/previewShape';
 import { purgeAtOf, restorableVisibility, trashExpired } from '@/lib/cards/trash';
+import { coverFrameOf } from '@/lib/images/coverFrame';
 import type { AuthorBody, FeedCardBody, LinkPreviewBody } from './schemas';
 import { summaryOf, type ListCard } from './summary';
+import { presentSummaryTranslations } from './summaryTranslations';
 
 /**
  * Turning Firestore documents into the contract's shapes. Old or hand-edited
@@ -119,6 +121,9 @@ export function toFeedCard(c: ListCard, author: DocumentData | undefined, opts: 
     visibility: visibilityOf(c.visibility),
     imageUrl: str(c.media?.url),
     imageLabel: str(c.media?.label) ?? (title ? Array.from(title).slice(0, 24).join('') : null),
+    // Only beside a picture: a frame left on a cover that is gone frames nothing.
+    imageFrame: str(c.media?.url) ? coverFrameOf(c.media?.frame) : null,
+    summaryTranslations: presentSummaryTranslations(c, title, summary.excerpt),
     accentHue: typeof c.accentHue === 'number' && Number.isFinite(c.accentHue) ? c.accentHue : null,
     readMinutes: summary.readMinutes,
     referenceCardId: str(c.referenceCardId),

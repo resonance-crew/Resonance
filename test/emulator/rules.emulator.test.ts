@@ -719,6 +719,58 @@ describe('cards: what the author may write', () => {
     await assertSucceeds(setDoc(ref, { story: '測試測試', updatedAt: serverTimestamp() }, { merge: true }));
   });
 
+  it("takes a cover's frame of exactly four numbers in their ranges, on a draft, the card and its pending edit (round 25)", async () => {
+    const ID = 'ffffffffffffffffffff';
+    await seed(async (db) => {
+      await setDoc(doc(db, 'cards', ID), publishedCard('alice', { media: { type: 'image', url: 'https://img.example/c.avif' } }));
+    });
+    const db = as('alice');
+    const cover = (frame: unknown) => ({ type: 'image', url: 'https://img.example/c.avif', label: 'c', frame });
+    const good = { cx: 0.3, cy: 1, zoom: 2, ar: 1.5 };
+    await assertSucceeds(setDoc(doc(collection(db, 'cards')), draft('alice', { media: cover(good) })));
+    await assertSucceeds(setDoc(doc(collection(db, 'cards')), draft('alice', { media: cover({ cx: 0, cy: 0, zoom: 1, ar: 0.2 }) })));
+    const bad = [
+      { cx: 1.2, cy: 0.5, zoom: 1, ar: 1.5 },
+      { cx: 0.5, cy: -0.1, zoom: 1, ar: 1.5 },
+      { cx: 0.5, cy: 0.5, zoom: 0.5, ar: 1.5 },
+      { cx: 0.5, cy: 0.5, zoom: 2.5, ar: 1.5 },
+      { cx: 0.5, cy: 0.5, zoom: 1, ar: 9 },
+      { cx: 0.5, cy: 0.5, zoom: 1 },
+      { cx: 0.5, cy: 0.5, zoom: 1, ar: 1.5, rotate: 90 },
+      { cx: '0.5', cy: 0.5, zoom: 1, ar: 1.5 },
+      'centre',
+    ];
+    for (const frame of bad) await assertFails(setDoc(doc(collection(db, 'cards')), draft('alice', { media: cover(frame) })));
+    const ref = doc(db, 'cards', ID);
+    await assertSucceeds(setDoc(ref, { media: cover(good), updatedAt: serverTimestamp() }, { merge: true }));
+    await assertFails(setDoc(ref, { media: cover(bad[3]), updatedAt: serverTimestamp() }, { merge: true }));
+    const edit = doc(db, 'cards', ID, 'edits', 'current');
+    const working = { thoughtCore: 't', story: 's', tags: [], visibility: 'public', anonymous: false, updatedAt: serverTimestamp(), authorId: 'alice' };
+    await assertSucceeds(setDoc(edit, { ...working, media: cover(good) }));
+    await assertFails(setDoc(edit, { ...working, media: cover(bad[0]) }));
+  });
+
+  it("takes no translated title and excerpt from a client, and lets no one read or write a story's kept translations (round 25)", async () => {
+    const ID = 'ssssssssssssssssssss';
+    const made = { of: 'h', en: { title: 'Plums', excerpt: 'Every May' } };
+    await seed(async (db) => {
+      await setDoc(doc(db, 'cards', ID), publishedCard('alice', { summaryTranslations: made }));
+      await setDoc(doc(db, 'cards', ID, 'translations', 'en'), { title: 'Plums', story: 'Every May', hash: 'h', model: 'm', createdAt: new Date() });
+    });
+    const db = as('alice');
+    await assertFails(setDoc(doc(collection(db, 'cards')), draft('alice', { summaryTranslations: made })));
+    const ref = doc(db, 'cards', ID);
+    await assertFails(setDoc(ref, { summaryTranslations: { of: 'x', en: { title: 'Mine', excerpt: 'mine' } }, updatedAt: serverTimestamp() }, { merge: true }));
+    await assertFails(setDoc(ref, { summaryTranslations: deleteField(), updatedAt: serverTimestamp() }, { merge: true }));
+    await assertFails(setDoc(ref, { 'summaryTranslations.en.title': 'Mine', updatedAt: serverTimestamp() }, { merge: true }));
+    for (const who of [as('alice'), as('bob'), as('carol'), anonymous()]) {
+      await assertFails(getDoc(doc(who, 'cards', ID, 'translations', 'en')));
+      await assertFails(getDocs(collection(who, 'cards', ID, 'translations')));
+      await assertFails(setDoc(doc(who, 'cards', ID, 'translations', 'zh-TW'), { title: 'x', story: 'y', hash: 'h' }));
+    }
+    await assertFails(deleteDoc(doc(db, 'cards', ID, 'translations', 'en')));
+  });
+
   it('counts a title as JavaScript does (UTF-16 units, not bytes): 200 Chinese characters fit, 101 emoji do not', async () => {
     const db = as('alice');
     await assertSucceeds(setDoc(doc(collection(db, 'cards')), draft('alice', { thoughtCore: '共'.repeat(200) })));
