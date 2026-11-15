@@ -148,7 +148,7 @@ struct ThreadStickerView: View {
             }
             .onAppear {
                 onScreen = true
-                // First time on screen: its two loops (a still stays still under Reduce Motion or Low Power).
+                // First time on screen: its two loops (a still stays still under Reduce Motion).
                 if interactive, rest != nil, StickerPlayback.shared.autoplays(message.key) { play += 1 }
             }
             .onDisappear {

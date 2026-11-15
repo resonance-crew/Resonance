@@ -7,7 +7,7 @@ import SwiftUI
 /// any — held still while the panel is open) over one scroll through every pack, each headed by its character's name.
 /// The bar follows the scroll; a tap on a pack goes to it. One tap on a sticker sends it — no preview, no second
 /// tap; the cells in view breathe (``StickerBreathing``: each plays, rests on its thumb, plays again; the thumbs
-/// alone under Reduce Motion or Low Power Mode). Scrolling the grid only scrolls it: the panel grows from the send
+/// alone under Reduce Motion; Low Power Mode changes nothing, round 25). Scrolling the grid only scrolls it: the panel grows from the send
 /// segment's ↑ alone (round 22 v3). The grid runs to the screen's foot, under the home indicator, fading out there
 /// (`toScreenEdge`). On a Mac it is the popover's content (4 columns across 400).
 struct StickerPanel: View {
