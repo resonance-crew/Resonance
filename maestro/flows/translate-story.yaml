@@ -1,0 +1,30 @@
+# alice (繁體中文) reads carol's English card 「Rain on the old bridge」: the translate line under the byline offers
+# 翻譯成中文; a tap shows the seeded translation's title 舊橋上的雨 with 已由 AI 翻譯 · 顯示原文 (round 25 §F2; the
+# emulators ask no model, the seed keeps the translation), and 顯示原文 brings the English back with 顯示翻譯.
+appId: com.resonance.stories
+name: translate-story
+tags:
+  - card
+  - translation
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /card/bridge-rain
+- extendedWaitUntil:
+    visible: Rain on the old bridge
+    timeout: 30000
+- tapOn: 翻譯成中文
+- extendedWaitUntil:
+    visible: 舊橋上的雨
+    timeout: 20000
+- assertVisible: 已由 AI 翻譯.*
+- assertNotVisible: Rain on the old bridge
+- takeScreenshot: translate-story
+- tapOn: 顯示原文
+- extendedWaitUntil:
+    visible: Rain on the old bridge
+    timeout: 5000
+- assertVisible: 顯示翻譯
+- takeScreenshot: translate-story-original

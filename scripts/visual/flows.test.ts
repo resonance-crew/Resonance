@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import zhTW from '../../src/messages/zh-TW.json';
 import { STICKER_PACKS } from '../../src/lib/stickers/catalog';
-import { flowTags, flowsToRun, withTags } from './flows';
+import { flowSettings, flowTags, flowsToRun, withTags } from './flows';
 
 const FLOWS = join(process.cwd(), 'maestro/flows');
 const read = (flow: string) => readFileSync(join(FLOWS, `${flow}.yaml`), 'utf8');
@@ -30,6 +30,15 @@ describe('the flows’ tags', () => {
     expect(withTags(['a', 'b', 'c'], [], 'tablet', of)).toEqual(['a']);
     // A typo would run nothing and pass: refused instead.
     expect(() => withTags(['a', 'b', 'c'], ['lnks'], 'phone', of)).toThrow(/No flow is tagged lnks/);
+  });
+
+  it('turns the animations on and battery saver on for a flow tagged animations, and back after', () => {
+    expect(flowSettings(['chat'])).toEqual({ put: [], back: [] });
+    const { put, back } = flowSettings(flowTags(read('sticker-breath')));
+    expect(put).toEqual(['settings put global animator_duration_scale 1', 'settings put global low_power 1']);
+    // Put back as the harness holds the device: still, and on mains power.
+    expect(back).toContain('settings put global animator_duration_scale 0');
+    expect(back).toContain('settings put global low_power 0');
   });
 
   it('places every flow in the run’s order', () => {
@@ -75,5 +84,22 @@ describe('the flows’ words are the apps’ words', () => {
     expect(flow).toContain('一場雨後的散步');
     expect(seed).toContain("bio: `${u.handle} 的測試帳號`");
     expect(flow).toContain('bob 的測試帳號');
+  });
+
+  it('translate-story: the line’s words and the seeded card in both languages', () => {
+    const flow = read('translate-story');
+    const t = zhTW.card.translate;
+    for (const word of [t.action, t.showOriginal, t.showTranslation]) expect(flow).toContain(word);
+    expect(flow).toContain(t.done);
+    expect(seed).toContain("'bridge-rain',\n    'carol',\n    'Rain on the old bridge'");
+    expect(seed).toContain("'舊橋上的雨'");
+    for (const words of ['Rain on the old bridge', '舊橋上的雨']) expect(flow).toContain(words);
+  });
+
+  it('sticker-breath: 貼圖 and the panel’s first sticker, the playing cell by its flow name', () => {
+    const flow = read('sticker-breath');
+    expect(flow).toContain(m.stickers);
+    expect(flow).toContain(name('tuck', 'warm-heart'));
+    expect(flow).toContain('sticker-moving');
   });
 });

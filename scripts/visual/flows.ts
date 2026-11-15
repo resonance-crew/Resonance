@@ -33,7 +33,7 @@ const FLOWS_DIR = join(ROOT, 'maestro/flows');
 const ORDER = [
   'sign-in', 'send-message', 'send-sticker', 'react-reply', 'unsend-message', 'chat-draft', 'composer-toggle',
   'sticker-replies', 'send-picture', 'answer-letter', 'leave-note', 'resonate', 'open-notification', 'open-link',
-  'publish-card', 'trash-restore',
+  'publish-card', 'trash-restore', 'sticker-breath', 'translate-story',
 ];
 
 export type FlowDevice = 'phone' | 'tablet';
@@ -106,7 +106,27 @@ export function flowEnv(ports: typeof PORTS): Record<string, string> {
 }
 
 /** A device brought up for the flows: its id for `maestro --device`, and how to put it away. */
-type Device = { id: string; prepareFlow: () => Promise<void>; close: () => Promise<void> };
+type Device = {
+  id: string;
+  /** Before a flow: a fresh app (Android), and the device settings its tags ask for ([flowSettings]). */
+  prepareFlow: (tags?: string[]) => Promise<void>;
+  /** After a flow: puts back what [prepareFlow] changed for it. */
+  afterFlow?: (tags?: string[]) => Promise<void>;
+  close: () => Promise<void>;
+};
+
+/**
+ * What a flow's tags ask of the device besides the harness's stillness (round 25 §D): `animations` — the system's
+ * animations on (animator scale 1, which the harness otherwise holds at 0) and battery saver on, the state the owner's
+ * phone was in when the sticker picker held still — `put` before the flow, `back` after it, as adb shell commands.
+ */
+export function flowSettings(tags: readonly string[]): { put: string[]; back: string[] } {
+  if (!tags.includes('animations')) return { put: [], back: [] };
+  return {
+    put: ['settings put global animator_duration_scale 1', 'settings put global low_power 1'],
+    back: ['settings put global low_power 0', 'settings put global animator_duration_scale 0'],
+  };
+}
 
 async function iosDevice(ctx: CaptureContext, kind: FlowDevice): Promise<Device> {
   const ios = await import('./ios');
@@ -157,12 +177,16 @@ async function androidDevice(ctx: CaptureContext, kind: FlowDevice): Promise<Dev
     id: serial,
     // A fresh install's data, in light mode and Chinese (the app follows its own locale while nothing is
     // saved). Done here rather than by the flow's `clearState`, which would drop the app's locale again.
-    prepareFlow: async () => {
+    prepareFlow: async (tags = []) => {
       await android.shell(serial, `am force-stop ${android.PACKAGE}`);
       await android.shell(serial, `pm clear ${android.PACKAGE}`);
       await android.shell(serial, `cmd locale set-app-locales ${android.PACKAGE} --locales zh-TW`);
       await android.shell(serial, 'cmd uimode night no');
       await keyboardsOff();
+      for (const command of flowSettings(tags).put) await android.shell(serial, command);
+    },
+    afterFlow: async (tags = []) => {
+      for (const command of flowSettings(tags).back) await android.shell(serial, command).catch(() => {});
     },
     close: async () => {
       await android.shell(serial, `am force-stop ${android.PACKAGE}`).catch(() => {});
@@ -216,9 +240,15 @@ export async function runFlows(platform: FlowPlatform, ctx: CaptureContext, { ta
   try {
     for (const flow of flows) {
       await seed(ctx.log);
-      await device.prepareFlow();
+      const tags = tagsOf(flow);
+      await device.prepareFlow(tags);
       const started = Date.now();
-      const passed = await maestroTest(device.id, flow, outDir, ctx.ports, join(outDir, flow, 'maestro.log'));
+      let passed: boolean;
+      try {
+        passed = await maestroTest(device.id, flow, outDir, ctx.ports, join(outDir, flow, 'maestro.log'));
+      } finally {
+        await device.afterFlow?.(tags);
+      }
       const seconds = Math.round((Date.now() - started) / 1000);
       results.push({ flow, passed, seconds });
       ctx.log(`  ${passed ? 'pass' : 'FAIL'}  ${platform}/${flow}  (${seconds} s)${passed ? '' : `  see ${join(outDir, flow, 'maestro.log')}`}`);

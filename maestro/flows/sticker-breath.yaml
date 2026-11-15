@@ -1,0 +1,33 @@
+# alice opens her thread with bob and the sticker panel with the system's animations on and battery saver on (the
+# runner sets both for a flow tagged `animations`, and puts them back after): a cell starts playing after its
+# stagger (round 25 §D — the owner's phone was in battery saver and its stickers never moved). Android names a
+# playing cell `sticker-moving` (debug builds); iOS has no such name yet, so there the flow only opens the panel.
+appId: com.resonance.stories
+name: sticker-breath
+tags:
+  - chat
+  - stickers
+  - composer
+  - animations
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /messages/bob
+- extendedWaitUntil:
+    visible: 你的信讓我想起我自己的十年前。
+    timeout: 30000
+- tapOn: 貼圖
+- extendedWaitUntil:
+    visible: 心暖暖
+    timeout: 10000
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: sticker-moving
+          timeout: 10000
+- takeScreenshot: sticker-breath
