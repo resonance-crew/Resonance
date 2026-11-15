@@ -145,3 +145,43 @@ describe('nearestSide', () => {
     expect(nearestSide(NODE_W / 2, -12)).toBe('top');
   });
 });
+
+// Round 25 post-merge (§G1): a framed cover's thumb on the map shows the framed part, as the apps' nodes do —
+// it was always the centred slice.
+describe('a node’s thumb', () => {
+  const thumb = (card: Card) => {
+    const { container, unmount } = render(
+      <ThoughtMapNode
+        card={card}
+        x={0}
+        y={0}
+        selected={false}
+        linkTarget={false}
+        onPointerDown={noop}
+        onStartLink={noop}
+        onOpen={noop}
+        onRemove={noop}
+        linkHandleLabel="Link"
+        openLabel="Open"
+        removeLabel="Remove"
+      />,
+    );
+    const image = container.querySelector('image')!;
+    const at = ['x', 'y', 'width', 'height', 'preserveAspectRatio', 'data-frame'].map((k) => image.getAttribute(k));
+    unmount();
+    return at;
+  };
+  const media = { type: 'image' as const, url: 'https://img.example.com/wide.webp' };
+
+  it('without a frame: the centred slice', () => {
+    expect(thumb({ ...base, media })).toEqual(['-4', '-4', '64', '64', 'xMidYMid slice', null]);
+  });
+
+  it('with a frame: the frame’s square crop fills it', () => {
+    // a 2 : 1 picture framed at its left edge: drawn 128 wide from x -4, so its left half fills the square
+    const [x, y, w, h, fit, framed] = thumb({ ...base, media: { ...media, frame: { cx: 0, cy: 0.5, zoom: 1, ar: 2 } } });
+    expect([Number(x), Number(y), Number(w), Number(h)]).toEqual([-4, -4, 128, 64]);
+    expect(fit).toBe('none');
+    expect(framed).toBe('');
+  });
+});

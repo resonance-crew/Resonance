@@ -9,6 +9,7 @@ import { wobRect } from '@/lib/design/wobRect';
 import { wobTabRect } from '@/lib/design/wobTabRect';
 import { plainExcerpt } from '@/lib/adapters/story';
 import { firstPicture } from '@/lib/markdown/plainText';
+import { coverCrop, coverFrameOf, type CoverFrame } from '@/lib/images/coverFrame';
 import type { Card, Visibility } from '@/lib/db/types';
 import { NODE_H, NODE_W } from './mapMath';
 import styles from './ThoughtMap.module.css';
@@ -201,7 +202,7 @@ export const ThoughtMapNode = memo(function ThoughtMapNode({
             it — no dead column under the image. The body crops overflow with
             a soft fade instead of a hard mid-line cut. */}
         <div className={styles.nodeBody}>
-          {thumb && <NodeThumb src={thumb} seed={seed} hue={hue} />}
+          {thumb && <NodeThumb src={thumb} seed={seed} hue={hue} frame={card.media?.type === 'image' ? card.media.frame : undefined} />}
           <div className={styles.nodeTitle}>{card.thoughtCore}</div>
           <p className={styles.nodeExcerpt}>{plainExcerpt(card.story, thumb ? 80 : 100)}</p>
         </div>
@@ -254,9 +255,17 @@ export const ThoughtMapNode = memo(function ThoughtMapNode({
 });
 
 /** Organic-clipped thumbnail; floats top-right so the text wraps around it. */
-function NodeThumb({ src, seed, hue }: { src: string; seed: number; hue: number }) {
+function NodeThumb({ src, seed, hue, frame }: { src: string; seed: number; hue: number; frame?: CoverFrame | null }) {
   const uid = useId().replace(/:/g, '');
   const S = 56;
+  // The picture fills a square S + 8 wide from (-4, -4): centred, or — a framed cover (round 25 §G1) — placed so
+  // its frame's square crop fills it, as the apps' map nodes draw it.
+  const B = S + 8;
+  const f = coverFrameOf(frame);
+  const r = f ? coverCrop(f.ar, f, 1) : null;
+  const place = r
+    ? { x: -4 - (r.x / r.w) * B, y: -4 - (r.y / r.h) * B, width: B / r.w, height: B / r.h, preserveAspectRatio: 'none' }
+    : { x: -4, y: -4, width: B, height: B, preserveAspectRatio: 'xMidYMid slice' };
   const path = useMemo(
     () => wobRect(S, S, 12, seed + 3, 1.8, { segmentsH: 2, segmentsV: 2, curve: 1.3, cornerJitter: 1.4 }),
     [seed],
@@ -276,11 +285,8 @@ function NodeThumb({ src, seed, hue }: { src: string; seed: number; hue: number 
       </defs>
       <image
         href={src}
-        x={-4}
-        y={-4}
-        width={S + 8}
-        height={S + 8}
-        preserveAspectRatio="xMidYMid slice"
+        {...place}
+        data-frame={r ? '' : undefined}
         clipPath={`url(#nodethumb-${uid})`}
       />
       <path
