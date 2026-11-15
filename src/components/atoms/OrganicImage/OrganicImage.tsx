@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/atoms/Skeleton/Skeleton';
 import { wobRect } from '@/lib/design/wobRect';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import { brokenImage } from '@/lib/images/broken';
+import { coverImageBox, type CoverFrame } from '@/lib/images/coverFrame';
 
 /** How long a picture that failed waits before its one more try. */
 export const IMAGE_RETRY_MS = 3000;
@@ -36,6 +37,11 @@ export interface OrganicImageProps {
    * the box already holds its space (`ratio`), so nothing moves when it lands.
    */
   priority?: boolean;
+  /**
+   * Where a cover is looked at (`media.frame`, round 25 §G1): the picture placed so its frame's crop for this box's
+   * `ratio` fills it. Absent: covered and centred.
+   */
+  frame?: CoverFrame | null;
 }
 
 /**
@@ -56,7 +62,9 @@ export function OrganicImage({
   children,
   overlay,
   priority = false,
+  frame,
 }: OrganicImageProps) {
+  const framed = coverImageBox(frame, ratio);
   const ref = useRef<HTMLDivElement>(null);
   const { w, h } = useElementSize(ref, 320, Math.round(320 * ratio));
   // While the picture is on its way its place shimmers (a story card tints the
@@ -137,7 +145,12 @@ export function OrganicImage({
             loading={priority ? 'eager' : 'lazy'}
             decoding={priority ? undefined : 'async'}
             fetchPriority={priority ? 'high' : undefined}
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+            data-frame={framed ? '' : undefined}
+            style={
+              framed
+                ? { position: 'absolute', ...framed, maxWidth: 'none' }
+                : { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }
+            }
           />
         )}
         {children}

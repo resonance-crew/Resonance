@@ -1,6 +1,12 @@
 'use client';
 
 import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { ButtonLoader } from '@/components/atoms/ButtonLoader/ButtonLoader';
+import menuStyles from '@/components/molecules/OrganicMenu/OrganicMenu.module.css';
+import { INK } from '@/lib/design/strokes';
+import type { CoverFrame as CoverFrameValue } from '@/lib/images/coverFrame';
+import { CoverFrameModal, loadCoverPicture } from './CoverFrameModal';
+import type { StagePicture } from '@/components/molecules/CropStage/CropStage';
 import { useTranslations } from 'next-intl';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import { HandDrawnDashedSurface } from '@/components/atoms/HandDrawnDashedBorder/HandDrawnDashedBorder';
@@ -33,6 +39,8 @@ export interface CoverEditor {
   upload: (file: File) => void;
   generate: () => void;
   remove: () => void;
+  /** Keeps where the cover is looked at (調整位置's 完成): the picture and its colour stay; undefined is the centre. */
+  setFrame: (frame: CoverFrameValue | undefined) => void;
   /** Opens the file picker. */
   pick: () => void;
   /** The hidden file input the picker is (rendered once, by CoverFrame). */
@@ -49,10 +57,13 @@ export interface CoverEditor {
 export function useCoverEditor({
   media,
   story,
+  accentHue = null,
   onChange,
 }: {
   media?: CardMedia;
   story: string;
+  /** The card's colour now: framing a cover never recolours the card (it comes from the whole picture). */
+  accentHue?: number | null;
   onChange: (media: CardMedia | undefined, accentHue: number | null) => void;
 }): CoverEditor {
   const t = useTranslations('write');
@@ -137,6 +148,12 @@ export function useCoverEditor({
       setError(null);
       onChange(undefined, null);
     },
+    setFrame: (frame) => {
+      if (!media) return;
+      const { frame: _old, ...rest } = media;
+      void _old;
+      onChange(frame ? { ...rest, frame } : rest, accentHue);
+    },
     pick: () => inputRef.current?.click(),
     input: (
       <input
@@ -212,6 +229,7 @@ export function CoverFrame({ cover, palette = 0 }: { cover: CoverEditor; palette
         <>
           {cover.error && <CoverErrorChip message={cover.error} />}
           <span className={styles.coverMenu}>
+          {media.url && <CoverAdjustChip cover={cover} colors={colors.chip} />}
           <OrganicMenu
             items={menu}
             label={t('coverChange')}
@@ -326,5 +344,76 @@ function CoverErrorChip({ message }: { message: string }) {
       />
       <span className={styles.coverErrorText}>{message}</span>
     </span>
+  );
+}
+
+/**
+ * 調整位置 / Adjust (round 25 §G2): the second chip on a picture cover, left of 更換封面 — the same face, 34 tall (44 to
+ * the touch), its glyph alone at the largest text sizes (still named). Its small loader runs while the picture is
+ * fetched for the dialog; the dialog's 完成 keeps the frame in the draft.
+ */
+function CoverAdjustChip({ cover, colors }: { cover: CoverEditor; colors: { fill: string; pen: string; ink: string } }) {
+  const t = useTranslations('write');
+  const ref = useRef<HTMLButtonElement>(null);
+  const { w } = useElementSize(ref, 0, 0, []);
+  const [loading, setLoading] = useState(false);
+  const [picture, setPicture] = useState<StagePicture | null>(null);
+  const url = cover.media?.url;
+  async function open() {
+    if (!url || loading) return;
+    setLoading(true);
+    try {
+      setPicture(await loadCoverPicture(url));
+    } catch {
+      // the picture couldn't be read: nothing opens (the cover stays as it is)
+    } finally {
+      setLoading(false);
+    }
+  }
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        className={`${menuStyles.trigger} ${menuStyles.pill} ${styles.coverAdjust}`}
+        style={{ height: 34, color: colors.ink }}
+        data-colored=""
+        aria-label={t('coverAdjust')}
+        aria-busy={loading || undefined}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          void open();
+        }}
+      >
+        {w > 0 && (
+          <HandDrawnBorder
+            w={w}
+            h={34}
+            R={34 * 0.42}
+            seed={47}
+            mag={34 * 0.03}
+            fillColor={colors.fill}
+            strokeColor={colors.pen}
+            strokeWidth={INK}
+            segmentsH={2}
+            segmentsV={1}
+            curve={1.4}
+            cornerJitter={2.4}
+          />
+        )}
+        <span className={menuStyles.triggerIcon}>{loading ? <ButtonLoader size={16} /> : <Icon name="frame" size={16} strokeWidth={INK} />}</span>
+        <span className={`${menuStyles.triggerLabel} ${styles.coverAdjustLabel}`}>{t('coverAdjust')}</span>
+      </button>
+      <CoverFrameModal
+        picture={picture}
+        frame={cover.media?.frame}
+        onCancel={() => setPicture(null)}
+        onDone={(frame) => {
+          cover.setFrame(frame);
+          setPicture(null);
+        }}
+      />
+    </>
   );
 }

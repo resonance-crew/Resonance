@@ -17,6 +17,7 @@ import { wobRect } from '@/lib/design/wobRect';
 import { wavyLine } from '@/lib/design/wavyPath';
 import { CARD_HUES } from '@/lib/design/dominantHue';
 import { CARD_BORDERS, CARD_FILLS, cardVar, preferredPalette } from '@/lib/design/cardColours';
+import type { CoverFrame } from '@/lib/images/coverFrame';
 import styles from './StoryCard.module.css';
 
 export interface Story {
@@ -30,6 +31,8 @@ export interface Story {
   tags: string[];
   imageUrl?: string;
   imageLabel?: string;
+  /** Where the cover is looked at (`media.frame`, round 25 §G1). */
+  imageFrame?: CoverFrame;
   /** Cover-image dominant hue snapped to the card palette (see lib/design/dominantHue). */
   accentHue?: number;
   /**
@@ -51,10 +54,12 @@ function StoryImage({
   label,
   family,
   imageUrl,
+  frame,
   seed,
   slot,
   grain = true,
 }: {
+  frame?: CoverFrame;
   label: string;
   family: number;
   imageUrl?: string;
@@ -69,6 +74,7 @@ function StoryImage({
       alt={label}
       seed={seed}
       ratio={0.62}
+      frame={imageUrl ? frame : undefined}
       className={styles.imagePlaceholder}
       overlay={slot}
     >
@@ -383,6 +389,7 @@ export const StoryCard = memo(function StoryCard({
             label={story!.imageLabel || 'story illustration'}
             family={paletteIdx}
             imageUrl={story!.imageUrl}
+            frame={story!.imageFrame}
             seed={seed + 5}
             slot={coverSlot}
             grain={!stillGrain}

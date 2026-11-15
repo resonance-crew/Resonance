@@ -306,7 +306,7 @@ export function PublishStep({
   }
 
   // ── The cover, edited in the preview's picture ──
-  const cover = useCoverEditor({ media, story, onChange: onCoverChange });
+  const cover = useCoverEditor({ media, story, accentHue, onChange: onCoverChange });
   const mediaBusy = cover.uploading || cover.generating || storyBusy;
 
   // ── The preview: the card as a list will show it, from what is on screen ──

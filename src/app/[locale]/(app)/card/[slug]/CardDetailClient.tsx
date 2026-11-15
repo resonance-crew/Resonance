@@ -366,6 +366,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
                 alt={card.media.label ?? card.thoughtCore}
                 seed={hue + 11}
                 ratio={0.52}
+                frame={card.media.frame}
                 className={styles.heroImage}
                 priority
               />

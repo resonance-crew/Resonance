@@ -114,3 +114,17 @@ export function coverFrameKey(frame: CoverFrame | null | undefined): string {
   const f = coverFrameOf(frame);
   return f ? `@${KEYS.map((k) => Number(f[k].toFixed(4))).join(',')}` : '';
 }
+
+/**
+ * The web's way of drawing a framed cover with CSS alone (round 25 §G1): the picture sized and placed so that
+ * `coverCrop`'s rect fills a box `boxRatio` (height ÷ width) tall — percentages of the box, no script measuring the
+ * picture (the frame's `ar` stands for its shape). Null without a frame: the picture covers the box, centred (as an
+ * unframed cover always has).
+ */
+export function coverImageBox(frame: CoverFrame | null | undefined, boxRatio: number): { left: string; top: string; width: string; height: string } | null {
+  const f = coverFrameOf(frame);
+  if (!f) return null;
+  const r = coverCrop(f.ar, f, boxRatio);
+  const pct = (v: number) => `${Number((v * 100).toFixed(4))}%`;
+  return { left: pct(-r.x / r.w), top: pct(-r.y / r.h), width: pct(1 / r.w), height: pct(1 / r.h) };
+}

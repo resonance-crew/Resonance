@@ -99,6 +99,7 @@ export function cardToStory(
     readTime: `${minutes} min`,
     tags: card.tags,
     imageUrl: card.media?.url,
+    ...(card.media?.url && card.media.frame ? { imageFrame: card.media.frame } : {}),
     imageLabel: card.media?.label ?? card.thoughtCore.slice(0, 24),
     accentHue: card.accentHue,
   };

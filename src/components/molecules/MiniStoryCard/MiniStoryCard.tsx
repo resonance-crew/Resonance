@@ -8,6 +8,7 @@ import { GrainOverlay } from '@/components/atoms/GrainOverlay/GrainOverlay';
 import { STORY_GRAIN } from '@/lib/design/grain';
 import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
 import { OrganicImage } from '@/components/atoms/OrganicImage/OrganicImage';
+import type { CoverFrame } from '@/lib/images/coverFrame';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import { useIsMobile } from '@/lib/hooks/useIsMobile';
 import { wobRect } from '@/lib/design/wobRect';
@@ -25,6 +26,8 @@ export interface MiniStoryCardProps {
   authorAvatarUrl?: string;
   imageUrl?: string;
   imageLabel?: string;
+  /** Where the cover is looked at (`media.frame`, round 25 §G1). */
+  imageFrame?: CoverFrame;
   /** Cover-image dominant hue snapped to the card palette (see lib/design/dominantHue). */
   accentHue?: number;
   index?: number;
@@ -47,6 +50,7 @@ export function MiniStoryCard({
   authorAvatarUrl,
   imageUrl,
   imageLabel,
+  imageFrame,
   accentHue,
   index = 0,
   isLast = false,
@@ -161,6 +165,7 @@ export function MiniStoryCard({
           alt={imageLabel ?? title}
           seed={seed + 5}
           ratio={0.56}
+          frame={imageUrl ? imageFrame : undefined}
           className={styles.imagePlaceholder}
         >
           {!imageUrl && (
