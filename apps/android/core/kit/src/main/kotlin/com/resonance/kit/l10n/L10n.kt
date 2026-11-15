@@ -766,6 +766,32 @@ object L10n {
         }
         /** {handle} shared this private card with you — only you can read it */
         fun sharedPrivately(handle: String): String = Strings.format("card.sharedPrivately", mapOf("handle" to handle))
+        object Translate {
+            /** Translate to English */
+            val action: String get() = Strings.string("card.translate.action")
+            /** Translating… */
+            val working: String get() = Strings.string("card.translate.working")
+            /** Translated by AI */
+            val done: String get() = Strings.string("card.translate.done")
+            /** Show original */
+            val showOriginal: String get() = Strings.string("card.translate.showOriginal")
+            /** Show translation */
+            val showTranslation: String get() = Strings.string("card.translate.showTranslation")
+            /** Couldn’t translate */
+            val failed: String get() = Strings.string("card.translate.failed")
+            /** Try again */
+            val retry: String get() = Strings.string("card.translate.retry")
+            /** No more translations today */
+            val spent: String get() = Strings.string("card.translate.spent")
+            /** Translated to English */
+            val announce: String get() = Strings.string("card.translate.announce")
+            /** Translation ready */
+            val ready: String get() = Strings.string("card.translate.ready")
+            /** Show */
+            val show: String get() = Strings.string("card.translate.show")
+            /** AI translation */
+            val mark: String get() = Strings.string("card.translate.mark")
+        }
     }
     object Share {
         /** Share profile */
@@ -1406,6 +1432,22 @@ object L10n {
         fun tagsRemoveLabel(tag: String): String = Strings.format("write.tagsRemoveLabel", mapOf("tag" to tag))
         /** Discard */
         val discardShort: String get() = Strings.string("write.discardShort")
+        /** Adjust */
+        val coverAdjust: String get() = Strings.string("write.coverAdjust")
+        object CoverFrame {
+            /** Frame the cover */
+            val title: String get() = Strings.string("write.coverFrame.title")
+            /** Drag to move, pinch or slide to zoom */
+            val hintTouch: String get() = Strings.string("write.coverFrame.hintTouch")
+            /** Drag to move, scroll or slide to zoom */
+            val hintPointer: String get() = Strings.string("write.coverFrame.hintPointer")
+            /** Cover framing area */
+            val stage: String get() = Strings.string("write.coverFrame.stage")
+            /** Done */
+            val done: String get() = Strings.string("write.coverFrame.done")
+            /** Cancel */
+            val cancel: String get() = Strings.string("write.coverFrame.cancel")
+        }
     }
     object Me {
         /** Joined {date} */
@@ -1939,6 +1981,10 @@ object L10n {
             val autoTranslate: String get() = Strings.string("settings.language.autoTranslate")
             /** When reading others’ cards */
             val readPreference: String get() = Strings.string("settings.language.readPreference")
+            /** Auto-translate */
+            val autoTranslateStories: String get() = Strings.string("settings.language.autoTranslateStories")
+            /** Titles, excerpts and stories in another language are shown translated by AI into the interface language */
+            val autoTranslateStoriesHint: String get() = Strings.string("settings.language.autoTranslateStoriesHint")
         }
         object Ai {
             /** Let AI polish my drafts */
@@ -2108,5 +2154,21 @@ object L10n {
         val close: String get() = Strings.string("native.close")
         /** New cards */
         val channelNewCards: String get() = Strings.string("native.channelNewCards")
+    }
+    object Crop {
+        /** Zoom */
+        val zoom: String get() = Strings.string("crop.zoom")
+        /** Reset */
+        val reset: String get() = Strings.string("crop.reset")
+        /** Arrow keys move, + and − zoom */
+        val keys: String get() = Strings.string("crop.keys")
+        /** Move up */
+        val moveUp: String get() = Strings.string("crop.moveUp")
+        /** Move down */
+        val moveDown: String get() = Strings.string("crop.moveDown")
+        /** Move left */
+        val moveLeft: String get() = Strings.string("crop.moveLeft")
+        /** Move right */
+        val moveRight: String get() = Strings.string("crop.moveRight")
     }
 }
