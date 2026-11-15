@@ -321,6 +321,8 @@ export function PublishStep({
     readTime: `${readMinutes(story)} min`,
     tags,
     imageUrl: cover.partial ?? media?.url,
+    // the cover where 調整位置 put it (a picture still arriving has none yet)
+    imageFrame: cover.partial ? undefined : media?.frame,
     imageLabel: media?.label ?? thoughtCore.slice(0, 24),
     accentHue: accentHue ?? undefined,
   };

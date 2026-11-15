@@ -402,6 +402,15 @@ describe('PublishStep', () => {
     await echoSettled();
   });
 
+  // Round 25 post-merge: 調整位置 → 完成 saved the frame into the draft, but the preview card never took it.
+  it('draws the preview’s cover where its frame puts it', async () => {
+    const cover: CardMedia = { type: 'image', url: 'https://img.example.com/framed.webp', label: 'framed', frame: { cx: 0.2, cy: 0.5, zoom: 1.5, ar: 1.5 } };
+    const view = renderWithIntl(<Step cardId="card-a" start={{ media: cover }} />);
+    const img = view.container.querySelector<HTMLImageElement>('img[src="https://img.example.com/framed.webp"]')!;
+    expect(img).toHaveAttribute('data-frame');
+    await echoSettled();
+  });
+
   it('dresses 更換封面 in its cover’s family: its fill, its pen line, its deep ink', async () => {
     const cover: CardMedia = { type: 'image', url: 'https://img.example.com/green.webp', label: 'green' };
     renderWithIntl(<Step cardId="card-a" start={{ media: cover, accentHue: 140 }} />);
