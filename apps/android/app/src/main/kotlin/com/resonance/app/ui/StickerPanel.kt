@@ -33,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -133,7 +134,7 @@ internal const val RECENT_KEY = "recent"
  * bar marks the pack in view and a tap on an icon scrolls to its pack. 4 columns on a phone, 5–6 wider, the cells
  * as big as the width lets them be ([StickerGridInset], [StickerGridGap], [StickerCellInset]). A tap on a sticker sends
  * it ([onTap]: one tap, the owner's — no preview); the cells in view breathe ([PickerBreath], at most [playing] at
- * once; still under [still]). Scrolling the grid only scrolls it — ↑ is what grows the panel. The grid runs on under
+ * once; still while [still] answers so, asked on every tick of the loop). Scrolling the grid only scrolls it — ↑ is what grows the panel. The grid runs on under
  * the navigation bar to the screen's edge ([navigation] of room under its last row), its bottom fade at that edge.
  */
 @Composable
@@ -145,7 +146,8 @@ internal fun StickerPanel(
     modifier: Modifier = Modifier,
     navigation: Dp = 0.dp,
     playing: Int = PICKER_PLAYING_PHONE,
-    still: Boolean = LocalContext.current.let { c -> remember(c) { c.pickerHoldsStill() } },
+    still: () -> Boolean = LocalContext.current.let { c -> remember(c) { { c.pickerHoldsStill() } } },
+    decode: StickerDecode = DecodeSticker,
 ) {
     val language = Strings.language.tag
     val sections = remember(catalog, recents, language) { stickerSections(catalog, recents, language, L10n.Messages.stickerRecent) }
@@ -173,7 +175,7 @@ internal fun StickerPanel(
                 StickerGrid(
                     sections, columns, grid, origin,
                     Modifier.fillMaxSize().edgeFades({ grid.canScrollBackward }, { grid.canScrollForward }),
-                    navigation, onTap, playing, still,
+                    navigation, onTap, playing, still, decode,
                 )
             }
         }
@@ -232,15 +234,23 @@ private fun StickerGrid(
     navigation: Dp,
     onTap: (StickerCatalog.Sticker) -> Unit,
     playing: Int,
-    still: Boolean,
+    stillNow: () -> Boolean,
+    decode: StickerDecode,
 ) {
     val language = Strings.language.tag
     val breath = remember(playing) { PickerBreath(playing) }
     val density = LocalDensity.current
     val hidden = with(density) { navigation.roundToPx() }
-    if (!still) LaunchedEffect(breath, grid) {
+    val askStill by rememberUpdatedState(stillNow)
+    // Asked on every tick (round 25 §D): turning the system's animations off or on shows without reopening the panel.
+    var still by remember { mutableStateOf(askStill()) }
+    LaunchedEffect(breath, grid) {
         while (true) {
-            breath.step(cellsInView(grid, hidden), grid.isScrollInProgress)
+            val holds = askStill()
+            if (holds != still) still = holds
+            // Still: every turn ends at once (no cell in view, as if scrolled away), the poses stay.
+            if (holds) breath.step(emptyList(), scrolling = true)
+            else breath.step(cellsInView(grid, hidden), grid.isScrollInProgress)
             delay(PickerBreath.STAGGER_MILLIS)
         }
     }
@@ -266,6 +276,7 @@ private fun StickerGrid(
                 val key = "${section.key}:${sticker.pack}/${sticker.id}"
                 val wash = Tokens.ButtonTonal
                 val name = sticker.name(language)
+                val moving = !still && breath.plays(key)
                 Box(
                     Modifier
                         .aspectRatio(1f)
@@ -274,12 +285,17 @@ private fun StickerGrid(
                             interactionSource = null, indication = remember(wash) { OrganicIndication(wash, shape = CellShape) },
                             role = Role.Button, onClickLabel = L10n.Messages.stickerSendHint,
                         ) { onTap(sticker) }
-                        .semantics { contentDescription = name },
+                        .semantics {
+                            contentDescription = name
+                            if (moving) stickerMoving = true
+                        }
+                        // The flows' name for a cell playing (maestro/flows/sticker-breath.yaml), debug builds only.
+                        .then(if (moving) Modifier.flowTag("sticker-moving") else Modifier),
                     contentAlignment = Alignment.Center,
                 ) {
                     val art = Modifier.fillMaxSize().padding(StickerCellInset)
                     if (still) StickerPose(sticker, origin, art)
-                    else BreathingSticker(sticker, origin, playing = breath.plays(key), onEnded = { breath.ended(key) }, modifier = art)
+                    else BreathingSticker(sticker, origin, playing = moving, onEnded = { breath.ended(key) }, modifier = art, decode = decode)
                 }
             }
         }
