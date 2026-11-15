@@ -36,6 +36,9 @@ native/mascots/dist/
 # Native apps (apps/): generated Xcode project, build outputs, SwiftPM caches
 apps/ios/*.xcodeproj/
 apps/ios/build/
+# Derived data an acceptance list's iOS / Mac commands keep at the worktree's root (-derivedDataPath ../../.dd-ios)
+.dd-ios/
+.dd-mac/
 apps/**/.build/
 apps/**/.swiftpm/
 # Android (apps/android): Gradle caches and build outputs, this machine's SDK path

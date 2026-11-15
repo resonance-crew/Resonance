@@ -39,6 +39,9 @@ const eslintConfig = [
       "native/**",
       // Native apps: Swift/Kotlin sources and their build outputs
       "apps/**",
+      // Xcode's derived data when an acceptance command keeps it at the root (SwiftPM checkouts carry .js files)
+      ".dd-ios/**",
+      ".dd-mac/**",
     ],
   },
 ];
