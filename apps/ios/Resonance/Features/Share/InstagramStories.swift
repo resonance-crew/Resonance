@@ -37,10 +37,22 @@ enum InstagramStories {
     }
 
     /// Offered only with a Meta App ID and an Instagram that opens the scheme — without either, the
-    /// sheet still reaches Instagram's own share extension, with the picture.
-    static func available(appID: String?, canOpen: (URL) -> Bool) -> Bool {
+    /// sheet still reaches Instagram's own share extension, with the link. `forced` (Debug builds only,
+    /// ``debugForced``) offers it without Instagram, so the sheet can be looked at in the simulator: the
+    /// hand-off then fails into `share.image.storiesFailed`, as it would.
+    static func available(appID: String?, forced: Bool = debugForced, canOpen: (URL) -> Bool) -> Bool {
         guard let appID, !appID.isEmpty else { return false }
-        return canOpen(probe)
+        return forced || canOpen(probe)
+    }
+
+    /// `-debugStories YES` (round 25 §C): read only in a Debug build; a Release build never offers the
+    /// action without Instagram.
+    static var debugForced: Bool {
+        #if DEBUG
+        UserDefaults.standard.bool(forKey: "debugStories")
+        #else
+        false
+        #endif
     }
 
     /// The pasteboard's one item: the sticker (PNG), the background (JPEG) and the link as text.

@@ -173,7 +173,8 @@ final class CardImageSource: NSObject, UIActivityItemSource {
     }
 }
 
-/// Instagram 限時動態 in the sheet's row of apps: the card as a sticker over its backdrop
+/// Instagram 限時動態 in the sheet's list of actions, with 儲存影像 (round 25 §C: in the row of apps, a
+/// `.share` activity, it never showed on the owner's iPhone): the card as a sticker over its backdrop
 /// (``InstagramStories``). The sticker and backdrop are drawn when it is chosen; the card's link goes
 /// on the pasteboard with them (copied, for Instagram's link sticker), the app's toast says what to
 /// do with it, and Instagram opens a moment later, once it can be read (round 8 §9.2). UIKit calls
@@ -211,7 +212,7 @@ nonisolated final class InstagramStoriesActivity: UIActivity, @unchecked Sendabl
         super.init()
     }
 
-    override class var activityCategory: UIActivity.Category { .share }
+    override class var activityCategory: UIActivity.Category { .action }
     override var activityType: UIActivity.ActivityType? { Self.type }
     override var activityTitle: String? { title }
     override var activityImage: UIImage? { image }
