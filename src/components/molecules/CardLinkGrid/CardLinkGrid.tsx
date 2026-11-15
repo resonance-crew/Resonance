@@ -1,10 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { StoryCard, type Story } from '@/components/molecules/StoryCard/StoryCard';
 import type { Card, User } from '@/lib/db/types';
 import { cardToStory } from '@/lib/adapters/story';
+import { useAutoTranslate } from '@/components/providers/TweaksPanel';
+import { useAuth } from '@/components/providers/AuthProvider';
+import { translateTarget } from '@/lib/text/translation';
 import { cardPalettes } from '@/lib/design/cardColours';
 import { Link } from '@/i18n/navigation';
 import { usePrefillCard } from '@/lib/data/cardPrefill';
@@ -86,6 +89,13 @@ export function CardLinkGrid({ cards, authors, cardHref, renderActions, renderCa
   // before it): the server's grid, one column and two or three alike.
   const palettes = useMemo(() => cardPalettes(cards.map((c) => c.accentHue)), [cards]);
   const anonymousLabel = t('anonymousAuthor');
+  // 自動翻譯 (round 25 §F7): the titles and excerpts the cards carry translated, never the viewer's own card's
+  const auto = useAutoTranslate();
+  const locale = useLocale();
+  const viewerId = useAuth().user?.id ?? null;
+  const mark = t('translate.mark');
+  const translate = auto ? { to: translateTarget(locale), mark, viewerId } : undefined;
+  const faceKey = `${anonymousLabel}|${auto ? `${locale}|${viewerId ?? ''}` : ''}`;
   // Each card's face, made once for as long as the card and its byline stay
   // the same (its excerpt reads the whole story): the list re-renders when the
   // viewer's session settles or more cards arrive, and a card whose face
@@ -93,12 +103,12 @@ export function CardLinkGrid({ cards, authors, cardHref, renderActions, renderCa
   const stories = useRef(new WeakMap<Card, { author: User | undefined; label: string; story: Story }>());
   const storyOf = (card: Card, author: User | undefined): Story => {
     const kept = stories.current.get(card);
-    if (kept && kept.author === author && kept.label === anonymousLabel) return kept.story;
+    if (kept && kept.author === author && kept.label === faceKey) return kept.story;
     // An anonymous card needs no author: its byline is the anonymous one.
     const story = author || card.anonymous
-      ? cardToStory(card, author, { anonymousLabel })
+      ? cardToStory(card, author, { anonymousLabel, translate })
       : { title: card.thoughtCore, excerpt: '', author: '—', authorInitials: '?', readTime: '—', tags: card.tags };
-    stories.current.set(card, { author, label: anonymousLabel, story });
+    stories.current.set(card, { author, label: faceKey, story });
     return story;
   };
 

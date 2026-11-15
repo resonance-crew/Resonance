@@ -2,6 +2,9 @@ import type { Card, User } from '@/lib/db/types';
 import type { Story } from '@/components/molecules/StoryCard/StoryCard';
 import { excerpt, plainText } from '@/lib/markdown/plainText';
 import { readMinutes } from '@/lib/readTime';
+import { storyType } from '@/lib/text/script';
+import { summaryHashOf } from '@/lib/text/summaryHash';
+import type { TranslationTarget } from '@/lib/text/translation';
 
 /**
  * Plain-text excerpt of a markdown story — markdown syntax and bare addresses
@@ -22,6 +25,30 @@ export interface CardToStoryOptions {
    * with an explicit anonymous badge instead.
    */
   deanonymize?: boolean;
+  /**
+   * 自動翻譯 is on (round 25 §F7): the interface language its translated title and excerpt are shown in, when the
+   * card carries them — and the words the small mark is named by. Never for the viewer's own card (`viewerId`).
+   */
+  translate?: { to: TranslationTarget; mark: string; viewerId?: string | null };
+}
+
+/**
+ * A feed card's title and excerpt in the reader's interface language (§F7), when the card carries them: a summary
+ * from /api/v1 has them only while they match (the server checked); a card read from Firestore carries `of`, checked
+ * here against what it shows. Only a published, public card that isn't the viewer's own.
+ */
+export function translatedSummary(
+  card: Card,
+  shown: { title: string; excerpt: string },
+  to: TranslationTarget,
+  viewerId?: string | null,
+): { title: string; excerpt: string } | null {
+  const st = card.summaryTranslations;
+  if (!st || !card.publishedAt || card.visibility !== 'public' || card.trashedAt) return null;
+  if (viewerId && card.authorId === viewerId) return null;
+  if (!card.summary && st.of !== summaryHashOf(shown.title, shown.excerpt)) return null;
+  const e = st[to];
+  return e && typeof e.title === 'string' && e.title && typeof e.excerpt === 'string' ? e : null;
 }
 
 /**
@@ -63,9 +90,11 @@ export function cardToStory(
         avatarUrl: author.avatarUrl,
         avatarSeed: author.avatarSeed,
       };
+  const tr = opts?.translate ? translatedSummary(card, { title: card.thoughtCore, excerpt: shown }, opts.translate.to, opts.translate.viewerId) : null;
   return {
-    title: card.thoughtCore,
-    excerpt: shown,
+    title: tr?.title ?? card.thoughtCore,
+    excerpt: tr?.excerpt ?? shown,
+    ...(tr ? { translated: { script: storyType(tr.title, tr.excerpt).script, lang: opts!.translate!.to, mark: opts!.translate!.mark } } : {}),
     ...byline,
     readTime: `${minutes} min`,
     tags: card.tags,

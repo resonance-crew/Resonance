@@ -237,3 +237,10 @@
   margin-top: 8px;
 }
 
+
+/* An AI-translated title and excerpt (round 25 §F7): the small globe at the foot row's end, in the meta ink. */
+.translatedMark {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-text-muted);
+}

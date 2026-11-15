@@ -32,6 +32,11 @@ export interface Story {
   imageLabel?: string;
   /** Cover-image dominant hue snapped to the card palette (see lib/design/dominantHue). */
   accentHue?: number;
+  /**
+   * The title and excerpt are an AI translation (round 25 §F7, 自動翻譯): their script and language, and the name of
+   * the small globe the foot row wears for it (「AI 翻譯」).
+   */
+  translated?: { script: 'cjk' | 'latin'; lang: string; mark: string };
 }
 
 // The six families' fills and pens live in lib/design/cardColours (server code
@@ -403,7 +408,9 @@ export const StoryCard = memo(function StoryCard({
             <Skeleton height={18} width="55%" style={{ marginTop: 8 }} />
           </div>
         ) : (
-          <h3 className={styles.title}>{story!.title}</h3>
+          <h3 className={styles.title} lang={story!.translated?.lang} data-script={story!.translated?.script}>
+            {story!.title}
+          </h3>
         )}
 
         {loading ? (
@@ -413,7 +420,9 @@ export const StoryCard = memo(function StoryCard({
             <Skeleton height={13} width="70%" />
           </div>
         ) : (
-          <p className={styles.excerpt}>{story!.excerpt}</p>
+          <p className={styles.excerpt} lang={story!.translated?.lang} data-script={story!.translated?.script}>
+            {story!.excerpt}
+          </p>
         )}
 
         <svg
@@ -464,6 +473,11 @@ export const StoryCard = memo(function StoryCard({
                 </>
               )}
             </div>
+            {!loading && story!.translated && (
+              <span className={styles.translatedMark} role="img" aria-label={story!.translated.mark} title={story!.translated.mark}>
+                <Icon name="globe" size={12} strokeWidth={INK_LIGHT} />
+              </span>
+            )}
             {loading ? (
               <Skeleton width={18} height={18} circle />
             ) : preview ? null : (

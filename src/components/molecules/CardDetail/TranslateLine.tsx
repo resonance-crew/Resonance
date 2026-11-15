@@ -6,7 +6,7 @@ import { ButtonLoader } from '@/components/atoms/ButtonLoader/ButtonLoader';
 import { Icon } from '@/components/atoms/Icon/Icon';
 import { useToast } from '@/components/providers/ToastProvider';
 import { useAutoTranslate } from '@/components/providers/TweaksPanel';
-import { TRANSLATE_MAX_CHARS, translationTargets, type TranslationTarget } from '@/lib/text/translation';
+import { TRANSLATE_MAX_CHARS, translateTarget, translationTargets, type TranslationTarget } from '@/lib/text/translation';
 import styles from './TranslateLine.module.css';
 
 /**
@@ -15,8 +15,7 @@ import styles from './TranslateLine.module.css';
  * say that a translation is showing). The server translates (POST /api/v1/cards/{key}/translation, kept per card).
  */
 
-/** The interface language a reader's locale reads in. */
-export const translateTarget = (locale: string): TranslationTarget => (locale === 'en' ? 'en' : 'zh-TW');
+export { translateTarget };
 
 export interface TranslatableCard {
   id: string;
