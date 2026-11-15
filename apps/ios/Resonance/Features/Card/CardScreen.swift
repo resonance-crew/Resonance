@@ -33,6 +33,9 @@ struct CardScreen: View {
     /// Where the reader was in the story when the toast's 看譯文 swapped it (a share of the story's height), kept
     /// until the translated story is measured and the page scrolled back to the same place.
     @State private var keptPlace: CGFloat?
+    /// The translation asked for and not yet come: cancelled when the page goes, so 譯文好了 · 看譯文 (or the
+    /// announcement) never comes over another screen.
+    @State private var translation: Task<Void, Never>?
     @State private var position = ScrollPosition(idType: String.self)
     @Environment(\.window) private var window
     /// A tablet's header (round 5 C1): the card's title fades into its centre in place of the author.
@@ -120,7 +123,20 @@ struct CardScreen: View {
         let api = session.reading
         let made = StoryTranslator(key: detail.card.id, language: language) { key, to in try await api.translate(key, to: to) }
         translator = made
-        if TranslationSettings.shared.autoTranslate { Task { await requestTranslation(made) } }
+        if TranslationSettings.shared.autoTranslate { askForTranslation(made) }
+    }
+
+    /// The request runs while the page is there: a new one replaces the last, and the page going cancels it.
+    private func askForTranslation(_ translator: StoryTranslator) {
+        translation?.cancel()
+        translation = Task { await requestTranslation(translator) }
+    }
+
+    /// Back on the page (another card was pushed over it, say) with 自動翻譯 on: the request the page's going cut
+    /// short is asked for again.
+    private func resumeTranslation() {
+        guard let translator, translator.phase == .idle, translation == nil, TranslationSettings.shared.autoTranslate else { return }
+        askForTranslation(translator)
     }
 
     /// Asks for the translation: it swaps in if the line is on screen when it comes, else the toast offers it.
@@ -147,7 +163,7 @@ struct CardScreen: View {
     /// A tap on the line: translate, show the translation again, or the original.
     private func translateLineTapped(_ translator: StoryTranslator) {
         switch translator.phase {
-        case .idle, .failed: Task { await requestTranslation(translator) }
+        case .idle, .failed: askForTranslation(translator)
         case .shown: withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) { translator.showOriginal() }
         case .original: withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) { translator.show() }
         case .working, .spent: break
@@ -280,6 +296,12 @@ struct CardScreen: View {
             keptPlace = nil
             position.scrollTo(y: max(0, story.minY + share * story.height - meter.insetTop))
         }
+        // The page went (to the feed, another card): a translation still on its way is not shown or offered elsewhere.
+        .onDisappear {
+            translation?.cancel()
+            translation = nil
+        }
+        .onAppear { resumeTranslation() }
         // Edited, published or re-shelved from the writer or the ⋯ — this card, or a
         // resonance to it: read it again (another card's draft leaves it as it is).
         .onChange(of: writer.changes) {

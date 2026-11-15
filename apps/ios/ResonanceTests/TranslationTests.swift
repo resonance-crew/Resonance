@@ -148,6 +148,48 @@ import Testing
         #expect(offline.phase == .failed)
     }
 
+    /// The page went while the model answered (its request task cancelled when the page disappeared): the toast's
+    /// 譯文好了 · 看譯文 is never offered, nor the translation swapped in and announced, over another screen.
+    @Test func aRequestCutShortByThePageGoingNeverOffersOrShowsTheTranslation() async {
+        final class Gate: @unchecked Sendable {
+            var waiting: CheckedContinuation<Void, Never>?
+            func wait() async { await withCheckedContinuation { waiting = $0 } }
+        }
+        for inView in [false, true] {
+            let gate = Gate()
+            let t = StoryTranslator(key: "c1", language: .en) { _, _ in
+                // A slow model, and a fetch that answers though its task was cancelled.
+                await gate.wait()
+                return Self.english
+            }
+            var ready = 0
+            let request = Task { await t.request(inView: { inView }) { ready += 1 } }
+            #expect(await eventually { gate.waiting != nil }, "inView: \(inView)")
+            #expect(t.phase == .working)
+            request.cancel()
+            gate.waiting?.resume()
+            await request.value
+            #expect(ready == 0 && !t.showing, "inView: \(inView)")
+            // Kept for a return to the page: 顯示翻譯 brings it, nothing asked again.
+            #expect(t.phase == .original && t.story != nil)
+            t.show()
+            #expect(t.showing)
+        }
+        // A fetch that gives up when cancelled: the line offers to translate again, not 再試一次.
+        let gate = Gate()
+        let t = StoryTranslator(key: "c1", language: .en) { _, _ in
+            await gate.wait()
+            try Task.checkCancellation()
+            return Self.english
+        }
+        let request = Task { await t.request() }
+        #expect(await eventually { gate.waiting != nil })
+        request.cancel()
+        gate.waiting?.resume()
+        await request.value
+        #expect(t.phase == .idle && !t.showing)
+    }
+
     // MARK: §F4 — the switch
 
     @Test func theSwitchIsOffUntilTurnedOnAndKeptOnThisDevice() throws {

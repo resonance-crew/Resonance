@@ -122,7 +122,11 @@ nonisolated enum StoryTranslationRule {
             let read = await Task.detached(priority: .userInitiated) { CardModel.read(title: title, story: text) }.value
             self.title = title
             story = read
-            if inView() && !keptOriginal {
+            // The page went while the model answered (its request task cancelled): the translation is kept for a
+            // return, but nothing swaps in, is announced or offered over another screen.
+            if Task.isCancelled {
+                phase = .original
+            } else if inView() && !keptOriginal {
                 show()
             } else {
                 phase = .original
@@ -131,7 +135,8 @@ nonisolated enum StoryTranslationRule {
         } catch let failure as APIFailure where failure.status == 429 {
             phase = .spent
         } catch {
-            phase = .failed
+            // Cut short because the page went: the line offers to translate again, not 再試一次.
+            phase = Task.isCancelled ? .idle : .failed
         }
     }
 
