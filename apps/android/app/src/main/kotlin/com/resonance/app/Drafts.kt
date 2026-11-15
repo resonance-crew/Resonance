@@ -68,6 +68,33 @@ interface DraftStore {
     fun refused(error: Throwable): Boolean
 }
 
+private fun fields(v: DraftValues): MutableMap<String, Any?> = mutableMapOf(
+    "thoughtCore" to v.title,
+    "story" to v.story,
+    "tags" to v.tags,
+    "visibility" to v.visibility,
+    "anonymous" to v.anonymous,
+)
+
+private fun media(v: DraftValues): Map<String, Any>? = v.imageUrl?.let { url ->
+    val m = mutableMapOf<String, Any>("type" to "image", "url" to url, "label" to (v.imageLabel ?: ""))
+    v.imageFrame?.let { m["frame"] = it.toMap() }
+    m
+}
+
+/**
+ * updateCardDraft's fields, for a merge write: the fields as they are now (a removed cover clears media and its hue).
+ * A merge set merges nested maps key by key, so a cover with no frame (a new picture, or reset to the centre) deletes
+ * `media.frame` outright — else the old crop would stay on the document and frame the new picture.
+ */
+internal fun draftUpdate(v: DraftValues): Map<String, Any?> {
+    val data = fields(v)
+    data["media"] = media(v)?.let { m -> if (v.imageFrame == null) m + ("frame" to FieldValue.delete()) else m } ?: FieldValue.delete()
+    data["accentHue"] = v.accentHue
+    data["updatedAt"] = FieldValue.serverTimestamp()
+    return data
+}
+
 /**
  * Drafts, written straight to Firestore like the web editor's client
  * (lib/db/firestore/client/cards.ts: createCardDraft, updateCardDraft) — the
@@ -79,20 +106,6 @@ interface DraftStore {
  */
 class DraftService(private val uid: String) : DraftStore {
     private val cards get() = AppFirebase.db.collection("cards")
-
-    private fun fields(v: DraftValues): MutableMap<String, Any?> = mutableMapOf(
-        "thoughtCore" to v.title,
-        "story" to v.story,
-        "tags" to v.tags,
-        "visibility" to v.visibility,
-        "anonymous" to v.anonymous,
-    )
-
-    private fun media(v: DraftValues): Map<String, Any>? = v.imageUrl?.let { url ->
-        val m = mutableMapOf<String, Any>("type" to "image", "url" to url, "label" to (v.imageLabel ?: ""))
-        v.imageFrame?.let { m["frame"] = it.toMap() }
-        m
-    }
 
     override fun newDraftId(): String = cards.document().id
 
@@ -118,11 +131,7 @@ class DraftService(private val uid: String) : DraftStore {
 
     /** updateCardDraft: the fields as they are now (a removed cover clears media and its hue). */
     override suspend fun update(id: String, v: DraftValues) {
-        val data = fields(v)
-        data["media"] = media(v) ?: FieldValue.delete()
-        data["accentHue"] = v.accentHue
-        data["updatedAt"] = FieldValue.serverTimestamp()
-        cards.document(id).set(data, SetOptions.merge()).await()
+        cards.document(id).set(draftUpdate(v), SetOptions.merge()).await()
     }
 
     override suspend fun delete(id: String) {

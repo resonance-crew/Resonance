@@ -40,11 +40,15 @@ import com.resonance.design.plainClickable
 import com.resonance.kit.api.ApiFailure
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
+import com.resonance.kit.story.StoryBlock
+import com.resonance.kit.story.StoryParser
 import com.resonance.kit.story.StoryTranslation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** What the translate line says (round 25 §F2): its states, in the table's order. */
 enum class TranslateState {
@@ -78,15 +82,25 @@ class StoryTranslator(
     private val originalStory: String,
     private val scope: CoroutineScope,
     private val fetch: suspend (to: String) -> TranslationResponse,
+    /** The translated story's blocks, read off the main thread (a story of up to 30,000 characters). */
+    private val parse: suspend (story: String) -> List<StoryBlock> = { withContext(Dispatchers.Default) { StoryParser.parse(it) } },
 ) {
     var state by mutableStateOf(TranslateState.Offer)
         private set
     var translation by mutableStateOf<TranslationResponse?>(null)
         private set
+    /**
+     * The translation's story as blocks, parsed before the translation is ever shown: the page lays the translated
+     * article out whole at the frame after a swap (the toast's 看譯文 keeps the reader's place by measuring it then).
+     */
+    var translatedBlocks by mutableStateOf<List<StoryBlock>?>(null)
+        private set
     /** Whether the page shows the translation now. */
     val showing: Boolean get() = state == TranslateState.Translated && translation != null
     val shownTitle: String get() = if (showing) translation!!.title else originalTitle
     val shownStory: String get() = if (showing) translation!!.story else originalStory
+    /** The blocks the page draws: the translation's while it shows, else null (the page's own, the original's). */
+    val shownBlocks: List<StoryBlock>? get() = if (showing) translatedBlocks else null
     /** 顯示原文 was pressed: this card stays original for the visit, whatever the switch says. */
     var keptOriginal by mutableStateOf(false)
         private set
@@ -113,11 +127,13 @@ class StoryTranslator(
 
     /**
      * The switch is on (§F4): asks as the page opens — once, and never after 顯示原文. [inView] says, when it comes,
-     * whether the line is on screen.
+     * whether the line is on screen, and [present] whether the page is still there to be told (composed and resumed):
+     * a slow answer that comes after the reader has left shows no toast on another screen — the line then says
+     * 顯示翻譯 when they come back.
      */
-    fun auto(inView: () -> Boolean, onReadyOutOfView: () -> Unit) {
+    fun auto(inView: () -> Boolean, present: () -> Boolean = { true }, onReadyOutOfView: () -> Unit) {
         if (keptOriginal || state != TranslateState.Offer) return
-        ask(auto = true, inView = inView, onReadyOutOfView = onReadyOutOfView)
+        ask(auto = true, inView = inView, onReadyOutOfView = { if (present()) onReadyOutOfView() })
     }
 
     /** The toast's 看譯文: the translation, swapped in now. */
@@ -140,6 +156,8 @@ class StoryTranslator(
         asking = scope.launch {
             try {
                 val got = fetch(target)
+                val blocks = parse(got.story)
+                translatedBlocks = blocks
                 translation = got
                 if (!auto || inView()) swap(TranslateState.Translated)
                 else {

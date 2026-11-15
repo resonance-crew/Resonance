@@ -5,10 +5,6 @@ import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.runtime.produceState
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Dispatchers
-import com.resonance.kit.story.StoryParser
 import com.resonance.kit.l10n.Strings
 import com.resonance.design.Toasts
 import androidx.compose.ui.graphics.graphicsLayer
@@ -113,7 +109,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.lifecycle.Lifecycle
+import kotlinx.coroutines.isActive
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -217,9 +216,9 @@ class CardPageModel(private val session: Session, private val key: String, previ
     fun translatorFor(d: com.resonance.api.models.CardDetail, language: String): StoryTranslator? {
         val target = StoryTranslator.targetFor(d, language) ?: return null.also { if (translator != null) translator = null }
         translator?.let { t -> if (t.target == target && t.isFor(d.card.title, d.story)) return t }
-        val made = StoryTranslator(target, d.card.title, d.story, viewModelScope) { to ->
+        val made = StoryTranslator(target, d.card.title, d.story, viewModelScope, fetch = { to ->
             session.reading.translate(d.card.slug ?: d.card.id, to)
-        }
+        })
         translator = made
         return made
     }
@@ -393,9 +392,11 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     val titleGone by remember(list) {
         derivedStateOf { scrolledUnderBar(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset, heading.bottom) }
     }
-    // The story's h2 and h3 are its table of contents: a tap on one brings it 16 under the bar.
-    val anchors = remember(blocks) { StoryAnchors() }
-    val headings = remember(blocks) { StoryToc.headings(blocks) }
+    // The blocks the article draws: the translation's while it shows (round 25 §F2, parsed before it is shown), else the story's.
+    val shownBlocks = detail?.let { d -> articleBlocks(model.translator, d.card.title, d.story, blocks) } ?: blocks
+    // The story's h2 and h3 — of the text shown — are its table of contents: a tap on one brings it 16 under the bar.
+    val anchors = remember(shownBlocks) { StoryAnchors() }
+    val headings = remember(shownBlocks) { StoryToc.headings(shownBlocks) }
     // One centred column on phones and medium windows, and on an expanded one for a story with no contents;
     // with contents, an expanded window sets their rail beside the article (round 8 §10.1: the author is under the title).
     val columns = LocalWindowLayout.current.cardPage(rail = phase == "loaded" && headings.isNotEmpty())
@@ -408,13 +409,18 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     val autoTranslate by remember { AppearanceStore.shared.state.map { it.autoTranslate } }.collectAsStateWithLifecycle(AppearanceStore.shared.state.value.autoTranslate)
     var lineCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val pageView = LocalView.current
+    val pageLifecycle = LocalLifecycleOwner.current.lifecycle
     // The line's translator follows the page as read (made in an effect, never while composing).
     LaunchedEffect(detail, language) { detail?.let { model.translatorFor(it, language) } }
     val translatorNow = model.translator
     LaunchedEffect(translatorNow, autoTranslate) {
         val t = translatorNow ?: return@LaunchedEffect
         if (!autoTranslate) return@LaunchedEffect
-        t.auto(inView = { lineOnScreen(lineCoords, pageView.height) }) {
+        t.auto(
+            inView = { lineOnScreen(lineCoords, pageView.height) },
+            // Only while this page is composed and in front: a slow answer after the reader has left shows no toast elsewhere.
+            present = { scope.isActive && pageLifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) },
+        ) {
             // Scrolled past the line: nothing moves; the shell's toast offers it, keeping the reader's place.
             toasts.show(
                 L10n.Card.Translate.ready,
@@ -501,7 +507,6 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                         val original = model.storyText ?: remember(card.title, d.story) { StoryScripts.storyType(card.title, d.story) }
                         val text = if (translated == null) original else remember(translated) { StoryScripts.storyType(translated.title, translated.story) }
                         val type = StoryType.of(text.script, cls)
-                        val shownBlocks = if (translated == null) blocks else translatedBlocks(translated.story)
                         val fade = rememberSwapFade(translator?.swaps ?: 0, reduced)
                         Column(heading.onItem.then(byline.onItem).onPlaced { articleCoords = it }.padding(start = columns.start, end = columns.end).mascotMark("column").padding(top = articleTop)) {
                             if (trashedOwn) TrashedCardBanner(card, d.anonymous, compact = cls == LayoutClass.Compact, focusTicket = trashedHere, onDeleted = popToRoot)
@@ -1079,6 +1084,13 @@ internal fun easesProgress(jump: Float, scrolling: Boolean, interrupted: Boolean
 internal const val PROGRESS_JUMP = 0.02f
 private const val PROGRESS_EASE_MILLIS = 120
 
+/**
+ * The blocks a card page's article draws, and its contents rail lists and anchors (round 25 §F2): the translation's
+ * while it shows for this very story, else the story's own [blocks].
+ */
+internal fun articleBlocks(translator: StoryTranslator?, title: String, story: String, blocks: List<com.resonance.kit.story.StoryBlock>): List<com.resonance.kit.story.StoryBlock> =
+    translator?.takeIf { it.isFor(title, story) }?.shownBlocks ?: blocks
+
 /** Whether the translate line is on screen now (between the window's top and [windowHeight]). */
 internal fun lineOnScreen(line: LayoutCoordinates?, windowHeight: Int): Boolean {
     val c = line?.takeIf { it.isAttached } ?: return false
@@ -1100,15 +1112,6 @@ internal suspend fun keepingPlace(list: LazyListState, swap: () -> Unit) {
     val after = list.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "article" } ?: return
     val want = -(share * after.size)
     list.scrollBy(after.offset - want)
-}
-
-/** The translated story's blocks, parsed off the main thread (a story of up to 30,000 characters); empty meanwhile. */
-@Composable
-private fun translatedBlocks(story: String): List<com.resonance.kit.story.StoryBlock> {
-    val parsed by produceState(emptyList<com.resonance.kit.story.StoryBlock>(), story) {
-        value = withContext(Dispatchers.Default) { StoryParser.parse(story) }
-    }
-    return parsed
 }
 
 /** The title's and story's 180 ms fade as the text swaps (round 25 §F2): none under reduced motion, none at the first. */

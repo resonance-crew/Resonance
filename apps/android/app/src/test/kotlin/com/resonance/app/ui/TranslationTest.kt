@@ -10,6 +10,9 @@ import com.resonance.api.models.TranslationResponse
 import com.resonance.app.AppearanceStore
 import com.resonance.kit.api.ApiFailure
 import com.resonance.kit.l10n.Strings
+import com.resonance.design.StoryToc
+import com.resonance.kit.story.StoryBlock
+import com.resonance.kit.story.StoryParser
 import com.resonance.kit.story.StoryTranslation
 import java.io.File
 import kotlinx.coroutines.CompletableDeferred
@@ -95,7 +98,64 @@ class TranslationTest {
 
     private val answer = TranslationResponse("en", "A walk in the rain", "The rain stopped that afternoon.")
 
-    private fun translator(fetch: suspend (String) -> TranslationResponse) = StoryTranslator("en", "雨中散步", zhStory, scope, fetch)
+    private fun translator(
+        parse: suspend (String) -> List<StoryBlock> = { StoryParser.parse(it) },
+        fetch: suspend (String) -> TranslationResponse,
+    ) = StoryTranslator("en", "雨中散步", zhStory, scope, fetch, parse)
+
+    private val headed = TranslationResponse("en", "A walk in the rain", "## By the river\n\nThe rain stopped.\n\n## Under the bridge\n\nNo one spoke.")
+
+    @Test fun theTranslatedStoryIsParsedBeforeItIsEverShown() {
+        // The parse takes longer than a frame: the line stays at 翻譯中⋯ and nothing swaps or toasts until it is done,
+        // so 看譯文's keepingPlace measures the whole translated article at the frame after the swap.
+        val parsing = CompletableDeferred<Unit>()
+        var toasts = 0
+        val t = translator(parse = { parsing.await(); StoryParser.parse(it) }) { headed }
+        t.auto(inView = { false }) { toasts++ }
+        assertEquals(TranslateState.Working, t.state)
+        assertEquals(0, toasts)
+        assertNull(t.shownBlocks)
+        parsing.complete(Unit)
+        assertEquals(TranslateState.Original, t.state)
+        assertEquals(1, toasts)
+        // The original shows: its own blocks.
+        assertNull(t.shownBlocks)
+        t.showReady()
+        val shown = t.shownBlocks
+        assertTrue(shown != null && shown.isNotEmpty())
+    }
+
+    @Test fun theContentsRailListsTheHeadingsOfTheTextShown() {
+        val originalBlocks = StoryParser.parse("## 河堤上\n\n雨停了。\n\n## 橋下\n\n誰也沒有說話。")
+        val t = StoryTranslator("en", "雨中散步", "## 河堤上\n\n雨停了。\n\n## 橋下\n\n誰也沒有說話。", scope, { headed }, { StoryParser.parse(it) })
+        fun rail() = StoryToc.headings(articleBlocks(t, "雨中散步", "## 河堤上\n\n雨停了。\n\n## 橋下\n\n誰也沒有說話。", originalBlocks)).map { it.text }
+        assertEquals(listOf("河堤上", "橋下"), rail())
+        t.tap()
+        // Translated: the rail's headings, and the blocks its anchors are kept by, are the translation's.
+        assertEquals(listOf("By the river", "Under the bridge"), rail())
+        val shown = articleBlocks(t, "雨中散步", "## 河堤上\n\n雨停了。\n\n## 橋下\n\n誰也沒有說話。", originalBlocks)
+        assertTrue(StoryToc.headings(shown).all { h -> shown.any { it === h.block } })
+        // 顯示原文: the original's again; another story's translator never lends its blocks.
+        t.tap()
+        assertEquals(listOf("河堤上", "橋下"), rail())
+        t.tap()
+        assertEquals(originalBlocks, articleBlocks(t, "Another", "Another story", originalBlocks))
+    }
+
+    @Test fun aSlowAnswerAfterThePageIsGoneShowsNoToast() {
+        val gate = CompletableDeferred<TranslationResponse>()
+        var present = true
+        var toasts = 0
+        val t = translator { gate.await() }
+        t.auto(inView = { false }, present = { present }) { toasts++ }
+        // The reader leaves the card page before the answer comes.
+        present = false
+        gate.complete(answer)
+        assertEquals(0, toasts)
+        // The line says 顯示翻譯 when they come back; nothing swapped.
+        assertEquals(TranslateState.Original, t.state)
+        assertEquals("雨中散步", t.shownTitle)
+    }
 
     @Test fun theLineGoesFromOfferThroughWorkingToTranslatedAndBack() {
         val gate = CompletableDeferred<TranslationResponse>()
