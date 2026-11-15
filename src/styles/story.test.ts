@@ -46,9 +46,12 @@ describe('story.css', () => {
     }
   });
 
-  it('justifies CJK and leaves a Latin-script story ragged', () => {
-    expect(own.get('s-align')).toBe('start'); // the last declaration of it: the Latin rule
-    expect(storyCss).toMatch(/--s-align: justify;[\s\S]*\[data-script='latin'\][\s\S]*--s-align: start;/);
+  it('sets every story flush left, CJK and Latin alike (the owner, round 25: 「全部靠左」)', () => {
+    const aligns = [...storyCss.matchAll(/--s-align:\s*([^;]+);/g)].map((m) => m[1].trim());
+    expect(aligns.length).toBeGreaterThan(0);
+    expect(new Set(aligns)).toEqual(new Set(['start']));
+    expect(storyCss).not.toMatch(/text-align:\s*justify/);
+    expect(storyCss).toMatch(/\.story-prose \{[^}]*text-align: var\(--s-align\)/);
   });
 });
 

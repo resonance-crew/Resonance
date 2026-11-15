@@ -80,7 +80,7 @@ export const SHARE_TYPE = {
     latin: { face: '--font-heading', weight: '--story-heading-weight-latin', tracking: 0, leading: '--story-title-leading-latin', figures: 'lining' },
   },
   words: {
-    cjk: { face: '--font-story-sans', weight: 400, tracking: '--story-tracking', leading: '--story-leading', align: 'justify' },
+    cjk: { face: '--font-story-sans', weight: 400, tracking: '--story-tracking', leading: '--story-leading', align: 'start' },
     latin: { face: '--font-body', weight: 400, tracking: 0, leading: '--story-leading-latin', align: 'start' },
   },
 } as const satisfies Record<'title' | 'words', Record<'cjk' | 'latin', ShareType>>;

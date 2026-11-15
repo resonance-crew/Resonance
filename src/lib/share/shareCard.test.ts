@@ -61,6 +61,9 @@ describe('the share card recipe (native/fixtures/share-card.json, shared with th
     expect(SHARE_TYPE.title.latin).toMatchObject({ face: '--font-heading', weight: '--story-heading-weight-latin', tracking: 0, figures: 'lining' });
     expect(SHARE_TYPE.words.cjk).toMatchObject({ face: '--font-story-sans', tracking: '--story-tracking' });
     expect(SHARE_TYPE.words.latin).toMatchObject({ face: '--font-body', tracking: 0 });
+    // Set as the story sets it: flush left in every script (the owner, round 25: 「全部靠左」).
+    expect(SHARE_TYPE.words.cjk.align).toBe('start');
+    expect(SHARE_TYPE.words.latin.align).toBe('start');
     // Never negative tracking on a story's title (the reading design).
     expect(tokenValue(SHARE_TYPE.title.cjk.tracking)).toBeGreaterThan(0);
   });
