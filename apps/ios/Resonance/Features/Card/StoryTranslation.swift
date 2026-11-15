@@ -239,3 +239,28 @@ struct TranslateLine: View {
         }
     }
 }
+
+/// The translation and the original crossfade in one slot (round 25 §F2): while the outgoing copy fades it still
+/// lays itself out, so only the copy that matches what the translator shows writes the page's measures.
+enum StoryCrossfade {
+    static func measures(translatedCopy: Bool, showing: Bool) -> Bool { translatedCopy == showing }
+}
+
+/// Where the reader was in the story when the toast's 看譯文 swapped it: a share of the story's height. With the
+/// crossfade it is held `untilSettled` — every frame of the swap scrolls back to it, and the page lets go once the
+/// original has gone; without (Reduce Motion), the first measure of the translated story is the settled one.
+struct KeptPlace: Equatable {
+    let share: CGFloat
+    let untilSettled: Bool
+
+    static func at(story: CGRect, visibleTop: CGFloat, untilSettled: Bool) -> KeptPlace? {
+        guard story.height > 0 else { return nil }
+        return KeptPlace(share: min(max((visibleTop - story.minY) / story.height, 0), 1), untilSettled: untilSettled)
+    }
+
+    /// The scroll offset that puts the same share of `story` under the bar; none before the story is measured.
+    func offset(story: CGRect, insetTop: CGFloat) -> CGFloat? {
+        guard story.height > 0 else { return nil }
+        return max(0, story.minY + share * story.height - insetTop)
+    }
+}

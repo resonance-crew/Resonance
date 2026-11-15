@@ -190,6 +190,36 @@ import Testing
         #expect(t.phase == .idle && !t.showing)
     }
 
+    /// The crossfade (post-merge review): the outgoing copy still lays itself out while it fades, so only the copy
+    /// that matches what the translator shows writes the story's frame, and 看譯文's kept place follows every frame
+    /// of the swap rather than spending itself on the first one.
+    @Test func theCrossfadeMeasuresOnlyTheShownCopyAndKeepsThePlaceUntilItSettles() async {
+        let t = translator { Self.english }
+        await t.request(inView: { false })
+        // Before 看譯文: the original copy measures, the translated one (not yet drawn) would not.
+        #expect(StoryCrossfade.measures(translatedCopy: false, showing: t.showing))
+        #expect(!StoryCrossfade.measures(translatedCopy: true, showing: t.showing))
+        t.show()
+        // During the fade the outgoing original's frames are left out.
+        #expect(StoryCrossfade.measures(translatedCopy: true, showing: t.showing))
+        #expect(!StoryCrossfade.measures(translatedCopy: false, showing: t.showing))
+
+        // A quarter of the way into a 900-high story starting at 400, under a 100 bar.
+        let original = CGRect(x: 0, y: 400, width: 350, height: 900)
+        let kept = KeptPlace.at(story: original, visibleTop: 625, untilSettled: true)
+        #expect(kept?.share == 0.25)
+        // Mid-swap the outgoing title still holds its slot (the story 40 lower); once settled, the shorter title.
+        let midSwap = CGRect(x: 0, y: 440, width: 350, height: 1200)
+        let settled = CGRect(x: 0, y: 380, width: 350, height: 1200)
+        #expect(kept?.offset(story: midSwap, insetTop: 100) == 640) // 440 + a quarter of 1200 − the bar
+        #expect(kept?.offset(story: settled, insetTop: 100) == 580) // 380 + 300 − 100
+        #expect(kept?.untilSettled == true)
+        // Not measured yet: nothing to scroll to; Reduce Motion's swap settles on its first measure.
+        #expect(kept?.offset(story: .zero, insetTop: 100) == nil)
+        #expect(KeptPlace.at(story: .zero, visibleTop: 0, untilSettled: true) == nil)
+        #expect(KeptPlace.at(story: original, visibleTop: 0, untilSettled: false)?.share == 0)
+    }
+
     // MARK: §F4 — the switch
 
     @Test func theSwitchIsOffUntilTurnedOnAndKeptOnThisDevice() throws {

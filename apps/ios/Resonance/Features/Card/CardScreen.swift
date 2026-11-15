@@ -32,7 +32,7 @@ struct CardScreen: View {
     @State private var translator: StoryTranslator?
     /// Where the reader was in the story when the toast's 看譯文 swapped it (a share of the story's height), kept
     /// until the translated story is measured and the page scrolled back to the same place.
-    @State private var keptPlace: CGFloat?
+    @State private var keptPlace: KeptPlace?
     /// The translation asked for and not yet come: cancelled when the page goes, so 譯文好了 · 看譯文 (or the
     /// announcement) never comes over another screen.
     @State private var translation: Task<Void, Never>?
@@ -153,11 +153,18 @@ struct CardScreen: View {
 
     /// 看譯文: the translation swaps in and the reader stays at the same place in the story.
     private func revealKeepingPlace(_ translator: StoryTranslator) {
-        let story = meter.story
-        if story.height > 0 {
-            keptPlace = min(max((meter.viewport.top - story.minY) / story.height, 0), 1)
+        keptPlace = KeptPlace.at(story: meter.story, visibleTop: meter.viewport.top, untilSettled: !reduceMotion)
+        guard !reduceMotion else { translator.show(); return }
+        // The crossfade's frames move the story (the outgoing title still holds its slot): the page follows it
+        // until the original has gone, then takes the settled place once more and lets go.
+        withAnimation(.easeInOut(duration: 0.18), completionCriteria: .removed) { translator.show() } completion: {
+            Task { @MainActor in
+                if let offset = keptPlace?.offset(story: meter.story, insetTop: meter.insetTop) {
+                    position.scrollTo(y: offset)
+                }
+                keptPlace = nil
+            }
         }
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) { translator.show() }
     }
 
     /// A tap on the line: translate, show the translation again, or the original.
@@ -292,9 +299,9 @@ struct CardScreen: View {
         .onChange(of: model?.phase == .loaded, initial: true) { _, loaded in if loaded { startTranslator() } }
         // The translated story measured after the toast's 看譯文: back to where the reader was.
         .onChange(of: meter.story) { _, story in
-            guard let share = keptPlace, story.height > 0 else { return }
-            keptPlace = nil
-            position.scrollTo(y: max(0, story.minY + share * story.height - meter.insetTop))
+            guard let kept = keptPlace, let offset = kept.offset(story: story, insetTop: meter.insetTop) else { return }
+            if !kept.untilSettled { keptPlace = nil }
+            position.scrollTo(y: offset)
         }
         // The page went (to the feed, another card): a translation still on its way is not shown or offered elsewhere.
         .onDisappear {
@@ -398,6 +405,11 @@ struct CardScreen: View {
                 head(card, anonymous: detail.anonymous, type: type, actions: actionsInByline && !trashed ? detail : nil,
                      privateCard: Self.isPrivateCard(detail) || Self.isSharedPrivate(detail),
                      title: shown != nil ? translator?.title : nil, translator: trashed ? nil : translator)
+                // The translation and the original crossfade (180 ms; none under Reduce Motion) in one slot: the
+                // outgoing copy lies under the incoming one, not above it in the column, and only the copy that
+                // shows measures the story.
+                let translatedCopy = shown != nil
+                ZStack(alignment: .topLeading) {
                 // A card the reader can't see (private, gone, blocked) is the link the story wrote, as the prose draws one.
                 StoryMarkdownView(blocks: blocks, typography: story, language: type.lang, onOpenURL: open) { href, _ in
                     model.embed(for: href).map { CardEmbedView(href: href, card: $0) }
@@ -420,17 +432,20 @@ struct CardScreen: View {
                 .anchoringHeadings(in: Self.pageSpace)
                 // What VoiceOver names a table in it.
                 .environment(\.storyTableLabel, L10n.Card.table)
-                .onPreferenceChange(StoryHeadingTops.self) { tops in
+                .onPreferenceChange(StoryHeadingTops.self) { [translator] tops in
+                    guard StoryCrossfade.measures(translatedCopy: translatedCopy, showing: translator?.showing == true) else { return }
                     let wanted = Set(toc.map(\.index))
                     meter.headings = tops.filter { wanted.contains($0.key) }
                         .map { TocReading.Heading(index: $0.key, top: $0.value) }
                         .sorted { $0.top < $1.top }
                 }
                 // The story block alone (not the cover, title or what follows) is what the progress measures.
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.pageSpace)) } action: { meter.story = $0 }
-                // The translation and the original crossfade (180 ms; none under Reduce Motion).
-                .id(shown != nil)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.pageSpace)) } action: { [translator] frame in
+                    if StoryCrossfade.measures(translatedCopy: translatedCopy, showing: translator?.showing == true) { meter.story = frame }
+                }
+                .id(translatedCopy)
                 .transition(.opacity)
+                }
                 .padding(.bottom, story.endGap)
                 if !card.tags.isEmpty {
                     // Tags are app furniture: the theme colour, not the card's hue.
@@ -544,12 +559,22 @@ struct CardScreen: View {
                     .padding(.bottom, story.coverGap)
                     .accessibilityLabel(card.imageLabel ?? card.title)
             }
-            StoryTitle(shownTitle ?? card.title, typography: story, lang: type.lang)
-                .id(shownTitle != nil)
-                .transition(.opacity)
-                // Where the title ends, for the tablet header's centre (it fades in once this is under the line).
-                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.pageSpace)).maxY } action: { meter.titleBottom = $0 }
-                .padding(.bottom, story.metaGap)
+            // The two titles crossfade in one slot, as the story does; only the one that shows measures.
+            let translatedCopy = shownTitle != nil
+            // The page's own translator (the line's `translator` is left out on a trashed card).
+            let live = self.translator
+            ZStack(alignment: .topLeading) {
+                StoryTitle(shownTitle ?? card.title, typography: story, lang: type.lang)
+                    // Where the title ends, for the tablet header's centre (it fades in once this is under the line).
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.pageSpace)).maxY } action: { bottom in
+                        if StoryCrossfade.measures(translatedCopy: translatedCopy, showing: live?.showing == true) {
+                            meter.titleBottom = bottom
+                        }
+                    }
+                    .id(translatedCopy)
+                    .transition(.opacity)
+            }
+            .padding(.bottom, story.metaGap)
             StoryBylineRow(card: card, anonymous: anonymous, avatar: story.bylineAvatar, metaSize: story.metaSize,
                            privateCard: privateCard) {
                 if let detail {
