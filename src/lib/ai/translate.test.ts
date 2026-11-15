@@ -11,6 +11,7 @@ const chatJSON = vi.fn();
 vi.mock('./openai', async (orig) => ({ ...(await orig<typeof import('./openai')>()), chatJSON: (...a: unknown[]) => chatJSON(...a) }));
 
 const {
+  addressesIn,
   addressesKept,
   PIECE_MAX_CHARS,
   PIECES_IN_FLIGHT,
@@ -139,6 +140,14 @@ describe('addresses', () => {
     expect(addressesKept('see https://x.example/1.', '見 https://x.example/1。')).toBe(true);
     expect(addressesKept('plain', '[here](https://evil.example)')).toBe(false);
     expect(addressesKept('plain', 'www.evil.example')).toBe(false);
+  });
+
+  it('ends a bare URL at CJK text or full-width punctuation written straight after it', () => {
+    expect(addressesKept('我的部落格https://example.com/blog，歡迎來看看。', 'My blog https://example.com/blog, come take a look.')).toBe(true);
+    expect(addressesKept('see https://x.example/1 and more', '見https://x.example/1，以及更多')).toBe(true);
+    expect(addressesIn('我的部落格https://example.com/blog，歡迎來看看。')).toEqual(new Set(['https://example.com/blog']));
+    // an address the source never held is still caught when CJK follows it
+    expect(addressesKept('見https://x.example/1，以及更多', 'see https://evil.example/1, and more')).toBe(false);
   });
 });
 

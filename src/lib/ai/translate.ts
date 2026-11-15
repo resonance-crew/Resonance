@@ -131,7 +131,9 @@ export function storyPieces(story: string, max = PIECE_MAX_CHARS): string[] {
 
 // --- addresses ---
 
-const URL_PATTERN = /\b(?:https?:\/\/|mailto:|www\.)[^\s<>()"'`\]]+/giu;
+// A bare address ends at the first character outside printable ASCII, so CJK text or full-width punctuation written
+// straight after it (「部落格https://x.example/blog，歡迎」) is not taken as part of it.
+const URL_PATTERN = /\b(?:https?:\/\/|mailto:|www\.)(?:(?![<>()"'`\]])[\x21-\x7E])+/giu;
 const LINK_TARGET = /\]\(\s*<?([^)\s>]+)>?/gu;
 
 /** Every address a piece of Markdown holds: bare URLs, and the targets of its links and pictures. */
