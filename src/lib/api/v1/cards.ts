@@ -13,6 +13,7 @@ import { becameReachable, hiddenResonance } from './resonate';
 import { privateShareRef } from './sharedCards';
 import { summaryFields } from './summary';
 import type { FeedCardBody, UpdateCardInput } from './schemas';
+import { TRANSLATION_TARGETS } from '@/lib/text/translation';
 
 /**
  * The card box's own changes to a card — its visibility, its byline, deleting
@@ -189,10 +190,12 @@ export async function deleteCard(db: Firestore, uid: string, id: string, opts: D
     if (opts.onlyIfTrashed && trashedAt == null) throw new ApiFailure('conflict', NOT_IN_TRASH_MESSAGE);
     takeBack(tx, await readTakeBack(tx, db, uid, id));
     tx.delete(ref);
-    // What is under the card goes with it: its pending edit — the one document a card has beneath it (the rules
-    // let a client write edits/current alone, and no server path writes anything else there). Deleting a missing
-    // one is nothing; once the card is gone the rules take no new one.
+    // What is under the card goes with it: its pending edit (the rules let a client write edits/current alone)
+    // and the translations the server kept of its story, one per interface language (POST …/translation). Deleting
+    // a missing one is nothing; once the card is gone the rules take no new edit, and the server translates no card
+    // that isn't there.
     tx.delete(db.doc(`cards/${id}/edits/current`));
+    for (const to of TRANSLATION_TARGETS) tx.delete(db.doc(`cards/${id}/translations/${to}`));
     // Whether it was ever shared privately is about this card alone (sharedCards PRIVATE_SHARES).
     tx.delete(privateShareRef(db, id));
     tx.set(tombstoneRef(db, id), TOMBSTONE);

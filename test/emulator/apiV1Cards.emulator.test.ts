@@ -380,12 +380,18 @@ describe('the recommendation vectors of a card whose visibility changes (PATCH /
 });
 
 describe('deleteCard (DELETE /cards/{id})', () => {
-  it('removes the card, its pending edit and its recommendation vectors, naming its pages', async () => {
+  it('removes the card, its pending edit, its kept translations and its recommendation vectors, naming its pages', async () => {
     await db.doc('cards/live/edits/current').set({ story: 'half-written' });
+    await db.doc('cards/live/translations/en').set({ title: 'A quiet night', story: 'x', hash: 'h', model: 'm' });
+    await db.doc('cards/live/translations/zh-TW').set({ title: '安靜的夜', story: 'x', hash: 'h', model: 'm' });
+    await db.doc('cards/other/translations/en').set({ title: 'Other', story: 'x', hash: 'h', model: 'm' });
     const { stale } = await deleteCard(db, 'alice', 'live', { vectors: new FirestoreVectorStore(db) });
     expect(stale).toEqual(PAGES);
     expect((await db.doc('cards/live').get()).exists).toBe(false);
     expect((await db.doc('cards/live/edits/current').get()).exists).toBe(false);
+    expect((await db.doc('cards/live/translations/en').get()).exists).toBe(false);
+    expect((await db.doc('cards/live/translations/zh-TW').get()).exists).toBe(false);
+    expect((await db.doc('cards/other/translations/en').get()).exists).toBe(true);
     expect((await db.doc('cardVectors/live__insight').get()).exists).toBe(false);
     expect((await db.doc('cardVectors/other__insight').get()).exists).toBe(true);
     expect((await failure(getCardDetail(db, 'alice', 'a-quiet-night'))).code).toBe('not_found');

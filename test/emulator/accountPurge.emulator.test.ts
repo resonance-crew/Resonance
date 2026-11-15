@@ -59,8 +59,11 @@ async function seedWorld() {
 
     set('cards/alice-card', { authorId: 'alice', thoughtCore: 'A', story: 's', visibility: 'public' }),
     set('cards/alice-card/edits/current', { story: 'draft' }),
+    // The server's kept translation of her story (POST …/translation, round 25): it goes with the card's tree.
+    set('cards/alice-card/translations/en', { title: 'A', story: 's', hash: 'h', model: 'm' }),
     set('cards/alice-draft', { authorId: 'alice', thoughtCore: 'D', story: 's', visibility: 'private' }),
     set('cards/bob-card', { authorId: 'bob', thoughtCore: 'B', story: 's', visibility: 'public' }),
+    set('cards/bob-card/translations/zh-TW', { title: 'B', story: 's', hash: 'h', model: 'm' }),
     // Bob's resonance card responding to Alice's — Bob's own writing, kept.
     set('cards/bob-reply', {
       authorId: 'bob',
@@ -243,6 +246,7 @@ describe('purgeAccount', () => {
       'users/alice/blocks/carol',
       'cards/alice-card',
       'cards/alice-card/edits/current',
+      'cards/alice-card/translations/en',
       'cards/alice-draft',
       'thoughtMaps/alice/nodes/alice-card',
       'connections/alice_bob',
@@ -313,6 +317,7 @@ describe('purgeAccount', () => {
       'uploads/b1',
       'reportEvidence/r3',
       'cards/bob-card/edits/current',
+      'cards/bob-card/translations/zh-TW',
     ];
 
     const stillThere = (await Promise.all(gone.map(async (p) => ((await exists(p)) ? p : null)))).filter(Boolean);

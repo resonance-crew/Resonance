@@ -19,21 +19,27 @@ const STATUS: Record<Code, number> = {
   internal: 500,
 };
 
-/** A failure a v1 handler can throw; rendered as the ApiError body. */
+/**
+ * A failure a v1 handler can throw; rendered as the ApiError body. `status`
+ * answers another HTTP status than its code's (a translation: 413 for a
+ * story too long, 503 when the model failed) — ErrorCode is an enum the
+ * apps decode, closed within v1, so a new status never needs a new code.
+ */
 export class ApiFailure extends Error {
   constructor(
     readonly code: Code,
     message: string,
     readonly issues?: { path: string; message: string }[],
+    readonly status?: number,
   ) {
     super(message);
   }
 }
 
 /** A failure is never kept: the next ask may well succeed (see ./cache). */
-export function apiError(code: Code, message: string, issues?: { path: string; message: string }[]) {
+export function apiError(code: Code, message: string, issues?: { path: string; message: string }[], status?: number) {
   const body: ApiErrorBody = { error: { code, message, ...(issues ? { issues } : {}) } };
-  return NextResponse.json(body, { status: STATUS[code], headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json(body, { status: status ?? STATUS[code], headers: { 'Cache-Control': 'no-store' } });
 }
 
 export function parse<T extends z.ZodType>(schema: T, value: unknown): z.infer<T> {
@@ -106,7 +112,7 @@ export function withUser<A extends unknown[]>(
     try {
       res = await handler(user, req, ...rest);
     } catch (e) {
-      if (e instanceof ApiFailure) res = apiError(e.code, e.message, e.issues);
+      if (e instanceof ApiFailure) res = apiError(e.code, e.message, e.issues, e.status);
       else {
         console.error('[api/v1]', e);
         res = apiError('internal', 'Something went wrong.');

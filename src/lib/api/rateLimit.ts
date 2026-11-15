@@ -16,6 +16,12 @@ export const LIMITS = {
   /** /api/cards/insight and /api/cards/tags: one LLM call each. */
   insight: { max: 60, windowMs: HOUR },
   tags: { max: 60, windowMs: HOUR },
+  /**
+   * A story translated for its reader (POST /api/v1/cards/{id}/translation):
+   * up to eight model calls for a long one. Only a new translation spends it —
+   * one already kept for the card's words as they are is answered for free.
+   */
+  translate: { max: 40, windowMs: DAY },
   /** Publishing: a slug LLM call, the index, maybe a bell. */
   publish: { max: 30, windowMs: DAY },
   /**
