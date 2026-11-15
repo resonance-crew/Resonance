@@ -11,6 +11,7 @@
     "src/app/api/recommend/feed/route.ts": { "regions": ["hnd1"], "maxDuration": 60 },
     "src/app/api/v1/cards/*/edits/apply/route.ts": { "regions": ["hnd1"], "maxDuration": 60 },
     "src/app/api/v1/cards/*/publish/route.ts": { "regions": ["hnd1"], "maxDuration": 60 },
+    "src/app/api/v1/cards/*/translation/route.ts": { "regions": ["hnd1"], "maxDuration": 60 },
     "src/app/api/v1/feed/recommended/route.ts": { "regions": ["hnd1"], "maxDuration": 60 }
   },
   "redirects": [

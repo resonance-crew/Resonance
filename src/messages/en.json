@@ -444,7 +444,21 @@
       "onlyYou": "Only you can see it",
       "notesGone": "The notes left on this anonymous card have been deleted"
     },
-    "sharedPrivately": "{handle} shared this private card with you — only you can read it"
+    "sharedPrivately": "{handle} shared this private card with you — only you can read it",
+    "translate": {
+      "action": "Translate to English",
+      "working": "Translating…",
+      "done": "Translated by AI",
+      "showOriginal": "Show original",
+      "showTranslation": "Show translation",
+      "failed": "Couldn’t translate",
+      "retry": "Try again",
+      "spent": "No more translations today",
+      "announce": "Translated to English",
+      "ready": "Translation ready",
+      "show": "Show",
+      "mark": "AI translation"
+    }
   },
   "share": {
     "profile": "Share profile",
@@ -776,7 +790,16 @@
     "tagsAddLabel": "Add tag: {tag}",
     "tagsAdded": "{count, plural, one {# tag added} other {# tags added}}",
     "tagsRemoveLabel": "Remove tag: {tag}",
-    "discardShort": "Discard"
+    "discardShort": "Discard",
+    "coverAdjust": "Adjust",
+    "coverFrame": {
+      "title": "Frame the cover",
+      "hintTouch": "Drag to move, pinch or slide to zoom",
+      "hintPointer": "Drag to move, scroll or slide to zoom",
+      "stage": "Cover framing area",
+      "done": "Done",
+      "cancel": "Cancel"
+    }
   },
   "me": {
     "joined": "Joined {date}",
@@ -1059,7 +1082,9 @@
       "ui": "UI language",
       "original": "Primary writing language",
       "autoTranslate": "Auto-translate my cards",
-      "readPreference": "When reading others’ cards"
+      "readPreference": "When reading others’ cards",
+      "autoTranslateStories": "Auto-translate",
+      "autoTranslateStoriesHint": "Titles, excerpts and stories in another language are shown translated by AI into the interface language"
     },
     "ai": {
       "polish": "Let AI polish my drafts",
@@ -1153,5 +1178,14 @@
     "refresh": "Refresh",
     "close": "Close",
     "channelNewCards": "New cards"
+  },
+  "crop": {
+    "zoom": "Zoom",
+    "reset": "Reset",
+    "keys": "Arrow keys move, + and − zoom",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "moveLeft": "Move left",
+    "moveRight": "Move right"
   }
 }

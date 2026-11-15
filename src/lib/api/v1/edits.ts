@@ -9,6 +9,7 @@ import { becameReachable, hiddenResonance } from './resonate';
 import { listingFields, summaryFields } from './summary';
 import { visibilityOf } from './present';
 import type { Visibility } from '@/lib/db/types';
+import type { CoverFrame } from '@/lib/images/coverFrame';
 
 export interface ApplyEditResult {
   id: string;
@@ -113,11 +114,20 @@ export async function applyCardEdit(db: Firestore, uid: string, id: string): Pro
   });
 }
 
-function isMedia(m: unknown): m is { type: string; url: string; label?: unknown } {
+function isMedia(m: unknown): m is { type: string; url: string; label?: unknown; frame?: unknown } {
   return !!m && typeof m === 'object' && typeof (m as { url?: unknown }).url === 'string' && typeof (m as { type?: unknown }).type === 'string';
 }
 
-/** A cover's own fields only (the buffer could hold anything beside them). */
-function pickMedia(m: { type: string; url: string; label?: unknown }): { type: string; url: string; label?: string } {
-  return { type: m.type, url: m.url, ...(typeof m.label === 'string' ? { label: m.label } : {}) };
+/**
+ * A cover's own fields only (the buffer could hold anything beside them) —
+ * its frame too (lib/images/coverFrame), whatever it holds: one out of its
+ * ranges is refused by cardContentProblem, as the rules refuse it.
+ */
+function pickMedia(m: { type: string; url: string; label?: unknown; frame?: unknown }): { type: string; url: string; label?: string; frame?: CoverFrame } {
+  return {
+    type: m.type,
+    url: m.url,
+    ...(typeof m.label === 'string' ? { label: m.label } : {}),
+    ...(m.frame != null ? { frame: m.frame as CoverFrame } : {}),
+  };
 }

@@ -1368,6 +1368,106 @@
         }
       }
     },
+    "/cards/{key}/translation": {
+      "post": {
+        "operationId": "translateCard",
+        "summary": "A published public story translated by AI into the reader's interface language (title and story only)",
+        "description": "For the card page's translate line: `to` is the interface language. Checked in this order: the contract (`400`); the card — one you may read, published and public (named or anonymous), not in the trash — else `404`, as for a card that is not there; a story over 30 000 characters is `413`; one already in that language (by its script: a Chinese story goes into English, a Latin-script one into 繁體中文, a Japanese or Korean one into either) `400`. A translation already made for the card as it is now is answered at once and spends nothing; otherwise your translation budget (`429`, 40 a day), then the model: `503` when it failed or ran out of time (nothing kept: ask again later). The answer says nothing about the author. Never cached.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "The card slug or id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranslationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/cards/{key}/edits/apply": {
       "post": {
         "operationId": "applyCardEdit",
@@ -2949,6 +3049,66 @@
           "region"
         ]
       },
+      "CoverFrame": {
+        "type": "object",
+        "properties": {
+          "cx": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "cy": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "zoom": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 2
+          },
+          "ar": {
+            "type": "number",
+            "minimum": 0.2,
+            "maximum": 5
+          }
+        },
+        "required": [
+          "cx",
+          "cy",
+          "zoom",
+          "ar"
+        ],
+        "description": "Where a cover is looked at: every shape it is drawn in centres its own crop on (cx, cy) at `zoom`, moved to lie inside the picture (coverCrop, pinned by native/fixtures/cover-frame.json). Null or absent: the centre at zoom 1."
+      },
+      "SummaryTranslation": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "excerpt"
+        ],
+        "description": "A card's title and excerpt translated by AI into one interface language."
+      },
+      "SummaryTranslations": {
+        "type": "object",
+        "properties": {
+          "en": {
+            "$ref": "#/components/schemas/SummaryTranslation"
+          },
+          "zh-TW": {
+            "$ref": "#/components/schemas/SummaryTranslation"
+          }
+        },
+        "description": "A published public card's title and excerpt translated by AI, made when it was published or last edited: into English for a Chinese story, into 繁體中文 for a Latin-script one, both for Japanese or Korean. Sent only while they still describe the card as it is. Show one only when the reader turned auto-translate on, and mark it."
+      },
       "FeedCard": {
         "type": "object",
         "properties": {
@@ -3001,6 +3161,22 @@
           "imageLabel": {
             "nullable": true,
             "type": "string"
+          },
+          "imageFrame": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CoverFrame"
+              }
+            ]
+          },
+          "summaryTranslations": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SummaryTranslations"
+              }
+            ]
           },
           "accentHue": {
             "nullable": true,
@@ -3373,6 +3549,41 @@
           }
         },
         "description": "Your card's visibility and byline; only the fields sent change."
+      },
+      "TranslationRequest": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "enum": [
+              "en",
+              "zh-TW"
+            ]
+          }
+        },
+        "required": [
+          "to"
+        ]
+      },
+      "TranslationResponse": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "story": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "to",
+          "title",
+          "story"
+        ],
+        "description": "A story translated by AI into the reader's interface language (title and story only)."
       },
       "PublishResponse": {
         "type": "object",

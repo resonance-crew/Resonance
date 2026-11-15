@@ -764,6 +764,32 @@ public enum L10n {
         }
         /// {handle} shared this private card with you — only you can read it
         public static func sharedPrivately(handle: String) -> String { Strings.shared.format("card.sharedPrivately", ["handle": handle]) }
+        public enum Translate {
+            /// Translate to English
+            public static var action: String { Strings.shared.string("card.translate.action") }
+            /// Translating…
+            public static var working: String { Strings.shared.string("card.translate.working") }
+            /// Translated by AI
+            public static var done: String { Strings.shared.string("card.translate.done") }
+            /// Show original
+            public static var showOriginal: String { Strings.shared.string("card.translate.showOriginal") }
+            /// Show translation
+            public static var showTranslation: String { Strings.shared.string("card.translate.showTranslation") }
+            /// Couldn’t translate
+            public static var failed: String { Strings.shared.string("card.translate.failed") }
+            /// Try again
+            public static var retry: String { Strings.shared.string("card.translate.retry") }
+            /// No more translations today
+            public static var spent: String { Strings.shared.string("card.translate.spent") }
+            /// Translated to English
+            public static var announce: String { Strings.shared.string("card.translate.announce") }
+            /// Translation ready
+            public static var ready: String { Strings.shared.string("card.translate.ready") }
+            /// Show
+            public static var show: String { Strings.shared.string("card.translate.show") }
+            /// AI translation
+            public static var mark: String { Strings.shared.string("card.translate.mark") }
+        }
     }
     public enum Share {
         /// Share profile
@@ -1404,6 +1430,22 @@ public enum L10n {
         public static func tagsRemoveLabel(tag: String) -> String { Strings.shared.format("write.tagsRemoveLabel", ["tag": tag]) }
         /// Discard
         public static var discardShort: String { Strings.shared.string("write.discardShort") }
+        /// Adjust
+        public static var coverAdjust: String { Strings.shared.string("write.coverAdjust") }
+        public enum CoverFrame {
+            /// Frame the cover
+            public static var title: String { Strings.shared.string("write.coverFrame.title") }
+            /// Drag to move, pinch or slide to zoom
+            public static var hintTouch: String { Strings.shared.string("write.coverFrame.hintTouch") }
+            /// Drag to move, scroll or slide to zoom
+            public static var hintPointer: String { Strings.shared.string("write.coverFrame.hintPointer") }
+            /// Cover framing area
+            public static var stage: String { Strings.shared.string("write.coverFrame.stage") }
+            /// Done
+            public static var done: String { Strings.shared.string("write.coverFrame.done") }
+            /// Cancel
+            public static var cancel: String { Strings.shared.string("write.coverFrame.cancel") }
+        }
     }
     public enum Me {
         /// Joined {date}
@@ -1937,6 +1979,10 @@ public enum L10n {
             public static var autoTranslate: String { Strings.shared.string("settings.language.autoTranslate") }
             /// When reading others’ cards
             public static var readPreference: String { Strings.shared.string("settings.language.readPreference") }
+            /// Auto-translate
+            public static var autoTranslateStories: String { Strings.shared.string("settings.language.autoTranslateStories") }
+            /// Titles, excerpts and stories in another language are shown translated by AI into the interface language
+            public static var autoTranslateStoriesHint: String { Strings.shared.string("settings.language.autoTranslateStoriesHint") }
         }
         public enum Ai {
             /// Let AI polish my drafts
@@ -2106,5 +2152,21 @@ public enum L10n {
         public static var close: String { Strings.shared.string("native.close") }
         /// New cards
         public static var channelNewCards: String { Strings.shared.string("native.channelNewCards") }
+    }
+    public enum Crop {
+        /// Zoom
+        public static var zoom: String { Strings.shared.string("crop.zoom") }
+        /// Reset
+        public static var reset: String { Strings.shared.string("crop.reset") }
+        /// Arrow keys move, + and − zoom
+        public static var keys: String { Strings.shared.string("crop.keys") }
+        /// Move up
+        public static var moveUp: String { Strings.shared.string("crop.moveUp") }
+        /// Move down
+        public static var moveDown: String { Strings.shared.string("crop.moveDown") }
+        /// Move left
+        public static var moveLeft: String { Strings.shared.string("crop.moveLeft") }
+        /// Move right
+        public static var moveRight: String { Strings.shared.string("crop.moveRight") }
     }
 }

@@ -331,6 +331,23 @@ export function buildOpenApi(): Json {
           responses: { '200': { description: 'OK', ...json(ref('PublishResponse')) }, ...errors(400, 401, 404, 409) },
         },
       },
+      '/cards/{key}/translation': {
+        post: {
+          operationId: 'translateCard',
+          summary: "A published public story translated by AI into the reader's interface language (title and story only)",
+          description:
+            'For the card page\'s translate line: `to` is the interface language. Checked in this order: the contract (`400`); ' +
+            'the card — one you may read, published and public (named or anonymous), not in the trash — else `404`, as for a ' +
+            'card that is not there; a story over 30 000 characters is `413`; one already in that language (by its script: a ' +
+            'Chinese story goes into English, a Latin-script one into 繁體中文, a Japanese or Korean one into either) `400`. A ' +
+            'translation already made for the card as it is now is answered at once and spends nothing; otherwise your ' +
+            'translation budget (`429`, 40 a day), then the model: `503` when it failed or ran out of time (nothing kept: ask ' +
+            'again later). The answer says nothing about the author. Never cached.',
+          parameters: [pathParam('key', 'The card slug or id')],
+          requestBody: { required: true, ...json(ref('TranslationRequest')) },
+          responses: { '200': { description: 'OK', ...json(ref('TranslationResponse')) }, ...errors(400, 401, 404, 413, 429, 503) },
+        },
+      },
       '/cards/{key}/edits/apply': {
         post: {
           operationId: 'applyCardEdit',

@@ -93,6 +93,43 @@ export const Author = named(
   'Author',
 );
 
+export const CoverFrame = named(
+  z.object({
+    /** The picture's point at the frame's centre, as a fraction of its width (0…1). */
+    cx: z.number().min(0).max(1),
+    /** …and of its height (0…1). */
+    cy: z.number().min(0).max(1),
+    /** 1 = the picture just covers the frame; up to 2. */
+    zoom: z.number().min(1).max(2),
+    /** The picture's width ÷ height when it was framed (0.2…5): draw the crop without measuring the picture. */
+    ar: z.number().min(0.2).max(5),
+  }),
+  'CoverFrame',
+  "Where a cover is looked at: every shape it is drawn in centres its own crop on (cx, cy) at `zoom`, moved to lie inside " +
+    'the picture (coverCrop, pinned by native/fixtures/cover-frame.json). Null or absent: the centre at zoom 1.',
+);
+
+export const SummaryTranslation = named(
+  z.object({
+    title: z.string(),
+    /** Plain text, at most 96 characters, as `excerpt`. */
+    excerpt: z.string(),
+  }),
+  'SummaryTranslation',
+  "A card's title and excerpt translated by AI into one interface language.",
+);
+
+export const SummaryTranslations = named(
+  z.object({
+    en: SummaryTranslation.optional(),
+    'zh-TW': SummaryTranslation.optional(),
+  }),
+  'SummaryTranslations',
+  "A published public card's title and excerpt translated by AI, made when it was published or last edited: into " +
+    'English for a Chinese story, into 繁體中文 for a Latin-script one, both for Japanese or Korean. Sent only while ' +
+    'they still describe the card as it is. Show one only when the reader turned auto-translate on, and mark it.',
+);
+
 export const FeedCard = named(
   z.object({
     id: z.string(),
@@ -112,6 +149,17 @@ export const FeedCard = named(
     visibility: z.enum(['public', 'connections', 'private']),
     imageUrl: z.string().nullable(),
     imageLabel: z.string().nullable(),
+    /**
+     * Where the cover is looked at (CoverFrame); null for the centre, or
+     * without a cover. Absent only from servers older than the field.
+     */
+    imageFrame: CoverFrame.nullable().optional(),
+    /**
+     * The title and excerpt translated by AI, by interface language (only
+     * a published public card's, and only while current); null when there
+     * are none. Absent only from servers older than the field.
+     */
+    summaryTranslations: SummaryTranslations.nullable().optional(),
     /** The cover's dominant hue, which picks the card's palette (lib/design/dominantHue). */
     accentHue: z.number().nullable(),
     readMinutes: z.number().int(),
@@ -353,6 +401,29 @@ export const UpdateCardRequest = named(
   }),
   'UpdateCardRequest',
   'Your card\'s visibility and byline; only the fields sent change.',
+);
+
+export const TranslationLanguage = z.enum(['en', 'zh-TW']);
+
+export const TranslationRequest = named(
+  z.object({
+    /** The reader's interface language: what the story is translated into. */
+    to: TranslationLanguage,
+  }),
+  'TranslationRequest',
+);
+
+export const TranslationResponse = named(
+  z.object({
+    /** The language asked for (`en` or `zh-TW`) — a string, not an enum, so no client must know every value. */
+    to: z.string(),
+    /** The title, translated. */
+    title: z.string(),
+    /** The story, translated: Markdown, as `CardDetail.story`. */
+    story: z.string(),
+  }),
+  'TranslationResponse',
+  "A story translated by AI into the reader's interface language (title and story only).",
 );
 
 export const PublishResponse = named(
@@ -744,6 +815,9 @@ export const HandleParam = z.string().trim().min(1).max(40).regex(/^[^/?#]+$/, '
 export type ApiErrorBody = z.infer<typeof ApiError>;
 export type MeBody = z.infer<typeof Me>;
 export type FeedCardBody = z.infer<typeof FeedCard>;
+export type CoverFrameBody = z.infer<typeof CoverFrame>;
+export type SummaryTranslationsBody = z.infer<typeof SummaryTranslations>;
+export type TranslationResponseBody = z.infer<typeof TranslationResponse>;
 export type FeedPageBody = z.infer<typeof FeedPage>;
 export type RecommendedFeedBody = z.infer<typeof RecommendedFeed>;
 export type AuthorBody = z.infer<typeof Author>;

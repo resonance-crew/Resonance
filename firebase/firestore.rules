@@ -314,10 +314,24 @@ service cloud.firestore {
 
       function validMedia(m) {
         return m is map
-          && m.keys().hasOnly(["type", "url", "label"])
+          && m.keys().hasOnly(["type", "url", "label", "frame"])
           && m.type in ["image", "video"]
           && storedFile(m.url)
-          && (!("label" in m) || (m.label is string && m.label.size() <= 200));
+          && (!("label" in m) || (m.label is string && m.label.size() <= 200))
+          && (!("frame" in m) || validFrame(m.frame));
+      }
+
+      // Where a cover is looked at (round 25, lib/images/coverFrame): the
+      // picture's point at the frame's centre, its zoom, and the picture's
+      // width ÷ height when it was framed — exactly these four numbers.
+      function validFrame(f) {
+        return f is map
+          && f.keys().hasOnly(["cx", "cy", "zoom", "ar"])
+          && f.keys().hasAll(["cx", "cy", "zoom", "ar"])
+          && f.cx is number && f.cx >= 0 && f.cx <= 1
+          && f.cy is number && f.cy >= 0 && f.cy <= 1
+          && f.zoom is number && f.zoom >= 1 && f.zoom <= 2
+          && f.ar is number && f.ar >= 0.2 && f.ar <= 5;
       }
 
       function answersReadableCard(d) {
@@ -381,6 +395,14 @@ service cloud.firestore {
         allow delete: if signedIn()
           && (resource.data.get("authorId", "") == request.auth.uid
             || (ownsCard() && resource.data.get("authorId", request.auth.uid) == request.auth.uid));
+      }
+
+      // --- a story's translations (cards/{cardId}/translations/{to}) ---
+      // Made and kept by the server alone (POST /api/v1/cards/{id}/translation,
+      // round 25): read through that route, which asks who may read the card,
+      // never by a client — not even the card's author.
+      match /translations/{to} {
+        allow read, write: if false;
       }
     }
 

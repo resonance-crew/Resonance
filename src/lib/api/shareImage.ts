@@ -6,6 +6,7 @@ import { OG_COVER_PATH } from '@/lib/og';
 import { imageVersion } from '@/lib/linkImage/version';
 import { createMemo } from '@/lib/links/memo';
 import { Busy, createLimiter } from '@/lib/links/imageProxy';
+import { coverCropPixels, coverFrameOf, type CoverFrame } from '@/lib/images/coverFrame';
 
 /**
  * Share images (og:image): one of our stored pictures — AVIF or WebP, which
@@ -76,18 +77,36 @@ export function shareImageUrl(path: string, version: string): string {
   return `${path}?v=${version}`;
 }
 
-/** A picture's size as a share image: cropped to exactly this (a card's cover: og:image:width / height say it). */
+/**
+ * A picture's size as a share image: cropped to exactly this (a card's cover:
+ * og:image:width / height say it) — on its `frame` when it has one (lib/images/coverFrame).
+ */
 export interface ShareCrop {
   width: number;
   height: number;
+  frame?: CoverFrame | null;
 }
 
 /**
  * A picture as a share image: upright, on the paper colour where it was
  * transparent, JPEG — at most 1200 px a side, or cropped to `crop` from its
- * centre (scaled up when it is smaller, so the size is always the one named).
+ * centre, or where its frame says (scaled up when it is smaller, so the size
+ * is always the one named).
  */
 export async function toShareJpeg(bytes: Uint8Array, crop?: ShareCrop): Promise<Buffer> {
+  const frame = coverFrameOf(crop?.frame);
+  if (crop && frame) {
+    // Upright first, so the frame's point is measured on the picture as it is seen.
+    const upright = await sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS }).rotate().ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const { width, height, channels } = upright.info;
+    const cut = coverCropPixels(width, height, frame, crop.height / crop.width);
+    return sharp(upright.data, { raw: { width, height, channels } })
+      .extract(cut)
+      .resize(crop.width, crop.height, { fit: 'fill' })
+      .flatten({ background: '#faf2e9' })
+      .jpeg({ quality: 82, mozjpeg: true })
+      .toBuffer();
+  }
   return sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS })
     .rotate()
     .resize(

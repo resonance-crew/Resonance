@@ -83,6 +83,8 @@ export const LIST_FIELDS = [
   'trashedFrom',
   // Whether lists may show it at all (lib/cards/blank: unlistedCard).
   ...LISTING_FIELDS,
+  // Its title and excerpt translated by AI (./summaryTranslations), shown to readers who asked.
+  'summaryTranslations',
 ] as const;
 
 /** a > b, to the nanosecond (Date would drop the microseconds). */

@@ -6,6 +6,7 @@ import { CardIdParam } from '@/lib/api/v1/schemas';
 import { revalidateLocalized } from '@/lib/api/revalidate';
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import { indexCard } from '@/lib/recommend/indexCard';
+import { makeSummaryTranslations } from '@/lib/api/v1/summaryTranslationsMake';
 import { unfurlCardLinks } from '@/lib/links/cardLinks';
 import { ringAfter } from '@/lib/push/ring';
 import { ApiFailure } from '@/lib/api/v1/http';
@@ -45,6 +46,10 @@ export const POST = withUser(async (user, _req, ctx: RouteContext<'key'>) => {
           revalidateLocalized(stale);
         })(),
         indexCard(id, { mayCall: () => reindexAllowed(user.id) }).catch((e) => console.error('[api/v1] index', e)),
+        // The title's and excerpt's translations, made again only when either changed (the same budget as the index).
+        makeSummaryTranslations(getAdminDb(), id, { mayCall: () => reindexAllowed(user.id) }).catch((e) =>
+          console.error('[api/v1] summary translations', e),
+        ),
       ]),
     );
   }

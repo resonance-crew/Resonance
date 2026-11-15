@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { embed } from './openai';
 import { extractInsightSignature, SIGNATURE_TIMEOUT_MS, SLUG_MAX_TOKENS, SLUG_TIMEOUT_MS, suggestStoryTags, TAGS_TIMEOUT_MS, titleToSlugBase } from './tasks';
+import { SUMMARY_TRANSLATE_TIMEOUT_MS, TRANSLATE_PIECE_TIMEOUT_MS, translateStory, translateSummary } from './translate';
 
 // Every OpenAI call carries a timeout (CLAUDE.md, AI): one that hangs must
 // not hold a function — publishing's slug, the writer's tag suggestions, the
@@ -51,6 +52,24 @@ describe('OpenAI calls', () => {
     await extractInsightSignature({ title: 't', story: 's' });
     expect(timeout).toHaveBeenCalledWith(SIGNATURE_TIMEOUT_MS);
     expect(requests[0].signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("abandon a story's translation piece past TRANSLATE_PIECE_TIMEOUT_MS, and a title's and excerpt's past SUMMARY_TRANSLATE_TIMEOUT_MS (round 25)", async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        requests.push({ url, body: JSON.parse(String(init.body)), signal: init.signal });
+        const content = JSON.stringify({ title: 'After the rain', text: 'It rained.', en: { title: 'After the rain', excerpt: 'It rained.' } });
+        return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+      }),
+    );
+    await translateStory({ title: '雨後', story: '下了雨。' }, 'en');
+    expect(timeout).toHaveBeenCalledWith(TRANSLATE_PIECE_TIMEOUT_MS);
+    expect(requests[0].signal).toBeInstanceOf(AbortSignal);
+    expect(requests[0].body.max_completion_tokens).toBeGreaterThan(0);
+    await translateSummary({ title: '雨後', excerpt: '下了雨。' }, ['en']);
+    expect(timeout).toHaveBeenCalledWith(SUMMARY_TRANSLATE_TIMEOUT_MS);
+    expect(requests[1].signal).toBeInstanceOf(AbortSignal);
   });
 
   it('pass an embedding call the signal it is given', async () => {

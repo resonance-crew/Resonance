@@ -8,6 +8,7 @@ import { ringAfter } from '@/lib/push/ring';
 import { announceNewCard } from '@/lib/push/connectionCards';
 import { spend } from '@/lib/api/rateLimit';
 import { indexCard } from '@/lib/recommend/indexCard';
+import { makeSummaryTranslations } from '@/lib/api/v1/summaryTranslationsMake';
 import { cardPagePaths, revalidateLocalized } from '@/lib/api/revalidate';
 import { unfurlCardLinks } from '@/lib/links/cardLinks';
 
@@ -15,7 +16,7 @@ export const dynamic = 'force-dynamic';
 // The slug's LLM call is waited for 8 s at most (SLUG_WAIT_MS), then finished
 // after the response beside the story's link previews (15 s at most,
 // STORY_UNFURL_DEADLINE_MS), followed by the page cache; the recommendation
-// index runs alongside, and so — on a first publish, once the slug is in —
+// index and the title's and excerpt's translations run alongside, and so — on a first publish, once the slug is in —
 // does the push to the author's connections who asked (a few seconds).
 export const maxDuration = 60;
 
@@ -42,6 +43,8 @@ export const POST = withUser(async (user, req, ctx: RouteContext<'key'>) => {
         revalidateLocalized(cardPagePaths({ id, slug }));
       })(),
       indexCard(id).catch((e) => console.error('[api/v1] index', e)),
+      // Its title and excerpt in the other interface language, for readers who turned auto-translate on (one small call).
+      makeSummaryTranslations(db, id).catch((e) => console.error('[api/v1] summary translations', e)),
       // The first time only: the author's connections who asked hear of it, once its slug is settled.
       result.firstPublish ? announceNewCard(db, id, result.slug ?? pendingSlug) : null,
     ]),

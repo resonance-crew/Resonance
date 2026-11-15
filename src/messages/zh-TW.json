@@ -444,7 +444,21 @@
       "onlyYou": "只有你看得到",
       "notesGone": "留在這張匿名卡片上的紙條已經刪除"
     },
-    "sharedPrivately": "{handle} 私下分享給你的私人卡，只有你讀得到"
+    "sharedPrivately": "{handle} 私下分享給你的私人卡，只有你讀得到",
+    "translate": {
+      "action": "翻譯成中文",
+      "working": "翻譯中⋯",
+      "done": "已由 AI 翻譯",
+      "showOriginal": "顯示原文",
+      "showTranslation": "顯示翻譯",
+      "failed": "沒有翻好",
+      "retry": "再試一次",
+      "spent": "今天的翻譯次數用完了",
+      "announce": "已翻譯成中文",
+      "ready": "譯文好了",
+      "show": "看譯文",
+      "mark": "AI 翻譯"
+    }
   },
   "share": {
     "profile": "分享個人頁",
@@ -776,7 +790,16 @@
     "tagsAddLabel": "新增標籤：{tag}",
     "tagsAdded": "已加入 {count} 個標籤",
     "tagsRemoveLabel": "移除標籤：{tag}",
-    "discardShort": "捨棄"
+    "discardShort": "捨棄",
+    "coverAdjust": "調整位置",
+    "coverFrame": {
+      "title": "調整封面",
+      "hintTouch": "拖曳移動，捏合或滑桿縮放",
+      "hintPointer": "拖曳移動，滾輪或滑桿縮放",
+      "stage": "封面顯示範圍",
+      "done": "完成",
+      "cancel": "取消"
+    }
   },
   "me": {
     "joined": "{date} 加入",
@@ -1059,7 +1082,9 @@
       "ui": "介面語言",
       "original": "我主要書寫的語言",
       "autoTranslate": "自動翻譯我的卡片",
-      "readPreference": "閱讀別人的卡時"
+      "readPreference": "閱讀別人的卡時",
+      "autoTranslateStories": "自動翻譯",
+      "autoTranslateStoriesHint": "其他語言的故事，標題、摘要與內文都用 AI 翻成介面語言"
     },
     "ai": {
       "polish": "允許 AI 幫我潤稿",
@@ -1153,5 +1178,14 @@
     "refresh": "重新整理",
     "close": "關閉",
     "channelNewCards": "新卡片"
+  },
+  "crop": {
+    "zoom": "縮放",
+    "reset": "重設",
+    "keys": "方向鍵移動，＋ − 縮放",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "moveLeft": "左移",
+    "moveRight": "右移"
   }
 }

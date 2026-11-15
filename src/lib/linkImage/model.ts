@@ -7,6 +7,7 @@ import { sharePalette, shareSeed } from '@/lib/share/shareCard';
 import { storageKeyOf } from '@/lib/storage/publicUrl';
 import { storyType, type StoryScript } from '@/lib/text/script';
 import { imageVersion, keyedImageVersion } from './version';
+import { coverFrameKey, type CoverFrame } from '@/lib/images/coverFrame';
 
 /**
  * What the link-preview image of a card draws (/api/og/card/{id}, og:image):
@@ -25,9 +26,14 @@ export const LINK_IMAGE_SIZE = { width: 1200, height: 630 } as const;
 /** Bumped when the drawing changes: every drawn image gets a new address, and platforms fetch it again. */
 export const DRAWN_CARD_RECIPE = 1;
 
-/** A stored cover as the share image, cropped to LINK_IMAGE_SIZE: its version (the crop is part of what it shows). */
-export function coverVersion(coverUrl: string): string {
-  return imageVersion(`${coverUrl}#${LINK_IMAGE_SIZE.width}x${LINK_IMAGE_SIZE.height}`);
+/**
+ * A stored cover as the share image, cropped to LINK_IMAGE_SIZE on its frame
+ * (lib/images/coverFrame): its version — the crop is part of what it shows, so
+ * a cover framed again is a new URL. A cover without a frame keeps the
+ * version it had before frames were.
+ */
+export function coverVersion(coverUrl: string, frame?: CoverFrame | null): string {
+  return imageVersion(`${coverUrl}#${LINK_IMAGE_SIZE.width}x${LINK_IMAGE_SIZE.height}${coverFrameKey(frame)}`);
 }
 
 export type DrawnByline =

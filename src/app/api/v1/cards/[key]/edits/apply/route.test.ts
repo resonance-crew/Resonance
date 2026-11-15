@@ -22,6 +22,8 @@ vi.mock('@/lib/push/ring', () => ({ ringAfter: vi.fn() }));
 vi.mock('@/lib/links/cardLinks', () => ({ unfurlCardLinks: async () => {} }));
 const indexCard = vi.fn(async (..._a: unknown[]) => ({}));
 vi.mock('@/lib/recommend/indexCard', () => ({ indexCard: (...a: unknown[]) => indexCard(...a) }));
+const makeSummaryTranslations = vi.fn(async (..._a: unknown[]) => 'made');
+vi.mock('@/lib/api/v1/summaryTranslationsMake', () => ({ makeSummaryTranslations: (...a: unknown[]) => makeSummaryTranslations(...a) }));
 const setVisibility = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('@/lib/recommend/vectorStore', () => ({ getVectorStore: () => ({ setVisibility: (...a: unknown[]) => setVisibility(...a) }) }));
 const spend = vi.fn(async (..._a: unknown[]) => {});
@@ -74,11 +76,23 @@ describe('POST /api/v1/cards/{id}/edits/apply', () => {
     await expect(mayCall()).resolves.toBe(false);
   });
 
+  it("makes the title's and excerpt's translations after the response, asking the same budget just before its model call (round 25)", async () => {
+    applyCardEdit.mockResolvedValue(RESULT);
+    await apply();
+    await Promise.all(afterWork);
+    expect(makeSummaryTranslations).toHaveBeenCalledWith({}, 'c1', { mayCall: expect.any(Function) });
+    expect(spend).not.toHaveBeenCalled();
+    const { mayCall } = makeSummaryTranslations.mock.calls[0][2] as { mayCall: () => Promise<boolean> };
+    await expect(mayCall()).resolves.toBe(true);
+    expect(spend).toHaveBeenCalledWith({}, 'alice', 'reindex');
+  });
+
   it('spends nothing and re-indexes nothing when there was no pending edit', async () => {
     applyCardEdit.mockResolvedValue({ ...RESULT, applied: false, stale: [] });
     await apply();
     await Promise.all(afterWork);
     expect(spend).not.toHaveBeenCalled();
     expect(indexCard).not.toHaveBeenCalled();
+    expect(makeSummaryTranslations).not.toHaveBeenCalled();
   });
 });

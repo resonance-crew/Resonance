@@ -1,4 +1,5 @@
 import { blankCard } from '@/lib/cards/blank';
+import { isCoverFrame, type CoverFrame } from '@/lib/images/coverFrame';
 import { publicBases, storageKeyOf } from '@/lib/storage/publicUrl';
 
 /**
@@ -22,7 +23,8 @@ export interface CardContent {
   thoughtCore: string;
   story: string;
   tags: string[];
-  media?: { type: string; url: string; label?: string } | null;
+  /** `frame`: where the cover is looked at (lib/images/coverFrame), absent = the centre. */
+  media?: { type: string; url: string; label?: string; frame?: CoverFrame } | null;
   accentHue?: number | null;
 }
 
@@ -50,6 +52,8 @@ export function cardContentProblem(
     // Our own storage only, where the server knows it (the rules hold the same once config/storage is set: its host or a former one).
     if (bases.length && m.url !== opts.keptMediaUrl && !storageKeyOf(m.url, bases)) return 'media';
     if (m.label != null && (typeof m.label !== 'string' || m.label.length > CARD_LIMITS.mediaLabel)) return 'media';
+    // The rules' validMedia: four numbers, each in its range.
+    if ('frame' in m && m.frame !== undefined && !isCoverFrame(m.frame)) return 'media';
   }
   return null;
 }

@@ -15,6 +15,21 @@ export interface CardMedia {
   type: 'image' | 'video';
   url: string;
   label?: string;
+  /**
+   * Where the cover is looked at (round 25, lib/images/coverFrame): every
+   * shape it is drawn in centres its crop on (cx, cy) at `zoom`. Absent =
+   * the centre at zoom 1. Inside `media`, so changing or removing the
+   * picture clears it.
+   */
+  frame?: { cx: number; cy: number; zoom: number; ar: number };
+}
+
+/** A feed card's title and excerpt translated by AI (lib/api/v1/summaryTranslations), keyed by interface language. */
+export interface SummaryTranslations {
+  /** The hash of the title and excerpt they were made from (summaryHash). */
+  of: string;
+  en?: { title: string; excerpt: string };
+  'zh-TW'?: { title: string; excerpt: string };
 }
 
 export interface Card {
@@ -88,6 +103,12 @@ export interface Card {
   trashedAt?: Date | null;
   /** What restoring it brings back (server-only, beside `trashedAt`). */
   trashedFrom?: TrashedFrom | null;
+  /**
+   * Its title and list excerpt translated by AI, made when it was published
+   * or last edited while public (server-only: lib/api/v1/summaryTranslations).
+   * Lists show them only to a reader who turned auto-translate on.
+   */
+  summaryTranslations?: SummaryTranslations;
 }
 
 /**
