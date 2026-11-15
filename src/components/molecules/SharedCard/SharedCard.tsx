@@ -12,6 +12,7 @@ import { STORY_GRAIN } from '@/lib/design/grain';
 import { Link } from '@/i18n/navigation';
 import { plainExcerpt } from '@/lib/adapters/story';
 import { readMinutes } from '@/lib/readTime';
+import { coverImageBox } from '@/lib/images/coverFrame';
 import type { Card, User } from '@/lib/db/types';
 import styles from './SharedCard.module.css';
 
@@ -52,6 +53,8 @@ export function SharedCardContent({ card, author, titleId }: SharedCardContentPr
   const byline = card.anonymous ? null : author;
   const palette = paletteOf(card.accentHue);
   const cover = card.media?.url && !coverFailed ? card.media.url : null;
+  // The cover cut from its frame (round 25 §G1) for this 1.91 : 1 box, as the apps' chat cards cut theirs.
+  const framed = cover ? coverImageBox(card.media?.frame, 1 / 1.91) : null;
   // A summary's story is its plain excerpt and brings the whole story's read time along; a card read in full
   // (its summary didn't come) has its Markdown, to be read as words.
   const minutes = card.summary?.readMinutes ?? readMinutes(card.story);
@@ -84,7 +87,15 @@ export function SharedCardContent({ card, author, titleId }: SharedCardContentPr
       {cover ? (
         <span className={styles.cover}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={cover} alt="" loading="lazy" decoding="async" onError={() => setCoverFailed(true)} />
+          <img
+            src={cover}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onError={() => setCoverFailed(true)}
+            data-frame={framed ? '' : undefined}
+            style={framed ? { ...framed, right: 'auto', bottom: 'auto', maxWidth: 'none' } : undefined}
+          />
         </span>
       ) : (
         <span
