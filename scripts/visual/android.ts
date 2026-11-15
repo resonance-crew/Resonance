@@ -184,6 +184,9 @@ async function launch(serial: string, ctx: CaptureContext, account: Account | nu
     '--ei', 'emulatorFirestorePort', String(ctx.ports.firestore),
     '--ei', 'emulatorApiPort', String(ctx.ports.dev),
     '--ez', 'mascots', 'false',
+    // 自動翻譯 is kept by the app once an extra sets it (screens.ts AUTO_TRANSLATE): off unless this screen asks for it
+    // (a later extra of the same name wins)
+    '--ez', 'autoTranslate', 'false',
   ];
   if (account) args.push('--es', 'email', `${account}@resonance.test`, '--es', 'password', SEED_PASSWORD);
   if (route) args.push('--es', 'route', route);

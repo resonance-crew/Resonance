@@ -87,6 +87,12 @@ export const REPLY_CARD_DRAFT: Record<string, string> = {
   }),
 };
 
+/**
+ * 自動翻譯 on for one launch of the apps (round 25 §F4): iOS reads its own setting's key from the launch arguments, which
+ * nothing keeps; Android's extra writes the setting, so android.ts starts every other screen with it off.
+ */
+const AUTO_TRANSLATE = { ios: ['-autoTranslateStories', 'YES'], android: ['--ez', 'autoTranslate', 'true'] };
+
 export const SCREENS: Screen[] = [
   // The landing page is a film the scroll plays (sections/LandingFilm): a whole-page capture took its first frame and
   // then a screenful of empty track for every few seconds of it. So: its first frame and its end, compared as any
@@ -159,24 +165,29 @@ export const SCREENS: Screen[] = [
     expect: "alice's notifications (the web's phone: the 通知 page, its title in the header; wider: the bell's dialog over the feed): carol's letter, bob's note (both with their words) and bob's resonance unread (dot, the bell's badge 3), carol's card link and bob's first message read — the rows touching, no rules or washes between them at rest" },
   { id: 'settings', route: '/settings', as: 'alice',
     expect: 'Settings: profile, appearance (theme swatches, 小紙團 switch), notifications, account' },
-  // Round 25 §F (web; the apps' lanes widen `platforms` with their launch arguments): 自動翻譯 on in this browser.
-  { id: 'settings-language', route: '/settings', as: 'alice', platforms: ['web'],
-    web: { click: '[role="tablist"] [role="tab"]:nth-child(5)' },
-    expect: 'Settings → 語言: the UI language, 我主要書寫的語言, then 自動翻譯 with its hint and its switch off' },
-  { id: 'card-translated', route: '/card/bridge-rain', as: 'alice', platforms: ['web'],
-    web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) } },
+  // Round 25 §F: 自動翻譯 — its switch, then a card and the feed read under it. The apps open Settings' own page by its
+  // path (the web has none: a tab of /settings) and take the switch as a debug launch argument, which the web keeps in
+  // this browser's storage.
+  { id: 'settings-language', route: '/settings/language', as: 'alice',
+    web: { route: '/settings', click: '[role="tablist"] [role="tab"]:nth-child(5)' },
+    expect: 'Settings → 語言: the UI language (the web and iOS: then 我主要書寫的語言), then 自動翻譯 with its hint and its switch off' },
+  { id: 'card-translated', route: '/card/bridge-rain', as: 'alice',
+    web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) } }, app: AUTO_TRANSLATE,
     expect: "carol's English card read by alice under 自動翻譯: 舊橋上的雨 and its story in Chinese, the line under the byline 已由 AI 翻譯 · 顯示原文" },
-  { id: 'home-translated', route: '/home', as: 'alice', platforms: ['web'],
-    web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) } },
+  { id: 'home-translated', route: '/home', as: 'alice',
+    web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) } }, app: AUTO_TRANSLATE,
     expect: "alice's feed under 自動翻譯: carol's English card as 舊橋上的雨 with its excerpt in Chinese and the small globe at its foot's end; every other card as written" },
   // Round 25 §G1: a cover framed off its centre — the lamp at the picture's right edge stays in view on every shape.
-  { id: 'card-framed', route: '/card/harbour-lamp', as: 'bob', platforms: ['web'],
+  { id: 'card-framed', route: '/card/harbour-lamp', as: 'bob',
     expect: "alice's card 港邊的那盞燈: its cover cut on its frame — the lamp and its glow in view right of centre, not the empty sky" },
   // Round 25 §G2: the publish step of a card with a picture cover — 調整位置 left of 更換封面 — and the dialog it opens.
-  { id: 'publish-cover', route: '/write/harbour-lamp', as: 'alice', platforms: ['web'], web: { query: 'step=publish' },
+  // The apps reach both by debug launch arguments (apps/README.md): the writer opened on its publish step, the dialog up.
+  { id: 'publish-cover', route: '/write/harbour-lamp', as: 'alice', web: { query: 'step=publish' },
+    app: { ios: ['-writeStep', 'publish'], android: ['--es', 'writeStep', 'publish'] },
     expect: "alice's 港邊的那盞燈 on its publish step (更新這張卡片): the cover with two chips at its foot, 調整位置 left of 更換封面, in the card's own paper and pen" },
-  { id: 'cover-frame', route: '/write/harbour-lamp', as: 'alice', platforms: ['web'],
+  { id: 'cover-frame', route: '/write/harbour-lamp', as: 'alice',
     web: { query: 'step=publish', click: 'button[aria-label="調整位置"], button[aria-label="Adjust"]' },
+    app: { ios: ['-writeStep', 'publish', '-coverFrame', 'YES'], android: ['--es', 'writeStep', 'publish', '--ez', 'coverFrame', 'true'] },
     expect: '調整封面 over the publish step: the harbour picture under a frame in the feed card’s shape, dimmed outside it, the lamp right of centre; the zoom slider, 重設, then 取消 · 完成' },
   { id: 'write-new', route: '/write', as: 'dora',
     expect: "A newcomer's empty writer: the title and story placeholders (on wide screens beside her empty thought map)" },
