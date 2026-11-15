@@ -324,6 +324,12 @@ export function coverColors(palette: number) {
   };
 }
 
+/** The 更換封面 chip's face (OrganicMenu's pill trigger, a tuned primitive), worn by the cover's other chips too: 34
+ *  tall, its wobble the pill's. */
+const CHIP_H = 34;
+const CHIP_MAG = 0.03;
+const CHIP_FACE = { segmentsH: 2, segmentsV: 1, curve: 1.4, cornerJitter: 2.4 } as const;
+
 /** Why the last try at a cover didn't work, over the cover that stays: the 更換封面 chip's paper, in the error's ink. */
 function CoverErrorChip({ message }: { message: string }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -335,12 +341,9 @@ function CoverErrorChip({ message }: { message: string }) {
         h={h}
         R={Math.min(h * 0.42, 16)}
         seed={43}
-        mag={Math.min(h, 34) * 0.03}
+        mag={Math.min(h, CHIP_H) * CHIP_MAG}
         fillColor="color-mix(in oklch, var(--color-cream) 94%, transparent)"
-        segmentsH={2}
-        segmentsV={1}
-        curve={1.4}
-        cornerJitter={2.4}
+        {...CHIP_FACE}
       />
       <span className={styles.coverErrorText}>{message}</span>
     </span>
@@ -376,7 +379,7 @@ function CoverAdjustChip({ cover, colors }: { cover: CoverEditor; colors: { fill
         ref={ref}
         type="button"
         className={`${menuStyles.trigger} ${menuStyles.pill} ${styles.coverAdjust}`}
-        style={{ height: 34, color: colors.ink }}
+        style={{ '--cover-adjust-ink': colors.ink } as CSSProperties}
         data-colored=""
         aria-label={t('coverAdjust')}
         aria-busy={loading || undefined}
@@ -389,17 +392,14 @@ function CoverAdjustChip({ cover, colors }: { cover: CoverEditor; colors: { fill
         {w > 0 && (
           <HandDrawnBorder
             w={w}
-            h={34}
-            R={34 * 0.42}
+            h={CHIP_H}
+            R={CHIP_H * 0.42}
             seed={47}
-            mag={34 * 0.03}
+            mag={CHIP_H * CHIP_MAG}
             fillColor={colors.fill}
             strokeColor={colors.pen}
             strokeWidth={INK}
-            segmentsH={2}
-            segmentsV={1}
-            curve={1.4}
-            cornerJitter={2.4}
+            {...CHIP_FACE}
           />
         )}
         <span className={menuStyles.triggerIcon}>{loading ? <ButtonLoader size={16} /> : <Icon name="frame" size={16} strokeWidth={INK} />}</span>

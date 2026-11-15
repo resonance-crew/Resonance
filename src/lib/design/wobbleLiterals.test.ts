@@ -24,7 +24,6 @@ const COUNTS: Record<string, number> = {
   'src/components/molecules/MiniStoryCard/MiniStoryCard.tsx': 6,
   'src/components/molecules/Modal/Modal.tsx': 6,
   'src/components/molecules/OrganicMenu/OrganicMenu.tsx': 6,
-  'src/components/molecules/PublishStep/CoverSlot.tsx': 3,
   'src/components/molecules/StoryCard/StoryCard.tsx': 6,
   'src/components/molecules/ThoughtMap/ThoughtMapCanvas.tsx': 3,
   'src/components/molecules/ThoughtMap/ThoughtMapNode.tsx': 3,

@@ -364,7 +364,11 @@
   gap: 8px;
 }
 
-/* 調整位置: the 更換封面 chip's face; 44 to the touch round its 34. */
+/* 調整位置: the 更換封面 chip's face; 44 to the touch round its 34, in its card's deep ink (CoverSlot sets it). */
+.coverAdjust.coverAdjust {
+  height: 34px;
+  color: var(--cover-adjust-ink);
+}
 .coverAdjust::after {
   content: '';
   position: absolute;
