@@ -166,6 +166,14 @@ reasons (tapping them still answers them for the account). Android's twins are `
 `--es threadPanel stickers` and `--es notifyInvite picks|connectionCards|all` (debug builds, each read once).
 `-route /settings` (or `/settings/<section>`: profile, account, privacy, notifications,
 language, appearance, terms, delete) opens Settings or one of its pages.
+Round 25's: `-autoTranslateStories YES` turns 自動翻譯 on for that launch (the setting's own key read from
+the launch arguments, so nothing is kept); `-debugStories YES` offers Instagram 限時動態 in a card's share
+sheet with no Instagram installed (a simulator can't have it; `-debugShare YES` opens the sheet); `-writeStep
+publish` opens a card's writer (`-route /write/<id>`) on its publish step, and `-coverFrame YES` then
+opens 調整封面 over it (the release screenshots' `publish-cover` and `cover-frame`). Android's twins:
+`--ez autoTranslate true|false` (it writes the setting, `translate.auto` in the `settings` preferences —
+the release screenshots start every other screen with `false`), `--es route /settings/<section>`,
+`--es writeStep publish`, `--ez coverFrame true`.
 `-openWriter YES` opens the writer on a new card at launch and `-writeCard <id>`
 on one of yours (a draft, a published card, one in the trash); `-writeStep publish`
 then opens its second step, `-writeFocus YES` puts the caret in the story (the
@@ -283,9 +291,10 @@ rules rather than boxes — calm pen lines (`StoryTable.rulePoints`: the header'
 ends, the rows' ±0.7 a little short), seeded by the table and the row —, every cell at its start edge
 whatever the alignments say (round 9 §6), the body's face at 0.94 em on 1.6 lines, each column
 4–18 em, wider than the column it scrolls sideways under a fading edge; its
-words count toward the excerpt and read time (`StoryProse`). Justified Chinese is spread by
-`StoryJustification` (between characters, as a browser does — TextKit's own
-`.justified` widens only spaces); TextKit keeps a Chinese word whole where a
+words count toward the excerpt and read time (`StoryProse`). A story's words stand at
+their start edge, ragged, in every script (round 25 §H: the owner chose flush left —
+justified 19-character lines were spread up to 12 %; `StoryJustification` is gone, and
+Android's `StoryType.justified` is false); TextKit keeps a Chinese word whole where a
 browser breaks between any two characters, so a line can end a character
 earlier than the web's. A story's words grow with the system's text size up
 to 2× (`TextScale.readingFactor`); the byline and the rest stay under 1.25×.

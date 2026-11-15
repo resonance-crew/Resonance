@@ -27,6 +27,8 @@ come, are Playwright's.
 | `open-notification` | alice | the tab bar's 通知: carol's letter and bob's note unread with their words; carol's row opens their conversation (her note quoting alice's card, 回覆後，你們就能開始聊天) |
 | `publish-card` | alice | `/write`: title, Return, a line of story, ✓, 公開, 發布 → the card's page with its title, story and share |
 | `trash-restore` | alice | her card `letter`: ⋯ → 刪除 → 這張卡片在垃圾桶裡 → 還原 → public again (its share back) |
+| `sticker-breath` | alice | `/messages/bob` with the system's animations on and battery saver on (the runner sets both for the `animations` tag and puts them back): ☺ opens the panel and, on Android, a cell is playing (`sticker-moving`, a debug build's name for it) — round 25 §D: the owner's phone in battery saver showed a picker that never moved. iOS has no such name yet, so there the flow only opens the panel |
+| `translate-story` | alice | carol's English card `bridge-rain`: 翻譯成中文 under the byline → 舊橋上的雨 with 已由 AI 翻譯 · 顯示原文 (the seed's kept translation: the emulators ask no model), then 顯示原文 brings the English back with 顯示翻譯 (round 25 §F2) |
 
 Each one ends with a `takeScreenshot` of its end state (the trash flow also of the trashed page).
 
@@ -45,9 +47,11 @@ VISUAL_SKIP_BUILD=1 npx tsx scripts/visual/flows.ts ios      # the last build, i
 | Tag | Flows | Run it after a change to |
 | --- | --- | --- |
 | `smoke` | sign-in, send-message, open-notification, publish-card | anything, as a quick look |
-| `composer` | send-message, send-sticker, react-reply, chat-draft, composer-toggle, sticker-replies | the composer, its panels, its rows |
+| `composer` | send-message, send-sticker, react-reply, chat-draft, composer-toggle, sticker-replies, sticker-breath | the composer, its panels, its rows |
 | `media` | send-picture | pictures, the attach panel, the gallery |
 | `links` | open-link | Route, links, App Links / Universal Links |
+| `animations` | sticker-breath | what moves by itself: before such a flow the runner turns the system's animations on (animator scale 1, which it otherwise holds at 0) and battery saver on, and puts both back after (`flowSettings` in `scripts/visual/flows.ts`, Android) |
+| `translation` | translate-story | the translate line, the story translation's client, 自動翻譯 |
 | `tablet` | sign-in, send-message, send-sticker, sticker-replies, open-notification | written to hold on two panes and popovers: `--device tablet` runs these alone |
 
 plus the older ones by area (`chat`, `stickers`, `reactions`, `letters`, `card`, `notifications`,
