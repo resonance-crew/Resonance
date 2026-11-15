@@ -3,12 +3,14 @@ package com.resonance.design
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -29,7 +31,17 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
@@ -53,9 +65,9 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * Where a photo sits under the avatar's mask while it is framed (design note B7): its zoom [z]
- * (1 = the mask just covered, up to 4) and its centre's offset ([ox], [oy]) from the mask's
- * centre, in stage units (dp).
+ * Where a photo sits under a crop's frame while it is framed (design note B7; round 25 §G3 for the cover too): its
+ * zoom [z] (1 = the frame just covered) and its centre's offset ([ox], [oy]) from the frame's centre, in stage units
+ * (dp).
  */
 @Immutable
 data class CropState(val z: Double = 1.0, val ox: Double = 0.0, val oy: Double = 0.0)
@@ -65,39 +77,11 @@ data class CropState(val z: Double = 1.0, val ox: Double = 0.0, val oy: Double =
 data class CropRect(val x: Double, val y: Double, val side: Double)
 
 /**
- * The crop's arithmetic (design note B7), apart from Compose so it can be tested — the same on
- * every platform. A photo [iw] × [ih] (orientation applied) under a mask [mask] wide: at zoom z it
- * is drawn at s = sMin × z, sMin = mask / min(iw, ih), so the mask is always covered; the offset
- * keeps it so (|ox| ≤ (iw·s − mask) / 2, and the same down); zooming keeps the point under its
- * anchor where it is.
+ * The avatar's crop (design note B7): a [FrameCrop] whose frame is the square mask [mask] wide, zoomed 1–4 — the same
+ * on every platform. A photo [iw] × [ih] (orientation applied) at zoom z is drawn at s = sMin × z, sMin = mask /
+ * min(iw, ih), so the mask is always covered; the offset keeps it so; zooming keeps the point under its anchor.
  */
-class AvatarCrop(val iw: Double, val ih: Double, val mask: Double) {
-    private val minScale = mask / min(iw, ih)
-
-    fun scale(z: Double): Double = minScale * z
-
-    /** The state with its zoom in [MIN_ZOOM, MAX_ZOOM] and the photo still covering the mask. */
-    fun clamp(state: CropState): CropState {
-        val z = state.z.coerceIn(MIN_ZOOM, MAX_ZOOM)
-        val s = scale(z)
-        val maxX = max(0.0, (iw * s - mask) / 2)
-        val maxY = max(0.0, (ih * s - mask) / 2)
-        return CropState(z, state.ox.coerceIn(-maxX, maxX), state.oy.coerceIn(-maxY, maxY))
-    }
-
-    /** A drag of ([dx], [dy]) stage units. */
-    fun pan(state: CropState, dx: Double, dy: Double): CropState = clamp(state.copy(ox = state.ox + dx, oy = state.oy + dy))
-
-    /**
-     * Zoomed to [z], the photo's point under the anchor ([ax], [ay]: from the mask's centre, in stage
-     * units — the centre for the slider, the fingers' centroid for a pinch) staying there.
-     */
-    fun zoomTo(state: CropState, z: Double, ax: Double = 0.0, ay: Double = 0.0): CropState {
-        val to = z.coerceIn(MIN_ZOOM, MAX_ZOOM)
-        val k = scale(to) / scale(state.z)
-        return clamp(CropState(to, ax - (ax - state.ox) * k, ay - (ay - state.oy) * k))
-    }
-
+class AvatarCrop(iw: Double, ih: Double, val mask: Double) : FrameCrop(iw, ih, mask, mask, MAX_ZOOM) {
     /** What the mask shows, in the photo's pixels. */
     fun crop(state: CropState): CropRect {
         val s = scale(state.z)
@@ -117,20 +101,38 @@ class AvatarCrop(val iw: Double, val ih: Double, val mask: Double) {
     }
 }
 
-/** The stage's side: a square at most 320 wide; the mask is 48 smaller, so 24 of the dimmed photo shows round it. */
-fun cropStageSide(available: Dp): Dp = min(320f, available.value).dp
+/**
+ * The avatar stage's side (round 25 §G3.1): a square at most 400 wide, and never taller than the window's height − 200
+ * ([windowHeight]; unknown: no limit); the mask is 48 smaller, so 24 of the dimmed photo shows round it.
+ */
+fun cropStageSide(available: Dp, windowHeight: Dp = Dp.Infinity): Dp =
+    cropStageWidth(available.value, if (windowHeight == Dp.Infinity) Float.MAX_VALUE / 4 else windowHeight.value, AVATAR_STAGE_MAX, 1f).dp
 
-fun cropMask(stage: Dp): Dp = stage - 48.dp
+/** The widest the avatar's stage gets (320 before round 25). */
+const val AVATAR_STAGE_MAX = 400f
+
+/** The widest the cover's stage gets on a phone or a tablet. */
+const val COVER_STAGE_MAX = 480f
+
+fun cropMask(stage: Dp): Dp = stage - (CROP_MARGIN * 2).dp
 
 /** The scrim over the photo outside the mask: over a picture, the same dark in either scheme. */
 private val CropScrim = OverPicture.Scrim
 
+/** What TalkBack offers on a crop stage besides its slider (round 25 §G3.8): 上移 / 下移 / 左移 / 右移. */
+@Immutable
+data class CropMoveLabels(val up: String, val down: String, val left: String, val right: String)
+
+/** How far one key press or one TalkBack move takes the picture (stage units): 8, with Shift 32 (the web's). */
+const val CROP_KEY_STEP = 8.0
+const val CROP_KEY_STEP_LARGE = 32.0
+
+/** A zoom key's step (+ / −): the same factor a wheel notch of 100 gives. */
+private const val CROP_ZOOM_STEP = 1.2214
+
 /**
- * The crop's stage (design note B7): a square of cream-dark paper in HandDrawnImage's frame (seed
- * 79, no pen line), the photo on it where [state] puts it, dimmed outside the avatar's own outline
- * — HandDrawnAvatar's recipe at the mask's size, seed 77, outlined in cream — so what shows inside
- * it is exactly the avatar to be. One finger moves the photo, two pinch it about their centroid.
- * One element for TalkBack, named [label]: the zoom slider beside it does the rest.
+ * The avatar's stage (design note B7): [FrameCropStage] with the square mask and HandDrawnAvatar's outline (its
+ * recipe at the mask's size, seed 77), so what shows inside it is exactly the avatar to be.
  */
 @Composable
 fun AvatarCropStage(
@@ -140,28 +142,112 @@ fun AvatarCropStage(
     onState: (CropState) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
+    moves: CropMoveLabels? = null,
 ) {
-    val mask = cropMask(side)
-    val model = remember(photo, mask) { AvatarCrop(photo.width.toDouble(), photo.height.toDouble(), mask.value.toDouble()) }
-    val current by rememberUpdatedState(state)
-    val emit by rememberUpdatedState(onState)
-    val frame = remember { AutoWobRectShape(16.0, 79.0, 0.8) }
-    val m = mask.value.toDouble()
-    val avatar = remember(m) {
-        WobRectShape(m * 0.4, 77.0, mag = m * 0.022, options = WobRectOptions(
-            curve = 1.3, cornerJitter = 3.2, cornerOffset = m * 0.06, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0),
+    FrameCropStage(photo, side, 1f, AvatarCrop.MAX_ZOOM, state, onState, label, modifier, moves) { w, _ ->
+        WobRectShape(w * 0.4, 77.0, mag = w * 0.022, options = WobRectOptions(
+            curve = 1.3, cornerJitter = 3.2, cornerOffset = w * 0.06, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0),
         ))
     }
+}
+
+/**
+ * One crop stage for the avatar and the cover (round 25 §G3): [width] wide, its frame [ratio] (height ÷ width) inside
+ * [CROP_MARGIN] of dimmed picture on every side, a cream-dark paper in HandDrawnImage's frame (seed 79, no pen line),
+ * the photo on it where [state] puts it, dimmed outside [outline] (the frame's own shape, made for its w × h in dp)
+ * and outlined in cream. One finger moves the photo, two pinch it about their moving centroid, a mouse wheel zooms
+ * about the pointer, the arrow keys move it (8, with Shift 32) and + / − zoom; TalkBack gets [moves] as actions
+ * besides the zoom slider beside it. When the stage changes size (turned) the picture keeps its place.
+ */
+@Composable
+fun FrameCropStage(
+    photo: ImageBitmap,
+    width: Dp,
+    ratio: Float,
+    maxZoom: Double,
+    state: CropState,
+    onState: (CropState) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    moves: CropMoveLabels? = null,
+    outline: (Double, Double) -> Shape,
+) {
+    val fw = (width.value - CROP_MARGIN * 2).coerceAtLeast(1f)
+    val fh = fw * ratio
+    val height = (fh + CROP_MARGIN * 2).dp
+    val model = remember(photo, fw, fh, maxZoom) { FrameCrop(photo.width.toDouble(), photo.height.toDouble(), fw.toDouble(), fh.toDouble(), maxZoom) }
+    val current by rememberUpdatedState(state)
+    val emit by rememberUpdatedState(onState)
+    // A new size (turned, a window resized): the offsets follow the frame, so the same part of the picture shows.
+    val lastWidth = remember { doubleArrayOf(fw.toDouble()) }
+    LaunchedEffect(fw) {
+        val from = lastWidth[0]
+        lastWidth[0] = fw.toDouble()
+        if (from != fw.toDouble()) emit(model.clamp(FrameCrop.resized(current, from, fw.toDouble())))
+    }
+    val paperShape = remember { AutoWobRectShape(16.0, 79.0, 0.8) }
+    val frameShape = remember(fw, fh) { outline(fw.toDouble(), fh.toDouble()) }
     val well = Tokens.CreamDark
+    fun move(dx: Double, dy: Double): Boolean {
+        val next = model.pan(current, dx, dy)
+        if (next != current) emit(next)
+        return true
+    }
+    fun zoomBy(k: Double, ax: Double = 0.0, ay: Double = 0.0) {
+        val next = model.zoomTo(current, current.z * k, ax, ay)
+        if (next != current) emit(next)
+    }
     Box(
         modifier
-            .size(side)
-            .semantics { contentDescription = label }
+            .size(width, height)
+            .semantics {
+                contentDescription = label
+                if (moves != null) customActions = listOf(
+                    // The picture moves the way it says, as an arrow key moves it (16 a move: a few presses' worth).
+                    CustomAccessibilityAction(moves.up) { move(0.0, -CROP_KEY_STEP * 2) },
+                    CustomAccessibilityAction(moves.down) { move(0.0, CROP_KEY_STEP * 2) },
+                    CustomAccessibilityAction(moves.left) { move(-CROP_KEY_STEP * 2, 0.0) },
+                    CustomAccessibilityAction(moves.right) { move(CROP_KEY_STEP * 2, 0.0) },
+                )
+            }
+            .onKeyEvent { e ->
+                if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                val step = if (e.isShiftPressed) CROP_KEY_STEP_LARGE else CROP_KEY_STEP
+                when (e.key) {
+                    // An arrow moves the picture the way it points (what's beyond comes into the frame from there).
+                    Key.DirectionUp -> move(0.0, -step)
+                    Key.DirectionDown -> move(0.0, step)
+                    Key.DirectionLeft -> move(-step, 0.0)
+                    Key.DirectionRight -> move(step, 0.0)
+                    Key.Plus, Key.Equals, Key.NumPadAdd -> { zoomBy(CROP_ZOOM_STEP); true }
+                    Key.Minus, Key.NumPadSubtract -> { zoomBy(1 / CROP_ZOOM_STEP); true }
+                    else -> false
+                }
+            }
+            .focusable()
+            .pointerInput(model) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type != PointerEventType.Scroll) continue
+                        val change = event.changes.firstOrNull() ?: continue
+                        val dy = change.scrollDelta.y
+                        if (dy == 0f) continue
+                        // A wheel notch is about 1 here, 100 on the web: the web's e^(−deltaY × 0.002) per its 100.
+                        val ax = (change.position.x - size.width / 2f) / density
+                        val ay = (change.position.y - size.height / 2f) / density
+                        val z = AvatarCrop.wheelZoom(current.z, dy * 100.0)
+                        val next = model.zoomTo(current, z, ax.toDouble(), ay.toDouble())
+                        if (next != current) emit(next)
+                        change.consume()
+                    }
+                }
+            }
             .pointerInput(model) {
                 detectTransformGestures { centroid, pan, zoom, _ ->
                     var next = current
                     if (zoom != 1f) {
-                        // The fingers' centroid, from the mask's centre, in stage units.
+                        // The fingers' centroid as it moves, from the frame's centre, in stage units.
                         val ax = (centroid.x - size.width / 2f) / density
                         val ay = (centroid.y - size.height / 2f) / density
                         next = model.zoomTo(next, next.z * zoom, ax.toDouble(), ay.toDouble())
@@ -171,12 +257,14 @@ fun AvatarCropStage(
                 }
             }
             .drawWithCache {
-                val paper = frame.createOutline(size, layoutDirection, this)
+                val paper = paperShape.createOutline(size, layoutDirection, this)
                 val paperPath = Path().apply { addOutline(paper) }
-                val maskPx = mask.toPx()
-                val inset = (size.width - maskPx) / 2f
-                val ring = avatar.createOutline(Size(maskPx, maskPx), layoutDirection, this)
-                val ringPath = Path().apply { addOutline(ring); translate(Offset(inset, inset)) }
+                val fwPx = fw.dp.toPx()
+                val fhPx = fh.dp.toPx()
+                val left0 = (size.width - fwPx) / 2f
+                val top0 = (size.height - fhPx) / 2f
+                val ring = frameShape.createOutline(Size(fwPx, fhPx), layoutDirection, this)
+                val ringPath = Path().apply { addOutline(ring); translate(Offset(left0, top0)) }
                 val pen = Stroke(Tokens.Ink.toPx(), join = StrokeJoin.Round)
                 onDrawBehind {
                     clipPath(paperPath) {

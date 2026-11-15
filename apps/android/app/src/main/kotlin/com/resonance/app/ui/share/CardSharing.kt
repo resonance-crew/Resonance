@@ -1,5 +1,6 @@
 package com.resonance.app.ui.share
 
+import com.resonance.app.ui.framing
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -150,5 +151,6 @@ fun shareCardModel(detail: CardDetail, photo: ImageBitmap? = null): ShareCardMod
         date = mediumDate(card.publishedAt),
         byline = if (author == null) ShareByline.Anonymous
             else ShareByline.Named(author.handle, author.initials, author.avatarSeedValue(), author.verified, photo),
+        coverFrame = card.framing,
     )
 }

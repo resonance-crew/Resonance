@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.drawable.Animatable2
 import android.graphics.drawable.AnimatedImageDrawable
 import android.graphics.drawable.Drawable
-import android.os.PowerManager
 import android.os.SystemClock
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
@@ -23,6 +22,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import com.resonance.app.Stickers
 import com.resonance.design.prefersReducedMotion
 import com.resonance.kit.chat.ChatSticker
@@ -98,12 +99,27 @@ internal class PickerBreath(
 internal const val PICKER_PLAYING_PHONE = 8
 internal const val PICKER_PLAYING_WIDE = 12
 
+/** How many of the picker's cells may play at once in a window of this kind — whatever the battery mode (round 25 §D). */
+internal fun pickerPlaying(phone: Boolean): Int = if (phone) PICKER_PLAYING_PHONE else PICKER_PLAYING_WIDE
+
 /** Whether a cell [shown] px of [size] px tall is in view enough to play (≥ 60 %). */
 internal fun inViewEnough(size: Int, shown: Int): Boolean = size > 0 && shown * 5L >= size * 3L
 
-/** The picker's cells hold still: the system's animations off, or the battery saver on (round 23 §3). */
-internal fun Context.pickerHoldsStill(): Boolean =
-    prefersReducedMotion() || (getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isPowerSaveMode == true
+/**
+ * The picker's cells hold still: only under the system's "Remove animations" (animator scale 0). Battery saver changes
+ * nothing (round 25 §D, the owner: 「想请你省电模式这一个拿掉…省电模式应该没有影响这么大」 — the phone in battery saver
+ * was why its stickers never moved); iOS's Low Power Mode likewise. Read on every tick of the picker's loop.
+ */
+internal fun Context.pickerHoldsStill(): Boolean = prefersReducedMotion()
+
+/** A picker cell playing now (the web's `data-moving`): set on the cell's semantics while its turn lasts. */
+internal val StickerMoving = SemanticsPropertyKey<Boolean>("StickerMoving")
+internal var SemanticsPropertyReceiver.stickerMoving by StickerMoving
+
+/** How a picker cell's animated file is read: [Stickers.animated] (the tests' stand in for it). */
+internal typealias StickerDecode = suspend (sticker: StickerCatalog.Sticker, origin: String, targetPx: Int) -> Drawable?
+
+internal val DecodeSticker: StickerDecode = { sticker, origin, px -> Stickers.animated(sticker, origin, targetPx = px) }
 
 /**
  * A picker cell's sticker (round 23 §3): its hero pose at rest, its file playing while [playing] — decoded once, the
@@ -120,13 +136,14 @@ internal fun BreathingSticker(
     playing: Boolean,
     onEnded: () -> Unit,
     modifier: Modifier = Modifier,
+    decode: StickerDecode = DecodeSticker,
 ) {
     var side by remember { mutableIntStateOf(0) }
     var drawable by remember(sticker) { mutableStateOf<Drawable?>(null) }
     val ended by rememberUpdatedState(onEnded)
     LaunchedEffect(sticker, playing, side) {
         if (!playing || drawable != null || side <= 0) return@LaunchedEffect
-        val decoded = Stickers.animated(sticker, origin, targetPx = side)
+        val decoded = decode(sticker, origin, side)
         // Not readable now (a file this build doesn't carry, offline): the turn goes back, the pose stays.
         if (decoded == null) ended() else drawable = decoded
     }

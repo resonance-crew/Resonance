@@ -138,6 +138,8 @@ fun OrganicImage(
     onError: (() -> Unit)? = null,
     /** Laid over the picture, inside the same clip (a picked card's wash and tick). */
     overlay: (@Composable () -> Unit)? = null,
+    /** Where a cover is looked at (round 25 §G1, [CoverFit]); null: centred, as every picture was. */
+    frame: CoverFraming? = null,
     placeholder: @Composable () -> Unit,
 ) {
     // The bleed follows the box offered (what BoxWithConstraints read, now read while measuring, with
@@ -149,7 +151,8 @@ fun OrganicImage(
                 var loading by remember(url) { mutableStateOf(url != null) }
                 if (loading) SkeletonCover() else placeholder()
                 if (url != null) AsyncImage(
-                    model = url, contentDescription = contentDescription, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
+                    model = url, contentDescription = contentDescription, modifier = Modifier.fillMaxSize(),
+                    contentScale = CoverFit.scale(frame), alignment = CoverFit.alignment(frame),
                     onLoading = { loading = true },
                     onSuccess = { loading = false },
                     onError = { loading = false; onError?.invoke() },
@@ -244,6 +247,13 @@ data class StoryCardContent(
     val accentHue: Double?,
     /** Why the feed picked it — Resonance's handwritten margin note. */
     val reason: String? = null,
+    /** Where its cover is looked at (round 25 §G1: `FeedCard.imageFrame`); null: centred. */
+    val imageFrame: CoverFraming? = null,
+    /**
+     * Its title and excerpt are an AI translation into the interface's language (round 25 §F7): drawn in [lang]'s type
+     * and marked with the globe at the foot's end. Null: as written.
+     */
+    val translatedLang: String? = null,
 )
 
 /** CSS `margin-top` (negative too): shifts the child and takes the same amount off the space it claims. */
@@ -388,8 +398,12 @@ data class CoverFrame(val seed: Double, val fill: Color, val stripe: Color, val 
  * ([StoryCard]'s `cover`) that edits the picture where it will be.
  */
 @Composable
-fun StoryCardCover(url: String?, frame: CoverFrame, modifier: Modifier = Modifier, overlay: (@Composable () -> Unit)? = null) {
-    OrganicImage(url, frame.seed, modifier.fillMaxSize(), grain = StoryGrain.Cover, overlay = overlay) {
+fun StoryCardCover(
+    url: String?, frame: CoverFrame, modifier: Modifier = Modifier, overlay: (@Composable () -> Unit)? = null,
+    /** Where the picture is looked at (round 25 §G1); null: centred. */
+    framing: CoverFraming? = null,
+) {
+    OrganicImage(url, frame.seed, modifier.fillMaxSize(), grain = StoryGrain.Cover, overlay = overlay, frame = framing) {
         StoryImagePlaceholder(frame.fill, frame.stripe, frame.label)
     }
 }
@@ -405,7 +419,7 @@ private fun ColumnScope.StoryCardBody(
 ) {
     if (cover != null) {
         Box(Modifier.fillMaxWidth().aspectRatio(1 / 0.62f)) { cover(CoverFrame(seed + 5, palette.fill, palette.stripe, content.imageLabel)) }
-    } else OrganicImage(content.imageUrl, seed + 5, Modifier.fillMaxWidth().aspectRatio(1 / 0.62f), grain = StoryGrain.Cover) {
+    } else OrganicImage(content.imageUrl, seed + 5, Modifier.fillMaxWidth().aspectRatio(1 / 0.62f), grain = StoryGrain.Cover, frame = content.imageFrame) {
         StoryImagePlaceholder(palette.fill, palette.stripe, content.imageLabel)
     }
     // The web renders the tag row even when empty (its 8px margin still counts).
@@ -426,6 +440,11 @@ private fun ColumnScope.StoryCardBody(
             BasicText(content.authorName, style = AppFonts.body(13f, 600, lineHeight = 1.4f), modifier = Modifier.mascotMark("$foot:name"))
             BasicText(content.readTime, style = AppFonts.body(12f, lineHeight = 1.4f, color = Tokens.TextMuted), modifier = Modifier.mascotMark("$foot:time"))
         }
+        // Its title and excerpt an AI's translation (round 25 §F7): the globe at 12 in the meta ink, named for TalkBack.
+        if (content.translatedLang != null) OrganicIcon(
+            IconName.Globe, Modifier.semantics { contentDescription = L10n.Card.Translate.mark },
+            size = 12.dp, color = Tokens.TextMuted, strokeWidth = Tokens.Ink.value,
+        )
         if (!preview) OrganicIcon(IconName.ArrowRight, Modifier.mascotMark("$foot:arrow"), size = 18.dp, color = Tokens.Text.copy(alpha = 0.28f), strokeWidth = Tokens.Ink.value)
     }
     if (!content.reason.isNullOrEmpty()) {
@@ -605,7 +624,7 @@ fun MiniStoryCard(content: StoryCardContent, position: Int, isLast: Boolean = fa
     val accent = palette.accent
     WithSkeletonHue(palette.hue) {
         StoryBand(palette, seed + 17, isLast, 28.dp, 12.dp, modifier, inset = inset) {
-            OrganicImage(content.imageUrl, seed + 5, Modifier.fillMaxWidth().aspectRatio(1 / 0.56f), grain = StoryGrain.Cover) {
+            OrganicImage(content.imageUrl, seed + 5, Modifier.fillMaxWidth().aspectRatio(1 / 0.56f), grain = StoryGrain.Cover, frame = content.imageFrame) {
                 if (content.imageUrl == null) Box(Modifier.fillMaxSize().background(accent))
             }
             CssText(content.title, AppFonts.Family.Heading, 17f, 700, lineHeight = 1.3f, modifier = Modifier.fillMaxWidth())

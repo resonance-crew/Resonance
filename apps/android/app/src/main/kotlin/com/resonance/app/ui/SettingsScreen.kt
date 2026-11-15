@@ -531,6 +531,28 @@ private fun LanguageSettings(session: Session) {
             WavyDivider(seed = 67.0, modifier = Modifier.padding(vertical = 2.dp))
             LanguageRow(session, Strings.Language.En, "English", "gb", 73.0)
         }
+        // 自動翻譯 (round 25 §F4): the reader's switch, kept on this device, off by default — the field's label over it,
+        // the hint at its start and the switch at its end, the whole row the one switch (小紙團's row).
+        val store = AppearanceStore.shared
+        val appearance by store.state.collectAsStateWithLifecycle()
+        Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            FieldLabel(L10n.Settings.Language.autoTranslateStories)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .toggleRow(appearance.autoTranslate) { store.setAutoTranslate(it) }
+                    .semantics { contentDescription = L10n.Settings.Language.autoTranslateStories },
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BasicText(
+                    L10n.Settings.Language.autoTranslateStoriesHint,
+                    style = AppFonts.body(Tokens.HintSize, lineHeight = 1.55f, color = Tokens.TextMuted),
+                    modifier = Modifier.weight(1f),
+                )
+                OrganicToggle(appearance.autoTranslate, seed = 101.0)
+            }
+        }
     }
 }
 

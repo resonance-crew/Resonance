@@ -1107,6 +1107,7 @@ internal fun ColumnScope.SharedCard(card: FeedCard, onClick: (() -> Unit)?, onLo
         onClick = onClick,
         onLongPress = onLongPress,
         pictureBleed = pictureBleed,
+        imageFrame = card.framing,
     )
 }
 

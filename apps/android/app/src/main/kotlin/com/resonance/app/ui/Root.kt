@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import com.resonance.kit.l10n.Strings
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.snap
@@ -63,7 +64,10 @@ fun ResonanceRoot(session: Session, incomingRoute: MutableState<String?>) {
             soft.animateTo(if (open) 1f else 0f, tween(150))
         }
     }
-    CompositionLocalProvider(LocalIndication provides OrganicIndication(), LocalModalBackdrop provides backdrop) {
+    // The feed's cards read the reader's 自動翻譯 and who they are (round 25 §F7).
+    val viewer by session.signedInUid.collectAsStateWithLifecycle()
+    val summaryReader = SummaryReader(viewer, appearance.autoTranslate, Strings.language.tag)
+    CompositionLocalProvider(LocalIndication provides OrganicIndication(), LocalModalBackdrop provides backdrop, LocalSummaryReader provides summaryReader) {
         val phase by session.phase.collectAsStateWithLifecycle()
         // Under the launch's splash the first screen simply is; a crossfade would show the loader leaving as it dissolves.
         Crossfade(phase, Modifier.fillMaxSize().cream().softenedUnder { BackdropBlurBudget.softening(soft.value) }, animationSpec = if (Launch.covering) snap() else tween(), label = "phase") { p ->

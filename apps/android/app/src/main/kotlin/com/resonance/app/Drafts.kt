@@ -5,6 +5,7 @@ import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.SetOptions
+import com.resonance.design.CoverFraming
 import com.resonance.kit.api.Trash
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
@@ -22,6 +23,11 @@ data class DraftValues(
     val imageLabel: String? = null,
     /** The cover's hue snapped to the card palette; null keeps the position colour. */
     val accentHue: Double? = null,
+    /**
+     * Where the cover is looked at (round 25 §G1: `media.frame`); null — the centre at zoom 1. Inside `media`, so it
+     * goes with the picture: a new picture, or none, clears it.
+     */
+    val imageFrame: CoverFraming? = null,
 ) {
     /** Nothing written yet — autosave doesn't create a document for it (isEmptyDraft). */
     val isEmpty: Boolean get() = title.isBlank() && story.isBlank() && tags.isEmpty() && imageUrl == null
@@ -82,7 +88,11 @@ class DraftService(private val uid: String) : DraftStore {
         "anonymous" to v.anonymous,
     )
 
-    private fun media(v: DraftValues): Map<String, String>? = v.imageUrl?.let { mapOf("type" to "image", "url" to it, "label" to (v.imageLabel ?: "")) }
+    private fun media(v: DraftValues): Map<String, Any>? = v.imageUrl?.let { url ->
+        val m = mutableMapOf<String, Any>("type" to "image", "url" to url, "label" to (v.imageLabel ?: ""))
+        v.imageFrame?.let { m["frame"] = it.toMap() }
+        m
+    }
 
     override fun newDraftId(): String = cards.document().id
 
@@ -215,6 +225,7 @@ class DraftService(private val uid: String) : DraftStore {
                 imageUrl = media?.get("url") as? String,
                 imageLabel = media?.get("label") as? String,
                 accentHue = (d["accentHue"] as? Number)?.toDouble(),
+                imageFrame = CoverFraming.of(media?.get("frame") as? Map<*, *>),
             )
         }
     }

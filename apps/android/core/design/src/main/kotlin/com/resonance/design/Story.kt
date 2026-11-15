@@ -275,8 +275,8 @@ internal fun linkStrokes(layout: Layout, spanned: Spanned, sizePx: Float, densit
  * A run of story text as a StaticLayout in exact CSS line boxes: its marks as spans (bold at the
  * story's weight, the synthetic italic, strikethrough, inline code, links in the deep terracotta
  * labels wear), a CJK story's apostrophes inside Latin words in the Latin face, the story's
- * language on the paint (line breaking, regional glyph forms), and its breaking — justified CJK on
- * API 35+, strict CJK breaks on API 33+, balanced lines for a title or a heading — as story.css
+ * language on the paint (line breaking, regional glyph forms), and its breaking — ragged at the
+ * start edge in every script (round 25 §H), strict CJK breaks on API 33+, balanced lines for a title or a heading — as story.css
  * sets them. [breakAt] are offsets a line must start at (a title's clauses, [TitleClauses]).
  */
 internal fun buildRichLayout(runs: List<InlineRun>, style: ProseStyle, widthPx: Int, density: Density): Pair<StaticLayout, Spanned> =
@@ -576,7 +576,7 @@ class LinkCardFace(val preview: LinkPreview, val foot: String, val spoken: Strin
 
 /**
  * A story, laid out like the web reader's `.story-prose` (src/styles/story.css) in its [type] —
- * by its script and the window: a CJK story's Noto Sans TC words, tracked and justified, under Noto
+ * by its script and the window: a CJK story's Noto Sans TC words, tracked and flush left, under Noto
  * Serif TC headings; a Latin story's DM Sans under Playfair — headings h2–h6 (`#` drawn as h2),
  * the curved quote rail beside upright muted words, lists in a 1.6em gutter, photos in organic
  * clips, card links as embedded cards, a link standing alone as its page's card when [links] has

@@ -75,6 +75,8 @@ data class ShareCardModel(
     /** The published day as the app writes it (2026年10月10日 / Oct 10, 2026); null: none shown. */
     val date: String?,
     val byline: ShareByline,
+    /** Where the cover is looked at (round 25 §G1); null: centred. Cut at the share picture's own 0.5. */
+    val coverFrame: CoverFraming? = null,
 )
 
 /** Who a share card says wrote it. */
@@ -183,7 +185,7 @@ fun ShareCard(model: ShareCardModel, cover: ImageBitmap?, modifier: Modifier = M
     ) {
         val inner = ShareCardRecipe.Card.WIDTH - ShareCardRecipe.Card.PADDING * 2
         if (cover != null) {
-            CoverPicture(cover, seed + ShareCardRecipe.Cover.SEED_OFFSET, inner, inner * ShareCardRecipe.Cover.RATIO)
+            CoverPicture(cover, seed + ShareCardRecipe.Cover.SEED_OFFSET, inner, inner * ShareCardRecipe.Cover.RATIO, model.coverFrame)
             Spacer(Modifier.height(ShareCardRecipe.Cover.GAP_BELOW.dp))
         }
         val withCover = cover != null
@@ -217,9 +219,8 @@ fun ShareCard(model: ShareCardModel, cover: ImageBitmap?, modifier: Modifier = M
 }
 
 /**
- * The card's words in the story's body type at the recipe's size — exact CSS line boxes, a CJK
- * story's justified between characters where the device can (API 35+; Compose's own justify
- * stretches only spaces, which in Chinese are the gaps a link or a line break left), at most
+ * The card's words in the story's body type at the recipe's size — exact CSS line boxes, flush
+ * left and ragged in every script as the story sets them (round 25 §H), at most
  * [maxLines], cut with a tail "…" on a line of natural width, paragraph breaks kept.
  */
 @Composable
@@ -249,7 +250,7 @@ internal fun wordsLayout(text: String, type: StoryType, maxLines: Int, widthPx: 
     val full = wordsLayout(text, type, paint, widthPx)
     if (full.lineCount <= maxLines) return full
     // Cut after the last line that fits and end it with "…": the cut line is then the text's last,
-    // set natural rather than stretched to the edge as a justified line would be; a character less
+    // set natural, as every line is; a character less
     // at a time while the "…" would push it onto a line of its own.
     var end = full.getLineEnd(maxLines - 1)
     while (end > 0) {
@@ -278,7 +279,7 @@ private fun wordsLayout(text: String, type: StoryType, paint: TextPaint, widthPx
 
 /** The cover in OrganicImage's clip, the picture past the box by the clip's outward swing (as [OrganicImage] does), under its grain. */
 @Composable
-private fun CoverPicture(cover: ImageBitmap, seed: Double, width: Float, height: Float) {
+private fun CoverPicture(cover: ImageBitmap, seed: Double, width: Float, height: Float, frame: CoverFraming? = null) {
     val bleed = imageBleed(width, height, 0.05)
     Box(Modifier.size(width.dp, height.dp), contentAlignment = Alignment.Center) {
         Box(
@@ -287,7 +288,7 @@ private fun CoverPicture(cover: ImageBitmap, seed: Double, width: Float, height:
                 .clip(BledShape(seed, bleed.value.toDouble()))
                 .grainOverlay(ShareCardRecipe.Cover.GRAIN, GrainInk.of(ShareCardRecipe.PALETTE)),
         ) {
-            Image(cover, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            Image(cover, contentDescription = null, contentScale = CoverFit.scale(frame), alignment = CoverFit.alignment(frame), modifier = Modifier.fillMaxSize())
         }
     }
 }

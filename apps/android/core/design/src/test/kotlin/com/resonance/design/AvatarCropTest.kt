@@ -59,9 +59,12 @@ class AvatarCropTest {
         assertEquals(1.0 * kotlin.math.exp(-0.2), AvatarCrop.wheelZoom(1.0, 100.0), 1e-9)
     }
 
-    @Test fun theStageIsAtMost320AndTheMask48Smaller() {
-        assertEquals(320f, cropStageSide(400f.dp).value, 1e-4f)
+    @Test fun theStageIsAtMost400NeverTallerThanTheWindowLess200AndTheMask48Smaller() {
+        // Round 25 §G3.1: 400 at most (320 before), the dialog's width below that.
+        assertEquals(400f, cropStageSide(500f.dp).value, 1e-4f)
         assertEquals(296f, cropStageSide(296f.dp).value, 1e-4f)
+        // A phone held sideways (411 tall): the square stage no taller than 211.
+        assertEquals(211f, cropStageSide(700f.dp, 411f.dp).value, 1e-4f)
         assertEquals(272f, cropMask(320f.dp).value, 1e-4f)
     }
 }

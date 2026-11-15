@@ -194,9 +194,11 @@ class MainActivity : ComponentActivity() {
         kind?.let(PushCenter::reachedOut)
     }
 
-    /** Debug: `--ez mascots true|false` sets 外觀's 小紙團; `--es mascotJs "mascots.visit({…})"` calls the island on screen. */
+    /** Debug: `--ez mascots true|false` sets 外觀's 小紙團, `--ez autoTranslate` 語言's 自動翻譯; `--es mascotJs "mascots.visit({…})"` calls the island on screen. */
     private fun mascotExtras(intent: Intent) {
         if (intent.hasExtra("mascots")) AppearanceStore.shared.setMascots(intent.getBooleanExtra("mascots", false))
+        // `--ez autoTranslate true|false`: 語言's 自動翻譯 (round 25 §F4), for the home-translated and card-translated screens.
+        if (intent.hasExtra("autoTranslate")) AppearanceStore.shared.setAutoTranslate(intent.getBooleanExtra("autoTranslate", false))
         intent.getStringExtra("mascotJs")?.let { DebugLaunch.mascotCalls.trySend(it) }
     }
 

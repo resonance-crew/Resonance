@@ -97,7 +97,7 @@
         "weight": 400,
         "tracking": "--story-tracking",
         "leading": "--story-leading",
-        "align": "justify"
+        "align": "start"
       },
       "latin": {
         "face": "--font-body",

@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import com.resonance.design.CoverFraming
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -989,7 +990,7 @@ class WriteModel(
                     CoverImage.jpeg(bitmap) to CoverImage.accentHue(bitmap)
                 }
                 val url = writing.upload(jpeg, "cover.jpg")
-                update { copy(imageUrl = url, imageLabel = "cover.jpg", accentHue = hue) }
+                update { copy(imageUrl = url, imageLabel = "cover.jpg", accentHue = hue, imageFrame = null) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1031,7 +1032,7 @@ class WriteModel(
                     val picture = runCatching { URL(url).readBytes() }.getOrNull()?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
                     (picture ?: preview)?.let(CoverImage::accentHue)
                 }
-                update { copy(imageUrl = url, imageLabel = L10n.Write.mediaGeneratedLabel, accentHue = hue) }
+                update { copy(imageUrl = url, imageLabel = L10n.Write.mediaGeneratedLabel, accentHue = hue, imageFrame = null) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1046,7 +1047,16 @@ class WriteModel(
     /** No cover: the card's stripes again, and whatever the last picture's failure said goes with it. */
     fun removeCover() {
         mediaError = null
-        update { copy(imageUrl = null, imageLabel = null, accentHue = null) }
+        update { copy(imageUrl = null, imageLabel = null, accentHue = null, imageFrame = null) }
+    }
+
+    /**
+     * 調整位置's 完成 (round 25 §G2.4): where the cover is looked at, into the draft (null: the centre, as none) — the
+     * preview shows it at once; nothing is uploaded, and the card's colour stays the whole picture's.
+     */
+    fun setCoverFrame(frame: CoverFraming?) {
+        if (values.imageUrl == null) return
+        update { copy(imageFrame = frame) }
     }
 
     /** A photo inside the story (the format bar's 插入圖片), read on the device first. */

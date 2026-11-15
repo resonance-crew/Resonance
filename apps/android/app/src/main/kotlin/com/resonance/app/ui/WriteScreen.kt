@@ -84,6 +84,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -93,6 +94,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -116,7 +118,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import coil3.SingletonImageLoader
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.request.allowHardware
+import coil3.toBitmap
 import com.resonance.app.BuildConfig
 import com.resonance.app.DebugLaunch
 import com.resonance.app.DraftService
@@ -128,6 +135,7 @@ import com.resonance.design.ButtonFace
 import com.resonance.design.CardPalette
 import com.resonance.design.OrganicIndication
 import com.resonance.design.ButtonVariant
+import com.resonance.design.CoverFit
 import com.resonance.design.CoverFrame
 import com.resonance.design.CssText
 import com.resonance.design.EmptyAction
@@ -1261,6 +1269,7 @@ internal fun previewContent(model: WriteModel, me: com.resonance.api.models.Me?)
         imageUrl = v.imageUrl,
         imageLabel = v.imageLabel ?: v.title.take(24),
         accentHue = v.accentHue,
+        imageFrame = v.imageFrame,
     )
 }
 
@@ -1284,6 +1293,7 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, palette: CardPalette, model: W
     StoryCardCover(
         // Under the two pills the card's stripes say nothing of their own.
         url, if (url == null) frame.copy(label = "") else frame,
+        framing = model.values.imageFrame,
         overlay = {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 when {
@@ -1295,7 +1305,11 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, palette: CardPalette, model: W
                         if (model.generating && partial != null) {
                             Image(partial.asImageBitmap(), null, Modifier.fillMaxSize().blur(14.dp), contentScale = ContentScale.Crop)
                         } else if (url != null) {
-                            AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().blur(14.dp))
+                            val f = model.values.imageFrame
+                            AsyncImage(
+                                model = url, contentDescription = null, modifier = Modifier.fillMaxSize().blur(14.dp),
+                                contentScale = CoverFit.scale(f), alignment = CoverFit.alignment(f),
+                            )
                         }
                         if (veiled) Box(Modifier.fillMaxSize().background(palette.interior.copy(alpha = 0.45f)))
                         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1341,7 +1355,9 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, palette: CardPalette, model: W
         },
     )
     if (url != null && !busy) {
-        Box(Modifier.align(Alignment.BottomEnd).padding(10.dp)) {
+        // 調整位置 left of 更換封面, 8 between them (round 25 §G2.2): any picture cover, both hidden while one goes up or paints.
+        Row(Modifier.align(Alignment.BottomEnd).padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            CoverAdjustChip(url, model, frame.seed, palette, dismissKeyboard)
             CoverMenu(model, frame.seed, palette, pickCover, dismissKeyboard)
         }
         model.mediaError?.let { error ->
@@ -1350,6 +1366,55 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, palette: CardPalette, model: W
             }
         }
     }
+}
+
+/**
+ * 調整位置 (round 25 §G2.2): 更換封面's twin chip — the same face, 34 tall, 44 to the touch — opening 調整封面 over the
+ * whole picture ([CoverFrameDialog]); between the tap and the dialog the picture is read, the chip's small loader
+ * meanwhile (§G3.7). At large text sizes it is its glyph alone, still named. 完成 writes the frame into the draft.
+ */
+@Composable
+private fun CoverAdjustChip(url: String, model: WriteModel, seed: Double, palette: CardPalette, dismissKeyboard: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var opening by remember { mutableStateOf(false) }
+    var photo by remember(url) { mutableStateOf<ImageBitmap?>(null) }
+    val faces = CoverFaces.of(palette)
+    val glyphOnly = LocalConfiguration.current.fontScale >= COVER_CHIP_GLYPH_SCALE
+    OrganicButton(
+        L10n.Write.coverAdjust, icon = IconName.Frame, small = true, face = faces.chip, outline = palette.border,
+        iconOnly = glyphOnly, loading = opening,
+    ) {
+        if (opening) return@OrganicButton
+        dismissKeyboard()
+        opening = true
+        scope.launch {
+            try {
+                photo = coverPicture(context, url)
+            } finally {
+                opening = false
+            }
+        }
+    }
+    photo?.let { picture ->
+        CoverFrameDialog(picture, model.values.imageFrame, onCancel = { photo = null }) { framed ->
+            photo = null
+            model.setCoverFrame(framed)
+        }
+    }
+}
+
+/** From this text size on, 調整位置 is its glyph alone (both chips on a phone's cover would not fit side by side). */
+internal const val COVER_CHIP_GLYPH_SCALE = 1.3f
+
+/** The cover's picture whole, in software pixels, for the framing dialog (at most 2048 on its long side); null: unreadable. */
+private suspend fun coverPicture(context: android.content.Context, url: String): ImageBitmap? = try {
+    val request = ImageRequest.Builder(context).data(url).size(2048).allowHardware(false).build()
+    (SingletonImageLoader.get(context).execute(request) as? SuccessResult)?.image?.toBitmap()?.asImageBitmap()
+} catch (e: CancellationException) {
+    throw e
+} catch (e: Exception) {
+    null
 }
 
 /**

@@ -1,5 +1,7 @@
 package com.resonance.app.thoughtmap
 
+import com.resonance.app.ui.framing
+import com.resonance.design.CoverFraming
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
@@ -39,6 +41,8 @@ data class MapCard(
     val publishedAt: Long?,
     val mediaUrl: String?,
     val accentHue: Double?,
+    /** Where its cover is looked at (round 25 §G1); null: centred — the square thumb cut on it. */
+    val mediaFrame: CoverFraming? = null,
 ) {
     /** A 私人卡 (round 9 §1): one only its author sees — never published, or published and kept private. */
     val isPrivateCard: Boolean get() = publishedAt == null || visibility == "private"
@@ -304,6 +308,7 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
             publishedAt = c.publishedAt?.let { runCatching { OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull() },
             mediaUrl = c.imageUrl,
             accentHue = c.accentHue,
+            mediaFrame = c.framing,
         )
 
         /**
@@ -325,6 +330,7 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
                 publishedAt = (data["publishedAt"] as? Timestamp)?.toDate()?.time,
                 mediaUrl = if (media?.get("type") == "image") media["url"] as? String else null,
                 accentHue = (data["accentHue"] as? Number)?.toDouble(),
+                mediaFrame = if (media?.get("type") == "image") CoverFraming.of(media["frame"] as? Map<*, *>) else null,
             )
         }
 

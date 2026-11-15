@@ -650,7 +650,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                         ComposerPanel.Stickers -> StickerPanel(
                             stickerCatalog, panelRecents, origin, tapSticker,
                             Modifier.readableColumn(ComposerMax), navigation = navigation,
-                            playing = if (phone) PICKER_PLAYING_PHONE else PICKER_PLAYING_WIDE,
+                            playing = pickerPlaying(phone),
                         )
                         // Across the pane, its pen line too — from the rule beside the conversations — its content in the
                         // composer's column (round 24 part 3 §C2).

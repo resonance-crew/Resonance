@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -121,11 +122,14 @@ internal fun AvatarSettingsRow(session: Session, me: Me) {
     val toasts = LocalToasts.current
     var photo by remember { mutableStateOf<Bitmap?>(null) }
     var openError by remember { mutableStateOf(false) }
+    // Between picking and the crop (round 25 §G3.7): the photo being opened, the avatar's small loader on it.
+    var opening by remember { mutableStateOf(false) }
     // The crop on its way: drawn in the avatar's place until the profile has it.
     val sending by AvatarUpload.pending.collectAsStateWithLifecycle()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
             openError = false
+            opening = true
             scope.launch {
                 // Upright (the decoder applies the photo's orientation), its first frame, at most 2048 on its long side.
                 val decoded = try {
@@ -134,6 +138,8 @@ internal fun AvatarSettingsRow(session: Session, me: Me) {
                     throw e
                 } catch (e: Exception) {
                     null
+                } finally {
+                    opening = false
                 }
                 if (decoded == null) openError = true else photo = decoded
             }
@@ -145,7 +151,7 @@ internal fun AvatarSettingsRow(session: Session, me: Me) {
         Box(Modifier.clickable(onClickLabel = verb, role = Role.Button, onClick = pick), contentAlignment = Alignment.Center) {
             val shown = sending
             HandDrawnAvatar(me.initials, if (shown != null) null else me.avatarUrl, avatarFill(me.accentColor), 88.dp, 77.0, image = shown)
-            if (shown != null) Box(
+            if (shown != null || opening) Box(
                 Modifier.size(28.dp).semantics { stateDescription = L10n.App.busy }.background(Tokens.Cream.copy(alpha = 0.85f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) { ButtonLoader(Tokens.Text, ButtonLoaderSmall) }
@@ -207,9 +213,11 @@ private fun AvatarCropModal(photo: Bitmap, onCancel: () -> Unit, onUse: (ByteArr
     var sending by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val windowHeight = LocalConfiguration.current.screenHeightDp.dp
     OrganicModal(if (sending) null else onCancel, L10n.Settings.Profile.cropTitle, seed = 89.0, closeLabel = L10n.Settings.Profile.cropCancel) {
         BoxWithConstraints {
-            val side = cropStageSide(maxWidth)
+            // At most 400, never taller than the window less 200 (round 25 §G3.1): a phone held sideways keeps it all.
+            val side = cropStageSide(maxWidth, windowHeight)
             val crop = remember(image, side) { AvatarCrop(image.width.toDouble(), image.height.toDouble(), cropMask(side).value.toDouble()) }
             Column(verticalArrangement = Arrangement.spacedBy(ModalGap)) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -217,17 +225,10 @@ private fun AvatarCropModal(photo: Bitmap, onCancel: () -> Unit, onUse: (ByteArr
                     BasicText(L10n.Settings.Profile.cropHint, style = AppFonts.body(13.5f, lineHeight = 1.5f, color = Tokens.TextMuted))
                 }
                 Box(Modifier.fillMaxWidth().padding(top = 2.dp), contentAlignment = Alignment.Center) {
-                    AvatarCropStage(image, side, state, { if (!sending) state = it }, L10n.Settings.Profile.cropStage)
+                    AvatarCropStage(image, side, state, { if (!sending) state = it }, L10n.Settings.Profile.cropStage, moves = CropMoves)
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OrganicIcon(IconName.Minus, size = 16.dp, color = Tokens.TextMuted)
-                    OrganicSlider(
-                        state.z.toFloat(), { z -> if (!sending) state = crop.zoomTo(state, z.toDouble()) },
-                        AvatarCrop.MIN_ZOOM.toFloat()..AvatarCrop.MAX_ZOOM.toFloat(), L10n.Settings.Profile.cropZoom,
-                        Modifier.weight(1f), step = 0.01f,
-                    )
-                    OrganicIcon(IconName.Plus, size = 16.dp, color = Tokens.TextMuted)
-                }
+                CropZoomRow(state.z, AvatarCrop.MAX_ZOOM, L10n.Settings.Profile.cropZoom, enabled = !sending) { z -> state = crop.zoomTo(state, z) }
+                CropResetRow(state != CropState(), enabled = !sending) { state = CropState() }
                 if (failed) ModalError(L10n.Settings.Profile.avatarError)
                 ModalActions(
                     L10n.Settings.Profile.cropCancel, onCancel, L10n.Settings.Profile.cropUse,

@@ -648,7 +648,7 @@ private fun Modifier.bleedSides(by: Dp): Modifier = layout { measurable, constra
 
 /** A picture edge to edge across a bubble at 1.91:1 (the share-image ratio); [onError] when it won't load. */
 @Composable
-private fun BubblePicture(url: String, bleed: Dp = PictureBleed, onError: () -> Unit) {
+private fun BubblePicture(url: String, bleed: Dp = PictureBleed, frame: CoverFraming? = null, onError: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -656,7 +656,10 @@ private fun BubblePicture(url: String, bleed: Dp = PictureBleed, onError: () -> 
             .bleedSides(bleed)
             .background(Tokens.Text.copy(alpha = 0.06f)),
     ) {
-        AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(), onError = { onError() })
+        AsyncImage(
+            model = url, contentDescription = null, modifier = Modifier.fillMaxSize(), onError = { onError() },
+            contentScale = CoverFit.scale(frame), alignment = CoverFit.alignment(frame),
+        )
     }
 }
 
@@ -820,6 +823,8 @@ fun ColumnScope.SharedCardSection(
     onClick: (() -> Unit)?,
     onLongPress: (() -> Unit)?,
     pictureBleed: Dp = PictureBleed,
+    /** Where the card's cover is looked at (round 25 §G1), cut at the bubble's 1.91 : 1; null: centred. */
+    imageFrame: CoverFraming? = null,
 ) {
     Column(Modifier.fillMaxWidth().bubblePart(title, onClick, onLongPress)) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -833,7 +838,7 @@ fun ColumnScope.SharedCardSection(
             }
         }
         if (imageUrl != null && !FailedPictures.shared.has(imageUrl)) {
-            BubblePicture(imageUrl, pictureBleed) { FailedPictures.shared.note(imageUrl) }
+            BubblePicture(imageUrl, pictureBleed, imageFrame) { FailedPictures.shared.note(imageUrl) }
         } else {
             val palette = CardPalette(accentHue, 0)
             Box(

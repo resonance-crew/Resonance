@@ -37,7 +37,7 @@ import java.io.File
 
 /**
  * The reader sets a story in its type (reading-type §6 and §8): a CJK story's words in Noto Sans
- * TC, tracked, justified (API 35) with strict breaks, under Noto Serif TC headings sized from the
+ * TC, tracked, flush left (round 25 §H) with strict breaks, under Noto Serif TC headings sized from the
  * body (`#` and `##` alike); a Latin story ragged in DM Sans under Playfair; quotes upright and
  * muted, their headings too; story.css's room between blocks, in the story's own numbers; an
  * apostrophe inside a Latin word in the Latin face; the story's language on its text; and a CJK
@@ -58,25 +58,25 @@ class StoryProseTest {
         Strings.load { File("../../../../src/messages/${it.tag}.json").readText() }
     }
 
-    @Test fun aCjkStorysWordsAreItsSansTrackedAndJustified() = composed {
+    @Test fun aCjkStorysWordsAreItsSansTrackedAndFlushLeft() = composed {
         val body = ProseStyle.body(cjkPhone, "zh-TW")
         assertEquals(AppFonts.Family.BodyCJK, body.family)
         assertEquals(Tokens.StorySizeCompact, body.size)
         assertEquals(Tokens.StoryLeadingCompact, body.lineHeight)
         assertEquals(Tokens.StoryTracking, body.tracking)
         assertEquals(Tokens.StoryBold.toInt(), body.boldWeight)
-        assertTrue(body.justified)
+        assertFalse(body.justified)
         assertTrue(body.latinMarks)
         // A quote: the same words, muted and upright.
         val quoted = body.quoted
         assertEquals(Tokens.TextMuted, quoted.color)
         assertFalse(quoted.italic)
         assertEquals(body.size, quoted.size)
-        assertTrue(quoted.justified)
+        assertFalse(quoted.justified)
 
         val (layout, _) = buildRichLayout(listOf(InlineRun("每年五月，外婆都會把青梅一顆顆擦乾，排在竹篩上曬。她說梅子要曬過太陽才會甜，人也是。")), body, 320, one)
-        // Robolectric runs API 35: justified between characters, its last line natural.
-        assertEquals(LineBreaker.JUSTIFICATION_MODE_INTER_CHARACTER, layout.justificationMode)
+        // Robolectric runs API 35, where it could be justified: round 25 §H sets it ragged, at its start.
+        assertEquals(LineBreaker.JUSTIFICATION_MODE_NONE, layout.justificationMode)
         assertEquals("zh-TW", layout.paint.textLocale.toLanguageTag())
         assertEquals(Tokens.StoryTracking, layout.paint.letterSpacing, 1e-6f)
     }
