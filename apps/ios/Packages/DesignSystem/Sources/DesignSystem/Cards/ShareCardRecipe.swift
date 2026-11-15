@@ -96,7 +96,7 @@ public nonisolated enum ShareCardRecipe {
     /// Omitted, with its gap, when the story has nothing to quote.
     public static let wordsGapBelow: CGFloat = 16
 
-    /// The words' type by the story's script: the story body's face, tracking, leading and justification.
+    /// The words' type by the story's script: the story body's face, tracking, leading and alignment (flush left).
     public static func wordsType(_ script: StoryScript) -> TextType {
         let story = StoryTypography(script: script, compact: false)
         return TextType(family: story.bodyFamily, weight: .regular, tracking: story.bodyTracking,

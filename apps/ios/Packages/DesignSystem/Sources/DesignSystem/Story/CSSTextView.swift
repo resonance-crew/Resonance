@@ -63,14 +63,10 @@ public struct CSSTextView: UIViewRepresentable {
         // Under the letters, not under the line box: the depth every platform shares (0.29em).
         (view as? LinkWaveTextView)?.waveDrop = LinkWaves.drop(fontSize: font.pointSize)
         view.layoutManager.delegate = boxes
-        // A justified paragraph is laid out ragged and spread by hand once its width is known
-        // (StoryJustification: as a browser spreads Chinese, not only at the spaces).
         let coordinator = context.coordinator
         if coordinator.input != text {
             coordinator.input = text
-            coordinator.prepared = StoryJustification.prepared(text)
-            coordinator.justifiedWidth = nil
-            view.attributedText = coordinator.prepared
+            view.attributedText = text
         }
         view.accessibilityLanguage = language
     }
@@ -81,12 +77,6 @@ public struct CSSTextView: UIViewRepresentable {
         if container.size.width != width {
             container.size = CGSize(width: width, height: .greatestFiniteMagnitude)
         }
-        let coordinator = context.coordinator
-        if let prepared = coordinator.prepared, coordinator.justifiedWidth != width, StoryJustification.wanted(coordinator.input ?? prepared) {
-            uiView.textStorage.setAttributedString(prepared)
-            StoryJustification.apply(storage: uiView.textStorage, layoutManager: uiView.layoutManager, container: container)
-            coordinator.justifiedWidth = width
-        }
         uiView.layoutManager.ensureLayout(for: container)
         let used = uiView.layoutManager.usedRect(for: container)
         return CGSize(width: fitsContent ? min(width, ceil(used.width)) : width, height: ceil(used.height))
@@ -96,11 +86,8 @@ public struct CSSTextView: UIViewRepresentable {
         var onOpenURL: (URL) -> Void = { _ in }
         /// The layout manager holds its delegate weakly.
         var lineBoxes: CSSLineBoxes?
-        /// The text as given, as laid out (justified paragraphs ragged), and the width it was last
-        /// justified for.
+        /// The text as given, so an unchanged one isn't set again.
         var input: NSAttributedString?
-        var prepared: NSAttributedString?
-        var justifiedWidth: CGFloat?
 
         public func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem, defaultAction: UIAction) -> UIAction? {
             guard case let .link(url) = textItem.content else { return defaultAction }
@@ -114,8 +101,7 @@ public struct CSSTextView: UIViewRepresentable {
 /// reading curve): the body (a paragraph, a quote's words, a list item) or a heading, h2–h6 (a
 /// story's `#` is drawn as an h2).
 ///
-/// The body's lines are justified in a CJK story (the last one as it falls) and ragged in a Latin
-/// one; headings start-aligned in both, with lining figures. Tracking is the story's (+0.03em in a
+/// The body's lines start at the column's start edge and end ragged, in every script; headings start-aligned in both, with lining figures. Tracking is the story's (+0.03em in a
 /// CJK body, +0.02em on its headings, none in a Latin story or in code); `strong` is the story's
 /// bold; `em` the one synthesized oblique; links' words the deep terracotta every label on paper
 /// wears (their wave stays terracotta, ``LinkWaveTextView``); code the story's code size on its

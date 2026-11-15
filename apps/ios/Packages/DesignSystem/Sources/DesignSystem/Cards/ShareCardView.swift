@@ -22,6 +22,8 @@ public struct ShareCardContent {
     public var script: StoryScript
     /// The cover, already loaded; nil draws the layout without one.
     public var cover: UIImage?
+    /// Where the cover is looked at (round 25 §G1): nil, its centre.
+    public var coverFrame: CoverFraming?
     public var byline: Byline
     /// The published date in the app's language (2026年10月10日 / Oct 10, 2026).
     public var date: String?
@@ -122,6 +124,7 @@ public struct ShareCardView: View {
         VStack(alignment: .leading, spacing: 0) {
             if let cover = content.cover {
                 ShareCover(image: cover, width: inner, height: inner * R.coverRatio, seed: content.seed + Double(R.coverSeedOffset))
+                    .coverFraming(content.coverFrame)
                     .padding(.bottom, R.coverGapBelow)
             }
             ShareText(content.title, type: R.titleType(content.script),
@@ -165,7 +168,8 @@ struct ShareCover: View {
     var body: some View {
         let bleed = (min(width, height) * 0.05 + 6 + 4).rounded(.up)
         ZStack {
-            Image(uiImage: image).resizable().scaledToFill()
+            // The share picture cuts its 0.5 box from the cover's frame (round 25 §G1).
+            FramedCover(Image(uiImage: image), pictureSize: image.size)
             GrainLayer(shape: Rectangle(), mode: .tile, opacity: ShareCardRecipe.coverGrain * 2, tile: "grain-overlay")
         }
         .frame(width: width + bleed * 2, height: height + bleed * 2)
@@ -260,8 +264,7 @@ struct ShareAvatar: View {
     }
 }
 
-/// Text on the card, set as the story sets it (its face, tracking, CSS line box, justified CJK spread
-/// between characters) within a line budget, the last line cut with an ellipsis — laid out by TextKit
+/// Text on the card, set as the story sets it (its face, tracking, CSS line box, flush left) within a line budget, the last line cut with an ellipsis — laid out by TextKit
 /// and drawn into a Canvas, so `ImageRenderer` draws it (a UIKit text view it would leave blank).
 struct ShareText: View {
     let layout: ShareTextLayout
@@ -310,7 +313,7 @@ public final class ShareTextLayout {
             let mark = AppFonts.uiFont(latin, size: size, weight: type.weight, lining: type.lining)
             for index in StoryScript.latinMarks(text) { attributed.addAttribute(.font, value: mark, range: NSRange(location: index, length: 1)) }
         }
-        storage = NSTextStorage(attributedString: StoryJustification.prepared(attributed))
+        storage = NSTextStorage(attributedString: attributed)
         container = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
         container.lineFragmentPadding = 0
         container.maximumNumberOfLines = maxLines
@@ -319,12 +322,15 @@ public final class ShareTextLayout {
         manager.delegate = boxes
         manager.addTextContainer(container)
         storage.addLayoutManager(manager)
-        StoryJustification.apply(storage: storage, layoutManager: manager, container: container)
         manager.ensureLayout(for: container)
     }
 
     /// The lines it takes (at most its budget).
-    public var lineCount: Int { StoryJustification.lines(manager, container).count }
+    public var lineCount: Int {
+        var count = 0
+        manager.enumerateLineFragments(forGlyphRange: manager.glyphRange(for: container)) { _, _, _, _, _ in count += 1 }
+        return count
+    }
 
     /// Whether its words ran past the budget (the last line ends in an ellipsis).
     public var truncated: Bool {

@@ -28,6 +28,12 @@ struct CardScreen: View {
     @State private var trashedHere = TrashedHere()
     /// 查看全部: every resonance shown, not the first three (C1).
     @State private var allResonances = false
+    /// The story's translation (round 25 §F): there only for a story the page offers to translate.
+    @State private var translator: StoryTranslator?
+    /// Where the reader was in the story when the toast's 看譯文 swapped it (a share of the story's height), kept
+    /// until the translated story is measured and the page scrolled back to the same place.
+    @State private var keptPlace: CGFloat?
+    @State private var position = ScrollPosition(idType: String.self)
     @Environment(\.window) private var window
     /// A tablet's header (round 5 C1): the card's title fades into its centre in place of the author.
     @Environment(\.headerChrome) private var headerChrome
@@ -51,7 +57,10 @@ struct CardScreen: View {
     }
 
     /// The story's table of contents, once the card has loaded.
-    private var contents: [TocEntry] { model?.phase == .loaded ? model?.toc ?? [] : [] }
+    private var contents: [TocEntry] { model?.phase == .loaded ? shownStory?.toc ?? model?.toc ?? [] : [] }
+
+    /// The translation, while it shows in place of the story (round 25 §F2: title and story only).
+    private var shownStory: CardModel.ReadStory? { translator?.showing == true ? translator?.story : nil }
     /// A tablet's window: the card's share and ⋯ end the byline row, not the bar (round 8 §10.1).
     private var actionsInByline: Bool { CardPageLayout.actionsInByline(window: window.width) }
     /// How far the lists under the story reach out of the article's column on either side: on a
@@ -67,6 +76,8 @@ struct CardScreen: View {
                     // Where the paper puppets' marks are measured, and their island laid over: the content's own points.
                     .mascotContent()
             }
+            // The toast's 看譯文 brings the reader back to the same place in the translated story.
+            .scrollPosition($position)
             // The paper puppets (round 19), while Settings → 外觀 → 小紙團 is on: on the card once it has
             // loaded, never one in the trash. A tablet's contents rail keeps them out of the right margin.
             .modifier(MascotStage(page: "card", allowed: mascotsAllowed, rail: layout.rail ? CGRect(x: layout.railX, y: 0, width: Tokens.cardRailW, height: 1) : nil))
@@ -97,6 +108,49 @@ struct CardScreen: View {
         guard trashedHere.bringIntoView(banner: banner) else { return }
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) {
             proxy.scrollTo(Self.pageHead, anchor: .top)
+        }
+    }
+
+    /// The translate line's model, once the card has loaded and only for a story the page offers to translate
+    /// (§F3); with 自動翻譯 on it asks at once (§F4), showing the original with 翻譯中⋯ meanwhile.
+    private func startTranslator() {
+        guard translator == nil, let detail = model?.detail else { return }
+        let language = Strings.shared.language
+        guard StoryTranslationRule.offers(detail, interface: language) else { return }
+        let api = session.reading
+        let made = StoryTranslator(key: detail.card.id, language: language) { key, to in try await api.translate(key, to: to) }
+        translator = made
+        if TranslationSettings.shared.autoTranslate { Task { await requestTranslation(made) } }
+    }
+
+    /// Asks for the translation: it swaps in if the line is on screen when it comes, else the toast offers it.
+    private func requestTranslation(_ translator: StoryTranslator) async {
+        let gone = { bylineGone }
+        let toasts = session.toasts
+        await translator.request(inView: { !gone() }) {
+            toasts.show(L10n.Card.Translate.ready, action: .init(label: L10n.Card.Translate.show,
+                                                                 accessibilityLabel: "\(L10n.Card.Translate.ready) · \(L10n.Card.Translate.show)") {
+                revealKeepingPlace(translator)
+            })
+        }
+    }
+
+    /// 看譯文: the translation swaps in and the reader stays at the same place in the story.
+    private func revealKeepingPlace(_ translator: StoryTranslator) {
+        let story = meter.story
+        if story.height > 0 {
+            keptPlace = min(max((meter.viewport.top - story.minY) / story.height, 0), 1)
+        }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) { translator.show() }
+    }
+
+    /// A tap on the line: translate, show the translation again, or the original.
+    private func translateLineTapped(_ translator: StoryTranslator) {
+        switch translator.phase {
+        case .idle, .failed: Task { await requestTranslation(translator) }
+        case .shown: withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) { translator.showOriginal() }
+        case .original: withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) { translator.show() }
+        case .working, .spent: break
         }
     }
 
@@ -155,6 +209,7 @@ struct CardScreen: View {
         } action: { _, viewport in
             meter.viewport = viewport
         }
+        .onScrollGeometryChange(for: CGFloat.self) { $0.contentInsets.top } action: { _, inset in meter.insetTop = inset }
         // Where the byline ends, as measured under the title (until then, about where a phone's lands).
         .onScrollGeometryChange(for: Bool.self) { [meter] in
             $0.contentOffset.y + $0.contentInsets.top > (meter.bylineBottom ?? ReadingMeter.bylineBottomGuess)
@@ -216,6 +271,14 @@ struct CardScreen: View {
             }
             // Also resumes a load that was cut short when the page left mid-way.
             if let model, model.detail == nil { await model.load() }
+        }
+        // The card has loaded: the translate line, when the story is one to offer it for.
+        .onChange(of: model?.phase == .loaded, initial: true) { _, loaded in if loaded { startTranslator() } }
+        // The translated story measured after the toast's 看譯文: back to where the reader was.
+        .onChange(of: meter.story) { _, story in
+            guard let share = keptPlace, story.height > 0 else { return }
+            keptPlace = nil
+            position.scrollTo(y: max(0, story.minY + share * story.height - meter.insetTop))
         }
         // Edited, published or re-shelved from the writer or the ⋯ — this card, or a
         // resonance to it: read it again (another card's draft leaves it as it is).
@@ -292,7 +355,11 @@ struct CardScreen: View {
 
     private func page(_ model: CardModel, _ detail: CardDetail) -> some View {
         let card = detail.card
-        let type = model.storyType
+        // The translation, while it shows (round 25 §F2): its own script's type and language, its own headings.
+        let shown = shownStory
+        let type = shown?.type ?? model.storyType
+        let blocks = shown?.blocks ?? model.blocks
+        let toc = shown?.toc ?? model.toc
         let story = StoryTypography(script: type.script, layout: window.layoutClass)
         // The owner's card in the trash: its banner first, and nothing around the story but its tags.
         let trashed = TrashedCardBanner.shows(detail)
@@ -307,9 +374,10 @@ struct CardScreen: View {
                 // A tablet's byline ends in the card's share and ⋯ — not the owner's card in the trash, whose banner is
                 // the way out — until it scrolls under the bar, which takes them (round 9 §3).
                 head(card, anonymous: detail.anonymous, type: type, actions: actionsInByline && !trashed ? detail : nil,
-                     privateCard: Self.isPrivateCard(detail) || Self.isSharedPrivate(detail))
+                     privateCard: Self.isPrivateCard(detail) || Self.isSharedPrivate(detail),
+                     title: shown != nil ? translator?.title : nil, translator: trashed ? nil : translator)
                 // A card the reader can't see (private, gone, blocked) is the link the story wrote, as the prose draws one.
-                StoryMarkdownView(blocks: model.blocks, typography: story, language: type.lang, onOpenURL: open) { href, _ in
+                StoryMarkdownView(blocks: blocks, typography: story, language: type.lang, onOpenURL: open) { href, _ in
                     model.embed(for: href).map { CardEmbedView(href: href, card: $0) }
                 } linkCard: { href, text in
                     if let preview = model.linkPreview(href: href, text: text) {
@@ -331,13 +399,16 @@ struct CardScreen: View {
                 // What VoiceOver names a table in it.
                 .environment(\.storyTableLabel, L10n.Card.table)
                 .onPreferenceChange(StoryHeadingTops.self) { tops in
-                    let wanted = Set(model.toc.map(\.index))
+                    let wanted = Set(toc.map(\.index))
                     meter.headings = tops.filter { wanted.contains($0.key) }
                         .map { TocReading.Heading(index: $0.key, top: $0.value) }
                         .sorted { $0.top < $1.top }
                 }
                 // The story block alone (not the cover, title or what follows) is what the progress measures.
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.pageSpace)) } action: { meter.story = $0 }
+                // The translation and the original crossfade (180 ms; none under Reduce Motion).
+                .id(shown != nil)
+                .transition(.opacity)
                 .padding(.bottom, story.endGap)
                 if !card.tags.isEmpty {
                     // Tags are app furniture: the theme colour, not the card's hue.
@@ -436,7 +507,7 @@ struct CardScreen: View {
     /// read time and date (round 8 §10.1), ending on a tablet in the card's share and ⋯ (`actions`,
     /// once the card has loaded) — and `leadGap` down to the story.
     private func head(_ card: FeedCard, anonymous: Bool, type: StoryType, actions detail: CardDetail? = nil,
-                      privateCard: Bool = false) -> some View {
+                      privateCard: Bool = false, title shownTitle: String? = nil, translator: StoryTranslator? = nil) -> some View {
         let hue = card.accentHue ?? 55
         let story = StoryTypography(script: type.script, layout: window.layoutClass)
         return VStack(alignment: .leading, spacing: 0) {
@@ -444,12 +515,16 @@ struct CardScreen: View {
                 OrganicImage(url: url, seed: hue + 11, fill: Tokens.creamDark)
                     // On its way, the cover shimmers in the card's own hue (as in its story card).
                     .environment(\.skeletonHue, card.accentHue)
+                    // Its 0.52 cut from the cover's frame (round 25 §G1).
+                    .coverFraming(card.coverFraming)
                     .aspectRatio(1 / 0.52, contentMode: .fit)
                     .readingMark(.cover)
                     .padding(.bottom, story.coverGap)
                     .accessibilityLabel(card.imageLabel ?? card.title)
             }
-            StoryTitle(card.title, typography: story, lang: type.lang)
+            StoryTitle(shownTitle ?? card.title, typography: story, lang: type.lang)
+                .id(shownTitle != nil)
+                .transition(.opacity)
                 // Where the title ends, for the tablet header's centre (it fades in once this is under the line).
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.pageSpace)).maxY } action: { meter.titleBottom = $0 }
                 .padding(.bottom, story.metaGap)
@@ -467,7 +542,12 @@ struct CardScreen: View {
             }
                 // Where the byline ends: past it, the bar names the author.
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.pageSpace)).maxY } action: { meter.bylineBottom = $0 }
-                .padding(.bottom, story.leadGap)
+                .padding(.bottom, translator == nil ? story.leadGap : story.metaGap)
+            // The translate line (round 25 §F2): its own row under the byline, above the story's first block.
+            if let translator {
+                TranslateLine(translator: translator, metaSize: story.metaSize) { translateLineTapped(translator) }
+                    .padding(.bottom, story.leadGap)
+            }
         }
     }
 
@@ -788,6 +868,8 @@ final class ReadingMeter {
     /// The byline's bottom in the page: once it is under the bar, the bar names the author (only the
     /// scroll's own check reads it).
     @ObservationIgnored var bylineBottom: CGFloat?
+    /// The scroll's top inset (the bar): a place in the page is scrolled to less this.
+    @ObservationIgnored var insetTop: CGFloat = 0
     /// Where a phone's byline ends before it is measured: the reading head over a two-line title under
     /// no cover, its 20 to the byline, the 44 row.
     static let bylineBottomGuess: CGFloat = PenLineGap.fromFoot(Tokens.storyHeadGapCompact) + 2 * 39.2 + Tokens.storyMetaGapCompact + 44

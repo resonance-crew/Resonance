@@ -1,3 +1,4 @@
+import DesignSystem
 import FirebaseFirestore
 import Foundation
 import ResonanceKit
@@ -12,6 +13,9 @@ struct DraftValues: Equatable {
     /// The cover: its public URL and label (media {type: image} on the web).
     var imageURL: URL?
     var imageLabel: String?
+    /// Where the cover is looked at (`media.frame`, round 25 §G1): nil, its centre. It rides inside `media`, so a
+    /// changed or removed picture takes it with it.
+    var imageFrame: CoverFraming?
     /// The cover's hue snapped to the card palette; nil keeps the position colour.
     var accentHue: Double?
 
@@ -71,7 +75,15 @@ struct DraftService: DraftStore {
     }
 
     private func media(_ v: DraftValues) -> [String: Any]? {
-        v.imageURL.map { ["type": "image", "url": $0.absoluteString, "label": v.imageLabel ?? ""] }
+        Self.media(v)
+    }
+
+    /// `media` as the card or draft stores it: the picture, its label and — once it was framed — its frame.
+    nonisolated static func media(_ v: DraftValues) -> [String: Any]? {
+        guard let url = v.imageURL else { return nil }
+        var media: [String: Any] = ["type": "image", "url": url.absoluteString, "label": v.imageLabel ?? ""]
+        if let frame = v.imageFrame, frame.isValid { media["frame"] = CoverFrames.fields(frame) }
+        return media
     }
 
     func newDraftId() -> String { db.collection("cards").document().documentID }
@@ -188,6 +200,7 @@ struct DraftService: DraftStore {
             anonymous: d["anonymous"] as? Bool ?? false,
             imageURL: (media?["url"] as? String).flatMap(URL.init(string:)),
             imageLabel: media?["label"] as? String,
+            imageFrame: CoverFrames.of(media: media),
             accentHue: (d["accentHue"] as? NSNumber)?.doubleValue
         )
     }

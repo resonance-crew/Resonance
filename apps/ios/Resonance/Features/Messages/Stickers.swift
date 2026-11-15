@@ -367,7 +367,7 @@ nonisolated struct StickerBreathing: Equatable {
 }
 
 /// Runs a picker's ``StickerBreathing`` while the picker shows: a start every ``StickerBreathing/stagger`` at most,
-/// nothing at all while motion is quiet (Reduce Motion, Low Power Mode: the thumbs alone). Only who plays is
+/// nothing at all while motion is quiet (Reduce Motion: the thumbs alone; Low Power Mode changes nothing, round 25). Only who plays is
 /// watched: a cell coming into view or the grid scrolling draws nothing again.
 @MainActor @Observable final class StickerBreathingClock {
     @ObservationIgnored private var state: StickerBreathing
@@ -447,9 +447,18 @@ nonisolated struct StickerBreathing: Equatable {
         stop?()
     }
 
-    /// Motion is quiet: Reduce Motion, or Low Power Mode — only the key pose is drawn.
+    /// Motion is quiet: Reduce Motion — only the key pose is drawn. Read afresh on every tick, so a change shows
+    /// without reopening the picker.
     static var still: Bool {
-        UIAccessibility.isReduceMotionEnabled || ProcessInfo.processInfo.isLowPowerModeEnabled
+        still(reduceMotion: UIAccessibility.isReduceMotionEnabled, lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled)
+    }
+
+    /// Round 25 §D (the owner: 「想请你省电模式这一个拿掉」): Low Power Mode changes nothing — the picker breathes at its
+    /// full limit whatever the battery; only Reduce Motion holds it (and the thread's stickers) still. Android's
+    /// `pickerHoldsStill()` is the twin.
+    nonisolated static func still(reduceMotion: Bool, lowPower: Bool) -> Bool {
+        _ = lowPower
+        return reduceMotion
     }
 }
 

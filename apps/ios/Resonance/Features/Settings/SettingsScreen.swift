@@ -245,9 +245,12 @@ private struct ProfileSettings: View {
 private struct ProfilePhotoRow: View {
     let me: Components.Schemas.Me
     @Environment(SessionStore.self) private var session
+    @Environment(\.window) private var window
     @State private var picking = false
     @State private var picked: PhotosPickerItem?
     @State private var framing: CGImage?
+    /// A picked photo is being read for the crop (round 25 §G3.7): the avatar's small loop says so.
+    @State private var opening = false
     @State private var openFailed = false
     @State private var uploadError: String?
     /// The photo just framed, shown on the avatar at once (round 21) while it goes up — and after, until the
@@ -277,7 +280,7 @@ private struct ProfilePhotoRow: View {
                                 image: shownLocal?.image)
                     .overlay(alignment: .bottomTrailing) {
                         // Going up: the button's small loop on a paper disc at its corner.
-                        if shownLocal?.uploading == true {
+                        if shownLocal?.uploading == true || opening {
                             Circle().fill(Tokens.cream)
                                 .frame(width: 28, height: 28)
                                 .overlay { ButtonLoader(size: 16, color: Tokens.terracotta) }
@@ -285,7 +288,7 @@ private struct ProfilePhotoRow: View {
                                 .accessibilityHidden(true)
                         }
                     }
-                    .animation(.easeOut(duration: 0.16), value: shownLocal?.uploading)
+                    .animation(.easeOut(duration: 0.16), value: shownLocal?.uploading == true || opening)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(hasPhoto ? L10n.Settings.Profile.avatarChange : L10n.Settings.Profile.avatarAdd)
@@ -319,7 +322,7 @@ private struct ProfilePhotoRow: View {
         .organicModal(isPresented: Binding(get: { framing != nil }, set: { if !$0 { framing = nil; uploadError = nil } }),
                       seed: 83, maxWidth: 400, closeLabel: L10n.Settings.Profile.cropCancel) {
             if let framing {
-                AvatarCropContent(image: framing, error: uploadError,
+                AvatarCropContent(image: framing, error: uploadError, windowHeight: window.height,
                                   onCancel: { self.framing = nil; uploadError = nil }) { crop, side in
                     use(framing, crop: crop, side: side)
                 }
@@ -330,6 +333,8 @@ private struct ProfilePhotoRow: View {
     private func open(_ item: PhotosPickerItem) async {
         let picked = ContinuousClock.now
         openFailed = false
+        opening = true
+        defer { opening = false }
         guard let data = try? await item.loadTransferable(type: Data.self), let image = AvatarImage.load(data) else {
             openFailed = true
             return
@@ -463,9 +468,12 @@ private struct NotificationSettings: View {
     }
 }
 
-/// Language: the interface language, as a radio list (the web's select).
+/// Language: the interface language, as a radio list (the web's select), then 自動翻譯 (round 25 §F4): stories,
+/// titles and excerpts in another language shown translated by AI into the interface's — off until turned on, kept
+/// on this device.
 private struct LanguageSettings: View {
     @Environment(SessionStore.self) private var session
+    private var translation: TranslationSettings { .shared }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -478,6 +486,11 @@ private struct LanguageSettings: View {
                 WavyDivider(seed: 67).padding(.vertical, 2)
                 row(.en, "English", flag: "gb", seed: 73)
             }
+            WavyDivider(seed: 79).padding(.vertical, 2)
+            NotificationSwitchRow(label: L10n.Settings.Language.autoTranslateStories,
+                                  hint: L10n.Settings.Language.autoTranslateStoriesHint, seed: 83,
+                                  isOn: Binding(get: { translation.autoTranslate }, set: { translation.setAutoTranslate($0) }))
+                .padding(.top, 12)
         }
     }
 

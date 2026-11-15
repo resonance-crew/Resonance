@@ -255,6 +255,55 @@ import UIKit
         #expect(AppConfig.production.metaAppID == "1115208464203859")
     }
 
+    // MARK: Round 25 §C — the action beside 儲存影像
+
+    /// The owner: 「iPhone 的分享面板里面现在没有 Instagram 现实动态这一颗」 — so it is an action (a row in the sheet's
+    /// list, with 儲存影像), titled share.toStories, in Instagram's template glyph.
+    @Test func theStoriesActionIsARowInTheSheetsActionList() {
+        #expect(InstagramStoriesActivity.activityCategory == .action)
+        let activity = InstagramStoriesActivity(link: URL(string: "https://resonance.channel/card/run-2400")!, appID: "1115208464203859",
+                                                make: { nil }, failed: {})
+        #expect(activity.activityTitle == L10n.Share.toStories)
+        #expect(activity.activityImage?.renderingMode == .alwaysTemplate)
+        #expect(activity.activityType == InstagramStoriesActivity.type)
+    }
+
+    /// `-debugStories YES` offers it without Instagram in a Debug build (the flag read under `#if DEBUG`); off, or
+    /// without an App ID, it is Instagram's `canOpenURL` that decides.
+    @Test func theDebugFlagOffersTheActionWithoutInstagramInDebugOnly() {
+        #expect(InstagramStories.available(appID: "1115208464203859", forced: true) { _ in false })
+        #expect(!InstagramStories.available(appID: "1115208464203859", forced: false) { _ in false })
+        #expect(!InstagramStories.available(appID: nil, forced: true) { _ in true })
+        let defaults = UserDefaults.standard
+        let before = defaults.object(forKey: "debugStories")
+        defer { defaults.set(before, forKey: "debugStories") }
+        defaults.set(true, forKey: "debugStories")
+        #if DEBUG
+        #expect(InstagramStories.debugForced)
+        #expect(InstagramStories.available(appID: "1115208464203859") { _ in false })
+        #else
+        #expect(!InstagramStories.debugForced)
+        #endif
+        defaults.set(false, forKey: "debugStories")
+        #expect(!InstagramStories.debugForced)
+        // The Release path never reads the flag: the source keeps the read inside `#if DEBUG`.
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("..").standardized
+        let source = (try? String(contentsOf: root.appendingPathComponent("Resonance/Features/Share/InstagramStories.swift"), encoding: .utf8)) ?? ""
+        let read = source.range(of: #"bool(forKey: "debugStories")"#)
+        let debug = source.range(of: "#if DEBUG")
+        let otherwise = source.range(of: "#else", range: (debug?.upperBound ?? source.startIndex)..<source.endIndex)
+        #expect(read != nil && debug != nil && otherwise != nil)
+        if let read, let debug, let otherwise { #expect(debug.upperBound <= read.lowerBound && read.upperBound <= otherwise.lowerBound) }
+    }
+
+    /// Without `instagram-stories` in LSApplicationQueriesSchemes `canOpenURL` answers false on every phone, and the
+    /// action never shows: the app's own Info.plist (the test host's) lists it.
+    @Test func theAppAsksWhetherInstagramStoriesOpens() {
+        let schemes = Bundle.main.object(forInfoDictionaryKey: "LSApplicationQueriesSchemes") as? [String]
+        #expect(schemes?.contains(InstagramStories.scheme) == true)
+        #expect(InstagramStories.scheme == "instagram-stories")
+    }
+
     @Test func theStoriesActionDrawsItsPicturesWhenChosenAndSaysWhenInstagramDidntOpen() async {
         let board = Pasteboard()
         let content = CardSharing.content(Self.detail(), cover: nil, photo: nil)
@@ -262,7 +311,7 @@ import UIKit
             guard let sticker = ShareCardRenderer.sticker(content), let background = ShareCardRenderer.backdrop(palette: content.palette) else { return nil }
             return (sticker, background)
         }, failed: {}, pasteboard: board, open: { _ in false }, pause: { _ in })
-        #expect(type(of: activity).activityCategory == .share)
+        #expect(type(of: activity).activityCategory == .action)
         #expect(activity.activityTitle == L10n.Share.toStories && activity.activityImage != nil)
         #expect(await activity.handOff() == false)
         // The sticker (PNG) and backdrop (JPEG) went up even so: Instagram just didn't open.

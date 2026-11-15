@@ -46,10 +46,12 @@ enum CardSharing {
         } else {
             byline = .anonymous(label: L10n.Card.anonymousAuthor)
         }
-        return ShareCardContent(title: card.title, words: SharePassages.opening(detail.story),
-                                script: ScriptRule.storyScript(title: card.title, story: detail.story), cover: cover, byline: byline,
-                                date: publishedDate(card), palette: ShareCardContent.palette(accentHue: card.accentHue, cardId: card.id),
-                                seed: ShareCardContent.seed(cardId: card.id))
+        var content = ShareCardContent(title: card.title, words: SharePassages.opening(detail.story),
+                                       script: ScriptRule.storyScript(title: card.title, story: detail.story), cover: cover, byline: byline,
+                                       date: publishedDate(card), palette: ShareCardContent.palette(accentHue: card.accentHue, cardId: card.id),
+                                       seed: ShareCardContent.seed(cardId: card.id))
+        content.coverFrame = card.coverFraming
+        return content
     }
 
     static func anonymous(_ detail: CardDetail) -> Bool { detail.anonymous || detail.card.anonymous }
@@ -173,7 +175,8 @@ final class CardImageSource: NSObject, UIActivityItemSource {
     }
 }
 
-/// Instagram 限時動態 in the sheet's row of apps: the card as a sticker over its backdrop
+/// Instagram 限時動態 in the sheet's list of actions, with 儲存影像 (round 25 §C: in the row of apps, a
+/// `.share` activity, it never showed on the owner's iPhone): the card as a sticker over its backdrop
 /// (``InstagramStories``). The sticker and backdrop are drawn when it is chosen; the card's link goes
 /// on the pasteboard with them (copied, for Instagram's link sticker), the app's toast says what to
 /// do with it, and Instagram opens a moment later, once it can be read (round 8 §9.2). UIKit calls
@@ -211,7 +214,7 @@ nonisolated final class InstagramStoriesActivity: UIActivity, @unchecked Sendabl
         super.init()
     }
 
-    override class var activityCategory: UIActivity.Category { .share }
+    override class var activityCategory: UIActivity.Category { .action }
     override var activityType: UIActivity.ActivityType? { Self.type }
     override var activityTitle: String? { title }
     override var activityImage: UIImage? { image }

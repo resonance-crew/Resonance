@@ -5,7 +5,7 @@ import SwiftUI
 
 /// A story, laid out as the web reader sets it (src/styles/story.css `.story-prose`) in the story's
 /// own type (``StoryTypography``: by its script and the window, its words growing with the person's
-/// text size up to 2×): a CJK story in Noto Sans TC, justified, under Noto Serif TC headings; a Latin
+/// text size up to 2×): a CJK story in Noto Sans TC, flush left, under Noto Serif TC headings; a Latin
 /// one in DM Sans, ragged, under Playfair. The pen's quote rail, photos in organic clips, card links
 /// as embedded cards, links standing alone as their page's card (when the story has one), tables as
 /// rules and words (``StoryTableView``), and blank-line markers as air. Vertical rhythm follows CSS

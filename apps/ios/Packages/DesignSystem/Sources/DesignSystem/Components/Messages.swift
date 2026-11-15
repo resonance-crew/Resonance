@@ -356,7 +356,8 @@ private struct BubblePicture: View {
             .overlay {
                 LazyImage(url: url) { state in
                     if let image = state.image {
-                        image.resizable().scaledToFill()
+                        // A shared card's cover on its frame (round 25 §G1); a link's picture has none.
+                        FramedCover(image, pictureSize: state.imageContainer?.image.size)
                     } else if state.error != nil {
                         Color.clear.onAppear(perform: onError)
                     }
@@ -570,6 +571,8 @@ public struct SharedCardSection: View {
     let title: String
     let excerpt: String?
     let imageURL: URL?
+    /// The card's cover frame (round 25 §G1): its 1.91 : 1 band is cut from it.
+    public var coverFrame: CoverFraming?
     let accentHue: Double?
     let source: String
     let onOpen: (() -> Void)?
@@ -604,6 +607,7 @@ public struct SharedCardSection: View {
             .padding(12)
             if let imageURL, !coverFailed {
                 BubblePicture(url: imageURL) { coverFailed = true }
+                    .coverFraming(coverFrame)
             } else {
                 let palette = CardPalette(accentHue: accentHue, position: 0)
                 ZStack {

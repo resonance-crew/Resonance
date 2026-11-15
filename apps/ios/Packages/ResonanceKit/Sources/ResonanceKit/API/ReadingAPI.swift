@@ -6,6 +6,7 @@ public typealias FeedPage = Components.Schemas.FeedPage
 public typealias CardDetail = Components.Schemas.CardDetail
 public typealias Profile = Components.Schemas.Profile
 public typealias Author = Components.Schemas.Author
+public typealias CardTranslation = Components.Schemas.TranslationResponse
 
 /// The reading side of /api/v1 (feed, card page, author page) as plain async
 /// calls: each returns the contract's type or throws an `APIFailure` whose
@@ -61,6 +62,24 @@ public struct ReadingAPI: Sendable {
         case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
         case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
         case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
+        case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
+        }
+    }
+
+    /// A published public story translated by AI into `to`, the reader's interface language (POST
+    /// /cards/{key}/translation, round 25 §F5): title and story only, never the author. Throws an `APIFailure`
+    /// with the answer's status — 404 (not one to translate), 413 (too long), 429 (today's translations spent),
+    /// 503 (the model failed or ran out of time: ask again later).
+    public func translate(_ key: String, to: Strings.Language) async throws -> CardTranslation {
+        let body = Components.Schemas.TranslationRequest(to: to == .zhTW ? .zhTW : .en)
+        switch try await client.translateCard(path: .init(key: key), body: .json(body)) {
+        case let .ok(r): return try r.body.json
+        case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
+        case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
+        case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
+        case let .contentTooLarge(r): throw APIFailure(try r.body.json, status: 413)
+        case let .tooManyRequests(r): throw APIFailure(try r.body.json, status: 429)
+        case let .serviceUnavailable(r): throw APIFailure(try r.body.json, status: 503)
         case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
         }
     }

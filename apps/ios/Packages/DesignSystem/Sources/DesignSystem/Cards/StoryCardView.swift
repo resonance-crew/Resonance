@@ -18,6 +18,9 @@ public struct StoryCardContent: Sendable, Identifiable {
     public var accentHue: Double?
     /// The recommender's margin note (「因為…」), if any.
     public var reason: String?
+    /// The title and excerpt are an AI translation (round 25 §F7): the language they are in, and what the small globe
+    /// at the foot row's end is named for VoiceOver (「AI 翻譯」). Nil: the card as written.
+    public var translation: (language: String, mark: String)?
 
     public init(id: String, title: String, excerpt: String, authorName: String, authorInitials: String,
                 authorImageURL: URL?, avatarSeed: Double, readTime: String, tags: [String],
@@ -56,6 +59,7 @@ public struct StoryCardView: View {
     /// A quiet line under the byline (the trash shelf's 「還原後公開 · 23 天後永久刪除」).
     var footnote: String?
     @State private var hovered = false
+    @Environment(\.locale) private var locale
 
     /// `underBar`: the first card of a page whose bar's pen line is its top edge (home): no rule of
     /// its own on top, and its paper reaches up under the bar's wave (design §2). `bordered`: the
@@ -126,11 +130,15 @@ public struct StoryCardView: View {
                 .padding(.top, 8)
             }
 
-            CSSText(content.title, font: AppFonts.scaledUIFont(.heading, size: 18, weight: .bold), lineHeight: 1.3)
-                .accessibilityAddTraits(.isHeader)
-                .readingMark(.cardWords)
+            Group {
+                CSSText(content.title, font: AppFonts.scaledUIFont(.heading, size: 18, weight: .bold), lineHeight: 1.3)
+                    .accessibilityAddTraits(.isHeader)
+                    .readingMark(.cardWords)
 
-            CSSText(content.excerpt, font: AppFonts.scaledUIFont(.body, size: 14), lineHeight: 1.65, color: Tokens.UI.textMuted)
+                CSSText(content.excerpt, font: AppFonts.scaledUIFont(.body, size: 14), lineHeight: 1.65, color: Tokens.UI.textMuted)
+            }
+            // A translation is set in its own language (its type follows the locale's faces).
+            .environment(\.locale, content.translation.map { Locale(identifier: $0.language) } ?? locale)
 
             StoryCardSeparator(palette: palette, seed: seed)
 
@@ -146,6 +154,12 @@ public struct StoryCardView: View {
                 }
                 .readingMark(.cardFoot)
                 Spacer()
+                if let translation = content.translation {
+                    // The title and excerpt are AI's (round 25 §F7): the globe at 12 in the meta ink.
+                    OrganicIcon(.globe, size: 12, color: Tokens.textMuted, strokeWidth: Tokens.inkLight)
+                        .accessibilityElement()
+                        .accessibilityLabel(translation.mark)
+                }
                 if !isPreview {
                     OrganicIcon(.arrowRight, size: 18, strokeWidth: Tokens.ink)
                         .foregroundStyle(Tokens.text.opacity(0.28))

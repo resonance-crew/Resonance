@@ -8,8 +8,8 @@ import UIKit
 @testable import Resonance
 
 /// The card page's reader in the story's type (reading-type §6, §8): each block's face, size,
-/// tracking, alignment and colour from `StoryTypography`; justified Chinese spread between its
-/// characters as a browser does, never only at its spaces; the rhythm between blocks; the title's
+/// tracking, alignment and colour from `StoryTypography`; Chinese set flush left with its tracking
+/// unspread (round 25 §H); the rhythm between blocks; the title's
 /// clauses kept whole and its lines balanced; and the script read off the title and story together.
 @MainActor @Suite struct StoryReaderTests {
     private let zhPhone = StoryTypography(script: .cjk, compact: true)
@@ -42,7 +42,7 @@ import UIKit
 
     // MARK: Blocks
 
-    @Test func aCJKParagraphIsNotoSansTrackedJustifiedWithBoldItalicLinksAndCodeInTheStorysWay() {
+    @Test func aCJKParagraphIsNotoSansTrackedFlushLeftWithBoldItalicLinksAndCodeInTheStorysWay() {
         let style = ProseStyle.body(zhPhone, language: "zh-TW")
         #expect(style.font.familyName == "Noto Sans TC" && style.font.pointSize == 17)
         #expect(style.lineHeight == 1.8)
@@ -52,7 +52,7 @@ import UIKit
         ])
         let plain = attributes(text)
         #expect(abs((plain[.kern] as? CGFloat ?? 0) - 0.03 * 17) < 0.001)
-        #expect((plain[.paragraphStyle] as? NSParagraphStyle)?.alignment == .justified)
+        #expect((plain[.paragraphStyle] as? NSParagraphStyle)?.alignment == .natural)
         #expect((plain[.paragraphStyle] as? NSParagraphStyle)?.lineBreakStrategy.contains(.pushOut) == true)
         #expect((plain[.paragraphStyle] as? NSParagraphStyle)?.minimumLineHeight == 17 * 1.8)
         #expect(same(plain[.foregroundColor], Tokens.text))
@@ -118,11 +118,11 @@ import UIKit
         #expect(family(attributes(heading, at: 4)[.font]) == "Playfair Display")
     }
 
-    // MARK: Justified Chinese
+    // MARK: Flush-left Chinese (round 25 §H)
 
     /// `text` laid out `width` wide in TextKit, as the reader's text view does.
     private func laidOut(_ text: NSAttributedString, width: CGFloat) -> (NSTextStorage, NSLayoutManager, NSTextContainer) {
-        let storage = NSTextStorage(attributedString: StoryJustification.prepared(text))
+        let storage = NSTextStorage(attributedString: text)
         let layout = NSLayoutManager()
         let container = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
         container.lineFragmentPadding = 0
@@ -132,53 +132,19 @@ import UIKit
         return (storage, layout, container)
     }
 
-    private func lineWidths(_ layout: NSLayoutManager, _ container: NSTextContainer, _ storage: NSTextStorage) -> [CGFloat] {
-        var out: [CGFloat] = []
-        let text = storage.string as NSString
-        layout.enumerateLineFragments(forGlyphRange: layout.glyphRange(for: container)) { _, _, _, glyphs, _ in
-            var chars = layout.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
-            while chars.length > 0, text.character(at: NSMaxRange(chars) - 1) == 0x20 { chars.length -= 1 }
-            let visible = layout.glyphRange(forCharacterRange: chars, actualCharacterRange: nil)
-            out.append(layout.boundingRect(forGlyphRange: visible, in: container).maxX)
-        }
-        return out
-    }
-
-    @Test func justifiedChineseMeetsBothEdgesSharedBetweenItsCharactersNotOnlyAtItsSpaces() {
+    @Test func chineseStartsAtTheColumnsEdgeAndEndsRaggedItsTrackingNeverSpread() {
         let story = "那年我用 iPhone 記下每一次配速……教練只說：don’t rush. 他說得很輕，像是怕吵醒什麼。我一直以為跑步是跟時間比賽，後來才知道是跟自己的呼吸說話。"
         let text = ProseStyle.body(zhPhone).attributed([InlineRun(story)])
-        let width: CGFloat = 335
-        let (storage, layout, container) = laidOut(text, width: width)
-        let ragged = lineWidths(layout, container, storage)
-        let lines = StoryJustification.lines(layout, container)
-        #expect(ragged.count >= 3)
-        #expect(StoryJustification.apply(storage: storage, layoutManager: layout, container: container))
-        // The same line breaks, every line but the last now at the column's edge; the last as it fell.
-        #expect(StoryJustification.lines(layout, container) == lines)
-        let justified = lineWidths(layout, container, storage)
-        for w in justified.dropLast() { #expect(abs(w - width) < 0.6, "a full line ends at the edge: \(w)") }
-        #expect(abs(justified.last! - ragged.last!) < 0.01)
-        // The room went between characters, not into the two spaces round 「iPhone」 alone: the space
-        // after 「用」 grew by no more than the gap after any Han character on that line did.
+        let (storage, layout, container) = laidOut(text, width: 335)
+        var starts: [CGFloat] = []
+        layout.enumerateLineFragments(forGlyphRange: layout.glyphRange(for: container)) { _, used, _, _, _ in starts.append(used.minX) }
+        #expect(starts.count >= 3)
+        for x in starts { #expect(abs(x) < 0.01, "every line starts at the start edge: \(x)") }
+        // Every character keeps the body's +0.03em: nothing is spread to meet the far edge.
         let s = storage.string as NSString
-        let kern = { (i: Int) in storage.attribute(.kern, at: i, effectiveRange: nil) as? CGFloat ?? 0 }
-        let space = s.range(of: " ").location
-        let han = s.range(of: "年").location
-        #expect(kern(space) > 0.03 * 17 && abs(kern(space) - kern(han)) < 0.01)
-        // Never inside a Latin word: 「iPhone」's letters keep the body's tracking.
-        let i = s.range(of: "iPhone").location
-        for k in i..<(i + 5) { #expect(abs(kern(k) - 0.03 * 17) < 0.001) }
-    }
-
-    @Test func aRaggedOrLatinParagraphIsLeftAsItIs() {
-        let latin = ProseStyle.body(enPhone).attributed([InlineRun(String(repeating: "Every May my grandmother dried the plums. ", count: 4))])
-        #expect(!StoryJustification.wanted(latin))
-        let (storage, layout, container) = laidOut(latin, width: 335)
-        #expect(!StoryJustification.apply(storage: storage, layoutManager: layout, container: container))
-        // Where the room may go: a space takes it, a Latin pair doesn't, a CJK character on either side does.
-        #expect(StoryJustification.opportunity(0x20, 0x61) && !StoryJustification.opportunity(0x61, 0x62))
-        #expect(StoryJustification.opportunity(0x96E8, 0x61) && StoryJustification.opportunity(0x61, 0x96E8))
-        #expect(!StoryJustification.opportunity(0x96E8, 0x20))
+        for k in [s.range(of: "年").location, s.range(of: " ").location, s.range(of: "iPhone").location] {
+            #expect(abs((storage.attribute(.kern, at: k, effectiveRange: nil) as? CGFloat ?? 0) - 0.03 * 17) < 0.001)
+        }
     }
 
     // MARK: Rhythm

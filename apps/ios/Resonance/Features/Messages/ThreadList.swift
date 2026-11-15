@@ -883,6 +883,7 @@ extension SharedCardSection {
             readTime: L10n.App.readMinutes(count: card.readMinutes),
             title: card.title, excerpt: card.excerpt, imageURL: card.imageUrl.flatMap(URL.init(string:)),
             accentHue: card.accentHue, source: Self.source(card), onOpen: onOpen)
+        coverFrame = card.coverFraming
     }
 
     /// The source line's word: 「私人卡」 for a card only its author (and whoever they sent it to) reads, else 「共振」.
