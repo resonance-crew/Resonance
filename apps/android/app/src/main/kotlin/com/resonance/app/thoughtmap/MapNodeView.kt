@@ -1,5 +1,7 @@
 package com.resonance.app.thoughtmap
 
+import com.resonance.design.CoverFit
+import com.resonance.design.CoverFraming
 import com.resonance.design.generated.LocalResonanceColors
 import com.resonance.design.generated.ResonanceColors
 import com.resonance.design.generated.HueRole
@@ -248,7 +250,7 @@ fun MapNodeView(
                 }
             },
     ) {
-        if (thumb != null) MapThumb(thumb, hue, seed, Modifier.offset((16 + NodeTextLayout.width - 56).dp, (14 + 2).dp))
+        if (thumb != null) MapThumb(thumb, hue, seed, Modifier.offset((16 + NodeTextLayout.width - 56).dp, (14 + 2).dp), card.mediaFrame.takeIf { card.mediaUrl != null })
         // The meta row: the visibility glyph (the lock for every 私人卡, published or not: round 9 C4) and the tags,
         // 8 apart, under the body's 126 and the 8 gap — stopping 8 short of 移除 while it shows (`padding-right: 22px`).
         Row(
@@ -276,7 +278,7 @@ fun MapNodeView(
 
 /** NodeThumb: 56×56 in a wobbly clip, the picture overscanned 4px each side and decoded for the largest zoom, not the full file. */
 @Composable
-private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier) {
+private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier, frame: CoverFraming? = null) {
     val context = LocalContext.current
     val density = LocalDensity.current.density
     val clip = remember(seed) {
@@ -305,7 +307,8 @@ private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier)
             AsyncImage(
                 model = request,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
+                contentScale = CoverFit.scale(frame),
+                alignment = CoverFit.alignment(frame),
                 modifier = Modifier.requiredSize(64.dp).offset((-4).dp, (-4).dp),
             )
         }

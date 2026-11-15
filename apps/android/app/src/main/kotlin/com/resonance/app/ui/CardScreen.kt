@@ -651,7 +651,7 @@ private fun ArticleHead(
     if (card.imageUrl != null) {
         // While it is on its way the cover shimmers in the card's own hue (CardDetailClient's `hue`).
         WithSkeletonHue(card.accentHue ?: 55.0) {
-            OrganicImage(card.imageUrl, (card.accentHue ?: 55.0) + 11, Modifier.fillMaxWidth().aspectRatio(1 / 0.52f).mascotMark("cover")) {
+            OrganicImage(card.imageUrl, (card.accentHue ?: 55.0) + 11, Modifier.fillMaxWidth().aspectRatio(1 / 0.52f).mascotMark("cover"), frame = card.framing) {
                 Box(Modifier.fillMaxSize().background(Tokens.CreamDark))
             }
         }

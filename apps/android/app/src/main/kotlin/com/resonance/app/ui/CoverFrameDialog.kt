@@ -1,0 +1,132 @@
+package com.resonance.app.ui
+
+import android.content.Context
+import android.view.InputDevice
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import com.resonance.design.AppFonts
+import com.resonance.design.COVER_STAGE_MAX
+import com.resonance.design.CoverFraming
+import com.resonance.design.CropMoveLabels
+import com.resonance.design.CropState
+import com.resonance.design.FrameCrop
+import com.resonance.design.FrameCropStage
+import com.resonance.design.ModalActions
+import com.resonance.design.ModalGap
+import com.resonance.design.ModalTitle
+import com.resonance.design.OrganicIcon
+import com.resonance.design.OrganicImageShape
+import com.resonance.design.OrganicModal
+import com.resonance.design.OrganicSlider
+import com.resonance.design.QuietButton
+import com.resonance.design.QuietButtonPadX
+import com.resonance.design.cropStageWidth
+import com.resonance.design.generated.IconName
+import com.resonance.design.generated.Tokens
+import com.resonance.kit.l10n.L10n
+
+/** The feed card's cover shape (height ÷ width): the frame a cover is framed in (round 25 §G2.3). */
+internal const val COVER_FRAME_RATIO = 0.62f
+
+/** TalkBack's moves on a crop stage (round 25 §G3.8). */
+internal val CropMoves: CropMoveLabels
+    get() = CropMoveLabels(L10n.Crop.moveUp, L10n.Crop.moveDown, L10n.Crop.moveLeft, L10n.Crop.moveRight)
+
+/** Whether a mouse or a trackpad is attached: the hint then speaks of the wheel, not a pinch (round 25 §G2.3). */
+internal fun Context.hasPointer(): Boolean =
+    InputDevice.getDeviceIds().any { id ->
+        InputDevice.getDevice(id)?.let { !it.isVirtual && (it.supportsSource(InputDevice.SOURCE_MOUSE) || it.supportsSource(InputDevice.SOURCE_TOUCHPAD)) } == true
+    }
+
+/**
+ * The zoom row under a crop stage (round 25 §G3.3): − · the slider · +, the slider on a multiplying scale (ln z: a
+ * slide, a pinch and a wheel are one control) from 1 to [maxZoom], named [label] for TalkBack.
+ */
+@Composable
+internal fun CropZoomRow(z: Double, maxZoom: Double, label: String, enabled: Boolean = true, onZoom: (Double) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        OrganicIcon(IconName.Minus, size = 16.dp, color = Tokens.TextMuted)
+        OrganicSlider(
+            FrameCrop.sliderOf(z), { v -> if (enabled) onZoom(FrameCrop.zoomOf(v)) },
+            0f..FrameCrop.sliderOf(maxZoom), label,
+            Modifier.weight(1f), step = 0.005f,
+        )
+        OrganicIcon(IconName.Plus, size = 16.dp, color = Tokens.TextMuted)
+    }
+}
+
+/**
+ * 重設 (round 25 §G3.2): a quiet text button at the stage's start, shown once something has moved — it puts the
+ * picture back at the start (centred, zoom 1).
+ */
+@Composable
+internal fun CropResetRow(moved: Boolean, enabled: Boolean = true, onReset: () -> Unit) {
+    if (!moved) return
+    Box(Modifier.fillMaxWidth()) {
+        // Its words in line with the column (the quiet button's air pulled out).
+        QuietButton(L10n.Crop.reset, Modifier.offset(x = -QuietButtonPadX), enabled = enabled, onClick = onReset)
+    }
+}
+
+/**
+ * 調整封面 (round 25 §G2.3): the house modal over the cover's picture, framed in the feed card's shape (0.62, the
+ * cover's own outline), dimmed outside; the hint by input (touch: drag and pinch; a mouse: drag and wheel); the zoom
+ * slider; 重設 once something moved; 取消 · 完成. 完成 hands back the frame ([onDone]; null: the centre at zoom 1, as if
+ * none) — nothing is uploaded. Opens where [frame] left it.
+ */
+@Composable
+internal fun CoverFrameDialog(photo: ImageBitmap, frame: CoverFraming?, onCancel: () -> Unit, onDone: (CoverFraming?) -> Unit) {
+    val context = LocalContext.current
+    val pointer = remember(context) { context.hasPointer() }
+    val windowHeight = LocalConfiguration.current.screenHeightDp.toFloat()
+    var state by remember(photo) { mutableStateOf<CropState?>(null) }
+    OrganicModal(onCancel, L10n.Write.CoverFrame.title, seed = 91.0, closeLabel = L10n.Write.CoverFrame.cancel, maxWidth = 540.dp) {
+        BoxWithConstraints {
+            val width = cropStageWidth(maxWidth.value, windowHeight, COVER_STAGE_MAX, COVER_FRAME_RATIO).dp
+            val fw = width.value - 48f
+            val crop = remember(photo, fw) {
+                FrameCrop(photo.width.toDouble(), photo.height.toDouble(), fw.toDouble(), (fw * COVER_FRAME_RATIO).toDouble(), CoverFraming.MAX_ZOOM)
+            }
+            val shown = state ?: crop.stateOf(frame)
+            Column(verticalArrangement = Arrangement.spacedBy(ModalGap)) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ModalTitle(L10n.Write.CoverFrame.title)
+                    BasicText(
+                        if (pointer) L10n.Write.CoverFrame.hintPointer else L10n.Write.CoverFrame.hintTouch,
+                        style = AppFonts.body(13.5f, lineHeight = 1.5f, color = Tokens.TextMuted),
+                    )
+                }
+                Box(Modifier.fillMaxWidth().padding(top = 2.dp), contentAlignment = Alignment.Center) {
+                    FrameCropStage(
+                        photo, width, COVER_FRAME_RATIO, CoverFraming.MAX_ZOOM, shown, { state = it },
+                        L10n.Write.CoverFrame.stage, moves = CropMoves,
+                    ) { _, _ -> OrganicImageShape(91.0) }
+                }
+                CropZoomRow(shown.z, CoverFraming.MAX_ZOOM, L10n.Crop.zoom) { z -> state = crop.zoomTo(shown, z) }
+                CropResetRow(shown != CropState()) { state = CropState() }
+                ModalActions(
+                    L10n.Write.CoverFrame.cancel, onCancel, L10n.Write.CoverFrame.done,
+                    onVerb = { onDone(crop.framing(shown).takeUnless { it.isCentred }) },
+                )
+            }
+        }
+    }
+}

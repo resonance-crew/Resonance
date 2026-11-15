@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import com.resonance.design.CoverFraming
 import com.resonance.design.avatarFill
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.CubicBezierEasing
@@ -147,8 +148,12 @@ fun FeedCard.story(): StoryCardContent {
         imageLabel = imageLabel ?: title.take(24),
         accentHue = accentHue,
         reason = null,
+        imageFrame = framing,
     )
 }
+
+/** Where the card's cover is looked at (round 25 §G1, `imageFrame`), as the design draws it; null: centred. */
+val FeedCard.framing: CoverFraming? get() = imageFrame?.let { CoverFraming.of(it.cx, it.cy, it.zoom, it.ar) }
 
 /**
  * The colour family of each card of a list as it is shown (design note B3, CardPalette.palettes):
