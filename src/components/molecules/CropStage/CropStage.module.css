@@ -1,0 +1,100 @@
+/* The crop stage the profile photo and the cover share (round 25 §G3): stage → 14 → zoom row → 重設. */
+
+/* The content's width, which the stage takes up to its widest. */
+.room {
+  display: flex;
+  justify-content: center;
+}
+
+.stage {
+  position: relative;
+  flex: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  border-radius: 16px;
+}
+.stage:active {
+  cursor: grabbing;
+}
+.stage[data-busy] {
+  cursor: progress;
+}
+.stage:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: 3px;
+}
+
+/* The paper, cut to HandDrawnImage's outline: what the picture and the scrim are clipped to. */
+.paper {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--color-cream-dark);
+}
+
+.holder {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* 方向鍵移動，＋ − 縮放: on the keyboard's focus only (and named by the stage's aria-describedby always). */
+.keys {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--color-cream) 92%, transparent);
+  color: var(--color-text);
+  font-size: 12.5px;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  clip-path: inset(50%);
+  opacity: 0;
+}
+.stage:focus-visible .keys {
+  clip-path: none;
+  opacity: 1;
+}
+
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+.zoomGlyph {
+  flex: none;
+  color: var(--color-text-muted);
+}
+.slider {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 重設 once something has moved: its row keeps its height either way (nothing jumps). */
+.resetRow {
+  display: flex;
+  justify-content: center;
+  min-height: 36px;
+  margin-top: 6px;
+}
