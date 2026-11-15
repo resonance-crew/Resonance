@@ -297,7 +297,7 @@ ${JSON.stringify(groups[t], null, 2)}`, { label: `fix:${t}${round ? `:${round + 
       const settle = await run(`${SCOPE}
 
 In ${BASE.worktree} (${BASE.branch}) the fixers left uncommitted changes for these findings: ${JSON.stringify(trees.map((t, i) => ({ tree: t, report: fixes[i] })))}.
-1. Commit them one finding at a time where the files allow (\`git commit -- <paths>\`, never \`git add -A\`), house style (\`fix: <emoji> …\`, a body saying what failed and why), a \`Visual: <screens>: why\` or \`Visual: none — why\` line, the Co-Authored-By line your session instructions give.
+1. Commit them one finding at a time where the files allow (\`git commit -- <paths>\`, never \`git add -A\`; a new file needs \`git add <that path>\` first, and \`git status --short\` shows nothing of yours left afterwards), house style (\`fix: <emoji> …\`, a body saying what failed and why), a \`Visual: <screens>: why\` or \`Visual: none — why\` line, the Co-Authored-By line your session instructions give.
 2. Each printed with its exit code: \`npm run lint\`, \`npm run typecheck\`, \`npm test\`, and the app suites for the trees touched (${trees.join(', ')}).
 3. \`npm run -s acceptance -- ${ACC} --run --write --cwd ${BASE.worktree} --against ${SIGNED}; echo "exit=$?"\`.
 Return the schema.`, { label: `settle${round ? `:${round + 1}` : ''}`, phase: 'Fixes', schema: SETTLE, model: MODELS.mechanical })

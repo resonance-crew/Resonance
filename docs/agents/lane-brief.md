@@ -105,7 +105,9 @@ what all lanes did.
 
 - Small and coherent: one spec item or one acceptance item per commit where you can, so a broken screen can be
   bisected and a reviewer can tell an intended change from a regression.
-- Explicit paths: `git commit -- <paths>` (never `git add -A` / `git add .`).
+- Explicit paths: `git commit -- <paths>` (never `git add -A` / `git add .`). A file git doesn't know yet is not taken by
+  that: `git add <that path>` first, and after each commit `git status --short` must show nothing of yours left
+  (round 25: two review fixes committed their code and left their new test files untracked).
 - The repo's style (read `git log`): `type: <emoji> what changed, in plain words`, then a body that says why.
 - A commit that changes how a screen looks names it in a `Visual:` line (`Visual: thread, ios/messages: why`);
   one that changes none says `Visual: none — why`. The screenshot verdict reads these lines.
