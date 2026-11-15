@@ -165,7 +165,7 @@ object ShareCardRecipe {
             .copy(fontFeatureSettings = StoryType.LINING_FIGURES)
     }
 
-    /** The words' type for a story in [script]: the story's body face and tracking at its regular leading, justified for CJK. */
+    /** The words' type for a story in [script]: the story's body face and tracking at its regular leading, flush left in every script (round 25 §H). */
     fun wordsStyle(script: StoryScript, color: Color = PALETTE.Text): TextStyle {
         val type = StoryType(script, compact = false)
         return AppFonts.styleIn(type.bodyFamily, Words.SIZE, type.bodyWeight, type.bodyLeading, color, type.bodyTracking.em)

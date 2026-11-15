@@ -20,8 +20,8 @@ import com.resonance.kit.story.StoryScript
  * src/styles/story.css's `--s-*` picks). Which set applies depends on the story's script
  * ([StoryScripts][com.resonance.kit.story.StoryScripts]) and on whether the window is a phone's
  * ([compact]: the apps' compact class, the web's ≤ 640): a CJK story is a Ming title and headings
- * (Noto Serif TC 600, +0.02em) over a Hei body (Noto Sans TC, +0.03em, justified); a Latin story is
- * Playfair 700 over DM Sans, with its own sizes, no tracking, ragged.
+ * (Noto Serif TC 600, +0.02em) over a Hei body (Noto Sans TC, +0.03em); a Latin story is
+ * Playfair 700 over DM Sans, with its own sizes, no tracking. Both are set flush left, ragged (round 25 §H).
  *
  * Sizes are the web's px, which the apps count in sp (the title and body at [readingTextScale]
  * inside [ReadingTextScale]); gaps are dp at the normal text size — a gap in ems (paragraphs,
@@ -53,8 +53,12 @@ data class StoryType(val script: StoryScript, val compact: Boolean) {
     val bodyWeight: Int get() = 400
     /** `**bold**` in a story. */
     val boldWeight: Int get() = Tokens.StoryBold.toInt()
-    /** CJK text is justified, as Chinese is printed (its last line natural); Latin stays ragged (WCAG 1.4.8). */
-    val justified: Boolean get() = cjk
+    /**
+     * Never: every story's lines start at the column's start edge and end ragged, in every script
+     * (round 25 §H, the owner: 「全部靠左」 — a justified 19-character phone line spread each line by
+     * a different amount, up to 12 %). Kept as a property so the breaking below reads one answer.
+     */
+    val justified: Boolean get() = false
 
     // The title and the headings
 
@@ -131,10 +135,8 @@ data class StoryType(val script: StoryScript, val compact: Boolean) {
     // Breaking a story's lines (a StaticLayout of its prose)
 
     /**
-     * How a paragraph of the story is justified on this device: a CJK story between characters on
-     * API 35 and up (LineBreaker's inter-character mode — inter-word would leave Chinese ragged),
-     * ragged before that (line breaks are the same, only the right edge differs); a Latin story is
-     * always ragged. Never for a heading: headings stay at their start.
+     * How a paragraph of the story is justified on this device: never ([justified] is false for
+     * every script since round 25 §H), so always LineBreaker's none — the right edge ragged.
      */
     @SuppressLint("InlinedApi")
     fun justificationMode(sdk: Int = Build.VERSION.SDK_INT): Int =

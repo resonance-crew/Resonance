@@ -1,8 +1,8 @@
 package com.resonance.kit.story
 
 /**
- * How a story is set: CJK (a Ming title over a Hei body, justified) or Latin (Playfair over DM Sans,
- * ragged) — the web's `StoryScript` (src/lib/text/script.ts).
+ * How a story is set: CJK (a Ming title over a Hei body) or Latin (Playfair over DM Sans), both
+ * flush left and ragged (round 25 §H) — the web's `StoryScript` (src/lib/text/script.ts).
  */
 enum class StoryScript { Cjk, Latin }
 

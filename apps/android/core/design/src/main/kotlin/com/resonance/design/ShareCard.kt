@@ -217,9 +217,8 @@ fun ShareCard(model: ShareCardModel, cover: ImageBitmap?, modifier: Modifier = M
 }
 
 /**
- * The card's words in the story's body type at the recipe's size — exact CSS line boxes, a CJK
- * story's justified between characters where the device can (API 35+; Compose's own justify
- * stretches only spaces, which in Chinese are the gaps a link or a line break left), at most
+ * The card's words in the story's body type at the recipe's size — exact CSS line boxes, flush
+ * left and ragged in every script as the story sets them (round 25 §H), at most
  * [maxLines], cut with a tail "…" on a line of natural width, paragraph breaks kept.
  */
 @Composable
@@ -249,7 +248,7 @@ internal fun wordsLayout(text: String, type: StoryType, maxLines: Int, widthPx: 
     val full = wordsLayout(text, type, paint, widthPx)
     if (full.lineCount <= maxLines) return full
     // Cut after the last line that fits and end it with "…": the cut line is then the text's last,
-    // set natural rather than stretched to the edge as a justified line would be; a character less
+    // set natural, as every line is; a character less
     // at a time while the "…" would push it onto a line of its own.
     var end = full.getLineEnd(maxLines - 1)
     while (end > 0) {

@@ -21,8 +21,8 @@ import java.io.File
  * A story's type has one vocabulary (reading-type §3 and §8): every number comes from tokens.css's
  * "A story's type" — read here from the web's own file, not only from the generated Tokens — by
  * script and by window, the CJK story in Noto first (its title Noto Serif TC 600, its words Noto
- * Sans TC with their tracking, justified where the device can), the Latin story in Playfair over
- * DM Sans, ragged; and the CJK faces fall back per glyph to the Latin face, then the system.
+ * Sans TC with their tracking), the Latin story in Playfair over DM Sans, both flush left and
+ * ragged (round 25 §H); and the CJK faces fall back per glyph to the Latin face, then the system.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -57,7 +57,9 @@ class StoryTypeTest {
         assertEquals(token("--story-heading-weight").toInt(), cjkWide.headingWeight)
         assertEquals(AppFonts.Family.BodyCJK, cjkWide.bodyFamily)
         assertEquals(AppFonts.Family.HeadingCJK, cjkWide.headingFamily)
-        assertTrue(cjkWide.justified)
+        // Round 25 §H: flush left, ragged — never justified.
+        assertFalse(cjkWide.justified)
+        assertFalse(cjkPhone.justified)
     }
 
     @Test fun aLatinStoryIsSetInItsOwnNumbersWithoutTrackingAndRagged() {
@@ -139,9 +141,10 @@ class StoryTypeTest {
         assertEquals(Tokens.Text, words.color)
     }
 
-    @Test fun aCjkParagraphIsJustifiedWhereTheDeviceCanAndBrokenStrictly() {
+    @Test fun aCjkParagraphStartsAtTheStartEdgeOnEveryDeviceAndBreaksStrictly() {
         assertEquals(LineBreaker.JUSTIFICATION_MODE_NONE, cjkWide.justificationMode(sdk = 34))
-        assertEquals(LineBreaker.JUSTIFICATION_MODE_INTER_CHARACTER, cjkWide.justificationMode(sdk = 35))
+        assertEquals(LineBreaker.JUSTIFICATION_MODE_NONE, cjkWide.justificationMode(sdk = 35))
+        assertEquals(LineBreaker.JUSTIFICATION_MODE_NONE, cjkPhone.justificationMode(sdk = 36))
         assertEquals(LineBreaker.JUSTIFICATION_MODE_NONE, latinWide.justificationMode(sdk = 36))
         assertFalse(cjkWide.strictLineBreaks(sdk = 32))
         assertTrue(cjkWide.strictLineBreaks(sdk = 33))
