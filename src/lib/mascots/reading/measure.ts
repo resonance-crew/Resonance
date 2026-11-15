@@ -52,6 +52,39 @@ function cardsIn(root: ParentNode, page: Page): SceneCard[] {
     .filter((c): c is SceneCard => !!c);
 }
 
+/**
+ * The translation an element's own transform carries at this moment, px — the computed value (a browser gives
+ * `matrix(…)` / `matrix3d(…)`, mid-transition too; jsdom hands back what was written, so `translate…()` reads too).
+ */
+export function translationOf(win: Window, el: Element | null | undefined): { x: number; y: number } {
+  if (!el) return { x: 0, y: 0 };
+  const t = win.getComputedStyle(el).transform || '';
+  if (!t || t === 'none') return { x: 0, y: 0 };
+  const nums = (body: string) => body.split(',').map((v) => parseFloat(v));
+  const m3 = /^matrix3d\(([^)]*)\)/.exec(t);
+  if (m3) {
+    const v = nums(m3[1]);
+    return { x: v[12] || 0, y: v[13] || 0 };
+  }
+  const m = /^matrix\(([^)]*)\)/.exec(t);
+  if (m) {
+    const v = nums(m[1]);
+    return { x: v[4] || 0, y: v[5] || 0 };
+  }
+  let x = 0;
+  let y = 0;
+  for (const [, fn, body] of t.matchAll(/(translate(?:X|Y|3d)?)\(([^)]*)\)/g)) {
+    const v = nums(body);
+    if (fn === 'translateX') x += v[0] || 0;
+    else if (fn === 'translateY') y += v[0] || 0;
+    else {
+      x += v[0] || 0;
+      y += v[1] || 0;
+    }
+  }
+  return { x, y };
+}
+
 /** The home feed's or a card page's scene, measured now. */
 export function readingScene(doc: Document, layer: HTMLElement): { scene: ReadingScene; page: Page; header: number } {
   const win = doc.defaultView as Window;
@@ -92,7 +125,11 @@ export function readingScene(doc: Document, layer: HTMLElement): { scene: Readin
     const rail = article.parentElement?.querySelector('aside');
     scene.rail = rail ? page.rect(rail) : null;
     const respond = mark('respond', article);
-    scene.respond = page.rect(respond?.querySelector('[role="group"]') ?? null);
+    // The bar at rest: ReadAfterArea holds its container at translateY(10px) until it fades in, and nothing
+    // measures again when it rises — so take away whatever translation the container carries right now.
+    const bar = page.rect(respond?.querySelector('[role="group"]') ?? null);
+    const lift = translationOf(win, respond);
+    scene.respond = bar ? { ...bar, x: bar.x - lift.x, y: bar.y - lift.y } : null;
     if (scene.respond) {
       const above = [story, respond?.previousElementSibling].map((el) => page.rect(el)).filter((r): r is Rect => !!r && r.y < scene.respond!.y);
       scene.respondCeiling = above.length ? Math.max(...above.map((r) => r.y + r.h)) + 2 : null;
