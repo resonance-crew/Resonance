@@ -18,7 +18,8 @@ describe('the variant sets', () => {
     // No state, no extended-only screen in a release run.
     expect(devicesFor('android', 'release')).toEqual(['phone', 'tablet']);
     expect(keys('android', 'phone', 'release').some((k) => k.startsWith('thread-attach') || k.startsWith('thread-keyboard'))).toBe(false);
-    expect(estimate('release').captures).toBe(303);
+    // round 25: four web screens (settings-language, card-translated, home-translated, card-framed) × the web's five
+    expect(estimate('release').captures).toBe(323);
   });
 
   it('adds the device states after the device they run on, and only in the extended set', () => {
