@@ -22,6 +22,8 @@ public struct ShareCardContent {
     public var script: StoryScript
     /// The cover, already loaded; nil draws the layout without one.
     public var cover: UIImage?
+    /// Where the cover is looked at (round 25 §G1): nil, its centre.
+    public var coverFrame: CoverFraming?
     public var byline: Byline
     /// The published date in the app's language (2026年10月10日 / Oct 10, 2026).
     public var date: String?
@@ -122,6 +124,7 @@ public struct ShareCardView: View {
         VStack(alignment: .leading, spacing: 0) {
             if let cover = content.cover {
                 ShareCover(image: cover, width: inner, height: inner * R.coverRatio, seed: content.seed + Double(R.coverSeedOffset))
+                    .coverFraming(content.coverFrame)
                     .padding(.bottom, R.coverGapBelow)
             }
             ShareText(content.title, type: R.titleType(content.script),
@@ -165,7 +168,8 @@ struct ShareCover: View {
     var body: some View {
         let bleed = (min(width, height) * 0.05 + 6 + 4).rounded(.up)
         ZStack {
-            Image(uiImage: image).resizable().scaledToFill()
+            // The share picture cuts its 0.5 box from the cover's frame (round 25 §G1).
+            FramedCover(Image(uiImage: image), pictureSize: image.size)
             GrainLayer(shape: Rectangle(), mode: .tile, opacity: ShareCardRecipe.coverGrain * 2, tile: "grain-overlay")
         }
         .frame(width: width + bleed * 2, height: height + bleed * 2)

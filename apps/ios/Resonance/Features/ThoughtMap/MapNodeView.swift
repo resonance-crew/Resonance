@@ -125,7 +125,11 @@ struct MapNodeView: View, Equatable {
                             .alignmentGuide(.top) { $0[.firstTextBaseline] }
                             .offset(y: line.baseline)
                     }
-                    if let thumb { thumbnail(thumb).offset(x: NodeTextLayout.width - 56, y: 2) }
+                    // The cover's square cut from its frame; a picture from the story has none (round 25 §G1).
+                    if let thumb {
+                        thumbnail(thumb).coverFraming(card.mediaURL != nil ? card.coverFrame : nil)
+                            .offset(x: NodeTextLayout.width - 56, y: 2)
+                    }
                 }
                 .frame(width: NodeTextLayout.width, height: NodeTextLayout.bodyHeight, alignment: .topLeading)
                 .clipped()

@@ -128,7 +128,7 @@ import UniformTypeIdentifiers
         let white = try #require(context.makeImage())
         var crop = AvatarCrop(imageSize: CGSize(width: 400, height: 400), mask: 272)
         crop.zoom(to: 2)
-        let stage = AvatarCropStage(image: white, crop: .constant(crop), side: 320)
+        let stage = CropStage(image: white, crop: .constant(crop), size: CGSize(width: 320, height: 320), outline: .avatar, label: "")
         let renderer = ImageRenderer(content: stage)
         renderer.scale = 1
         let image = try #require(renderer.cgImage)

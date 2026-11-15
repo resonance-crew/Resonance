@@ -210,11 +210,13 @@ struct PublishStep: View {
                               underBar: Self.bandUnderBar(model, showsBar: !inlineHeading, compact: compact), palette: palette.index)
                     .coverSlot { CoverSlot(model: model, palette: palette, onPick: onPickCover) }
                     .preview()
+                    .coverFraming(model.values.imageFrame)
                     .padding(.horizontal, -20)
             } else {
                 StoryCardView(content, position: 0, bordered: true, palette: palette.index)
                     .coverSlot { CoverSlot(model: model, palette: palette, onPick: onPickCover) }
                     .preview()
+                    .coverFraming(model.values.imageFrame)
                     .frame(maxWidth: Self.previewMaxWidth, alignment: .leading)
             }
         }
@@ -396,6 +398,12 @@ private struct CoverSlot: View {
     /// The preview's family: the cover's controls wear it (round 9 §8).
     let palette: CardPalette
     var onPick: () -> Void
+    @Environment(\.window) private var window
+    @Environment(\.dynamicTypeSize) private var typeSize
+    /// The cover read for 調整封面 (round 25 §G2), while its dialog is open.
+    @State private var framing: CGImage?
+    /// The picture is being read: 調整位置 shows its small loader.
+    @State private var readingFrame = false
 
     var body: some View {
         GeometryReader { geo in
@@ -411,7 +419,14 @@ private struct CoverSlot: View {
                     .accessibilityElement(children: .combine)
                 } else if model.values.imageURL != nil {
                     Color.clear
-                        .overlay(alignment: .bottomTrailing) { changeChip.padding(10) }
+                        // 調整位置 left of 更換封面, 8 between them (round 25 §G2).
+                        .overlay(alignment: .bottomTrailing) {
+                            HStack(spacing: 8) {
+                                adjustChip
+                                changeChip
+                            }
+                            .padding(10)
+                        }
                         // A replacement or a drawn one failed: the old cover stays, and a chip over it says why.
                         .overlay(alignment: .topLeading) {
                             if let error = model.mediaError {
@@ -449,6 +464,41 @@ private struct CoverSlot: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .animation(.easeOut(duration: 0.16), value: model.mediaError)
+        }
+        .organicModal(isPresented: Binding(get: { framing != nil }, set: { if !$0 { framing = nil } }),
+                      seed: 89, maxWidth: CoverFrameContent.maxWidth, closeLabel: L10n.Write.CoverFrame.cancel) {
+            if let framing {
+                CoverFrameContent(image: framing, frame: model.values.imageFrame, seed: Self.coverSeed,
+                                  windowHeight: window.height, onCancel: { self.framing = nil }) { frame in
+                    model.setCoverFrame(frame)
+                    self.framing = nil
+                }
+            }
+        }
+    }
+
+    /// The preview's cover outline (``StoryCardView`` at position 0: seed 13, its picture + 5).
+    static let coverSeed: Double = 18
+
+    /// 調整位置: the chip beside 更換封面, the same face; at the largest text sizes its glyph alone (still named). It
+    /// reads the cover (its small loader meanwhile) and opens 調整封面 over it.
+    private var adjustChip: some View {
+        let button = typeSize.isAccessibilitySize
+            ? OrganicButton(icon: .frame, label: L10n.Write.coverAdjust, variant: .paper, size: .sm) { adjust() }
+            : OrganicButton(L10n.Write.coverAdjust, icon: .frame, variant: .paper, size: .sm) { adjust() }
+        return button
+            .face(.cardChip(palette), outline: palette.border)
+            .loading(readingFrame)
+            .fixedSize()
+            .frame(minHeight: 44)
+    }
+
+    private func adjust() {
+        guard !readingFrame, let url = model.values.imageURL else { return }
+        readingFrame = true
+        Task { @MainActor in
+            defer { readingFrame = false }
+            if let image = await CoverFramePicture.load(url) { framing = image } else { model.coverFrameUnreadable() }
         }
     }
 

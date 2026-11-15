@@ -36,7 +36,8 @@ public struct OrganicImage<Placeholder: View>: View {
                         if let image = state.image {
                             ZStack {
                                 placeholder
-                                image.resizable().scaledToFill()
+                                // On the cover's frame when it has one (round 25 §G1), centred otherwise.
+                                FramedCover(image, pictureSize: state.imageContainer?.image.size)
                             }
                         } else if state.error != nil {
                             placeholder
@@ -66,13 +67,20 @@ public func organicImageBleed(_ w: CGFloat, _ h: CGFloat) -> CGFloat {
     (min(w, h) * 0.05 + 6 + 4).rounded(.up)
 }
 
-/// The clip, drawn in the bled frame's coordinates (so offset by `bleed`).
-nonisolated struct OrganicImageShape: Shape {
+/// The clip, drawn in the bled frame's coordinates (so offset by `bleed`). Public for the cover's framing stage
+/// (round 25 §G3), whose frame is the cover's own outline (`bleed` 0).
+public nonisolated struct OrganicImageShape: Shape {
     let seed: Double
     let radius: Double
     let bleed: Double
 
-    func path(in rect: CGRect) -> Path {
+    public init(seed: Double, radius: Double, bleed: Double) {
+        self.seed = seed
+        self.radius = radius
+        self.bleed = bleed
+    }
+
+    public func path(in rect: CGRect) -> Path {
         let w = rect.width - bleed * 2, h = rect.height - bleed * 2
         guard w > 0, h > 0 else { return Path() }
         // Kept by the geometry cache: a feed of covers asks for the same few sizes on every layout.
@@ -117,7 +125,8 @@ public struct RemoteImage: View {
 
     public var body: some View {
         LazyImage(request: ImageRequest(url: url, processors: [.resize(size: pixelSize, unit: .pixels, contentMode: .aspectFill)])) { state in
-            if let image = state.image { image.resizable().scaledToFill() }
+            // On the cover's frame when it has one (round 25 §G1): the decoded thumbnail keeps the picture's proportions.
+            if let image = state.image { FramedCover(image, pictureSize: state.imageContainer?.image.size) }
         }
     }
 }

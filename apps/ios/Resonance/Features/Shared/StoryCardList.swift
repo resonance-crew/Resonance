@@ -50,6 +50,8 @@ struct StoryCardList: View {
         return NavigationLink(value: Route.card(card.routeKey)) {
             StoryCardView(card.story, position: position, isLast: i == cards.count - 1, underBar: underBar && i == 0, bordered: bordered,
                           palette: palette)
+                // Its 0.62 cut from the cover's frame (round 25 §G1).
+                .coverFraming(card.coverFraming)
         }
         .buttonStyle(.plain)
         // Where the paper puppets may sit (round 19): its top as drawn (round 20: its line stays in front
@@ -246,6 +248,7 @@ struct MiniCardList: View {
             ForEach(Array(cards.enumerated()), id: \.element.id) { i, card in
                 NavigationLink(value: Route.card(card.routeKey)) {
                     MiniStoryCardView(card.mini, position: i, isLast: i == cards.count - 1, palette: palettes[i])
+                        .coverFraming(card.coverFraming)
                 }
                 .buttonStyle(.plain)
                 .onAppear { session.cardPreviews.remember(card) }

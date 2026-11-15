@@ -1,3 +1,4 @@
+import DesignSystem
 import FirebaseFirestore
 import Foundation
 import ResonanceKit
@@ -41,6 +42,8 @@ struct MapCard: Equatable, Sendable {
     let publishedAt: Date?
     let mediaURL: URL?
     let accentHue: Double?
+    /// The cover's frame (round 25 §G1): the node's square thumb is cut from it. Nil: the centre.
+    var coverFrame: CoverFraming? = nil
 }
 
 extension MapCard {
@@ -50,7 +53,7 @@ extension MapCard {
     nonisolated init(summary c: FeedCard) {
         self.init(id: c.id, authorId: c.author?.value1.id ?? "", slug: c.slug, title: c.title, story: c.excerpt,
                   tags: c.tags, visibility: c.visibility.rawValue, publishedAt: c.publishedAt.flatMap(ISO8601.date),
-                  mediaURL: c.imageUrl.flatMap(URL.init(string:)), accentHue: c.accentHue)
+                  mediaURL: c.imageUrl.flatMap(URL.init(string:)), accentHue: c.accentHue, coverFrame: c.coverFraming)
     }
 }
 
@@ -286,7 +289,7 @@ struct ThoughtMapService {
             visibility: d["visibility"] as? String ?? "public",
             publishedAt: (d["publishedAt"] as? Timestamp)?.dateValue(),
             mediaURL: (media?["type"] as? String) == "image" ? (media?["url"] as? String).flatMap(URL.init(string:)) : nil,
-            accentHue: num(d["accentHue"]))
+            accentHue: num(d["accentHue"]), coverFrame: CoverFrames.of(media: media))
     }
 
     nonisolated private static func num(_ v: Any?) -> Double? { (v as? NSNumber)?.doubleValue }

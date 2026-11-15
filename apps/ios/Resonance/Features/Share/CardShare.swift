@@ -46,10 +46,12 @@ enum CardSharing {
         } else {
             byline = .anonymous(label: L10n.Card.anonymousAuthor)
         }
-        return ShareCardContent(title: card.title, words: SharePassages.opening(detail.story),
-                                script: ScriptRule.storyScript(title: card.title, story: detail.story), cover: cover, byline: byline,
-                                date: publishedDate(card), palette: ShareCardContent.palette(accentHue: card.accentHue, cardId: card.id),
-                                seed: ShareCardContent.seed(cardId: card.id))
+        var content = ShareCardContent(title: card.title, words: SharePassages.opening(detail.story),
+                                       script: ScriptRule.storyScript(title: card.title, story: detail.story), cover: cover, byline: byline,
+                                       date: publishedDate(card), palette: ShareCardContent.palette(accentHue: card.accentHue, cardId: card.id),
+                                       seed: ShareCardContent.seed(cardId: card.id))
+        content.coverFrame = card.coverFraming
+        return content
     }
 
     static func anonymous(_ detail: CardDetail) -> Bool { detail.anonymous || detail.card.anonymous }

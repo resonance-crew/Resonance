@@ -842,6 +842,8 @@ final class WriteModel {
             let url = try await upload(data, filename)
             values.imageURL = url
             values.imageLabel = filename
+            // A new picture starts centred (round 25 §G2): its frame was the old one's.
+            values.imageFrame = nil
             values.accentHue = CoverImage.accentHue(image)
         } catch {
             mediaError = L10n.Write.mediaUploadError
@@ -882,6 +884,7 @@ final class WriteModel {
         let picture = try? await URLSession.shared.data(from: stored).0
         values.imageURL = stored
         values.imageLabel = L10n.Write.mediaGeneratedLabel
+        values.imageFrame = nil
         values.accentHue = (picture.flatMap(UIImage.init(data:)) ?? preview).flatMap(CoverImage.accentHue)
     }
 
@@ -889,7 +892,21 @@ final class WriteModel {
         mediaError = nil
         values.imageURL = nil
         values.imageLabel = nil
+        values.imageFrame = nil
         values.accentHue = nil
+    }
+
+    /// The cover couldn't be read for 調整封面: said on the picture, as a failed cover is.
+    func coverFrameUnreadable() {
+        mediaError = L10n.Write.Editor.imageUnsupported
+    }
+
+    /// 完成 in 調整封面 (round 25 §G2): where the cover is looked at, written into the draft like any other field
+    /// (nothing is uploaded, the card's colour stays the whole picture's). A frame at the centre and zoom 1 is no frame.
+    func setCoverFrame(_ frame: CoverFraming?) {
+        guard values.imageURL != nil else { return }
+        let plain = frame.map { abs($0.cx - 0.5) < 1e-4 && abs($0.cy - 0.5) < 1e-4 && abs($0.zoom - 1) < 1e-4 } ?? true
+        values.imageFrame = plain ? nil : frame
     }
 
     /// A photo inside the story (the format bar's 插入圖片). Its trouble is said in the writing step,

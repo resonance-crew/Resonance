@@ -444,6 +444,8 @@ struct CardScreen: View {
                 OrganicImage(url: url, seed: hue + 11, fill: Tokens.creamDark)
                     // On its way, the cover shimmers in the card's own hue (as in its story card).
                     .environment(\.skeletonHue, card.accentHue)
+                    // Its 0.52 cut from the cover's frame (round 25 §G1).
+                    .coverFraming(card.coverFraming)
                     .aspectRatio(1 / 0.52, contentMode: .fit)
                     .readingMark(.cover)
                     .padding(.bottom, story.coverGap)

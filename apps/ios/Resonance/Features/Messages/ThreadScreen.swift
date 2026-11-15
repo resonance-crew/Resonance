@@ -1306,6 +1306,7 @@ private struct SharedMediaContent: View {
                                         OrganicImage(url: card.imageUrl.flatMap(URL.init(string:)), seed: 7,
                                                      fill: Palette.hue(.accent, card.accentHue ?? 55))
                                             .environment(\.skeletonHue, card.accentHue)
+                                            .coverFraming(card.coverFraming)
                                             .frame(width: 40, height: 40)
                                         Text(card.title).font(AppFonts.body(14, weight: .semibold)).foregroundStyle(Tokens.text)
                                             .lineLimit(2).multilineTextAlignment(.leading)

@@ -449,6 +449,7 @@ private struct ManagedCardList: View {
             let hue = CardPalette(index: palettes[i]).hue
             NavigationLink(value: Route.card(card.routeKey)) {
                 StoryCardView(card.publicStory, position: i, isLast: i == cards.count - 1, bordered: bordered, palette: palettes[i])
+                    .coverFraming(card.coverFraming)
             }
             .onAppear { session.cardPreviews.remember(card) }
             .buttonStyle(.plain)
@@ -606,6 +607,7 @@ private struct TrashCardList: View {
             let hue = CardPalette(index: palettes[i]).hue
             let face = StoryCardView(card.publicStory, position: i, isLast: i == cards.count - 1, bordered: bordered,
                                      palette: palettes[i])
+                .coverFraming(card.coverFraming)
             // Never prefilled from the shelf: a trash summary isn't the card's page.
             NavigationLink(value: Route.card(card.routeKey)) { face }
                 .buttonStyle(.plain)
