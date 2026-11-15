@@ -1,7 +1,7 @@
 ---
 title: Privacy Policy
 description: What Resonance collects, why, who processes it, and how to download or delete it.
-updated: 2026-10-27
+updated: 2026-11-15
 ---
 
 Resonance is a place to share stories as cards, made up of the website resonance.channel and the iOS and Android apps. It is built and run by the Resonance team ("we"). This policy explains what we collect, why, who processes it for us, and how you can manage or delete it.
@@ -29,7 +29,7 @@ Each card can be **public**, **connections only** or **only me**. Public cards c
 
 - **To run the service**: signing in, storing and showing your content, delivering messages and notifications.
 - **Notifications you turn on**: under Settings → Notifications you can ask for a card picked for you on up to three evenings a week, and for a notification when someone you're connected with publishes a new public card under their pen name. Both are off until you turn them on; we keep your choice and when you made it, and you can turn either off there at any time. To keep to their limits we also note which cards we've sent you this way and when, and the day you last opened the stories picked for you: an evening card is never sent to you twice within 30 days, no more than three notifications of new cards come in a day, and no evening card comes on a day you've already looked at your picks.
-- **AI features**: an English web address for each card, suggested tags, the "core insight" shown before you publish, illustrations drawn from a story, and the index behind recommendations. That index includes your private cards, but only to recommend cards to you; nobody else sees private content through it.
+- **AI features**: an English web address for each card, suggested tags, the "core insight" shown before you publish, illustrations drawn from a story, the index behind recommendations, and translation: a public card's title and the opening shown in lists are translated when it is published or edited, and a public story is translated whole when a reader asks for it (or has turned on auto-translate). Translations are kept with the card and deleted with it; a reader's switch stays on their own device. That index includes your private cards, but only to recommend cards to you; nobody else sees private content through it. Private and connections-only cards are never translated.
 - **Safety**: handling reports, enforcing blocks, preventing abuse and spam.
 
 ## Who processes it for us

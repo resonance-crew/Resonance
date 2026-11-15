@@ -25,6 +25,9 @@ async function main() {
   const { initializeApp } = await import('firebase-admin/app');
   const { getAuth } = await import('firebase-admin/auth');
   const { getFirestore, Timestamp } = await import('firebase-admin/firestore');
+  const { translationHash } = await import('../src/lib/api/v1/translationHash');
+  const { summaryHash } = await import('../src/lib/api/v1/summaryTranslations');
+  const { summarize } = await import('../src/lib/api/v1/summary');
 
   const app = initializeApp({ projectId: EMULATOR_PROJECT_ID }, 'seed');
   const auth = getAuth(app);
@@ -138,6 +141,41 @@ async function main() {
     ].join('\n\n'),
     45,
     290,
+  );
+
+  // A story in English (carol's), weeks old so it sits at the feed's end: the one a 繁體中文 reader can translate.
+  await card(
+    'bridge-rain',
+    'carol',
+    'Rain on the old bridge',
+    'We stood on the old bridge and watched the rain move across the river.\n\nNobody said anything, and for once that was enough.',
+    60 * 24 * 20,
+    200,
+  );
+
+  // Translations (round 25 §F): no model answers against the emulators, so the two stories a reader can translate
+  // carry what the server would have kept — bob's walk into English, carol's bridge into 繁體中文 — each for the card
+  // exactly as seeded (its hash), and the feed card's translated title and excerpt beside it (summaryTranslations).
+  const translated = async (id: string, to: 'en' | 'zh-TW', title: string, story: string, excerpt: string) => {
+    const snap = await db.doc(`cards/${id}`).get();
+    const [ownTitle, ownStory] = [String(snap.get('thoughtCore')), String(snap.get('story'))];
+    await db.doc(`cards/${id}/translations/${to}`).set({ title, story, hash: translationHash(ownTitle, ownStory), model: 'seed', createdAt: at(10) });
+    const of = summaryHash(ownTitle, summarize(ownStory).excerpt);
+    await db.doc(`cards/${id}`).update({ summaryTranslations: { of, [to]: { title, excerpt } } });
+  };
+  await translated(
+    'rain-walk',
+    'en',
+    'A walk after the rain',
+    'When the rain stopped, the puddles at the end of the lane held a whole row of streetlights.\n\nI suddenly remembered being small, splashing through puddles like this on the way home.',
+    'When the rain stopped, the puddles in the lane held a whole row of streetlights. I suddenly…',
+  );
+  await translated(
+    'bridge-rain',
+    'zh-TW',
+    '舊橋上的雨',
+    '我們站在舊橋上，看著雨從河面上移過去。\n\n誰都沒有說話，而那一次，這樣就夠了。',
+    '我們站在舊橋上，看著雨從河面上移過去。 誰都沒有說話，而那一次，這樣就夠了。',
   );
 
   // alice resonated with bob's walk, and keeps a draft.
