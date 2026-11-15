@@ -14,6 +14,7 @@ import { FilmClock } from './clock';
 import { Director } from './director';
 import { Drive, type DriveMode } from './drive';
 import { cameBack, sceneOfHash } from './nav';
+import { watchCardHands } from './pointer';
 
 export interface FilmHandle {
   ready: boolean;
@@ -299,13 +300,13 @@ export function startFilm(root: HTMLElement, { model, style }: { model: FilmMode
   /**
    * A scroll while the film plays skips ahead (or back), and the film plays on from there (round 4): the visitor's
    * hand has the page for as long as it moves it, and RESUME_MS after its last move — the wheel's, the finger's and
-   * its fling's, a scroll key's — the film takes it again. Not after ❚❚, a card under the pointer, the film's end or
-   * the stage's letting go. A scroll before the film has started by itself (`auto`) is the same skip: it starts from
+   * its fling's, a scroll key's — the film takes it again. Not after ❚❚, a mouse pressed on a card (or the keyboard's
+   * focus on one), the film's end or the stage's letting go. A scroll before the film has started by itself (`auto`) is the same skip: it starts from
    * where the scroll rests.
    */
   const RESUME_MS = 900;
   let touching = false;
-  /** The film is not to play on after this scroll (❚❚, a card under the pointer). */
+  /** The film is not to play on after this scroll (❚❚, a mouse pressed on a card, the keyboard's focus on one). */
   const stopResume = () => {
     if (!resumeAt && !carry) return;
     resumeAt = 0;
@@ -365,27 +366,9 @@ export function startFilm(root: HTMLElement, { model, style }: { model: FilmMode
   window.addEventListener('touchcancel', onTouchEnd, { passive: true });
   window.addEventListener('pointerdown', onBarPress);
   window.addEventListener('keydown', onKey);
-  // a mouse really moving over a card, or the keyboard's focus on one, during ▶ gives the page back (a card sliding
-  // under a resting mouse doesn't: the browser's hover after a scroll comes with no movement)
-  let lastPt: [number, number] | null = null;
-  const onCardMove = (e: PointerEvent) => {
-    if (e.pointerType !== 'mouse') return;
-    const moved = !!lastPt && Math.hypot(e.clientX - lastPt[0], e.clientY - lastPt[1]) > 2;
-    lastPt = [e.clientX, e.clientY];
-    if (moved && (e.target as HTMLElement | null)?.closest?.('[data-film-card]')) {
-      stopResume();
-      if (drive.mode === 'play') drive.handBack();
-    }
-  };
-  const onCardFocus = (e: Event) => {
-    const t = e.target as HTMLElement | null;
-    if (t?.closest?.('[data-film-card]') && t.matches?.(':focus-visible')) {
-      stopResume();
-      if (drive.mode === 'play') drive.handBack();
-    }
-  };
-  stage.addEventListener('pointermove', onCardMove);
-  stage.addEventListener('focusin', onCardFocus);
+  // a mouse's press on a card (not its moving over one), or the keyboard's focus on one, gives the page back at
+  // once, as ❚❚ does: the click lands on the card pressed (runtime/pointer.ts)
+  const stopCardHands = watchCardHands(stage, { drive, stopResume });
   // a card opened in this tab: remember where we were, for the way back (not a new tab's ⌘-click)
   const onCardClick = (e: MouseEvent) => {
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -701,8 +684,7 @@ export function startFilm(root: HTMLElement, { model, style }: { model: FilmMode
     window.removeEventListener('scroll', onScroll);
     window.removeEventListener('resize', onResize);
     window.removeEventListener('hashchange', onHash);
-    stage.removeEventListener('pointermove', onCardMove);
-    stage.removeEventListener('focusin', onCardFocus);
+    stopCardHands();
     root.removeEventListener('click', onCardClick);
     root.removeAttribute('data-ready');
     root.removeAttribute('data-released');
