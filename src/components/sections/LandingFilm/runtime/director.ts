@@ -17,7 +17,8 @@ import { CLEAR_UNDER_PEN, easeIntoRoom, type ChangeFrame, type ChangeInfo, type 
 import { path, rng, ribbon, tear, type Pt } from '../script/geom';
 import { groundAt } from '../script/ground';
 import { finishLayout, type Layout, type Rect } from '../script/layout';
-import { hourAt, paletteAt } from '../script/palette';
+import { hourAt } from '../script/palette';
+import { LIGHT_VAR, PAPER_KEYS_IN_CHANGE, PLANE_LIGHT, lightAt, paletteOf } from '../script/light';
 import { scrollbarCss } from '../script/scrollbar';
 import { HEADER_PEN, camOf, ctaSpot, journeyCamEnd, moonSpot, nightHeadsY, placeOf } from '../script/marks';
 import { SEG, TRACK_SVH, changeAt, clamp01, lerp, smooth, span, type SceneN } from '../script/timeline';
@@ -79,13 +80,33 @@ function stripPaper(i: number): string {
   for (let x = 0; x <= 1000; x += 20) line.push([x, 50 + Math.sin(x / f + ph) * 7]);
   return path(tear(ribbon(line, 64, 0.32), 5200 + i, { jag: 1.6, wander: 5 }), true, 0);
 }
-/** How often a plane's paper steps through the hours during a scene change (per hour; twelve elsewhere, as the light). */
-const PLANE_STEPS_IN_CHANGE = 4;
-/** The variables of the light itself — the sky, the disc and its glow, the clouds, the stars, the chrome — cheap to
- *  repaint; every other one is the planes' paper. */
-const LIGHT_VAR = /^--film-(sky-|c-(disc|halo|cloud|streak|bird|wind|fly)|stars|cloud-|chrome-|night$)/;
-/** The light's paints a plane wears too: the disc's (the sea's reflection of it), the haze's (a flown flat's). */
-const PLANE_LIGHT = /^--film-c-(disc|fly)/;
+/**
+ * A plane's (or a fringe's) paper in two paints (script/light.ts): `base` (the plane itself, whose paints its whole
+ * subtree inherits) and `over`, its art again laid over it, whose opacity alone moves per frame. Each holds a key's
+ * hour (null: not written yet); a paint is rewritten only while it is fully hidden, and `pending` is the rewrite
+ * waiting its turn in the queue.
+ */
+interface PaperPair {
+  base: HTMLElement | SVGElement;
+  over: SVGElement;
+  set: SetRef;
+  a: number | null;
+  b: number | null;
+  o: number;
+  pending: { layer: 'a' | 'b'; key: number } | null;
+  /** A plane's own art (its copy is cut to the art's height the first time it is on stage: a smaller layer). */
+  art?: SVGSVGElement | null;
+  cropped?: boolean;
+}
+/** Hidden paints rewritten per frame while their planes are on stage (each a repaint of one plane). */
+const PAPER_REWRITES_PER_FRAME = 2;
+/** How far (in hours) a pair's shown paint may lag the hour while its other paint waits its turn: beyond, it is a jump
+ *  (a seek), written whole. */
+const PAPER_LAG = 0.5;
+const sameKey = (k: number | null, h: number) => k != null && Math.abs(k - h) < 1e-7;
+/** How long the film is held still (s) before its paper settles on the exact hour, whole (one repaint of the planes):
+ *  long enough that a slow scroll's pauses between steps don't each repaint them. */
+const STILL_AFTER = 0.3;
 const paintVar = (k: StripPaint) => (k.startsWith('sky-') ? `var(--film-${k})` : `var(--film-c-${k})`);
 
 /** A DOM card over the stage. */
@@ -208,16 +229,28 @@ export class Director {
   private readonly clouds: HTMLElement | null;
   private readonly dot: HTMLElement | null;
   private paletteKey = '';
-  private planeKey = '';
-  /** The planes' paints (renderLight): each plane's own, the hour they were made for, and the planes still to take them. */
+  /** The planes' paints (renderLight): each plane's two, and the hidden ones still to be rewritten. */
   private readonly paint = new StyleBook();
-  private paintVars: [string, string][] = [];
-  private paintQueue: Element[] = [];
-  private paintAt = 0;
-  private paintDim = false;
+  private pairs: PaperPair[] = [];
+  private paintQueue: PaperPair[] = [];
+  private paintDim: boolean | null = null;
+  /** The film time of the last frame, and when it last moved (renderLight's `still`). */
+  private lastS: number | null = null;
+  private movedAt = 0;
+  /** What wears the paper's paints exactly, at the light's pace (cheap: small, or shown only through a change): a
+   *  flown flat's haze, the sea's reflection of the disc, an apron. */
+  private hazes: { el: SVGSVGElement; back: boolean }[] = [];
+  private reflects: Element[] = [];
+  private aprons: { el: HTMLElement; id: string }[] = [];
+  /** What the film added to the server's stage for the second paint (removed on destroy). */
+  private added: Element[] = [];
   /** What wears the light besides the planes (the sky, the stars, the disc, the clouds, the particles, the props, the ≋s, the tissue strips), and which of them wear the planes' paints too. */
   private lightOn: Element[] = [];
   private paintToo: Element[] = [];
+  /** What each wearer of the hour's paints reads of them (null: every one): the rest is never written there, so a step
+   *  of the light restyles only what it repaints (the props layer and the ≋s read the chrome's ink alone). */
+  private wears = new Map<Element, ((k: string) => boolean) | null>();
+  private headerInk = '';
   private skyFetched = false;
   private readonly paletteKeys = new Set<string>();
   private shownSets = '';
@@ -263,6 +296,16 @@ export class Director {
       const el = stage.querySelector<HTMLElement>(`[data-slot="${id}"]`);
       if (el) this.slots.set(id, new Slot(id, el, focusPlay));
     }
+    // each plane's art again over itself, for the paper's second paint (script/light.ts): made before the planes' <use>s
+    // are gathered below, so a cut-out foot clips both
+    for (const p of stage.querySelectorAll<HTMLElement>('[data-set] [data-plane]')) {
+      const art = p.querySelector<SVGSVGElement>(':scope > svg:not([data-haze]):not([data-reflect])');
+      if (!art) continue;
+      const over = art.cloneNode(true) as SVGSVGElement;
+      over.setAttribute('data-paper-next', '');
+      art.after(over);
+      this.added.push(over);
+    }
     this.sets = [...stage.querySelectorAll<HTMLElement>('[data-set]')].map((el) => ({
       n: Number(el.dataset.set) as SceneN,
       el,
@@ -283,6 +326,26 @@ export class Director {
       })),
       fringes: [...el.querySelectorAll<HTMLElement>('[data-fringe]')],
     }));
+    for (const set of this.sets) {
+      for (const pl of set.planes) {
+        const over = pl.el.querySelector<SVGElement>(':scope > svg[data-paper-next]');
+        if (over) this.pairs.push({ art: pl.el.querySelector<SVGSVGElement>(':scope > svg:not([data-haze]):not([data-reflect]):not([data-paper-next])'), base: pl.el, over, set, a: null, b: null, o: 0, pending: null });
+        if (pl.haze) this.hazes.push({ el: pl.haze, back: pl.back });
+        if (pl.reflect) this.reflects.push(pl.reflect);
+        const apron = pl.el.querySelector<HTMLElement>(':scope > span[style*="--apron-top"]');
+        if (apron) this.aprons.push({ el: apron, id: pl.id });
+      }
+      for (const f of set.fringes) {
+        // a fringe is one small <svg>: its second paint a second <use> inside it
+        const use = f.querySelector<SVGElement>(':scope > use');
+        if (!use) continue;
+        const over = use.cloneNode(true) as SVGElement;
+        over.style.opacity = '0';
+        use.after(over);
+        this.added.push(over);
+        this.pairs.push({ base: f, over, set, a: null, b: null, o: 0, pending: null });
+      }
+    }
     // the style's tissue strips: made once, inside the sets' stacking context (each slotted among the planes by its z)
     const setsEl = this.sets[0]?.el.parentElement ?? null;
     if (setsEl && this.style.strips > 0) {
@@ -325,6 +388,12 @@ export class Director {
     const particles = el('[data-wind]')?.parentElement;
     this.paintToo = some([this.disc, particles, this.stripBox]);
     this.lightOn = some([el('[data-sky]'), el('[data-sky]')?.nextElementSibling, this.disc, this.clouds, particles, layer, this.stripBox, this.slots.get('wave')?.el, this.slots.get('wave2')?.el]);
+    const only = (re: RegExp) => (k: string) => re.test(k);
+    const chrome = only(/^--film-chrome-/);
+    if (this.disc) this.wears.set(this.disc, only(/^--film-c-(disc|halo|rim)$/));
+    if (particles) this.wears.set(particles, only(/^--film-c-(bird|wind|rim)$/));
+    this.wears.set(layer, chrome);
+    for (const w of [this.slots.get('wave')?.el, this.slots.get('wave2')?.el]) if (w) this.wears.set(w, chrome);
   }
 
   /** Read the stage's measures back from the CSS (the probes), the cards' sizes and the hero's box. Never inside a frame. */
@@ -379,7 +448,7 @@ export class Director {
       this.heroRect = { x: r.left - st.left, y: r.top - st.top - this.heroTy, w: right - r.left, h: r.height };
     }
     this.paletteKey = '';
-    this.planeKey = '';
+    this.forgetPaper();
     this.epoch++;
     this.cast.resize(this.L.pal, this.L2.pal, this.L4.pal);
     return this.L;
@@ -410,14 +479,17 @@ export class Director {
     this.hero?.removeAttribute('data-gone');
     for (const k of this.paletteKeys) this.root.style.removeProperty(k);
     this.paint.clear();
+    for (const el of this.added) el.remove();
+    this.added = [];
+    this.pairs = [];
     this.paintQueue = [];
     this.header?.style.removeProperty('--film-chrome-ink');
+    this.headerInk = '';
     if (this.sbStyle) this.sbStyle.textContent = this.sbServer;
     this.sbKey = '';
     this.sbVars = null;
     this.shownSets = '';
     this.paletteKey = '';
-    this.planeKey = '';
   }
 
   get heroBox(): Rect {
@@ -638,7 +710,10 @@ export class Director {
     this.renderDisc(s);
     this.renderSets(s);
     this.renderStrips(s);
-    this.renderLight(this.hourS(s), dim, inp.released, !!changeAt(s));
+    // the film held still a moment (paused, or the scroll come to rest): the paper settles on the exact hour, whole
+    if (s !== this.lastS || this.lastS == null) this.movedAt = now;
+    this.lastS = s;
+    this.renderLight(this.hourS(s), dim, inp.released, resting, now - this.movedAt >= STILL_AFTER);
     this.writeScrollbar();
     this.renderHero(s);
     // the beats: the owner's frame places the cards and the actors
@@ -873,59 +948,180 @@ export class Director {
   }
 
   /**
-   * The hour's colours (`s`: the hour's film time). The sky, the disc, the clouds and the chrome step every twelfth of
-   * an hour; so does the planes' paper (every other variable) — except through a scene change, where the hour runs
-   * fastest (a step every 0.13–0.27 s) and the planes fly, masking a larger step: there every quarter of an hour. Each
-   * paper step repaints every plane, which WebKit takes 50 ms and more over (the engineering review, round 3). At rest a
-   * quarter's step would show (ΔE up to 0.06 a step at dawn), so there the planes keep the twelfths. Each written only
-   * when it moves (or the scheme changes).
+   * The hour's colours (`s`: the hour's film time), as script/light.ts says they are drawn (round 25 §A). The light —
+   * the sky, the disc, the clouds, the chrome — written whole from the hour every twelfth of an hour (finer, it repaints
+   * the whole sky on nearly every frame of a change: WebKit drops to half its frame rate), on what wears it (never on
+   * the root: a custom property set there restyles the whole film, every card, puppet and plane).
+   * The planes' paper never steps on screen: each live plane shows its two keys' paints, the upper one's opacity
+   * moving per frame (the compositor's), and a paint is rewritten only while fully hidden — one plane at a time, far to
+   * near, since each rewrite repaints a plane (WebKit takes 50 ms and more over all of them at once). A jump (the first
+   * frame, a seek, the scheme changing), a plane off stage and `?rest=1`'s still are written whole, at once; held still
+   * a moment (`still`: paused, the scroll at rest) the paper settles on the exact hour, whole.
    */
-  private renderLight(s: number, dim: boolean, released: boolean, inChange: boolean) {
+  private renderLight(s: number, dim: boolean, released: boolean, rest: boolean, still: boolean) {
     const hour = hourAt(s);
-    const step = Math.floor(hour * 12);
-    const per = inChange ? PLANE_STEPS_IN_CHANGE : 12;
-    const pstep = Math.floor(hour * per);
-    const key = `${step}|${dim}|${released}`;
-    const pkey = `${pstep}/${per}|${dim}`;
-    if (pkey !== this.planeKey) {
-      // the planes' paper: the hour's paints written on each plane itself (never on the root: a custom property set
-      // there restyles the whole film, and every plane then repaints in the one frame — in WebKit a dropped frame or
-      // two at every step of the light, twelve an hour). The planes not on stage take it at once (nothing to paint);
-      // those on stage one a frame, far to near — a step of the light is a twelfth of an hour, far too small to see
-      // pass from plane to plane. A jump (the first frame, a seek, the scheme changing) is written whole, at once.
-      const at = pstep / per;
-      const jump = this.planeKey === '' || Math.abs(at - this.paintAt) > 1.5 / PLANE_STEPS_IN_CHANGE || dim !== this.paintDim;
-      this.paintAt = at;
-      this.paintDim = dim;
-      this.planeKey = pkey;
-      // (the disc's own paint too: the sea's reflection wears it; and the haze's, which a flown flat pales into)
-      this.paintVars = Object.entries(per === 12 ? paletteAt(step / 12, { dim }) : paletteAt(at, { dim })).filter(([k]) => !LIGHT_VAR.test(k) || PLANE_LIGHT.test(k));
-      const queue: Element[] = [];
-      for (const set of this.sets) {
-        const els = [...set.planes.map((pl) => pl.el), ...set.fringes];
-        if (!jump && set.el.hasAttribute('data-live')) queue.push(...els);
-        else for (const el of els) this.paintOn(el);
-      }
-      for (const el of this.paintToo) this.paintOn(el);
-      this.paintQueue = queue;
-    }
-    const next = this.paintQueue.shift();
-    if (next) this.paintOn(next);
+    const at = lightAt(hour, { rest, still, change: !!changeAt(s) });
+    this.renderPaper(at.paper, hour, dim);
+    const key = `${at.light}|${dim}|${released}`;
     if (key === this.paletteKey) return;
     this.paletteKey = key;
-    // the light (the sky, the stars, the disc, the clouds, the wind and the birds, the ≋'s ink): on what wears it, never
-    // on the root either — the sky's step then restyles a handful of small trees, not every card, puppet and plane
-    const vars = paletteAt(step / 12, { dim });
+    const vars = paletteOf(at.light, dim);
     this.sbVars = vars;
+    const wears = (el: Element, k: string) => {
+      const f = this.wears.get(el);
+      return !f || f(k);
+    };
     for (const [k, v] of Object.entries(vars)) {
       if (!LIGHT_VAR.test(k)) continue;
-      for (const el of this.lightOn) this.paint.set(el, k, v);
+      for (const el of this.lightOn) if (wears(el, k)) this.paint.set(el, k, v);
+    }
+    // the paper's paints on what wears them besides the planes: at the light's pace, each small or shown only through
+    // a change — the disc, the particles, the tissue strips; a flown flat's haze (its back planes' the low wash); the
+    // sea's reflection of the disc; an apron under a torn foot
+    for (const [k, v] of Object.entries(vars)) {
+      if (LIGHT_VAR.test(k) && !PLANE_LIGHT.test(k)) continue;
+      for (const el of this.paintToo) if (wears(el, k)) this.paint.set(el, k, v);
+    }
+    for (const h of this.hazes) {
+      if (h.back) this.paint.set(h.el, '--film-c-fly-low', vars['--film-c-fly-low']);
+      else this.paint.set(h.el, '--film-c-fly', vars['--film-c-fly']);
+    }
+    for (const el of this.reflects) this.paint.set(el, '--film-c-disc', vars['--film-c-disc']);
+    for (const ap of this.aprons) {
+      this.paint.set(ap.el, `--film-c-${ap.id}`, vars[`--film-c-${ap.id}`]);
+      this.paint.set(ap.el, '--film-c-shade', vars['--film-c-shade']);
     }
     // once the stage has let go the header is the site's own, its ink the theme's (FilmHeader.module.css)
     if (this.header) {
-      if (released) this.header.style.removeProperty('--film-chrome-ink');
-      else this.header.style.setProperty('--film-chrome-ink', vars['--film-chrome-ink']);
+      const ink = released ? '' : vars['--film-chrome-ink'];
+      if (ink !== this.headerInk) {
+        this.headerInk = ink;
+        if (!ink) this.header.style.removeProperty('--film-chrome-ink');
+        else this.header.style.setProperty('--film-chrome-ink', ink);
+      }
     }
+  }
+
+  /**
+   * The planes' paper: every pair to the hour (script/light.ts `lightAt().paper`: the two keys around it and their mix).
+   * A pair whose two paints hold the hour between them (no more than a key apart) only moves its copy's opacity. Past
+   * them, the paint still inside the hour's two keys shows alone while the other — hidden — waits its turn to be
+   * rewritten to the key on the hour's far side (forward or back). The paints need not hold grid keys: settled on the
+   * exact hour (paused), a pair fades on from it to the next key, never written whole while it shows.
+   */
+  private renderPaper(want: { lo: number; hi: number; mix: number }, hour: number, dim: boolean) {
+    const jump = dim !== this.paintDim;
+    this.paintDim = dim;
+    const whole = want.lo === want.hi;
+    for (const p of this.pairs) {
+      if (jump || whole || !p.set.el.hasAttribute('data-live')) {
+        // off stage nothing is painted, and at rest the hour is to be whole: written at once (and a jump on stage too)
+        this.writePaper(p, 'a', want.lo, dim);
+        this.writePaper(p, 'b', want.hi, dim);
+        p.pending = null;
+        this.setOver(p, want.mix);
+        continue;
+      }
+      if (p.art && !p.cropped) this.crop(p);
+      if (this.fade(p, hour)) {
+        p.pending = null;
+        continue;
+      }
+      // the paint nearer the hour shows alone; the other, hidden, waits its rewrite to the key past the hour. (Through a
+      // change the hour may pass a key before every pair's turn has come: the nearer paint then holds a moment, and the
+      // pair fades on from it when its turn comes — never written whole while it shows.)
+      // (once a paint waits its rewrite, the other keeps showing until it is done)
+      const keepA = p.pending ? p.pending.layer === 'b' : Math.abs((p.a ?? Infinity) - hour) <= Math.abs((p.b ?? Infinity) - hour);
+      const keep = keepA ? p.a : p.b;
+      if (keep != null && Math.abs(keep - hour) <= PAPER_LAG) {
+        const layer = keepA ? 'b' : 'a';
+        const key = keep <= hour ? want.hi : want.lo;
+        this.setOver(p, layer === 'b' ? 0 : 1);
+        if (!p.pending) this.paintQueue.push(p);
+        p.pending = { layer, key };
+      } else {
+        // more than a key away (a seek, or a queue too slow for the hour): written whole
+        this.writePaper(p, 'a', want.lo, dim);
+        this.writePaper(p, 'b', want.hi, dim);
+        p.pending = null;
+        this.setOver(p, want.mix);
+      }
+    }
+    for (let n = 0; n < PAPER_REWRITES_PER_FRAME && this.paintQueue.length; ) {
+      const p = this.paintQueue.shift()!;
+      if (!p.pending) continue;
+      // (it shows from the next frame on, at the hour's mix: this frame it is still hidden as it was written)
+      this.writePaper(p, p.pending.layer, p.pending.key, dim);
+      p.pending = null;
+      n++;
+    }
+  }
+
+  /**
+   * A plane's copy cut to its art's height (the art stands in the lower half of the plane's 1400 units, the rest of the
+   * box transparent): the copy's layer — composited on every frame of a fade — is then a third to a half the size. Read
+   * once, the first time the plane is on stage (its box measured: a set off stage has none).
+   */
+  private crop(p: PaperPair) {
+    p.cropped = true;
+    const art = p.art!;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    for (const u of art.querySelectorAll<SVGGraphicsElement>(':scope > use')) {
+      let b: DOMRect;
+      try {
+        b = u.getBBox();
+      } catch {
+        continue;
+      }
+      if (!b.width || !b.height) continue;
+      y0 = Math.min(y0, b.y);
+      y1 = Math.max(y1, b.y + b.height);
+    }
+    if (!(y1 > y0)) return;
+    y0 = Math.max(0, Math.floor(y0) - 4);
+    y1 = Math.min(1400, Math.ceil(y1) + 4);
+    const vb = art.viewBox.baseVal;
+    p.over.setAttribute('viewBox', `${vb.x} ${y0} ${vb.width} ${y1 - y0}`);
+    this.paint.set(p.over, 'top', `calc(${y0} * var(--u))`);
+    this.paint.set(p.over, 'height', `calc(${y1 - y0} * var(--u))`);
+  }
+
+  /** A pair whose two paints hold the hour between them, a key apart at most: its copy's opacity to the hour. */
+  private fade(p: PaperPair, hour: number): boolean {
+    if (p.a == null || p.b == null) return false;
+    const span = p.b - p.a;
+    if (Math.abs(span) < 1e-7 || Math.abs(span) > PAPER_LAG + 1 / PAPER_KEYS_IN_CHANGE + 1e-7) return false;
+    const o = (hour - p.a) / span;
+    if (o < -1e-6 || o > 1 + 1e-6) return false;
+    this.setOver(p, Math.min(1, Math.max(0, o)));
+    return true;
+  }
+
+  /** One of a pair's paints: a key's paper (every paint but the light's) written on it. */
+  private writePaper(p: PaperPair, layer: 'a' | 'b', key: number, dim: boolean) {
+    if (layer === 'a' ? sameKey(p.a, key) : sameKey(p.b, key)) return;
+    const el = layer === 'a' ? p.base : p.over;
+    for (const [k, v] of Object.entries(paletteOf(key, dim))) if (!LIGHT_VAR.test(k)) this.paint.set(el, k, v);
+    if (layer === 'a') p.a = key;
+    else p.b = key;
+  }
+
+  private setOver(p: PaperPair, o: number) {
+    const v = o <= 0.0005 ? 0 : o >= 0.9995 ? 1 : o;
+    if (v === p.o && this.paint.has(p.over, 'opacity')) return;
+    p.o = v;
+    this.paint.set(p.over, 'opacity', v === 0 ? '0' : v === 1 ? '1' : v.toFixed(3));
+  }
+
+  /** The paper is to be written whole again (a new measure). */
+  private forgetPaper() {
+    for (const p of this.pairs) {
+      p.a = null;
+      p.b = null;
+      p.pending = null;
+    }
+    this.paintQueue = [];
   }
 
   /** The stories' paper is up (`data-paper`, runtime/index.ts): the bar is the theme's; down again, the film's at once. */
@@ -943,11 +1139,6 @@ export class Director {
     this.sbKey = key;
     this.sbText = this.sbPaper || !this.sbVars ? '' : scrollbarCss(this.sbVars);
     this.sbStyle.textContent = this.sbText;
-  }
-
-  /** The hour's paints on one plane (or the grass, the tissue strips, the birds): only what changed is written. */
-  private paintOn(el: Element) {
-    for (const [k, v] of this.paintVars) this.paint.set(el, k, v);
   }
 
   private discState = { x: 0, y: 0, r: 86, refl: 0, moon: 0 };

@@ -438,6 +438,20 @@
 .film[data-film='film'] .set[data-live] .plane {
   will-change: transform;
 }
+/* the plane's art again over itself, in the next key's paint (round 25 §A, runtime/director.ts renderPaper): only its
+   opacity moves per frame, so the light runs on without a plane repainted on screen; the film adds it, the server
+   doesn't draw it */
+.plane > :global(svg[data-paper-next]) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: calc(1400 * var(--u));
+  display: block;
+  opacity: 0;
+  will-change: opacity;
+  pointer-events: none;
+}
 /* a flat going into the haze (a change's `haze`): its paper again over itself, every paint the sky's high up, faded in
    by the director (opacity only) — shown only while it hazes */
 .haze {
