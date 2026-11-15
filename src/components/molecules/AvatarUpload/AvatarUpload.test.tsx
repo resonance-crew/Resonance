@@ -71,7 +71,8 @@ describe('AvatarUpload', () => {
     // Nothing goes up before 使用.
     expect(uploadImageFile).not.toHaveBeenCalled();
     expect(within(dialog).getByRole('group', { name: t.cropStage })).toBeInTheDocument();
-    expect(within(dialog).getByRole('slider', { name: t.cropZoom })).toHaveValue('1');
+    // the slider is on a multiplying scale (round 25 §G3.3): its position is ln z, 0 at no zoom
+    expect(within(dialog).getByRole('slider', { name: 'Zoom' })).toHaveValue('0');
 
     await userEvent.click(within(dialog).getByRole('button', { name: t.cropUse }));
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('https://img.example/me.webp'));

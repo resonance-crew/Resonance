@@ -12,6 +12,9 @@ import { storyType } from './script';
 export type TranslationTarget = 'en' | 'zh-TW';
 export const TRANSLATION_TARGETS: readonly TranslationTarget[] = ['en', 'zh-TW'];
 
+/** The interface language a reader's locale reads in (the clients' translate line and feed cards). */
+export const translateTarget = (locale: string): TranslationTarget => (locale === 'en' ? 'en' : 'zh-TW');
+
 /** The longest story the card page offers to translate (characters, as JavaScript counts them). */
 export const TRANSLATE_MAX_CHARS = 30_000;
 

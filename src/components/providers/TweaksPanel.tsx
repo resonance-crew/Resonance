@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { TWEAKS_KEY, applyAppearance, isAccent, isSchemeChoice, type SchemeChoice } from '@/lib/design/appearance';
 import type { Accent } from '@/lib/design/palette';
 
@@ -10,7 +10,11 @@ const TWEAK_DEFAULTS: TweakState = {
   fontFamily: 'default',
   grainIntensity: 2,
   mascots: false,
+  autoTranslate: false,
 };
+
+/** Told on this page whenever a tweak is applied (the storage event tells the other tabs). */
+const TWEAKS_EVENT = 'resonance:tweaks';
 
 /*
  * The theme colour and the scheme are attributes on <html> (lib/design/
@@ -48,6 +52,11 @@ export interface TweakState {
    * the reader turns it on in Settings → 顯示.
    */
   mascots: boolean;
+  /**
+   * Settings → 語言 → 自動翻譯 (round 25 §F4): a story in another language than the interface, its title and excerpt in
+   * the feeds too, shown translated by AI — this browser's choice, off until the reader turns it on.
+   */
+  autoTranslate: boolean;
 }
 
 export { TWEAK_DEFAULTS };
@@ -68,6 +77,7 @@ export function loadTweaks(): TweakState {
     fontFamily: typeof saved.fontFamily === 'string' ? saved.fontFamily : TWEAK_DEFAULTS.fontFamily,
     grainIntensity: typeof saved.grainIntensity === 'number' ? saved.grainIntensity : TWEAK_DEFAULTS.grainIntensity,
     mascots: saved.mascots === true,
+    autoTranslate: saved.autoTranslate === true,
   };
 }
 
@@ -86,6 +96,8 @@ export function applyTweaks(vals: TweakState) {
   } catch {
     // Storage blocked (SecurityError) or full: the tweak lasts this page.
   }
+  current = vals;
+  window.dispatchEvent(new Event(TWEAKS_EVENT));
   postToEditor({ type: '__edit_mode_set_keys', edits: vals });
 }
 
@@ -121,6 +133,39 @@ export function useTweaks() {
   return { state, update };
 }
 
+/** The tweaks as this page last applied or read them (null: not read yet). */
+let current: TweakState | null = null;
+
+function subscribeTweaks(onChange: () => void) {
+  const onStorage = (e: StorageEvent) => {
+    if (e.key !== STORAGE_KEY && e.key !== null) return;
+    current = null;
+    onChange();
+  };
+  window.addEventListener(TWEAKS_EVENT, onChange);
+  window.addEventListener('storage', onStorage);
+  return () => {
+    window.removeEventListener(TWEAKS_EVENT, onChange);
+    window.removeEventListener('storage', onStorage);
+  };
+}
+const autoTranslateNow = () => (current ??= loadTweaks()).autoTranslate;
+const autoTranslateOnServer = () => false;
+
+/**
+ * Whether stories are shown translated by AI (Settings → 語言 → 自動翻譯): false on the server and through hydration
+ * (it can't know this browser), this browser's choice from then on, and at once when it changes here or in another
+ * tab. A page drawn on the client from the start reads it on its first render: nothing moves after it is drawn.
+ */
+export function useAutoTranslate(): boolean {
+  return useSyncExternalStore(subscribeTweaks, autoTranslateNow, autoTranslateOnServer);
+}
+
+/** Forgets what was read (tests that write the storage themselves). */
+export function forgetTweaksRead(): void {
+  current = null;
+}
+
 /**
  * What the provider does on each page load: the saved tweaks, applied — or,
  * when they are the defaults (nothing saved, or the defaults saved), nothing
@@ -136,7 +181,8 @@ export function applySavedTweaks(): void {
     saved.scheme === TWEAK_DEFAULTS.scheme &&
     saved.fontFamily === TWEAK_DEFAULTS.fontFamily &&
     saved.grainIntensity === TWEAK_DEFAULTS.grainIntensity &&
-    saved.mascots === TWEAK_DEFAULTS.mascots;
+    saved.mascots === TWEAK_DEFAULTS.mascots &&
+    saved.autoTranslate === TWEAK_DEFAULTS.autoTranslate;
   if (defaults) postToEditor({ type: '__edit_mode_set_keys', edits: saved });
   else applyTweaks(saved);
 }

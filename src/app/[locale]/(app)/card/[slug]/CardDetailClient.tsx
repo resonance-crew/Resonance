@@ -15,6 +15,8 @@ import { storyType } from '@/lib/text/script';
 import { CardToc, storyHasContents, tocHeadings, type TocHeading } from '@/components/molecules/CardDetail/CardToc';
 import { LatinMarkText } from '@/components/molecules/CardDetail/LatinMarkText';
 import { StoryByline } from '@/components/molecules/CardDetail/StoryByline';
+import { TranslateLine, useStoryTranslation } from '@/components/molecules/CardDetail/TranslateLine';
+import translateStyles from '@/components/molecules/CardDetail/TranslateLine.module.css';
 import { ShareMenu } from '@/components/molecules/ShareMenu/ShareMenu';
 import { CardActionsMenu } from '@/components/molecules/CardActionsMenu/CardActionsMenu';
 import { TrashedCardBanner } from '@/components/molecules/CardDetail/TrashedCardBanner';
@@ -176,7 +178,17 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
 
   const storyRef = useRef<HTMLDivElement>(null);
   const [headings, setHeadings] = useState<TocHeading[]>([]);
-  const story = data?.card?.story;
+
+  // The story in the interface's language (round 25 §F): by the line under the byline, or by itself under 自動翻譯.
+  const tr = useStoryTranslation({
+    card: data?.card ?? null,
+    isOwner,
+    signedIn: !!user,
+    locale,
+    storyRef,
+    onSignIn: () => router.push('/signin'),
+  });
+  const story = tr.shown?.story ?? data?.card?.story;
 
   // The card's share · ⋯ come twice — under the title and at the story's end — only when the two can't be in
   // view at once (round 12 §5–6): at ≥ 1200 at the end of the response row, below it at the end of the tags.
@@ -194,7 +206,8 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
       return;
     }
     setHeadings(tocHeadings(root));
-  }, [story]);
+    // (the shown text's headings: a swap lists the translation's)
+  }, [story, tr.swaps]);
 
   // The article's box (page.module.css .articleWrap): the reading head from the header's pen line. The
   // skeleton draws a cover, so it stands at a cover's depth.
@@ -242,7 +255,11 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   const resonances = lists.resonances ?? { cards: [], authors: {} };
   const hasResonance = resonances.cards.length > 0;
   // How the title and story are set (src/styles/story.css), read off both together, the same on the server and here.
-  const type = storyType(card.thoughtCore, card.story);
+  // The title and story shown: the card's, or its translation (set in its own script's type and lang).
+  const shownTitle = tr.shown?.title ?? card.thoughtCore;
+  const shownStory = tr.shown?.story ?? card.story;
+  const type = storyType(shownTitle, shownStory);
+  const swapClass = tr.swaps > 0 ? ` ${translateStyles.swapped}` : '';
   // Whether the story has a contents list beside it, read off its Markdown: the column is laid out once, in the
   // server's HTML too — centred alone, or beside the rail.
   const contents = storyHasContents(card.story);
@@ -349,14 +366,21 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
                 alt={card.media.label ?? card.thoughtCore}
                 seed={hue + 11}
                 ratio={0.52}
+                frame={card.media.frame}
                 className={styles.heroImage}
                 priority
               />
             )}
 
             {/* The title has the column to itself; its language is the story's (never the page's around it). */}
-            <h1 className={`story-title ${styles.title}`} data-script={type.script} lang={type.lang} data-mascot="story-title">
-              {type.script === 'cjk' ? <LatinMarkText text={card.thoughtCore} /> : card.thoughtCore}
+            <h1
+              key={`title-${tr.swaps}`}
+              className={`story-title ${styles.title}${swapClass}`}
+              data-script={type.script}
+              lang={type.lang}
+              data-mascot="story-title"
+            >
+              {type.script === 'cjk' ? <LatinMarkText text={shownTitle} /> : shownTitle}
             </h1>
 
             <StoryByline
@@ -370,11 +394,13 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               actions={cardActions}
             />
 
-            <div ref={storyRef} className={styles.story} data-mascot="story">
+            <TranslateLine tr={tr} />
+
+            <div ref={storyRef} key={`story-${tr.swaps}`} className={`${styles.story}${swapClass}`} data-mascot="story">
               {/* Signed in, the embedded cards came with the lists; the link previews come with the card. */}
               <CardEmbedSourceContext.Provider value={lists.embeds}>
                 <StoryLinkPreviewsContext.Provider value={card.linkPreviews ?? null}>
-                  <StoryMarkdown source={card.story} script={type.script} lang={type.lang} />
+                  <StoryMarkdown source={shownStory} script={type.script} lang={type.lang} />
                 </StoryLinkPreviewsContext.Provider>
               </CardEmbedSourceContext.Provider>
             </div>

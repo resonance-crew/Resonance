@@ -178,6 +178,34 @@ async function main() {
     '我們站在舊橋上，看著雨從河面上移過去。 誰都沒有說話，而那一次，這樣就夠了。',
   );
 
+  // A cover framed off its centre (round 25 §G1, the `card-framed` screen): a picture stored as the emulators store one
+  // (lib/storage/local: a folder this machine's dev server serves), its lamp far to the right, and the card's
+  // media.frame looking at it — so every renderer shows the lamp, not the picture's empty middle.
+  {
+    const { localStorageRoot, LOCAL_STORAGE_PATH } = await import('../src/lib/storage/local');
+    const { mkdir, writeFile } = await import('node:fs/promises');
+    const { join, dirname } = await import('node:path');
+    const sharp = (await import('sharp')).default;
+    const key = 'cover/seed/harbour-lamp.webp';
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900">
+      <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f3d63"/><stop offset="1" stop-color="#d98b6a"/></linearGradient></defs>
+      <rect width="1600" height="900" fill="url(#sky)"/>
+      <rect y="640" width="1600" height="260" fill="#26324f"/>
+      <rect x="1290" y="330" width="26" height="330" fill="#1b2238"/>
+      <circle cx="1303" cy="318" r="62" fill="#ffd98a"/>
+      <circle cx="1303" cy="318" r="130" fill="#ffd98a" opacity="0.25"/>
+      <rect x="1180" y="660" width="250" height="18" fill="#ffd98a" opacity="0.5"/>
+    </svg>`;
+    const path = join(localStorageRoot(), key);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, await sharp(Buffer.from(svg)).webp({ quality: 82 }).toBuffer());
+    await card('harbour-lamp', 'alice', '港邊的那盞燈', '每次加班回家，港邊那盞燈都還亮著。\n\n它不知道我是誰，可是它一直在那裡。', 60 * 24 * 25, 30);
+    await db.doc('cards/harbour-lamp').update({
+      // a path on whatever port the dev server listens on (the harness's, a lane's): what serves the stand-in's pictures
+      media: { type: 'image', url: `${LOCAL_STORAGE_PATH}/${key}`, label: '港邊的燈', frame: { cx: 0.8, cy: 0.42, zoom: 1.35, ar: 1600 / 900 } },
+    });
+  }
+
   // alice resonated with bob's walk, and keeps a draft.
   await db.doc('cards/alice-reply').set({
     authorId: 'alice', slug: 'alice-reply', thoughtCore: '我也在雨裡走過', story: '讀完那篇散步，我想起高中放學的那條路。',

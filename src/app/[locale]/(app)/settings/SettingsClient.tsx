@@ -25,6 +25,7 @@ import { SCHEME_CHOICES, type SchemeChoice } from '@/lib/design/appearance';
 import { SegmentedActionBar, type SegmentSpec } from '@/components/molecules/SegmentedActionBar/SegmentedActionBar';
 import { ThemeSwatches } from './ThemeSwatches';
 import { MascotsSwitch } from './MascotsSwitch';
+import { AutoTranslateSwitch } from './AutoTranslateSwitch';
 import { useIsMobile } from '@/lib/hooks/useIsMobile';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import type { Locale } from '@/lib/db/types';
@@ -360,6 +361,7 @@ export function SettingsClient({ initial }: SettingsClientProps) {
                 <option value="ko">한국어</option>
               </Select>
             </Field>
+            <AutoTranslateSwitch on={tweaks.autoTranslate} onChange={(autoTranslate) => updateTweaks({ autoTranslate })} />
           </div>
         )}
         {active === 'appearance' && (

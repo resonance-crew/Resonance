@@ -428,7 +428,10 @@ const SKY_KEYS = new Set(['fly', 'fly-low', 'mist', 'halo', 'cloud-front', 'clou
  */
 export function mixKey(a: LCH, b: LCH, t: number, paper = false): LCH {
   const d = ((b[2] - a[2] + 540) % 360) - 180;
-  if (Math.abs(d) <= 120 || a[1] <= 0.005 || b[1] <= 0.005) return mixLch(a, b, t);
+  // a near-grey end has no hue to keep: mixed in OKLab, so the path meets the next time's own paint exactly (in OKLCH
+  // a grey's hue would jump at the keyframe — invisible, but a step all the same: round 25 §A)
+  if (a[1] <= 0.005 || b[1] <= 0.005) return mixLab(a, b, t);
+  if (Math.abs(d) <= 120) return mixLch(a, b, t);
   if (!paper) return mixLab(a, b, t);
   const other = d > 0 ? d - 360 : d + 360;
   const dh = inOlive(a[2], other) < inOlive(a[2], d) ? other : d;

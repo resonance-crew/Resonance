@@ -159,6 +159,25 @@ export const SCREENS: Screen[] = [
     expect: "alice's notifications (the web's phone: the 通知 page, its title in the header; wider: the bell's dialog over the feed): carol's letter, bob's note (both with their words) and bob's resonance unread (dot, the bell's badge 3), carol's card link and bob's first message read — the rows touching, no rules or washes between them at rest" },
   { id: 'settings', route: '/settings', as: 'alice',
     expect: 'Settings: profile, appearance (theme swatches, 小紙團 switch), notifications, account' },
+  // Round 25 §F (web; the apps' lanes widen `platforms` with their launch arguments): 自動翻譯 on in this browser.
+  { id: 'settings-language', route: '/settings', as: 'alice', platforms: ['web'],
+    web: { click: '[role="tablist"] [role="tab"]:nth-child(5)' },
+    expect: 'Settings → 語言: the UI language, 我主要書寫的語言, then 自動翻譯 with its hint and its switch off' },
+  { id: 'card-translated', route: '/card/bridge-rain', as: 'alice', platforms: ['web'],
+    web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) } },
+    expect: "carol's English card read by alice under 自動翻譯: 舊橋上的雨 and its story in Chinese, the line under the byline 已由 AI 翻譯 · 顯示原文" },
+  { id: 'home-translated', route: '/home', as: 'alice', platforms: ['web'],
+    web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) } },
+    expect: "alice's feed under 自動翻譯: carol's English card as 舊橋上的雨 with its excerpt in Chinese and the small globe at its foot's end; every other card as written" },
+  // Round 25 §G1: a cover framed off its centre — the lamp at the picture's right edge stays in view on every shape.
+  { id: 'card-framed', route: '/card/harbour-lamp', as: 'bob', platforms: ['web'],
+    expect: "alice's card 港邊的那盞燈: its cover cut on its frame — the lamp and its glow in view right of centre, not the empty sky" },
+  // Round 25 §G2: the publish step of a card with a picture cover — 調整位置 left of 更換封面 — and the dialog it opens.
+  { id: 'publish-cover', route: '/write/harbour-lamp', as: 'alice', platforms: ['web'], web: { query: 'step=publish' },
+    expect: "alice's 港邊的那盞燈 on its publish step (更新這張卡片): the cover with two chips at its foot, 調整位置 left of 更換封面, in the card's own paper and pen" },
+  { id: 'cover-frame', route: '/write/harbour-lamp', as: 'alice', platforms: ['web'],
+    web: { query: 'step=publish', click: 'button[aria-label="調整位置"], button[aria-label="Adjust"]' },
+    expect: '調整封面 over the publish step: the harbour picture under a frame in the feed card’s shape, dimmed outside it, the lamp right of centre; the zoom slider, 重設, then 取消 · 完成' },
   { id: 'write-new', route: '/write', as: 'dora',
     expect: "A newcomer's empty writer: the title and story placeholders (on wide screens beside her empty thought map)" },
   // At the desktop split the thought map sits beside the writer, and its camera

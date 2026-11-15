@@ -56,8 +56,9 @@
   --s-heading-face: var(--font-story-serif);
   --s-heading-weight: var(--story-heading-weight);
   --s-heading-track: var(--story-heading-tracking);
-  /* Justified, as Chinese is printed (clreq); the line already breaks between characters. */
-  --s-align: justify;
+  /* Flush left, every script (the owner, round 25: 「全部靠左」): justified lines on a
+     19-character phone column each spread by a different amount, up to 12 %. */
+  --s-align: start;
 
   /* A window wider than a phone takes the regular numbers. */
   --s-size: var(--s-size-regular);
@@ -124,8 +125,7 @@
 
 /* ── The body ────────────────────────────────────────────────────────── */
 
-/* text-justify stays auto (inter-character would space out English words in a
-   Chinese line), hanging punctuation off and text-spacing-trim initial (clreq:
+/* Set flush left (--s-align), hanging punctuation off and text-spacing-trim initial (clreq:
    Traditional Chinese doesn't hang). */
 .story-prose {
   font-family: var(--s-body-face);

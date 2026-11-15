@@ -358,6 +358,44 @@
   position: absolute;
   right: 18px;
   bottom: 16px;
+  /* 調整位置 left of 更換封面, 8 between (round 25 §G2) */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 調整位置: the 更換封面 chip's face; 44 to the touch round its 34, in its card's deep ink (CoverSlot sets it). */
+.coverAdjust.coverAdjust {
+  height: 34px;
+  color: var(--cover-adjust-ink);
+}
+.coverAdjust::after {
+  content: '';
+  position: absolute;
+  inset: -5px -2px;
+}
+/* At the largest text sizes its glyph alone (it keeps its name). */
+@media (min-width: 0) and (max-width: 360px) {
+  .coverAdjustLabel {
+    display: none;
+  }
+}
+
+/* 調整封面: title → 6 → hint → 16 → the stage (molecules/CropStage) → the foot. */
+.frameTitle {
+  font-family: var(--font-heading);
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+.frameHint {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  margin: 0 0 16px;
+}
+.frameFoot {
+  margin-top: 12px;
 }
 
 /* A file dragged over the frame: a dashed frame, focused. */

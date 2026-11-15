@@ -1,0 +1,85 @@
+/* The translate line (round 25 §F2): a row of its own at the story's start column, --story-meta-gap under the
+   byline (whose own --story-lead-gap is taken back), the story --story-lead-gap after it. The meta line's type,
+   about 20 tall to the eye and 44 to the touch: the control's padding overlaps the gaps above and below. */
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 6px;
+  min-height: 20px;
+  margin-top: calc(var(--story-meta-gap) - var(--story-lead-gap));
+  margin-bottom: var(--story-lead-gap);
+  font-family: var(--font-body);
+  font-size: var(--story-meta-size-compact);
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 640px) {
+  .line {
+    margin-top: calc(var(--story-meta-gap-compact) - var(--story-lead-gap-compact));
+    margin-bottom: var(--story-lead-gap-compact);
+  }
+}
+
+.plain,
+.working {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The control's words never wrap inside themselves; at large type the row wraps between its parts. */
+.control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin: -12px 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--button-on-tonal);
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.control:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.control:focus-visible {
+  outline: 2px solid var(--color-terracotta-light);
+  outline-offset: 2px;
+}
+
+.glyph {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+
+.announce {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The swap: the shown title and story fade in, 180 ms; none under reduced motion. */
+.swapped {
+  animation: translateSwap 180ms ease-out;
+}
+@keyframes translateSwap {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .swapped {
+    animation: none;
+  }
+}
