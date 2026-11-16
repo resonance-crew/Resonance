@@ -103,8 +103,9 @@ describe('the page’s scrollbar in the film’s light', () => {
     const text = style.textContent;
     const written = style.firstChild;
     expect(text).toContain('[data-page-scrollbar]{');
-    // the whole film, a step of the light every twelfth of an hour: the chrome's ink is the same cream throughout
-    for (let s = 0.1; s < FILM_END; s += 0.04) frame(s, (now += 1 / 60));
+    // the whole film, a step of the light every twelfth of an hour (a tenth of a second of film at a time: under a
+    // twelfth even on the road, where the hour runs fastest): the chrome's ink is the same cream throughout
+    for (let s = 0.1; s < FILM_END; s += 0.1) frame(s, (now += 1 / 60));
     expect(hourAt(FILM_END) - hourAt(0.1)).toBeGreaterThan(16);
     // the same text node: the style was never written again (a rewrite has the browser restyle the whole page)
     expect(style.firstChild).toBe(written);
@@ -118,7 +119,8 @@ describe('the page’s scrollbar in the film’s light', () => {
     frame(FILM_END - 1, (now += 1));
     frame(FILM_END - 0.5, (now += 1));
     expect(style.firstChild).toBe(again);
-  });
+    // (the whole film's frames: seconds on a slow runner — CI took seven for the first writing of this, at 0.04 s a frame)
+  }, 60_000);
 });
 
 describe('what the director writes on the stage itself', () => {
