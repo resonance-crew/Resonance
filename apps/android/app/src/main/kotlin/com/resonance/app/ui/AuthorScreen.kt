@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.derivedStateOf
+import com.resonance.design.GridBlockRows
 import com.resonance.design.LocalHeaderChrome
 import com.resonance.design.scrolledUnderBar
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -178,12 +179,13 @@ fun AuthorScreen(session: Session, handle: String, open: (Route) -> Unit, back: 
     // The bar lies over the page, so what scrolls shows right up to its pen line.
     val top = inlineBarTop()
     val layout = cardListLayout()
-    // Debug `--es scrollToCard <slug>` (the screenshots' profile-translated): a phone's page scrolls to that card once
-    // its cards are in — the masthead and the heading lie ahead of them (AuthorCardsBefore).
-    if (BuildConfig.DEBUG && !layout.isGrid) {
-        LaunchedEffect(phase, cards) {
+    // Debug `--es scrollToCard <slug>` (the screenshots' profile-translated): the page scrolls to that card once its
+    // cards are in — the masthead and the heading lie ahead of them (AuthorCardsBefore); a tablet's cards come in blocks.
+    if (BuildConfig.DEBUG) {
+        LaunchedEffect(phase, cards, layout) {
             if (phase != "loaded" || profile?.isBlocked == true) return@LaunchedEffect
-            DebugLaunch.takeCardScroll(cards.map { it.routeKey }, AuthorCardsBefore)?.let { list.scrollToItem(it) }
+            val perItem = if (layout.isGrid) layout.columns * GridBlockRows else 1
+            DebugLaunch.takeCardScroll(cards.map { it.routeKey }, AuthorCardsBefore, perItem)?.let { list.scrollToItem(it) }
         }
     }
     // The people head (round 9 §9): the avatar 40 under the bar's pen line on a phone, 56 wider.

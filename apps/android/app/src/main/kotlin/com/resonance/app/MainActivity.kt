@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
  *   --es route /settings/<section>  that page of Settings (profile, account, privacy, notifications, language, appearance, terms, delete)
  *   --es writeStep publish         with --es route /write/<id>: the writer opens on its publish step once the card has loaded
  *   --ez coverFrame true           with that step up: 調整封面 opens over the cover's picture once it has loaded
- *   --es scrollToCard <slug>       a person's page (--es route /u/<handle>) scrolls to that card once its cards are in
+ *   --es scrollToCard <slug>       a person's page (--es route /u/<handle>) scrolls to that card (a tablet: its block) once its cards are in
  *   --es threadDraft …             fills a conversation's composer (--es route /messages/<handle> opens one)
  *   --es pushToken …               registers that stand-in push token under the signed-in account
  *   --es pushTitle … [--es pushBody … --es pushRoute … --es pushId … --es pushFromUserId … --es pushType pick|new_card --es pushCardId …]   posts the notification a push received while open shows
@@ -319,23 +319,23 @@ object DebugLaunch {
     /**
      * The card a person's page scrolls to once its cards are in (`--es scrollToCard <slug>`, the screenshots'
      * `profile-translated`: on a phone the first card's band fills the screenful, so the card the screen is for
-     * lies under the fold). iOS's `-scrollToCard`.
+     * lies under the fold; on a tablet its foot does). iOS's `-scrollToCard`.
      */
     var scrollToCard: String? = null
 
     /**
-     * Where [scrollToCard]'s card lies in a list that holds [before] items ahead of its cards, one item a card
-     * (a phone's bands; a tablet's columns show a page's first cards together and scroll nowhere): null when no
-     * card is asked for, or the list hasn't that card (yet).
+     * Where [scrollToCard]'s card lies in a list that holds [before] items ahead of its cards and [perItem] cards
+     * to an item — one on a phone (its bands), a tablet's block of columns × rows (borderedCards): null when no card
+     * is asked for, or the list hasn't that card (yet).
      */
-    fun cardScrollIndex(slug: String?, routeKeys: List<String>, before: Int): Int? {
+    fun cardScrollIndex(slug: String?, routeKeys: List<String>, before: Int, perItem: Int = 1): Int? {
         val target = slug?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        return routeKeys.indexOf(target).takeIf { it >= 0 }?.plus(before)
+        return routeKeys.indexOf(target).takeIf { it >= 0 }?.let { before + it / perItem.coerceAtLeast(1) }
     }
 
     /** Takes [scrollToCard]'s place among [routeKeys] (once it is there: a list still loading keeps the ask). */
-    fun takeCardScroll(routeKeys: List<String>, before: Int): Int? =
-        cardScrollIndex(scrollToCard, routeKeys, before)?.also { scrollToCard = null }
+    fun takeCardScroll(routeKeys: List<String>, before: Int, perItem: Int = 1): Int? =
+        cardScrollIndex(scrollToCard, routeKeys, before, perItem)?.also { scrollToCard = null }
 
     /** What the writer's link sheet's field starts with when it opens on no link (screen checks: an IME's keys are slow to drive). */
     var linkDraft: String? = null

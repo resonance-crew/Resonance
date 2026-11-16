@@ -174,8 +174,8 @@ opens 調整封面 over it (the release screenshots' `publish-cover` and `cover-
 scrolls a person's page to that card once its cards are in (`profile-translated`). Android's twins:
 `--ez autoTranslate true|false` (it writes the setting, `translate.auto` in the `settings` preferences —
 the release screenshots start every other screen with `false`), `--es route /settings/<section>`,
-`--es writeStep publish`, `--ez coverFrame true`, `--es scrollToCard <slug>` (a phone's page; a tablet's columns
-show a page's first cards together).
+`--es writeStep publish`, `--ez coverFrame true`, `--es scrollToCard <slug>` (a tablet scrolls to the card's block
+of columns).
 `-openWriter YES` opens the writer on a new card at launch and `-writeCard <id>`
 on one of yours (a draft, a published card, one in the trash); `-writeStep publish`
 then opens its second step, `-writeFocus YES` puts the caret in the story (the

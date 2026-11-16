@@ -179,7 +179,7 @@ export const SCREENS: Screen[] = [
   // (a list, not the feed: carol's English card is weeks old and four screens down alice's feed, past what a phone's
   // one screenful takes; her profile lists it second, and every list draws its cards the same way — on iOS and the
   // Mac the first card's band is taller than a screenful, so the page scrolls to it: `-scrollToCard`, apps/README.md
-  // (Android's phone the same: `--es scrollToCard`);
+  // (Android the same, `--es scrollToCard`: a phone to the card, a tablet to the cards so their feet are in view);
   // on the web's phone too the first card's bands fill the screenful, and on desktop the second card's foot falls below
   // the fold, so the web scrolls to that card's link — the one CardLinkGrid wraps each card in)
   { id: 'profile-translated', route: '/u/carol', as: 'alice',
