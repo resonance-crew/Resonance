@@ -200,14 +200,20 @@ struct StoryLinkModal: View {
     }
 }
 
-/// A quiet button of words alone (review D5): the text ink, semibold 14 as a small button's label, no fill — a
-/// press washes faintly round it — 44 tall, its words on the content's edge (its padding hangs in the margin).
+/// A quiet button of words alone (review D5; the web's `variant="quiet"`): the text ink, semibold 14 as a small
+/// button's label, no fill — a press washes faintly round it — 44 tall, its words on the content's edge (its padding
+/// hangs in the margin on the `hang` side: the start of a dialog's foot, the end of the crop's zoom row).
 struct QuietTextButton: View {
     let title: String
+    var hang: HorizontalEdge = .leading
+    var minHeight: CGFloat = StoryLinkModal.Metrics.control
     let action: () -> Void
 
-    init(_ title: String, action: @escaping () -> Void) {
+    init(_ title: String, hang: HorizontalEdge = .leading, minHeight: CGFloat = StoryLinkModal.Metrics.control,
+         action: @escaping () -> Void) {
         self.title = title
+        self.hang = hang
+        self.minHeight = minHeight
         self.action = action
     }
 
@@ -221,10 +227,10 @@ struct QuietTextButton: View {
                 .foregroundStyle(Tokens.text)
                 .lineLimit(1)
                 .padding(.horizontal, Self.padX)
-                .frame(minHeight: StoryLinkModal.Metrics.control)
+                .frame(minHeight: minHeight)
                 .contentShape(Rectangle())
         }
         .buttonStyle(OrganicPressStyle(inset: 2, color: Tokens.text.opacity(0.08)))
-        .padding(.leading, -Self.padX)
+        .padding(hang == .leading ? .leading : .trailing, -Self.padX)
     }
 }

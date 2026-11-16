@@ -1,4 +1,5 @@
 import CoreGraphics
+import DesignSystem
 import Foundation
 import ImageIO
 import SwiftUI
@@ -140,6 +141,31 @@ import UniformTypeIdentifiers
         func red(_ x: Int, _ y: Int) -> UInt8 { pixels[(y * image.width + x) * 4] }
         #expect(red(160, 160) > 240, "inside the mask: the photo as it is")
         #expect(red(12, 160) < 180, "beside the mask: under the scrim (\(red(12, 160)))")
+    }
+
+    /// 重設 is a quiet word (round 25 §G3.2, the web's `variant="quiet"`): once the photo has moved the zoom row
+    /// grows the words alone in the text ink, never the tonal button's peach pill.
+    @Test func theZoomRowsResetIsAQuietWordWithNoFill() throws {
+        var crop = AvatarCrop(imageSize: CGSize(width: 400, height: 400), mask: 272)
+        crop.zoom(to: 2)
+        #expect(crop.moved)
+        let row = CropZoomRow(crop: .constant(crop)).frame(width: 320).environment(\.colorScheme, .light)
+        let renderer = ImageRenderer(content: row)
+        renderer.scale = 2
+        let image = try #require(renderer.cgImage)
+        var pixels = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        let read = try #require(CGContext(data: &pixels, width: image.width, height: image.height, bitsPerComponent: 8,
+                                          bytesPerRow: image.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        read.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(Tokens.buttonTonal).resolvedColor(with: UITraitCollection(userInterfaceStyle: .light)).getRed(&r, green: &g, blue: &b, alpha: &a)
+        let peach = [r, g, b].map { Int(($0 * 255).rounded()) }
+        var peachy = 0
+        for i in 0..<(image.width * image.height) where pixels[i * 4 + 3] > 240 {
+            if (0..<3).allSatisfy({ abs(Int(pixels[i * 4 + $0]) - peach[$0]) <= 14 }) { peachy += 1 }
+        }
+        #expect(peachy < 200, "no tonal pill behind 重設 (\(peachy) peach pixels)")
     }
 
     @MainActor final class Calls {

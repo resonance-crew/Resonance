@@ -310,7 +310,8 @@ struct AvatarCropContent: View {
 }
 
 /// The zoom row under a stage: − slider + on the multiplying scale (``AvatarCrop/sliderValue``), and 重設 at its
-/// end once something has moved (round 25 §G3.2).
+/// end once something has moved (round 25 §G3.2): a quiet word, no fill, as the web's `variant="quiet"`
+/// (CropStage.tsx), 36 tall as the small pill it replaced so the row keeps its height.
 struct CropZoomRow: View {
     @Binding var crop: AvatarCrop
 
@@ -321,7 +322,7 @@ struct CropZoomRow: View {
                           label: L10n.Crop.zoom)
             OrganicIcon(.plus, size: 16).foregroundStyle(Tokens.textMuted).accessibilityHidden(true)
             if crop.moved {
-                OrganicButton(L10n.Crop.reset, variant: .text, size: .sm) { crop.reset() }
+                QuietTextButton(L10n.Crop.reset, hang: .trailing, minHeight: 36) { crop.reset() }
                     .fixedSize()
                     .transition(.opacity)
             }
