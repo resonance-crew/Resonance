@@ -110,4 +110,22 @@ describe('backfill.ts summary-translations', () => {
     expect((await db.doc('cards/priv').get()).get('summaryTranslations')).toBeUndefined();
     expect((await backfillSummaryTranslations(db, { apply: false, log: quiet })).candidates).toBe(0);
   });
+
+  it('judges a card by the excerpt a list shows of it: a current stored summary an older build made is no candidate once done', async () => {
+    const quiet = () => {};
+    const translateSummary = async (input: { title: string; excerpt: string }) => ({ en: { title: `EN ${input.title}`, excerpt: `EN ${input.excerpt}` } });
+    // a stored summary, current (stamped with the card's last write), whose words are not what summarize() makes of
+    // the story today — as an older build's excerpt is
+    const old = '雨停的時候…（舊版摘要）';
+    expect(old).not.toBe(summarize(STORY).excerpt);
+    const stamp = Timestamp.fromMillis(Date.now() - 30_000);
+    await db.doc('cards/pub').set(card({ slug: 'a-walk', excerpt: old, readMinutes: 1, excerptAt: stamp, updatedAt: stamp }));
+    expect((await backfillSummaryTranslations(db, { apply: false, log: quiet })).candidates).toBe(2);
+    const run = await backfillSummaryTranslations(db, { apply: true, log: quiet, pauseMs: 0, translate: translateSummary });
+    expect(run.made).toBe(2);
+    // made from the excerpt a list shows of it, the stored one
+    expect((await db.doc('cards/pub').get()).get('summaryTranslations')).toEqual({ of: summaryHash(TITLE, old), en: { title: `EN ${TITLE}`, excerpt: `EN ${old}` } });
+    // and done: the next count finds none (it counted this card for ever while it compared with the story's excerpt)
+    expect((await backfillSummaryTranslations(db, { apply: false, log: quiet })).candidates).toBe(0);
+  });
 });

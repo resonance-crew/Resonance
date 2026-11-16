@@ -2,7 +2,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { unlistedCard } from '../../src/lib/cards/blank';
 import { presentSummaryTranslations } from '../../src/lib/api/v1/summaryTranslations';
 import { makeSummaryTranslations, type SummaryTranslationsOptions, type SummaryTranslationsResult } from '../../src/lib/api/v1/summaryTranslationsMake';
-import { listCard, summaryOf } from '../../src/lib/api/v1/summary';
+import { listCard, summarize } from '../../src/lib/api/v1/summary';
 import { translationTargets } from '../../src/lib/text/translation';
 
 /**
@@ -33,7 +33,12 @@ export async function backfillSummaryTranslations(
     const card = listCard(doc.id, data);
     const title = String(data.thoughtCore ?? '');
     if (!translationTargets(title, String(data.story ?? '')).length) return false;
-    return presentSummaryTranslations(card, title, summaryOf(card).excerpt) === null;
+    // As a list shows it, and as makeSummaryTranslations reads it: the stored summary while it is current, else the
+    // story's. Never the story's while a current summary stands — an older build's stored excerpt need not be what
+    // today's summarize() makes of the same story, and such a card would be a candidate for ever (production,
+    // 2026-11-16: 8 of 19 still counted after all 19 were made).
+    const shown = (card.listing ?? summarize(data.story)).excerpt;
+    return presentSummaryTranslations(card, title, shown) === null;
   });
   log(`published cards: ${snap.size}, public and listed without current translated titles and excerpts: ${candidates.length}`);
   const report: Record<SummaryTranslationsResult | 'candidates', number> = {
