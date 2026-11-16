@@ -224,6 +224,29 @@ describe('the film’s paper as the director draws it', () => {
     expect(restAt(s)).toBe(true);
   });
 
+  it('on a device the safety net finds slow folds the copies away and shows none again: the paper as main draws it', () => {
+    const { d, stage, frame } = film();
+    const showing = () => pairs(stage).filter(({ base, over }) => liveOf(base) && shows(over)).length;
+    let now = 0;
+    let s = 1;
+    // the dawn while 摺摺 writes, at rest: the pairs come on
+    for (; s < 8; s += 1 / 60) frame(s, (now += 1 / 60));
+    expect(restAt(s)).toBe(true);
+    expect(showing()).toBeGreaterThan(0);
+    // the safety net's first level (runtime/index.ts: frames slower than 24 ms for two seconds)
+    d.lowfx = 1;
+    for (let i = 0; i < 30; i++) frame((s += 1 / 60), (now += 1 / 60));
+    expect(showing()).toBe(0);
+    // …and none unfolds again, however long the scene rests
+    let ever = 0;
+    for (let i = 0; i < 180; i++) {
+      frame((s += 1 / 60), (now += 1 / 60));
+      ever = Math.max(ever, showing());
+    }
+    expect(restAt(s)).toBe(true);
+    expect(ever).toBe(0);
+  });
+
   it('destroy() leaves the stage as the server drew it', () => {
     const { stage, frame, d, before, unmount } = film();
     for (let i = 0; i < 20; i++) frame(SEG.c2.t0 + i / 60, 1 + i / 60);

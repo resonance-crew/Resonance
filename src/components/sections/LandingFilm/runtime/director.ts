@@ -261,7 +261,7 @@ export class Director {
   private epoch = 0;
   /** Reduced motion asked for (the opt-in film): no idle life. */
   reduced = false;
-  /** The safety net's level: 1 the small particles dropped (CSS), 2 the clouds' drift stopped too. */
+  /** The safety net's level: 1 the small particles dropped (CSS) and the paper in one paint a plane, as through a change (renderPaper); 2 the clouds' drift stopped too. */
   lowfx = 0;
   private readonly layer: HTMLElement;
   /** The scene changes' style, and what it is told of each change on this screen (rebuilt on every measure). */
@@ -992,7 +992,10 @@ export class Director {
     const jump = dim !== this.paintDim;
     this.paintDim = dim;
     const inChange = !!changeAt(s);
-    const atRest = restAt(s);
+    // a device the safety net finds slow never comes to rest here: the planes stay as main draws them, one paint
+    // each, and the pairs showing fold away as they do before a change (the copies cost an iPad of 2022 two frames
+    // in five where the planes move under them: 17 → 9 a second on the way to 聆聆, measured 2026-11-16)
+    const atRest = restAt(s) && this.lowfx === 0;
     const live = (p: PaperPair) => p.set.el.hasAttribute('data-live');
     // main's key for the flat planes, and whether it has moved on
     const key = flatKey(hour, inChange);
