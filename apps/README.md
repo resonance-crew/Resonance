@@ -170,7 +170,8 @@ Round 25's: `-autoTranslateStories YES` turns 自動翻譯 on for that launch (t
 the launch arguments, so nothing is kept); `-debugStories YES` offers Instagram 限時動態 in a card's share
 sheet with no Instagram installed (a simulator can't have it; `-debugShare YES` opens the sheet); `-writeStep
 publish` opens a card's writer (`-route /write/<id>`) on its publish step, and `-coverFrame YES` then
-opens 調整封面 over it (the release screenshots' `publish-cover` and `cover-frame`). Android's twins:
+opens 調整封面 over it (the release screenshots' `publish-cover` and `cover-frame`); `-scrollToCard <slug>`
+scrolls a person's page to that card once its cards are in (`profile-translated`). Android's twins:
 `--ez autoTranslate true|false` (it writes the setting, `translate.auto` in the `settings` preferences —
 the release screenshots start every other screen with `false`), `--es route /settings/<section>`,
 `--es writeStep publish`, `--ez coverFrame true`.

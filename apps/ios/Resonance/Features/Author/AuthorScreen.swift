@@ -20,6 +20,18 @@ struct AuthorScreen: View {
     private static let pageSpace = "profile.page"
 
     var body: some View {
+        ScrollViewReader { proxy in
+            content
+                // `-scrollToCard <slug>` (Debug, ListLaunch): once the cards are in, that card's top at the top.
+                .task(id: model?.phase == .loaded) {
+                    guard model?.phase == .loaded, let target = ListLaunch.target else { return }
+                    try? await Task.sleep(for: .milliseconds(400))
+                    proxy.scrollTo(ListLaunch.anchor(target), anchor: .top)
+                }
+        }
+    }
+
+    private var content: some View {
         ScrollView {
             Group {
             switch model?.phase ?? .loading {

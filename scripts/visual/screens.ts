@@ -177,9 +177,11 @@ export const SCREENS: Screen[] = [
     web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) } }, app: AUTO_TRANSLATE,
     expect: "carol's English card read by alice under 自動翻譯: 舊橋上的雨 and its story in Chinese, the line under the byline 已由 AI 翻譯 · 顯示原文" },
   // (a list, not the feed: carol's English card is weeks old and four screens down alice's feed, past what a phone's
-  // one screenful takes; her profile lists it second, and every list draws its cards the same way)
+  // one screenful takes; her profile lists it second, and every list draws its cards the same way — on iOS and the
+  // Mac the first card's band is taller than a screenful, so the page scrolls to it: `-scrollToCard`, apps/README.md)
   { id: 'profile-translated', route: '/u/carol', as: 'alice',
-    web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) } }, app: AUTO_TRANSLATE,
+    web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) } },
+    app: { ...AUTO_TRANSLATE, ios: [...AUTO_TRANSLATE.ios, '-scrollToCard', 'bridge-rain'] },
     expect: "carol's profile read by alice under 自動翻譯: her English card as 舊橋上的雨 with its excerpt in Chinese and the small globe at its foot's end; 陌生人的一句話 as written" },
   // Round 25 §G1: a cover framed off its centre — the lamp at the picture's right edge stays in view on every shape.
   { id: 'card-framed', route: '/card/harbour-lamp', as: 'bob',

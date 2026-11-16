@@ -58,6 +58,8 @@ struct StoryCardList: View {
         // Where the paper puppets may sit (round 19): its top as drawn (round 20: its line stays in front
         // of whoever is behind it), named by the card, so a visitor stays as the cards round it come and go.
         .readingMark(.card(key: key, outline: StoryCardView.readingOutline(position: position, bordered: bordered)))
+        // `-scrollToCard <slug>` (Debug): the card a screen check scrolls its list to (ListLaunch).
+        .background { if let target = ListLaunch.target, target == card.routeKey { Color.clear.id(ListLaunch.anchor(target)) } }
         .modifier(CardEntrance(delay: enterFrom.flatMap { i >= $0 ? CardEntrance.delay(i - $0) : nil }))
         .onAppear {
             session.cardPreviews.remember(card)
@@ -287,4 +289,24 @@ struct FeedSkeleton: View {
         .accessibilityLabel("Loading")
         .skeletonTimeline()
     }
+}
+
+/// A list's launch argument for screen checks and the release screenshots (scripts/visual/ios.ts): read only in
+/// a Debug build — a Release build answers nil whatever its arguments say.
+enum ListLaunch {
+    /// `-scrollToCard <slug>`: a person's page, once its cards are in, scrolls to that card's top (the release
+    /// screenshots' `profile-translated`: carol's English card, under a first card taller than a screenful).
+    static func scrollTarget(_ defaults: UserDefaults = .standard) -> String? {
+        #if DEBUG
+        defaults.string(forKey: "scrollToCard").flatMap { $0.isEmpty ? nil : $0 }
+        #else
+        nil
+        #endif
+    }
+
+    /// This launch's, read once.
+    static let target = scrollTarget()
+
+    /// The id the card's row carries for a `ScrollViewReader` to find.
+    static func anchor(_ slug: String) -> String { "scrollToCard:\(slug)" }
 }
