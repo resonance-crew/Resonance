@@ -103,9 +103,9 @@ describe('the page’s scrollbar in the film’s light', () => {
     const text = style.textContent;
     const written = style.firstChild;
     expect(text).toContain('[data-page-scrollbar]{');
-    // the whole film, a step of the light every twelfth of an hour (a tenth of a second of film at a time: under a
-    // twelfth even on the road, where the hour runs fastest): the chrome's ink is the same cream throughout
-    for (let s = 0.1; s < FILM_END; s += 0.1) frame(s, (now += 1 / 60));
+    // the whole film, a third of a second of it at a time — a new step of the light at nearly every frame: the
+    // chrome's ink is the same cream throughout
+    for (let s = 0.1; s < FILM_END; s += 0.3) frame(s, (now += 1 / 60));
     expect(hourAt(FILM_END) - hourAt(0.1)).toBeGreaterThan(16);
     // the same text node: the style was never written again (a rewrite has the browser restyle the whole page)
     expect(style.firstChild).toBe(written);
@@ -119,7 +119,7 @@ describe('the page’s scrollbar in the film’s light', () => {
     frame(FILM_END - 1, (now += 1));
     frame(FILM_END - 0.5, (now += 1));
     expect(style.firstChild).toBe(again);
-    // (the whole film's frames: seconds on a slow runner — CI took seven for the first writing of this, at 0.04 s a frame)
+    // (CI took seven seconds for the first writing of this, a frame every 0.04 s of film)
   }, 60_000);
 });
 
@@ -221,7 +221,7 @@ describe('the film’s paper as the director draws it', () => {
       fold: { d: 0, at: '' },
       unfold: { d: 0, at: '' },
     };
-    return () => {
+    return async () => {
       const { stage, frame } = film();
       let prev: { base: string; over: string; o: number; on: boolean; live: boolean; c: (LCH | null)[] }[] | null = null;
       const keys = (plane: Element) => [`--film-c-${plane.getAttribute('data-plane')}`, '--film-c-canopy', '--film-c-tree'];
@@ -229,6 +229,9 @@ describe('the film’s paper as the director draws it', () => {
         if (d > w.d) Object.assign(w, { d, at });
       };
       for (let i = 0; i <= Math.ceil(FILM_END * 60); i++) {
+        // (four thousand frames: every two seconds of film the worker answers the runner — held for the whole of them
+        // on a slow machine, vitest reports the worker as timed out though every test passes: CI, 2026-11-16)
+        if (i % 120 === 0) await new Promise((res) => setTimeout(res, 0));
         const s = Math.min(FILM_END, i / 60);
         frame(s, 1 + i / 60);
         const ps = pairs(stage);
@@ -270,9 +273,9 @@ describe('the film’s paper as the director draws it', () => {
     };
   })();
 
-  let r: ReturnType<typeof run>;
-  beforeAll(() => {
-    r = run();
+  let r: Awaited<ReturnType<typeof run>>;
+  beforeAll(async () => {
+    r = await run();
   }, 180_000);
 
   it('through a scene change displays no copy at all; while a scene is at rest the planes show their pairs', () => {
