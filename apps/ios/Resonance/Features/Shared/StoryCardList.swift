@@ -30,7 +30,10 @@ struct StoryCardList: View {
         let families = Self.families(cards, splitAt: splitAt)
         let keys = Self.keys(cards)
         // The cards under a block put on top are drawn by their place among them, as before it came.
-        CardColumns(count: cards.count, underBar: underBar, split: split, ids: anchorsScroll ? keys : nil) { i, bordered in
+        CardColumns(count: cards.count, underBar: underBar, split: split, ids: anchorsScroll ? keys : nil,
+                    launchAnchor: ListLaunch.target.flatMap { target in
+                        cards.firstIndex { $0.routeKey == target }.map { ($0, ListLaunch.anchor(target)) }
+                    }) { i, bordered in
             cell(i, key: keys[i], position: i < split ? i : i - split, palette: families[i], bordered: bordered)
         }
     }
@@ -58,8 +61,6 @@ struct StoryCardList: View {
         // Where the paper puppets may sit (round 19): its top as drawn (round 20: its line stays in front
         // of whoever is behind it), named by the card, so a visitor stays as the cards round it come and go.
         .readingMark(.card(key: key, outline: StoryCardView.readingOutline(position: position, bordered: bordered)))
-        // `-scrollToCard <slug>` (Debug): the card a screen check scrolls its list to (ListLaunch).
-        .background { if let target = ListLaunch.target, target == card.routeKey { Color.clear.id(ListLaunch.anchor(target)) } }
         .modifier(CardEntrance(delay: enterFrom.flatMap { i >= $0 ? CardEntrance.delay(i - $0) : nil }))
         .onAppear {
             session.cardPreviews.remember(card)
@@ -111,6 +112,10 @@ struct CardColumns<Item: View>: View {
     /// The items' identities, which also makes them the scroll's targets: a scroll position kept on one
     /// keeps it in place when items come in above it. By index when none are given.
     var ids: [String]? = nil
+    /// `-scrollToCard <slug>` (Debug, ListLaunch): the item a screen check scrolls to and the id it goes by. It is
+    /// the item's identity in its `ForEach`, so a lazy stack finds it before it has built it (a first card taller
+    /// than a screenful leaves the second unbuilt on a phone).
+    var launchAnchor: (index: Int, id: String)? = nil
     @ViewBuilder let item: (_ index: Int, _ bordered: Bool) -> Item
     @Environment(\.window) private var window
     /// The list's own width (a card page's column is narrower than the window).
@@ -125,8 +130,14 @@ struct CardColumns<Item: View>: View {
         let id: String
     }
 
+    /// Item `index`'s identity: its id, or its place when none are given; the launch anchor's own.
+    static func slotID(_ index: Int, ids: [String]?, launchAnchor: (index: Int, id: String)?) -> String {
+        if let launchAnchor, launchAnchor.index == index { return launchAnchor.id }
+        return ids?[index] ?? String(index)
+    }
+
     private func slots(_ indices: some Sequence<Int>) -> [Slot] {
-        indices.map { Slot(index: $0, id: ids?[$0] ?? String($0)) }
+        indices.map { Slot(index: $0, id: Self.slotID($0, ids: ids, launchAnchor: launchAnchor)) }
     }
 
     var body: some View {
