@@ -475,7 +475,24 @@ private struct CoverSlot: View {
                 }
             }
         }
+        #if DEBUG
+        // `-coverFrame YES` taps 調整位置 once the step has settled, to show 調整封面 (screen checks, Debug only).
+        .task(id: model.values.imageURL) {
+            guard WriterLaunch.framesCover(asked: WriterLaunch.opensCoverFrame(), step: model.step,
+                                           hasPicture: model.values.imageURL != nil, alreadyOpened: Self.framedAtLaunch)
+            else { return }
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled, model.step == .publish else { return }
+            Self.framedAtLaunch = true
+            adjust()
+        }
+        #endif
     }
+
+    #if DEBUG
+    /// `-coverFrame YES` opened 調整封面 once in this launch.
+    private static var framedAtLaunch = false
+    #endif
 
     /// The preview's cover outline (``StoryCardView`` at position 0: seed 13, its picture + 5).
     static let coverSeed: Double = 18

@@ -67,8 +67,9 @@ public func organicImageBleed(_ w: CGFloat, _ h: CGFloat) -> CGFloat {
     (min(w, h) * 0.05 + 6 + 4).rounded(.up)
 }
 
-/// The clip, drawn in the bled frame's coordinates (so offset by `bleed`). Public for the cover's framing stage
-/// (round 25 §G3), whose frame is the cover's own outline (`bleed` 0).
+/// The clip, drawn in the bled frame's coordinates (so offset by `bleed`) from the rect's own origin. Public for the
+/// cover's framing stage (round 25 §G3), whose frame is the cover's own outline (`bleed` 0) cut out of the stage's
+/// middle — a rect away from the origin, which the hole once ignored and was cut at the stage's top-left.
 public nonisolated struct OrganicImageShape: Shape {
     let seed: Double
     let radius: Double
@@ -85,7 +86,7 @@ public nonisolated struct OrganicImageShape: Shape {
         guard w > 0, h > 0 else { return Path() }
         // Kept by the geometry cache: a feed of covers asks for the same few sizes on every layout.
         return GeometryCache.shared.wobRectPath(WobRectKey(w: w, h: h, r: min(radius, min(w, h) / 2), seed: seed, mag: min(w, h) * 0.05,
-                                                           options: Self.options, offsetX: bleed, offsetY: bleed))
+                                                           options: Self.options, offsetX: rect.minX + bleed, offsetY: rect.minY + bleed))
     }
 
     private static let options = WobRectOptions(curve: 0.4, cornerJitter: 1.1, cornerOffset: 6, segmentsH: .range(3, 4), segmentsV: .range(2, 3))
