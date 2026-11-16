@@ -52,6 +52,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.resonance.api.models.FeedCard
 import com.resonance.api.models.Profile
+import com.resonance.app.BuildConfig
+import com.resonance.app.DebugLaunch
 import com.resonance.app.SafetyService
 import com.resonance.app.Session
 import com.resonance.design.AppFonts
@@ -147,6 +149,9 @@ class AuthorModel(private val session: Session, private val handle: String) : Vi
     }
 }
 
+/** What a person's page lists ahead of their cards: the masthead, then 公開文章. */
+internal const val AuthorCardsBefore = 2
+
 /** A person's page (u/[handle]/page.tsx). */
 @Composable
 fun AuthorScreen(session: Session, handle: String, open: (Route) -> Unit, back: () -> Unit) {
@@ -173,6 +178,14 @@ fun AuthorScreen(session: Session, handle: String, open: (Route) -> Unit, back: 
     // The bar lies over the page, so what scrolls shows right up to its pen line.
     val top = inlineBarTop()
     val layout = cardListLayout()
+    // Debug `--es scrollToCard <slug>` (the screenshots' profile-translated): a phone's page scrolls to that card once
+    // its cards are in — the masthead and the heading lie ahead of them (AuthorCardsBefore).
+    if (BuildConfig.DEBUG && !layout.isGrid) {
+        LaunchedEffect(phase, cards) {
+            if (phase != "loaded" || profile?.isBlocked == true) return@LaunchedEffect
+            DebugLaunch.takeCardScroll(cards.map { it.routeKey }, AuthorCardsBefore)?.let { list.scrollToItem(it) }
+        }
+    }
     // The people head (round 9 §9): the avatar 40 under the bar's pen line on a phone, 56 wider.
     val profileTop = LocalWindowLayout.current.cls.peopleHeadGap()
     Box(Modifier.fillMaxSize().cream()) {
