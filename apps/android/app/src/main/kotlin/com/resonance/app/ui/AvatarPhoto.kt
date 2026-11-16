@@ -227,8 +227,10 @@ private fun AvatarCropModal(photo: Bitmap, onCancel: () -> Unit, onUse: (ByteArr
                 Box(Modifier.fillMaxWidth().padding(top = 2.dp), contentAlignment = Alignment.Center) {
                     AvatarCropStage(image, side, state, { if (!sending) state = it }, L10n.Settings.Profile.cropStage, moves = CropMoves)
                 }
-                CropZoomRow(state.z, AvatarCrop.MAX_ZOOM, L10n.Settings.Profile.cropZoom, enabled = !sending) { z -> state = crop.zoomTo(state, z) }
-                CropResetRow(state != CropState(), enabled = !sending) { state = CropState() }
+                CropZoomRow(
+                    state.z, AvatarCrop.MAX_ZOOM, L10n.Settings.Profile.cropZoom, moved = state != CropState(), enabled = !sending,
+                    onReset = { state = CropState() },
+                ) { z -> state = crop.zoomTo(state, z) }
                 if (failed) ModalError(L10n.Settings.Profile.avatarError)
                 ModalActions(
                     L10n.Settings.Profile.cropCancel, onCancel, L10n.Settings.Profile.cropUse,

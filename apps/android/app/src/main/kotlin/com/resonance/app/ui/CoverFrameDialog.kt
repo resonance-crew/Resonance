@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicText
@@ -21,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.resonance.design.AppFonts
 import com.resonance.design.COVER_STAGE_MAX
@@ -58,11 +60,26 @@ internal fun Context.hasPointer(): Boolean =
 
 /**
  * The zoom row under a crop stage (round 25 §G3.3): − · the slider · +, the slider on a multiplying scale (ln z: a
- * slide, a pinch and a wheel are one control) from 1 to [maxZoom], named [label] for TalkBack.
+ * slide, a pinch and a wheel are one control) from 1 to [maxZoom], named [label] for TalkBack. At its end 重設
+ * (§G3.2), once the picture has [moved]: a quiet word that puts it back at the start (centred, zoom 1), the slider
+ * giving it the room — as on iOS (AvatarCrop.swift's CropZoomRow) and the web. The row is [CropZoomRowHeight] tall
+ * whether 重設 shows or not, so nothing under it jumps when it appears.
  */
 @Composable
-internal fun CropZoomRow(z: Double, maxZoom: Double, label: String, enabled: Boolean = true, onZoom: (Double) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+internal fun CropZoomRow(
+    z: Double,
+    maxZoom: Double,
+    label: String,
+    moved: Boolean,
+    enabled: Boolean = true,
+    onReset: () -> Unit,
+    onZoom: (Double) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = CropZoomRowHeight),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         OrganicIcon(IconName.Minus, size = 16.dp, color = Tokens.TextMuted)
         OrganicSlider(
             FrameCrop.sliderOf(z), { v -> if (enabled) onZoom(FrameCrop.zoomOf(v)) },
@@ -70,26 +87,27 @@ internal fun CropZoomRow(z: Double, maxZoom: Double, label: String, enabled: Boo
             Modifier.weight(1f), step = 0.005f,
         )
         OrganicIcon(IconName.Plus, size = 16.dp, color = Tokens.TextMuted)
+        if (moved) {
+            // Its words hang on the column's end (the quiet button's air pushed out past it, the mirror of a
+            // start-aligned one's pull), so they line up with 完成 below.
+            QuietButton(
+                L10n.Crop.reset, Modifier.offset(x = QuietButtonPadX).testTag(CropResetTag),
+                minHeight = CropZoomRowHeight, enabled = enabled, onClick = onReset,
+            )
+        }
     }
 }
 
-/**
- * 重設 (round 25 §G3.2): a quiet text button at the stage's start, shown once something has moved — it puts the
- * picture back at the start (centred, zoom 1).
- */
-@Composable
-internal fun CropResetRow(moved: Boolean, enabled: Boolean = true, onReset: () -> Unit) {
-    if (!moved) return
-    Box(Modifier.fillMaxWidth()) {
-        // Its words in line with the column (the quiet button's air pulled out).
-        QuietButton(L10n.Crop.reset, Modifier.offset(x = -QuietButtonPadX), enabled = enabled, onClick = onReset)
-    }
-}
+/** The zoom row's height, 重設 or not (the small pill 重設 replaced, as iOS's `minHeight: 36`). */
+internal val CropZoomRowHeight = 36.dp
+
+/** 重設's test tag. */
+internal const val CropResetTag = "crop-reset"
 
 /**
  * 調整封面 (round 25 §G2.3): the house modal over the cover's picture, framed in the feed card's shape (0.62, the
  * cover's own outline), dimmed outside; the hint by input (touch: drag and pinch; a mouse: drag and wheel); the zoom
- * slider; 重設 once something moved; 取消 · 完成. 完成 hands back the frame ([onDone]; null: the centre at zoom 1, as if
+ * slider with 重設 at its end once something moved; 取消 · 完成. 完成 hands back the frame ([onDone]; null: the centre at zoom 1, as if
  * none) — nothing is uploaded. Opens where [frame] left it.
  */
 @Composable
@@ -120,8 +138,10 @@ internal fun CoverFrameDialog(photo: ImageBitmap, frame: CoverFraming?, onCancel
                         L10n.Write.CoverFrame.stage, moves = CropMoves,
                     ) { _, _ -> OrganicImageShape(91.0) }
                 }
-                CropZoomRow(shown.z, CoverFraming.MAX_ZOOM, L10n.Crop.zoom) { z -> state = crop.zoomTo(shown, z) }
-                CropResetRow(shown != CropState()) { state = CropState() }
+                CropZoomRow(
+                    shown.z, CoverFraming.MAX_ZOOM, L10n.Crop.zoom, moved = shown != CropState(),
+                    onReset = { state = CropState() },
+                ) { z -> state = crop.zoomTo(shown, z) }
                 ModalActions(
                     L10n.Write.CoverFrame.cancel, onCancel, L10n.Write.CoverFrame.done,
                     onVerb = { onDone(crop.framing(shown).takeUnless { it.isCentred }) },
