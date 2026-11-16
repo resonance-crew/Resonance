@@ -122,3 +122,21 @@ describe('the grid draws a card again only when it changed', () => {
     expect(Array.from(grid.children).map((el) => (el as HTMLElement).dataset.cardId)).toEqual(['c0', 'c1', 'c2']);
   });
 });
+
+// Round 25: the release screenshots' profile-translated screen scrolls carol's profile to her English card on the
+// web (on a phone her first card fills the screenful), by the link this grid wraps each card in.
+describe('the profile-translated screen finds its card in the grid', () => {
+  it('scrolls to the link of carol’s bridge-rain card, whichever locale prefixes it', async () => {
+    const { SCREENS } = await import('../../../../scripts/visual/screens');
+    const to = SCREENS.find((s) => s.id === 'profile-translated')?.web?.scrollTo;
+    expect(to).toBeTruthy();
+    const cards = [card('a', 140, { slug: 'stranger-line' }), card('b', 55, { slug: 'bridge-rain' })];
+    const { container } = renderWithIntl(<CardLinkGrid cards={cards} authors={{}} />);
+    const link = container.querySelector(to!);
+    expect(link?.getAttribute('href')).toBe('/card/bridge-rain');
+    expect(link?.querySelector('article')).toBeTruthy();
+    const en = document.createElement('a');
+    en.setAttribute('href', '/en/card/bridge-rain');
+    expect(en.matches(to!)).toBe(true);
+  });
+});
