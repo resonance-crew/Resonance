@@ -76,6 +76,17 @@ describe('調整位置 on a picture cover', () => {
     expect(uploadImageFile).not.toHaveBeenCalled();
   });
 
+  it('draws the frame’s line in the photo ink, which stays light at night — the paper’s own cream turns dark there', async () => {
+    renderWithIntl(<Slot onChanged={vi.fn()} />);
+    const dialog = await openDialog();
+    const line = await waitFor(() => {
+      const path = dialog.querySelector('path[data-crop-mask]');
+      expect(path).not.toBeNull();
+      return path!;
+    });
+    expect(line.getAttribute('stroke')).toBe('var(--photo-ink)');
+  });
+
   it('完成 writes media.frame into the draft — the picture and the card’s colour stay', async () => {
     const onChanged = vi.fn();
     renderWithIntl(<Slot onChanged={onChanged} />);

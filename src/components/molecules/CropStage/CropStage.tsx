@@ -199,7 +199,7 @@ export function CropStage({ picture, ratio, max, inset, zoomMax, outline, view, 
               <svg className={styles.overlay} width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden>
                 <g transform={`translate(${fx} ${fy})`}>
                   <path d={`M${-fx} ${-fy}H${width - fx}V${height - fy}H${-fx}Z ${framePath}`} fill={SCRIM} fillRule="evenodd" />
-                  <path d={framePath} fill="none" stroke="var(--color-cream)" strokeOpacity={0.9} strokeWidth={INK} strokeLinejoin="round" data-crop-mask="" />
+                  <path d={framePath} fill="none" stroke="var(--photo-ink)" strokeOpacity={0.9} strokeWidth={INK} strokeLinejoin="round" data-crop-mask="" />
                 </g>
               </svg>
             )}
