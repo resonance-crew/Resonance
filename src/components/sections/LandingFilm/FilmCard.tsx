@@ -201,9 +201,12 @@ export const CTA_FAMILY = 4;
  * and, in place of a byline, its one action, 寫下你的故事.
  */
 /**
- * The night card's cover: a page being written — three ruled lines in the card's own pen, the first begun in ink, a
- * pencil at the place it has reached. Round 4 (the owner's list: 「夜晚那張空白卡片的條紋封面，看起來還有點像圖片沒載入」):
- * the stripes a card wears before its picture read as a picture that failed to load; this is plainly a drawing.
+ * The night card's cover: a page being written — three ruled lines in the card's own pen, the first two written in
+ * ink and the third begun, a pencil at the place it has reached. Round 4 (the owner's list:
+ * 「夜晚那張空白卡片的條紋封面，看起來還有點像圖片沒載入」): the stripes a card wears before its picture read as a
+ * picture that failed to load; this is plainly a drawing. The pencil stands on the third line, not the first
+ * (2026-11-16, the owner on an iPad: 「鉛筆會被截斷」): on a tall screen the cover is a strip (34 %, film.module.css)
+ * and its `slice` keeps only the drawing's middle — y 46…154 — where a pencil over the first line lost all but its point.
  */
 function CtaCover() {
   const rule = (y: number, seed: number, w = 190) => <path d={wavyLine(w, seed, 1.6, 6)} transform={`translate(65 ${y})`} />;
@@ -214,9 +217,13 @@ function CtaCover() {
         {rule(100, 12)}
         {rule(136, 13, 120)}
       </g>
-      <path d={wavyLine(84, 11, 1.6, 3)} transform="translate(65 64)" className={styles.ctaInk} strokeWidth={INK} />
-      {/* the pencil, its point where the line has got to */}
-      <g transform="translate(150 63) rotate(38)" className={styles.ctaPencil}>
+      <g className={styles.ctaInk} strokeWidth={INK}>
+        {rule(64, 11)}
+        {rule(100, 12)}
+        <path d={wavyLine(64, 13, 1.6, 2)} transform="translate(65 136)" />
+      </g>
+      {/* the pencil, its point where the third line has got to */}
+      <g transform="translate(129 135) rotate(38)" className={styles.ctaPencil}>
         <path d="M-5 -58C-5 -61 5 -61 5 -58L5.4 -12L0 0L-5.4 -12Z" className={styles.ctaPencilBody} strokeWidth={INK_LIGHT} />
         <path d="M-5.3 -12L0 0L5.3 -12" className={styles.ctaPencilTip} strokeWidth={INK_LIGHT} />
         <path d="M-5 -50L5 -50" className={styles.ctaPencilBand} strokeWidth={INK_LIGHT} />
