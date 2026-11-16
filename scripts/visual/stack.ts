@@ -27,7 +27,8 @@ export async function seed(log: (line: string) => void) {
   log('Seeding the test world (scripts/seed-emulator.ts)…');
   // SEED_RESET: the stack's emulators are its own, so each seed starts from an empty database (a flow's writes never
   // carry into the next flow or capture).
-  run('npx', ['tsx', 'scripts/seed-emulator.ts'], { ...emulatorPorts(), SEED_NOW, SEED_RESET: '1' });
+  // EMULATOR_DEV_PORT: where the seed's stored cover is served from (this stack's dev server), so the apps load it too
+  run('npx', ['tsx', 'scripts/seed-emulator.ts'], { ...emulatorPorts(), EMULATOR_DEV_PORT: String(PORTS.dev), SEED_NOW, SEED_RESET: '1' });
 }
 
 export async function startStack(logDir: string, log: (line: string) => void): Promise<Stack> {

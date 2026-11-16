@@ -78,7 +78,8 @@ EMULATOR_AUTH_PORT={auth} EMULATOR_FIRESTORE_PORT={firestore} npm run dev:emulat
 VISUAL_AUTH_PORT={auth} VISUAL_FIRESTORE_PORT={firestore} VISUAL_DEV_PORT={dev} npm run visual -- capture <platform> --only <screens>
 ```
 
-Seeds follow the same variables (`npx tsx scripts/seed-emulator.ts`); the apps take
+Seeds follow the same variables (`npx tsx scripts/seed-emulator.ts`, with `EMULATOR_DEV_PORT={dev}` too, so the seed's
+stored cover gets your dev server's address and the apps can load it); the apps take
 `emulatorAuthPort` / `emulatorFirestorePort` / `emulatorApiPort` launch arguments (apps/README.md). Never reseed
 someone else's emulators. A slice of screenshots is yours to run and read; **never `accept`** — a baseline changes
 only on the owner's OK.

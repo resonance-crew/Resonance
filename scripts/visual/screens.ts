@@ -165,7 +165,7 @@ export const SCREENS: Screen[] = [
     expect: "alice's notifications (the web's phone: the 通知 page, its title in the header; wider: the bell's dialog over the feed): carol's letter, bob's note (both with their words) and bob's resonance unread (dot, the bell's badge 3), carol's card link and bob's first message read — the rows touching, no rules or washes between them at rest" },
   { id: 'settings', route: '/settings', as: 'alice',
     expect: 'Settings: profile, appearance (theme swatches, 小紙團 switch), notifications, account' },
-  // Round 25 §F: 自動翻譯 — its switch, then a card and the feed read under it. The apps open Settings' own page by its
+  // Round 25 §F: 自動翻譯 — its switch, then a card and a list of cards read under it. The apps open Settings' own page by its
   // path (the web has none: a tab of /settings) and take the switch as a debug launch argument, which the web keeps in
   // this browser's storage.
   { id: 'settings-language', route: '/settings/language', as: 'alice',
@@ -174,9 +174,11 @@ export const SCREENS: Screen[] = [
   { id: 'card-translated', route: '/card/bridge-rain', as: 'alice',
     web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) } }, app: AUTO_TRANSLATE,
     expect: "carol's English card read by alice under 自動翻譯: 舊橋上的雨 and its story in Chinese, the line under the byline 已由 AI 翻譯 · 顯示原文" },
-  { id: 'home-translated', route: '/home', as: 'alice',
+  // (a list, not the feed: carol's English card is weeks old and four screens down alice's feed, past what a phone's
+  // one screenful takes; her profile lists it second, and every list draws its cards the same way)
+  { id: 'profile-translated', route: '/u/carol', as: 'alice',
     web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) } }, app: AUTO_TRANSLATE,
-    expect: "alice's feed under 自動翻譯: carol's English card as 舊橋上的雨 with its excerpt in Chinese and the small globe at its foot's end; every other card as written" },
+    expect: "carol's profile read by alice under 自動翻譯: her English card as 舊橋上的雨 with its excerpt in Chinese and the small globe at its foot's end; 陌生人的一句話 as written" },
   // Round 25 §G1: a cover framed off its centre — the lamp at the picture's right edge stays in view on every shape.
   { id: 'card-framed', route: '/card/harbour-lamp', as: 'bob',
     expect: "alice's card 港邊的那盞燈: its cover cut on its frame — the lamp and its glow in view right of centre, not the empty sky" },

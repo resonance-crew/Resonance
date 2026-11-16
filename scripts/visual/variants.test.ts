@@ -18,7 +18,7 @@ describe('the variant sets', () => {
     // No state, no extended-only screen in a release run.
     expect(devicesFor('android', 'release')).toEqual(['phone', 'tablet']);
     expect(keys('android', 'phone', 'release').some((k) => k.startsWith('thread-attach') || k.startsWith('thread-keyboard'))).toBe(false);
-    // round 25: six screens (settings-language, card-translated, home-translated, card-framed, publish-cover,
+    // round 25: six screens (settings-language, card-translated, profile-translated, card-framed, publish-cover,
     // cover-frame) × the web's five, the iPhone's three, the iPad, the Mac, the Android phone's three and the tablet
     expect(estimate('release').captures).toBe(387);
   });

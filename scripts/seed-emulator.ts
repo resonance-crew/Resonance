@@ -187,6 +187,7 @@ async function main() {
     const { join, dirname } = await import('node:path');
     const sharp = (await import('sharp')).default;
     const key = 'cover/seed/harbour-lamp.webp';
+    const storageBase = process.env.EMULATOR_DEV_PORT ? `http://localhost:${process.env.EMULATOR_DEV_PORT}${LOCAL_STORAGE_PATH}` : LOCAL_STORAGE_PATH;
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900">
       <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f3d63"/><stop offset="1" stop-color="#d98b6a"/></linearGradient></defs>
       <rect width="1600" height="900" fill="url(#sky)"/>
@@ -201,8 +202,10 @@ async function main() {
     await writeFile(path, await sharp(Buffer.from(svg)).webp({ quality: 82 }).toBuffer());
     await card('harbour-lamp', 'alice', '港邊的那盞燈', '每次加班回家，港邊那盞燈都還亮著。\n\n它不知道我是誰，可是它一直在那裡。', 60 * 24 * 25, 30);
     await db.doc('cards/harbour-lamp').update({
-      // a path on whatever port the dev server listens on (the harness's, a lane's): what serves the stand-in's pictures
-      media: { type: 'image', url: `${LOCAL_STORAGE_PATH}/${key}`, label: '港邊的燈', frame: { cx: 0.8, cy: 0.42, zoom: 1.35, ar: 1600 / 900 } },
+      // at the address the dev server serves the stand-in's pictures (EMULATOR_DEV_PORT: the harness's port, a lane's),
+      // as an upload against the emulators is stored — the apps load no path without a host (round 25: both showed an
+      // empty cover); with no port given, a path of whatever site reads it, which the web alone resolves
+      media: { type: 'image', url: `${storageBase}/${key}`, label: '港邊的燈', frame: { cx: 0.8, cy: 0.42, zoom: 1.35, ar: 1600 / 900 } },
     });
   }
 
