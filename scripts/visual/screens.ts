@@ -170,7 +170,7 @@ export const SCREENS: Screen[] = [
   // this browser's storage.
   { id: 'settings-language', route: '/settings/language', as: 'alice',
     web: { route: '/settings', click: '[role="tablist"] [role="tab"]:nth-child(5)' },
-    expect: 'Settings → 語言: the UI language (the web and iOS: then 我主要書寫的語言), then 自動翻譯 with its hint and its switch off' },
+    expect: 'Settings → 語言: the UI language (the web: then 我主要書寫的語言, which the apps have no row for), then 自動翻譯 with its hint and its switch off' },
   { id: 'card-translated', route: '/card/bridge-rain', as: 'alice',
     web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) } }, app: AUTO_TRANSLATE,
     expect: "carol's English card read by alice under 自動翻譯: 舊橋上的雨 and its story in Chinese, the line under the byline 已由 AI 翻譯 · 顯示原文" },
