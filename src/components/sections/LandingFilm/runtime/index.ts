@@ -511,6 +511,13 @@ export function startFilm(root: HTMLElement, { model, style }: { model: FilmMode
       else if (Math.abs(yFilm() - restore.y) > 2) jumpToY(restore.y);
     }
     const d = drive.step(wall);
+    // the page moved from where ▶ had put it, by no hand we heard (drive.step's `moved`): the same skip as a scroll's
+    // — the film plays on from where the page comes to rest (skipScroll), and the button stays ❚❚ meanwhile. Before
+    // this ▶ stayed stopped, and on an iPad's or an iPhone's Safari the film never got past its first second.
+    if (d.moved) {
+      resumeAt = performance.now() + RESUME_MS;
+      publish({ playing: true });
+    }
     const yS = ySvh();
     const st = clock.tick(sOfY(Math.max(0, yS)), dt, { driving: d.driving, scrub: d.scrub || false, resting });
     // the end winds down: 5 s after the night's act is over, only breath and blinks are left (WCAG 2.2.2)

@@ -3,7 +3,7 @@
  * 1.5 s at the end of 寫下, of the reply, of the meeting and of the night, stopping where the stage lets go), the glides of ← →, the
  * progress line's ticks and 重看一次, and the jumps (the hash, the way back, the progress line pressed or dragged,
  * which then leaves the page to the visitor). Any wheel, touch, scroll key, press on the scrollbar, or the page moving
- * more than 3 px from where we last put it hands control straight back. Writes are `behavior: 'instant'` (the site's
+ * more than 3 px from where we put it (our last two writes: `movedByAnother`) hands control straight back. Writes are `behavior: 'instant'` (the site's
  * html has smooth scrolling, which would turn every per-frame write into a smooth scroll).
  */
 import { FILM_END, SEG, TRACK_SVH, easeInOut, yOfS } from '../script/timeline';
@@ -34,6 +34,8 @@ export class Drive {
   private tail = -1;
   private glide: { from: number; to: number; t: number; dur: number; then?: () => void } | null = null;
   private lastWritten = -1;
+  /** Where the page was ours before that: the write before, or where it stood when we took it. */
+  private prevWritten = -1;
 
   constructor(
     private readonly track: Track,
@@ -46,7 +48,27 @@ export class Drive {
     this.onMode(m);
   }
 
-  /** ▶ is holding its breath at the end of an act (the page still). */
+  /** The page is ours from where it stands: nothing written yet, and where it is now counts as where we left it. */
+  private take() {
+    this.lastWritten = -1;
+    this.prevWritten = Math.round(window.scrollY);
+  }
+
+  /**
+   * The page is somewhere we didn't put it: more than 3 px outside the stretch between the last two places it was
+   * ours. Not just the last one: Safari on an iPad (and an iPhone) now and then applies a write a frame late — the
+   * next frame still reads where the write before left the page — and after a long frame one step is more than 3 px.
+   * Measured on an iPad (10th generation), 2026-11-16: 29 written, 22 read 122 ms later, 29 the frame after. Against
+   * the last write alone that read as a visitor's scroll: ▶ gave the page back within a second of starting, by itself
+   * or pressed, and the film never played there.
+   */
+  private movedByAnother(): boolean {
+    const y = window.scrollY;
+    const lo = Math.min(this.prevWritten, this.lastWritten);
+    const hi = Math.max(this.prevWritten, this.lastWritten);
+    return y < lo - 3 || y > hi + 3;
+  }
+
   get holding(): boolean {
     return this.mode === 'play' && this.hold > 0;
   }
@@ -59,6 +81,7 @@ export class Drive {
   /** Writes the scroll (whole px: rounded, or `up` to the next one — ▶'s last write lands on the track's end, never short). */
   private write(yFilm: number, up = false) {
     const top = (up ? Math.ceil : Math.round)(this.track.top() + yFilm - (up ? 1e-6 : 0));
+    if (this.lastWritten >= 0) this.prevWritten = this.lastWritten;
     this.lastWritten = top;
     window.scrollTo({ top, behavior: 'instant' as ScrollBehavior });
   }
@@ -79,7 +102,7 @@ export class Drive {
     this.tail = -1;
     this.held = new Set(HOLDS.filter((h) => h <= s + 1e-3 && h > 0 && s > 0));
     this.glide = null;
-    this.lastWritten = -1;
+    this.take();
     this.setMode('play');
   }
 
@@ -94,7 +117,7 @@ export class Drive {
     const from = this.y();
     const dist = Math.abs(yFilm - from) / Math.max(1, this.track.svh() * 100);
     this.glide = { from, to: yFilm, t: 0, dur: Math.min(max, 0.35 + dist * 0.5), then };
-    this.lastWritten = -1;
+    this.take();
     this.setMode('glide');
   }
 
@@ -109,13 +132,17 @@ export class Drive {
    * One frame: advance the play-through or the glide and write the scroll. Answers whether the page is being driven
    * (the clock then takes s exactly) and whether that is a glide (every act at its floor meanwhile). `dt` is the wall
    * clock since the last frame (seconds): a glide and ▶ keep to it even on a device that drops frames — only the acts'
-   * clocks cap a long frame (the caller's), so a glide takes its time and ▶ plays at 1×, never slower.
+   * clocks cap a long frame (the caller's), so a glide takes its time and ▶ plays at 1×, never slower. `moved`: ▶ has
+   * just given the page back because something else moved it — a hand we heard nothing of, or the browser itself
+   * (Safari's Smart App Banner arriving puts an iPad's page back at its top, half a second into the film).
    */
-  step(dt: number): { driving: boolean; scrub: boolean } {
+  step(dt: number): { driving: boolean; scrub: boolean; moved?: boolean } {
     if (this.mode === 'browse') return { driving: false, scrub: false };
-    if (this.lastWritten >= 0 && Math.abs(window.scrollY - this.lastWritten) > 3) {
+    if (this.lastWritten >= 0 && this.movedByAnother()) {
+      // ▶ interrupted (not a glide): the caller lets the film play on once the page rests, as after a scroll
+      const moved = this.mode === 'play';
       this.handBack();
-      return { driving: false, scrub: false };
+      return { driving: false, scrub: false, moved };
     }
     const svh = this.track.svh();
     if (this.mode === 'glide' && this.glide) {

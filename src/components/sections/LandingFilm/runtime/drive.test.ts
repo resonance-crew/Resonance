@@ -54,14 +54,48 @@ describe('the play-through', () => {
     expect(s()).toBeCloseTo(4, 1);
   });
 
+  it('plays on where a write lands a frame late and the frames are long, as in Safari on an iPad', () => {
+    // the page reads, at each frame's start, where the write before the last one left it (measured on an iPad:
+    // 29 written, 22 read 122 ms later, 29 the frame after) — with steps of more than 3 px a frame
+    let shown = 0;
+    let asked = 0;
+    vi.spyOn(window, 'scrollTo').mockImplementation(((o: ScrollToOptions) => {
+      shown = asked;
+      asked = o.top ?? asked;
+    }) as typeof window.scrollTo);
+    Object.defineProperty(window, 'scrollY', { configurable: true, get: () => shown });
+    const modes: string[] = [];
+    // 1svh = 1000 px: ▶ moves the page by tens of px in a quarter of a second
+    const d = new Drive({ top: () => 0, svh: () => 1000 }, (m) => modes.push(m));
+    d.play(1);
+    let widest = 0;
+    for (let i = 0; i < 12; i++) {
+      const before = asked;
+      d.step(0.25);
+      widest = Math.max(widest, asked - before);
+    }
+    expect(widest).toBeGreaterThan(3);
+    expect(d.mode).toBe('play');
+    // and a visitor's own move, well outside the last two writes, still takes the page
+    shown = asked + 400;
+    d.step(0.25);
+    expect(d.mode).toBe('browse');
+  });
+
   it("hands the page back when the visitor moves it, and on ❚❚", () => {
     const { d, setY } = page();
     d.play(1);
-    d.step(0.05);
+    expect(d.step(0.05).moved).toBeUndefined();
     expect(d.mode).toBe('play');
     setY(window.scrollY + 40);
-    d.step(0.05);
+    // …saying so, for the film to play on once the page rests (Safari's Smart App Banner arriving puts an iPad's
+    // page back at its top with no hand on it); a glide interrupted says nothing, and ❚❚ is not a step's doing
+    expect(d.step(0.05)).toEqual({ driving: false, scrub: false, moved: true });
     expect(d.mode).toBe('browse');
+    d.glideTo(500, undefined, 2);
+    d.step(0.05);
+    setY(window.scrollY + 40);
+    expect(d.step(0.05)).toEqual({ driving: false, scrub: false, moved: false });
     d.play(1);
     d.handBack();
     expect(d.mode).toBe('browse');
