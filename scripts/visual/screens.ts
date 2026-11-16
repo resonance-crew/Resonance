@@ -169,7 +169,9 @@ export const SCREENS: Screen[] = [
   // path (the web has none: a tab of /settings) and take the switch as a debug launch argument, which the web keeps in
   // this browser's storage.
   { id: 'settings-language', route: '/settings/language', as: 'alice',
-    web: { route: '/settings', click: '[role="tablist"] [role="tab"]:nth-child(5)' },
+    // (by its name, not its place: wider than 760 px it is OrganicTabs' tab, on a phone the menu's row — each a button
+    // whose own span holds the words; `:text-is` alone matches that span, never the button)
+    web: { route: '/settings', click: 'button:has(> span:text-is("語言")), button:has(> span:text-is("Language"))' },
     expect: 'Settings → 語言: the UI language (the web: then 我主要書寫的語言, which the apps have no row for), then 自動翻譯 with its hint and its switch off' },
   { id: 'card-translated', route: '/card/bridge-rain', as: 'alice',
     web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) } }, app: AUTO_TRANSLATE,

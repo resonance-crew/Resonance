@@ -53,6 +53,17 @@ describe('the release screenshots’ screens', () => {
     });
   });
 
+  // Round 25 §F: Settings → 語言 is a tab only wider than 760 px; a phone's Settings is a menu of row buttons with no
+  // tablist, so a click by the tab's place timed out there and ended the web run (round 25's review).
+  it('opens Settings → 語言 by its name, as a tab or as the phone menu’s row', () => {
+    const lang = SCREENS.find((s) => s.id === 'settings-language')!;
+    const click = lang.web!.click!;
+    expect(click).not.toMatch(/tablist|nth-child/);
+    for (const name of [zhTW.settings.sections.language, en.settings.sections.language]) {
+      expect(click).toContain(`button:has(> span:text-is("${name}"))`);
+    }
+  });
+
   // The landing film: its first frame and its end compared; one still per scene only looked at, each at a moment
   // that stands in the scene it names — a change to the film's timeline that moves a scene fails here first.
   it('takes the landing film as its first frame, its end, and a pinned still of each scene', () => {
