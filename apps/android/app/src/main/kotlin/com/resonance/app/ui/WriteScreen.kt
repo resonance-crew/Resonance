@@ -527,6 +527,11 @@ private fun WriteForm(
             if (model.next()) dismissKeyboard()
         }
     }
+    // Debug `--es writeStep publish` (the screenshots' publish-cover): one of the viewer's cards, loaded, opens on its
+    // publish step as its ✓ would open it. Taken once, by the first card's writer.
+    if (BuildConfig.DEBUG && opened != null) LaunchedEffect(model) {
+        if (DebugLaunch.takeWriteStep() == WriterStep.Publish && step == WriterStep.Write) goNext()
+    }
 
     // At the split, how wide the floating ✓ and its save state are: a line beside them keeps clear of them.
     var pillWidth by remember(model) { mutableIntStateOf(0) }
@@ -1381,11 +1386,8 @@ private fun CoverAdjustChip(url: String, model: WriteModel, seed: Double, palett
     var photo by remember(url) { mutableStateOf<ImageBitmap?>(null) }
     val faces = CoverFaces.of(palette)
     val glyphOnly = LocalConfiguration.current.fontScale >= COVER_CHIP_GLYPH_SCALE
-    OrganicButton(
-        L10n.Write.coverAdjust, icon = IconName.Frame, small = true, face = faces.chip, outline = palette.border,
-        iconOnly = glyphOnly, loading = opening,
-    ) {
-        if (opening) return@OrganicButton
+    val adjust: () -> Unit = adjust@{
+        if (opening) return@adjust
         dismissKeyboard()
         opening = true
         scope.launch {
@@ -1396,6 +1398,12 @@ private fun CoverAdjustChip(url: String, model: WriteModel, seed: Double, palett
             }
         }
     }
+    OrganicButton(
+        L10n.Write.coverAdjust, icon = IconName.Frame, small = true, face = faces.chip, outline = palette.border,
+        iconOnly = glyphOnly, loading = opening, onClick = adjust,
+    )
+    // Debug `--ez coverFrame true` (the screenshots' cover-frame): the chip, on the publish step's picture cover, as if tapped.
+    if (BuildConfig.DEBUG) LaunchedEffect(url) { if (DebugLaunch.takeCoverFrame()) adjust() }
     photo?.let { picture ->
         CoverFrameDialog(picture, model.values.imageFrame, onCancel = { photo = null }) { framed ->
             photo = null
