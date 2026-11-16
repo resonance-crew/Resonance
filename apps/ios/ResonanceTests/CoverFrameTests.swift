@@ -118,4 +118,31 @@ import Testing
         values.imageURL = nil
         #expect(DraftService.media(values) == nil)
     }
+
+    /// The scrim's hole is the frame, centred on the stage under its cream line, for the cover as for the avatar: the
+    /// cover's outline once ignored the hole's place and was cut at the stage's top-left (found on the iPhone, the
+    /// `cover-frame` screen).
+    @Test func theScrimsHoleIsTheFrameInTheStagesMiddle() {
+        let stage = CGRect(x: 0, y: 0, width: 322, height: 218)
+        let frame = CropStageSize.frame(stage: stage.size, aspect: CGFloat(CoverFraming.Box.feed))
+        let square = CGSize(width: frame.height, height: frame.height)
+        for (outline, size) in [(CropOutline.cover(seed: 18), frame), (.avatar, square)] {
+            let scrim = CropScrimShape(frame: size, outline: outline).path(in: stage)
+            let centre = CGPoint(x: stage.midX, y: stage.midY)
+            // Clear in the middle, shaded at the stage's corners.
+            #expect(!scrim.contains(centre, eoFill: true))
+            // Just inside the frame's left and right, top and bottom edges, half way along (the avatar's is round-ish).
+            let (w, h) = (size.width / 2 - 20, size.height / 2 - 20)
+            let edges: [(CGFloat, CGFloat)] = [(w, 0), (-w, 0), (0, h), (0, -h)]
+            for (dx, dy) in edges {
+                #expect(!scrim.contains(CGPoint(x: centre.x + dx, y: centre.y + dy), eoFill: true))
+            }
+            #expect(scrim.contains(CGPoint(x: 4, y: 4), eoFill: true))
+            #expect(scrim.contains(CGPoint(x: stage.maxX - 4, y: stage.maxY - 4), eoFill: true))
+        }
+        // The shape itself follows the rect it is given.
+        let moved = OrganicImageShape(seed: 18, radius: 18, bleed: 0).path(in: CGRect(x: 24, y: 24, width: frame.width, height: frame.height))
+        #expect(abs(moved.boundingRect.midX - (24 + frame.width / 2)) < 2)
+        #expect(abs(moved.boundingRect.midY - (24 + frame.height / 2)) < 2)
+    }
 }
