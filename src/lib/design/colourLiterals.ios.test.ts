@@ -58,7 +58,8 @@ function swiftFiles(dir: string): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
-    if (['build', '.build', 'Generated', 'ResonanceTests', 'Tests', 'Resonance.xcodeproj'].includes(name)) continue;
+    // dot folders too: Xcode's derived data kept beside the project (-derivedDataPath .dd-ios) holds the packages' sources
+    if (name.startsWith('.') || ['build', 'Generated', 'ResonanceTests', 'Tests', 'Resonance.xcodeproj'].includes(name)) continue;
     if (statSync(p).isDirectory()) out.push(...swiftFiles(p));
     else if (name.endsWith('.swift')) out.push(p);
   }
