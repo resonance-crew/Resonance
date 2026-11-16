@@ -24,6 +24,20 @@ class DebugLaunchRoutesTest {
         assertEquals(Tab.CardBox to Route.Write(cardId = "alice-draft"), debugLaunchPlace("/en/write/alice-draft"))
     }
 
+    @Test fun aSettingsPageOpensByIosName() {
+        // Round 25's settings-language screen: `--es route /settings/language`, the page a tap on 語言's row opens
+        // (Navigation stacks it on the list). Every section answers to its iOS name; a name nobody has opens the list.
+        val names = mapOf(
+            "profile" to SettingsSection.Profile, "account" to SettingsSection.Account, "privacy" to SettingsSection.Privacy,
+            "notifications" to SettingsSection.Notifications, "language" to SettingsSection.Language,
+            "appearance" to SettingsSection.Appearance, "terms" to SettingsSection.Terms, "delete" to SettingsSection.Delete,
+        )
+        assertEquals(SettingsSection.entries.toSet(), names.values.toSet())
+        for ((name, section) in names) assertEquals(name, Tab.CardBox to Route.SettingsSection(section), debugLaunchPlace("/settings/$name"))
+        assertEquals(Tab.CardBox to Route.SettingsSection(SettingsSection.Language), debugLaunchPlace("/zh-TW/settings/language"))
+        assertEquals(Tab.CardBox to Route.Settings, debugLaunchPlace("/settings/nowhere"))
+    }
+
     @Test fun thePushAndLinkRoutesAreLeftAsTheyWere() {
         for (path in listOf("/card/rain-walk", "/u/bob", "/messages/bob", "/me/thought-map", "", "/privacy", "/me/trash")) {
             assertNull(path, debugLaunchPlace(path))

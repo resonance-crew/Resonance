@@ -214,7 +214,7 @@ internal fun pushedTab(route: String): Tab {
 /**
  * Debug builds' launch route only (`--es route …` with no `notificationId`: the release
  * screenshots, `npm run visual`): the site's places that are a tab's root or a page of the app but
- * never a push's or a link's route — /home, /messages, /notifications, /me, /settings, /write, /write/{cardId} —
+ * never a push's or a link's route — /home, /messages, /notifications, /me, /settings, /settings/{section}, /write, /write/{cardId} —
  * as the tab to show and the page to open on it. Null for anything else: those go through
  * [Route.fromPath] and [pushedTab] as a push's route does, and release builds never ask.
  */
@@ -227,6 +227,10 @@ internal fun debugLaunchPlace(route: String): Pair<Tab, Route?>? {
         parts == listOf("me") -> Tab.CardBox to null
         // Where 編輯個人檔案 opens it.
         parts == listOf("settings") -> Tab.CardBox to Route.Settings
+        // One page of it, by iOS's names in the same path (/settings/language), stacked on the list as a tap on its row
+        // stacks it (the caller puts the list under it); a name it doesn't know opens the list, as iOS does.
+        parts.size == 2 && parts[0] == "settings" ->
+            Tab.CardBox to (SettingsSection.entries.firstOrNull { it.name.equals(parts[1], ignoreCase = true) }?.let(Route::SettingsSection) ?: Route.Settings)
         // The pen opens the writer over the tab on screen.
         parts == listOf("write") -> Tab.Feed to Route.Write()
         // One of the viewer's cards, as the card box's ⋯ · 編輯 opens it.
@@ -430,7 +434,10 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
             route != null -> open(route)
             debugPlace != null -> {
                 tab = debugPlace.first
-                debugPlace.second?.let { stacks.getValue(debugPlace.first).add(it) }
+                val placeStack = stacks.getValue(debugPlace.first)
+                // A settings page lies on the settings list, as a tap on its row leaves it (its back goes to the list).
+                if (debugPlace.second is Route.SettingsSection) placeStack.add(Route.Settings)
+                debugPlace.second?.let { placeStack.add(it) }
             }
             else -> tab = pushedTab(opened.route)
         }

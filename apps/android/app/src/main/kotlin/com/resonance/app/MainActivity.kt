@@ -30,6 +30,9 @@ import kotlinx.coroutines.launch
  *   --es email … --es password …   sign that seeded account in, switching from a restored one (emulator only)
  *   --es route /card/<slug>        open that page (with --es notificationId … [--es fromUserId …], what a tapped push starts the app with)
  *   --es writeTitle … --es writeStory … --es writeCover <url>   a new card starts with them
+ *   --es route /settings/<section>  that page of Settings (profile, account, privacy, notifications, language, appearance, terms, delete)
+ *   --es writeStep publish         with --es route /write/<id>: the writer opens on its publish step once the card has loaded
+ *   --ez coverFrame true           with that step up: 調整封面 opens over the cover's picture once it has loaded
  *   --es threadDraft …             fills a conversation's composer (--es route /messages/<handle> opens one)
  *   --es pushToken …               registers that stand-in push token under the signed-in account
  *   --es pushTitle … [--es pushBody … --es pushRoute … --es pushId … --es pushFromUserId … --es pushType pick|new_card --es pushCardId …]   posts the notification a push received while open shows
@@ -97,6 +100,9 @@ class MainActivity : ComponentActivity() {
             DebugLaunch.threadRide = intent.getStringExtra("visualRide")
             DebugLaunch.threadPanel = intent.getStringExtra("threadPanel")
             DebugLaunch.linkDraft = intent.getStringExtra("linkDraft")
+            DebugLaunch.writeStep = intent.getStringExtra("writeStep")
+            // `--ez` from adb, or a string from Maestro's launchApp arguments.
+            DebugLaunch.coverFrame = intent.getStringExtra("coverFrame") == "true" || intent.getBooleanExtra("coverFrame", false)
             DebugLaunch.avifDecoder = intent.getBooleanExtra("avifDecoder", false)
             DebugLaunch.feedPicksDelay = intent.getIntExtra("feedPicksDelay", 0)
             DebugLaunch.feedPicksIds = intent.getStringExtra("feedPicks")?.split(',')?.map(String::trim)?.filter(String::isNotEmpty)
@@ -284,6 +290,30 @@ object DebugLaunch {
         "keyboard" -> LaunchPanel.Keyboard
         else -> null
     }
+    /**
+     * The next of the viewer's cards the writer opens (`--es route /write/<id>`) opens on this step once it has loaded
+     * (`--es writeStep publish`, the screenshots' `publish-cover`), as if its ✓ had been pressed. Taken once.
+     */
+    var writeStep: String? = null
+
+    /** [writeStep]'s word as a step past writing; anything else (writing included) opens nothing. */
+    fun launchStep(value: String?): com.resonance.app.ui.WriterStep? = when (value?.trim()?.lowercase()) {
+        "publish" -> com.resonance.app.ui.WriterStep.Publish
+        else -> null
+    }
+
+    /** Takes [writeStep] as a step (once: a writer opened afterwards opens as it would). */
+    fun takeWriteStep(): com.resonance.app.ui.WriterStep? = launchStep(writeStep).also { writeStep = null }
+
+    /**
+     * 調整封面 opens over the publish step's picture cover once it has loaded (`--ez coverFrame true`, the screenshots'
+     * `cover-frame`), as if 調整位置 had been tapped; a card with no picture cover opens nothing. Taken once.
+     */
+    var coverFrame = false
+
+    /** Takes [coverFrame] (once). */
+    fun takeCoverFrame(): Boolean = coverFrame.also { coverFrame = false }
+
     /** What the writer's link sheet's field starts with when it opens on no link (screen checks: an IME's keys are slow to drive). */
     var linkDraft: String? = null
     /** Pictures in AVIF go through [AvifDecoder] whatever the Android version (its check on a recent emulator). */
