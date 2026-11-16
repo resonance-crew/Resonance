@@ -14,8 +14,8 @@ deploy was still owed from round 16, written only in a round's notes).
 
 ## Open
 
-- [ ] rules: deploy `firebase/firestore.rules` before the web or apps that write a cover's `media.frame` (round 25 §G1: `validMedia` takes `frame`; `cards/{id}/translations` closed to clients) — `cd firebase && firebase deploy --only firestore:rules`
+- [x] (2026-11-16, released to resonance-stories before the push) rules: deploy `firebase/firestore.rules` before the web or apps that write a cover's `media.frame` (round 25 §G1: `validMedia` takes `frame`; `cards/{id}/translations` closed to clients) — `cd firebase && firebase deploy --only firestore:rules`
 - [ ] backfill: translated titles and excerpts for the public cards published before round 25 (§F7) — after the web that makes them is live, on the owner's go (one small OpenAI call per card): `npx tsx scripts/backfill.ts summary-translations` (dry run, counts), then `… --apply`
-- [ ] legal: the owner reads the privacy policy's new translation sentence (docs/legal/privacy.en.md / .zh-TW.md, round 25 §F5) before the push
+- [x] (2026-11-16, the owner read it and said to deploy the rules and push) legal: the owner reads the privacy policy's new translation sentence (docs/legal/privacy.en.md / .zh-TW.md, round 25 §F5) before the push
 
 ## Done
