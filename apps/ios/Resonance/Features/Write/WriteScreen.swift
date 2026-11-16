@@ -192,8 +192,9 @@ struct WriteScreen: View {
         pane.goBack = { [weak model] in if let model { goBack(model) } }
         pane.leave = { [weak model] in if let model { leaveAsking(model) } }
         #if DEBUG
-        // `-writeStep publish` opens a new card's publish step at once (screen checks).
-        if defaults.string(forKey: "writeStep") == "publish" { Task { await next(model) } }
+        // `-writeStep publish` opens the publish step at once, as ✓ would — a new card's, or one of yours
+        // (`-route /write/<id>`) once it is read (screen checks; the release screenshots' `publish-cover`).
+        if WriterLaunch.opensPublishStep(defaults) { Task { await next(model) } }
         // `-writeFocus YES` puts the caret in the story once its page is up (the format bar on the keyboard).
         if defaults.bool(forKey: "writeFocus") {
             Task {
@@ -847,6 +848,35 @@ enum CaretFollow {
         if bottom > shownBottom { return max(0, bottom - viewport.height) }
         if top < shownTop { return max(0, top) }
         return nil
+    }
+}
+
+/// The writer's launch arguments for screen checks and the release screenshots (scripts/visual/ios.ts):
+/// read only in a Debug build — a Release build answers false whatever its arguments say.
+enum WriterLaunch {
+    /// `-writeStep publish`: the writer opens on its publish step, as if ✓ had been pressed.
+    static func opensPublishStep(_ defaults: UserDefaults = .standard) -> Bool {
+        #if DEBUG
+        defaults.string(forKey: "writeStep") == "publish"
+        #else
+        false
+        #endif
+    }
+
+    /// `-coverFrame YES`: with the publish step up, 調整封面 opens over a picture cover, as if 調整位置
+    /// had been tapped (round 25 §G2; the release screenshots' `cover-frame`). A card without one is left be.
+    static func opensCoverFrame(_ defaults: UserDefaults = .standard) -> Bool {
+        #if DEBUG
+        defaults.bool(forKey: "coverFrame")
+        #else
+        false
+        #endif
+    }
+
+    /// Whether the cover slot opens 調整封面 by itself: asked for, the step up, a picture cover there, and not
+    /// already done once in this launch (the step shown again, or another card opened, leaves it alone).
+    static func framesCover(asked: Bool, step: WriterStep, hasPicture: Bool, alreadyOpened: Bool) -> Bool {
+        asked && step == .publish && hasPicture && !alreadyOpened
     }
 }
 
