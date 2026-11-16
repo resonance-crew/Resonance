@@ -225,12 +225,12 @@ export function CropStage({ picture, ratio, max, inset, zoomMax, outline, view, 
           />
         </div>
         <Icon name="plus" size={16} className={styles.zoomGlyph} />
-      </div>
-      <div className={styles.resetRow}>
         {viewMoved(view) && (
-          <OrganicButton variant="quiet" size="sm" disabled={busy} onClick={() => onView(() => CROP_START)}>
-            {t('reset')}
-          </OrganicButton>
+          <span className={styles.reset}>
+            <OrganicButton variant="quiet" size="sm" disabled={busy} onClick={() => onView(() => CROP_START)}>
+              {t('reset')}
+            </OrganicButton>
+          </span>
         )}
       </div>
     </>

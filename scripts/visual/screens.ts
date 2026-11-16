@@ -197,7 +197,7 @@ export const SCREENS: Screen[] = [
   { id: 'cover-frame', route: '/write/harbour-lamp', as: 'alice',
     web: { query: 'step=publish', click: 'button[aria-label="調整位置"], button[aria-label="Adjust"]' },
     app: { ios: ['-writeStep', 'publish', '-coverFrame', 'YES'], android: ['--es', 'writeStep', 'publish', '--ez', 'coverFrame', 'true'] },
-    expect: '調整封面 over the publish step: the harbour picture under a frame in the feed card’s shape, dimmed outside it, the lamp right of centre; the zoom slider, 重設, then 取消 · 完成' },
+    expect: '調整封面 over the publish step: the harbour picture under a frame in the feed card’s shape, dimmed outside it, the lamp right of centre; one row − zoom slider + 重設 (the seeded frame has moved it, so 重設 shows at the row’s end, its word on the content’s edge above 完成), then 取消 · 完成' },
   { id: 'write-new', route: '/write', as: 'dora',
     expect: "A newcomer's empty writer: the title and story placeholders (on wide screens beside her empty thought map)" },
   // At the desktop split the thought map sits beside the writer, and its camera

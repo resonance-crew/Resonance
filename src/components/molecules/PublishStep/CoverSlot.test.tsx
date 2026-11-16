@@ -110,6 +110,22 @@ describe('調整位置 on a picture cover', () => {
     expect(uploadImageFile).not.toHaveBeenCalled();
   });
 
+  it('重設 stands at the end of the zoom slider’s row, as on iOS — absent until the picture moves', async () => {
+    renderWithIntl(<Slot onChanged={vi.fn()} />);
+    const dialog = await openDialog();
+    const slider = within(dialog).getByRole('slider', { name: en.crop.zoom });
+    expect(within(dialog).queryByRole('button', { name: en.crop.reset })).toBeNull();
+    const stage = within(dialog).getByRole('group', { name: en.write.coverFrame.stage });
+    fireEvent.keyDown(stage, { key: '+' });
+    const reset = within(dialog).getByRole('button', { name: en.crop.reset });
+    // the row that holds the slider holds 重設 too, after it: one row, − slider + 重設
+    let shared: HTMLElement | null = slider.parentElement;
+    while (shared && !shared.contains(reset)) shared = shared.parentElement;
+    expect(shared).not.toBeNull();
+    expect(shared!.contains(stage)).toBe(false);
+    expect(slider.compareDocumentPosition(reset) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('重設 brings it back to the centre, and 完成 there leaves no frame', async () => {
     const onChanged = vi.fn();
     renderWithIntl(<Slot start={{ ...COVER, frame: { cx: 0.3, cy: 0.5, zoom: 1.4, ar: 16 / 9 } }} onChanged={onChanged} />);

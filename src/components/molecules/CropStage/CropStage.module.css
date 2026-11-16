@@ -1,4 +1,4 @@
-/* The crop stage the profile photo and the cover share (round 25 §G3): stage → 14 → zoom row → 重設. */
+/* The crop stage the profile photo and the cover share (round 25 §G3): stage → 14 → the zoom row (− slider + 重設). */
 
 /* The content's width, which the stage takes up to its widest. */
 .room {
@@ -76,10 +76,12 @@
   opacity: 1;
 }
 
+/* 36 high whether or not 重設 shows: nothing below it jumps when it appears. */
 .zoom {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-height: 36px;
   margin-top: 14px;
 }
 .zoomGlyph {
@@ -91,10 +93,13 @@
   min-width: 0;
 }
 
-/* 重設 once something has moved: its row keeps its height either way (nothing jumps). */
-.resetRow {
+/* 重設 once something has moved, at the zoom row's end as on iOS (the owner, 2026-11-16: 要) — the slider gives it
+   the room. Its word hangs on the content's edge: the quiet button's own side padding (OrganicButton .sm, 18) sits
+   past it, so the word lines up with the dialog's buttons below. */
+.reset {
+  flex: none;
   display: flex;
-  justify-content: center;
-  min-height: 36px;
-  margin-top: 6px;
+  align-items: center;
+  height: 36px; /* the small button (39) overhangs it a little, so the row never grows when it appears */
+  margin-inline-end: -18px;
 }
