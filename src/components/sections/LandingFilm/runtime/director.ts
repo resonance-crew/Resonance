@@ -81,13 +81,16 @@ function stripPaper(i: number): string {
   return path(tear(ribbon(line, 64, 0.32), 5200 + i, { jag: 1.6, wander: 5 }), true, 0);
 }
 /**
- * A plane's (or a fringe's) paper in two paints (script/light.ts): `base` (the plane itself, whose paints its whole
- * subtree inherits) and `over`, its art again laid over it, whose opacity alone moves per frame. Each holds a key's
+ * A plane's (or a fringe's) paper in two paints (script/light.ts): `base` (the plane's art, and what else of the plane
+ * reads its paints) and `over`, its art again laid over it, whose opacity alone moves per frame. Each holds a key's
  * hour (null: not written yet); a paint is rewritten only while it is fully hidden, and `pending` is the rewrite
  * waiting its turn in the queue.
  */
 interface PaperPair {
-  base: HTMLElement | SVGElement;
+  /** What wears the lower paint: a plane's art, and what else of the plane reads its paints (its apron, its haze, the
+   *  sea's reflection of the disc) — never the plane itself: the puppets standing in it would inherit every paint,
+   *  and be restyled with every step of the light. A fringe: itself. */
+  base: (HTMLElement | SVGElement)[];
   over: SVGElement;
   set: SetRef;
   a: number | null;
@@ -248,6 +251,8 @@ export class Director {
   /** What wears the light besides the planes (the sky, the stars, the disc, the clouds, the particles, the props, the ≋s, the tissue strips), and which of them wear the planes' paints too. */
   private lightOn: Element[] = [];
   private paintToo: Element[] = [];
+  /** What reads the horizon's height (film.module.css `--hz`): the sky, the stars, the clouds. */
+  private hzOn: Element[] = [];
   /** What each wearer of the hour's paints reads of them (null: every one): the rest is never written there, so a step
    *  of the light restyles only what it repaints (the props layer and the ≋s read the chrome's ink alone). */
   private wears = new Map<Element, ((k: string) => boolean) | null>();
@@ -331,7 +336,10 @@ export class Director {
     for (const set of this.sets) {
       for (const pl of set.planes) {
         const over = pl.el.querySelector<SVGElement>(':scope > svg[data-paper-next]');
-        if (over) this.pairs.push({ art: pl.el.querySelector<SVGSVGElement>(':scope > svg:not([data-haze]):not([data-reflect]):not([data-paper-next])'), base: pl.el, over, set, a: null, b: null, o: 0, pending: null, on: false });
+        if (!over) continue;
+        const art = pl.el.querySelector<SVGSVGElement>(':scope > svg:not([data-haze]):not([data-reflect]):not([data-paper-next])');
+        const base = [art, pl.el.querySelector<HTMLElement>(':scope > [data-apron]'), pl.haze, pl.reflect].filter((el): el is SVGSVGElement | HTMLElement => !!el);
+        this.pairs.push({ art, base, over, set, a: null, b: null, o: 0, pending: null, on: false });
       }
       for (const f of set.fringes) {
         // a fringe is one small <svg>: its second paint a second <use> inside it
@@ -343,7 +351,7 @@ export class Director {
         over.setAttribute('data-paper-next', '');
         use.after(over);
         this.added.push(over);
-        this.pairs.push({ base: f, over, set, a: null, b: null, o: 0, pending: null, on: false });
+        this.pairs.push({ base: [f], over, set, a: null, b: null, o: 0, pending: null, on: false });
       }
     }
     // the style's tissue strips: made once, inside the sets' stacking context (each slotted among the planes by its z)
@@ -387,6 +395,7 @@ export class Director {
     const some = (els: (Element | null | undefined)[]) => els.filter((e): e is Element => !!e);
     const particles = el('[data-wind]')?.parentElement;
     this.paintToo = some([this.disc, particles, this.stripBox]);
+    this.hzOn = some([this.sky, this.sky?.nextElementSibling, this.clouds]);
     this.lightOn = some([el('[data-sky]'), el('[data-sky]')?.nextElementSibling, this.disc, this.clouds, particles, layer, this.stripBox, this.slots.get('wave')?.el, this.slots.get('wave2')?.el]);
     const only = (re: RegExp) => (k: string) => re.test(k);
     const chrome = only(/^--film-chrome-/);
@@ -705,7 +714,10 @@ export class Director {
     const s = st.s;
     const L = this.L;
     const seg = st.owner;
-    this.css.set(this.stage, '--hz', `${this.hzAt(s).toFixed(1)}px`);
+    // the horizon, on what reads it (the sky, the stars, the clouds) — never on the stage, where a new value restyles
+    // every plane, card and puppet: on a tall screen it moves on every frame of the first two changes
+    const hz = `${this.hzAt(s).toFixed(1)}px`;
+    for (const el of this.hzOn) this.css.set(el, '--hz', hz);
     this.cast.carrierSize(this.carrierPal(s));
     this.renderDisc(s);
     this.renderSets(s);
@@ -1165,9 +1177,12 @@ export class Director {
   /** One of a pair's paints: a key's paper (every paint but the light's) written on it. */
   private writePaper(p: PaperPair, layer: 'a' | 'b', key: number, dim: boolean) {
     if (layer === 'a' ? sameKey(p.a, key) : sameKey(p.b, key)) return;
-    const el = layer === 'a' ? p.base : p.over;
+    const els = layer === 'a' ? p.base : [p.over];
     // (and the light's that a plane's parts wear: the disc's in the sea's reflection, the haze a flown flat pales into)
-    for (const [k, v] of Object.entries(paletteOf(key, dim))) if (!LIGHT_VAR.test(k) || PLANE_LIGHT.test(k)) this.paint.set(el, k, v);
+    for (const [k, v] of Object.entries(paletteOf(key, dim))) {
+      if (LIGHT_VAR.test(k) && !PLANE_LIGHT.test(k)) continue;
+      for (const el of els) this.paint.set(el, k, v);
+    }
     if (layer === 'a') p.a = key;
     else p.b = key;
   }
@@ -1211,7 +1226,11 @@ export class Director {
     if (key === this.sbKey && this.sbStyle.textContent === this.sbText) return;
     this.sbKey = key;
     this.sbText = this.sbPaper || !this.sbVars ? '' : scrollbarCss(this.sbVars);
-    this.sbStyle.textContent = this.sbText;
+    // only when the rule's text changes — its ink is the same cream through the whole film, so when the stories' paper
+    // comes up or goes. A <style> written again, even with the text it had, has the browser resolve the whole page's
+    // style anew and paint all of it again: in an iPad's Safari a frame of 60–130 ms at every step of the light, twelve
+    // an hour — two hundred such frames in a play-through, the film at 35 frames a second (2026-11-16; 55 without them)
+    if (this.sbStyle.textContent !== this.sbText) this.sbStyle.textContent = this.sbText;
   }
 
   private discState = { x: 0, y: 0, r: 86, refl: 0, moon: 0 };

@@ -63,9 +63,9 @@ function film() {
   return { d, root, stage, before, frame, unmount };
 }
 
-/** The planes' pairs: each plane's own paints and its copy's. */
+/** The planes' pairs: each plane's own paints — on its art, right before its copy — and its copy's. */
 function pairs(stage: HTMLElement) {
-  return [...stage.querySelectorAll<SVGElement>('[data-plane] > svg[data-paper-next]')].map((over) => ({ base: over.parentElement!, over }));
+  return [...stage.querySelectorAll<SVGElement>('[data-plane] > svg[data-paper-next]')].map((over) => ({ plane: over.parentElement!, base: over.previousElementSibling!, over }));
 }
 const paintsOf = (el: Element) => {
   const st = (el as HTMLElement).style;
@@ -93,6 +93,102 @@ function shown(base: Element, over: Element, k: string): LCH | null {
   const y = srgb(parseOklch(o));
   return oklabOfSrgb(x.map((v, i) => v + (y[i] - v) * m) as LCH);
 }
+
+describe('the page’s scrollbar in the film’s light', () => {
+  it('writes its rule only when its text changes: a step of the light that keeps the ink leaves the <style> alone', () => {
+    const { d, root, frame } = film();
+    const style = root.closest('[data-film-page]')!.querySelector('style[data-film-scrollbar]')!;
+    let now = 0;
+    frame(0.1, now);
+    const text = style.textContent;
+    const written = style.firstChild;
+    expect(text).toContain('[data-page-scrollbar]{');
+    // the whole film, a step of the light every twelfth of an hour: the chrome's ink is the same cream throughout
+    for (let s = 0.1; s < FILM_END; s += 0.04) frame(s, (now += 1 / 60));
+    expect(hourAt(FILM_END) - hourAt(0.1)).toBeGreaterThan(16);
+    // the same text node: the style was never written again (a rewrite has the browser restyle the whole page)
+    expect(style.firstChild).toBe(written);
+    expect(style.textContent).toBe(text);
+    // the stories' paper up: the rule goes (the theme's ink); down again: the film's, once each
+    d.paperUp = true;
+    expect(style.textContent).toBe('');
+    d.paperUp = false;
+    expect(style.textContent).toBe(text);
+    const again = style.firstChild;
+    frame(FILM_END - 1, (now += 1));
+    frame(FILM_END - 0.5, (now += 1));
+    expect(style.firstChild).toBe(again);
+  });
+});
+
+describe('what the director writes on the stage itself', () => {
+  it('writes the horizon on the sky, the stars and the clouds — never on the stage, where it would restyle every plane, card and puppet', () => {
+    const { stage, frame } = film();
+    let now = 0;
+    // through the first change (a tall screen's horizon moves on every frame of it) and on into the journey
+    for (let s = SEG.c1.t0 - 0.2; s < SEG.journey.t0 + 0.4; s += 0.05) frame(s, (now += 1 / 60));
+    expect(stage.style.getPropertyValue('--hz')).toBe('');
+    const sky = stage.querySelector<HTMLElement>('[data-sky]')!;
+    const readers = [sky, sky.nextElementSibling as HTMLElement, stage.querySelector<HTMLElement>('[data-clouds]')!];
+    for (const el of readers) expect(el.style.getPropertyValue('--hz')).toMatch(/^-?\d+(\.\d)?px$/);
+    // and nothing else on the stage wears it
+    expect([...stage.querySelectorAll<HTMLElement>('[style*="--hz"]')]).toEqual(readers);
+  });
+
+  it("writes a plane's paints on its art and on what else reads them — never on the plane, whose puppets would be restyled with every step of the light", () => {
+    const { stage, frame } = film();
+    let now = 0;
+    for (let s = SEG.catch.t0; s < SEG.catch.t0 + 3; s += 0.05) frame(s, (now += 1 / 60));
+    const paints = (el: Element) => {
+      const st = (el as HTMLElement).style;
+      return [...Array(st.length).keys()].map((i) => st[i]).filter((k) => k.startsWith('--film-'));
+    };
+    const planes = [...stage.querySelectorAll<HTMLElement>('[data-set][data-live] [data-plane]')];
+    expect(planes.length).toBeGreaterThan(5);
+    for (const plane of planes) {
+      // the plane itself: its place, nothing of the light
+      expect(paints(plane), plane.dataset.plane).toEqual([]);
+      const art = plane.querySelector(':scope > svg')!;
+      expect(paints(art), plane.dataset.plane).toContain(`--film-c-${plane.dataset.plane}`);
+      // nor a puppet standing in it
+      for (const actor of plane.querySelectorAll('[data-actor]')) expect(paints(actor)).toEqual([]);
+      // what else reads the plane's paints wears them too: the apron its paper, the haze the sky's, the sea's reflection the disc's
+      for (const el of plane.querySelectorAll(':scope > [data-apron], :scope > svg[data-haze], :scope > svg[data-reflect]')) expect(paints(el).sort()).toEqual(paints(art).sort());
+    }
+  });
+
+  it('finds each twinkling star a small picture of its own beside the field: its fading repaints nothing', () => {
+    const { stage } = film();
+    const stars = stage.querySelector<HTMLElement>('[data-sky]')!.nextElementSibling!;
+    const twinkles = [...stars.querySelectorAll('[data-twinkle]')];
+    // (the sky has five glints large enough to twinkle)
+    expect(twinkles).toHaveLength(5);
+    for (const t of twinkles) {
+      expect(t.tagName.toLowerCase()).toBe('svg');
+      expect(t.parentElement).toBe(stars);
+      expect(t.querySelectorAll('path')).toHaveLength(1);
+      // its square of the field: the picture's own view, and where the stylesheet lays it
+      const [x, y, w, h] = t.getAttribute('viewBox')!.split(' ').map(Number);
+      const st = (t as SVGElement).style;
+      const [tx, ty, tq] = ['--tx', '--ty', '--tq'].map((k) => Number(st.getPropertyValue(k)));
+      expect([x, y, w, h]).toEqual([tx - tq, ty - tq, 2 * tq, 2 * tq]);
+      expect(tx).toBeGreaterThanOrEqual(0);
+      expect(tx).toBeLessThanOrEqual(1600);
+      expect(ty).toBeGreaterThanOrEqual(0);
+      expect(ty).toBeLessThanOrEqual(560);
+      // the glint is inside its square
+      const nums = t.querySelector('path')!.getAttribute('d')!.match(/-?\d+(\.\d+)?/g)!.map(Number);
+      for (let i = 0; i + 1 < nums.length; i += 2) {
+        expect(Math.abs(nums[i] - tx)).toBeLessThanOrEqual(tq);
+        expect(Math.abs(nums[i + 1] - ty)).toBeLessThanOrEqual(tq);
+      }
+    }
+    // the field's one picture holds none of them
+    const field = stars.querySelector(':scope > svg:not([data-twinkle])')!;
+    expect(field.getAttribute('viewBox')).toBe('0 0 1600 560');
+    expect(field.querySelector('[data-twinkle]')).toBeNull();
+  });
+});
 
 describe('the film’s paper as the director draws it', () => {
   it('in the stills (?rest=1) shows no copy at all, every plane whole at main’s key, as main draws them', () => {
@@ -126,7 +222,7 @@ describe('the film’s paper as the director draws it', () => {
     return () => {
       const { stage, frame } = film();
       let prev: { base: string; over: string; o: number; on: boolean; live: boolean; c: (LCH | null)[] }[] | null = null;
-      const keys = (base: Element) => [`--film-c-${base.getAttribute('data-plane')}`, '--film-c-canopy', '--film-c-tree'];
+      const keys = (plane: Element) => [`--film-c-${plane.getAttribute('data-plane')}`, '--film-c-canopy', '--film-c-tree'];
       const keep = (w: { d: number; at: string }, d: number, at: string) => {
         if (d > w.d) Object.assign(w, { d, at });
       };
@@ -137,12 +233,12 @@ describe('the film’s paper as the director draws it', () => {
         const shownNow = ps.filter(({ over }) => shows(over)).length;
         if (changeAt(s)) out.shownInChange += shownNow;
         else out.shownAtRest += shownNow;
-        const now = ps.map(({ base, over }) => ({ base: paintsOf(base), over: paintsOf(over), o: opacityOf(over), on: shows(over), live: liveOf(over), c: keys(base).map((k) => shown(base, over, k)) }));
+        const now = ps.map(({ plane, base, over }) => ({ base: paintsOf(base), over: paintsOf(over), o: opacityOf(over), on: shows(over), live: liveOf(over), c: keys(plane).map((k) => shown(base, over, k)) }));
         if (prev && i > 3) {
           now.forEach((p, j) => {
             const q = prev![j];
             if (!p.live || !q.live) return;
-            const at = `plane ${j} (${ps[j].base.getAttribute('data-plane')}) at s ${s.toFixed(3)}`;
+            const at = `plane ${j} (${ps[j].plane.getAttribute('data-plane')}) at s ${s.toFixed(3)}`;
             if (p.on && q.on) {
               if (p.over !== q.over) {
                 out.hiddenRewrites++;

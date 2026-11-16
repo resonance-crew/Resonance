@@ -9,7 +9,7 @@
 import { Fragment, type CSSProperties } from 'react';
 import { MASCOT_CAST } from '@/lib/mascots/cast.generated';
 import { stillOf, type Still } from '@/lib/mascots/pals/still';
-import { ellipse, path, ribbon, rng, tear, type Pt } from './script/geom';
+import { ellipse, path, ribbon, rng, tear, woundAlike, type Pt } from './script/geom';
 import { ARMS_FRONT, CAST_OF, PLACE_OF, markOf, type PalSlug } from './script/marks';
 import type { SceneN } from './script/timeline';
 import type { Look } from './script/look';
@@ -26,28 +26,35 @@ import styles from './film.module.css';
 
 const PLACES: PlaceId[] = ['home', 'journey', 'valley', 'valleyT'];
 
-/** The paints: each class a variable of the hour (and the strokes' widths, which never scale). */
+/**
+ * The paints: each class a variable of the hour (and the strokes' widths, which never scale). A paper or a line that
+ * is not opaque says so as its fill's or its stroke's own opacity, never as `opacity`: each shape is one fill or one
+ * stroke, so it looks the same, and an `opacity` has WebKit paint the shape into a sheet of its own first and lay that
+ * down — on every repaint of its plane, at every step of the light.
+ */
 const PAINTS = `
 .ff-range{fill:var(--film-c-range)}.ff-peaks{fill:var(--film-c-peaks)}.ff-sea{fill:var(--film-c-sea)}
 .ff-headland{fill:var(--film-c-headland)}.ff-town{fill:var(--film-c-town)}.ff-hills{fill:var(--film-c-hills)}
 .ff-near{fill:var(--film-c-near)}.ff-ground{fill:var(--film-c-ground)}
 .ff-swell-b{fill:color-mix(in oklab,var(--film-c-range),var(--film-c-peaks) 52%)}.ff-swell-d{fill:color-mix(in oklab,var(--film-c-peaks),var(--film-c-headland) 42%)}
 .ff-bridge{fill:var(--film-c-bridge)}.ff-bridge-wall{fill:color-mix(in oklab,var(--film-c-bridge),var(--film-c-ground) 38%)}.ff-roof{fill:var(--film-c-roof)}.ff-tree{fill:var(--film-c-tree)}
-.ff-canopy{fill:var(--film-c-canopy)}.ff-fold-lit{fill:var(--film-c-fold-lit);opacity:.6}.ff-fold-dark{fill:var(--film-c-fold-dark);opacity:.5}
+.ff-canopy{fill:var(--film-c-canopy)}.ff-fold-lit{fill:var(--film-c-fold-lit);fill-opacity:.6}.ff-fold-dark{fill:var(--film-c-fold-dark);fill-opacity:.5}
 .ff-lit{fill:var(--film-c-lit)}.ff-accent{fill:var(--film-c-accent)}
 .ff-lamp{fill:var(--film-c-lamp)}.ff-lamp-glow{fill:url(#film-lamp-glow)}.ff-mist{fill:var(--film-c-mist)}
 .ff-fringe{fill:var(--film-c-fringe)}
 .ff-trail{fill:color-mix(in oklab,var(--film-c-near),var(--film-c-rim) 34%)}
-.ff-flower{fill:var(--film-c-rim);opacity:.85}.ff-flower-warm{fill:var(--film-c-accent)}
-.fs-sea-line{fill:none;stroke:var(--film-c-sea-line);stroke-width:1.2px;stroke-linecap:round;opacity:.45}
-.fs-swell-line{fill:none;stroke:color-mix(in oklab,var(--film-c-rim) 52%,var(--film-c-range));stroke-width:1.3px;stroke-linecap:round;stroke-linejoin:round;opacity:.4}
+.ff-flower{fill:var(--film-c-rim);fill-opacity:.85}.ff-flower-warm{fill:var(--film-c-accent)}
+.fs-sea-line{fill:none;stroke:var(--film-c-sea-line);stroke-width:1.2px;stroke-linecap:round;stroke-opacity:.45}
+.fs-swell-line{fill:none;stroke:color-mix(in oklab,var(--film-c-rim) 52%,var(--film-c-range));stroke-width:1.3px;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:.4}
 .fx-ns{vector-effect:non-scaling-stroke}
-.fk-sand{fill:url(#film-sand);opacity:var(--film-sand,0);visibility:var(--film-sand-show,hidden)}
+.fk-sand{fill:url(#film-sand);fill-opacity:var(--film-sand,0);visibility:var(--film-sand-show,hidden)}
 @media not all and (min-aspect-ratio:11/10){.ff-lonetree,.art-wide{display:none}}
 @media (min-aspect-ratio:11/10){.art-tall{display:none}}
 `.replace(/\n/g, '');
 
 const groupId = (place: PlaceId, plane: string) => `film-${place}-${plane}`;
+/** A plane's sand: its papers' one outline (SandGroup), by the group it lies on. */
+const sandId = (place: PlaceId, plane: string) => `${groupId(place, plane)}-sand`;
 /** A plane's cut-out clip (a scene change's `cut` foot: its art and a short torn foot), by the group it clips. */
 const cutId = (place: PlaceId, plane: string) => `${groupId(place, plane)}-cut`;
 /** A middle flat's silhouette at rest (a scene change's `rest` foot), by the set's place (its nearer planes shape it). */
@@ -91,29 +98,36 @@ function CutClips({ place, look }: { place: PlaceId; look: Look }) {
 /** The paints that are paper (a hill, the sea, a roof, a tree): what the paper's sand lies on (script/sand.ts). */
 const PAPER = /(^| )ff-(range|swell-b|peaks|swell-d|sea|headland|town|hills|near|ground|bridge|bridge-wall|roof|tree|canopy|trail)( |$)/;
 
-/**
- * A plane's parts, in order. A paper part is cut once, unpainted, and used twice: with its paint, then with the
- * paper's sand (`.fk-sand`: its strength the film's `--film-sand`) — so the sand lies on each paper exactly once,
- * cut to its edge, and the next paper laid over it covers it as it covers the paper.
- */
+/** A plane's parts, in order, each in its paint. The paper's sand is no part of them: it is the plane's SandGroup. */
 function PlaneGroup({ place, plane }: { place: PlaceId; plane: PlaneArt }) {
-  const gid = groupId(place, plane.id);
   return (
-    <g id={gid}>
-      {plane.parts.map((p, i) => {
-        const style = p.op != null ? { opacity: p.op } : undefined;
-        if (!PAPER.test(p.cls)) return <path key={i} d={p.d} className={p.cls} style={style} />;
-        const pid = `${gid}-${i}`;
-        return (
-          <Fragment key={i}>
-            <defs>
-              <path id={pid} d={p.d} />
-            </defs>
-            <use href={`#${pid}`} className={p.cls} style={style} />
-            <use href={`#${pid}`} className="fk-sand" />
-          </Fragment>
-        );
-      })}
+    <g id={groupId(place, plane.id)}>
+      {plane.parts.map((p, i) => (
+        <path key={i} d={p.d} className={p.cls} style={p.op != null ? { fillOpacity: p.op } : undefined} />
+      ))}
+    </g>
+  );
+}
+
+/**
+ * A plane's sand (script/sand.ts): every paper of the plane as one outline — their cuts one after another in one
+ * path, every cut wound the same way (geom.ts woundAlike), which so fills where any of them is — filled once with the
+ * grit's pattern (`.fk-sand`: its strength the film's `--film-sand`). So the sand lies on the plane's paper exactly
+ * once, cut to its edge, wherever its papers overlap; a plane draws it over its art in the art's own picture (Plane),
+ * one fill of the pattern a plane where each paper had its own. A sheet of its own for it — a layer the plane's size
+ * over each plane, never repainted with the art — was tried and is slower: sixteen screens of layers are more than an
+ * iPad's graphics lay down sixty times a second (2026-11-16, an iPad of 2022: 43 frames a second so, 55 as it is here).
+ */
+function SandGroup({ place, plane }: { place: PlaceId; plane: PlaneArt }) {
+  const d = woundAlike(
+    plane.parts
+      .filter((p) => PAPER.test(p.cls))
+      .map((p) => p.d)
+      .join(''),
+  );
+  return (
+    <g id={sandId(place, plane.id)}>
+      <path d={d} className="fk-sand" />
     </g>
   );
 }
@@ -140,7 +154,16 @@ function WorldDefsArt({ look }: { look: Look }) {
     <>
       <style>{PAINTS}</style>
       <defs>
-        {PLACES.map((place) => placeArt(place, look).planes.filter((plane) => !plane.src).map((plane) => <PlaneGroup key={`${place}-${plane.id}`} place={place} plane={plane} />))}
+        {PLACES.map((place) =>
+          placeArt(place, look)
+            .planes.filter((plane) => !plane.src)
+            .map((plane) => (
+              <Fragment key={`${place}-${plane.id}`}>
+                <PlaneGroup place={place} plane={plane} />
+                <SandGroup place={place} plane={plane} />
+              </Fragment>
+            )),
+        )}
         {PLACES.map((place) => (
           <CutClips key={place} place={place} look={look} />
         ))}
@@ -153,8 +176,8 @@ function WorldDefsArt({ look }: { look: Look }) {
         <g id="film-fringe-r">
           <path d={fringeArt('right')} className="ff-fringe" />
         </g>
-        {/* the paper's sand (script/sand.ts): one tile of fine grit, dark and pale, each paper is
-            filled with a second time (PlaneGroup's `.fk-sand`) and the sky once (Sky) */}
+        {/* the paper's sand (script/sand.ts): one tile of fine grit, dark and pale, each plane's paper is
+            filled with once (SandGroup's `.fk-sand`) and the sky once (Sky) */}
         <pattern id="film-sand" width={SAND_TILE} height={SAND_TILE} patternUnits="userSpaceOnUse">
           <image href={pictureSrc(sandDark)} width={SAND_TILE} height={SAND_TILE} />
           <image href={pictureSrc(sandLight)} width={SAND_TILE} height={SAND_TILE} />
@@ -177,11 +200,19 @@ function WorldDefsArt({ look }: { look: Look }) {
 
 /* ───────────── the sky layer ───────────── */
 
-function starsPath(): { dots: string; glints: string; twinkle: string[] } {
+/** A glint that twinkles: its path, and the square of the field it stands in (its centre, half its side). */
+interface Twinkle {
+  d: string;
+  x: number;
+  y: number;
+  q: number;
+}
+
+function starsPath(): { dots: string; glints: string; twinkle: Twinkle[] } {
   const r = rng(808);
   let dots = '';
   let glints = '';
-  const twinkle: string[] = [];
+  const twinkle: Twinkle[] = [];
   for (let i = 0; i < 150; i++) {
     const x = r() * 1600;
     const y = Math.pow(r(), 1.4) * 540;
@@ -192,7 +223,7 @@ function starsPath(): { dots: string; glints: string; twinkle: string[] } {
       const q = s * 3.6;
       const w = s * 0.65;
       const star = `M${x.toFixed(0)},${(y - q).toFixed(0)}Q${(x + w).toFixed(0)},${(y - w).toFixed(0)} ${(x + q).toFixed(0)},${y.toFixed(0)}Q${(x + w).toFixed(0)},${(y + w).toFixed(0)} ${x.toFixed(0)},${(y + q).toFixed(0)}Q${(x - w).toFixed(0)},${(y + w).toFixed(0)} ${(x - q).toFixed(0)},${y.toFixed(0)}Q${(x - w).toFixed(0)},${(y - w).toFixed(0)} ${x.toFixed(0)},${(y - q).toFixed(0)}Z`;
-      if (twinkle.length < 6) twinkle.push(star);
+      if (twinkle.length < 6) twinkle.push({ d: star, x: Math.round(x), y: Math.round(y), q: Math.ceil(q) + 1 });
       else glints += star;
     }
   }
@@ -209,13 +240,27 @@ export function Sky() {
           <rect width="2800" height="1400" fill="url(#film-sand)" />
         </svg>
       </div>
-      <svg className={styles.stars} viewBox="0 0 1600 560" preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">
-        <path d={st.dots} className={styles.starDots} />
-        <path d={st.glints} className={styles.starGlint} />
-        {st.twinkle.map((d, i) => (
-          <path key={i} d={d} className={styles.starGlint} data-twinkle="" style={{ animationDelay: `${-i * 0.9}s` } as CSSProperties} />
+      <div className={styles.stars} aria-hidden="true">
+        <svg className={styles.starField} viewBox="0 0 1600 560" preserveAspectRatio="xMidYMax slice" focusable="false">
+          <path d={st.dots} className={styles.starDots} />
+          <path d={st.glints} className={styles.starGlint} />
+        </svg>
+        {/* the ones that twinkle: each a small picture of its own at its place in the field (film.module.css `.twinkle`),
+            so its fading is the compositor's and repaints nothing — inside the field's one picture every frame of it
+            repainted the field, a hundred and fifty stars, and the sky under it */}
+        {st.twinkle.map((t, i) => (
+          <svg
+            key={i}
+            className={styles.twinkle}
+            data-twinkle=""
+            viewBox={`${t.x - t.q} ${t.y - t.q} ${2 * t.q} ${2 * t.q}`}
+            focusable="false"
+            style={{ '--tx': t.x, '--ty': t.y, '--tq': t.q, animationDelay: `${-i * 0.9}s` } as CSSProperties}
+          >
+            <path d={t.d} className={styles.starGlint} />
+          </svg>
         ))}
-      </svg>
+      </div>
     </>
   );
 }
@@ -369,6 +414,15 @@ function Plane({ place, plane, look, children }: { place: PlaceId; plane: PlaneA
   const cutTall = plane.tall && ysTall ? cutId(plane.tall, plane.id) : undefined;
   // its silhouette at rest (a change's `rest`), where its place has one
   const rest = !plane.tall && REST_PLACES.includes(place) && REST_PLANES.includes(plane.id) && !!plane.edges?.length ? restId(place, plane.id) : undefined;
+  // the paper's sand (SandGroup), over the art in the same picture: cut with it through a change
+  const sandUses = plane.tall ? (
+    <>
+      <use href={`#${sandId(src, plane.id)}`} className="art-wide" data-cut={cut} />
+      <use href={`#${sandId(plane.tall, plane.id)}`} className="art-tall" data-cut={cutTall} />
+    </>
+  ) : (
+    <use href={`#${sandId(src, plane.id)}`} data-cut={cut} data-rest={rest} />
+  );
   const uses = plane.tall ? (
     <>
       <use href={href} className="art-wide" data-cut={cut} />
@@ -389,9 +443,10 @@ function Plane({ place, plane, look, children }: { place: PlaceId; plane: PlaneA
       data-cut-ys-tall={ysTall ? `${CUT_STEP}:${ysTall.join(',')}` : undefined}
       style={{ '--x0': plane.x0, '--pw': plane.w, '--d': plane.depth } as CSSProperties}
     >
-      {apron && <span className={styles.apron} style={{ '--apron-top': plane.foot - 40, backgroundColor: `var(--film-c-${plane.id})` } as CSSProperties} />}
+      {apron && <span className={styles.apron} data-apron="" style={{ '--apron-top': plane.foot - 40, backgroundColor: `var(--film-c-${plane.id})` } as CSSProperties} />}
       <svg viewBox={`${plane.x0} 0 ${plane.w} 1400`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
         {uses}
+        {sandUses}
       </svg>
       {plane.id !== 'sea' && (
         // the same paper again, every paint the haze's (a change's `haze`: a flat flown away pales into the sky, opaque)

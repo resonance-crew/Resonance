@@ -256,18 +256,56 @@
   height: calc(var(--hz) + var(--bar));
   z-index: 1;
   opacity: var(--film-stars);
+  /* (the twinkling ones measure the field by its box: `.twinkle`) */
+  container-type: size;
+}
+/* a layer of its own while the film runs: the sky under it is repainted as the sun moves, and the stars — a hundred
+   and fifty dots — were painted again with it (the dawn, the dusk and the night, where they show) */
+.film[data-film='film'] .stars {
+  will-change: opacity;
+}
+.starField {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 .starDots {
   fill: var(--film-cream);
-  opacity: 0.85;
+  fill-opacity: 0.85;
 }
 .starGlint {
   fill: var(--film-cream);
-  opacity: 0.9;
+  fill-opacity: 0.9;
+}
+/* A glint that twinkles (five of them): a small picture of its own, laid where the field's own picture would draw
+   it — the field is 1600 × 560 units, scaled to cover its box from the middle of its foot (`xMidYMax slice`), so a
+   unit is --k and the glint's square (--tx, --ty its centre, --tq half its side: World.tsx) stands that far from the
+   box's middle and foot. Its fading is then an opacity on a layer, the compositor's alone: drawn inside the field it
+   repainted the stars, and the sky under them, on every frame. */
+.twinkle {
+  position: absolute;
+  /* the stage is as wide as the window (the page's own bar is hidden: script/scrollbar.ts) */
+  --k: max(calc(100vw / 1600), calc((var(--hz) + var(--bar)) / 560));
+  left: calc(50% + (var(--tx) - var(--tq) - 800) * var(--k));
+  top: calc(100% - (560 - var(--ty) + var(--tq)) * var(--k));
+  width: calc(2 * var(--tq) * var(--k));
+  height: calc(2 * var(--tq) * var(--k));
+  display: block;
+  overflow: visible;
+}
+@supports (width: 1cqw) {
+  .twinkle {
+    /* by the field's own box, where the browser can measure it */
+    --k: max(calc(100cqw / 1600), calc(100cqh / 560));
+  }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .film:not([data-resting]) .starGlint[data-twinkle] {
+  .film:not([data-resting]) .twinkle {
     animation: twinkle 5.4s ease-in-out infinite;
+    will-change: opacity;
   }
 }
 /* the safety net: a device that can't keep up drops the small particles (fireflies, birds, the stars' twinkle) */
@@ -275,21 +313,22 @@
 .film[data-lowfx] .birds {
   display: none;
 }
-.film[data-lowfx] .starGlint[data-twinkle] {
+.film[data-lowfx] .twinkle {
   animation: none;
 }
 /* the end winds down: 5 s after the film is over nothing moves on its own but the puppets' breath and blinks */
-.film[data-still] .starGlint[data-twinkle],
+.film[data-still] .twinkle,
 .film[data-still] .fireflies i {
   animation-play-state: paused;
 }
+/* (over the glint's own 0.9: from 0.9 down to 0.25 and back, as it was when the glint itself faded) */
 @keyframes twinkle {
   0%,
   100% {
-    opacity: 0.9;
+    opacity: 1;
   }
   50% {
-    opacity: 0.25;
+    opacity: 0.278;
   }
 }
 
@@ -587,11 +626,11 @@
 /* ───────────── the paper's sand ───────────── */
 
 /* The owner (2026-11-11): 「背景是不是可以加入這種沙沙的感覺」, and of the strengths tried, 「最淡的」. A fine grit on
-   the scenery's paper and the sky (script/sand.ts): each paper of the world filled a second time with the grit's
-   pattern (World.tsx PlaneGroup's `.fk-sand`, which reads the two variables below), so the sand is cut to each paper's
-   edge, travels with it, and is never on the puppets or the cards; the sky has its own sheet of it. The lab's
-   comparisons (Page.tsx's mode script): `?sand=0` none, `?sand=2` plain to see. A flat paling into the sky (a change's
-   haze) carries none. */
+   the scenery's paper and the sky (script/sand.ts): each plane's paper — its papers' one outline — filled with the
+   grit's pattern over its art (World.tsx SandGroup's `.fk-sand`, which reads the two variables below), so the sand
+   is cut to the paper's edge, travels with it, and is never on the puppets or the cards; the sky has its own sheet of
+   it. The lab's comparisons (Page.tsx's mode script): `?sand=0` none, `?sand=2` plain to see. A flat paling into the
+   sky (a change's haze) covers it. */
 .film {
   /* the lightest strength tried, a touch lighter again (the owner, 2026-11-12: 「再弄淡一點點」) */
   --film-sand: 0.45;
@@ -608,6 +647,11 @@
   pointer-events: none;
   opacity: var(--film-sand, 0);
 }
+/* a layer of its own while the film runs: the sky under it is repainted on every frame the sun moves (its glow is the
+   sky's paint), and its sheet of sand — a whole screen of pattern — was filled again with it */
+.film[data-film='film'] .skySand {
+  will-change: transform;
+}
 .film[data-sand='0'] {
   --film-sand: 0;
   --film-sand-show: hidden;
@@ -617,9 +661,6 @@
 }
 .film[data-sand='2'] {
   --film-sand: 1;
-}
-.haze {
-  --film-sand-show: hidden;
 }
 
 /* ───────────── the puppets ───────────── */

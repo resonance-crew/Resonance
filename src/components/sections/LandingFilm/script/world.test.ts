@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { WALK, walkwayAt } from './ground';
 import { computeLayout } from './layout';
 import { LANTERN_BAND, ctaSpot, nightHeadsY } from './marks';
+import { woundAlike } from './geom';
+import { LOOKS } from './look';
 import { WATER_Y, placeArt, type PlaceId } from './world';
 
 const PLACES: PlaceId[] = ['home', 'journey', 'valley', 'valleyT'];
@@ -57,6 +59,77 @@ describe("the world's paper, cut plainly (round 4)", () => {
       const y = L.groundY + (WATER_Y - 885) * L.u;
       expect(h - y, `${w}×${h}`).toBeGreaterThan(24);
     }
+  });
+});
+
+/** The paints that are paper (World.tsx PAPER): what the sand lies on. */
+const PAPER = /(^| )ff-(range|swell-b|peaks|swell-d|sea|headland|town|hills|near|ground|bridge|bridge-wall|roof|tree|canopy|trail)( |$)/;
+type P2 = [number, number];
+/** A path's cuts by their corners (a curve by its ends), and whether each is all straight lines. */
+function cuts(d: string): { pts: P2[]; straight: boolean }[] {
+  const out: { pts: P2[]; straight: boolean }[] = [];
+  let x = 0;
+  let y = 0;
+  for (const cut of d.match(/[Mm][^Mm]*/g) ?? []) {
+    const pts: P2[] = [];
+    let straight = true;
+    for (const m of cut.matchAll(/([A-Za-z])([^A-Za-z]*)/g)) {
+      const n = (m[2].match(/-?\d*\.?\d+(?:e-?\d+)?/g) ?? []).map(Number);
+      const rel = m[1] === m[1].toLowerCase();
+      const up = m[1].toUpperCase();
+      if (up === 'M' || up === 'L') for (let i = 0; i + 1 < n.length; i += 2) pts.push(([x, y] = rel ? [x + n[i], y + n[i + 1]] : [n[i], n[i + 1]]));
+      else if (up === 'H') for (const v of n) pts.push([(x = rel ? x + v : v), y]);
+      else if (up === 'V') for (const v of n) pts.push([x, (y = rel ? y + v : v)]);
+      else if (up === 'Q') {
+        straight = false;
+        for (let i = 0; i + 3 < n.length; i += 4) pts.push(([x, y] = rel ? [x + n[i + 2], y + n[i + 3]] : [n[i + 2], n[i + 3]]));
+      } else if (up !== 'Z') throw new Error(`a command the sand's outline cannot be checked for: ${m[1]}`);
+    }
+    out.push({ pts, straight });
+  }
+  return out;
+}
+const areaOf = (p: P2[]) => p.reduce((a, [x1, y1], i) => a + x1 * p[(i + 1) % p.length][1] - p[(i + 1) % p.length][0] * y1, 0) / 2;
+const side = (a: P2, b: P2, c: P2) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+function crossings(p: P2[]): number {
+  let n = 0;
+  for (let i = 0; i < p.length; i++) {
+    for (let j = i + 2; j < p.length; j++) {
+      if (i === 0 && j === p.length - 1) continue;
+      const [a, b, c, d] = [p[i], p[(i + 1) % p.length], p[j], p[(j + 1) % p.length]];
+      if (side(c, d, a) * side(c, d, b) < 0 && side(a, b, c) * side(a, b, d) < 0) n++;
+    }
+  }
+  return n;
+}
+
+describe("the paper's sand, one outline a plane (World.tsx SandGroup)", () => {
+  // a plane's sand is its papers' cuts one after another in ONE path (geom.ts woundAlike): it fills where any of them
+  // is only while every cut goes round the same way — two wound against each other would leave a hole in the sand
+  // where they overlap — and no cut crosses itself (a crossed cut is wound both ways)
+  it.each(LOOKS)("every plane's papers make one outline: each cut wound the same way, none crossing itself (%s)", (look) => {
+    let seen = 0;
+    let turned = 0;
+    for (const place of PLACES) {
+      for (const plane of placeArt(place, look).planes.filter((pl) => !pl.src)) {
+        const papers = plane.parts.filter((x) => PAPER.test(x.cls)).map((x) => x.d);
+        expect(papers.length, `${look} ${place} ${plane.id}`).toBeGreaterThan(0);
+        const drawn = cuts(papers.join(''));
+        const outline = cuts(woundAlike(papers.join('')));
+        expect(outline).toHaveLength(drawn.length);
+        outline.forEach((cut, i) => {
+          seen++;
+          if (areaOf(drawn[i].pts) < 0) turned++;
+          expect(areaOf(cut.pts), `${look} ${place} ${plane.id} cut ${i}`).toBeGreaterThan(0);
+          // the same paper, whichever way round: as large as it was drawn
+          expect(areaOf(cut.pts)).toBeCloseTo(Math.abs(areaOf(drawn[i].pts)), 0);
+          if (cut.straight) expect(crossings(cut.pts), `${look} ${place} ${plane.id} cut ${i}`).toBe(0);
+        });
+      }
+    }
+    expect(seen).toBeGreaterThan(300);
+    // (the trail's ribbon comes the other way round, and the old look's headland: the outline turns them)
+    expect(turned).toBeGreaterThan(0);
   });
 });
 

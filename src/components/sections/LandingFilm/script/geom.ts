@@ -208,3 +208,68 @@ export function quad(a: Pt, c: Pt, b: Pt, u: number): Pt {
   const v = 1 - u;
   return [v * v * a[0] + 2 * v * u * c[0] + u * u * b[0], v * v * a[1] + 2 * v * u * c[1] + u * u * b[1]];
 }
+
+/**
+ * A path whose every cut (an M … up to the next) is wound the same way — clockwise on the screen, as the flats are
+ * drawn: a cut wound the other way is written again backwards, the same outline and the same fill. For a path of
+ * several papers filled as one (the paper's sand, World.tsx SandGroup): cuts wound against each other would cancel
+ * where they overlap and leave a hole. Lines and quadratic curves — what the world's paper is cut with; anything else
+ * throws rather than guess. A cut already wound that way is kept as it is written.
+ */
+export function woundAlike(d: string): string {
+  let out = '';
+  let x = 0;
+  let y = 0;
+  for (const cut of d.match(/[Mm][^Mm]*/g) ?? []) {
+    let start: Pt | null = null;
+    const segs: { c?: Pt; to: Pt }[] = [];
+    for (const m of cut.matchAll(/([A-Za-z])([^A-Za-z]*)/g)) {
+      const c = m[1];
+      const n = (m[2].match(/-?\d*\.?\d+(?:e-?\d+)?/g) ?? []).map(Number);
+      const rel = c === c.toLowerCase();
+      const up = c.toUpperCase();
+      const at = (i: number): Pt => (rel ? [x + n[i], y + n[i + 1]] : [n[i], n[i + 1]]);
+      if (up === 'M' || up === 'L') {
+        for (let i = 0; i + 1 < n.length; i += 2) {
+          [x, y] = at(i);
+          if (!start) start = [x, y];
+          else segs.push({ to: [x, y] });
+        }
+      } else if (up === 'H') for (const v of n) segs.push({ to: [(x = rel ? x + v : v), y] });
+      else if (up === 'V') for (const v of n) segs.push({ to: [x, (y = rel ? y + v : v)] });
+      else if (up === 'Q') {
+        for (let i = 0; i + 3 < n.length; i += 4) {
+          const ctrl = at(i);
+          const to = at(i + 2);
+          segs.push({ c: ctrl, to });
+          [x, y] = to;
+        }
+      } else if (up === 'Z') {
+        if (start) [x, y] = start;
+      } else throw new Error(`woundAlike: a path command the paper is not cut with: ${c}`);
+    }
+    if (!start) continue;
+    // which way it goes round, by its corners (a curve by its ends)
+    const pts = [start, ...segs.map((s) => s.to)];
+    let area = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % pts.length];
+      area += a[0] * b[1] - b[0] * a[1];
+    }
+    if (area >= 0) {
+      out += cut;
+      continue;
+    }
+    const num = (v: number) => String(Number(v.toFixed(2)));
+    const pt = (p: Pt) => `${num(p[0])},${num(p[1])}`;
+    let back = `M${pt(pts[pts.length - 1])}`;
+    for (let i = segs.length - 1; i >= 0; i--) {
+      const to = i === 0 ? start : segs[i - 1].to;
+      const ctrl = segs[i].c;
+      back += ctrl ? `Q${pt(ctrl)} ${pt(to)}` : `L${pt(to)}`;
+    }
+    out += `${back}Z`;
+  }
+  return out;
+}
