@@ -175,7 +175,7 @@ async function main() {
     'zh-TW',
     '舊橋上的雨',
     '我們站在舊橋上，看著雨從河面上移過去。\n\n誰都沒有說話，而那一次，這樣就夠了。',
-    '我們站在舊橋上，看著雨從河面上移過去。 誰都沒有說話，而那一次，這樣就夠了。',
+    '我們站在舊橋上，看著雨從河面上移過去。誰都沒有說話，而那一次，這樣就夠了。',
   );
 
   // A cover framed off its centre (round 25 §G1, the `card-framed` screen): a picture stored as the emulators store one
