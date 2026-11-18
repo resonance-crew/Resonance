@@ -347,8 +347,8 @@ internal data class PushSwitchRow(val switch: NotificationSwitch, val label: Str
 internal val pushSwitchRows: List<PushSwitchRow>
     get() = listOf(
         PushSwitchRow(NotificationSwitch.Messages, L10n.Settings.Notifications.messages, L10n.Settings.Notifications.messagesHint, 79.0),
-        // 有人共振 (round 26 §U8.3): on until turned off, its words alone.
-        PushSwitchRow(NotificationSwitch.ResonanceTaps, L10n.Settings.Notifications.taps, null, 73.0),
+        // 有人共振 (round 26 §U8.3): on until turned off, with its hint as the web's and iOS's (what TalkBack reads too).
+        PushSwitchRow(NotificationSwitch.ResonanceTaps, L10n.Settings.Notifications.taps, L10n.Settings.Notifications.tapsHint, 73.0),
         PushSwitchRow(NotificationSwitch.Picks, L10n.Settings.Notifications.picks, L10n.Settings.Notifications.picksHint, 83.0),
         PushSwitchRow(NotificationSwitch.ConnectionCards, L10n.Settings.Notifications.connectionCards, L10n.Settings.Notifications.connectionCardsHint, 91.0), // 91, as the web and iOS: 89's track pinched at its middle
     )

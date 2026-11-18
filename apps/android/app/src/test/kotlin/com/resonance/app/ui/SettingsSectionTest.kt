@@ -2,6 +2,7 @@ package com.resonance.app.ui
 
 import com.resonance.api.models.NotificationSettings
 import com.resonance.app.PushCenter
+import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
 import com.resonance.kit.push.NotificationSwitch
 import org.junit.Assert.assertEquals
@@ -36,6 +37,18 @@ class SettingsSectionTest {
             ),
             pushSwitchRows.map { it.switch to it.seed },
         )
+    }
+
+    /**
+     * Every push switch says what it is for under its words, 有人共振 too (round 26 review: Android's alone had no hint
+     * line, where the web's NotificationsSection and iOS's NotificationSwitchRow show 「有人與你的卡片共振時通知你」).
+     */
+    @Test fun everySwitchSaysWhatItIsForTheTapsToo() {
+        Strings.load { File("../../../src/messages/${it.tag}.json").readText() }
+        val taps = pushSwitchRows.single { it.switch == NotificationSwitch.ResonanceTaps }
+        assertEquals(L10n.Settings.Notifications.tapsHint, taps.hint)
+        assertEquals(73.0, taps.seed, 0.0)
+        pushSwitchRows.forEach { assertTrue("${it.switch} has a hint", !it.hint.isNullOrBlank()) }
     }
 
     /** Turning a push switch on saves it only when its pushes can show; else the permission comes first, or the notice. */
