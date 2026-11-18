@@ -22,7 +22,10 @@ import type { ReadingReportInput } from './schemas';
  * reportsToday, expireAt }`. `expireAt` is 180 days after the last read, for
  * the Firestore TTL policy on the collection (firestore.indexes.json): a card
  * not opened again for half a year leaves nothing behind. Deleted with the
- * reader's account and with the card (deleteCard, the purge's `byCard`).
+ * reader's account and with the card (deleteCard, the purge's `byCard`), and
+ * an anonymous card's as it goes into the trash (./trash: in its readers'
+ * exports, they would otherwise end in the purge's run beside its author's
+ * profile).
  *
  * A report holds its page view's running totals (`session` is that view's id):
  * the server keeps the largest seconds and progress each session has said and
@@ -291,7 +294,7 @@ export async function reportReading(db: Firestore, viewerId: string, cardId: str
   });
 }
 
-/** Every reading record of the card `id`, a batch at a time (deleting the card). */
+/** Every reading record of the card `id`, a batch at a time (deleting the card, or trashing an anonymous one). */
 export async function deleteSignalsOn(db: Firestore, id: string): Promise<void> {
   const signals = db.collection(READER_SIGNALS).where('cardId', '==', id).select().limit(BATCH_MAX);
   for (;;) {

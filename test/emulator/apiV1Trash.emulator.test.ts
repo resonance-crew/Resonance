@@ -14,6 +14,7 @@ import { CardDetail, FeedCard, TrashedCard, RestoredCard } from '@/lib/api/v1/sc
 import { spend } from '@/lib/api/rateLimit';
 import { exportAccountData } from '@/lib/account/export';
 import { listTaps, setTap } from '@/lib/api/v1/taps';
+import { reportReading } from '@/lib/api/v1/reading';
 import { readCardForPage } from '@/app/[locale]/(app)/card/[slug]/cardPageData';
 import { FirestoreVectorStore } from '@/lib/recommend/vectorStore/firestore';
 import type { IVectorStore } from '@/lib/recommend/vectorStore/interfaces';
@@ -413,6 +414,34 @@ describe('taps on a card in the trash', () => {
     expect((await db.collection('resonanceTaps').where('cardId', '==', 'live').get()).size).toBe(0);
     expect((await getCardDetail(db, 'alice', 'live')).tap).toEqual({ mine: false, faces: [], more: false, mayNote: false });
     expect((await getCardDetail(db, 'alice', 'mine')).tap!.faces.map((f) => f.handle)).toEqual(['carol']);
+  });
+});
+
+// Round 26 (§R3): readers' reading records are in their own exports, so on an anonymous card they go as it goes in, as its
+// notes and taps do — left there, the purge's byCard would end them in the same run as its author's profile.
+describe('reading records on a card in the trash', () => {
+  it("go with an anonymous card as it goes in — out of its readers' exports at once — stay on a named one, and don't come back with a restore", async () => {
+    await db.doc('cards/live').update({ anonymous: true });
+    const view = { session: 'view-0001', activeSeconds: 30, progress: 1, reachedEnd: true };
+    for (const [cardId, uid] of [['live', 'carol'], ['live', 'bob'], ['mine', 'carol']]) {
+      expect(await reportReading(db, uid, cardId, view)).toBe(true);
+    }
+    const readCards = async (uid: string) => (await exportAccountData(db, uid)).reading.map((r) => r.cardId).sort();
+    expect(await readCards('carol')).toEqual(['live', 'mine']);
+
+    await trashCard(db, 'alice', 'live');
+    await trashCard(db, 'alice', 'mine');
+    expect((await db.collection('readerSignals').where('cardId', '==', 'live').get()).size).toBe(0);
+    expect(await exists('readerSignals/carol_mine')).toBe(true);
+    expect(await readCards('carol')).toEqual(['mine']);
+    expect(await readCards('bob')).toEqual([]);
+    // In the trash, no report is kept to bring one back.
+    expect(await reportReading(db, 'carol', 'live', { ...view, session: 'view-0002' })).toBe(false);
+
+    await restoreCard(db, 'alice', 'live');
+    await restoreCard(db, 'alice', 'mine');
+    expect((await db.collection('readerSignals').where('cardId', '==', 'live').get()).size).toBe(0);
+    expect(await exists('readerSignals/carol_mine')).toBe(true);
   });
 });
 
