@@ -265,6 +265,31 @@ export const LinkPreview = named(
   'What a link says about itself: the title, description, site name and picture of its page, as the server read it.',
 );
 
+/** The faces CardTap shows at most; `more` says there are others. */
+export const TAP_FACES_MAX = 3;
+
+export const CardTap = named(
+  z.object({
+    /** The viewer resonated with this card (共振, the tap) and hasn't taken it back. Always false for its author. */
+    mine: z.boolean(),
+    /**
+     * Who resonated, as faces, at most 3, newest first. A reader sees themselves first (when `mine`), then the
+     * people they are connected with who resonated — never strangers. The card's author sees the 3 newest of
+     * everyone who resonated. Never a count.
+     */
+    faces: z.array(Author),
+    /** More faces than these 3: draw a blank disc after them, never a number. */
+    more: z.boolean(),
+    /**
+     * Whether a note (POST /notes) from the viewer on this card would be taken now: false while 3 notes of theirs
+     * wait for the author's answer (and always for the author). Says nothing of a pen name: ask for one first.
+     */
+    mayNote: z.boolean(),
+  }),
+  'CardTap',
+  'The resonance tap (共振) on a card: whether you resonated, and the faces of who did as you may see them.',
+);
+
 export const CardDetail = named(
   z.object({
     card: FeedCard,
@@ -279,6 +304,13 @@ export const CardDetail = named(
     isOwner: z.boolean(),
     /** The card this one responds to, when the viewer may see it. */
     referenceCard: FeedCard.nullable(),
+    /**
+     * The resonance tap (共振): for a reader who may resonate with the card (published, not their own, read without
+     * a shared-card pass) and for its author on their published card. Null for anyone else: a draft, a card in the
+     * trash, someone else's 私人卡 shared in a conversation, a named card across a block either way. Absent only
+     * from servers older than the field.
+     */
+    tap: CardTap.nullable().optional(),
     // The card page's lists, when asked for with `include` (absent otherwise):
     // each is exactly what its own endpoint answers this viewer.
     /** `include=resonances`: GET /cards/{id}/resonances. */
@@ -505,6 +537,66 @@ export const ResonateResponse = named(
   'ResonateResponse',
 );
 
+export const TapResponse = named(
+  z.object({
+    /** Whether you resonate with the card now. */
+    on: z.boolean(),
+    /** False when it already was so: nothing was written, no one was told. */
+    changed: z.boolean(),
+  }),
+  'TapResponse',
+);
+
+export const TapNote = named(
+  z.object({
+    /** The first line of the latest note this person left you on the card, at most 80 characters. */
+    excerpt: z.string(),
+  }),
+  'TapNote',
+);
+
+export const TapPerson = named(
+  z.object({
+    author: Author,
+    /** Their latest note on this card, for the card's author on a named card only (open their conversation); else null. */
+    note: TapNote.nullable(),
+  }),
+  'TapPerson',
+);
+
+export const TapList = named(
+  z.object({
+    /** Newest first. */
+    people: z.array(TapPerson),
+    /** Pass back as `pageToken` for the next page (the author's list, 30 a page); null at the end. */
+    nextPageToken: z.string().nullable(),
+  }),
+  'TapList',
+  'Who resonated with a card (共振): everyone, for its author; the people you are connected with, for a reader.',
+);
+
+export const TapListQuery = z.object({ pageToken: z.string().min(1).max(512).nullish() });
+
+/** POST /cards/{id}/reading's session id: one per page view, made by the client. */
+const ReadingSession = z.string().regex(/^[A-Za-z0-9-]{8,40}$/, 'Not a valid session.');
+
+export const ReadingReportRequest = named(
+  z.object({
+    /** The page view's own id (8–40 of A–Z a–z 0–9 -), kept for every report of that view. */
+    session: ReadingSession,
+    /** Seconds the page was in front and in use so far in this session (its running total, never a delta). */
+    activeSeconds: z.number(),
+    /** How much of the story was scrolled through so far in this session, 0…1. */
+    progress: z.number(),
+    /** The end of the story came into view in this session. */
+    reachedEnd: z.boolean(),
+    /** The share button was used in this session. */
+    shared: z.boolean().nullish(),
+  }),
+  'ReadingReportRequest',
+  "How a reader read a card in one page view, as the session's running totals so far (send it again as they grow).",
+);
+
 /** The web's limits (client/notes.ts, client/messages.ts; mirrored in firestore.rules). */
 export const NOTE_TEXT_MAX = 2000;
 export const MESSAGE_TEXT_MAX = 2000;
@@ -670,9 +762,14 @@ export const NotificationSettings = named(
      * servers leave it out, and its absence means on.
      */
     messages: z.boolean().optional(),
+    /**
+     * A push when someone resonates with your card (共振, the tap) — once per person and card, ever. On until turned
+     * off; older servers leave it out, and its absence means on.
+     */
+    resonanceTaps: z.boolean().optional(),
   }),
   'NotificationSettings',
-  'Which pushes you want. picks and connectionCards go beyond the ones answering you and are off until turned on; messages (messages and notes) is on until turned off. Resonances always ring.',
+  'Which pushes you want. picks and connectionCards go beyond the ones answering you and are off until turned on; messages (messages and notes) and resonanceTaps (someone resonated with your card) are on until turned off. A card answering yours always rings.',
 );
 
 export const UpdateNotificationSettingsRequest = named(
@@ -680,6 +777,7 @@ export const UpdateNotificationSettingsRequest = named(
     picks: z.boolean().nullish(),
     connectionCards: z.boolean().nullish(),
     messages: z.boolean().nullish(),
+    resonanceTaps: z.boolean().nullish(),
   }),
   'UpdateNotificationSettingsRequest',
   'Only the switches sent change; turning one on records when you agreed to it.',
@@ -822,6 +920,11 @@ export type FeedPageBody = z.infer<typeof FeedPage>;
 export type RecommendedFeedBody = z.infer<typeof RecommendedFeed>;
 export type AuthorBody = z.infer<typeof Author>;
 export type CardDetailBody = z.infer<typeof CardDetail>;
+export type CardTapBody = z.infer<typeof CardTap>;
+export type TapResponseBody = z.infer<typeof TapResponse>;
+export type TapListBody = z.infer<typeof TapList>;
+export type TapPersonBody = z.infer<typeof TapPerson>;
+export type ReadingReportInput = z.infer<typeof ReadingReportRequest>;
 export type LinkPreviewBody = z.infer<typeof LinkPreview>;
 export type ProfileBody = z.infer<typeof Profile>;
 export type CardBoxTabName = z.infer<typeof CardBoxTab>;

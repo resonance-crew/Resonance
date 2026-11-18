@@ -23,7 +23,8 @@ const CJK = String.raw`\p{scx=Han}\p{scx=Hira}\p{scx=Kana}\p{scx=Hang}\p{scx=Bop
 const RUN = new RegExp(`([${CJK}]+)|[^\\s${CJK}]+`, 'gu');
 const WORDLIKE = /[\p{L}\p{N}]/u;
 
-export function readMinutes(text: string): number {
+/** How long `text` takes to read, in minutes, unrounded. */
+function minutesOf(text: string): number {
   let chars = 0;
   let words = 0;
   for (const [run, cjk] of text.matchAll(RUN)) {
@@ -33,5 +34,18 @@ export function readMinutes(text: string): number {
     // are counted as characters, as they always were.
     else chars += run.length;
   }
-  return Math.max(1, Math.round(chars / CJK_CHARS_PER_MINUTE + words / WORDS_PER_MINUTE));
+  return chars / CJK_CHARS_PER_MINUTE + words / WORDS_PER_MINUTE;
+}
+
+export function readMinutes(text: string): number {
+  return Math.max(1, Math.round(minutesOf(text)));
+}
+
+/**
+ * How long `text` takes to read at the same rates, in seconds and unrounded —
+ * what a reading report is measured against (lib/api/v1/reading): a short
+ * card's 20 seconds stay 20, not the list's "1 min".
+ */
+export function readSeconds(text: string): number {
+  return minutesOf(text) * 60;
 }

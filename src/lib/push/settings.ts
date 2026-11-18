@@ -6,9 +6,12 @@ import { FieldPath, FieldValue, type DocumentData, type Firestore } from 'fireba
  * the ones answering them and are off until turned on (explicit opt-in: App
  * Store 4.5.4), each turn-on recording when (`picksConsentAt`,
  * `connectionCardsConsentAt` — the last time consent was given; turning a
- * switch off keeps it, the switch says it's off). The third, `messages`,
- * answers them — messages and notes — and is on unless turned off (stored
- * only as `messages: false`; no consent to record). Resonances always ring.
+ * switch off keeps it, the switch says it's off). The other two answer them
+ * and are on unless turned off (stored only as `false`; no consent to
+ * record): `messages` — messages and notes —, and `resonanceTaps` — someone
+ * resonated with one of their cards (共振, the tap: lib/push/tapBell; the
+ * installed app builds have no switch for it, the web has). A card answering
+ * theirs always rings.
  *
  * Server-only (firestore.rules deny every client access): read and written
  * through GET/PATCH /api/v1/me/notifications, read by the senders
@@ -24,15 +27,17 @@ export interface NotificationSettings {
   connectionCards: boolean;
   /** Messages and notes sent to them (lib/push/chat, a note's bell): on until turned off. */
   messages: boolean;
+  /** Someone resonated with one of their cards (共振, the tap; lib/push/tapBell): on until turned off. */
+  resonanceTaps: boolean;
 }
 
 export type NotificationSwitch = keyof NotificationSettings;
-export const NOTIFICATION_SWITCHES: readonly NotificationSwitch[] = ['picks', 'connectionCards', 'messages'];
+export const NOTIFICATION_SWITCHES: readonly NotificationSwitch[] = ['picks', 'connectionCards', 'messages', 'resonanceTaps'];
 
 /** The switches sent; null or absent leaves one as it is (Kotlin clients send null). */
 export type NotificationSettingsPatch = { [K in NotificationSwitch]?: boolean | null };
 
-/** The opt-in switches, whose turning on is consent given (`messages` is on from the start: it records none). */
+/** The opt-in switches, whose turning on is consent given (`messages` and `resonanceTaps` are on from the start: they record none). */
 const CONSENT_AT: Partial<Record<NotificationSwitch, string>> = {
   picks: 'picksConsentAt',
   connectionCards: 'connectionCardsConsentAt',
@@ -40,11 +45,16 @@ const CONSENT_AT: Partial<Record<NotificationSwitch, string>> = {
 
 /**
  * A stored document as the switches it holds: the opt-in ones are on only as
- * `true`, `messages` is off only as `false` (a missing document is the two off
- * and messages on).
+ * `true`, `messages` and `resonanceTaps` are off only as `false` (a missing
+ * document is the two opt-in ones off and the other two on).
  */
 export function readNotificationSettings(data: DocumentData | undefined): NotificationSettings {
-  return { picks: data?.picks === true, connectionCards: data?.connectionCards === true, messages: data?.messages !== false };
+  return {
+    picks: data?.picks === true,
+    connectionCards: data?.connectionCards === true,
+    messages: data?.messages !== false,
+    resonanceTaps: data?.resonanceTaps !== false,
+  };
 }
 
 /**
@@ -55,6 +65,19 @@ export function readNotificationSettings(data: DocumentData | undefined): Notifi
 export async function wantsMessagePushes(db: Firestore, uid: string): Promise<boolean> {
   try {
     return (await db.doc(`${NOTIFICATION_SETTINGS}/${uid}`).get()).get('messages') !== false;
+  } catch (e) {
+    console.error('[push] notification settings', uid, e);
+    return true;
+  }
+}
+
+/**
+ * Whether `uid` wants a push when someone resonates with their card (a missing
+ * document says yes; a failed read too, as for messages).
+ */
+export async function wantsTapPushes(db: Firestore, uid: string): Promise<boolean> {
+  try {
+    return (await db.doc(`${NOTIFICATION_SETTINGS}/${uid}`).get()).get('resonanceTaps') !== false;
   } catch (e) {
     console.error('[push] notification settings', uid, e);
     return true;

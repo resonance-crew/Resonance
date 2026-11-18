@@ -9,6 +9,8 @@ import { unsendMessage } from '@/lib/api/v1/messageActions';
 import { MAX_DEVICES, registerDevice, unregisterDevice } from '@/lib/push/devices';
 import { MESSAGES_CHANNEL, MULTICAST_MAX, pushNotification, type PushSender } from '@/lib/push/send';
 import { updateNotificationSettings } from '@/lib/push/settings';
+import { setTap } from '@/lib/api/v1/taps';
+import { TAP_NOTE_WINDOW_MS, pushTap, ringTap } from '@/lib/push/tapBell';
 
 // Push against the Firestore emulator with a fake FCM: the device registry,
 // what a push says and where it leads, and that it rings once, never across a
@@ -738,5 +740,62 @@ describe('a letter (a note between two people not connected)', () => {
     await expect(sendNote(db, 'alice', { cardId: 'walk', text: 'one too many' })).rejects.toMatchObject({ code: 'conflict' });
     expect((await db.collection('conversations/alice_bob/messages').get()).size).toBe(3);
     expect((await db.collection('notifications').get()).size).toBe(3);
+  });
+});
+
+// Round 26 (§R2.3, S7): a reader who taps 共振 and then leaves a note keeps one line on the author's lock screen —
+// the note rides the tap's collapse id / Android tag `rtap_{cardId}` for ten minutes after the tap rang; a tap
+// right after a note pushes nothing, so the note's words stay.
+describe('a note and a tap of the same reader on the same card', () => {
+  beforeEach(async () => {
+    await registerDevice(db, 'bob', 'bob-iphone', { token: 'bob-ios', platform: 'ios', locale: 'en' });
+    await registerDevice(db, 'bob', 'bob-old-android', { token: 'bob-android', platform: 'android', locale: 'en' });
+  });
+
+  const tapAndRing = async (cardId: string) => {
+    await setTap(db, 'alice', cardId, true);
+    const rang = await ringTap(db, 'alice', cardId);
+    const fcm = fakeFcm();
+    await pushTap(db, fcm.sender, { ...rang!, from: 'alice', cardId });
+    return fcm.sent;
+  };
+  const byPlatform = (sent: MulticastMessage[]) => Object.fromEntries(sent.flatMap((m) => m.tokens.map((t) => [t, m] as const)));
+
+  it("lets a note on a named card replace the tap's line, within ten minutes of the ring and not after", async () => {
+    await db.doc('connections/alice_bob').set({ userIds: ['alice', 'bob'], establishedAt: Timestamp.now() });
+    const tapped = byPlatform(await tapAndRing('walk'));
+    expect(tapped['bob-ios'].apns?.headers).toEqual({ 'apns-collapse-id': 'rtap_walk' });
+    expect(tapped['bob-android'].android?.notification?.tag).toBe('rtap_walk');
+    const note = await sendNote(db, 'alice', { cardId: 'walk', text: '雨停的那段' });
+    const fcm = fakeFcm();
+    await pushMessage(db, note.push!, fcm.sender);
+    const noted = byPlatform(fcm.sent);
+    expect(noted['bob-ios'].apns?.headers).toEqual({ 'apns-collapse-id': 'rtap_walk' });
+    expect(noted['bob-android'].android?.notification?.tag).toBe('rtap_walk');
+    // Past the window: the note's own collapse id, in its conversation.
+    await db.doc('resonanceTaps/walk_alice').update({ rangAt: Timestamp.fromMillis(Date.now() - TAP_NOTE_WINDOW_MS - 60_000) });
+    const later = await sendNote(db, 'alice', { cardId: 'walk', text: 'one more thing' });
+    const again = fakeFcm();
+    await pushMessage(db, later.push!, again.sender);
+    expect(byPlatform(again.sent)['bob-ios'].apns?.headers).toEqual({ 'apns-collapse-id': later.id });
+    expect(byPlatform(again.sent)['bob-android'].android?.notification?.tag).toBe('alice_bob');
+  });
+
+  it("does the same for a note on an anonymous card, whose bell row rings", async () => {
+    await tapAndRing('masked');
+    const { notificationId } = await sendNote(db, 'alice', { cardId: 'masked', text: 'whose is this?' });
+    const fcm = fakeFcm();
+    await pushNotification(db, notificationId!, fcm.sender);
+    const noted = byPlatform(fcm.sent);
+    expect(noted['bob-ios'].apns?.headers).toEqual({ 'apns-collapse-id': 'rtap_masked' });
+    expect(noted['bob-android'].android?.notification?.tag).toBe('rtap_masked');
+    expect(noted['bob-ios'].data).toEqual({ notificationId, type: 'note', route: '/card/masked' });
+  });
+
+  it("pushes no tap right after the same reader's note on the card: the note's words stay on the lock screen", async () => {
+    await sendNote(db, 'alice', { cardId: 'masked', text: 'whose is this?' });
+    expect(await tapAndRing('masked')).toEqual([]);
+    // The tap still rang once (its bell row is the record).
+    expect((await db.doc('resonanceTaps/masked_alice').get()).get('rangAt')).toBeInstanceOf(Timestamp);
   });
 });

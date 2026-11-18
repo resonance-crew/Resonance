@@ -13,6 +13,7 @@ import { emptyTrash, purgeExpiredTrash, restoreCard, trashCard } from '@/lib/api
 import { CardDetail, FeedCard, TrashedCard, RestoredCard } from '@/lib/api/v1/schemas';
 import { spend } from '@/lib/api/rateLimit';
 import { exportAccountData } from '@/lib/account/export';
+import { listTaps, setTap } from '@/lib/api/v1/taps';
 import { readCardForPage } from '@/app/[locale]/(app)/card/[slug]/cardPageData';
 import { FirestoreVectorStore } from '@/lib/recommend/vectorStore/firestore';
 import type { IVectorStore } from '@/lib/recommend/vectorStore/interfaces';
@@ -387,6 +388,31 @@ describe('notes on a card in the trash', () => {
     const message = (await get(`conversations/alice_carol/messages/${sent.id}`))!;
     expect(message.text).toBe('thank you');
     expect(message).not.toHaveProperty('noteRef');
+  });
+});
+
+// Round 26 (§R1.6, §Q12): the taps (共振) on an anonymous card go as it goes in, as its notes do — "trash, then delete
+// the account" must not make them vanish beside its author's profile — and restoring brings none back.
+describe('taps on a card in the trash', () => {
+  it("go with an anonymous card as it goes in, stay on a named one, and don't come back with a restore", async () => {
+    await db.doc('cards/live').update({ anonymous: true });
+    for (const [cardId, uid] of [['live', 'carol'], ['live', 'bob'], ['mine', 'carol']]) {
+      expect(await setTap(db, uid, cardId, true)).toMatchObject({ on: true, changed: true });
+    }
+    await trashCard(db, 'alice', 'live');
+    await trashCard(db, 'alice', 'mine');
+    expect((await db.collection('resonanceTaps').where('cardId', '==', 'live').get()).size).toBe(0);
+    expect(await exists('resonanceTaps/mine_carol')).toBe(true);
+    // In the trash it answers its readers as a missing card: no tap, no list, nothing to take back.
+    expect(answer(await failure(setTap(db, 'carol', 'live', true)))).toEqual(MISSING);
+    expect(answer(await failure(setTap(db, 'carol', 'mine', false)))).toEqual(MISSING);
+    expect(answer(await failure(listTaps(db, 'carol', 'live')))).toEqual(MISSING);
+    expect((await getCardDetail(db, 'alice', 'live')).tap).toBeNull();
+    await restoreCard(db, 'alice', 'live');
+    await restoreCard(db, 'alice', 'mine');
+    expect((await db.collection('resonanceTaps').where('cardId', '==', 'live').get()).size).toBe(0);
+    expect((await getCardDetail(db, 'alice', 'live')).tap).toEqual({ mine: false, faces: [], more: false, mayNote: false });
+    expect((await getCardDetail(db, 'alice', 'mine')).tap!.faces.map((f) => f.handle)).toEqual(['carol']);
   });
 });
 

@@ -3,7 +3,10 @@ import { cardPagePaths, landingPagePaths, profilePagePaths } from '@/lib/api/rev
 import { CARD_READS } from '@/lib/api/v1/cardReads';
 import { CHAT_IMAGES, chatImageFiles } from '@/lib/api/v1/chatImages';
 import { UNSENT_MESSAGES } from '@/lib/api/v1/messageActions';
+import { READER_SIGNALS } from '@/lib/api/v1/reading';
 import { PRIVATE_SHARES } from '@/lib/api/v1/sharedCards';
+import { TAPS } from '@/lib/api/v1/taps';
+import { purgeTapRows } from '@/lib/push/tapBell';
 import { restoreCard, trashCard } from '@/lib/api/v1/trash';
 import { HANDLE_HOLDS, HANDLES, holdHandle, reservable, handleKey } from '@/lib/db/firestore/handles';
 import { RETIRED_SLUG, TOMBSTONE, retirable, retiredSlugRef, tombstoneRef } from '@/lib/db/firestore/tombstones';
@@ -159,8 +162,8 @@ export interface PurgeReport {
  * time. Only ids and the fields the pages need are read.
  *
  * Some records are found through one of the user's cards: other readers'
- * legacy resonance records (which name only the card), and every note left on
- * it. Each goes just before its card (`byCard`), so a purge cut short never
+ * legacy resonance records (which name only the card), every note left on
+ * it, the taps (共振) on it and others' records of reading it. Each goes just before its card (`byCard`), so a purge cut short never
  * leaves one behind whose card is gone. Notes left on a card deleted earlier
  * are found by whom they were for: `toUserId`, or `withheldFor` for one
  * withheld across a block (left on an anonymous card, delivered to no one) —
@@ -239,6 +242,9 @@ async function collectAccountData(db: Firestore, uid: string) {
     db.collection(PRIVATE_SHARES).where('authorId', '==', uid),
     // The days their reads of cards were last counted (lib/api/v1/cardReads).
     db.collection(CARD_READS).where('userId', '==', uid),
+    // The cards they resonated with (共振, lib/api/v1/taps), and how they read cards (lib/api/v1/reading).
+    db.collection(TAPS).where('userId', '==', uid),
+    db.collection(READER_SIGNALS).where('userId', '==', uid),
     db.collection('reportEvidence').where('reporterId', '==', uid),
     db.collection('reportEvidence').where('targetUserId', '==', uid),
     // A pending edit outlives its card when an older app deleted the card
@@ -256,6 +262,9 @@ async function collectAccountData(db: Firestore, uid: string) {
       db.collection('notes').where('cardId', 'in', chunk),
       // Others' read markers on them (lib/api/v1/cardReads).
       db.collection(CARD_READS).where('cardId', 'in', chunk),
+      // Who resonated with them (lib/api/v1/taps), and how others read them (lib/api/v1/reading).
+      db.collection(TAPS).where('cardId', 'in', chunk),
+      db.collection(READER_SIGNALS).where('cardId', 'in', chunk),
     );
   }
 
@@ -362,6 +371,12 @@ export async function purgeAccountData(db: Firestore, uid: string, opts: PurgeOp
       const writes = singles.map((ref) => writer.delete(ref).catch(() => void failed++));
       await writer.flush();
       await Promise.all(writes);
+      // Others' bell rows of resonance taps naming them among several (lib/push/tapBell): out of each, and a row
+      // left with no one goes (a row of their own went with the singles above).
+      await purgeTapRows(db, uid).catch((e) => {
+        failed++;
+        console.error(`Account purge: tap rows naming ${uid}`, e);
+      });
       // The profile goes last, once nothing else of the account is left.
       if (!failed) {
         const last = await pool(roots, TREE_CONCURRENCY, (ref) => db.recursiveDelete(ref, writer), late);

@@ -111,12 +111,12 @@ const clockFrom = (at: number) => {
 
 describe('notification settings', () => {
   it('are both off until turned on, and turning one on records when — messages on until turned off', async () => {
-    expect(await getNotificationSettings(db, 'alice')).toEqual({ picks: false, connectionCards: false, messages: true });
+    expect(await getNotificationSettings(db, 'alice')).toEqual({ picks: false, connectionCards: false, messages: true, resonanceTaps: true });
     // Nothing to change writes nothing.
-    expect(await updateNotificationSettings(db, 'alice', { picks: false, connectionCards: null, messages: true })).toEqual({ picks: false, connectionCards: false, messages: true });
+    expect(await updateNotificationSettings(db, 'alice', { picks: false, connectionCards: null, messages: true })).toEqual({ picks: false, connectionCards: false, messages: true, resonanceTaps: true });
     expect((await db.doc('notificationSettings/alice').get()).exists).toBe(false);
 
-    expect(await updateNotificationSettings(db, 'alice', { picks: true })).toEqual({ picks: true, connectionCards: false, messages: true });
+    expect(await updateNotificationSettings(db, 'alice', { picks: true })).toEqual({ picks: true, connectionCards: false, messages: true, resonanceTaps: true });
     const on = (await db.doc('notificationSettings/alice').get()).data()!;
     expect(on.picksConsentAt).toBeInstanceOf(Timestamp);
     expect(on.connectionCardsConsentAt).toBeNull();
@@ -127,15 +127,22 @@ describe('notification settings', () => {
     expect((await db.doc('notificationSettings/alice').get()).get('picksConsentAt')).toEqual(on.picksConsentAt);
 
     // Off keeps when they last agreed; the switch says it's off.
-    expect(await updateNotificationSettings(db, 'alice', { picks: false, connectionCards: true })).toEqual({ picks: false, connectionCards: true, messages: true });
+    expect(await updateNotificationSettings(db, 'alice', { picks: false, connectionCards: true })).toEqual({ picks: false, connectionCards: true, messages: true, resonanceTaps: true });
     const after = (await db.doc('notificationSettings/alice').get()).data()!;
     expect(after.picksConsentAt).toEqual(on.picksConsentAt);
     expect(after.connectionCardsConsentAt).toBeInstanceOf(Timestamp);
 
     // Messages turned off and on again: no consent of its own to record, the others untouched.
-    expect(await updateNotificationSettings(db, 'alice', { messages: false })).toEqual({ picks: false, connectionCards: true, messages: false });
+    expect(await updateNotificationSettings(db, 'alice', { messages: false })).toEqual({ picks: false, connectionCards: true, messages: false, resonanceTaps: true });
     expect((await db.doc('notificationSettings/alice').get()).get('messages')).toBe(false);
-    expect(await updateNotificationSettings(db, 'alice', { messages: true })).toEqual({ picks: false, connectionCards: true, messages: true });
+    expect(await updateNotificationSettings(db, 'alice', { messages: true })).toEqual({ picks: false, connectionCards: true, messages: true, resonanceTaps: true });
+    expect((await db.doc('notificationSettings/alice').get()).get('connectionCardsConsentAt')).toEqual(after.connectionCardsConsentAt);
+
+    // Round 26: 有人共振 (a resonance tap's push) — on until turned off, as messages are, with no consent to record.
+    expect(await updateNotificationSettings(db, 'alice', { resonanceTaps: false })).toEqual({ picks: false, connectionCards: true, messages: true, resonanceTaps: false });
+    expect((await db.doc('notificationSettings/alice').get()).get('resonanceTaps')).toBe(false);
+    expect(await getNotificationSettings(db, 'alice')).toMatchObject({ resonanceTaps: false });
+    expect(await updateNotificationSettings(db, 'alice', { resonanceTaps: true })).toMatchObject({ resonanceTaps: true });
     expect((await db.doc('notificationSettings/alice').get()).get('connectionCardsConsentAt')).toEqual(after.connectionCardsConsentAt);
   });
 
@@ -146,21 +153,21 @@ describe('notification settings', () => {
 
     const first = await get({ 'X-Resonance-Cache': '1' });
     expect(first.status).toBe(200);
-    expect(await first.json()).toEqual({ picks: false, connectionCards: false, messages: true });
+    expect(await first.json()).toEqual({ picks: false, connectionCards: false, messages: true, resonanceTaps: true });
     expect(first.headers.get('cache-control')).toBe('private, no-cache');
     const etag = first.headers.get('etag')!;
     expect((await get({ 'If-None-Match': etag })).status).toBe(304);
 
     const res = await patch({ picks: true, connectionCards: null });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ picks: true, connectionCards: false, messages: true });
+    expect(await res.json()).toEqual({ picks: true, connectionCards: false, messages: true, resonanceTaps: true });
     // The change shows at once: the old answer no longer matches.
     expect((await get({ 'If-None-Match': etag })).status).toBe(200);
 
     expect((await patch({ picks: 'yes' })).status).toBe(400);
     expect((await patch(null)).status).toBe(400);
     mocks.viewer = 'bob';
-    expect(await (await get()).json()).toEqual({ picks: false, connectionCards: false, messages: true });
+    expect(await (await get()).json()).toEqual({ picks: false, connectionCards: false, messages: true, resonanceTaps: true });
   });
 });
 

@@ -6,6 +6,8 @@ import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { getVectorStore, type IVectorStore } from '@/lib/recommend/vectorStore';
 import { cardPagePaths, landingPagePaths } from '@/lib/api/revalidate';
 import { ApiFailure } from './http';
+import { deleteSignalsOn } from './reading';
+import { deleteTapsOn } from './taps';
 import { refuseInTrash } from './inTrash';
 import { readTakeBack, takeBack } from './origins';
 import { toFeedCard } from './present';
@@ -163,7 +165,8 @@ export const NOT_IN_TRASH_MESSAGE = 'This card is not in the trash.';
  * Delete your card for good, draft or published — the only way a published
  * one goes (the rules let a client delete a draft alone) — with what only the
  * server can reach: its pending edit (a subcollection a client's delete
- * leaves behind), the notes left on it and its recommendation vectors. Links
+ * leaves behind), the notes left on it, who resonated with it (its taps), how
+ * it was read (its reading records) and its recommendation vectors. Links
  * and resonances pointing at it dangle, as they always have: readers resolve
  * a missing card to nothing. A card in the trash is deleted the same way (the
  * trash's 永久刪除, emptying it, its daily purge; `trashedBefore` and
@@ -209,6 +212,9 @@ export async function deleteCard(db: Firestore, uid: string, id: string, opts: D
   // only cost the recommender a candidate it then can't read.
   await Promise.all([
     deleteNotesOn(db, id).catch((e) => console.error('[api/v1] notes', id, e)),
+    // Who resonated with it (./taps) and how it was read (./reading): about this card alone, gone with it.
+    deleteTapsOn(db, id).catch((e) => console.error('[api/v1] taps', id, e)),
+    deleteSignalsOn(db, id).catch((e) => console.error('[api/v1] reading', id, e)),
     Promise.resolve()
       .then(() => (opts.vectors ?? getVectorStore()).deleteByCard(id))
       .catch((e) => console.error('[api/v1] vectors', id, e)),

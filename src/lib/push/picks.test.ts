@@ -75,9 +75,9 @@ describe('cardRoute', () => {
 
 describe('readNotificationSettings', () => {
   it('reads the opt-in switches as on only when true, and messages as off only when false — a missing document is the defaults', () => {
-    expect(readNotificationSettings(undefined)).toEqual({ picks: false, connectionCards: false, messages: true });
-    expect(readNotificationSettings({ picks: true, connectionCards: 'yes', messages: 'no' })).toEqual({ picks: true, connectionCards: false, messages: true });
-    expect(readNotificationSettings({ messages: false })).toEqual({ picks: false, connectionCards: false, messages: false });
+    expect(readNotificationSettings(undefined)).toEqual({ picks: false, connectionCards: false, messages: true, resonanceTaps: true });
+    expect(readNotificationSettings({ picks: true, connectionCards: 'yes', messages: 'no' })).toEqual({ picks: true, connectionCards: false, messages: true, resonanceTaps: true });
+    expect(readNotificationSettings({ messages: false, resonanceTaps: false })).toEqual({ picks: false, connectionCards: false, messages: false, resonanceTaps: false });
   });
 });
 

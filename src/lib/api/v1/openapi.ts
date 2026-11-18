@@ -315,6 +315,63 @@ export function buildOpenApi(): Json {
           responses: { '204': { description: 'Received' }, ...errors(400, 401) },
         },
       },
+      '/cards/{key}/reading': {
+        post: {
+          operationId: 'reportCardReading',
+          summary: 'How you read this card in one page view, as its running totals (204 whatever the card, and whether it was kept)',
+          description:
+            'Send it when the card page is left or hidden (and again if it comes back and is left again): the `session` is ' +
+            "the page view's own id, the numbers its totals so far — never deltas. The server keeps the largest each session " +
+            'has said and adds sessions up, so sending one twice counts once. Kept only for picking cards for you; the card\'s ' +
+            'author hears at most a weekly count of three readers or more, never a name. Counted only for a card you may read ' +
+            "and didn't write (published, not in the trash; a named card across a block either way is not counted, an " +
+            'anonymous one is). Numbers out of range are clamped. The answer is always `204` for a well-formed request — it ' +
+            'says nothing about the card — and the keeping happens after it; past a daily budget, reports go unkept, still `204`.',
+          parameters: [cardId],
+          requestBody: { required: true, ...json(ref('ReadingReportRequest')) },
+          responses: { '204': { description: 'Received' }, ...errors(400, 401) },
+        },
+      },
+      '/cards/{key}/tap': {
+        put: {
+          operationId: 'tapCard',
+          summary: 'Resonate with a card (共振, the tap): its author is told once, ever, and your face shows to your connections',
+          description:
+            'Checked in this order: the contract (`400`); your budget (`429`); the card (`404` for one you can\'t read, a ' +
+            "draft, one in the trash, or someone else's 私人卡 shared with you in a conversation — a card is never resonated " +
+            'with on that pass); your own card (`400`); your pen name (`403 forbidden`, "Choose a pen name first."); a block ' +
+            'either way on a named card (`403 blocked`). An anonymous card is answered exactly as without a block — its author ' +
+            'just never hears of it. Its author is told after the answer, the first time only: a bell row and a push naming you ' +
+            '(never across a block). A tap connects no one and lets the author write to no one. `changed: false` when you ' +
+            'already resonated: nothing written, no one told. `409 conflict` is documented for a refusal to come; nothing ' +
+            'answers it yet.',
+          parameters: [cardId],
+          responses: { '200': { description: 'OK', ...json(ref('TapResponse')) }, ...errors(400, 401, 403, 404, 409, 429) },
+        },
+        delete: {
+          operationId: 'untapCard',
+          summary: 'Take your resonance with a card back: it tells no one, and you leave its author\'s list and the faces at once',
+          description:
+            'Checked in this order: the contract (`400`); your budget (`429`); the card (`404` as for `tapCard`); your own card ' +
+            '(`400`). It reaches no one: across a block too, and with no pen name. Resonating again tells its author nothing ' +
+            '(once, ever). `changed: false` when there was nothing to take back. `403` and `409` are documented for refusals ' +
+            'to come; nothing answers them yet.',
+          parameters: [cardId],
+          responses: { '200': { description: 'OK', ...json(ref('TapResponse')) }, ...errors(400, 401, 403, 404, 409, 429) },
+        },
+      },
+      '/cards/{key}/taps': get('getCardTaps', 'Who resonated with a card (共振), as you may see them', 'TapList', {
+        description:
+          "The card's author gets everyone, newest first, 30 a page (pass `nextPageToken` back as `pageToken`), each with " +
+          'the excerpt of the latest note they left on a named card (`note`; open your conversation with them) — never across ' +
+          'a block, and never a note on an anonymous card. A reader gets the faces of `CardDetail.tap` without its cap: ' +
+          'themselves first, then the people they are connected with, in one page, with no notes. `404` wherever ' +
+          '`CardDetail.tap` is null. `429` is documented for a budget to come; nothing answers it yet.',
+        parameters: [
+          cardId,
+          { name: 'pageToken', in: 'query', required: false, description: "A page's `nextPageToken`", schema: { type: 'string', maxLength: 512 } },
+        ],
+      }, [400, 401, 404, 429]),
       '/cards/{key}/related': get('getRelatedCards', 'A few recent cards sharing its tags', 'CardList', { parameters: [cardId] }),
       '/cards/{key}/publish': {
         post: {

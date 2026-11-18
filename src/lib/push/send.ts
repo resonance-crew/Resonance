@@ -6,6 +6,7 @@ import zhTW from '@/messages/zh-TW.json';
 import { NOTE_PREVIEW_CHARS } from '@/lib/api/v1/conversations';
 import { deviceLocale, type DeviceLocale } from './devices';
 import { wantsMessagePushes } from './settings';
+import { noteRidesTap } from './tapCollapse';
 
 /** What sends the push; `getAdminMessaging()` in production, a fake in tests. */
 export interface PushSender {
@@ -29,6 +30,9 @@ const TEXT_KEY: Record<string, keyof typeof en.app.notifications> = {
   invite_accepted: 'inviteAccepted',
   translation_done: 'translationDone',
   resonance_summary: 'resonanceSummary',
+  // Written already pushed, both: lib/push/tapBell pushes a tap itself, and the weekly read summary is a bell row only.
+  resonance_tap: 'tap',
+  read_summary: 'readSummary',
 };
 
 /** The kinds whose push opens a conversation with their sender (pushRoute's thread). */
@@ -74,6 +78,9 @@ export function pushRoute(type: string, payload: Payload): string {
       return thread;
     case 'card_link':
     case 'translation_done':
+    // A resonance tap and the weekly read summary open the card, named or anonymous alike — never a thread.
+    case 'resonance_tap':
+    case 'read_summary':
       return str(payload.cardId) ? `/card/${encodeURIComponent(str(payload.cardId))}` : '';
     default:
       return '';
@@ -85,7 +92,7 @@ export function pushText(locale: DeviceLocale, type: string, payload: Payload): 
   const key = TEXT_KEY[type];
   if (!key) return null;
   const t = createTranslator({ locale, messages: MESSAGES[locale], namespace: 'app.notifications' });
-  const title = t(key, { handle: str(payload.fromHandle), count: Number(payload.count ?? 0) });
+  const title = t(key, { handle: str(payload.fromHandle), count: Number(payload.count ?? payload.readers ?? 0) });
   const preview = type === 'note' ? str(payload.preview) : '';
   return preview ? { title, body: `「${preview}」` } : { title };
 }
@@ -249,6 +256,9 @@ export async function pushNotification(db: Firestore, id: string, sender: PushSe
   // apps open a conversation by uid (a pen name can change before the tap).
   const opensThread = from && OPENS_THREAD.has(type) && !onAnonymousCard(type, payload);
   const data: Record<string, string> = { notificationId: id, type, route, ...(opensThread ? { fromUserId: from } : {}) };
+  // A note (on an anonymous card: a named card's rings as a message) its writer left just after their tap on the
+  // card rang replaces that tap's line on the lock screen (lib/push/tapCollapse).
+  const rides = type === 'note' && from ? await noteRidesTap(db, from, str(payload.cardId), Date.now()) : null;
   const groups: MulticastGroup[] = [];
   for (const [locale, targets] of groupByLocale(deviceTargets(devices.docs))) {
     const text = pushText(locale, type, payload);
@@ -259,8 +269,8 @@ export async function pushNotification(db: Firestore, id: string, sender: PushSe
         tokens,
         notification: text,
         data,
-        android: { notification: { channelId: ANDROID_CHANNEL, tag: id } },
-        apns: { payload: { aps: { sound: 'default', threadId: type } } },
+        android: { notification: { channelId: ANDROID_CHANNEL, tag: rides ?? id } },
+        apns: { ...(rides ? { headers: { 'apns-collapse-id': rides } } : {}), payload: { aps: { sound: 'default', threadId: type } } },
       }),
     });
   }
