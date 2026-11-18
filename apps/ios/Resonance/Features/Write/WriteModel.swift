@@ -1159,6 +1159,16 @@ nonisolated enum ReadTime {
     private static let wordlike = try! NSRegularExpression(pattern: #"[\p{L}\p{N}]"#)
 
     static func minutes(_ text: String) -> Int {
+        max(1, Int(exactMinutes(text).rounded()))
+    }
+
+    /// How long `text` takes to read at the same rates, in seconds and unrounded (lib/readTime's `readSeconds`,
+    /// round 26 §U7): what a reading report is measured against — a short card's 20 seconds stay 20.
+    static func seconds(_ text: String) -> Double {
+        exactMinutes(text) * 60
+    }
+
+    private static func exactMinutes(_ text: String) -> Double {
         let ns = text as NSString
         var chars = 0
         var words = 0
@@ -1172,7 +1182,7 @@ nonisolated enum ReadTime {
                 chars += piece.utf16.count
             }
         }
-        return max(1, Int((Double(chars) / cjkPerMinute + Double(words) / wordsPerMinute).rounded()))
+        return Double(chars) / cjkPerMinute + Double(words) / wordsPerMinute
     }
 }
 

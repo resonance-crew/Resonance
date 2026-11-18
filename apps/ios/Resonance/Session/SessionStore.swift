@@ -101,6 +101,8 @@ final class SessionStore {
     let cardPreviews = CardPreviewCache()
     /// The card reads this run has reported, by account and card (never shown).
     let cardReads: CardReads
+    /// How each page view of someone else's card was read (round 26 §U7), kept until the server has it.
+    let readingReports: ReadingReports
     /// The app's one toast (「已移到垃圾桶 · 復原」, 「已還原」): shown over the tabs' foot by the shell
     /// (`MainTabView`'s ToastHost), so it outlives the page that asked for it.
     let toasts = ToastCenter()
@@ -135,6 +137,7 @@ final class SessionStore {
         let client = ResonanceClient.make(configuration, cache: httpCache)
         api = client
         cardReads = CardReads { try await ReadingAPI(client: client).countRead($0) }
+        readingReports = ReadingReports { id, report in try await ReadingAPI(client: client).reportReading(id, report) }
         outboxes = ChatOutboxes(messaging: { MessagingAPI(client: client) }, sent: { PushCenter.shared.reachedOut(.reply) })
         chatImages = ChatImageStore { id, size in try await MessagingAPI(client: client).chatImage(id, thumb: size == .thumb) }
         account = AccountAPI(configuration)
@@ -218,7 +221,9 @@ final class SessionStore {
     /// the profile with them. Returns whether they do.
     @discardableResult
     func cameBack(now: Date = .now) -> Bool {
-        guard phase == .signedIn, foreground.isStale(at: now) else { return false }
+        guard phase == .signedIn else { return false }
+        readingReports.flush(uid: uid)
+        guard foreground.isStale(at: now) else { return false }
         foreground = ForegroundRefresh(last: now)
         awayRefreshes += 1
         Task { await loadMe() }
@@ -300,6 +305,7 @@ final class SessionStore {
         kept.removeAll()
         noteDrafts.retainOnly(nil)
         chatDrafts.retainOnly(nil)
+        readingReports.retainOnly(nil)
         notifyAsks.use(account: nil)
         httpCache.use(account: nil)
         signedOutForDeletion = true
@@ -344,6 +350,7 @@ final class SessionStore {
         kept.retainOnly(newUID)
         noteDrafts.retainOnly(newUID)
         chatDrafts.retainOnly(newUID)
+        readingReports.retainOnly(newUID)
         notifyAsks.use(account: newUID)
         StickerLibrary.shared.use(account: newUID)
         if previous != newUID { noteSends.reset() }
@@ -378,6 +385,8 @@ final class SessionStore {
                 guard let self, self.uid == newUID else { return }
                 notifications.start(uid: newUID)
                 conversations.start(uid: newUID)
+                // Reading reports an earlier run couldn't send (the app went away first).
+                readingReports.flush(uid: newUID)
             }
             Task { await loadMe() }
             Task { await registerPush() }
