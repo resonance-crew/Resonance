@@ -301,6 +301,8 @@ struct CardShareButton: View {
     let detail: CardDetail
     let seed: Double
     @Environment(SessionStore.self) private var session
+    /// The card page's reading report hears the share (round 26 §U7).
+    @Environment(\.cardShared) private var cardShared
     @State private var anchor = ShareAnchor()
     @State private var confirming = false
     @State private var busy = false
@@ -335,6 +337,7 @@ struct CardShareButton: View {
     private func share() {
         guard !busy else { return }
         busy = true
+        cardShared()
         let detail = detail
         Task { @MainActor in
             defer { busy = false }

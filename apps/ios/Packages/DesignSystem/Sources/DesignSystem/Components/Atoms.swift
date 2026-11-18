@@ -150,9 +150,13 @@ public struct HandDrawnAvatar: View {
 
     /// AVATAR_WOB: one lopsided turn per side, corners that drift (6% of the
     /// size), and the same curve for the fill, the photo's clip and the rim.
-    public var body: some View {
-        let shape = WobRectShape(radius: size * 0.4, seed: seed, mag: size * 0.022, options: WobRectOptions(
+    public static func shape(size: CGFloat, seed: Double) -> WobRectShape {
+        WobRectShape(radius: size * 0.4, seed: seed, mag: size * 0.022, options: WobRectOptions(
             curve: 1.3, cornerJitter: 3.2, cornerOffset: size * 0.06, segmentsH: .count(1), segmentsV: .count(1)))
+    }
+
+    public var body: some View {
+        let shape = Self.shape(size: size, seed: seed)
         ZStack {
             shape.fill(color)
             Text(initials)
