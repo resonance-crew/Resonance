@@ -484,7 +484,7 @@ struct WriteScreen: View {
                 .padding(.bottom, statusShown(model) || !showsBar ? 16 : 0)
             // A card answering another: which one, over the title (round 26 §U6) — a tap reads it again.
             if let original = model.referenceCardId {
-                ReplyingBand(cardId: original).padding(.bottom, 12)
+                ReplyingBand(cardId: original)
             }
             titleField(model, typo: typo)
                 // The title → the story's first line (round 11 §4): well over a paragraph's gap, so the title

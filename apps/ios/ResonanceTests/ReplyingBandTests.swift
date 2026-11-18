@@ -22,6 +22,20 @@ import UIKit
         #expect(abs(size.height - 44) < 0.5, "\(size.height)")
     }
 
+    /// The original can't be read (gone, hidden from the writer since, offline with nothing kept): nothing over the
+    /// title — no blank row, no unnamed dimmed button — as on Android. Known, it is the 44 row and its 12 to the title.
+    @Test func nothingWhileTheOriginalIsUnknown() {
+        func height(_ card: FeedCard?) -> CGFloat {
+            let row = ReplyingBandRow(card: card, seed: 3) {}
+            return UIHostingController(rootView: row.frame(width: 362)).sizeThatFits(in: CGSize(width: 362, height: 400)).height
+        }
+        #expect(height(nil) == 0)
+        #expect(height(Fixture.card("c1", title: "  ")) == 0, "a card with no title to name")
+        #expect(abs(height(Fixture.card("c1", title: "一場雨後的散步")) - (ReplyingBand.height + ReplyingBand.gap)) < 0.5)
+        #expect(ReplyingBand.title(of: nil) == nil)
+        #expect(ReplyingBand.title(of: Fixture.card("c1", title: " 一場雨後的散步 ")) == "一場雨後的散步")
+    }
+
     @Test func aLongTitleStaysOneLine() {
         let long = String(repeating: "很長的標題", count: 20)
         let label = ReplyingBandLabel(title: long, cover: nil, hue: nil, seed: 3)
