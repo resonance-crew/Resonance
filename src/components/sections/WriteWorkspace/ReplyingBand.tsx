@@ -50,14 +50,18 @@ function OriginalThumb({ id, cover, hue, title }: { id: string; cover?: string; 
  * What a reply is answering, below the split (round 26 §U6): there the writer shows nothing of the story being
  * answered (at the split the original stands beside it), so a 44 band above the title holds the original's cover at
  * 36 and 「回應〈一場雨後的散步〉」; tapping it opens the original in a centred dialog — the writing stays under it.
+ * Its room is kept while the original is read (the title doesn't drop under someone typing); an original that can't
+ * be read — deleted, trashed, hidden by a block, or the read failing — or that has no title leaves no band at all,
+ * as on iOS and Android.
  */
 export function ReplyingBand({ cardId }: { cardId: string }) {
   const t = useTranslations('card');
   const tWrite = useTranslations('write');
-  const { data } = useCard(cardId);
+  const { data, error } = useCard(cardId);
   const [open, setOpen] = useState(false);
   const card = data?.card;
-  if (!card) return <div className={styles.band} aria-hidden data-pending="" />;
+  if (!card) return data === undefined && !error ? <div className={styles.band} aria-hidden data-pending="" /> : null;
+  if (!card.thoughtCore.trim()) return null;
   const label = t('replying', { title: card.thoughtCore });
   return (
     <>

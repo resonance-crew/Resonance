@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithIntl, screen, userEvent, within } from '@/../test/render';
 import zhMessages from '@/messages/zh-TW.json';
 import { WriteWorkspace } from './WriteWorkspace';
@@ -27,12 +27,21 @@ vi.mock('./WorkspaceShell', () => ({
 }));
 vi.mock('@/components/molecules/CardEditor/CardEditor', () => ({ CardEditor: () => <textarea aria-label="Title" /> }));
 vi.mock('./LazyOriginalCardPanel', () => ({ OriginalCardPanel: ({ cardId }: { cardId: string }) => <article>the original {cardId}</article> }));
+const RAIN_WALK = { id: 'rain-walk', thoughtCore: '一場雨後的散步', accentHue: 215, media: { type: 'image', url: 'https://img.example/rain.webp' } };
 const original = vi.hoisted(() => ({
-  card: { id: 'rain-walk', thoughtCore: '一場雨後的散步', accentHue: 215, media: { type: 'image', url: 'https://img.example/rain.webp' } } as Record<string, unknown>,
+  card: {} as Record<string, unknown>,
+  /** What useCard answers instead of the card: still reading (undefined), not readable (null), or the read failed. */
+  read: null as null | { data: undefined | null; error?: Error },
 }));
-vi.mock('@/lib/data/hooks', () => ({ useCard: () => ({ data: { card: original.card, author: { id: 'bob' } } }) }));
+vi.mock('@/lib/data/hooks', () => ({
+  useCard: () => original.read ?? { data: { card: original.card, author: { id: 'bob' } } },
+}));
 
 const zh = { locale: 'zh-TW', messages: zhMessages };
+beforeEach(() => {
+  original.card = RAIN_WALK;
+  original.read = null;
+});
 afterEach(() => {
   split.value = false;
   vi.clearAllMocks();
@@ -63,6 +72,28 @@ describe('ReplyingBand', () => {
     const band = screen.getByRole('button', { name: '回應〈陌生人的一句話〉' });
     expect(band.querySelector('img')).toBeNull();
     expect(band).toHaveTextContent('陌');
+  });
+
+  it('keeps its room while the original is read, and leaves nothing once it can’t be read or has no title', () => {
+    original.read = { data: undefined };
+    const reading = renderWithIntl(<WriteWorkspace title="寫卡片" locale="zh-TW" referenceCardId="rain-walk" />, zh);
+    expect(document.querySelector('[data-pending]')).not.toBeNull();
+    reading.unmount();
+
+    // Deleted, trashed or hidden by a block (useCard's null), or the read failing: no blank row over the title.
+    for (const read of [{ data: null }, { data: undefined, error: new Error('permission-denied') }]) {
+      original.read = read;
+      const gone = renderWithIntl(<WriteWorkspace title="寫卡片" locale="zh-TW" referenceCardId="rain-walk" />, zh);
+      expect(document.querySelector('[data-pending]')).toBeNull();
+      expect(screen.queryByRole('button', { name: /回應〈/ })).toBeNull();
+      gone.unmount();
+    }
+
+    original.read = null;
+    original.card = { id: 'blank', thoughtCore: '  ', accentHue: 140 };
+    renderWithIntl(<WriteWorkspace title="寫卡片" locale="zh-TW" referenceCardId="blank" />, zh);
+    expect(screen.queryByRole('button', { name: /回應〈/ })).toBeNull();
+    expect(document.querySelector('[data-pending]')).toBeNull();
   });
 
   it('is not there at the split, where the original stands beside the writer — nor on a card answering nothing', () => {
