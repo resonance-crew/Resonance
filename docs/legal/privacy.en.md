@@ -30,7 +30,7 @@ Each card can be **public**, **connections only** or **only me**. Public cards c
 
 When you tap Resonate, your profile picture shows under that card to the people you're connected with; the card's author can see who resonated too, on anonymous cards as well (though that tells no one who the author is). Resonating connects no one and opens no conversation, and it gives the author no way to message you. The first time you resonate with a card its author gets a notification, and never again for that card; authors can turn these pushes off under Settings → Notifications → When someone resonates. Taking a resonance back tells no one, and your picture leaves the list at once. No count of resonances is shown anywhere.
 
-Your reading record is used only to pick cards for you (the stories picked for you and the evening card), and never shows anyone what you read. A card's author only hears, when three or more people read it to the end in a week, that "this many people read this card to the end last week", with no names; for fewer, they hear nothing.
+Your reading record is used only to pick cards for you (the stories picked for you and the evening card), and never shows anyone what you read. A card's author only hears, when three or more people read it to the end in a week, that "this many people read this card to the end last week", with no names; for fewer, they hear nothing. This weekly summary counts public cards only: a card for connections or for yourself gets none.
 
 Each card's reading record is deleted automatically 180 days after you last read it, and with the card, or with your account. "Download my data" includes the cards you resonated with (their titles and links) and your reading records.
 

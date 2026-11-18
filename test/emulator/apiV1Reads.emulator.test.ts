@@ -142,6 +142,19 @@ describe('getCardDetail', () => {
     expect((await getCardDetail(db, 'carol', 'anon')).isOwner).toBe(true);
   });
 
+  // Round 26 §A1.6: the through line the card's reading found is its author's alone — no screen shows a reader
+  // what the model read of a story, and the long reading never leaves the server.
+  it("answers the reading's through line to the card's author only, and nothing of the reading to anyone", async () => {
+    await card('read', 'bob', 3, { signature: { coreInsight: 'Keeping one letter', placeholder: false, contentHash: 'h' } });
+    await set('cardSignatures/read', { authorId: 'bob', version: 3, insights: [{ insight: 'SECRET-INSIGHT', evidence: 'SECRET-QUOTE' }], listedForStrangers: true });
+    expect((await getCardDetail(db, 'bob', 'read')).coreInsight).toBe('Keeping one letter');
+    for (const reader of ['alice', 'dana']) {
+      const detail = await getCardDetail(db, reader, 'read', new Set(['related', 'resonances']));
+      expect(detail.coreInsight, reader).toBeNull();
+      expect(JSON.stringify(detail), reader).not.toMatch(/Keeping one letter|SECRET-INSIGHT|SECRET-QUOTE|contentHash|listedForStrangers/);
+    }
+  });
+
   it('includes the card it responds to only when the viewer may read that one', async () => {
     await card('orig', 'bob', 5, { visibility: 'connections' });
     await card('resp', 'dana', 1, { referenceCardId: 'orig' });
@@ -189,6 +202,18 @@ describe('getResonances / getRelated / getLinksToCard', () => {
     await card('c', 'dana', 3, { tags: ['雨'] });
     await card('d', 'dana', 4, { tags: ['雨'] });
     expect((await getRelated(db, 'alice', 'base')).cards.map((c) => c.id)).toEqual(['b', 'c', 'd']);
+  });
+
+  // Round 26 §A1.7: related cards pick cards for readers who may not know their authors — a card its reading keeps
+  // from strangers (feeling only, too little to take) is left out; one not read yet is not.
+  it('leaves out a card its reading keeps from strangers, in the list and in the card page', async () => {
+    await card('base', 'bob', 10, { tags: ['雨'] });
+    await card('b', 'dana', 2, { tags: ['雨'] });
+    await card('c', 'dana', 3, { tags: ['雨'] });
+    await set('cardSignatures/b', { authorId: 'dana', listedForStrangers: false });
+    await set('cardSignatures/c', { authorId: 'dana', listedForStrangers: true });
+    expect((await getRelated(db, 'alice', 'base')).cards.map((c) => c.id)).toEqual(['c']);
+    expect((await getCardDetail(db, 'alice', 'base', new Set(['related']))).related!.cards.map((c) => c.id)).toEqual(['c']);
   });
 
   it('shows cards linking to a card to its author only', async () => {

@@ -1,26 +1,40 @@
-import type { InsightSignature } from '@/lib/db/types';
+import type { CardReading, ReadingInsight } from '@/lib/db/types';
 import type { VectorChannel } from './vectorStore/types';
 
 /**
- * Minimum insight score for a card to enter the recommendation candidate pool.
- * Below this the signature is still stored (so the author's own profile and the
- * card page can use it), but the card is never surfaced to other people — the
- * "is this worth recommending" filter, done for free at extraction time.
+ * The pure rules of a card's reading (round 26 §A1): what is kept of the
+ * model's answer, whether a card is listed for strangers, which formula
+ * phrasings a reading may not use, and what is embedded. No I/O.
+ */
+
+/**
+ * The least insight score for a card to be put before strangers (with
+ * `!moodOnly && !placeholder`: {@link listedForStrangers}, one switch).
+ * Re-calibrated on the exam after the first bake-off (§E1).
  */
 export const INSIGHT_INDEX_THRESHOLD = 0.45;
 
 /**
- * The longest a signature field is kept, in code points. The fields are model
- * output about an author's card, and they go whole into other readers'
- * ranking prompts: one line each, never a page a card could talk the model
- * into writing (or extra lines in the prompt's candidate list).
+ * The longest a reading's field is kept, in code points. The fields are model
+ * output about an author's card, and the hit part's insight and situation go
+ * into other readers' ranking prompts: one line each, never a page a card
+ * could talk the model into writing (or extra lines in the prompt's list).
  */
 export const SIGNATURE_FIELD_MAX = 200;
+/** The through line (the card's `coreInsight`), in code points. */
+export const THROUGH_LINE_MAX = 60;
+/** A quoted piece of the story, in code points. */
+export const EVIDENCE_MAX = 40;
+/** At most this many insights a card (C4: more parts, more chances to be near everything). */
+export const INSIGHTS_MAX = 3;
+/** A part weaker than this gets no vector (D11: the through line stands in when none clears it). */
+export const PART_MIN_STRENGTH = 0.5;
 
-function str(value: unknown): string {
+/** One line, at most `max` code points. */
+export function line(value: unknown, max = SIGNATURE_FIELD_MAX): string {
   if (typeof value !== 'string') return '';
-  const line = value.replace(/\s+/g, ' ').trim();
-  return Array.from(line).slice(0, SIGNATURE_FIELD_MAX).join('');
+  const one = value.replace(/\s+/g, ' ').trim();
+  return Array.from(one).slice(0, max).join('');
 }
 
 /** Clamp an arbitrary value into a 0–1 score, defaulting to 0. */
@@ -30,47 +44,134 @@ function clamp01(value: unknown): number {
   return Math.min(1, Math.max(0, n));
 }
 
+function parseInsight(raw: unknown): ReadingInsight | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const insight: ReadingInsight = {
+    span: line(r.span),
+    situation: line(r.situation),
+    struggle: line(r.struggle),
+    thinking: line(r.thinking),
+    gain: line(r.gain),
+    shift: line(r.shift),
+    insight: line(r.insight),
+    reader: line(r.reader),
+    evidence: line(r.evidence, EVIDENCE_MAX),
+    strength: clamp01(r.strength),
+  };
+  return insight.insight || insight.situation ? insight : null;
+}
+
 /**
- * Coerce the raw LLM JSON (snake_case, possibly partial) into a well-formed
- * {@link InsightSignature}. Tolerant of missing fields so a sloppy model
- * response never throws — downstream {@link isIndexable} handles the empty case.
+ * Coerce the model's JSON (snake_case, possibly partial — Structured Outputs
+ * holds the shape, not the lengths) into a well-formed {@link CardReading}.
+ * Tolerant of anything missing, so a sloppy answer never throws: a reading
+ * with nothing in it is simply not listed.
  */
-export function parseSignature(raw: unknown): InsightSignature {
+export function parseReading(raw: unknown): CardReading {
   const r = (raw ?? {}) as Record<string, unknown>;
+  const insights = (Array.isArray(r.insights) ? r.insights : [])
+    .map(parseInsight)
+    .filter((i): i is ReadingInsight => i !== null)
+    .slice(0, INSIGHTS_MAX);
   return {
-    coreInsight: str(r.core_insight ?? r.coreInsight),
-    intent: str(r.intent),
-    situation: str(r.situation),
-    lifeDomain: str(r.life_domain ?? r.lifeDomain),
-    emotionalRegister: str(r.emotional_register ?? r.emotionalRegister),
+    insights,
+    throughLine: line(r.through_line ?? r.throughLine, THROUGH_LINE_MAX),
+    // Only a plain `true` takes a card out: anything else the model says reads as false.
+    moodOnly: (r.mood_only ?? r.moodOnly) === true,
     insightScore: clamp01(r.insight_score ?? r.insightScore),
-    // Only a plain `true` hides a card from lists: anything else the model says reads as false.
+    lifeDomain: line(r.life_domain ?? r.lifeDomain),
+    emotionalRegister: line(r.emotional_register ?? r.emotionalRegister),
     placeholder: r.placeholder === true,
   };
 }
 
 /**
- * Whether a signature qualifies for the candidate pool: it must carry a real
- * core insight, clear the score threshold, and not be a placeholder.
+ * The answer of the older prompt (the refusal's fallback, on `llmModel()`):
+ * one realization and its circumstance, read as a one-insight reading.
  */
-export function isIndexable(sig: InsightSignature): boolean {
-  return sig.coreInsight.length > 0 && sig.insightScore >= INSIGHT_INDEX_THRESHOLD && sig.placeholder !== true;
+export function readingFromLegacy(raw: unknown): CardReading {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const core = line(r.core_insight ?? r.coreInsight);
+  const score = clamp01(r.insight_score ?? r.insightScore);
+  return {
+    insights: core
+      ? [{ span: '', situation: line(r.situation), struggle: '', thinking: '', gain: '', shift: '', insight: core, reader: '', evidence: '', strength: score }]
+      : [],
+    throughLine: line(core, THROUGH_LINE_MAX),
+    moodOnly: false,
+    insightScore: score,
+    lifeDomain: line(r.life_domain ?? r.lifeDomain),
+    emotionalRegister: line(r.emotional_register ?? r.emotionalRegister),
+    placeholder: r.placeholder === true,
+  };
 }
 
 /**
- * The per-channel text we actually embed — the distilled signature, NOT the raw
- * story. `insight` captures the transferable realization (+ its life domain for
- * disambiguation); `situation` captures the lived experience it arose from.
- * Returns only channels that have content.
+ * Whether strangers may be shown the card (§A1.7) — one switch every path
+ * that picks cards for people who aren't its author's connections reads: the
+ * recommendation pool (an unlisted card gets no vectors), cold start, the
+ * card page's related cards, the landing film, the evening push. A card not
+ * listed is still published, in the feed and on its author's profile.
  */
-export function signatureToChannelTexts(sig: InsightSignature): { channel: VectorChannel; text: string }[] {
-  const out: { channel: VectorChannel; text: string }[] = [];
-  if (sig.coreInsight) {
-    const domain = sig.lifeDomain ? `（${sig.lifeDomain}）` : '';
-    out.push({ channel: 'insight', text: `${sig.coreInsight}${domain}` });
+export function listedForStrangers(reading: Pick<CardReading, 'insightScore' | 'moodOnly' | 'placeholder'>): boolean {
+  return reading.insightScore >= INSIGHT_INDEX_THRESHOLD && !reading.moodOnly && !reading.placeholder;
+}
+
+/**
+ * The formula phrasings a reading may not use (§A1.5): aphorisms that make
+ * every card sound alike and stand near each other for it. The prompt asks
+ * the model to check for them; this checks after it.
+ */
+const FORMULAS: { name: string; pattern: RegExp }[] = [
+  { name: '真正', pattern: /真正/ },
+  { name: '不是……而是……', pattern: /不是[^。！？!?]{0,40}?而是/ },
+  { name: '往往', pattern: /(?:^|[。！？!?；;，,]\s*)往往/ },
+  { name: 'the real …', pattern: /\bthe real\b/i },
+  { name: 'not X but Y', pattern: /\bnot\b[^.!?;]{1,60}?\bbut\b/i },
+];
+
+/** The formula phrasings found in a reading's insight-bearing text (empty: none). */
+export function formulaPhrases(reading: Pick<CardReading, 'insights' | 'throughLine'>): string[] {
+  const texts = [reading.throughLine, ...reading.insights.flatMap((i) => [i.insight, i.thinking, i.gain, i.shift])].filter(Boolean);
+  return FORMULAS.filter((f) => texts.some((t) => f.pattern.test(t))).map((f) => f.name);
+}
+
+/** One part of a card as the vector index keeps it: what is embedded, and the short lines a hit shows other readers' prompts. */
+export interface ReadingPart {
+  channel: VectorChannel;
+  /** Which insight it comes from (0-based; the through line's stand-in is 0). */
+  part: number;
+  /** What is embedded. */
+  text: string;
+  /** The hit's one-line insight and situation (≤ SIGNATURE_FIELD_MAX each): what the rerank and select prompts read. */
+  insight: string;
+  situation: string;
+  /** Where in the story it is. */
+  span: string;
+}
+
+/**
+ * The parts a card is embedded as (§A2.1): for each insight of strength
+ * ≥ PART_MIN_STRENGTH (three at most), an `insight` passage (thinking, gain,
+ * shift and the insight) and a `situation` one (the circumstance and what was
+ * hard). A card none of whose insights clears that gets one `insight` part
+ * from its through line. `reader` and `evidence` are never embedded.
+ */
+export function readingParts(reading: CardReading): ReadingPart[] {
+  const strong = reading.insights.slice(0, INSIGHTS_MAX).filter((i) => i.strength >= PART_MIN_STRENGTH);
+  if (strong.length === 0) {
+    if (!reading.throughLine) return [];
+    const best = [...reading.insights].sort((a, b) => b.strength - a.strength)[0];
+    return [{ channel: 'insight', part: 0, text: reading.throughLine, insight: reading.throughLine, situation: best?.situation ?? '', span: '' }];
   }
-  if (sig.situation) {
-    out.push({ channel: 'situation', text: sig.situation });
-  }
-  return out;
+  return strong.flatMap((i, part) => {
+    const shared = { part, insight: i.insight || reading.throughLine, situation: i.situation, span: i.span };
+    const insightText = [i.thinking, i.gain, i.shift, i.insight].filter(Boolean).join('\n');
+    const situationText = [i.situation, i.struggle].filter(Boolean).join('\n');
+    return [
+      ...(insightText ? [{ channel: 'insight' as const, text: insightText, ...shared }] : []),
+      ...(situationText ? [{ channel: 'situation' as const, text: situationText, ...shared }] : []),
+    ];
+  });
 }

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { backfillAnonymous } from '../../scripts/backfills/anonymous';
@@ -17,6 +17,7 @@ import { backfillLinkPreviews } from '../../scripts/backfills/linkPreviews';
 import { backfillAnonymousBells } from '../../scripts/backfills/anonymousBells';
 import { backfillAvatarColors } from '../../scripts/backfills/avatarColors';
 import { backfillCardTombstones } from '../../scripts/backfills/cardTombstones';
+import { backfillRecommendIndex } from '../../scripts/backfills/recommendIndex';
 import { avatarColorFor, LEGACY_AVATAR_COLOR } from '@/lib/design/avatarColors';
 import type { PreviewFetch } from '@/lib/links/preview';
 
@@ -833,5 +834,47 @@ describe('card-tombstones', () => {
     expect(stones.docs.map((d) => d.id).sort()).toEqual(['GoneEditedAAAAAAAAAA', 'GoneMarkedAAAAAAAAAA', 'GoneOriginalAAAAAAAA', 'GoneSharedAAAAAAAAAA']);
     for (const d of stones.docs) expect(Object.keys(d.data())).toEqual(['deletedAt']);
     expect(await backfillCardTombstones(db, { apply: true, log: () => {} })).toMatchObject({ gone: 0, written: 0 });
+  });
+});
+
+// Round 26 §A5.1: recommend-index gives published cards round 26's reading (indexCard, stood in for here), takes the
+// older recipe's fields off cards, and clears readers' stored picks — their items and day only, never askedOn (the
+// evening's push reads it) nor what they were shown.
+describe('recommend-index', () => {
+  const at = Timestamp.fromDate(new Date('2026-11-01T00:00:00Z'));
+  const seedCards = async () => {
+    await Promise.all([
+      db.doc('cards/old').set({ authorId: 'a', publishedAt: at, thoughtCore: 'Old', story: 'An older card.', signature: { coreInsight: 'x', intent: 'to record', situation: 's', lifeDomain: 'd', emotionalRegister: 'e', insightScore: 0.7, placeholder: false } }),
+      db.doc('cards/new').set({ authorId: 'b', publishedAt: at, thoughtCore: 'New', story: 'A card read this round.', signature: { coreInsight: 'y', placeholder: false, contentHash: 'h' } }),
+      db.doc('cardSignatures/new').set({ authorId: 'b', version: 3, error: null }),
+      db.doc('cards/draft').set({ authorId: 'c', publishedAt: null, thoughtCore: 'Draft', story: 'Not yet.' }),
+      db.doc('recommendations/alice').set({ date: '2026-11-19', items: [{ cardId: 'old' }], askedOn: '2026-11-19', shown: { old: { n: 2, lastDay: '2026-11-19' } }, partial: false }),
+    ]);
+  };
+
+  it('counts what it would read and clear in a dry run, and writes nothing', async () => {
+    await seedCards();
+    const index = vi.fn(async (_id: string, _opts: unknown) => ({ indexed: true }));
+    const report = await backfillRecommendIndex(db, { apply: false, log: () => {}, index });
+    expect(report).toMatchObject({ published: 2, targets: 1, recommendationsCleared: 1 });
+    expect(index).not.toHaveBeenCalled();
+    expect((await db.doc('cards/old').get()).get('signature.intent')).toBe('to record');
+    expect((await db.doc('recommendations/alice').get()).get('items')).toHaveLength(1);
+  });
+
+  it('reads the cards not read this round (all with --all), drops the older fields, and keeps askedOn and shown', async () => {
+    await seedCards();
+    const index = vi.fn(async (_id: string, _opts: unknown) => ({ indexed: true, channels: 2 }));
+    const report = await backfillRecommendIndex(db, { apply: true, log: () => {}, index, pauseMs: 0 });
+    expect(index.mock.calls.map(([id]) => id)).toEqual(['old']);
+    expect(index).toHaveBeenCalledWith('old', expect.objectContaining({ force: true, rewrite: true }));
+    expect(report.legacyCleared).toBe(1);
+    expect(Object.keys((await db.doc('cards/old').get()).get('signature')).sort()).toEqual(['coreInsight', 'placeholder']);
+    const picks = (await db.doc('recommendations/alice').get()).data()!;
+    expect(picks.items).toBeUndefined();
+    expect(picks.date).toBeUndefined();
+    expect(picks).toMatchObject({ askedOn: '2026-11-19', shown: { old: { n: 2, lastDay: '2026-11-19' } } });
+    await backfillRecommendIndex(db, { apply: true, all: true, log: () => {}, index, pauseMs: 0 });
+    expect(index.mock.calls.slice(1).map(([id]) => id).sort()).toEqual(['new', 'old']);
   });
 });

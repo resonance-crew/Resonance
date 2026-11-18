@@ -1,7 +1,8 @@
 import { FieldValue, Timestamp, type DocumentReference, type Firestore } from 'firebase-admin/firestore';
 import type { RecommendationItem } from '@/lib/db/types';
 import { recommendFeed, type FunnelOptions, type FunnelResult } from './funnel';
-import { RECOMMENDATIONS, readStored, recommendationDay, type StoredRecommendations } from './stored';
+import { shownCounts } from './signals';
+import { RECOMMENDATIONS, countShown, readStored, recommendationDay, type StoredRecommendations } from './stored';
 
 export { readStored, recommendationDay, type StoredRecommendations };
 
@@ -93,28 +94,40 @@ async function takeLease(ref: DocumentReference, now: () => number): Promise<boo
 /**
  * Keep a build's result. One the reader asked for records their ask too
  * (`askedOn`); a warm one (the cron's, ahead of them) is marked `warm` and
- * leaves `askedOn` as it was.
+ * leaves `askedOn` as it was. `served`: the reader is answered with these
+ * items now (the inline build), so they count as shown today (./stored
+ * countShown).
  */
-function store(ref: DocumentReference, day: string, result: FunnelResult, opts: { warm?: boolean } = {}) {
-  return ref.set(
-    {
-      date: day,
-      items: result.items,
-      partial: result.partial,
-      generatedAt: FieldValue.serverTimestamp(),
-      leaseUntil: FieldValue.delete(),
-      failedAt: FieldValue.delete(),
-      ...(opts.warm ? { warm: true } : { warm: FieldValue.delete(), askedOn: day }),
-    },
-    { merge: true },
-  );
+async function store(ref: DocumentReference, day: string, result: FunnelResult, opts: { warm?: boolean; served?: boolean } = {}) {
+  const fields = {
+    date: day,
+    items: result.items,
+    partial: result.partial,
+    coldStart: result.coldStart === true,
+    generatedAt: FieldValue.serverTimestamp(),
+    leaseUntil: FieldValue.delete(),
+    failedAt: FieldValue.delete(),
+    ...(opts.warm ? { warm: true } : { warm: FieldValue.delete(), askedOn: day }),
+  };
+  if (!opts.served) return ref.set(fields, { merge: true });
+  return ref.firestore.runTransaction(async (tx) => {
+    const shown = countShown(shownCounts((await tx.get(ref)).data()), result.items.map((i) => i.cardId), day);
+    tx.set(ref, { ...fields, shown }, { merge: true });
+  });
 }
 
-/** Note that the reader asked for their picks on `day` (never throws: it only steers the evening's push). */
-function markAsked(ref: DocumentReference, day: string): Promise<void> {
-  return ref
-    .set({ askedOn: day }, { merge: true })
-    .then(() => undefined)
+/**
+ * Note that the reader asked for their picks on `day`, and count the ones
+ * they were answered with as shown (never throws: it only steers the
+ * evening's push and the weights).
+ */
+function markAsked(ref: DocumentReference, day: string, served: string[]): Promise<void> {
+  return ref.firestore
+    .runTransaction(async (tx) => {
+      const shown = countShown(shownCounts((await tx.get(ref)).data()), served, day);
+      // `shown` whole: a merge would keep a count countShown dropped.
+      tx.set(ref, { askedOn: day, shown }, { mergeFields: ['askedOn', 'shown'] });
+    })
     .catch((e) => console.error('[recommend] recording the ask', e));
 }
 
@@ -155,7 +168,8 @@ async function waitForBuild(
     const day = recommendationDay(new Date(now()));
     if (stored?.date === day) {
       const status = stored.partial ? 'stale' : 'fresh';
-      return { items: stored.items, cached: true, status, refresh: null, asked: stored.askedOn === day ? null : asked };
+      const servedAsk = () => markAsked(ref, day, stored.items.map((i) => i.cardId));
+      return { items: stored.items, cached: true, status, refresh: null, asked: stored.askedOn === day ? null : asked && servedAsk };
     }
     if (!stored || stored.leaseUntil <= now()) break; // released without a result: it failed
   }
@@ -176,8 +190,9 @@ export async function dailyRecommendations(db: Firestore, uid: string, deps: Dai
   const plan = planServe(stored, started);
   const refresh = () => rebuild(ref, uid, build, now);
   const today = recommendationDay(new Date(started));
-  // The ask goes on record once a day, after the response (a build of the reader's own writes it too).
-  const asked = stored?.askedOn === today ? null : () => markAsked(ref, today);
+  // The ask goes on record once a day, after the response (a build of the reader's own writes it too), with what they were shown.
+  const askedWith = (items: RecommendationItem[]) => (stored?.askedOn === today ? null : () => markAsked(ref, today, items.map((i) => i.cardId)));
+  const asked = askedWith(stored?.items ?? []);
 
   switch (plan.kind) {
     case 'fresh':
@@ -185,7 +200,7 @@ export async function dailyRecommendations(db: Firestore, uid: string, deps: Dai
     case 'stale':
       return { items: stored!.items, cached: true, status: 'stale', refresh: plan.rebuild ? refresh : null, asked };
     case 'cooldown':
-      return { items: [], cached: true, status: 'stale', refresh: null, asked };
+      return { items: [], cached: true, status: 'stale', refresh: null, asked: askedWith([]) };
     case 'wait':
       // A build is under way (another request of theirs, or the warm-up's): wait for it.
       return waitForBuild(ref, now, deadline, asked);
@@ -198,7 +213,7 @@ export async function dailyRecommendations(db: Firestore, uid: string, deps: Dai
   if (!(await takeLease(ref, now))) return waitForBuild(ref, now, deadline, asked);
   try {
     const result = await build(uid, { deadline, fallback: true, now });
-    await store(ref, recommendationDay(new Date(started)), result);
+    await store(ref, recommendationDay(new Date(started)), result, { served: true });
     return {
       items: result.items,
       cached: false,
@@ -208,7 +223,7 @@ export async function dailyRecommendations(db: Firestore, uid: string, deps: Dai
     };
   } catch (e) {
     await recordFailure(ref, now, e);
-    return { items: [], cached: false, status: 'stale', refresh: null, asked };
+    return { items: [], cached: false, status: 'stale', refresh: null, asked: askedWith([]) };
   }
 }
 

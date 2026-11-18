@@ -1,13 +1,18 @@
 /**
  * The pure half of the recommender's nearest-card diagnostic (./nearest.ts):
- * exact neighbours over the stored vectors, how much of each story the
- * signature model was handed, and the report the owner reads. No I/O.
+ * exact neighbours over the stored vectors — or, from a dry run's file
+ * (./dryrun.ts, `--from`), over each card's parts with the funnel's own
+ * scoring (lib/recommend/match: centred, CSLS, MaxSim + β × situation) — how
+ * much of each story the reading model was handed, the funnel's picks for
+ * one card taken as a reader's only positive (`--funnel`), and the report
+ * the owner reads. No I/O.
  *
  * A card here has a title, a slug and its signature — never an author. A
  * neighbour list that left an author's own cards out, or marked them, would
  * say who wrote an anonymous one (.claude/rules/safety.md).
  */
 import { dot, normalize } from '../../src/lib/recommend/math';
+import { cardScore, farthestPoint, matchCards, mmr, poolStats, relevance, slotsFor, type MatchCard, type PartVector, type PoolStats } from '../../src/lib/recommend/match';
 
 export interface DiagCard {
   id: string;
@@ -28,7 +33,11 @@ export type Vectors = ReadonlyMap<string, number[]>;
 
 export interface Neighbour {
   id: string;
-  /** Cosine distance, 1 − cos θ, as the vector store answers it: smaller is closer. */
+  /**
+   * Smaller is closer. Cosine distance, 1 − cos θ, as the vector store
+   * answers it (`rank`); or the funnel's card score with its sign turned
+   * (`rankMatch`: −score), which the report prints as the score.
+   */
   distance: number;
 }
 
@@ -50,6 +59,78 @@ export function rank(vectors: Vectors): Rankings {
       .map((other) => ({ id: other, distance: 1 - dot(from, vectors.get(other)!) }));
     list.sort((a, b) => a.distance - b.distance || (a.id < b.id ? -1 : 1));
     out.set(id, list);
+  }
+  return out;
+}
+
+/**
+ * Every card's neighbours by the funnel's own card score over their parts
+ * (lib/recommend/match: the pool's μ and r(x) worked out from these very
+ * records, as a build does) — best first; `distance` is −score. Ties by id.
+ */
+export function rankMatch(records: PartVector[]): Rankings {
+  const stats = poolStats(records);
+  const cards = matchCards(records, stats);
+  const out = new Map<string, Neighbour[]>();
+  for (const a of cards) {
+    const list = cards.filter((b) => b.cardId !== a.cardId).map((b) => ({ id: b.cardId, distance: -cardScore(a, b, stats) }));
+    list.sort((x, y) => x.distance - y.distance || (x.id < y.id ? -1 : 1));
+    out.set(a.cardId, list);
+  }
+  return out;
+}
+
+export interface FunnelVerdict {
+  /** The reader's only positive card. */
+  from: string;
+  /** The card that should reach them. */
+  to: string;
+  /** Where it stands among their picks (1 = first), or null when it isn't one of them. */
+  place: number | null;
+  /** It came from the taste's places (else the coverage set's). */
+  byTaste: boolean;
+  /** How many picks the trial made. */
+  picks: number;
+}
+
+/**
+ * The funnel's picks for a reader whose only positive is `from` (C3: the
+ * exam's trial of the whole picking path) — with the funnel's numbers: one
+ * positive gives slotsFor(1) places to the taste (relevance, then MMR) and
+ * the rest to the coverage set (the farthest-point order from `day`), every
+ * card its own author (the dry run's file names none). The LLM steps, which
+ * only reorder and drop, are not run.
+ */
+export function funnelTrial(records: PartVector[], from: string, day = 0): { picks: string[]; byTaste: Set<string> } {
+  const stats: PoolStats = poolStats(records);
+  const cards = matchCards(records, stats);
+  const taste = cards.filter((c) => c.cardId === from).map((card) => ({ card, weight: 1 }));
+  const pool = cards.filter((c) => c.cardId !== from);
+  if (!taste.length) return { picks: [], byTaste: new Set() };
+  const slots = slotsFor(1);
+  const scored = pool
+    .map((card) => ({ card, score: relevance(card, taste, stats), author: card.cardId }))
+    .filter((c) => c.score > 0)
+    .sort((a, b) => b.score - a.score || (a.card.cardId < b.card.cardId ? -1 : 1));
+  const chosen = mmr(scored.slice(0, 30), slots.taste, stats).map((c) => c.card.cardId);
+  const byTaste = new Set(chosen);
+  const rest: MatchCard[] = pool.filter((c) => !byTaste.has(c.cardId));
+  const coverage = farthestPoint(rest, day, stats, slots.coverage).map((c) => c.cardId);
+  return { picks: [...chosen, ...coverage], byTaste };
+}
+
+/** Each pair, both ways: did the other card make the picks of a reader whose only positive is this one? */
+export function funnelVerdicts(cards: DiagCard[], records: PartVector[], pairs: [string, string][], day = 0): FunnelVerdict[] {
+  const out: FunnelVerdict[] = [];
+  for (const [a, b] of pairs) {
+    const ca = resolve(cards, a);
+    const cb = resolve(cards, b);
+    if (!ca || !cb) continue;
+    for (const [from, to] of [[ca, cb], [cb, ca]]) {
+      const trial = funnelTrial(records, from.id, day);
+      const at = trial.picks.indexOf(to.id);
+      out.push({ from: from.key, to: to.key, place: at < 0 ? null : at + 1, byTaste: trial.byTaste.has(to.id), picks: trial.picks.length });
+    }
   }
   return out;
 }
@@ -225,9 +306,12 @@ export interface ReportInput {
   whole?: Rankings;
   /** The most characters the signature model is handed. */
   readLimit: number;
+  /** `cosine`: the stored vectors, one a card (the default); `match`: the funnel's card score over parts (a dry run's file). */
+  metric?: 'cosine' | 'match';
+  /** The funnel's trial for the pairs (`--funnel`). */
+  funnel?: FunnelVerdict[];
 }
 
-const fmt = (d: number) => d.toFixed(3);
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const count = (n: number) => n.toLocaleString('en-US');
 /** One table cell: a line, with nothing that ends the cell. */
@@ -238,6 +322,10 @@ const place = (s: Standing | null) => (s ? `第 ${s.rank}／${s.of}` : '—');
 /** The report, in Markdown, in the owner's language (the cards' own). */
 export function renderReport(input: ReportInput): string {
   const { cards, pool, rankings, whole, outside } = input;
+  const match = input.metric === 'match';
+  // The funnel's score is printed as it is (larger is closer); a cosine distance as one (smaller is closer).
+  const fmt = (d: number) => (match ? (-d).toFixed(3) : d.toFixed(3));
+  const measure = match ? '分數' : '距離';
   const byId = new Map(pool.map((c) => [c.id, c]));
   const stats = corpusStats(pool, rankings);
   const lines: string[] = [];
@@ -250,7 +338,12 @@ export function renderReport(input: ReportInput): string {
         ? `另有 ${count(outsideTotal)} 張公開卡片不在池裡（太短 ${outside.thin}、體悟分數不到門檻 ${outside.lowInsight}、被判為測試文 ${outside.placeholder}、沒有向量 ${outside.noVector}）。`
         : ''),
   );
-  lines.push('距離是餘弦距離，0 是完全一樣，1 是無關，數字越小越近。推薦的每一步只讀下面的「核心體悟」和「處境」，不讀原文。', '');
+  lines.push(
+    match
+      ? '分數是推薦用的卡片分數：每張卡的每個體悟各一份向量，先減掉整池的平均、再扣掉「跟誰都近」的程度（CSLS），取最接近的一對體悟，加上 0.3 倍最接近的一對處境。數字越大越近。推薦的每一步只讀命中那一組的「體悟」和「處境」，不讀原文。'
+      : '距離是餘弦距離，0 是完全一樣，1 是無關，數字越小越近。推薦的每一步只讀下面的「核心體悟」和「處境」，不讀原文。',
+    '',
+  );
 
   lines.push('## 模型讀到多少', '');
   lines.push(
@@ -259,7 +352,7 @@ export function renderReport(input: ReportInput): string {
   );
   lines.push(`- 核心體悟的長度：最短 ${stats.insightChars.min} 字，中位數 ${stats.insightChars.median} 字，最長 ${stats.insightChars.max} 字。`);
   lines.push(
-    `- 每張卡片到最近那張的距離，中位數 ${fmt(stats.nearest)}。到名單正中間那張的距離，中位數 ${fmt(stats.typical)}。兩個數字越接近，向量越分不出誰近誰遠。`,
+    `- 每張卡片到最近那張的${measure}，中位數 ${fmt(stats.nearest)}。到名單正中間那張的${measure}，中位數 ${fmt(stats.typical)}。兩個數字越接近，向量越分不出誰近誰遠。`,
     '',
   );
 
@@ -278,11 +371,26 @@ export function renderReport(input: ReportInput): string {
   }
 
   if (input.pairs.length) {
-    lines.push('## 指定的配對', '', '| A | B | B 在 A 的名單裡 | A 在 B 的名單裡 | 距離 |', '|---|---|---|---|---|');
+    lines.push('## 指定的配對', '', `| A | B | B 在 A 的名單裡 | A 在 B 的名單裡 | ${measure} |`, '|---|---|---|---|---|');
     for (const v of pairVerdicts(pool, rankings, input.pairs)) {
       lines.push(`| ${name(resolve(pool, v.a), v.a)} | ${name(resolve(pool, v.b), v.b)} | ${place(v.ab)} | ${place(v.ba)} | ${v.ab ? fmt(v.ab.distance) : '—'} |`);
     }
     lines.push('');
+  }
+
+  if (input.funnel?.length) {
+    lines.push('## 漏斗試跑', '');
+    lines.push(
+      '把 A 當成讀者唯一表態過的卡，照推薦的算法挑 8 張（1 張正樣本時 3 張照口味、5 張來自涵蓋組；不跑最後兩步模型），看 B 有沒有在裡面。',
+      '',
+      '| 讀者表態過 | 該讀到 | 在 8 張的第幾張 | 從哪裡來 |',
+      '|---|---|---|---|',
+    );
+    for (const v of input.funnel) {
+      lines.push(`| ${name(resolve(pool, v.from), v.from)} | ${name(resolve(pool, v.to), v.to)} | ${v.place === null ? `沒有（共 ${v.picks} 張）` : `第 ${v.place}`} | ${v.place === null ? '—' : v.byTaste ? '口味' : '涵蓋組'} |`);
+    }
+    const made = input.funnel.filter((v) => v.place !== null && v.byTaste).length;
+    lines.push('', `- ${count(input.funnel.length)} 次裡，該讀到的卡靠口味進了 8 張的有 ${count(made)} 次。`, '');
   }
 
   const versus = whole ? compare(rankings, whole) : null;
@@ -305,7 +413,7 @@ export function renderReport(input: ReportInput): string {
     lines.push(`- 核心體悟：${cell(card.coreInsight)}（${chars(card.coreInsight)} 字）`);
     lines.push(`- 處境：${cell(card.situation) || '—'}`);
     lines.push(`- 領域：${cell(card.lifeDomain) || '—'}`, '');
-    lines.push('| 名次 | 距離 | 卡片 | 核心體悟 |', '|---|---|---|---|');
+    lines.push(`| 名次 | ${measure} | 卡片 | 核心體悟 |`, '|---|---|---|---|');
     (rankings.get(card.id) ?? []).slice(0, input.top).forEach((n, i) => {
       lines.push(`| ${i + 1} | ${fmt(n.distance)} | ${name(byId.get(n.id), n.id)} | ${cell(byId.get(n.id)?.coreInsight ?? '')} |`);
     });

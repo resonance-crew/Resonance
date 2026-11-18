@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { normalize } from '../../src/lib/recommend/math';
-import { chunks, compare, corpusStats, hubs, pairVerdicts, pairsHold, pooled, rank, renderReport, standing, type DiagCard } from './report';
+import { chunks, compare, corpusStats, funnelTrial, funnelVerdicts, hubs, pairVerdicts, pairsHold, pooled, rank, rankMatch, renderReport, standing, type DiagCard } from './report';
+import type { PartVector } from '../../src/lib/recommend/match';
 
 const card = (id: string, over: Partial<DiagCard> = {}): DiagCard => ({
   id,
@@ -184,14 +185,77 @@ describe('renderReport', () => {
   });
 });
 
-describe('the script', () => {
-  it('reads no card\'s writer', () => {
+// Round 26 §A5.2: a dry run's file ranked with the funnel's own scoring, over each card's parts, and the funnel's
+// picks for one card taken as a reader's only positive (C3).
+describe('the funnel’s score over parts', () => {
+  const part = (cardId: string, part: number, v: number[], channel: 'insight' | 'situation' = 'insight'): PartVector => ({ cardId, channel, part, vector: normalize(v) });
+  const records = [
+    part('a', 0, [1, 0, 0, 0, 0, 0]),
+    part('a', 1, [0, 0, 0, 0, 1, 0]),
+    // b meets a's second part, not its first: one card of several insights is near another by its best pair.
+    part('b', 0, [0, 0, 0, 0, 1, 0.05]),
+    part('c', 0, [0, 1, 0, 0, 0, 0]),
+    part('d', 0, [0, 0, 1, 0, 0, 0]),
+    part('e', 0, [0, 0, 0, 1, 0, 0]),
+  ];
+
+  it('ranks each card’s neighbours by the best pair of parts, and prints the score', () => {
+    const rankings = rankMatch(records);
+    expect(rankings.get('a')![0].id).toBe('b');
+    expect(rankings.get('b')![0].id).toBe('a');
+    expect(standing(rankings, 'a', 'b')).toMatchObject({ rank: 1, of: 4 });
+    const report = renderReport({
+      channel: 'insight',
+      cards: [card('a')],
+      pool: ['a', 'b', 'c', 'd', 'e'].map((id) => card(id)),
+      rankings,
+      top: 2,
+      outside: { thin: 0, lowInsight: 0, placeholder: 0, noVector: 0 },
+      pairs: [['slug-a', 'slug-b']],
+      readLimit: 30_000,
+      metric: 'match',
+    });
+    expect(report).toContain('| 名次 | 分數 | 卡片 | 核心體悟 |');
+    expect(report).toContain('數字越大越近');
+    expect(report).toContain(`| ${(-rankings.get('a')![0].distance).toFixed(3)} | Title b（\`slug-b\`）`);
+  });
+
+  it('tries the funnel for a reader whose only positive is one card: its pair makes the 8 by the taste', () => {
+    const { picks, byTaste } = funnelTrial(records, 'a');
+    expect(picks).not.toContain('a');
+    expect(picks[0]).toBe('b');
+    expect(byTaste.has('b')).toBe(true);
+    const verdicts = funnelVerdicts(['a', 'b', 'c', 'd', 'e'].map((id) => card(id)), records, [['slug-a', 'slug-b'], ['slug-a', 'gone']]);
+    expect(verdicts).toEqual([
+      { from: 'slug-a', to: 'slug-b', place: 1, byTaste: true, picks: 4 },
+      { from: 'slug-b', to: 'slug-a', place: 1, byTaste: true, picks: 4 },
+    ]);
+    const report = renderReport({
+      channel: 'insight', cards: [], pool: ['a', 'b'].map((id) => card(id)), rankings: rankMatch(records), top: 1,
+      outside: { thin: 0, lowInsight: 0, placeholder: 0, noVector: 0 }, pairs: [], readLimit: 30_000, metric: 'match', funnel: verdicts,
+    });
+    expect(report).toContain('## 漏斗試跑');
+    expect(report).toContain('| Title a（`slug-a`） | Title b（`slug-b`） | 第 1 | 口味 |');
+  });
+});
+
+describe('the scripts', () => {
+  const source = (file: string) => readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8');
+
+  it('read no card\'s writer', () => {
     // A list that left a writer's own cards out, or marked them, would name an
-    // anonymous card's writer (.claude/rules/safety.md): the diagnostic stays
-    // card-to-card, so neither half has a writer to print.
-    for (const file of ['nearest.ts', 'report.ts']) {
-      const source = readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8');
-      expect(source).not.toMatch(/authorId|userId|handle\b/);
+    // anonymous card's writer (.claude/rules/safety.md): the diagnostic and the
+    // dry run stay card-to-card, so none of them has a writer to print or keep.
+    for (const file of ['nearest.ts', 'report.ts', 'dryrun.ts']) expect(source(file), file).not.toMatch(/authorId|userId|handle\b/);
+  });
+
+  it('write nothing to Firestore: the dry run and the diagnostic only read production', () => {
+    expect(".doc('cards/x').set({})").toMatch(/\.doc\([^)]*\)\s*\.(set|update|delete|create)\(/);
+    for (const file of ['nearest.ts', 'dryrun.ts']) {
+      // A document's or a query result's writes, a batch, a transaction, the index's own writers.
+      expect(source(file), file).not.toMatch(
+        /\.doc\([^)]*\)\s*\.(set|update|delete|create)\(|\.ref\.(set|update|delete)\(|collection\([^)]*\)\s*\.add\(|\.batch\(|runTransaction|bulkWriter|recursiveDelete|indexCard\(|getVectorStore|\.upsert\(|setVisibility\(|deleteByCard\(/,
+      );
     }
   });
 });

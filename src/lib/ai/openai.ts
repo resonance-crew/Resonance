@@ -37,9 +37,37 @@ export function rerankModel(): string {
   return process.env.OPENAI_RERANK_MODEL ?? 'gpt-5.4-mini-2026-03-17';
 }
 
+/**
+ * The card reading (round 26 §A1: lib/ai/tasks readCard): the whole story,
+ * read for what happened, how the author thought, what they gained and what
+ * changed — a reasoning model, its own setting. Never `llmModel()`, whose
+ * slug cap (SLUG_MAX_TOKENS) a reasoning model's thinking would spend.
+ * The default is the round's first choice until the owner's pick after the
+ * bake-off (scripts/recommend/dryrun.ts) is set in OPENAI_SIGNATURE_MODEL.
+ */
+export function signatureModel(): string {
+  return process.env.OPENAI_SIGNATURE_MODEL ?? 'gpt-6.2-sol';
+}
+
+/** The funnel's last step (lib/recommend/select): the reader's 8 and a line each. A reasoning model, asked to think a little. */
+export function selectModel(): string {
+  return process.env.OPENAI_SELECT_MODEL ?? 'gpt-6.1-terra';
+}
+
+/** The dimensions every stored vector has: the index (firestore.indexes.json `cardVectors`) is built for 1536. */
+export const EMBED_DIMENSIONS = 1536;
+
 export interface ChatMessage {
   role: 'system' | 'user';
   content: string;
+}
+
+/** What a call cost, in tokens, as OpenAI counts them. */
+export interface TokenUsage {
+  input: number;
+  output: number;
+  /** Of `output`, the model's reasoning (0 for a model that doesn't reason). */
+  reasoning: number;
 }
 
 export interface ChatOptions {
@@ -48,6 +76,42 @@ export interface ChatOptions {
   signal?: AbortSignal;
   /** Caps the reply, reasoning included (`max_completion_tokens`). */
   maxTokens?: number;
+  /** How much a reasoning model thinks first (`reasoning_effort`); left out, the model's own default. */
+  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high';
+  /** Told what the call spent (also when its answer is then refused or cut short). */
+  onUsage?: (usage: TokenUsage) => void;
+}
+
+/**
+ * A JSON Schema the answer must follow (Structured Outputs, `strict`): every
+ * property listed in `required`, `additionalProperties: false` on every
+ * object, an optional value written as a `null` union. Lengths are not held
+ * by `strict`: the caller still trims what it keeps.
+ */
+export interface JsonSchemaFormat {
+  name: string;
+  schema: Record<string, unknown>;
+}
+
+export interface ChatJSONOptions extends ChatOptions {
+  /** Without it, any JSON object (`json_object`). */
+  jsonSchema?: JsonSchemaFormat;
+}
+
+/**
+ * A completion that ended without an answer to read: `length` (the cap ran
+ * out, a reasoning model's thinking included — the content is empty or cut)
+ * or `refusal` (the model declined, which Structured Outputs says outright).
+ * A caller records which (cardSignatures.error) and may ask differently.
+ */
+export class ChatIncomplete extends Error {
+  constructor(
+    readonly kind: 'length' | 'refusal',
+    readonly detail: string,
+  ) {
+    super(`OpenAI chat ended without an answer: ${kind}${detail ? ` (${detail})` : ''}`);
+    this.name = 'ChatIncomplete';
+  }
 }
 
 function chatBody(messages: ChatMessage[], opts: ChatOptions, extra: Record<string, unknown> = {}): string {
@@ -55,8 +119,23 @@ function chatBody(messages: ChatMessage[], opts: ChatOptions, extra: Record<stri
     model: opts.model ?? llmModel(),
     messages,
     ...(opts.maxTokens ? { max_completion_tokens: opts.maxTokens } : {}),
+    ...(opts.reasoningEffort ? { reasoning_effort: opts.reasoningEffort } : {}),
     ...extra,
   });
+}
+
+interface CompletionBody {
+  choices?: { finish_reason?: string; message?: { content?: string | null; refusal?: string | null } }[];
+  usage?: { prompt_tokens?: number; completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } };
+}
+
+function usageOf(data: CompletionBody): TokenUsage {
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  return {
+    input: n(data.usage?.prompt_tokens),
+    output: n(data.usage?.completion_tokens),
+    reasoning: n(data.usage?.completion_tokens_details?.reasoning_tokens),
+  };
 }
 
 /** Single-turn chat completion; returns the assistant's trimmed text. */
@@ -80,30 +159,42 @@ export async function chat(messages: ChatMessage[], opts: ChatOptions = {}): Pro
 }
 
 /**
- * Single-turn completion constrained to a JSON object. Returns the parsed
- * object (or throws if the model emits non-JSON). Used by structured tasks like
- * insight-signature extraction and the funnel's batch rerank.
+ * Single-turn completion constrained to JSON: any object, or with
+ * `jsonSchema` one that follows that schema (Structured Outputs, strict).
+ * Returns the parsed object. Reads how the completion ended: a refusal or a
+ * reply cut at the cap (`finish_reason: length`, which a reasoning model's
+ * thinking can cause with nothing written yet) throws {@link ChatIncomplete},
+ * never a JSON parse error; non-JSON otherwise throws as before. Used by the
+ * structured tasks: the card reading, the funnel's rerank and select, the
+ * mirror, translations.
  */
 export async function chatJSON<T = unknown>(
   messages: ChatMessage[],
-  opts: ChatOptions = {}
+  opts: ChatJSONOptions = {}
 ): Promise<T> {
+  const format = opts.jsonSchema
+    ? { type: 'json_schema', json_schema: { name: opts.jsonSchema.name, strict: true, schema: opts.jsonSchema.schema } }
+    : { type: 'json_object' };
   const res = await fetch(`${API_BASE}/chat/completions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey()}`,
       'Content-Type': 'application/json',
     },
-    body: chatBody(messages, opts, { response_format: { type: 'json_object' } }),
+    body: chatBody(messages, opts, { response_format: format }),
     signal: opts.signal,
   });
   if (!res.ok) {
     throw new Error(`OpenAI chat failed: ${res.status} ${await res.text()}`);
   }
-  const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const content = String(data.choices?.[0]?.message?.content ?? '').trim();
+  const data = (await res.json()) as CompletionBody;
+  opts.onUsage?.(usageOf(data));
+  const choice = data.choices?.[0];
+  const refusal = choice?.message?.refusal;
+  if (typeof refusal === 'string' && refusal.trim()) throw new ChatIncomplete('refusal', refusal.trim().slice(0, 200));
+  if (choice?.finish_reason === 'content_filter') throw new ChatIncomplete('refusal', 'content_filter');
+  if (choice?.finish_reason === 'length') throw new ChatIncomplete('length', '');
+  const content = String(choice?.message?.content ?? '').trim();
   return JSON.parse(content) as T;
 }
 
@@ -112,21 +203,28 @@ export async function chatJSON<T = unknown>(
  * store's COSINE distance is 1 − their dot product (smaller = closer).
  * Server-only.
  */
-export async function embed(texts: string[], opts: { signal?: AbortSignal } = {}): Promise<number[][]> {
+export async function embed(
+  texts: string[],
+  opts: { signal?: AbortSignal; model?: string; onUsage?: (usage: TokenUsage) => void } = {},
+): Promise<number[][]> {
   if (texts.length === 0) return [];
+  const model = opts.model ?? embedModel();
   const res = await fetch(`${API_BASE}/embeddings`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey()}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ model: embedModel(), input: texts }),
+    // The third generation can be asked for fewer dimensions: `3-large` at the index's 1536 (round 26 §A2.2).
+    body: JSON.stringify({ model, input: texts, ...(model.startsWith('text-embedding-3') ? { dimensions: EMBED_DIMENSIONS } : {}) }),
     signal: opts.signal,
   });
   if (!res.ok) {
     throw new Error(`OpenAI embeddings failed: ${res.status} ${await res.text()}`);
   }
-  const data = (await res.json()) as { data?: { embedding?: number[] }[] };
+  const data = (await res.json()) as { data?: { embedding?: number[] }[]; usage?: { prompt_tokens?: number } };
+  const tokens = data.usage?.prompt_tokens;
+  opts.onUsage?.({ input: typeof tokens === 'number' && Number.isFinite(tokens) ? tokens : 0, output: 0, reasoning: 0 });
   const rows = data.data ?? [];
   return rows.map((row) => normalizeVector(row.embedding ?? []));
 }
@@ -140,11 +238,21 @@ function normalizeVector(v: number[]): number[] {
   return v.map((x) => x / norm);
 }
 
+/**
+ * How long an illustration may take, start to final image, before it is
+ * abandoned (zero-exception 9: every OpenAI call carries a timeout). Inside
+ * the illustration route's maxDuration (120), with room for the concept's
+ * call before it and the upload after.
+ */
+export const IMAGE_TIMEOUT_MS = 90_000;
+
 export interface ImageStreamOptions {
   size?: string;
   quality?: 'low' | 'medium' | 'high' | 'auto';
   /** How many in-progress previews to emit (0–3). */
   partialImages?: number;
+  /** Abandons the call; IMAGE_TIMEOUT_MS when none is given. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -173,6 +281,7 @@ export async function generateImageStream(
       stream: true,
       partial_images: opts.partialImages ?? 2,
     }),
+    signal: opts.signal ?? AbortSignal.timeout(IMAGE_TIMEOUT_MS),
   });
   if (!res.ok || !res.body) {
     throw new Error(`OpenAI image failed: ${res.status} ${await res.text()}`);
@@ -227,7 +336,7 @@ export async function generateImageStream(
  */
 export async function generateImage(
   prompt: string,
-  opts: { size?: string; quality?: 'low' | 'medium' | 'high' | 'auto' } = {},
+  opts: { size?: string; quality?: 'low' | 'medium' | 'high' | 'auto'; signal?: AbortSignal } = {},
 ): Promise<Uint8Array> {
   const res = await fetch(`${API_BASE}/images/generations`, {
     method: 'POST',
@@ -242,6 +351,7 @@ export async function generateImage(
       quality: opts.quality ?? 'low',
       n: 1,
     }),
+    signal: opts.signal ?? AbortSignal.timeout(IMAGE_TIMEOUT_MS),
   });
   if (!res.ok) {
     throw new Error(`OpenAI image failed: ${res.status} ${await res.text()}`);

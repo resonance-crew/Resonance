@@ -27,7 +27,9 @@ function bookmarkRef(uid: string, cardId: string) {
 /**
  * Toggle a bookmark (收藏) — the purely private "speak to yourself" layer.
  * Doc id == card id so toggling is idempotent. Returns the new state.
- * Never counted, never notifies the author, never a recommendation signal.
+ * Never counted, never notifies the author. The saver's own taste in the
+ * recommender reads it on the server (round 26 §A3) — never the card's
+ * standing for anyone else.
  */
 export async function toggleBookmark(cardId: string): Promise<boolean> {
   const uid = requireUid();

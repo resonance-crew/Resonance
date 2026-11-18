@@ -1,5 +1,6 @@
 import { Timestamp, type DocumentData, type Firestore, type QueryDocumentSnapshot, type QuerySnapshot } from 'firebase-admin/firestore';
 import { blankFeedCard, unlistedCard } from '@/lib/cards/blank';
+import { unlistedForStrangers } from '@/lib/recommend/collections';
 import { trashExpired } from '@/lib/cards/trash';
 import { anonymousBySlug, cardByKey, slugHolder, slugShaped } from '@/lib/db/firestore/cardKey';
 import { uidForHandle } from '@/lib/db/firestore/handles';
@@ -305,7 +306,7 @@ export async function getCardDetail(
     card.referenceCardId ? cardsByIds(db, [card.referenceCardId]) : [],
     card.referenceCardId || include.size ? blockedByViewer(db, viewerId) : new Set<string>(),
     lists.has('resonances') ? resonancesOf(db, card.id).get().then(toCards) : [],
-    lists.has('related') ? recentPublic(db).get().then(toCards) : [],
+    lists.has('related') ? recentPublic(db).get().then(toCards).then((cards) => listedOnly(db, cards)) : [],
     ownerLinks ? cardsLinkingTo(db, card.id) : [],
     embedKeys.length ? cardsByKeys(db, embedKeys).then((cards) => askedByKey(cards, embedKeys, viewerId)) : [],
     // The resonance tap (./taps): who resonated as the viewer may see them — none through a shared-card pass.
@@ -323,7 +324,8 @@ export async function getCardDetail(
     visibility: visibilityOf(card.visibility),
     anonymous: card.anonymous === true,
     resonanceCount: Number(card.resonanceCount ?? 0),
-    coreInsight: card.signature?.coreInsight || null,
+    // The reading's through line: its author's alone (round 26 §A1.6) — no screen shows a reader what the model read.
+    coreInsight: isOwner ? card.signature?.coreInsight || null : null,
     isOwner,
     referenceCard: referenceCard[0] ?? null,
     tap,
@@ -355,6 +357,17 @@ const recentPublic = (db: Firestore) =>
     .select(...LIST_FIELDS)
     .limit(RELATED_LIMIT + 6);
 
+/**
+ * Of these recent cards, the ones a stranger may be shown (round 26 §A1.7):
+ * related cards pick for readers who may not know the author, so a card its
+ * reading keeps from strangers is left out (it stays in the feed and on its
+ * author's profile).
+ */
+async function listedOnly(db: Firestore, cards: ListCard[]): Promise<ListCard[]> {
+  const hidden = await unlistedForStrangers(db, cards.map((c) => c.id));
+  return cards.filter((c) => !hidden.has(c.id));
+}
+
 /** Recent cards other than `base`, those sharing the most of its tags first. */
 function relatedPool(base: Card, recent: ListCard[]): ListCard[] {
   const tags = (base.tags ?? []).slice(0, 5);
@@ -379,8 +392,12 @@ export async function getResonances(db: Firestore, viewerId: string, id: string)
 
 /** A few recent public cards, those sharing the most tags first (the web's getRelatedCards). */
 export async function getRelated(db: Firestore, viewerId: string, id: string): Promise<CardListBody> {
-  const [base, snap, blocked] = await Promise.all([visibleCardById(db, viewerId, id), recentPublic(db).get(), blockedByViewer(db, viewerId)]);
-  return { cards: relatedOf(await present(db, viewerId, relatedPool(base, toCards(snap)), { blocked })) };
+  const [base, recent, blocked] = await Promise.all([
+    visibleCardById(db, viewerId, id),
+    recentPublic(db).get().then((snap) => listedOnly(db, toCards(snap))),
+    blockedByViewer(db, viewerId),
+  ]);
+  return { cards: relatedOf(await present(db, viewerId, relatedPool(base, recent), { blocked })) };
 }
 
 /** Cards that link to this one — shown to its author only, as on the web. */

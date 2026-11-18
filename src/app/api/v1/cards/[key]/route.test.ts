@@ -27,6 +27,9 @@ const applyCardEdit = vi.fn();
 vi.mock('@/lib/api/v1/edits', () => ({ applyCardEdit: (...a: unknown[]) => applyCardEdit(...a) }));
 const indexCard = vi.fn(async (_id: string) => ({ indexed: true }));
 vi.mock('@/lib/recommend/indexCard', () => ({ indexCard: (id: string) => indexCard(id) }));
+// Round 26 §A1.8: an applied edit marks the card's reading owed (the daily cron reads it), never reads it at once.
+const markIndexOwed = vi.fn(async (_db: unknown, _id: string) => {});
+vi.mock('@/lib/recommend/indexOwed', () => ({ markIndexOwed: (db: unknown, id: string) => markIndexOwed(db, id) }));
 const unfurlCardLinks = vi.fn(async (_db: unknown, _id: string) => ({ written: true }));
 vi.mock('@/lib/links/cardLinks', () => ({ unfurlCardLinks: (db: unknown, id: string) => unfurlCardLinks(db, id) }));
 const publishCard = vi.fn();
@@ -176,10 +179,11 @@ describe('POST /api/v1/cards/{id}/edits/apply', () => {
     await reach();
     expect(tryReachResonance).toHaveBeenCalledWith({}, 'alice', 'c1');
     expect(await settled()).toEqual(LOCALIZED);
-    expect(indexCard).toHaveBeenCalledWith('c1');
+    expect(markIndexOwed).toHaveBeenCalledWith({}, 'c1');
+    expect(indexCard).not.toHaveBeenCalled();
   });
 
-  it("brings the story's link previews up to date before the pages are rendered again, indexing beside them", async () => {
+  it("brings the story's link previews up to date before the pages are rendered again, marking the reading owed beside them", async () => {
     const order: string[] = [];
     unfurlCardLinks.mockImplementationOnce(async () => {
       await new Promise((r) => setTimeout(r, 10));
@@ -187,13 +191,13 @@ describe('POST /api/v1/cards/{id}/edits/apply', () => {
       return { written: true };
     });
     revalidatePath.mockImplementation(() => void order.push('revalidate'));
-    indexCard.mockImplementationOnce(async () => (order.push('index'), { indexed: true }));
+    markIndexOwed.mockImplementationOnce(async () => void order.push('index'));
     applyCardEdit.mockResolvedValue({ id: 'c1', slug: 'a-walk', applied: true, stale: STALE });
     await apply();
     await settled();
     expect(unfurlCardLinks).toHaveBeenCalledWith({}, 'c1');
     expect(order.indexOf('unfurl')).toBeLessThan(order.indexOf('revalidate'));
-    // The index never waits for the previews (as after a publish).
+    // The owed mark never waits for the previews.
     expect(order[0]).toBe('index');
   });
 
@@ -210,6 +214,7 @@ describe('POST /api/v1/cards/{id}/edits/apply', () => {
     await apply();
     expect(await settled()).toEqual([]);
     expect(indexCard).not.toHaveBeenCalled();
+    expect(markIndexOwed).not.toHaveBeenCalled();
     expect(unfurlCardLinks).not.toHaveBeenCalled();
     expect(ringAfter).not.toHaveBeenCalled();
   });

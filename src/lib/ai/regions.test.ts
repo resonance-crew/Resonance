@@ -109,6 +109,26 @@ describe('function regions', () => {
     expect(vercel.crons ?? []).toContainEqual({ path: '/api/cron/read-summary', schedule: '0 1 * * 1' });
   });
 
+  // Round 26 §A1.8: the card reading is a reasoning model reading the whole story, under one deadline of 100 s after
+  // a publish's response; edits are read again by a daily cron. Vercel Hobby runs a cron once a day at most — an
+  // hourly expression fails the deploy (D1).
+  it("gives publishing and applying 120 s, and pins the daily re-reading of owed cards away from Hong Kong", () => {
+    for (const route of ['src/app/api/v1/cards/[key]/publish/route.ts', 'src/app/api/v1/cards/[key]/edits/apply/route.ts']) {
+      expect(readFileSync(join(ROOT, route), 'utf8')).toMatch(/export const maxDuration = 120;/);
+    }
+    const cron = 'src/app/api/cron/index-cards/route.ts';
+    expect(openAIRoutes).toContain(cron);
+    expect(regionsOf(cron)).toEqual(['hnd1']);
+    expect(vercel.functions?.['src/app/api/cron/index-cards/route.ts']).toEqual({ regions: ['hnd1'], maxDuration: 300 });
+    expect(vercel.crons ?? []).toContainEqual({ path: '/api/cron/index-cards', schedule: '0 10 * * *' });
+    // Once a day or rarer, every one of them: a fixed minute and hour.
+    for (const { path, schedule } of vercel.crons ?? []) expect(schedule, path).toMatch(/^\d{1,2} \d{1,2} \S+ \S+ \S+$/);
+    // Removing a card or an account reaches no model (they name the readings' collection from a module of its own).
+    for (const route of ['src/app/api/cron/purge-accounts/route.ts', 'src/app/api/cron/push-picks/route.ts', 'src/app/[locale]/page.tsx']) {
+      if (existsSync(join(ROOT, route))) expect(openAIRoutes, route).not.toContain(route);
+    }
+  });
+
   it('runs none of them where OpenAI refuses requests', () => {
     const refused = openAIRoutes.filter((route) => regionsOf(route).some((r) => REFUSED.has(r)));
     expect(refused).toEqual([]);

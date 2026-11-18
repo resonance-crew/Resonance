@@ -1,87 +1,57 @@
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { getAdminDb } from '@/lib/db/firestore/admin';
-import type { InsightSignature } from '@/lib/db/types';
-import { kmeans } from './math';
-import { getVectorStore } from './vectorStore';
+import { connectionIds, readerEvents } from './signals';
+import { heldBack, tasteOf, type CardEvents, type Taste } from './weights';
 
-/** How many insight directions represent one person. A set of centroids, not one averaged centre. */
-const PROFILE_CENTROIDS = 6;
-/** Profiles older than this are rebuilt on next request. */
-const PROFILE_STALE_MS = 24 * 60 * 60 * 1000;
-/** How many of the user's own recent insights/situations feed the LLM text context. */
-const PROFILE_SUMMARY_LINES = 12;
-
+/**
+ * A reader as the recommender knows them (round 26 §A3): their taste — the
+ * cards they wrote, answered, tapped, saved and read, weighed by
+ * lib/recommend/weights — what not to show them, and who they are connected
+ * with. Built at each picks build from what they did (a handful of reads,
+ * no model).
+ *
+ * `userProfiles/{uid}` keeps the taste's card ids and weights only — never a
+ * vector (a part's is 12 KB) and never what a card says — for the offline
+ * tools and a look at why a reader got what they got.
+ */
 export interface UserProfile {
   uid: string;
-  /** Centroid vectors over the user's own insight embeddings (the ANN query points). */
-  centroids: number[][];
-  /** Short lines from the user's own signatures — the text the rerank/select LLM compares against. */
-  summaries: string[];
+  taste: Taste;
+  /** Cards not to pick for them now (./weights heldBack: their own, answered, read lately, paused). */
+  held: Set<string>;
+  /** How many positive cards they have: 0 is a cold start, 1–2 a mix (§A3.6). */
+  positives: number;
+  /** Whom they are connected with (for cold start's "your connections' cards first"). */
+  connections: string[];
   updatedAt: Date;
 }
 
-function profileRef(uid: string) {
-  return getAdminDb().collection('userProfiles').doc(uid);
+function profileRef(db: Firestore, uid: string) {
+  return db.collection('userProfiles').doc(uid);
 }
 
-/** Read the user's own card signatures (newest first) into compact summary lines. */
-async function readOwnSummaries(uid: string): Promise<string[]> {
-  const snap = await getAdminDb()
-    .collection('cards')
-    .where('authorId', '==', uid)
-    .orderBy('publishedAt', 'desc')
-    // Only the signature: the stories would be most of the bytes.
-    .select('signature')
-    .limit(40)
-    .get();
-  const lines: string[] = [];
-  for (const doc of snap.docs) {
-    const sig = doc.data().signature as InsightSignature | undefined;
-    if (!sig?.coreInsight) continue;
-    const situation = sig.situation ? `（${sig.situation}）` : '';
-    lines.push(`${sig.coreInsight}${situation}`);
-    if (lines.length >= PROFILE_SUMMARY_LINES) break;
-  }
-  return lines;
+/** The profile from a reader's events (pure: the reads are the caller's). */
+export function profileOf(uid: string, events: CardEvents[], connections: string[], now: number): UserProfile {
+  const taste = tasteOf(events, now);
+  const held = new Set(events.filter((e) => heldBack(e, now) !== null).map((e) => e.cardId));
+  return { uid, taste, held, positives: taste.positive.length, connections, updatedAt: new Date(now) };
 }
 
 /**
- * Compute and persist a user's profile: cluster their own insight vectors
- * (drawn from all their cards, **including private ones**) into a small set of
- * centroids, plus collect text summaries for the LLM stages. Private content
- * shapes the owner's own recommendations but never leaks — see the visibility
- * pre-filter at retrieval time.
+ * Build and keep a reader's profile (above). The stored copy is card ids and
+ * weights only; losing the write loses nothing the build needs.
  */
-export async function buildUserProfile(uid: string): Promise<UserProfile> {
-  const [vectors, summaries] = await Promise.all([
-    getVectorStore().listByAuthor(uid, 'insight'),
-    readOwnSummaries(uid),
-  ]);
-  const centroids = kmeans(
-    vectors.map((v) => v.vector),
-    PROFILE_CENTROIDS
-  );
-  const profile: UserProfile = { uid, centroids, summaries, updatedAt: new Date() };
-
-  // Firestore can't store arrays-of-arrays, so centroids are wrapped as maps.
-  await profileRef(uid).set({
-    centroids: centroids.map((v) => ({ v })),
-    summaries,
-    updatedAt: FieldValue.serverTimestamp(),
-  });
+export async function buildUserProfile(uid: string, opts: { db?: Firestore; now?: number } = {}): Promise<UserProfile> {
+  const db = opts.db ?? getAdminDb();
+  const now = opts.now ?? Date.now();
+  const [events, connections] = await Promise.all([readerEvents(uid, db), connectionIds(uid, db)]);
+  const profile = profileOf(uid, events, connections, now);
+  await profileRef(db, uid)
+    .set({
+      taste: profile.taste.positive.map((t) => ({ cardId: t.cardId, w: t.weight })),
+      against: profile.taste.negative.map((t) => ({ cardId: t.cardId, w: t.weight })),
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+    .catch((e) => console.warn('[recommend] keeping the profile', e));
   return profile;
-}
-
-/** Return a fresh profile, rebuilding it if missing or stale. */
-export async function getOrBuildProfile(uid: string): Promise<UserProfile> {
-  const snap = await profileRef(uid).get();
-  if (snap.exists) {
-    const data = snap.data() ?? {};
-    const updatedAt = data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(0);
-    if (Date.now() - updatedAt.getTime() < PROFILE_STALE_MS) {
-      const centroids = ((data.centroids ?? []) as { v: number[] }[]).map((c) => c.v);
-      return { uid, centroids, summaries: (data.summaries ?? []) as string[], updatedAt };
-    }
-  }
-  return buildUserProfile(uid);
 }

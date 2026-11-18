@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
 vi.mock('@/lib/recommend/warm', () => ({ warmPicks: vi.fn() }));
+// Round 26 §A2.3: the pool's numbers are worked out first (no model), every day.
+vi.mock('@/lib/recommend/poolStats', () => ({ refreshPoolStats: vi.fn(async () => ({ cards: 12, parts: 30 })) }));
+vi.mock('@/lib/recommend/indexCard', () => ({ currentEmbedModel: () => 'text-embedding-3-small' }));
 
 import { warmPicks } from '@/lib/recommend/warm';
 import { GET } from './route';
@@ -24,7 +27,7 @@ describe('/api/cron/warm-picks', () => {
     const before = Date.now();
     const res = await call('Bearer s3cret');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ readers: 3, outcomes: { built: 2, inactive: 1 }, deferred: 0 });
+    expect(await res.json()).toEqual({ pool: { cards: 12, parts: 30 }, readers: 3, outcomes: { built: 2, inactive: 1 }, deferred: 0 });
     const [, opts] = vi.mocked(warmPicks).mock.calls[0];
     expect(opts!.deadline! - before).toBeGreaterThanOrEqual(240_000);
     expect(opts!.deadline! - Date.now()).toBeLessThanOrEqual(240_000);

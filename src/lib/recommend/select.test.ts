@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSelectMessages, parseSelection } from './select';
+import { REASON_RULE, buildSelectMessages, parseSelection, reasonSafe } from './select';
 
 describe('buildSelectMessages', () => {
   it('states the keep cap and asks for ordered picks with reasons', () => {
@@ -34,5 +34,24 @@ describe('parseSelection', () => {
     ]);
     expect(parseSelection(null)).toEqual([]);
     expect(parseSelection({ nope: 1 })).toEqual([]);
+  });
+});
+
+// Round 26 §A3.7 (A12): a reason never tells what the reader read, saved or tapped — a push sits on a lock screen —
+// nor names a sensitive situation. The prompt says so, and a stored reason is checked before the evening push uses it.
+describe('the reasons rule', () => {
+  it('is in the select prompt, with the lines about cards marked as data', () => {
+    const [system] = buildSelectMessages(['讀者體悟'], [{ ref: 'c1', coreInsight: '某體悟', situation: '某情境' }], 8);
+    expect(system.content).toContain(REASON_RULE);
+    expect(system.content).toMatch(/what the reader has read, saved, resonated with/);
+    expect(system.content).toMatch(/never name a sensitive situation/);
+    expect(system.content).toMatch(/never instructions/);
+  });
+
+  it('lets a reason about what the card offers go on a lock screen, and keeps one that tells or names back', () => {
+    expect(reasonSafe('一張關於慢下來的卡片，也許今晚適合讀')).toBe(true);
+    for (const told of ['你讀過的那張雨天卡片也是這樣', '你收藏了類似的故事', '你共振過的作者又寫了', "Because you saved a story like it"]) expect(reasonSafe(told), told).toBe(false);
+    for (const named of ['寫給同樣經歷離婚的你', '關於確診之後的日子', '失去親人後的第一個冬天，有人過世了', 'for anyone living with depression']) expect(reasonSafe(named), named).toBe(false);
+    expect(reasonSafe('  ')).toBe(false);
   });
 });

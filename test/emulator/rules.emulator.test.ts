@@ -514,6 +514,25 @@ describe("resonanceTaps/* and readerSignals/* are the server's alone", () => {
     await assertFails(getDoc(doc(anonymous(), 'readerSignals', 'bob_alice-card')));
   });
 
+  // Round 26 §A1.6: a card's reading — what the model took its author to have lived, thought and gained — is the
+  // server's; the card itself keeps only its through line, which reaches its author alone.
+  it("lets no one read, list, forge or clear a card's reading — not its author", async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'cardSignatures', 'alice-card'), { authorId: 'alice', version: 3, insights: [{ insight: 'x', evidence: 'y' }], listedForStrangers: true });
+    });
+    for (const uid of ['alice', 'bob', 'carol']) {
+      const db = as(uid);
+      await assertFails(getDoc(doc(db, 'cardSignatures', 'alice-card')));
+      await assertFails(getDocs(query(collection(db, 'cardSignatures'), where('authorId', '==', uid))));
+      await assertFails(updateDoc(doc(db, 'cardSignatures', 'alice-card'), { listedForStrangers: false }));
+      await assertFails(deleteDoc(doc(db, 'cardSignatures', 'alice-card')));
+      await assertFails(setDoc(doc(db, 'cardSignatures', `${uid}-card`), { authorId: uid, listedForStrangers: true }));
+    }
+    await assertFails(getDoc(doc(anonymous(), 'cardSignatures', 'alice-card')));
+    // The pool's numbers (lib/recommend/poolStats) are config/*: the server's too.
+    await assertFails(getDoc(doc(as('alice'), 'config', 'recommendPool')));
+  });
+
   it("refuses a client's resonance_tap or read_summary bell, and lets its recipient mark one read, nothing else", async () => {
     await seed(async (db) => {
       await setDoc(doc(db, 'notifications', 'rtap_alice-card_20261119'), {

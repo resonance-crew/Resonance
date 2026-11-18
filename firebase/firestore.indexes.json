@@ -362,6 +362,31 @@
       "indexes": []
     },
     {
+      "collectionGroup": "cardSignatures",
+      "fieldPath": "insights",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "cardSignatures",
+      "fieldPath": "usage",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "config",
+      "fieldPath": "mu",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "config",
+      "fieldPath": "r",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "recommendations",
+      "fieldPath": "shown",
+      "indexes": []
+    },
+    {
       "collectionGroup": "userProfiles",
       "fieldPath": "centroids",
       "indexes": []

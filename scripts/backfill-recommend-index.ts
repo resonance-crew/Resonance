@@ -1,41 +1,9 @@
 /**
- * Backfill the recommendation vector index for published cards that were never
- * indexed (cards published before the recommender shipped, or whose fire-and-
- * forget publish-time indexing failed). Idempotent — re-running re-extracts
- * signatures and re-upserts vectors.
- *
- * Also clears the per-user daily `recommendations` cache so the next feed
- * request regenerates against the freshly indexed corpus.
- *
- * Usage (from the repo root, needs OPENAI + FIREBASE_* admin creds in .env):
- *   npx tsx -r dotenv/config scripts/backfill-recommend-index.ts          # only unindexed cards
- *   npx tsx -r dotenv/config scripts/backfill-recommend-index.ts --all    # reindex everything
+ * Replaced by `npx tsx scripts/backfill.ts recommend-index [--all] [--apply] [--emulator]`
+ * (round 26 §A5.1): a dry run by default, two cards at a time, the cost
+ * printed, and readers' `askedOn` and `shown` kept. This older entry point
+ * wrote at once and deleted every reader's stored picks whole; it only says
+ * where the new one is now (kept while .claude/rules/ai.md still names it).
  */
-import { getAdminDb } from '../src/lib/db/firestore/admin';
-import { indexCard } from '../src/lib/recommend/indexCard';
-
-async function main() {
-  const reindexAll = process.argv.includes('--all');
-  const db = getAdminDb();
-
-  const snap = await db.collection('cards').where('publishedAt', '!=', null).get();
-  const targets = snap.docs.filter((d) => reindexAll || d.data().indexedAt == null);
-  console.log(`published cards: ${snap.size}, to index: ${targets.length}`);
-
-  for (const doc of targets) {
-    try {
-      // --all makes every signature again, even one whose text is unchanged (a new prompt, say).
-      const result = await indexCard(doc.id, { force: reindexAll });
-      console.log(`  ${doc.id}: ${result.indexed ? `indexed (${result.channels} channels)` : `skipped (${result.reason})`}`);
-    } catch (err) {
-      console.error(`  ${doc.id}: FAILED`, err);
-    }
-  }
-
-  // Drop every cached daily feed so readers pick up the new corpus on next load.
-  const recs = await db.collection('recommendations').get();
-  await Promise.all(recs.docs.map((d) => d.ref.delete()));
-  console.log(`cleared ${recs.size} cached recommendation feed(s)`);
-}
-
-main().then(() => process.exit(0));
+console.error('Replaced: npx tsx scripts/backfill.ts recommend-index [--all] [--apply] [--emulator] (a dry run unless --apply)');
+process.exit(2);

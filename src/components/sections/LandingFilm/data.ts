@@ -3,17 +3,23 @@
  * the data research's (`.lab-tmp/filmCards.ts`, ported as is): lead eligibility; tier 0 the owner's pin
  * (`config/landingFilm`); tier 1 a real resonance; tier 2 kin (insight ≤ 0.40, situation ≤ 0.70, one per author, a
  * daily rotation among the top 3 at Taipei midnight); tier 3 alone; the sky from latestForLanding minus the leads.
+ * Since round 26 (§A4) the insight score and whether a card is for strangers are the reading's (server-only
+ * `cardSignatures`, read by id for the window), and a card's vectors are its parts (`cardVectors/{id}__{channel}__{i}`):
+ * kin are compared by their best pair of parts (lib/recommend/match maxSim), in memory, never by a vector search.
  * And the end's list (the owner, round 4: 「直接顯示現在推薦的…五六篇就好」, one recommendation for everyone who isn't
  * signed in): `recommendedIds`, from the same window — no pair, no place for the leads.
  * Read-only against Firestore. `loadFilm` memoizes the answer per Taipei day (10 minutes) and falls back to the
  * landing grid's read when the picks fail. What leaves here is `toModel`'s FilmModel: never a Card, never a score.
  */
 import type { DocumentData, Firestore } from 'firebase-admin/firestore';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { Timestamp } from 'firebase-admin/firestore';
 import { blankCard, unlistedCard } from '@/lib/cards/blank';
 import { LIST_FIELDS, blankBySummary, storedSummary } from '@/lib/api/v1/summary';
 import { LANDING_CARD_FIELDS, latestForLanding } from '@/lib/db/firestore/landing';
 import { getAdminDb } from '@/lib/db/firestore/admin';
+import { CARD_SIGNATURES } from '@/lib/recommend/collections';
+import { maxSim } from '@/lib/recommend/match';
+import { INSIGHTS_MAX } from '@/lib/recommend/signature';
 import { mapCard, mapUser } from '@/lib/db/firestore/mapper';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { publicBases } from '@/lib/storage/publicUrl';
@@ -21,20 +27,21 @@ import type { Card, User } from '@/lib/db/types';
 import { PICKS, type FilmModel } from './model';
 import { toModel } from './tiles';
 
-/** The newest public cards the film chooses among (one query, no stories: LIST_FIELDS + the score). */
+/** The newest public cards the film chooses among (one query, no stories: LIST_FIELDS; their readings by id). */
 export const FILM_WINDOW = 120;
-/** The written card's pool: the best lead of each author, this many authors by insight score (one findNearest each). */
+/** The written card's pool: the best lead of each author, this many authors by insight score. */
 export const FILM_POOL = 6;
-/** Hits per findNearest: the first leadable one by someone else is the kin. */
-export const KIN_K = 10;
+/** The leads whose parts are read to find kin among (the best by insight score): three insight parts each at most. */
+export const KIN_CANDIDATES = 40;
 /** A lead reads as a story worth a stranger's look. */
 export const LEAD_MIN_INSIGHT = 0.8;
 export const LEAD_TITLE_MAX = 32; // graphemes: two lines of the floating card on a phone
 export const LEAD_EXCERPT_MIN = 60; // graphemes of the stored excerpt (itself ≤ 96 + …)
 /**
- * Two cards are kin (one may stand for the other's answer) when their insight vectors are this close (COSINE, 1 − cos)
- * and their situations don't disagree. Tuned on 2026-11-09's 105 lead pairs (min 0.352, p10 0.452, median 0.555): 4 pass
- * (3 by different authors). Re-tune when the embedding model or INDEX_VERSION changes.
+ * Two cards are kin (one may stand for the other's answer) when their nearest insight parts are this close (COSINE,
+ * 1 − cos of the best pair) and their situations don't disagree. Tuned on 2026-11-09's 105 lead pairs (min 0.352, p10
+ * 0.452, median 0.555): 4 pass (3 by different authors) — on round 25's one-sentence vectors. Owed (§A4): re-tuned on the
+ * new distances after the production backfill of round 26's readings.
  */
 export const KIN_INSIGHT_MAX = 0.4;
 export const KIN_SITUATION_MAX = 0.7;
@@ -83,23 +90,31 @@ const OUR_COVER = (url: unknown, bases: readonly string[]) => typeof url === 'st
 export const taipeiDayIndex = (now: Date) => Math.floor((now.getTime() + 8 * 3_600_000) / 86_400_000);
 
 /** May this card play a lead (written or answer)? Decided on stored fields only; never on who reads. */
-function leadable(d: DocumentData, bases: readonly string[]): boolean {
+function leadable(r: Row, bases: readonly string[]): boolean {
+  const d = r.d;
   return (
-    d.visibility === 'public' && d.publishedAt != null && d.trashedAt == null &&
+    listed(r) &&
     d.anonymous !== true && // the two leads connect; an anonymous card connects no one (and its author is never read here)
-    !unlistedCard(d) && !blankBySummary(d) &&
     d.media?.type === 'image' && OUR_COVER(d.media.url, bases) &&
     glen(d.thoughtCore) >= 2 && glen(d.thoughtCore) <= LEAD_TITLE_MAX &&
     glen(storedSummary(d)?.excerpt ?? '') >= LEAD_EXCERPT_MIN &&
-    typeof d.signature?.insightScore === 'number' && d.signature.insightScore >= LEAD_MIN_INSIGHT
+    typeof r.reading?.insightScore === 'number' && r.reading.insightScore >= LEAD_MIN_INSIGHT
   );
 }
 
-export type Row = { id: string; d: DocumentData };
+/**
+ * A window card and what its reading says of it (`cardSignatures`, round 26): the insight score, and whether it is for
+ * strangers — absent for a card not read yet (it counts 0 and isn't held back).
+ */
+export type Row = { id: string; d: DocumentData; reading?: { insightScore: number | null; listed: boolean } };
 
-/** May a list that picks cards for readers show this one (lib/cards/blank)? Stored fields only, never who reads. */
-const listed = (d: DocumentData) =>
-  d.visibility === 'public' && d.publishedAt != null && d.trashedAt == null && !unlistedCard(d) && !blankBySummary(d);
+/**
+ * May a list that picks cards for readers show this one (lib/cards/blank), to strangers (its reading)? Stored fields
+ * only, never who reads.
+ */
+const listed = (r: Row) =>
+  r.d.visibility === 'public' && r.d.publishedAt != null && r.d.trashedAt == null && !unlistedCard(r.d) && !blankBySummary(r.d) &&
+  r.reading?.listed !== false;
 const millis = (v: unknown) => (v instanceof Timestamp ? v.toMillis() : v instanceof Date ? v.getTime() : 0);
 
 /**
@@ -112,10 +127,10 @@ const millis = (v: unknown) => (v instanceof Timestamp ? v.toMillis() : v instan
 export function recommendedIds(rows: readonly Row[], day: number, most: number = PICKS_READ): string[] {
   const dayEnd = (day + 1) * 86_400_000 - 8 * 3_600_000; // the Taipei day's last moment
   const ranked = rows
-    .filter((r) => listed(r.d))
+    .filter((r) => listed(r))
     .map((r) => {
       const at = millis(r.d.publishedAt);
-      const raw = r.d.signature?.insightScore;
+      const raw = r.reading?.insightScore;
       const insight = typeof raw === 'number' && Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0;
       const days = Math.max(0, (dayEnd - at) / 86_400_000);
       return { id: r.id, d: r.d, at, value: insight + PICK_RECENCY * 0.5 ** (days / PICK_HALF_LIFE_DAYS) };
@@ -144,7 +159,13 @@ export function recommendedIds(rows: readonly Row[], day: number, most: number =
   take(PICK_AUTHOR_MAX, Infinity);
   return out;
 }
-const cosine = (x: number[], y: number[]) => { let s = 0; for (let i = 0; i < x.length; i++) s += x[i] * y[i]; return 1 - s; }; // unit vectors
+/** COSINE distance of two cards' nearest parts (1 − the best pair's cosine; unit vectors); null when either has none. */
+const partsDistance = (x: number[][] | undefined, y: number[][] | undefined) => {
+  const best = x?.length && y?.length ? maxSim(x, y) : null;
+  return best === null ? null : 1 - best;
+};
+/** The ids a card's parts on a channel may have (lib/recommend/signature: three insights at most). */
+const partIds = (id: string, channel: 'insight' | 'situation') => Array.from({ length: INSIGHTS_MAX }, (_, i) => `cardVectors/${id}__${channel}__${i}`);
 
 /** What the page may hold of a card: latestForLanding's own strip. */
 const forPage = (c: Card): Card => {
@@ -159,19 +180,25 @@ export async function filmCards(db: Firestore, opts: { storageBases: readonly st
 
   const [windowSnap, pinSnap] = await Promise.all([
     db.collection('cards').where('visibility', '==', 'public').where('publishedAt', '!=', null).orderBy('publishedAt', 'desc')
-      .select(...LIST_FIELDS, 'signature.insightScore', 'resonanceCount').limit(FILM_WINDOW).get(),
+      .select(...LIST_FIELDS).limit(FILM_WINDOW).get(),
     db.doc('config/landingFilm').get(),
   ]);
-  const rows = windowSnap.docs.map((s) => ({ id: s.id, d: s.data() }));
+  // The window's readings, by id: the score and the strangers' switch only.
+  const readings = windowSnap.empty ? [] : await db.getAll(...windowSnap.docs.map((s) => db.doc(`${CARD_SIGNATURES}/${s.id}`)), { fieldMask: ['insightScore', 'listedForStrangers'] });
+  const readingOf = new Map(readings.filter((r) => r.exists).map((r) => {
+    const score = r.get('insightScore');
+    return [r.id, { insightScore: typeof score === 'number' && Number.isFinite(score) ? score : null, listed: r.get('listedForStrangers') !== false }];
+  }));
+  const rows: Row[] = windowSnap.docs.map((s) => ({ id: s.id, d: s.data(), reading: readingOf.get(s.id) }));
   const pickIds = recommendedIds(rows, day);
-  const leads = rows.filter((r) => leadable(r.d, bases));
+  const leads = rows.filter((r) => leadable(r, bases));
   const byId = new Map(leads.map((r) => [r.id, r]));
   // Pen names: a lead's author must have one (only named leads get here).
   const authorIds = [...new Set(leads.map((r) => String(r.d.authorId)))].filter((id) => id && !id.includes('/') && !isReservedId(id));
   const profiles = authorIds.length ? await db.getAll(...authorIds.map((id) => db.doc(`users/${id}`)), { fieldMask: ['handle'] }) : [];
   const named = new Set(profiles.filter((p) => p.exists && String(p.get('handle') ?? '').trim()).map((p) => p.id));
   const ok = leads.filter((r) => named.has(String(r.d.authorId)));
-  const score = (r: { d: DocumentData }) => Number(r.d.signature.insightScore);
+  const score = (r: Row) => Number(r.reading?.insightScore ?? 0);
   const okIds = new Set(ok.map((r) => r.id));
 
   let pair: { w: string; a: string | null; relation: FilmRelation; pinned: boolean } | null = null;
@@ -194,39 +221,47 @@ export async function filmCards(db: Firestore, opts: { storageBases: readonly st
     if (real.length) { const p = real[day % real.length]; pair = { w: p.w, a: p.a, relation: 'resonance', pinned: false }; }
   }
 
-  // 2. Kin: for each of the best leads (one per author), the nearest leadable card by someone else, by the insight
-  //    vectors (the recommender's own index); kept when the two insights are close and their situations don't disagree.
+  // 2. Kin: for each of the best leads (one per author), the nearest leadable card by someone else, by their insight
+  //    parts (the recommender's own index, read by id — the best pair of parts, lib/recommend/match maxSim); kept when
+  //    the two are close and their situations don't disagree.
   const bestOfAuthor = new Map<string, Row>();
   for (const r of [...ok].sort((x, y) => score(y) - score(x) || y.id.localeCompare(x.id))) if (!bestOfAuthor.has(String(r.d.authorId))) bestOfAuthor.set(String(r.d.authorId), r);
   const pool = [...bestOfAuthor.values()].slice(0, FILM_POOL);
   if (!pair && pool.length && ok.length >= 2) {
-    const own = await db.getAll(...pool.map((r) => db.doc(`cardVectors/${r.id}__insight`)), { fieldMask: ['vector'] });
-    const near = await Promise.all(own.map(async (vdoc, i) => {
-      const vec = vdoc.exists ? ((vdoc.get('vector')?.toArray?.() ?? []) as number[]) : [];
-      if (!vec.length) return null;
-      const hits = await db.collection('cardVectors').where('visibility', '==', 'public').where('channel', '==', 'insight')
-        .select('cardId', '__distance') // never the vector, nor the signature fields the records carry
-        .findNearest({ vectorField: 'vector', queryVector: FieldValue.vector(vec), limit: KIN_K, distanceMeasure: 'COSINE', distanceResultField: '__distance' })
-        .get();
-      const w = pool[i];
-      for (const h of hits.docs) {
-        const a = byId.get(String(h.get('cardId')));
-        if (!a || !okIds.has(a.id) || a.id === w.id || a.d.authorId === w.d.authorId) continue;
-        const di = Number(h.get('__distance'));
-        return di <= KIN_INSIGHT_MAX ? { w, a, di } : null;
+    const kinRows = [...ok].sort((x, y) => score(y) - score(x) || x.id.localeCompare(y.id)).slice(0, KIN_CANDIDATES);
+    for (const w of pool) if (!kinRows.includes(w)) kinRows.push(w);
+    const partsOf = async (channel: 'insight' | 'situation', ids: string[]) => {
+      const snaps = ids.length ? await db.getAll(...ids.flatMap((id) => partIds(id, channel)).map((p) => db.doc(p)), { fieldMask: ['vector'] }) : [];
+      const out = new Map<string, number[][]>();
+      for (const v of snaps) {
+        if (!v.exists) continue;
+        const vec = (v.get('vector')?.toArray?.() ?? []) as number[]; // never the signature fields the records carry
+        if (!vec.length) continue;
+        const id = v.id.slice(0, v.id.indexOf(`__${channel}__`));
+        out.set(id, [...(out.get(id) ?? []), vec]);
       }
-      return null;
-    }));
-    const found = near.filter((x): x is { w: Row; a: Row; di: number } => !!x);
-    // Situations: the pair's two records, read by id.
-    const sit = found.length ? await db.getAll(...found.flatMap((p) => [db.doc(`cardVectors/${p.w.id}__situation`), db.doc(`cardVectors/${p.a.id}__situation`)]), { fieldMask: ['vector'] }) : [];
-    const sv = new Map(sit.filter((s) => s.exists).map((s) => [s.id, (s.get('vector')?.toArray?.() ?? []) as number[]]));
+      return out;
+    };
+    const insight = await partsOf('insight', kinRows.map((r) => r.id));
+    const found = pool
+      .map((w) => {
+        let near: { a: Row; di: number } | null = null;
+        for (const a of kinRows) {
+          if (a.id === w.id || a.d.authorId === w.d.authorId) continue;
+          const di = partsDistance(insight.get(w.id), insight.get(a.id));
+          if (di !== null && (!near || di < near.di || (di === near.di && a.id < near.a.id))) near = { a, di };
+        }
+        return near && near.di <= KIN_INSIGHT_MAX ? { w, a: near.a, di: near.di } : null;
+      })
+      .filter((x): x is { w: Row; a: Row; di: number } => !!x);
+    // Situations: the pairs' parts, read by id.
+    const situation = await partsOf('situation', [...new Set(found.flatMap((p) => [p.w.id, p.a.id]))]);
     const seen = new Set<string>();
     const kin = found
-      .filter((p) => { const x = sv.get(`${p.w.id}__situation`), y = sv.get(`${p.a.id}__situation`); return !x?.length || !y?.length || cosine(x, y) <= KIN_SITUATION_MAX; })
+      .filter((p) => { const ds = partsDistance(situation.get(p.w.id), situation.get(p.a.id)); return ds === null || ds <= KIN_SITUATION_MAX; })
       .map((p) => (score(p.a) > score(p.w) ? { w: p.a, a: p.w, di: p.di } : p)) // the written card is the higher-scoring
       .filter((p) => { const k = [p.w.id, p.a.id].sort().join(); if (seen.has(k)) return false; seen.add(k); return true; })
-      .sort((x, y) => x.di - y.di)
+      .sort((x, y) => x.di - y.di || x.w.id.localeCompare(y.w.id))
       .slice(0, FILM_ROTATION);
     if (kin.length) { const p = kin[day % kin.length]; pair = { w: p.w.id, a: p.a.id, relation: 'kin', pinned: false }; }
   }

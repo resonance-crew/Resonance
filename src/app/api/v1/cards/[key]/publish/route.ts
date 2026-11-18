@@ -15,10 +15,12 @@ import { unfurlCardLinks } from '@/lib/links/cardLinks';
 export const dynamic = 'force-dynamic';
 // The slug's LLM call is waited for 8 s at most (SLUG_WAIT_MS), then finished
 // after the response beside the story's link previews (15 s at most,
-// STORY_UNFURL_DEADLINE_MS), followed by the page cache; the recommendation
-// index and the title's and excerpt's translations run alongside, and so — on a first publish, once the slug is in —
-// does the push to the author's connections who asked (a few seconds).
-export const maxDuration = 60;
+// STORY_UNFURL_DEADLINE_MS), followed by the page cache; the card's reading
+// and its vectors (one deadline, INDEX_DEADLINE_MS: 100 s — a reasoning model
+// reading the whole story) and the title's and excerpt's translations run
+// alongside, and so — on a first publish, once the slug is in — does the push
+// to the author's connections who asked (a few seconds).
+export const maxDuration = 120;
 
 /** POST /api/v1/cards/{id}/publish — publish your card (see publishCard). */
 export const POST = withUser(async (user, req, ctx: RouteContext<'key'>) => {
