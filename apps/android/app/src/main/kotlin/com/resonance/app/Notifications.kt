@@ -39,8 +39,20 @@ class NotificationsStore {
          * card, never a conversation with whoever wrote it (see [onAnonymousCard]).
          */
         val anonymous: Boolean = false,
+        /**
+         * A `resonance_tap` row's people (round 26 §R2.2), newest first: the first is the one named (their face, their
+         * pen name — read by [fromUserId], which is them), the rest are 「和另外 {count} 人」.
+         */
+        val fromUserIds: List<String> = emptyList(),
+        /** A `read_summary` row's readers who read the card to the end last week (three or more, never named). */
+        val readers: Int? = null,
+        /** …and someone came back to read it again. */
+        val reread: Boolean = false,
     ) {
         val isUnread get() = readAt == null
+
+        /** How many besides the one named resonated (a `resonance_tap` row's 「和另外 {count} 人」). */
+        val others: Int get() = (fromUserIds.size - 1).coerceAtLeast(0)
 
         /**
          * A note or resonance on an anonymous card of yours. Opening its writer's conversation would
@@ -214,18 +226,28 @@ class NotificationsStore {
     private fun item(doc: QueryDocumentSnapshot): Item {
         @Suppress("UNCHECKED_CAST")
         val payload = doc.get("payload") as? Map<String, Any?> ?: emptyMap()
-        return Item(
-            id = doc.id,
-            type = doc.getString("type") ?: "",
+        return bellItem(doc.id, doc.getString("type") ?: "", payload, doc.getTimestamp("readAt")?.toDate(), doc.getTimestamp("createdAt")?.toDate())
+    }
+}
+
+/** A bell row from its document's fields (its [payload] as Firestore hands it). */
+internal fun bellItem(id: String, type: String, payload: Map<String, Any?>, readAt: Date?, createdAt: Date?): NotificationsStore.Item {
+        val people = (payload["fromUserIds"] as? List<*>)?.filterIsInstance<String>()?.filter { it.isNotEmpty() }.orEmpty()
+        return NotificationsStore.Item(
+            id = id,
+            type = type,
             fromHandle = payload["fromHandle"] as? String,
-            fromUserId = payload["fromUserId"] as? String,
+            // A tap row names its newest (its face and pen name are read by this id).
+            fromUserId = payload["fromUserId"] as? String ?: people.firstOrNull(),
             cardId = payload["cardId"] as? String,
             preview = payload["preview"] as? String,
             noteId = payload["noteId"] as? String,
             count = (payload["count"] as? Number)?.toInt(),
-            readAt = doc.getTimestamp("readAt")?.toDate(),
-            createdAt = doc.getTimestamp("createdAt")?.toDate(),
+            readAt = readAt,
+            createdAt = createdAt,
             anonymous = payload["anonymous"] == true,
+            fromUserIds = people,
+            readers = (payload["readers"] as? Number)?.toInt(),
+            reread = payload["reread"] == true,
         )
-    }
 }

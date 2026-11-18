@@ -96,7 +96,14 @@ internal data class BellSentence(val before: String, val handle: String?, val af
     val whole: String get() = before + handle.orEmpty() + after
 }
 
-internal fun bellSentence(item: NotificationsStore.Item): BellSentence {
+internal fun bellSentence(item: NotificationsStore.Item, handle: String? = item.fromHandle): BellSentence {
+    // Round 26 §U8: someone resonated with your card — the newest named, the rest counted (「和另外 {count} 人」). Their
+    // pen name is read by who they are ([handle]): the row carries only their ids.
+    if (item.type == "resonance_tap") {
+        val others = item.others
+        val parts = (if (others > 0) L10n.App.Notifications.tapMany(NAME, others) else L10n.App.Notifications.tap(NAME)).split(NAME, limit = 2)
+        return BellSentence(parts.getOrElse(0) { "" }, handle.orEmpty(), parts.getOrElse(1) { "" })
+    }
     val named: ((String) -> String)? = when (item.type) {
         "invite" -> L10n.App.Notifications::invite
         "invite_accepted" -> L10n.App.Notifications::inviteAccepted
@@ -108,10 +115,12 @@ internal fun bellSentence(item: NotificationsStore.Item): BellSentence {
     }
     if (named != null) {
         val parts = named(NAME).split(NAME, limit = 2)
-        return BellSentence(parts.getOrElse(0) { "" }, item.fromHandle.orEmpty(), parts.getOrElse(1) { "" })
+        return BellSentence(parts.getOrElse(0) { "" }, handle.orEmpty(), parts.getOrElse(1) { "" })
     }
     val whole = when (item.type) {
         "resonance_summary" -> L10n.App.Notifications.resonanceSummary(item.count ?: 0)
+        // Three or more, never named (§R4): how many read the card to the end last week, and whether someone came back.
+        "read_summary" -> (item.readers ?: 0).let { n -> if (item.reread) L10n.App.Notifications.readSummaryReread(n) else L10n.App.Notifications.readSummary(n) }
         "translation_done" -> L10n.App.Notifications.translationDone
         "invite_expired" -> L10n.App.Notifications.inviteExpired
         else -> item.type
