@@ -77,10 +77,11 @@ export async function scheduleAccountDeletion(
  * Out of sight from the moment the deletion is scheduled: the account's
  * published anonymous cards go to its trash (marked `trashedFor: 'deletion'`),
  * as if their author had put them there — so, private to everyone and
- * answering every probe as a deleted card does, their notes deleted, their
- * pages never revalidated beside the profile's. Left until the purge, an
- * anonymous card would turn from "there" to "gone" in the same run as its
- * author's profile and say whose it was; this way it goes days before, as any
+ * answering every probe as a deleted card does, their notes, taps and
+ * readers' reading records deleted (lib/api/v1/trash), their pages never
+ * revalidated beside the profile's. Left until the purge, an anonymous card
+ * would turn from "there" to "gone" in the same run as its author's profile
+ * and say whose it was; this way it goes days before, as any
  * card its author trashed. Cancelling brings back these alone
  * (releaseHeldCards). Returns the card pages to revalidate. Best effort, a
  * card at a time: the deletion stands whatever this does.

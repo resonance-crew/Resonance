@@ -93,6 +93,25 @@ describe('runReadSummary', () => {
     expect((await runReadSummary(fresh.db, { now: MONDAY })).rows).toBe(2);
   });
 
+  it("writes nothing for a card for connections only, or private by now — three of the author's few connections would be named by their count", async () => {
+    const three = (cardId: string) => ({ ...read(cardId, 'r1', 1), ...read(cardId, 'r2', 2), ...read(cardId, 'r3', 3) });
+    const { db, docs } = fakeAdminDb({
+      'cards/open': card('bob'),
+      'cards/close': card('bob', { visibility: 'connections' }),
+      'cards/hidden': card('bob', { visibility: 'private' }),
+      // r1, r2 and r3 are all of bob's connections.
+      'connections/bob_r1': { userIds: ['bob', 'r1'] },
+      'connections/bob_r2': { userIds: ['bob', 'r2'] },
+      'connections/bob_r3': { userIds: ['bob', 'r3'] },
+      ...three('open'),
+      ...three('close'),
+      ...three('hidden'),
+    });
+    expect(await runReadSummary(db, { now: MONDAY })).toEqual({ cards: 3, rows: 1, held: 0, late: 0 });
+    expect(Object.keys(docs).filter((p) => p.startsWith('notifications/'))).toEqual(['notifications/rsum_open_20261123']);
+    expect(docs['notifications/rsum_open_20261123'].payload).toEqual({ cardId: 'open', readers: 3, reread: false });
+  });
+
   it('starts nothing past its deadline', async () => {
     const { db, docs } = world();
     expect(await runReadSummary(db, { now: MONDAY, deadline: MONDAY, clock: () => MONDAY })).toEqual({ cards: 4, rows: 0, held: 0, late: 3 });

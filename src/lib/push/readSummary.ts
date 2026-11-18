@@ -4,15 +4,18 @@ import { appsDraw } from './bellCapability';
 
 /**
  * The weekly read summary (round 26 §R4, `/api/cron/read-summary`, Mondays
- * 01:00 UTC = 09:00 in Taipei): for each published card, how many readers —
- * never its author — read it to the end in the seven days before the run
- * (`readerSignals.reachedEndAt`, lib/api/v1/reading). Three or more, and the
- * author gets one bell row, `notifications/rsum_{cardId}_{yyyymmdd}` =
+ * 01:00 UTC = 09:00 in Taipei): for each published public card, how many
+ * readers — never its author — read it to the end in the seven days before
+ * the run (`readerSignals.reachedEndAt`, lib/api/v1/reading). Three or more,
+ * and the author gets one bell row, `notifications/rsum_{cardId}_{yyyymmdd}` =
  * `{ userId, type: 'read_summary', payload: { cardId, readers, reread,
  * anonymous?: true }, readAt, createdAt, pushedAt }` — 「上週有 {count} 個人把這張卡
  * 讀到最後」, with 「，有人回來又讀了一遍」 when one of them came back to read it
  * again that week (`reread`). Fewer than three, nothing: a count that small
- * could name its readers. Names never, at any count.
+ * could name its readers. Names never, at any count. A card for connections
+ * only (or private by now) never gets one, at any count: its readers are
+ * among the author's connections, who may be only three or four while few
+ * connections exist, and a count of three could then name them all.
  *
  * A bell row only: written already pushed (`pushedAt`), so nothing rings a
  * phone for it (no switch is needed for what never buzzes). Like the tap's
@@ -127,12 +130,14 @@ export async function runReadSummary(db: Firestore, opts: { now?: number; deadli
     }
     const chunk = due.slice(i, i + 100);
     const cards = await db.getAll(...chunk.map((id) => db.doc(`cards/${id}`)), {
-      fieldMask: ['authorId', 'publishedAt', 'trashedAt', 'anonymous'],
+      fieldMask: ['authorId', 'publishedAt', 'trashedAt', 'anonymous', 'visibility'],
     });
     for (const [j, card] of cards.entries()) {
       const cardId = chunk[j];
       const author = card.exists ? str(card.get('authorId')) : '';
       if (!author || author.includes('/') || card.get('publishedAt') == null || card.get('trashedAt') != null) continue;
+      // Public cards only (see above): a connections card's readers are a few people its author knows.
+      if (card.get('visibility') !== 'public') continue;
       // Its author's own reads were never kept; counted again without them all the same.
       const week = weekTally((byCard.get(cardId) ?? []).filter((r) => r.userId !== author), now).get(cardId);
       if (!week || week.readers < READ_SUMMARY_MIN) continue;
