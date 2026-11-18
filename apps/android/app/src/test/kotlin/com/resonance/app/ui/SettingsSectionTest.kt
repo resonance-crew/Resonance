@@ -2,11 +2,13 @@ package com.resonance.app.ui
 
 import com.resonance.api.models.NotificationSettings
 import com.resonance.app.PushCenter
+import com.resonance.kit.l10n.Strings
 import com.resonance.kit.push.NotificationSwitch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class SettingsSectionTest {
     /**
@@ -22,6 +24,18 @@ class SettingsSectionTest {
             SettingsSection.entries,
         )
         assertEquals(listOf(0, 1, 2, 3, 4, 5, 6, 7), SettingsSection.entries.map { it.webIndex })
+    }
+
+    /** Each push switch's toggle is drawn from the web's seed, as iOS's is (NotificationsSection, NotificationSwitchRow). */
+    @Test fun thePushSwitchesWearTheWebsSeeds() {
+        Strings.load { File("../../../src/messages/${it.tag}.json").readText() }
+        assertEquals(
+            listOf(
+                NotificationSwitch.Messages to 79.0, NotificationSwitch.ResonanceTaps to 73.0,
+                NotificationSwitch.Picks to 83.0, NotificationSwitch.ConnectionCards to 91.0,
+            ),
+            pushSwitchRows.map { it.switch to it.seed },
+        )
     }
 
     /** Turning a push switch on saves it only when its pushes can show; else the permission comes first, or the notice. */

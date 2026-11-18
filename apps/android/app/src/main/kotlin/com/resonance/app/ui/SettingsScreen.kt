@@ -341,14 +341,14 @@ private fun PrivacySettings(session: Session) {
     }
 }
 
-/** A push switch of Settings → Notifications, as the web's NotificationsSection lists them. */
-private data class PushSwitchRow(val switch: NotificationSwitch, val label: String, val hint: String?, val seed: Double)
+/** A push switch of Settings → Notifications, as the web's NotificationsSection lists them (each toggle's seed the web's and iOS's). */
+internal data class PushSwitchRow(val switch: NotificationSwitch, val label: String, val hint: String?, val seed: Double)
 
-private val pushSwitchRows: List<PushSwitchRow>
+internal val pushSwitchRows: List<PushSwitchRow>
     get() = listOf(
         PushSwitchRow(NotificationSwitch.Messages, L10n.Settings.Notifications.messages, L10n.Settings.Notifications.messagesHint, 79.0),
         // 有人共振 (round 26 §U8.3): on until turned off, its words alone.
-        PushSwitchRow(NotificationSwitch.ResonanceTaps, L10n.Settings.Notifications.taps, null, 81.0),
+        PushSwitchRow(NotificationSwitch.ResonanceTaps, L10n.Settings.Notifications.taps, null, 73.0),
         PushSwitchRow(NotificationSwitch.Picks, L10n.Settings.Notifications.picks, L10n.Settings.Notifications.picksHint, 83.0),
         PushSwitchRow(NotificationSwitch.ConnectionCards, L10n.Settings.Notifications.connectionCards, L10n.Settings.Notifications.connectionCardsHint, 91.0), // 91, as the web and iOS: 89's track pinched at its middle
     )
