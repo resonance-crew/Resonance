@@ -39,6 +39,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.semantics.expand
+import androidx.compose.ui.semantics.collapse
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -79,6 +83,10 @@ class Segment(
     val iconStroke: Float = Tokens.InkStrong.value,
     /** Working on its tap (design note B6): its loader in the glyph's place, its words kept, no tap; heard as busy. */
     val loading: Boolean = false,
+    /** A switch's state (`aria-pressed`, round 26 §U1: 共振 on or off); null for a plain button. */
+    val toggled: Boolean? = null,
+    /** What it opens is open (`aria-expanded`, round 26: 寄小紙條's field); null when it opens nothing in place. */
+    val expanded: Boolean? = null,
     val onClick: () -> Unit,
 )
 
@@ -194,6 +202,10 @@ fun SegmentedActionBar(
                         .semantics {
                             (seg.contentDescription ?: seg.label.takeIf { collapsed })?.let { contentDescription = it }
                             seg.selected?.let { selected = it }
+                            seg.toggled?.let { toggleableState = ToggleableState(it) }
+                            seg.expanded?.let { open ->
+                                if (open) collapse { seg.onClick(); true } else expand { seg.onClick(); true }
+                            }
                             if (seg.loading) stateDescription = L10n.App.busy
                         }
                         .padding(horizontal = if (collapsed) 16.dp else SegmentedLayout.PAD.dp, vertical = segmentPadY(minHeight)),
