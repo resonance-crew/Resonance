@@ -9,18 +9,20 @@ import styles from './NotificationsSection.module.css';
 
 const SWITCHES: {
   name: NotificationSwitch;
-  label: 'messages' | 'picks' | 'connectionCards';
-  hint: 'messagesHint' | 'picksHint' | 'connectionCardsHint';
+  label: 'messages' | 'taps' | 'picks' | 'connectionCards';
+  hint: 'messagesHint' | 'tapsHint' | 'picksHint' | 'connectionCardsHint';
   seed: number;
 }[] = [
   { name: 'messages', label: 'messages', hint: 'messagesHint', seed: 79 },
+  // Round 26 §U8: 有人共振, on until turned off (the installed apps have no switch for it: the web has).
+  { name: 'resonanceTaps', label: 'taps', hint: 'tapsHint', seed: 73 },
   { name: 'picks', label: 'picks', hint: 'picksHint', seed: 83 },
   // 91, as the apps: 89's track pinched at its middle (QA r4).
   { name: 'connectionCards', label: 'connectionCards', hint: 'connectionCardsHint', seed: 91 },
 ];
 
 /**
- * Settings → 通知: messages and notes (on until turned off), then the pushes
+ * Settings → 通知: messages and notes and 有人共振 (on until turned off), then the pushes
  * beyond the ones answering you, each its own switch, both off until turned
  * on (`readNotificationSettings`; an older server leaves `messages` out, which
  * means on). They reach the person's phones (the
