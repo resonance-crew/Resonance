@@ -94,7 +94,7 @@ internal fun TapFacesButton(
                 OrganicIcon(IconName.Wave, size = 16.dp, color = Tokens.TextMuted)
                 Spacer(Modifier.width(8.dp))
             }
-            AvatarGroup(faces.faces.map { it.groupFace() }, faces.more, size = TapFaceSize, reducedMotion = reduced)
+            AvatarGroup(faces.shown.map { it.groupFace() }, faces.showsMore, size = TapFaceSize, reducedMotion = reduced)
         }
     }
     Box(

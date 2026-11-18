@@ -125,6 +125,8 @@ fun CardViewerActions(
     val switch = remember(cardId) {
         TapSwitch(
             served.mine,
+            // The account's scope: the tap still goes, and the page still hears of it, once this row has left the page.
+            launch = { work -> session.launch(work) },
             send = { on ->
                 val now = session.taps.set(cardId, on)
                 session.noteOwnWrite()
@@ -168,7 +170,7 @@ fun CardViewerActions(
     // The screenshots' states (`--es cardEnd tap,note,taps`), as the page took them.
     var openList by remember(cardId) { mutableStateOf(false) }
     LaunchedEffect(cardId, launch) {
-        if (DebugLaunch.CardEnd.Tap in launch && !switch.on) switch.flip(scope)
+        if (DebugLaunch.CardEnd.Tap in launch && !switch.on) switch.flip()
         if (DebugLaunch.CardEnd.Note in launch && !note.open) note.segment(mayNote)
         if (DebugLaunch.CardEnd.Taps in launch) openList = true
     }
@@ -204,7 +206,7 @@ fun CardViewerActions(
             toggled = switch.on,
         ) {
             haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-            switch.flip(scope)
+            switch.flip()
         }
         val noteSegment = Segment(
             "note", L10n.Card.Note.short, IconName.Note,

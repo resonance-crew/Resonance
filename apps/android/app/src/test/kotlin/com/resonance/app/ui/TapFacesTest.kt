@@ -41,22 +41,35 @@ class TapFacesTest {
     @Test fun theServersFacesAtMostThreeTheRestMore() {
         val tap = CardTap(mine = false, faces = listOf(dora, eli, fay, person("gus")), more = false, mayNote = true)
         val faces = TapFaces.of(tap)
-        assertEquals(listOf("dora", "eli", "fay"), faces.faces.map { it.id })
-        assertTrue(faces.more)
+        // Three drawn, then the disc.
+        assertEquals(listOf("dora", "eli", "fay"), faces.shown.map { it.id })
+        assertTrue(faces.showsMore)
         assertTrue(TapFaces.of(null).isEmpty)
     }
 
     @Test fun tappingOnPutsTheViewerFirstAndAFourthFacePushedOutMeansMore() {
         val before = TapFaces(false, listOf(dora, eli, fay), more = false)
         val on = before.withViewer(alice, on = true)
-        assertEquals(listOf("alice", "dora", "eli"), on.faces.map { it.id })
+        assertEquals(listOf("alice", "dora", "eli"), on.shown.map { it.id })
         assertTrue(on.mine)
         // fay is still one who resonated: the blank disc says there are more.
-        assertTrue(on.more)
-        // Taken back: their face goes, the others keep their order.
+        assertTrue(on.showsMore)
+        // Taken back: their face goes, the others keep their order — fay among them again.
         val off = on.withViewer(alice, on = false)
-        assertEquals(listOf("dora", "eli"), off.faces.map { it.id })
+        assertEquals(listOf("dora", "eli", "fay"), off.shown.map { it.id })
         assertFalse(off.mine)
+    }
+
+    @Test fun onThenOffGivesBackTheFacesAsTheServerHadThem() {
+        val served = CardTap(mine = false, faces = listOf(dora, eli, fay), more = false, mayNote = true)
+        // On: the page keeps the tap as the end row hands it (onTapChanged), and the next tap starts from that.
+        val on = TapFaces.of(served).withViewer(alice, on = true)
+        val kept = CardTap(mine = on.mine, faces = on.faces, more = on.more, mayNote = true)
+        val off = TapFaces.of(kept).withViewer(alice, on = false)
+        assertEquals(TapFaces(false, listOf(dora, eli, fay), more = false), off)
+        // No stray disc, and a screen reader hears no 「還有其他人」.
+        assertFalse(off.showsMore)
+        assertEquals("你連結的人裡，與這張卡片共振的：小安、阿明、fay", facesLabel(off, "alice", author = false))
     }
 
     @Test fun onlyTheViewersOwnFaceOpensNothing() {

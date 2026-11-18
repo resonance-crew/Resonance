@@ -13,7 +13,6 @@ import com.resonance.kit.l10n.Strings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -89,20 +88,23 @@ internal fun tapIcon(on: Boolean): IconName = if (on) IconName.WavePair else Ico
 
 /**
  * The faces under the capsule (§U2) as the viewer sees them: the viewer's own face first while their tap is on
- * ([mine]), then their connections who tapped (the author's: the newest tappers); at most [MAX] and whether there are
- * [more]. The server's `CardDetail.tap`, then the viewer's taps drawn at once ([withViewer]).
+ * ([mine]), then their connections who tapped (the author's: the newest tappers), all of them as the server gave them,
+ * and whether it knows [more]. The server's `CardDetail.tap`, then the viewer's taps drawn at once ([withViewer]).
+ * Only the drawing cuts them to [MAX] ([shown], then the blank disc: [showsMore]) — kept whole, a tap turned on and
+ * off again gives back the face it pushed out (iOS's TapState keeps them so too).
  */
 internal data class TapFaces(val mine: Boolean, val faces: List<Author>, val more: Boolean) {
-    /**
-     * After the viewer's tap went [on]: their face first (a fourth face pushed out tells there are more), or gone —
-     * the others keep their order. [viewer] is who they are.
-     */
+    /** After the viewer's tap went [on]: their face first, or gone — the others keep their order. [viewer] is who they are. */
     fun withViewer(viewer: Author, on: Boolean): TapFaces {
         val others = faces.filter { it.id != viewer.id }
-        if (!on) return TapFaces(false, others, more)
-        val all = listOf(viewer) + others
-        return TapFaces(true, all.take(MAX), more || all.size > MAX)
+        return if (on) TapFaces(true, listOf(viewer) + others, more) else TapFaces(false, others, more)
     }
+
+    /** The faces drawn: [MAX] at most. */
+    val shown: List<Author> get() = faces.take(MAX)
+
+    /** The blank disc after them: more people than the faces drawn (a fourth face pushed out tells there are more). */
+    val showsMore: Boolean get() = more || faces.size > MAX
 
     /** Only the viewer's own face: nothing to open (§U2.4) — read as 你共振了. */
     fun selfOnly(viewerId: String?): Boolean = faces.size == 1 && !more && faces[0].id == viewerId
@@ -113,7 +115,7 @@ internal data class TapFaces(val mine: Boolean, val faces: List<Author>, val mor
         const val MAX = 3
         val NONE = TapFaces(false, emptyList(), false)
 
-        fun of(tap: CardTap?): TapFaces = tap?.let { TapFaces(it.mine, it.faces.take(MAX), it.more || it.faces.size > MAX) } ?: NONE
+        fun of(tap: CardTap?): TapFaces = tap?.let { TapFaces(it.mine, it.faces, it.more) } ?: NONE
     }
 }
 
@@ -131,9 +133,11 @@ internal fun facesLabel(faces: TapFaces, viewerId: String?, author: Boolean): St
     val zh = Strings.language == Strings.Language.ZhTW
     val list = if (zh) "、" else ", "
     val and = if (zh) "，" else ", "
-    val others = faces.faces.filter { it.id != viewerId }.map { it.handle }
-    if (others.isEmpty() && !faces.more) return if (faces.mine) L10n.Card.Tap.selfOnly else ""
-    val names = others.joinToString(list) + if (faces.more) (if (others.isEmpty()) "" else and) + L10n.Card.Tap.more else ""
+    // The faces drawn, then the disc: what is said is what is seen.
+    val more = faces.showsMore
+    val others = faces.shown.filter { it.id != viewerId }.map { it.handle }
+    if (others.isEmpty() && !more) return if (faces.mine) L10n.Card.Tap.selfOnly else ""
+    val names = others.joinToString(list) + if (more) (if (others.isEmpty()) "" else and) + L10n.Card.Tap.more else ""
     val said = if (author) L10n.Card.Tap.facesAuthor(names) else L10n.Card.Tap.facesReader(names)
     return if (faces.mine && !author) L10n.Card.Tap.selfOnly + and + said else said
 }
@@ -142,8 +146,17 @@ internal fun facesLabel(faces: TapFaces, viewerId: String?, author: Boolean): St
  * The viewer's tap as the segment shows it (§U1.6): flipped at once, then sent — one request at a time, each saying
  * what the segment shows by then, so flips made while one is on its way end where the last one left it. A refusal
  * puts it back as the server last had it and says so ([onFailed]: the toast 沒送出去，再試一次).
+ *
+ * Its requests run where [launch] puts them — the account's scope ([com.resonance.app.Session.launch]), never the end
+ * row's: a reader who taps and then leaves the page, or scrolls the story's end away, before the server answers still
+ * has their tap sent, the page told ([send]'s own work) and a refusal said (iOS sends from a task that outlives the view).
  */
-internal class TapSwitch(initial: Boolean, private val send: suspend (Boolean) -> Boolean, private val onFailed: () -> Unit = {}) {
+internal class TapSwitch(
+    initial: Boolean,
+    private val launch: (suspend CoroutineScope.() -> Unit) -> Job,
+    private val send: suspend (Boolean) -> Boolean,
+    private val onFailed: () -> Unit = {},
+) {
     var on by mutableStateOf(initial)
         private set
     private var server = initial
@@ -157,9 +170,9 @@ internal class TapSwitch(initial: Boolean, private val send: suspend (Boolean) -
         }
     }
 
-    fun flip(scope: CoroutineScope): Job {
+    fun flip(): Job {
         on = !on
-        return scope.launch {
+        return launch {
             lock.withLock {
                 val want = on
                 if (want == server) return@withLock

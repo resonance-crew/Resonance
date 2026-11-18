@@ -3,7 +3,12 @@ package com.resonance.app.ui
 import com.resonance.design.generated.IconName
 import com.resonance.kit.l10n.Strings
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import org.junit.After
@@ -95,8 +100,8 @@ class CardEndRowTest {
     @Test fun theTapFlipsAtOnceAndBackOnARefusal() = runBlocking {
         var failed = 0
         val sent = mutableListOf<Boolean>()
-        val switch = TapSwitch(false, send = { on -> sent += on; throw IOException("offline") }, onFailed = { failed++ })
-        val job = switch.flip(this)
+        val switch = TapSwitch(false, launch = { launch(block = it) }, send = { on -> sent += on; throw IOException("offline") }, onFailed = { failed++ })
+        val job = switch.flip()
         // Drawn on before the server answers.
         assertTrue(switch.on)
         job.join()
@@ -108,12 +113,12 @@ class CardEndRowTest {
     @Test fun flipsMadeWhileOneIsOnItsWayEndWhereTheLastLeftIt() = runBlocking {
         val gate = CompletableDeferred<Unit>()
         val sent = mutableListOf<Boolean>()
-        val switch = TapSwitch(false, send = { on -> sent += on; gate.await(); on })
-        val jobs = mutableListOf(switch.flip(this)) // on
+        val switch = TapSwitch(false, launch = { launch(block = it) }, send = { on -> sent += on; gate.await(); on })
+        val jobs = mutableListOf(switch.flip()) // on
         yield()
-        jobs += switch.flip(this) // off, while on is on its way
-        jobs += switch.flip(this) // on again
-        jobs += switch.flip(this) // off
+        jobs += switch.flip() // off, while on is on its way
+        jobs += switch.flip() // on again
+        jobs += switch.flip() // off
         yield()
         assertFalse(switch.on)
         gate.complete(Unit)
@@ -124,8 +129,38 @@ class CardEndRowTest {
     }
 
     @Test fun aPageReadAgainSaysWhatTheServerHas() {
-        val switch = TapSwitch(false, send = { it })
+        val switch = TapSwitch(false, launch = { error("nothing sent") }, send = { it })
         switch.read(true)
         assertTrue(switch.on)
+    }
+
+    @Test fun aTapStillGoesOnceTheRowHasLeftThePage() = runBlocking {
+        // The account's scope (Session's) and the end row's own (rememberCoroutineScope), which goes with the row.
+        val account = CoroutineScope(coroutineContext + SupervisorJob(coroutineContext[Job]))
+        val screen = CoroutineScope(coroutineContext + Job())
+        val answered = CompletableDeferred<Unit>()
+        val puts = mutableListOf<Boolean>()
+        var told: Boolean? = null
+        var failed = 0
+        val switch = TapSwitch(
+            false,
+            launch = { account.launch(block = it) },
+            // The fake API: the PUT is made, and answers after the reader has gone back.
+            send = { on -> answered.await(); puts += on; told = on; on },
+            onFailed = { failed++ },
+        )
+        val job = switch.flip()
+        yield()
+        // Back, another page, or the story's end flung away: the row leaves composition before the server answers.
+        screen.cancel()
+        answered.complete(Unit)
+        job.join()
+        assertFalse(job.isCancelled)
+        assertEquals(listOf(true), puts)
+        // The page was told (onTapChanged), nothing said as failed, and the switch ends where the server is.
+        assertEquals(true, told)
+        assertEquals(0, failed)
+        assertTrue(switch.on)
+        account.cancel()
     }
 }
