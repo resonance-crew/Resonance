@@ -344,7 +344,9 @@ private fun NoteCapsule(state: NoteFieldState, tapOn: Boolean, maxLines: Int, on
                             true
                         } else false
                     }
-                    .semantics { contentDescription = placeholder }
+                    // Named as the web's aria-label and iOS's label are (寄一張小紙條給作者), not by the placeholder, which
+                    // changes with the 共振 tap and is its own text beside the field.
+                    .semantics { contentDescription = L10n.Card.Note.entry }
                     .flowTag("note-field"),
             )
         }

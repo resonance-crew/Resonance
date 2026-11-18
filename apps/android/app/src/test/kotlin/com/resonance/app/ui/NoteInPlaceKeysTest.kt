@@ -5,6 +5,7 @@ import android.content.ComponentName
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasSetTextAction
@@ -14,6 +15,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import com.resonance.design.AppFonts
 import com.resonance.design.Grain
+import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
 import java.io.File
 import org.junit.After
@@ -68,8 +70,8 @@ class NoteInPlaceKeysTest {
         Strings.language = language
     }
 
-    private fun show(note: NoteFieldState) = compose.setContent {
-        NoteInPlace(note, tapOn = false, mayNote = true, hint = false, reducedMotion = true, onSend = {}, onUpgrade = {})
+    private fun show(note: NoteFieldState, tapOn: Boolean = false) = compose.setContent {
+        NoteInPlace(note, tapOn = tapOn, mayNote = true, hint = false, reducedMotion = true, onSend = {}, onUpgrade = {})
     }
 
     private val field get() = compose.onNode(hasSetTextAction())
@@ -94,5 +96,17 @@ class NoteInPlaceKeysTest {
         field.performKeyInput { pressKey(Key.Escape) }
         compose.waitForIdle()
         assertFalse(note.open)
+    }
+
+    // TalkBack names the field as the web's aria-label and iOS's label do — 寄一張小紙條給作者 — not by its placeholder.
+    @Test fun theFieldIsNamedByTheEntryNotThePlaceholder() {
+        show(NoteFieldState("", mayNote = true).apply { segment() }, tapOn = true)
+        assertEquals("寄一張小紙條給作者", L10n.Card.Note.entry)
+        field.assertContentDescriptionEquals(L10n.Card.Note.entry)
+    }
+
+    @Test fun theFieldKeepsItsNameWithoutTheTap() {
+        show(NoteFieldState("", mayNote = true).apply { segment() })
+        field.assertContentDescriptionEquals(L10n.Card.Note.entry)
     }
 }
