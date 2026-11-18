@@ -1,0 +1,50 @@
+# alice reads bob's card 一場雨後的散步 and resonates with it (round 26, the tap): 共振 fills and says 已共振, the faces
+# under it hold hers first, and nothing else opens — no note field, no dialog. Then 寄小紙條 opens the note in place under
+# the faces (no dialog: no 取消 on screen), she writes and sends it (紙條寄出了, the field closes), and takes the tap back:
+# 共振 again, no one told.
+appId: com.resonance.stories
+name: tap
+tags:
+  - card
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /card/rain-walk
+- extendedWaitUntil:
+    visible: 一場雨後的散步
+    timeout: 30000
+- scrollUntilVisible:
+    element: 共振
+    direction: DOWN
+- tapOn: 共振
+- extendedWaitUntil:
+    visible: 已共振
+    timeout: 10000
+# Her face among the faces (one button for them all), and no field: tapping 共振 opens nothing.
+- assertVisible:
+    id: tap-faces
+- assertNotVisible:
+    id: note-field
+- tapOn: 寄(一張)?小紙條(給作者)?
+- extendedWaitUntil:
+    visible:
+      id: note-field
+    timeout: 10000
+- assertNotVisible: 取消
+- tapOn:
+    id: note-field
+- inputText: 第三段那場雨 Maestro
+- tapOn: 寄出
+- extendedWaitUntil:
+    visible: 紙條寄出了
+    timeout: 15000
+- assertNotVisible:
+    id: note-field
+# Taken back: 共振 again.
+- tapOn: 已共振
+- extendedWaitUntil:
+    visible: 共振
+    timeout: 10000
+- takeScreenshot: tap

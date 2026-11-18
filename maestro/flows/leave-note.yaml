@@ -1,5 +1,5 @@
-# alice reads bob's card 一場雨後的散步, leaves its author a note and sends it: the composer closes
-# with 紙條寄出了.
+# alice reads bob's card 一場雨後的散步, leaves its author a note and sends it: 寄小紙條 opens the note in place under
+# the story (round 26: never a dialog — no 取消 on screen), and 寄出 closes it with 紙條寄出了.
 appId: com.resonance.stories
 name: leave-note
 tags:
@@ -13,11 +13,17 @@ tags:
 - extendedWaitUntil:
     visible: 一場雨後的散步
     timeout: 30000
-# The response row's note: 寄一張小紙條給作者, or 寄小紙條 where the row is narrow.
+# The capsule's note: 寄一張小紙條給作者 (its name), or 寄小紙條 as it reads.
 - scrollUntilVisible:
     element: 寄(一張)?小紙條(給作者)?
     direction: DOWN
 - tapOn: 寄(一張)?小紙條(給作者)?
+- extendedWaitUntil:
+    visible:
+      id: note-field
+    timeout: 10000
+# In place: no dialog over the story.
+- assertNotVisible: 取消
 - tapOn:
     id: note-field
 - inputText: 謝謝你寫下這場雨 Maestro
