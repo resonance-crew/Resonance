@@ -57,6 +57,13 @@
  *       into English for a Chinese story, 繁體中文 for a Latin-script one, both for Japanese or Korean), as a
  *       publish makes them — one small OpenAI call each, two at a time; needs OPENAI_API_KEY to apply (on the
  *       emulator no model is asked: every card answers `offline`) — production runs are the owner's call
+ *   npx tsx scripts/backfill.ts recommend-index [--all] [--apply] [--emulator]
+ *       published cards get round 26's reading (the whole story into its insights, server-only in
+ *       cardSignatures) and their parts' vectors — the ones not read by this recipe yet, or every one with --all —
+ *       two at a time, 500 ms between, a formula-phrased reading asked once more; then the older recipe's fields go
+ *       from cards and every reader's stored picks lose their items and day (askedOn and shown kept). A dry run counts
+ *       and estimates tokens and cost; an applied run prints what it spent. Needs OPENAI_API_KEY to apply (on the
+ *       emulator no model is asked) — production runs are the owner's call, after the push
  *
  * Production credentials come from .env; `--emulator` runs against the local
  * emulators (EMULATOR_FIRESTORE_PORT etc., see scripts/emulator-env.mjs) and
@@ -198,6 +205,14 @@ async function main() {
       await backfillCardTombstones(db, { apply });
       return;
     }
+    case 'recommend-index': {
+      // indexCard reads and writes through the app's own admin database (getAdminDb, the default app): the same project.
+      const { getApps } = await import('firebase-admin/app');
+      if (!getApps().some((a) => a.name === '[DEFAULT]')) initializeApp(app.options);
+      const { backfillRecommendIndex } = await import('./backfills/recommendIndex');
+      await backfillRecommendIndex(db, { apply, all: args.includes('--all') });
+      return;
+    }
     case 'summary-translations': {
       const { backfillSummaryTranslations } = await import('./backfills/summaryTranslations');
       await backfillSummaryTranslations(db, { apply });
@@ -219,7 +234,7 @@ async function main() {
       return;
     }
     default:
-      throw new Error(`Unknown task "${task ?? ''}" (anonymous | handles | edits | storage-host | rekey-images | rehost-images | square-avatars | reencode-legacy | avatar-colors | notes | anonymous-bells | orphan-notes | card-tombstones | link-previews)`);
+      throw new Error(`Unknown task "${task ?? ''}" (anonymous | handles | edits | storage-host | rekey-images | rehost-images | square-avatars | reencode-legacy | avatar-colors | notes | anonymous-bells | orphan-notes | card-tombstones | link-previews | summary-translations | recommend-index)`);
   }
 }
 
