@@ -206,6 +206,16 @@ import Testing
         #expect(!model.permissionDenied)
     }
 
+    /// The web's rows (NotificationsSection.tsx): every switch has its muted line, 有人共振's 「有人與你的卡片共振時通知你」
+    /// too — which VoiceOver reads as the switch's hint.
+    @Test func everySwitchSaysWhatItIsForTheTapsToo() {
+        #expect(NotificationSettingsAPI.Switch.resonanceTaps.row.hint == L10n.Settings.Notifications.tapsHint)
+        #expect(NotificationSettingsAPI.Switch.resonanceTaps.row.seed == 73)
+        for name in NotificationSettingsAPI.Switch.allCases {
+            #expect(!(name.row.hint ?? "").isEmpty, "\(name)")
+        }
+    }
+
     @Test func aFailedReadSaysSoAndNothingCanBeFlipped() async {
         let world = World()
         world.readFails = true

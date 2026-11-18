@@ -7,7 +7,7 @@ import SwiftUI
 /// Android. VoiceOver reads the switch, the hint as its hint.
 struct NotificationSwitchRow: View {
     let label: String
-    /// What the switch is for, under its label (none for 有人共振, whose label says it all).
+    /// What the switch is for, under its label (each switch has one now, 有人共振 too, as on the web).
     let hint: String?
     let seed: Double
     @Binding var isOn: Bool
@@ -54,8 +54,8 @@ extension NotificationSettingsAPI.Switch {
     var row: (label: String, hint: String?, seed: Double) {
         switch self {
         case .messages: (L10n.Settings.Notifications.messages, L10n.Settings.Notifications.messagesHint, 79)
-        // 有人共振 (round 26 §U8): on until turned off, as messages are; its words need no hint.
-        case .resonanceTaps: (L10n.Settings.Notifications.taps, nil, 73)
+        // 有人共振 (round 26 §U8): on until turned off, as messages are; its hint the web's 「有人與你的卡片共振時通知你」.
+        case .resonanceTaps: (L10n.Settings.Notifications.taps, L10n.Settings.Notifications.tapsHint, 73)
         case .picks: (L10n.Settings.Notifications.picks, L10n.Settings.Notifications.picksHint, 83)
         // 91, as the web's: 89's track pinched at its middle (a peanut, QA r4).
         case .connectionCards: (L10n.Settings.Notifications.connectionCards, L10n.Settings.Notifications.connectionCardsHint, 91)
