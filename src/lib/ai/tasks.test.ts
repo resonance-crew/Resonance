@@ -6,14 +6,17 @@ import {
   READING_MAX_TOKENS,
   READING_PROMPT,
   generateStoryImage,
+  insightsLine,
   readCard,
   readingText,
+  storyUnits,
   SLUG_MAX_TOKENS,
   SLUG_TIMEOUT_MS,
   suggestStoryTags,
   TAGS_TIMEOUT_MS,
   titleToSlugBase,
 } from './tasks';
+import { LONG_STORY_UNITS, SHORT_STORY_UNITS } from '@/lib/recommend/signature';
 import { SUMMARY_TRANSLATE_TIMEOUT_MS, TRANSLATE_PIECE_TIMEOUT_MS, translateStory, translateSummary } from './translate';
 
 // Every OpenAI call carries a timeout (CLAUDE.md, AI): one that hangs must
@@ -181,7 +184,32 @@ describe('readCard', () => {
     answering([reading]);
     await readCard({ title: 't', story: 's' }, { avoid: ['真正', 'not X but Y'] });
     const messages = requests[0].body.messages as { role: string; content: string }[];
-    expect(messages[1]).toEqual({ role: 'system', content: expect.stringContaining('真正, not X but Y') });
+    expect(messages).toContainEqual({ role: 'system', content: expect.stringContaining('真正, not X but Y') });
+    expect(messages.at(-1)!.role).toBe('user');
+  });
+
+  // The bake-off (2026-11-19): left to choose, stories of 800–1 400 characters were read into two or three insights.
+  it("tells the model how many insights the story's length allows, and keeps no more than that", async () => {
+    const three = { ...reading, insights: [0.6, 0.9, 0.7].map((strength, k) => ({ ...reading.insights[0], insight: `第${k + 1}段`, strength })) };
+    const lines = () => (requests.at(-1)!.body.messages as { role: string; content: string }[]).filter((m) => m.role === 'system').map((m) => m.content);
+
+    answering([three]);
+    const short = await readCard({ title: '雨後', story: '雨停的時候，巷口的積水映出路燈。' });
+    expect(lines()).toContain(insightsLine(1));
+    expect(short.reading.insights.map((i) => i.insight)).toEqual(['第2段']);
+
+    answering([three]);
+    const middle = await readCard({ title: '雨後', story: '雨'.repeat(SHORT_STORY_UNITS) });
+    expect(lines()).toContain(insightsLine(2));
+    expect(middle.reading.insights.map((i) => i.insight)).toEqual(['第2段', '第3段']);
+
+    answering([three]);
+    // Counted on the whole story, past what the reading reads of a long one; English by its words.
+    const long = await readCard({ title: 'Rain', story: 'rain '.repeat(LONG_STORY_UNITS) });
+    expect(storyUnits('rain '.repeat(LONG_STORY_UNITS))).toBe(LONG_STORY_UNITS);
+    expect(lines()).toContain(insightsLine(3));
+    expect(long.reading.insights).toHaveLength(3);
+    expect(insightsLine(1)).not.toMatch(/one sentence/i);
   });
 
   it('reads the whole story up to READING_MAX_CHARS, and both ends of a longer one', () => {
@@ -200,5 +228,14 @@ describe('readCard', () => {
     for (const phrase of ['真正的', '不是……而是……', '往往', 'the real', 'not X but Y']) expect(READING_PROMPT).toContain(phrase);
     // The matching fields in one language, whatever the story's.
     expect(READING_PROMPT).toContain('Traditional Chinese');
+  });
+
+  // The bake-off (2026-11-19): through lines that gave the title back, small inventions, 他/她 the story never
+  // gave, and semicolons.
+  it('asks for a through line the title does not already say, nothing the story does not say, no gender it does not give, no semicolons', () => {
+    expect(READING_PROMPT).toMatch(/first line is its title[^\n]*never repeat it/);
+    expect(READING_PROMPT).toMatch(/Write only what the story says/);
+    expect(READING_PROMPT).toMatch(/never 他 or 她 \(he or she\) for the author unless the story says which/);
+    expect(READING_PROMPT).toMatch(/No semicolons/);
   });
 });

@@ -241,7 +241,7 @@ export async function indexCard(cardId: string, opts: IndexOptions = {}): Promis
       : await readCard({ title, story }, { signal: deadline, onUsage: count });
     // A reading in formula phrasings is asked once more — by the cron and the backfill only (§A1.5).
     if (!offline && opts.rewrite && result.error === null) {
-      const found = formulaPhrases(result.reading);
+      const found = formulaPhrases(result.reading, title);
       if (found.length) {
         result = await readCard({ title, story }, { signal: deadline, onUsage: count, avoid: found });
         rewritten = true;
@@ -260,7 +260,7 @@ export async function indexCard(cardId: string, opts: IndexOptions = {}): Promis
 
   const reading: CardReading = result.reading;
   const listed = listedForStrangers(reading);
-  const templated = formulaPhrases(reading).length > 0;
+  const templated = formulaPhrases(reading, title).length > 0;
   const embeddingModel = currentEmbedModel();
   const signature: InsightSignature = { coreInsight: reading.throughLine, placeholder: reading.placeholder };
 

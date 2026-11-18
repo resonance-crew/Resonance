@@ -3,13 +3,18 @@ import {
   EVIDENCE_MAX,
   INSIGHT_INDEX_THRESHOLD,
   INSIGHTS_MAX,
+  LONG_STORY_UNITS,
+  SHORT_STORY_UNITS,
   SIGNATURE_FIELD_MAX,
   THROUGH_LINE_MAX,
+  TITLE_ECHO,
   formulaPhrases,
+  insightsFor,
   listedForStrangers,
   parseReading,
   readingFromLegacy,
   readingParts,
+  restatesTitle,
 } from './signature';
 
 // Round 26 §A1: what is kept of a card's reading, whether strangers are shown the card, the formula phrasings a
@@ -58,6 +63,26 @@ describe('parseReading', () => {
     expect(parseReading({ insights: [{ span: 'x' }, 'nonsense', insight()] }).insights).toHaveLength(1);
   });
 
+  it("keeps a short story's strongest insight, and a longer one's strongest in the story's order (§A1.4, the bake-off)", () => {
+    const three = { insights: [insight({ insight: '第一段', strength: 0.6 }), insight({ insight: '第二段', strength: 0.9 }), insight({ insight: '第三段', strength: 0.7 })] };
+    expect(parseReading(three, 1).insights.map((i) => i.insight)).toEqual(['第二段']);
+    expect(parseReading(three, 2).insights.map((i) => i.insight)).toEqual(['第二段', '第三段']);
+    expect(parseReading(three, 3).insights.map((i) => i.insight)).toEqual(['第一段', '第二段', '第三段']);
+    // Ties keep the story's order; a cap past INSIGHTS_MAX or under one is held to them.
+    const even = { insights: [insight({ insight: 'a' }), insight({ insight: 'b' }), insight({ insight: 'c' }), insight({ insight: 'd' })] };
+    expect(parseReading(even, 2).insights.map((i) => i.insight)).toEqual(['a', 'b']);
+    expect(parseReading(even, 9).insights).toHaveLength(INSIGHTS_MAX);
+    expect(parseReading(even, 0).insights.map((i) => i.insight)).toEqual(['a']);
+  });
+
+  it('reads a story under SHORT_STORY_UNITS into one insight, one under LONG_STORY_UNITS into two, a longer one into three', () => {
+    expect(insightsFor(0)).toBe(1);
+    expect(insightsFor(SHORT_STORY_UNITS - 1)).toBe(1);
+    expect(insightsFor(SHORT_STORY_UNITS)).toBe(2);
+    expect(insightsFor(LONG_STORY_UNITS - 1)).toBe(2);
+    expect(insightsFor(LONG_STORY_UNITS)).toBe(INSIGHTS_MAX);
+  });
+
   it("reads the older prompt's answer (the refusal's fallback) as a one-insight reading", () => {
     const r = readingFromLegacy({ core_insight: '學會一個人吃飯', situation: '搬家後', insight_score: 0.6, life_domain: '日常', placeholder: false });
     expect(r).toMatchObject({ throughLine: '學會一個人吃飯', insightScore: 0.6, moodOnly: false });
@@ -88,6 +113,32 @@ describe('formulaPhrases', () => {
     expect(of('It was not the job but the people I missed')).toEqual(['not X but Y']);
     expect(of('踩著水窪回家的那晚，我第一次讓自己慢下來')).toEqual([]);
     expect(of('I walked home in the rain, slower than ever')).toEqual([]);
+  });
+
+  // The bake-off (2026-11-19): 13 of 36 readings gave the title back as the through line the author is shown.
+  it('names a through line that only says the title again, given the title', () => {
+    const reading = (throughLine: string) => ({ throughLine, insights: [] });
+    expect(formulaPhrases(reading('湖中央，我看見了知行合一'), '湖中央，我看見了知行合一')).toEqual([TITLE_ECHO]);
+    expect(formulaPhrases(reading('真正的光'), '把自己活成一道光')).toEqual(['真正']);
+    expect(formulaPhrases(reading('把自己活成一道光'), '把自己活成一道光，因為你不知道，誰會藉著你的光')).toEqual([TITLE_ECHO]);
+    expect(formulaPhrases(reading('我被人接住過，也想把自己活成一道光'), '把自己活成一道光')).toEqual([]);
+    // Without the title, only the phrasings (the callers that have none).
+    expect(formulaPhrases(reading('湖中央，我看見了知行合一'))).toEqual([]);
+  });
+});
+
+describe('restatesTitle', () => {
+  it('is the same words, a piece of the title, or the title with little added — whatever the spaces, punctuation and case', () => {
+    expect(restatesTitle('放鬆的心，才接得住靈感', '放鬆的心，才接得住靈感')).toBe(true);
+    expect(restatesTitle('from FOMO to soul resonance', 'From FOMO to Soul Resonance!')).toBe(true);
+    expect(restatesTitle('把自己活成一道光', '把自己活成一道光，因為你不知道，誰會藉著你的光')).toBe(true);
+    expect(restatesTitle('錢是什麼呢？', '錢是什麼？')).toBe(true);
+    // What the story comes to, in words of its own — the title in it or not.
+    expect(restatesTitle('除了帳戶裡的數字，我還想累積什麼？', '錢是什麼？')).toBe(false);
+    expect(restatesTitle('心臟蹦蹦蹦跳跳跳，我還想重新上場', '蹦蹦跳跳')).toBe(false);
+    expect(restatesTitle('雨後的巷口，我第一次讓自己慢下來', '雨')).toBe(false);
+    expect(restatesTitle('', '雨後')).toBe(false);
+    expect(restatesTitle('雨後', '🌿')).toBe(false);
   });
 });
 

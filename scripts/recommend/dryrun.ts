@@ -146,12 +146,12 @@ async function main() {
           const signal = AbortSignal.timeout(INDEX_DEADLINE_MS);
           let result = await readCard({ title, story }, { model: args.model, signal, onUsage: count });
           // As the backfill does: a reading in formula phrasings is asked once more.
-          const found = result.error === null ? formulaPhrases(result.reading) : [];
+          const found = result.error === null ? formulaPhrases(result.reading, title) : [];
           if (found.length) result = await readCard({ title, story }, { model: args.model, signal, onUsage: count, avoid: found });
           card.reading = result.reading;
           card.error = result.error;
           card.listed = listedForStrangers(result.reading);
-          card.templated = formulaPhrases(result.reading).length > 0;
+          card.templated = formulaPhrases(result.reading, title).length > 0;
           if (card.listed) {
             const parts = readingParts(result.reading);
             const vectors = await embed(

@@ -27,6 +27,23 @@ export const THROUGH_LINE_MAX = 60;
 export const EVIDENCE_MAX = 40;
 /** At most this many insights a card (C4: more parts, more chances to be near everything). */
 export const INSIGHTS_MAX = 3;
+/**
+ * A story shorter than this — CJK characters and other words together
+ * (`measure`, as the mirror counts a draft) — is read into one insight (§A1.4:
+ * "1 insight for a short card"), one shorter than {@link LONG_STORY_UNITS}
+ * into at most two, a longer one into {@link INSIGHTS_MAX}. Set on the first
+ * bake-off (2026-11-19): left to choose, the model gave stories of 800–1 400
+ * characters two or three insights, thinner and nearer each other.
+ */
+export const SHORT_STORY_UNITS = 1_500;
+export const LONG_STORY_UNITS = 4_000;
+
+/** How many insights a story this long is read into, at most. */
+export function insightsFor(units: number): number {
+  if (units < SHORT_STORY_UNITS) return 1;
+  if (units < LONG_STORY_UNITS) return 2;
+  return INSIGHTS_MAX;
+}
 /** A part weaker than this gets no vector (D11: the through line stands in when none clears it). */
 export const PART_MIN_STRENGTH = 0.5;
 
@@ -66,14 +83,22 @@ function parseInsight(raw: unknown): ReadingInsight | null {
  * Coerce the model's JSON (snake_case, possibly partial — Structured Outputs
  * holds the shape, not the lengths) into a well-formed {@link CardReading}.
  * Tolerant of anything missing, so a sloppy answer never throws: a reading
- * with nothing in it is simply not listed.
+ * with nothing in it is simply not listed. More insights than `max` (the
+ * story's {@link insightsFor}) keep the strongest, in the story's order.
  */
-export function parseReading(raw: unknown): CardReading {
+export function parseReading(raw: unknown, max = INSIGHTS_MAX): CardReading {
   const r = (raw ?? {}) as Record<string, unknown>;
-  const insights = (Array.isArray(r.insights) ? r.insights : [])
-    .map(parseInsight)
-    .filter((i): i is ReadingInsight => i !== null)
-    .slice(0, INSIGHTS_MAX);
+  const all = (Array.isArray(r.insights) ? r.insights : []).map(parseInsight).filter((i): i is ReadingInsight => i !== null);
+  const cap = Math.max(1, Math.min(INSIGHTS_MAX, Math.floor(max)));
+  const insights =
+    all.length <= cap
+      ? all
+      : all
+          .map((insight, at) => ({ insight, at }))
+          .sort((a, b) => b.insight.strength - a.insight.strength || a.at - b.at)
+          .slice(0, cap)
+          .sort((a, b) => a.at - b.at)
+          .map(({ insight }) => insight);
   return {
     insights,
     throughLine: line(r.through_line ?? r.throughLine, THROUGH_LINE_MAX),
@@ -131,10 +156,36 @@ const FORMULAS: { name: string; pattern: RegExp }[] = [
   { name: 'not X but Y', pattern: /\bnot\b[^.!?;]{1,60}?\bbut\b/i },
 ];
 
-/** The formula phrasings found in a reading's insight-bearing text (empty: none). */
-export function formulaPhrases(reading: Pick<CardReading, 'insights' | 'throughLine'>): string[] {
+/** Letters and digits only, lower-cased: a title and a line compared without their spaces and punctuation. */
+const bare = (s: string) => s.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+
+/**
+ * Whether a through line only says the card's title again (§A1.4): the same
+ * words, a piece of the title, or the title with little added (it is at least
+ * 60% of the line). The through line is shown to the author, who wrote the
+ * title: one that repeats it tells them nothing.
+ */
+export function restatesTitle(throughLine: string, title: string): boolean {
+  const said = bare(throughLine);
+  const head = bare(title);
+  if (!said || !head) return false;
+  if (head.includes(said)) return true;
+  return said.includes(head) && head.length >= 0.6 * said.length;
+}
+
+/** How {@link formulaPhrases} names a through line that repeats the title (and the second ask reads it). */
+export const TITLE_ECHO = 'through_line = the title';
+
+/**
+ * The formula phrasings found in a reading's insight-bearing text (empty:
+ * none), and, given the card's title, a through line that only repeats it
+ * ({@link TITLE_ECHO}): both are asked once more by the cron and the backfill.
+ */
+export function formulaPhrases(reading: Pick<CardReading, 'insights' | 'throughLine'>, title?: string): string[] {
   const texts = [reading.throughLine, ...reading.insights.flatMap((i) => [i.insight, i.thinking, i.gain, i.shift])].filter(Boolean);
-  return FORMULAS.filter((f) => texts.some((t) => f.pattern.test(t))).map((f) => f.name);
+  const found = FORMULAS.filter((f) => texts.some((t) => f.pattern.test(t))).map((f) => f.name);
+  if (title !== undefined && restatesTitle(reading.throughLine, title)) found.push(TITLE_ECHO);
+  return found;
 }
 
 /** One part of a card as the vector index keeps it: what is embedded, and the short lines a hit shows other readers' prompts. */
