@@ -73,7 +73,8 @@ nonisolated enum NoteInPlace {
 
     /// The field's width: a phone's column (nil), wider the story's column up to 680, starting where it starts.
     static func width(compact: Bool, column: CGFloat) -> CGFloat? {
-        compact ? nil : min(column, maxWidth)
+        // Before the column is measured, the column's own width (nothing drawn 0 wide for a frame).
+        compact || column <= 0 ? nil : min(column, maxWidth)
     }
 }
 

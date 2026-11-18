@@ -40,6 +40,8 @@ struct CardEndRow: View {
     /// Why the last send failed, for the field opened again on its words.
     @State private var noteWhy: String?
     @State private var listOpen = false
+    /// The story's column, which a wide window's note field spans up to 680.
+    @State private var column: CGFloat = 0
 
     init(detail: CardDetail) {
         self.detail = detail
@@ -72,6 +74,7 @@ struct CardEndRow: View {
         }
         .animation(reduceMotion ? nil : NoteInPlace.change, value: noteOpen)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { column = $0 }
         .organicModal(isPresented: $picking, seed: 53, maxWidth: 480, closeLabel: L10n.Card.ResonatePicker.cancel,
                       dismissible: !resonating) {
             ResonatePickerContent(targetId: cardId, targetReferenceId: detail.card.referenceCardId, busy: $resonating) {
@@ -291,7 +294,7 @@ struct CardEndRow: View {
                 NoteWaitLine()
             }
         }
-        .frame(maxWidth: NoteInPlace.width(compact: compact, column: window.contentWidth) ?? .infinity, alignment: .leading)
+        .frame(maxWidth: NoteInPlace.width(compact: compact, column: column) ?? .infinity, alignment: .leading)
         // 12 above the keyboard once it has risen under the field (the page scrolls; nothing floats).
         .padding(.bottom, NoteInPlace.gapAbove)
         .id(Self.noteBlock)
