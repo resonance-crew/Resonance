@@ -165,7 +165,7 @@ struct CardEndRow: View {
 
     /// The first set of words that fits on one line, else the capsule in two (共振 alone on the first).
     private var capsule: some View {
-        let sets = EndRowLabels.candidates(language: Strings.shared.language, tapOn: tap.on, reply: replyFace)
+        let sets = EndRowLabels.candidates(language: Strings.shared.language, tapOn: tap.on, reply: replyFace, column: column)
         let short = sets[sets.count - 1]
         return ViewThatFits(in: .horizontal) {
             ForEach(Array(sets.enumerated()), id: \.offset) { _, words in
@@ -331,11 +331,15 @@ struct CardEndRow: View {
 
 // MARK: - The capsule's words
 
-/// The capsule's words (§U1.3): in Chinese 共振 · 寄小紙條 · 用卡片回應 where they fit, then 寫卡片 for the last; in English
-/// always the short Resonate · Note · Card. The reply segment says 修改 with a draft and 已回應 once published, whatever
-/// the width; the tap 已共振 once on. No segment is ever hidden: past the last set the capsule takes two lines.
+/// The capsule's words (§U1.3): in Chinese 共振 · 寄小紙條 · 用卡片回應 where they fit, then 寫卡片 for the last; in English,
+/// or in a column of `narrowRow` or less (a 375 phone's 335), only the short set (Resonate · Note · Card, 共振 · 寄小紙條 ·
+/// 寫卡片), as the web's `NARROW_ROW` and Android's `EndRowLayout.NARROW`. The reply segment says 修改 with a draft and 已回應 once published,
+/// whatever the width; the tap 已共振 once on. No segment is ever hidden: past the last set the capsule takes two lines.
 nonisolated enum EndRowLabels {
     enum Reply: Equatable { case answer, draft, published }
+
+    /// At this column width or less the capsule says its short words, whether the full ones squeeze in or not.
+    static let narrowRow: CGFloat = 340
 
     struct Words: Equatable {
         let tap: String
@@ -343,7 +347,8 @@ nonisolated enum EndRowLabels {
         let reply: String
     }
 
-    static func candidates(language: Strings.Language, tapOn: Bool, reply: Reply) -> [Words] {
+    /// The sets to try, widest first, for a story column `column` wide (0: not measured yet, so the full words first).
+    static func candidates(language: Strings.Language, tapOn: Bool, reply: Reply, column: CGFloat) -> [Words] {
         let tap = tapOn ? L10n.Card.Tap.on : L10n.Card.Tap.label
         func replyWords(short: Bool) -> String {
             switch reply {
@@ -353,7 +358,7 @@ nonisolated enum EndRowLabels {
             }
         }
         let short = Words(tap: tap, note: L10n.Card.Note.short, reply: replyWords(short: true))
-        guard language == .zhTW else { return [short] }
+        guard language == .zhTW, !(column > 0 && column <= narrowRow) else { return [short] }
         return [Words(tap: tap, note: L10n.Card.Note.entryShort, reply: replyWords(short: false)), short]
     }
 }
