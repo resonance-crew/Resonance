@@ -47,6 +47,53 @@ import UIKit
         #expect(pixels[i] > 240 && pixels[i + 1] > 240 && pixels[i + 2] > 240, "\(pixels[i ..< i + 3])")
     }
 
+    /// §U2.2: at night the blank disc stands 3 : 1 off the page (the web's `.disc path`: the muted ink at 66 % over the
+    /// cream). The night's cream-dark it wore was about 1.1 : 1 there, and the disc read as a bare ring. By day it is the
+    /// waiting disc's cream-dark, as before.
+    @Test func theBlankDiscStandsOffTheNightPage() throws {
+        func luminance(_ color: UIColor) -> CGFloat {
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            color.getRed(&r, green: &g, blue: &b, alpha: &a)
+            func lin(_ v: CGFloat) -> CGFloat { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+            return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+        }
+        func contrast(_ a: UIColor, _ b: UIColor) -> CGFloat {
+            let (x, y) = (luminance(a), luminance(b))
+            return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+        }
+        for accent in Accent.allCases {
+            let night = UITraitCollection { $0.userInterfaceStyle = .dark; $0.accent = accent }
+            let day = UITraitCollection { $0.userInterfaceStyle = .light; $0.accent = accent }
+            let page = Palette.resolved(.cream, accent: accent, scheme: .dark)
+            let disc = UIColor(FaceStack.discFill).resolvedColor(with: night)
+            #expect(contrast(disc, page) >= 3, "\(accent): \(contrast(disc, page))")
+            let dayDisc = UIColor(FaceStack.discFill).resolvedColor(with: day)
+            #expect(abs(luminance(dayDisc) - luminance(Palette.resolved(.creamDark, accent: accent, scheme: .light))) < 0.002, "\(accent)")
+        }
+
+        // And the stack draws it: the disc's middle, rendered at night on the night page, clears 3 : 1.
+        let renderer = ImageRenderer(content: FaceStack(faces: [], more: true).environment(\.colorScheme, .dark))
+        renderer.scale = 2
+        let image = try #require(renderer.cgImage)
+        let width = image.width, height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let context = try #require(CGContext(data: &pixels, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                             space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let i = ((height / 2) * width + width / 2) * 4
+        let middle = UIColor(red: CGFloat(pixels[i]) / 255, green: CGFloat(pixels[i + 1]) / 255, blue: CGFloat(pixels[i + 2]) / 255, alpha: 1)
+        let page = Palette.resolved(.cream, accent: .terracotta, scheme: .dark)
+        // The night disc itself (not the day's paper, which would clear 3 : 1 on the night page too).
+        var want: (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat) = (0, 0, 0, 0)
+        UIColor(FaceStack.discFill).resolvedColor(with: UITraitCollection { $0.userInterfaceStyle = .dark })
+            .getRed(&want.r, green: &want.g, blue: &want.b, alpha: &want.a)
+        var got: (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat) = (0, 0, 0, 0)
+        middle.getRed(&got.r, green: &got.g, blue: &got.b, alpha: &got.a)
+        #expect(abs(got.r - want.r) < 0.02 && abs(got.g - want.g) < 0.02 && abs(got.b - want.b) < 0.02, "\(pixels[i ..< i + 3])")
+        #expect(contrast(middle, page) >= 3, "\(pixels[i ..< i + 3]): \(contrast(middle, page))")
+    }
+
     @Test func aReaderHearsWhoResonatedNeverACount() {
         var tap = TapState(Fixture.tap(faces: ["dora", "eli"], more: true))
         let spoken = tap.spoken(viewer: "alice", language: .zhTW)

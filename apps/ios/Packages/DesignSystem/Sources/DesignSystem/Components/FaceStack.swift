@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Who resonated, as faces (round 26 §U2, the web's AvatarGroup): at most three avatars in a row, each stepping in
 /// over the one after it by 0.34 of a face, the first on top — then, when there are more, a blank paper disc (the
-/// avatar's own shape in `creamDark` with the faces' pen line, never a number: the owner wants who, not how many).
+/// avatar's own shape in ``discFill`` with the faces' pen line, never a number: the owner wants who, not how many).
 /// Under each face a pad of the same shape grown by 6, filled with the paper it sits on, so a face reads clear of
 /// the one it lies over — no stroke ring, no shadow (M3). The row's faces come and go by their ids (the viewer's
 /// own slides in first when they resonate); the caller animates the change.
@@ -39,6 +39,16 @@ public struct FaceStack: View {
     public static let size: CGFloat = 28
     /// The blank disc's seed (its own shape, the same on every card).
     static let discSeed: Double = 113
+    /// The blank disc's paper, the web's `.disc path` (AvatarGroup.module.css): the waiting disc's (`avatar-wait`, the
+    /// cream-dark) by day; at night the muted ink at 66 % over the cream — the night's cream-dark sat about 1.1 : 1
+    /// against the page and the disc read as a bare ring, where §U2.2 asks for 3 : 1. Still no one's colour.
+    public nonisolated static let discFill: Color = Palette.made { accent, scheme in
+        func token(_ t: PaletteToken) -> (L: Double, C: Double, H: Double, alpha: Double) {
+            OKLCHColor.components(Palette.oklch(t, accent: accent, scheme: scheme)) ?? (0, 0, 0, 1)
+        }
+        guard scheme == .dark else { return token(.avatarWait) }
+        return Palette.mixOKLCH(token(.textMuted), 0.66, token(.cream))
+    }
 
     public init(faces: [Face], more: Bool, size: CGFloat = FaceStack.size, paper: Color = Tokens.cream) {
         self.faces = Array(faces.prefix(Self.maxFaces))
@@ -72,7 +82,7 @@ public struct FaceStack: View {
             if more {
                 padded(seed: Self.discSeed) {
                     let shape = HandDrawnAvatar.shape(size: size, seed: Self.discSeed)
-                    shape.fill(Tokens.creamDark)
+                    shape.fill(Self.discFill)
                         .frame(width: size, height: size)
                         .overlay { shape.stroke(Tokens.avatarStroke, style: StrokeStyle(lineWidth: Tokens.ink, lineJoin: .round)) }
                 }
