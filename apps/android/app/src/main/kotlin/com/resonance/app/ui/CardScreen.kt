@@ -1,7 +1,15 @@
 package com.resonance.app.ui
 
+import android.os.SystemClock
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.resonance.app.DebugLaunch
+import kotlinx.coroutines.flow.drop
 import com.resonance.app.AppearanceStore
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.ui.platform.LocalView
@@ -248,6 +256,26 @@ class CardPageModel(private val session: Session, private val key: String, previ
         session.cardCache.page(key)?.let { session.cardCache.rememberPage(key, it.copy(detail = next)) }
     }
 
+    /** This page view's reading (round 26 §U7), from when the card was first shown: none for the author's own. */
+    internal var readingView by mutableStateOf<ReadingSession?>(null)
+        private set
+    private var readingSent: com.resonance.api.models.ReadingReportRequest? = null
+
+    /** Starts this page view's reading of [d] (once), at [now] (elapsed ms). */
+    internal fun startReading(d: com.resonance.api.models.CardDetail, now: Long) {
+        if (readingView == null) readingView = ReadingSession.of(d, now)
+    }
+
+    /** Sends where this page view's reading stands (its running totals), unless that is what was sent last. */
+    fun sendReading(now: Long) {
+        val view = readingView ?: return
+        val id = detail?.card?.id ?: return
+        val report = view.report(now)
+        if (report == readingSent || (report.activeSeconds <= 0.0 && report.progress <= 0.0)) return
+        readingSent = report
+        session.reportReading(id, report)
+    }
+
     /**
      * Reads the card unless what the page holds is current ([isCurrent]: read lately, and no change
      * since that concerns it — `lastChange` is the latest of `changes`); `retry` always does.
@@ -376,6 +404,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     var askAnonymousShare by remember { mutableStateOf(false) }
     val shareScope = rememberCoroutineScope()
     val share: (com.resonance.api.models.CardDetail) -> Unit = { d ->
+        model.readingView?.didShare()
         if (d.isOwner && d.anonymous) askAnonymousShare = true
         else shareScope.launch { sharing.share(d) }
     }
@@ -392,6 +421,26 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
         derivedStateOf { scrolledUnderBar(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset, byline.bottom) }
     }
     val progress = rememberReadingProgress(list, top)
+    // How this page view is read (round 26 §U7): someone else's card, from when it shows. A scroll or a touch keeps it
+    // active; the share of the story scrolled through is its progress; the end row in view (onRow) its end. Sent as
+    // the page goes behind something or away — the running totals, which the server keeps per view.
+    LaunchedEffect(detail?.card?.id) { detail?.let { model.startReading(it, SystemClock.elapsedRealtime()) } }
+    val readingView = model.readingView
+    LaunchedEffect(readingView) {
+        val view = readingView ?: return@LaunchedEffect
+        snapshotFlow { progress.target }.collect { view.progressed(it.toDouble()) }
+    }
+    LaunchedEffect(readingView) {
+        val view = readingView ?: return@LaunchedEffect
+        snapshotFlow { list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset }.drop(1).collect { view.input(SystemClock.elapsedRealtime()) }
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { model.readingView?.front(SystemClock.elapsedRealtime(), true) }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        val now = SystemClock.elapsedRealtime()
+        model.readingView?.front(now, false)
+        model.sendReading(now)
+    }
+    DisposableEffect(model) { onDispose { model.sendReading(SystemClock.elapsedRealtime()) } }
     // On a tablet the bar's middle takes the card's title once the article's own has gone up under
     // it (round 5, part C): where the title ends below the article's top, and whether it has.
     val chrome = LocalHeaderChrome.current
@@ -488,7 +537,22 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     val mascots by remember { AppearanceStore.shared.state.map { it.mascots } }.collectAsStateWithLifecycle(AppearanceStore.shared.state.value.mascots)
     val marks = remember(mascots) { if (mascots) MascotMarks() else null }
     CompositionLocalProvider(LocalMascotMarks provides marks) {
-    Box(Modifier.fillMaxSize().cream().onGloballyPositioned { progress.page = it }) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .cream()
+            .onGloballyPositioned { progress.page = it }
+            // A touch anywhere on the page is reading (§U7): watched, never taken.
+            .pointerInput(model) {
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent(PointerEventPass.Initial)
+                        model.readingView?.input(SystemClock.elapsedRealtime())
+                    }
+                }
+            }
+            .onPreviewKeyEvent { model.readingView?.input(SystemClock.elapsedRealtime()); false },
+    ) {
     Column(Modifier.fillMaxSize().padding(top = if (phase == "loaded") 0.dp else top)) {
         when (phase) {
             // The card as the list drew it, the story still shimmering below; or, knowing nothing yet,
@@ -565,6 +629,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 40.dp),
                                 onOpenCard = { open(Route.Card(card.id)) },
                                 onTapChanged = model::tapped,
+                                onRow = { row -> if (lineOnScreen(row, pageView.height)) model.readingView?.sawEnd() },
                             )
                             // The author's own published card: who resonated, where a reader's row would be (§U3).
                             else if (!trashedOwn && card.publishedAt != null) {

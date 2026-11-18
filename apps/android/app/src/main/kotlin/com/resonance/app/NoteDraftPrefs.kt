@@ -22,3 +22,16 @@ class NoteDraftPrefs(private val prefs: SharedPreferences) : NoteDrafts.Storage 
         const val FILE = "note-drafts"
     }
 }
+
+/**
+ * Where unsent reading reports wait on the device ([com.resonance.app.ui.ReadingReports], round 26 §U7):
+ * `reading-reports.xml`, one entry per account — outside the device's backup, as the notes' drafts are, and gone
+ * with the account's other local data on sign-out.
+ */
+class ReadingReportPrefs(private val prefs: SharedPreferences) : com.resonance.app.ui.ReadingReports.Storage {
+    override fun read(account: String): String? = prefs.getString("reports:$account", null)
+
+    override fun write(account: String, value: String?) {
+        prefs.edit().apply { if (value == null) remove("reports:$account") else putString("reports:$account", value) }.apply()
+    }
+}

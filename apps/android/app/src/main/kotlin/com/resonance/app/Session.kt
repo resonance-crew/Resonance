@@ -95,6 +95,8 @@ class Session(
     pictureHttp: OkHttpClient = OkHttpClient(),
     /** The loader the thread's pictures are read with, over [pictures]' client (ChatPictures.loader); null: none (a test). */
     pictureLoader: ((OkHttpClient) -> ImageLoader)? = null,
+    /** Reading reports not sent yet, per account (reading-reports.xml, round 26 §U7): emptied with the account. */
+    private val readingReports: com.resonance.app.ui.ReadingReports? = null,
 ) {
     enum class Phase { Restoring, SignedOut, SignedIn }
     sealed interface Profile {
@@ -261,6 +263,36 @@ class Session(
      * faces; forgotten with the account.
      */
     @Volatile var selfFace: com.resonance.api.models.Author? = null
+
+    /**
+     * A card page's reading report (round 26 §U7.2): kept on the device, then sent from the account's scope (leaving
+     * the page doesn't stop it); delivered, forgotten — else it waits for the next launch.
+     */
+    fun reportReading(cardId: String, report: com.resonance.api.models.ReadingReportRequest) {
+        val who = uid ?: return
+        readingReports?.keep(who, cardId, report)
+        scope.launch { sendReading(who, cardId, report) }
+    }
+
+    private suspend fun sendReading(who: String, cardId: String, report: com.resonance.api.models.ReadingReportRequest) {
+        try {
+            if (uid != who) return
+            reading.reportReading(cardId, report)
+            readingReports?.sent(who, cardId, report)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: ApiFailure) {
+            // Refused for good (a card gone, a report the contract doesn't take): it would be refused again.
+            if (e.status in 400..499 && e.status != 429) readingReports?.sent(who, cardId, report)
+        } catch (e: Exception) {
+            // Offline: it waits for the next launch.
+        }
+    }
+
+    private suspend fun sendPendingReadings(who: String) {
+        val pending = readingReports?.pending(who).orEmpty()
+        for (p in pending) sendReading(who, p.cardId, p.report)
+    }
     /** The signed-in account's unsent notes, by card (the note composer's words, kept until sent). */
     val noteDrafts: NoteDrafts.Account? get() = uid?.let { noteDraftStore?.of(it) }
     /** The signed-in account's unsent messages, by conversation (round 22 §4.4). */
@@ -349,6 +381,8 @@ class Session(
                 scope.launch { restoreKept(next) }
                 scope.launch { runCatching { onSignedIn() } }
                 scope.launch { registerPush() }
+                // What the last launch read and couldn't send (round 26 §U7.2).
+                scope.launch { sendPendingReadings(next) }
             }
         }
     }
@@ -393,6 +427,8 @@ class Session(
         }
         // The notes it wrote and didn't send: words to someone, kept for this account alone.
         noteDraftStore?.forget(who)
+        // How it read cards, not sent yet (round 26 §U7).
+        readingReports?.forget(who)
         selfFace = null
         // Its unsent messages (round 22) and the stickers it sent last, likewise.
         chatDrafts.forget(who)
