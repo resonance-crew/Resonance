@@ -47,6 +47,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -89,7 +90,7 @@ internal sealed interface NoteLine {
  * the last note didn't go. [focusTicket] grows each time the field is to take the focus.
  *
  * - 寄小紙條 ([segment]): opens it, focused; tapped again, an empty field closes, one with words only takes the focus
- *   back. Escape in the field the same.
+ *   back. Escape in an empty field closes it too; in one with words it lets go of the focus (the web's and iOS's).
  * - [mayNote] false (three letters the author hasn't answered): its place says card.note.waitForReply instead — no
  *   field; the draft stays.
  * - A draft not yet sent: open when the page opens (where a note may be left).
@@ -110,7 +111,7 @@ internal class NoteFieldState(draft: String, mayNote: Boolean) {
     /** The note's words as counted (trimmed, in UTF-16 units, as the web counts them). */
     val count: Int get() = text.trim().length
 
-    /** 寄小紙條 (or Escape in the field); with [mayNote] false its place holds only the wait line, which it closes. */
+    /** 寄小紙條 (or Escape in an empty field); with [mayNote] false its place holds only the wait line, which it closes. */
     fun segment(mayNote: Boolean = true) {
         when {
             !open -> {
@@ -185,11 +186,14 @@ internal class NoteFieldState(draft: String, mayNote: Boolean) {
 /** The field's question (item 2): 「哪一段讓你有共鳴？」 while the viewer's tap is on, else the note's own. */
 internal fun notePlaceholder(tapOn: Boolean): String = if (tapOn) L10n.Card.Tap.ask else L10n.Card.Note.placeholder
 
-/** How many lines the field grows to before it scrolls inside: 3 on a phone (2 in a short window), 5 wider. */
+/**
+ * How many lines the field grows to before it scrolls inside: 3 on a phone, 5 wider — and 2 in a short window whatever
+ * its width: a phone on its side is a Medium window, and over the keyboard it has the least room of all.
+ */
 internal fun noteMaxLines(phone: Boolean, shortWindow: Boolean): Int = when {
-    !phone -> 5
     shortWindow -> 2
-    else -> 3
+    phone -> 3
+    else -> 5
 }
 
 /**
@@ -267,6 +271,7 @@ private fun NoteCapsule(state: NoteFieldState, tapOn: Boolean, maxLines: Int, on
     var focused by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val relocate = remember { BringIntoViewRequester() }
     val density = LocalDensity.current
     var blockHeight by remember { mutableIntStateOf(0) }
@@ -331,10 +336,11 @@ private fun NoteCapsule(state: NoteFieldState, tapOn: Boolean, maxLines: Int, on
                     .padding(vertical = vertical)
                     .focusRequester(focus)
                     .onFocusChanged { focused = it.isFocused }
-                    // Escape is 寄小紙條 again: an empty field closes, one with words keeps them.
+                    // Escape: an empty field closes (寄小紙條 again); one with words keeps them and lets go of the focus —
+                    // 寄小紙條's way would only ask for the focus it has (a multi-line field types Tab, so Escape is the way out).
                     .onPreviewKeyEvent { e ->
                         if (e.type == KeyEventType.KeyDown && e.key == Key.Escape) {
-                            state.segment()
+                            if (state.text.isBlank()) state.segment() else focusManager.clearFocus()
                             true
                         } else false
                     }

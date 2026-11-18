@@ -141,5 +141,7 @@ class NoteInPlaceTest {
         assertEquals(3, noteMaxLines(phone = true, shortWindow = false))
         assertEquals(2, noteMaxLines(phone = true, shortWindow = true))
         assertEquals(5, noteMaxLines(phone = false, shortWindow = false))
+        // A phone on its side is a Medium window, and short: 2 lines over the keyboard, whatever its width.
+        assertEquals(2, noteMaxLines(phone = false, shortWindow = true))
     }
 }
