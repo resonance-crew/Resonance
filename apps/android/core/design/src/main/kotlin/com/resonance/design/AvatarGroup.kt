@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.resonance.design.generated.LocalResonanceColors
 import com.resonance.design.generated.Tokens
 import com.resonance.geometry.SegValue
 import com.resonance.geometry.WobRectOptions
@@ -54,7 +55,7 @@ data class GroupFace(val key: String, val initials: String, val imageUrl: String
 /**
  * The web's AvatarGroup (round 26 §U2): faces overlapping, each stepping in by [AvatarGroup.OVERLAP] of its [size],
  * the first in front; at most the faces given, then — when there are [more] — a blank paper disc (the avatar's own
- * shape on `--color-cream-dark` in the faces' pen: who, never how many). Under each face (and the disc) a pad of the
+ * shape in [PaletteMixes.blankDisc] and the faces' pen: who, never how many). Under each face (and the disc) a pad of the
  * same shape grown by [AvatarGroup.PAD] × 2, filled with the [paper] it sits on — so a face reads apart from the one
  * behind it with no stroke ring and no shadow.
  *
@@ -173,12 +174,13 @@ fun AvatarPad(size: Dp, seed: Double, paper: Color, content: @Composable () -> U
 }
 
 /**
- * The blank disc after the faces when there are more (round 26 §U2): the avatar's shape, the paper's darker cream,
- * the faces' pen line — never a number. On its pad, as a face is.
+ * The blank disc after the faces when there are more (round 26 §U2): the avatar's shape, the paper's darker cream by
+ * day and lifted toward the muted ink at night ([PaletteMixes.blankDisc], the web's and iOS's), the faces' pen line —
+ * never a number. On its pad, as a face is.
  */
 @Composable
 fun BlankAvatar(size: Dp, paper: Color, seed: Double = BLANK_SEED) {
-    val fill = Tokens.CreamDark
+    val fill = PaletteMixes.of(LocalResonanceColors.current).blankDisc
     val rim = Tokens.AvatarStroke
     AvatarPad(size, seed, paper) {
         val shape = remember(size, seed) { avatarShape(size, seed) }
