@@ -137,6 +137,13 @@ export function useNoteInPlace({ cardId, uid, mayNote }: { cardId: string; uid: 
         if (uid && readNoteDraft(uid, cardId)?.trim() === trimmed) forgetNoteDraft(uid, cardId);
       },
       (err) => {
+        // No pen name yet (the server asks before anything else): the words wait on the device while one is chosen.
+        if (err instanceof ApiError && err.status === 403 && err.code === 'forbidden') {
+          if (here.current && !textRef.current.trim()) setTextState(trimmed);
+          toast.dismiss();
+          router.push('/signup');
+          return;
+        }
         const conflict = err instanceof ApiError && err.code === 'conflict';
         const why = conflict
           ? t('waitForReply')

@@ -103,14 +103,13 @@ describe('the end row: three answers in one capsule (§U1)', () => {
   });
 
   it('keeps every segment when the words are too wide: short words first (寫卡片), then 共振 alone on a first line', async () => {
-    // A segment's natural width in this test: 16 a character and 40 of padding and glyph; the room 280, then 250.
+    // A segment's natural width in this test: 16 a character and 40 of padding and glyph; the row's room 280, then 250.
     let room = 280;
-    const scroll = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
-      if (this.getAttribute('role') !== 'group') return 0;
-      return [...this.querySelectorAll('button')].reduce((w, b) => w + [...(b.textContent ?? '')].length * 16 + 40, 0);
+    const scroll = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute('data-segment') ? [...(this.textContent ?? '')].length * 16 + 40 : 0;
     });
     const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
-      return this.getAttribute('role') === 'group' ? room : 0;
+      return this.hasAttribute('data-end-row') ? room : 0;
     });
     const first = renderPage(NO_TAPS, { locale: 'zh-TW' });
     expect(within(capsule()).getAllByRole('button').map((b) => b.textContent)).toEqual(['共振', '寄小紙條', '寫卡片']);

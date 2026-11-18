@@ -83,15 +83,29 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  // The webfonts settling change the words' widths (a fallback's are wider): weigh them again then.
+  const [fonts, setFonts] = useState(0);
+  useEffect(() => {
+    let live = true;
+    document.fonts?.ready.then(() => live && setFonts((n) => n + 1)).catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
   const tapOn = !!tap?.mine;
   const replyState = mine?.publishedAt ? 'done' : mine ? 'draft' : 'none';
-  // A new width, or new words (已共振, 已回應): weigh them again from the full words.
-  useLayoutEffect(() => setFit(base), [room, base, tapOn, replyState]);
+  // A new width, new words (已共振, 已回應) or the fonts in: weigh them again from the full words.
+  useLayoutEffect(() => setFit(base), [room, base, tapOn, replyState, fonts]);
   useLayoutEffect(() => {
     if (fit === 'split') return;
-    const bar = firstBar.current?.querySelector<HTMLElement>('[role="group"]');
-    if (bar && bar.scrollWidth > bar.clientWidth + 1) setFit(fit === 'full' ? 'short' : 'split');
-  }, [fit, room, tapOn, replyState]);
+    // The segments' own widths against the row's room — never the bar's scrollWidth, which its drawn backdrop (still
+    // at the old size for a moment after the words got shorter) would inflate.
+    const box = containerRef.current;
+    const buttons = firstBar.current?.querySelectorAll<HTMLElement>('[role="group"] > button');
+    if (!box || !buttons?.length) return;
+    const need = [...buttons].reduce((w, b) => w + Math.max(b.offsetWidth, b.scrollWidth), 0);
+    if (need > box.clientWidth + 1) setFit(fit === 'full' ? 'short' : 'split');
+  }, [fit, room, tapOn, replyState, fonts]);
 
   const onTap = useCallback(async () => {
     if (!user) return router.push('/signin');

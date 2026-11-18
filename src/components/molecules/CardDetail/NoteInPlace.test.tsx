@@ -145,6 +145,16 @@ describe('the note, in place', () => {
     expect(screen.queryByText('Only the author can see this')).toBeNull();
   });
 
+  it('asks for a pen name first when the server says there is none, the words kept', async () => {
+    sendNote.mockRejectedValueOnce(new ApiError(403, 'forbidden', 'Choose a pen name first.'));
+    renderPage();
+    await user().click(noteSegment());
+    await user().type(field()!, 'first words');
+    await user().click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/signup'));
+    expect(readNoteDraft('viewer', 'c1')).toBe('first words');
+  });
+
   it('offers 再寄一次 in a toast when the page is gone, opening the card with the field', async () => {
     let fail!: (e: unknown) => void;
     sendNote.mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)));
