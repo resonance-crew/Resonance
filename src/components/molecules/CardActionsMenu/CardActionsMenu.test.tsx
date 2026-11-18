@@ -331,7 +331,7 @@ describe('CardActionsMenu', () => {
     await userEvent.click(screen.getByText('Delete'));
     await userEvent.click(await screen.findByRole('button', { name: 'Moved to the trash · Undo "My answer"' }));
     const notice = await screen.findByRole('dialog', { name: 'Restored' });
-    expect(notice).toHaveTextContent('This card is back, but it no longer resonates with the card it answered.');
+    expect(notice).toHaveTextContent('This card is back, but it no longer replies to the card it answered.');
   });
 
   it('shows no toast on the card\'s own page, which shows its banner instead', async () => {

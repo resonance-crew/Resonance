@@ -87,7 +87,7 @@ describe('TrashActionsMenu', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     await userEvent.click(screen.getByText('Restore'));
     expect(await screen.findByRole('dialog', { name: 'Restored' })).toHaveTextContent(
-      'This card is back, but it no longer resonates with the card it answered.',
+      'This card is back, but it no longer replies to the card it answered.',
     );
   });
 

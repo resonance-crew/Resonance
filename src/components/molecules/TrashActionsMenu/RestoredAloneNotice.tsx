@@ -6,7 +6,7 @@ import { useRestoredAloneNotice } from '@/lib/data/trash';
 import styles from '@/components/molecules/CardActionsMenu/CardActionsMenu.module.css';
 
 /**
- * 「已還原 — 這張卡片回來了，但不再與原本那張卡片共振」: a resonance restored
+ * 「已還原 — 這張卡片回來了，但不再回應原本那張卡片」: a reply card restored
  * from the trash that came back on its own (another of the viewer's cards
  * answers its original now, or the original answers it). One way out, as a
  * refused change's notice has. Drawn once by each page that can restore a

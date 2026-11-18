@@ -393,7 +393,6 @@
       "remove": "Remove bookmark"
     },
     "resonanceSection": {
-      "title": "Cards replying to this one",
       "sourceTitle": "Replying to",
       "empty": "No card has replied to this one yet — be the first",
       "showAll": "Show all {count}"
@@ -795,7 +794,7 @@
       "update": "Save changes",
       "updating": "Saving…",
       "anonymousVisibility": "An anonymous card is either public or only for you",
-      "resonanceReaches": "A public resonance under your name lets the original's author know it's you",
+      "resonanceReaches": "A public reply under your name lets the original's author know it's you",
       "resonanceQuiet": "The original's author won't be notified",
       "failed": "Couldn't publish — try again",
       "rateLimited": "That's the limit for today — try again tomorrow",
@@ -867,7 +866,7 @@
     "emptyPublished": "Your first card becomes the point this world starts arranging itself around",
     "emptyDraft": "No private cards",
     "emptyLinked": "No one has linked a card to you yet",
-    "emptyResonated": "No resonances yet",
+    "emptyResonated": "No replies yet",
     "emptyBookmarks": "When a story is too good to forget, press the bookmark — it will wait here quietly, only for you",
     "trashHint": "Cards stay in the trash for {days} days, then they're deleted forever",
     "trashAnonymousNotes": "When an anonymous card goes to the trash, the notes left on it are deleted",
@@ -908,7 +907,7 @@
       "restoredAnonymous": "Restored as an anonymous card",
       "restoredConnections": "Restored for your connections only",
       "restoredPrivate": "Restored as a private card",
-      "restoredAloneBody": "This card is back, but it no longer resonates with the card it answered.",
+      "restoredAloneBody": "This card is back, but it no longer replies to the card it answered.",
       "deleteForever": "Delete forever",
       "deleteForeverConfirmTitle": "Delete this card forever?",
       "deletedForever": "Deleted forever",

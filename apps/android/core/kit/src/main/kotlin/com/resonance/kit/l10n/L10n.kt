@@ -677,8 +677,6 @@ object L10n {
             val remove: String get() = Strings.string("card.bookmark.remove")
         }
         object ResonanceSection {
-            /** Cards replying to this one */
-            val title: String get() = Strings.string("card.resonanceSection.title")
             /** Replying to */
             val sourceTitle: String get() = Strings.string("card.resonanceSection.sourceTitle")
             /** No card has replied to this one yet — be the first */
@@ -1437,7 +1435,7 @@ object L10n {
             val updating: String get() = Strings.string("write.publishPanel.updating")
             /** An anonymous card is either public or only for you */
             val anonymousVisibility: String get() = Strings.string("write.publishPanel.anonymousVisibility")
-            /** A public resonance under your name lets the original's author know it's you */
+            /** A public reply under your name lets the original's author know it's you */
             val resonanceReaches: String get() = Strings.string("write.publishPanel.resonanceReaches")
             /** The original's author won't be notified */
             val resonanceQuiet: String get() = Strings.string("write.publishPanel.resonanceQuiet")
@@ -1570,7 +1568,7 @@ object L10n {
         val emptyDraft: String get() = Strings.string("me.emptyDraft")
         /** No one has linked a card to you yet */
         val emptyLinked: String get() = Strings.string("me.emptyLinked")
-        /** No resonances yet */
+        /** No replies yet */
         val emptyResonated: String get() = Strings.string("me.emptyResonated")
         /** When a story is too good to forget, press the bookmark — it will wait here quietly, only for you */
         val emptyBookmarks: String get() = Strings.string("me.emptyBookmarks")
@@ -1649,7 +1647,7 @@ object L10n {
             val restoredConnections: String get() = Strings.string("me.actions.restoredConnections")
             /** Restored as a private card */
             val restoredPrivate: String get() = Strings.string("me.actions.restoredPrivate")
-            /** This card is back, but it no longer resonates with the card it answered. */
+            /** This card is back, but it no longer replies to the card it answered. */
             val restoredAloneBody: String get() = Strings.string("me.actions.restoredAloneBody")
             /** Delete forever */
             val deleteForever: String get() = Strings.string("me.actions.deleteForever")

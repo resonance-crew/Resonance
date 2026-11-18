@@ -393,7 +393,6 @@
       "remove": "取消收藏"
     },
     "resonanceSection": {
-      "title": "回應這篇的卡片",
       "sourceTitle": "這篇回應的卡片",
       "empty": "還沒有卡片回應這篇，成為第一個吧",
       "showAll": "查看全部 {count} 篇"
@@ -795,8 +794,8 @@
       "update": "儲存修改",
       "updating": "儲存中⋯",
       "anonymousVisibility": "匿名卡片只能公開，或設為只有自己看得到",
-      "resonanceReaches": "公開並署名的共振，會讓原作者知道是你",
-      "resonanceQuiet": "這張共振不會通知原作者",
+      "resonanceReaches": "公開並署名的回應，會讓原作者知道是你",
+      "resonanceQuiet": "這張回應卡不會通知原作者",
       "failed": "沒發布成功，再試一次",
       "rateLimited": "今天的次數用完了，明天再試",
       "saveTitle": "儲存私人卡",
@@ -866,7 +865,7 @@
     },
     "emptyPublished": "你的第一張卡片，會成為這個世界為你排列的起點",
     "emptyDraft": "沒有私人卡",
-    "emptyResonated": "還沒共振過別人的卡片",
+    "emptyResonated": "還沒用卡片回應過別人",
     "emptyLinked": "還沒有人用卡片連結你",
     "emptyBookmarks": "讀到捨不得忘記的故事時，按下書籤——它們會安靜地待在這裡，只有你看得到",
     "trashHint": "卡片會在垃圾桶保留 {days} 天，之後永久刪除",
@@ -908,7 +907,7 @@
       "restoredAnonymous": "已還原為匿名公開卡片",
       "restoredConnections": "已還原，僅連結的人看得到",
       "restoredPrivate": "已還原為私人卡",
-      "restoredAloneBody": "這張卡片回來了，但不再與原本那張卡片共振",
+      "restoredAloneBody": "這張卡片回來了，但不再回應原本那張卡片",
       "deleteForever": "永久刪除",
       "deleteForeverConfirmTitle": "永久刪除這張卡片？",
       "deletedForever": "已永久刪除",

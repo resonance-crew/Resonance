@@ -175,7 +175,7 @@ export const RESTORED_TOAST = {
   connections: 'restoredConnections',
 } as const satisfies Record<RestoredAs, string>;
 
-// "This card is back, but no longer resonates with the card it answered":
+// "This card is back, but it no longer replies to the card it answered":
 // said in a dialog, which must outlive the control that restored the card —
 // the toast's 復原 does it after the card's own ⋯ has left the page with the
 // card. So whether it is up is kept here, and each page that can restore a

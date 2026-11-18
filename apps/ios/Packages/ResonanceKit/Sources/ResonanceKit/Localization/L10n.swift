@@ -675,8 +675,6 @@ public enum L10n {
             public static var remove: String { Strings.shared.string("card.bookmark.remove") }
         }
         public enum ResonanceSection {
-            /// Cards replying to this one
-            public static var title: String { Strings.shared.string("card.resonanceSection.title") }
             /// Replying to
             public static var sourceTitle: String { Strings.shared.string("card.resonanceSection.sourceTitle") }
             /// No card has replied to this one yet — be the first
@@ -1435,7 +1433,7 @@ public enum L10n {
             public static var updating: String { Strings.shared.string("write.publishPanel.updating") }
             /// An anonymous card is either public or only for you
             public static var anonymousVisibility: String { Strings.shared.string("write.publishPanel.anonymousVisibility") }
-            /// A public resonance under your name lets the original's author know it's you
+            /// A public reply under your name lets the original's author know it's you
             public static var resonanceReaches: String { Strings.shared.string("write.publishPanel.resonanceReaches") }
             /// The original's author won't be notified
             public static var resonanceQuiet: String { Strings.shared.string("write.publishPanel.resonanceQuiet") }
@@ -1568,7 +1566,7 @@ public enum L10n {
         public static var emptyDraft: String { Strings.shared.string("me.emptyDraft") }
         /// No one has linked a card to you yet
         public static var emptyLinked: String { Strings.shared.string("me.emptyLinked") }
-        /// No resonances yet
+        /// No replies yet
         public static var emptyResonated: String { Strings.shared.string("me.emptyResonated") }
         /// When a story is too good to forget, press the bookmark — it will wait here quietly, only for you
         public static var emptyBookmarks: String { Strings.shared.string("me.emptyBookmarks") }
@@ -1647,7 +1645,7 @@ public enum L10n {
             public static var restoredConnections: String { Strings.shared.string("me.actions.restoredConnections") }
             /// Restored as a private card
             public static var restoredPrivate: String { Strings.shared.string("me.actions.restoredPrivate") }
-            /// This card is back, but it no longer resonates with the card it answered.
+            /// This card is back, but it no longer replies to the card it answered.
             public static var restoredAloneBody: String { Strings.shared.string("me.actions.restoredAloneBody") }
             /// Delete forever
             public static var deleteForever: String { Strings.shared.string("me.actions.deleteForever") }

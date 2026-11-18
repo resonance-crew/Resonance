@@ -37,7 +37,7 @@ const drawn = () => Array.from(document.querySelectorAll('a')).map((a) => a.getA
 describe('ResonanceCards', () => {
   it('draws the full card, with its excerpt and its tags', () => {
     renderWithIntl(<ResonanceCards cards={[card('a')]} authors={{}} />);
-    expect(screen.getByRole('heading', { level: 2, name: en.card.resonanceSection.title })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: en.card.replies.title })).toBeInTheDocument();
     expect(screen.getAllByText('The words of answer a.').length).toBeGreaterThan(0);
     expect(screen.getAllByText('rain').length).toBeGreaterThan(0);
     // Three or fewer: nothing more to show.
