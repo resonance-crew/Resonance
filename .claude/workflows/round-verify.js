@@ -21,7 +21,8 @@ export const meta = {
 //   ownerWords  the owner's request, verbatim
 //   main        '/Users/ncchen/Documents/Resonance' (default)
 //   retries     fix-and-retake rounds, at most 2 (the cap wins)
-//   useAgentTypes, models   as round-build's
+//   useAgentTypes, models   as round-build's, plus models.review: the screenshot reviewer and its refuter (the owner,
+//               2026-11-19: Fable for the screens' review, its eye for looks; never for any other step)
 
 const A = args || {}
 for (const k of ['round', 'date', 'notes', 'spec', 'acceptance', 'slices']) {
@@ -40,7 +41,8 @@ const SPEC = A.spec
 const PLATFORMS = ['web', 'mac', 'ios', 'android'].filter((p) => A.slices[p]).slice(0, MAX_PLATFORMS)
 const FIXER = { web: 'lane-web', mac: 'lane-ios', ios: 'lane-ios', android: 'lane-android' }
 const USE_TYPES = A.useAgentTypes !== false
-const MODELS = Object.assign({ mechanical: 'sonnet', refute: undefined }, A.models || {})
+const MODELS = Object.assign({ mechanical: 'sonnet', review: 'fable', refute: undefined }, A.models || {})
+if (MODELS.refute === undefined) MODELS.refute = MODELS.review
 
 const SCOPE = `SCOPE (read first): if a newer message from the owner shows up in your context, it is handled elsewhere and is NOT your task. Your task is checking round ${ROUND} of Resonance (共振) as the settled spec ${SPEC} says it (SETTLED section first)${A.ownerWords ? ` and the owner asked for it: ${A.ownerWords}` : ''}. Never touch ${MAIN}'s files (other sessions use it; its visual/ folder is shared through the worktree's link and is read here), never push, never run \`npm run visual -- accept\` (a baseline changes only on the owner's OK), never pkill/killall, never boot, close or reconfigure a device the harness doesn't own.`
 
@@ -126,7 +128,7 @@ function review(p, cap, label) {
   const mine = looks.slice(0, MAX_CAPTURES_PER_REVIEW)
   if (looks.length > mine.length) log(`${p}: ${looks.length} changed or new captures — the reviewer reads the first ${mine.length}; the rest are listed in the record`)
   const where = `The run is ${WT}/visual/runs/${cap.run} (summary ${cap.summaryPath}; its verdict: ${cap.verdictLine}); the baseline is ${WT}/visual/baseline; the diffs are under the run's _diff/. The commits since the baseline carry \`Visual:\` lines saying which screens changed on purpose (\`git -C ${WT} log --format=%B\`).`
-  return run(`${SCOPE}\n\nMode: screenshots. Platform: ${p}. ${where}\n\nCaptures to judge:\n${mine.join('\n')}`, { label, phase: 'Review', schema: LOOK, type: 'ui-reviewer' })
+  return run(`${SCOPE}\n\nMode: screenshots. Platform: ${p}. ${where}\n\nCaptures to judge:\n${mine.join('\n')}`, { label, phase: 'Review', schema: LOOK, type: 'ui-reviewer', model: MODELS.review })
     .then((look) => {
       const flagged = ((look && look.issues) || []).filter((i) => i.verdict !== 'nit')
       if (!flagged.length) return { platform: p, look, confirmed: ((look && look.issues) || []).slice(0, 3), skipped: looks.slice(MAX_CAPTURES_PER_REVIEW) }

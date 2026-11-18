@@ -86,16 +86,15 @@ while the agents' frontmatter and the table differ). The workflows' own mechanic
 | lane-web / lane-ios / lane-android | opus | the implementation; quality here decides how many fix rounds follow |
 | critic | opus | taste and judgment from the owner's words — the reason the role exists |
 | post-merge-reviewer | opus | traced defects across three platforms; round 23's nine real findings came from this step |
-| ui-reviewer | opus | reads pictures against a spec; the calibration examples assume a careful reader |
+| ui-reviewer | fable | reads pictures against a spec and judges how they look; the owner's word of 2026-11-19: Fable for the screens' review, its eye for looks, and for nothing else (round-verify's `args.models.review`, its refuter too) |
 | workflow preflight, merge-settle, capture runner, record writer | sonnet (`args.models.mechanical`) | run commands, copy values, write down data they are handed — no judgment |
 | the merge itself | inherits the session's | conflicts across three platforms are judgment |
 
-Opus for every agent is the owner's word of 2026-11-13 (not the Fable tier). The memory files say why cost still
+Opus for every agent is the owner's word of 2026-11-13 (not the Fable tier), except the screens' reviewer: Fable, the owner's word of 2026-11-19 (「画面审查的 agent…使用 Fable 这个模型，它在美感比较好，但是呢，其他任务不要指派给它」). The memory files say why cost still
 matters: all-Opus fan-outs used the plan's quota up on 2026-10-10 (`quota-light-rounds.md`), and eight concurrent
 agents hit the session limit on 2026-09-30 (`subagent-model.md`). **Could safely go cheaper, in this order:** the
 refute passes (`args.models.refute: "sonnet"` — refuting a written claim against the code is narrower than finding
-it), the record writer and capture runner (already sonnet; haiku likely enough), and `ui-reviewer` once a few rounds
-show its verdicts match the calibration cases. Keep the lanes and the critic on opus.
+it), the record writer and capture runner (already sonnet; haiku likely enough), and never move another role to Fable. Keep the lanes and the critic on opus.
 
 ## Caps
 

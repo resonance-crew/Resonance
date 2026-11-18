@@ -4,5 +4,5 @@
   "lane-android": "opus",
   "critic": "opus",
   "post-merge-reviewer": "opus",
-  "ui-reviewer": "opus"
+  "ui-reviewer": "fable"
 }

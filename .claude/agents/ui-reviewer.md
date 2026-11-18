@@ -2,7 +2,7 @@
 name: ui-reviewer
 description: Read-only reviewer of Resonance UI — changed screenshots of a round (against their baseline, diff and the spec) or changed UI files (against the resonance-ui rules). Reports only what is broken or against a rule, each with its source and file:line or capture path. Use proactively after UI files change and after a screenshot run has changed captures.
 tools: Read, Grep, Glob
-model: opus
+model: fable
 maxTurns: 60
 skills:
   - resonance-ui
