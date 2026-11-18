@@ -3,7 +3,9 @@ import ResonanceAPI
 
 /// The pushes an account wants (GET/PATCH /api/v1/me/notifications): messages
 /// and notes sent to it (`messages`, on until turned off — an older server
-/// leaves it out, which means on), and two beyond the ones answering it, off
+/// leaves it out, which means on), someone resonating with its card
+/// (`resonanceTaps`, round 26: on until turned off the same way), and two
+/// beyond the ones answering it, off
 /// until turned on: "a card for tonight" (`picks`) and new cards from the
 /// people it is connected with (`connectionCards`). The server keeps the
 /// choice, so it follows the account to every device. Whether this phone may
@@ -13,7 +15,7 @@ public struct NotificationSettingsAPI: Sendable {
 
     /// One switch, as the contract names it.
     public enum Switch: String, CaseIterable, Sendable {
-        case messages, picks, connectionCards
+        case messages, resonanceTaps, picks, connectionCards
     }
 
     let client: Client
@@ -37,6 +39,7 @@ public struct NotificationSettingsAPI: Sendable {
         case .messages: Components.Schemas.UpdateNotificationSettingsRequest(messages: on)
         case .picks: Components.Schemas.UpdateNotificationSettingsRequest(picks: on)
         case .connectionCards: Components.Schemas.UpdateNotificationSettingsRequest(connectionCards: on)
+        case .resonanceTaps: Components.Schemas.UpdateNotificationSettingsRequest(resonanceTaps: on)
         }
         switch try await client.updateNotificationSettings(body: .json(body)) {
         case let .ok(r): return try r.body.json
@@ -54,6 +57,7 @@ extension Components.Schemas.NotificationSettings {
             case .messages: messages ?? true
             case .picks: picks
             case .connectionCards: connectionCards
+            case .resonanceTaps: resonanceTaps ?? true
             }
         }
         set {
@@ -61,6 +65,7 @@ extension Components.Schemas.NotificationSettings {
             case .messages: messages = newValue
             case .picks: picks = newValue
             case .connectionCards: connectionCards = newValue
+            case .resonanceTaps: resonanceTaps = newValue
             }
         }
     }

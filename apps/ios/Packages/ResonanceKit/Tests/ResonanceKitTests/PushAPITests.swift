@@ -25,6 +25,8 @@ struct PushAPITests {
         #expect(sent["locale"] as? String == "zh-TW")
         #expect(sent["appVersion"] as? String == "2.0.0")
         #expect(sent["timeZone"] as? String == "Asia/Taipei")
+        // Round 26 §U8: this build draws the tap's and the read summary's bell rows, and says so.
+        #expect(sent["capabilities"] as? [String] == ["bell-tap", "bell-read-summary"])
     }
 
     @Test func aTimeZoneTheContractWouldRefuseGoesAsNone() async throws {
@@ -88,6 +90,17 @@ struct PushRegistrationTests {
                              timeZone: "Asia/Tokyo"),
         ]
         for registration in changed { #expect(!PushRegistration.isFresh(kept, registration, now: now)) }
+    }
+
+    @Test func whatABuildBeforeTheCapabilitiesKeptIsSentAgain() {
+        // Round 26: that build kept seven fields (no capabilities) — the same registration otherwise, a minute ago.
+        let older = ["install-1", "alice", "fcm-token", "zh-TW", "2.0.0", "Asia/Taipei", String(at.timeIntervalSince1970)]
+            .joined(separator: "\n")
+        #expect(!PushRegistration.isFresh(older, sent, now: at.addingTimeInterval(60)))
+        // A build that draws more than the one that sent it sends again.
+        let more = PushRegistration(installationId: "install-1", uid: "alice", token: "fcm-token", language: "zh-TW", version: "2.0.0",
+                                    timeZone: "Asia/Taipei", capabilities: PushAPI.capabilities + ["bell-more"])
+        #expect(!PushRegistration.isFresh(kept, more, now: at.addingTimeInterval(60)))
     }
 
     @Test func whatABuildBeforeTheTimeZoneKeptIsSentAgain() {

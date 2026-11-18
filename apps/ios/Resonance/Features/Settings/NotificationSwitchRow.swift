@@ -7,7 +7,8 @@ import SwiftUI
 /// Android. VoiceOver reads the switch, the hint as its hint.
 struct NotificationSwitchRow: View {
     let label: String
-    let hint: String
+    /// What the switch is for, under its label (none for 有人共振, whose label says it all).
+    let hint: String?
     let seed: Double
     @Binding var isOn: Bool
     @Environment(\.isEnabled) private var isEnabled
@@ -17,14 +18,16 @@ struct NotificationSwitchRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(label).font(AppFonts.body(16)).foregroundStyle(Tokens.text)
                     .fixedSize(horizontal: false, vertical: true)
-                CSSText(hint, font: AppFonts.scaledUIFont(.body, size: Tokens.hintSize), lineHeight: 1.55, color: Tokens.UI.textMuted)
+                if let hint {
+                    CSSText(hint, font: AppFonts.scaledUIFont(.body, size: Tokens.hintSize), lineHeight: 1.55, color: Tokens.UI.textMuted)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .onTapGesture { if isEnabled { isOn.toggle() } }
             .accessibilityHidden(true)
             OrganicToggle(isOn: $isOn, label: label, seed: seed)
-                .accessibilityHint(hint)
+                .accessibilityHint(hint ?? "")
                 .padding(.top, 1)
         }
     }
@@ -48,9 +51,11 @@ struct NotificationsDeniedNotice: View {
 
 extension NotificationSettingsAPI.Switch {
     /// Its label and hint, in the interface's language of the moment, and its toggle's seed (the web's).
-    var row: (label: String, hint: String, seed: Double) {
+    var row: (label: String, hint: String?, seed: Double) {
         switch self {
         case .messages: (L10n.Settings.Notifications.messages, L10n.Settings.Notifications.messagesHint, 79)
+        // 有人共振 (round 26 §U8): on until turned off, as messages are; its words need no hint.
+        case .resonanceTaps: (L10n.Settings.Notifications.taps, nil, 73)
         case .picks: (L10n.Settings.Notifications.picks, L10n.Settings.Notifications.picksHint, 83)
         // 91, as the web's: 89's track pinched at its middle (a peanut, QA r4).
         case .connectionCards: (L10n.Settings.Notifications.connectionCards, L10n.Settings.Notifications.connectionCardsHint, 91)

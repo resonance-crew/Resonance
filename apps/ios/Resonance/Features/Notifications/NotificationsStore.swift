@@ -23,6 +23,11 @@ final class NotificationsStore {
         /// A note or resonance on one of this person's anonymous cards (`payload.anonymous`): it opens
         /// the card, never a thread with whoever wrote it (see `NotificationsScreen.route`).
         var anonymous = false
+        /// A resonance tap's row (round 26 §R2): everyone it names, newest first (`fromUserId` is the first).
+        var fromUserIds: [String] = []
+        /// The weekly read summary's row (§R4): how many read the card to the end, and whether someone read it again.
+        var readers: Int?
+        var reread = false
         var isUnread: Bool { readAt == nil }
     }
 
@@ -107,18 +112,23 @@ final class NotificationsStore {
     /// A bell row's fields as the list draws them.
     nonisolated static func item(id: String, data: [String: Any]) -> Item {
         let payload = data["payload"] as? [String: Any] ?? [:]
+        let tappers = (payload["fromUserIds"] as? [Any])?.compactMap { $0 as? String } ?? []
         return Item(
             id: id,
             type: data["type"] as? String ?? "",
             fromHandle: payload["fromHandle"] as? String,
-            fromUserId: payload["fromUserId"] as? String,
+            // A tap's row names its newest tapper first (its face, its name in bold).
+            fromUserId: payload["fromUserId"] as? String ?? tappers.first,
             cardId: payload["cardId"] as? String,
             preview: payload["preview"] as? String,
             noteId: payload["noteId"] as? String,
             count: (payload["count"] as? NSNumber)?.intValue,
             readAt: (data["readAt"] as? Timestamp)?.dateValue(),
             createdAt: (data["createdAt"] as? Timestamp)?.dateValue(),
-            anonymous: payload["anonymous"] as? Bool == true
+            anonymous: payload["anonymous"] as? Bool == true,
+            fromUserIds: tappers,
+            readers: (payload["readers"] as? NSNumber)?.intValue,
+            reread: payload["reread"] as? Bool == true
         )
     }
 }

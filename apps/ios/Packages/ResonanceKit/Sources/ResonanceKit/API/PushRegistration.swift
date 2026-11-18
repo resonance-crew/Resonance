@@ -18,30 +18,35 @@ public struct PushRegistration: Equatable, Sendable {
     public let version: String
     /// `TimeZone.current.identifier` (travel, or a change in the system's settings, sends it again).
     public let timeZone: String
+    /// What this build declares it draws (``PushAPI/capabilities``, round 26): a build that draws more sends again.
+    public let capabilities: [String]
 
-    public init(installationId: String, uid: String, token: String, language: String, version: String, timeZone: String) {
+    public init(installationId: String, uid: String, token: String, language: String, version: String, timeZone: String,
+                capabilities: [String] = PushAPI.capabilities) {
         self.installationId = installationId
         self.uid = uid
         self.token = token
         self.language = language
         self.version = version
         self.timeZone = timeZone
+        self.capabilities = capabilities
     }
 
     private static let separator = "\n"
 
     /// As kept on the device, with when it was sent.
     public func encode(sentAt: Date) -> String {
-        [installationId, uid, token, language, version, timeZone, String(sentAt.timeIntervalSince1970)].joined(separator: Self.separator)
+        [installationId, uid, token, language, version, timeZone, capabilities.joined(separator: ","),
+         String(sentAt.timeIntervalSince1970)].joined(separator: Self.separator)
     }
 
     /// Whether `wanted` was sent (as `kept` says) recently enough not to send it again. What a
-    /// build before the time zone kept (one field fewer) is sent again, time zone and all.
+    /// build before the time zone or the capabilities kept (a field fewer) is sent again, all of it.
     public static func isFresh(_ kept: String?, _ wanted: PushRegistration, now: Date) -> Bool {
-        guard let parts = kept?.components(separatedBy: separator), parts.count == 7,
-              let seconds = TimeInterval(parts[6]) else { return false }
+        guard let parts = kept?.components(separatedBy: separator), parts.count == 8,
+              let seconds = TimeInterval(parts[7]) else { return false }
         let sent = PushRegistration(installationId: parts[0], uid: parts[1], token: parts[2], language: parts[3], version: parts[4],
-                                    timeZone: parts[5])
+                                    timeZone: parts[5], capabilities: parts[6].isEmpty ? [] : parts[6].components(separatedBy: ","))
         let age = now.timeIntervalSince(Date(timeIntervalSince1970: seconds))
         // A clock set back counts as stale too.
         return sent == wanted && age >= 0 && age < ttl

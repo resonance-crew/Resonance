@@ -97,7 +97,7 @@ struct NotificationsScreen: View {
             session.notifications.markRead(item)
             if let route = Self.route(for: item) { openRoute(route) }
         } label: {
-            NotificationRowLabel(sentence: BellSentence.of(item),
+            NotificationRowLabel(sentence: BellSentence.of(item, handle: Self.handle(of: item, extras: extras)),
                                  preview: Self.preview(of: item),
                                  unread: item.isUnread,
                                  face: Self.face(of: item, extras: extras),
@@ -110,6 +110,13 @@ struct NotificationsScreen: View {
         .buttonStyle(BandWashStyle(top: item.id, bottom: below, cut: window.layoutClass != .compact))
         // On a wide window the row — its band and its tap — is the reading column, the band cut at its sides.
         .readableColumn()
+    }
+
+    /// Who a row names: the pen name it kept — or, a tap's row keeping none (round 26), its newest tapper's as read.
+    static func handle(of item: NotificationsStore.Item, extras: BellExtras) -> String {
+        if let handle = item.fromHandle { return handle }
+        if case let .found(person) = extras.person(item.fromUserId) { return person.handle }
+        return ""
     }
 
     /// A note's own words (a note IS what it says), nothing for any other row.
@@ -154,7 +161,9 @@ struct NotificationsScreen: View {
     static func route(for item: NotificationsStore.Item) -> Route? {
         if item.anonymous, ["note", "resonance"].contains(item.type) { return item.cardId.map(Route.card) }
         switch item.type {
-        case "translation_done", "card_link": return item.cardId.map(Route.card)
+        // Round 26: someone resonated (named and anonymous cards alike — a tap is no way to be written to), and the
+        // weekly read summary: both open the card, never a thread.
+        case "translation_done", "card_link", "resonance_tap", "read_summary": return item.cardId.map(Route.card)
         // NotificationBell: these open the conversation with that person; a note arrives quoted, ready to answer.
         case "note":
             let note = item.cardId.flatMap { card in item.noteId.map { MessagingAPI.NoteRef(cardId: card, noteId: $0) } }
@@ -272,25 +281,38 @@ nonisolated struct BellSentence: Equatable {
 
     /// The rows that name who did it.
     static func namesSomeone(_ type: String) -> Bool {
-        ["invite", "invite_accepted", "message", "resonance", "note", "card_link"].contains(type)
+        ["invite", "invite_accepted", "message", "resonance", "note", "card_link", "resonance_tap"].contains(type)
     }
 
     /// The glyph a row with nobody behind it wears instead of a face.
     static func glyph(_ type: String) -> IconName {
         switch type {
-        case "resonance_summary": .sparkle
+        case "resonance_summary", "read_summary": .sparkle
         case "translation_done": .globe
         case "invite_expired": .users
         default: .bell
         }
     }
 
-    static func of(_ item: NotificationsStore.Item) -> BellSentence {
-        of(type: item.type, handle: item.fromHandle ?? "", count: item.count ?? 0)
+    static func of(_ item: NotificationsStore.Item, handle: String? = nil) -> BellSentence {
+        switch item.type {
+        // 「小安和另外 2 人與你的卡片共振了」: the newest named, the others counted.
+        case "resonance_tap": of(type: item.type, handle: handle ?? item.fromHandle ?? "", count: max(0, item.fromUserIds.count - 1))
+        case "read_summary": readSummary(readers: item.readers ?? 0, reread: item.reread)
+        default: of(type: item.type, handle: handle ?? item.fromHandle ?? "", count: item.count ?? 0)
+        }
+    }
+
+    /// 「上週有 5 個人把這張卡讀到最後」 (and 「，有人回來又讀了一遍」): no one named, ever (§R4).
+    static func readSummary(readers: Int, reread: Bool) -> BellSentence {
+        let whole = reread ? L10n.App.Notifications.readSummaryReread(count: readers) : L10n.App.Notifications.readSummary(count: readers)
+        return BellSentence(before: whole, handle: nil, after: "")
     }
 
     static func of(type: String, handle: String, count: Int) -> BellSentence {
         let formatted: String? = switch type {
+        case "resonance_tap" where count > 0: L10n.App.Notifications.tapMany(handle: mark, count: count)
+        case "resonance_tap": L10n.App.Notifications.tap(handle: mark)
         case "invite": L10n.App.Notifications.invite(handle: mark)
         case "invite_accepted": L10n.App.Notifications.inviteAccepted(handle: mark)
         case "message": L10n.App.Notifications.message(handle: mark)

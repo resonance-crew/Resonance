@@ -20,6 +20,11 @@ public struct PushAPI: Sendable {
         self.client = client
     }
 
+    /// What this build draws that an older one would show as a raw type (round 26 §R2.2, §U8): the bell rows
+    /// `resonance_tap` and `read_summary`. The server writes those rows only while every app device of the
+    /// account declares them, so only a build that draws them may say so.
+    public static let capabilities = ["bell-tap", "bell-read-summary"]
+
     /// The time zone as the contract takes it: none when empty or longer than `timeZoneMax`
     /// (counted as the server counts, in UTF-16 units).
     static func sendable(timeZone: String?) -> String? {
@@ -28,8 +33,9 @@ public struct PushAPI: Sendable {
     }
 
     public func register(installationId: String, token: String, language: Strings.Language, appVersion: String?,
-                         timeZone: String?) async throws {
+                         timeZone: String?, capabilities: [String] = PushAPI.capabilities) async throws {
         let body = Components.Schemas.RegisterDeviceRequest(token: token, platform: .ios, locale: language.rawValue, appVersion: appVersion,
+                                                            capabilities: capabilities.isEmpty ? nil : capabilities,
                                                             timeZone: Self.sendable(timeZone: timeZone))
         switch try await client.registerDevice(path: .init(installationId: installationId), body: .json(body)) {
         case .noContent: return
