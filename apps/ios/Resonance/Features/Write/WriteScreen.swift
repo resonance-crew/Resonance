@@ -482,6 +482,10 @@ struct WriteScreen: View {
                 // The floating ✓ and its save state's room at the split.
                 .padding(.trailing, showsBar ? 0 : 160)
                 .padding(.bottom, statusShown(model) || !showsBar ? 16 : 0)
+            // A card answering another: which one, over the title (round 26 §U6) — a tap reads it again.
+            if let original = model.referenceCardId {
+                ReplyingBand(cardId: original).padding(.bottom, 12)
+            }
             titleField(model, typo: typo)
                 // The title → the story's first line (round 11 §4): well over a paragraph's gap, so the title
                 // never reads as the story's first paragraph. Its note lies in this gap (`titleField`).
