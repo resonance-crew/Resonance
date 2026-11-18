@@ -50,6 +50,8 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
         // Chat pictures: through the app's client with the token, kept in a folder of their own (cache: never backed up).
         pictureHttp = http,
         pictureLoader = { client -> ChatPictures.loader(this, File(cacheDir, "chat-pictures"), client) },
+        // How cards were read and not reported yet (round 26 §U7): sent at the next launch.
+        readingReports = com.resonance.app.ui.ReadingReports(ReadingReportPrefs(getSharedPreferences(com.resonance.app.ui.ReadingReports.FILE, MODE_PRIVATE))),
     ).also {
         session = it
         it.start { it.loadMe() }

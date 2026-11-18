@@ -1,5 +1,16 @@
 package com.resonance.app.ui
 
+import android.os.SystemClock
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.lifecycle.compose.LifecycleEventEffect
+import com.resonance.app.DebugLaunch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 import com.resonance.app.AppearanceStore
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.ui.platform.LocalView
@@ -236,6 +247,37 @@ class CardPageModel(private val session: Session, private val key: String, previ
     }
 
     /**
+     * The viewer's tap as the end row last left it (round 26 §U1): the page shows it on its way back, and so does the
+     * card's kept page until the next read.
+     */
+    fun tapped(tap: com.resonance.api.models.CardTap) {
+        val d = detail ?: return
+        val next = d.copy(tap = tap)
+        detail = next
+        session.cardCache.page(key)?.let { session.cardCache.rememberPage(key, it.copy(detail = next)) }
+    }
+
+    /** This page view's reading (round 26 §U7), from when the card was first shown: none for the author's own. */
+    internal var readingView by mutableStateOf<ReadingSession?>(null)
+        private set
+    private var readingSent: com.resonance.api.models.ReadingReportRequest? = null
+
+    /** Starts this page view's reading of [d] (once), at [now] (elapsed ms). */
+    internal fun startReading(d: com.resonance.api.models.CardDetail, now: Long) {
+        if (readingView == null) readingView = ReadingSession.of(d, now)
+    }
+
+    /** Sends where this page view's reading stands (its running totals), unless that is what was sent last. */
+    fun sendReading(now: Long) {
+        val view = readingView ?: return
+        val id = detail?.card?.id ?: return
+        val report = view.report(now)
+        if (report == readingSent || (report.activeSeconds <= 0.0 && report.progress <= 0.0)) return
+        readingSent = report
+        session.reportReading(id, report)
+    }
+
+    /**
      * Reads the card unless what the page holds is current ([isCurrent]: read lately, and no change
      * since that concerns it — `lastChange` is the latest of `changes`); `retry` always does.
      */
@@ -363,6 +405,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     var askAnonymousShare by remember { mutableStateOf(false) }
     val shareScope = rememberCoroutineScope()
     val share: (com.resonance.api.models.CardDetail) -> Unit = { d ->
+        model.readingView?.didShare()
         if (d.isOwner && d.anonymous) askAnonymousShare = true
         else shareScope.launch { sharing.share(d) }
     }
@@ -379,6 +422,26 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
         derivedStateOf { scrolledUnderBar(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset, byline.bottom) }
     }
     val progress = rememberReadingProgress(list, top)
+    // How this page view is read (round 26 §U7): someone else's card, from when it shows. A scroll or a touch keeps it
+    // active; the share of the story scrolled through is its progress; the end row in view (onRow) its end. Sent as
+    // the page goes behind something or away — the running totals, which the server keeps per view.
+    LaunchedEffect(detail?.card?.id) { detail?.let { model.startReading(it, SystemClock.elapsedRealtime()) } }
+    val readingView = model.readingView
+    LaunchedEffect(readingView) {
+        val view = readingView ?: return@LaunchedEffect
+        snapshotFlow { progress.seen }.collect { view.progressed(it.toDouble()) }
+    }
+    LaunchedEffect(readingView) {
+        val view = readingView ?: return@LaunchedEffect
+        snapshotFlow { list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset }.drop(1).collect { view.input(SystemClock.elapsedRealtime()) }
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { model.readingView?.front(SystemClock.elapsedRealtime(), true) }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        val now = SystemClock.elapsedRealtime()
+        model.readingView?.front(now, false)
+        model.sendReading(now)
+    }
+    DisposableEffect(model) { onDispose { model.sendReading(SystemClock.elapsedRealtime()) } }
     // On a tablet the bar's middle takes the card's title once the article's own has gone up under
     // it (round 5, part C): where the title ends below the article's top, and whether it has.
     val chrome = LocalHeaderChrome.current
@@ -402,6 +465,8 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     val columns = LocalWindowLayout.current.cardPage(rail = phase == "loaded" && headings.isNotEmpty())
     val railed = columns.railStart != null
     var listCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    // Where the story's end row (or the author's line) is: the screenshots bring it into view.
+    var endRowCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val scope = rememberCoroutineScope()
     val reduced = context.prefersReducedMotion()
     // Round 25 §F: the interface's language, the switch, and where the translate line is on screen.
@@ -475,7 +540,22 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     val mascots by remember { AppearanceStore.shared.state.map { it.mascots } }.collectAsStateWithLifecycle(AppearanceStore.shared.state.value.mascots)
     val marks = remember(mascots) { if (mascots) MascotMarks() else null }
     CompositionLocalProvider(LocalMascotMarks provides marks) {
-    Box(Modifier.fillMaxSize().cream().onGloballyPositioned { progress.page = it }) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .cream()
+            .onGloballyPositioned { progress.page = it }
+            // A touch anywhere on the page is reading (§U7): watched, never taken.
+            .pointerInput(model) {
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent(PointerEventPass.Initial)
+                        model.readingView?.input(SystemClock.elapsedRealtime())
+                    }
+                }
+            }
+            .onPreviewKeyEvent { model.readingView?.input(SystemClock.elapsedRealtime()); false },
+    ) {
     Column(Modifier.fillMaxSize().padding(top = if (phase == "loaded") 0.dp else top)) {
         when (phase) {
             // The card as the list drew it, the story still shimmering below; or, knowing nothing yet,
@@ -497,7 +577,19 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                 // Related cards are the feed's kind of list: bands, or the bordered grid when expanded;
                 // the page's other lists follow it.
                 val relatedLayout = cardListLayout()
-                LazyColumn(Modifier.fillMaxSize().onPlaced { listCoords = it }, state = list, contentPadding = PaddingValues(top = top, bottom = 40.dp)) {
+                // The screenshots' end of the story (`--es cardEnd …`, round 26): taken once, its row brought to the middle.
+                val launchEnd = remember(card.id) { DebugLaunch.takeCardEnd() }
+                LaunchedEffect(launchEnd) {
+                    if (launchEnd.isEmpty()) return@LaunchedEffect
+                    // The story laid out (its pictures' places) before the row is found.
+                    delay(LAUNCH_END_SETTLE_MS)
+                    val row = endRowCoords?.takeIf { it.isAttached } ?: return@LaunchedEffect
+                    val frame = listCoords?.takeIf { it.isAttached } ?: return@LaunchedEffect
+                    val y = frame.localPositionOf(row, Offset.Zero).y
+                    list.scrollBy(y - frame.size.height * 0.5f)
+                }
+                // The keyboard (the note's field, round 26) shortens the list, so the field is brought above it.
+                LazyColumn(Modifier.fillMaxSize().imePadding().onPlaced { listCoords = it }, state = list, contentPadding = PaddingValues(top = top, bottom = 40.dp)) {
                     item(key = "article") {
                         // The translate line (round 25 §F2), for a page that gets one: what it shows, in its own type.
                         val translator = model.translator?.takeIf { it.isFor(card.title, d.story) }
@@ -542,14 +634,30 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 40.dp),
                             )
                             else if (!trashedOwn && !d.isOwner) CardViewerActions(
-                                session, card.id, card.referenceCardId,
+                                session, d,
                                 onWriteNew = { open(Route.Write(referenceCardId = card.id)) },
                                 onModify = { mine -> open(Route.Write(cardId = mine)) },
                                 onOpenMine = { key -> open(Route.Card(key)) },
                                 onUpgradeNote = { words -> open(Route.Write(referenceCardId = card.id, story = words)) },
+                                open = open,
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 40.dp),
                                 onOpenCard = { open(Route.Card(card.id)) },
+                                onTapChanged = model::tapped,
+                                onRow = { row ->
+                                    endRowCoords = row
+                                    if (lineOnScreen(row, pageView.height)) model.readingView?.sawEnd()
+                                },
+                                launch = launchEnd,
                             )
+                            // The author's own published card: who resonated, where a reader's row would be (§U3).
+                            else if (!trashedOwn && card.publishedAt != null) {
+                                val taps = TapFaces.of(d.tap)
+                                if (!taps.isEmpty) AuthorTaps(
+                                    session, card.id, taps, d.anonymous, open,
+                                    Modifier.onGloballyPositioned { endRowCoords = it }.padding(bottom = 40.dp),
+                                    launchOpen = DebugLaunch.CardEnd.Taps in launchEnd,
+                                )
+                            }
                         }
                     }
                     // The owner's linked cards and the resonances take the related list's layout (round 5 D3).
@@ -565,9 +673,9 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                         answerCards(linked, open, keyPrefix = "linked:", related = relatedLayout)
                         item(contentType = "spacer") { Spacer(Modifier.height(40.dp)) }
                     }
-                    // 與此文共振: the related list's full cards at every width (round 9 C1) — three, then 查看全部 for the rest, in place.
+                    // 回應這篇的卡片 (round 26 §S2): the related list's full cards at every width (round 9 C1) — three, then 查看全部 for the rest, in place.
                     if (resonance.isNotEmpty()) {
-                        sectionHeading(L10n.Card.ResonanceSection.title, cardSectionAir(cls, phoneBelow = 40))
+                        sectionHeading(L10n.Card.Replies.title, cardSectionAir(cls, phoneBelow = 40))
                         val shown = resonancesShown(resonance, allResonances)
                         storyCards(shown, open, layout = relatedLayout, keyPrefix = "resonance:")
                         if (shown.size < resonance.size) item(key = "resonance:all") {
@@ -1038,6 +1146,20 @@ internal class ReadingProgress(private val list: LazyListState, private val line
     }
 
     fun shown(): Float = eased.value
+
+    /**
+     * The share of the story that has come into view, its foot over the page's foot (round 26 §U7: what a reading
+     * report calls progress) — a short story shown whole is all of it, where the bar shows none; once the article has
+     * scrolled out of the list, all of it.
+     */
+    val seen: Float get() = storySeen(top, height, pageHeight - bottomInset, pastArticle = list.firstVisibleItemIndex > 0)
+}
+
+/** How much of a story [height] tall standing at [top] has come into a page whose foot is at [foot] (0…1). */
+internal fun storySeen(top: Float, height: Float, foot: Float, pastArticle: Boolean): Float = when {
+    pastArticle -> 1f
+    height <= 0f -> 0f
+    else -> ((foot - top) / height).coerceIn(0f, 1f)
 }
 
 @Composable
@@ -1079,6 +1201,9 @@ private fun rememberReadingProgress(list: LazyListState, top: Dp): ReadingProgre
  */
 internal fun easesProgress(jump: Float, scrolling: Boolean, interrupted: Boolean, reduced: Boolean): Boolean =
     !reduced && !scrolling && !interrupted && jump >= PROGRESS_JUMP
+
+/** How long a screenshot's card page waits for its story to be laid out before its end is brought into view. */
+private const val LAUNCH_END_SETTLE_MS = 700L
 
 /** The smallest change of the reading progress that eases rather than snaps (2 % of the story). */
 internal const val PROGRESS_JUMP = 0.02f

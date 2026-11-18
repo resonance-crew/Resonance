@@ -30,6 +30,7 @@ class NotificationSettingsApi(private val api: DefaultApi) {
                 picks = changes[NotificationSwitch.Picks],
                 connectionCards = changes[NotificationSwitch.ConnectionCards],
                 messages = changes[NotificationSwitch.Messages],
+                resonanceTaps = changes[NotificationSwitch.ResonanceTaps],
             ),
         )
     }

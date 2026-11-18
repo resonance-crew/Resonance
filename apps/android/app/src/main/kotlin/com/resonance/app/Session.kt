@@ -95,6 +95,8 @@ class Session(
     pictureHttp: OkHttpClient = OkHttpClient(),
     /** The loader the thread's pictures are read with, over [pictures]' client (ChatPictures.loader); null: none (a test). */
     pictureLoader: ((OkHttpClient) -> ImageLoader)? = null,
+    /** Reading reports not sent yet, per account (reading-reports.xml, round 26 §U7): emptied with the account. */
+    private val readingReports: com.resonance.app.ui.ReadingReports? = null,
 ) {
     enum class Phase { Restoring, SignedOut, SignedIn }
     sealed interface Profile {
@@ -142,6 +144,8 @@ class Session(
     val account = AccountApi(api, http)
     val writing = WritingApi(api, http)
     val messaging = MessagingApi(api, http)
+    /** The resonance tap (round 26 §R1): 共振 on a card, and the faces' lists. */
+    val taps = com.resonance.kit.api.TapApi(api, http)
     /** Pictures in chat: sent up and read back with the account's token, never through a plain image loader. */
     val pictures = ChatPicturesApi(api, pictureHttp)
     /** The thread's pictures on this device: their loader and caches, and the ones sent from here (emptied with the account). */
@@ -252,6 +256,43 @@ class Session(
     val hints: HintService? get() = uid?.let { HintService(it, prefs) }
     /** Notes on their way from the account (round 21): their client ids, and a failed one's 再寄一次. */
     val noteSends = NoteSends()
+
+    /**
+     * The signed-in person as their face is drawn (round 26 §U2: their own face slides in first when they tap 共振), as
+     * the server last drew it — its avatar's seed is the server's, which /me doesn't carry. Learnt from a card page's
+     * faces; forgotten with the account.
+     */
+    @Volatile var selfFace: com.resonance.api.models.Author? = null
+
+    /**
+     * A card page's reading report (round 26 §U7.2): kept on the device, then sent from the account's scope (leaving
+     * the page doesn't stop it); delivered, forgotten — else it waits for the next launch.
+     */
+    fun reportReading(cardId: String, report: com.resonance.api.models.ReadingReportRequest) {
+        val who = uid ?: return
+        readingReports?.keep(who, cardId, report)
+        scope.launch { sendReading(who, cardId, report) }
+    }
+
+    private suspend fun sendReading(who: String, cardId: String, report: com.resonance.api.models.ReadingReportRequest) {
+        try {
+            if (uid != who) return
+            reading.reportReading(cardId, report)
+            readingReports?.sent(who, cardId, report)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: ApiFailure) {
+            // Refused for good (a card gone, a report the contract doesn't take): it would be refused again.
+            if (e.status in 400..499 && e.status != 429) readingReports?.sent(who, cardId, report)
+        } catch (e: Exception) {
+            // Offline: it waits for the next launch.
+        }
+    }
+
+    private suspend fun sendPendingReadings(who: String) {
+        val pending = readingReports?.pending(who).orEmpty()
+        for (p in pending) sendReading(who, p.cardId, p.report)
+    }
     /** The signed-in account's unsent notes, by card (the note composer's words, kept until sent). */
     val noteDrafts: NoteDrafts.Account? get() = uid?.let { noteDraftStore?.of(it) }
     /** The signed-in account's unsent messages, by conversation (round 22 §4.4). */
@@ -340,6 +381,8 @@ class Session(
                 scope.launch { restoreKept(next) }
                 scope.launch { runCatching { onSignedIn() } }
                 scope.launch { registerPush() }
+                // What the last launch read and couldn't send (round 26 §U7.2).
+                scope.launch { sendPendingReadings(next) }
             }
         }
     }
@@ -384,6 +427,9 @@ class Session(
         }
         // The notes it wrote and didn't send: words to someone, kept for this account alone.
         noteDraftStore?.forget(who)
+        // How it read cards, not sent yet (round 26 §U7).
+        readingReports?.forget(who)
+        selfFace = null
         // Its unsent messages (round 22) and the stickers it sent last, likewise.
         chatDrafts.forget(who)
         stickerRecentsStore?.forget(who)

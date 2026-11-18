@@ -31,7 +31,16 @@ object ReadTime {
     private fun isWordLike(cp: Int): Boolean = Character.isLetter(cp) || Character.isDigit(cp) ||
         Character.getType(cp).let { it == Character.LETTER_NUMBER.toInt() || it == Character.OTHER_NUMBER.toInt() }
 
-    fun minutes(text: String): Int {
+    fun minutes(text: String): Int = maxOf(1, Math.round(exactMinutes(text)).toInt())
+
+    /**
+     * How long [text] takes to read at the same rates, in seconds and unrounded (readSeconds): what a reading
+     * report is measured against — a short card's 20 seconds stay 20, not the list's "1 min".
+     */
+    fun seconds(text: String): Double = exactMinutes(text) * 60
+
+    /** How long [text] takes to read, in minutes, unrounded (minutesOf). */
+    private fun exactMinutes(text: String): Double {
         var chars = 0
         var words = 0
         var i = 0
@@ -62,6 +71,6 @@ object ReadTime {
                 }
             }
         }
-        return maxOf(1, Math.round(chars.toDouble() / CJK_CHARS_PER_MINUTE + words.toDouble() / WORDS_PER_MINUTE).toInt())
+        return chars.toDouble() / CJK_CHARS_PER_MINUTE + words.toDouble() / WORDS_PER_MINUTE
     }
 }

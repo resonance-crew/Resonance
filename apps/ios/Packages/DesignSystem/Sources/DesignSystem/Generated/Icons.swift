@@ -17,6 +17,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case users
     case globe
     case wave
+    case wavePair = "wave-pair"
     case pen
     case cards
     case logout
@@ -124,6 +125,10 @@ extension IconName {
             IconStroke(filled: false, width: 1, commands: [0, 3.4, 8.2, 2, 5.4, 5.9, 7.3, 5.8, 9.2, 8, 2, 11.1, 10.2, 13, 10.3, 15, 8.1, 2, 16.9, 6, 18.8, 5.9, 20.7, 8.1]),
             IconStroke(filled: false, width: 1, commands: [0, 3, 12.1, 2, 5.1, 9.7, 7.1, 9.8, 9, 12, 2, 10.9, 14.2, 12.9, 14.3, 14.9, 12.1, 2, 16.8, 9.9, 18.8, 9.8, 20.9, 12]),
             IconStroke(filled: false, width: 1, commands: [0, 3.5, 16, 2, 5.4, 13.8, 7.4, 13.7, 9.3, 15.9, 2, 11.2, 18.1, 13.1, 18.2, 15.1, 16, 2, 17, 13.9, 18.9, 13.8, 20.8, 16]),
+        ])
+        case .wavePair: IconGlyph(viewBox: 24, fillable: false, strokes: [
+            IconStroke(filled: false, width: 1, commands: [0, 3.2, 9.4, 2, 5.2, 7.1, 7.2, 7.2, 9.1, 9.4, 2, 11, 11.6, 13, 11.7, 14.9, 9.5, 2, 16.8, 7.3, 18.8, 7.2, 20.8, 9.4]),
+            IconStroke(filled: false, width: 1, commands: [0, 3.3, 14.7, 2, 5.3, 12.4, 7.2, 12.5, 9.2, 14.7, 2, 11.1, 16.9, 13.1, 17, 15, 14.8, 2, 16.9, 12.6, 18.9, 12.5, 20.8, 14.7]),
         ])
         case .pen: IconGlyph(viewBox: 24, fillable: false, strokes: [
             IconStroke(filled: false, width: 1, commands: [0, 15.6, 3.7, 2, 16.4, 2.9, 17.7, 2.9, 18.5, 3.7, 1, 20.3, 5.5, 2, 21.1, 6.3, 21.1, 7.6, 20.3, 8.4, 1, 9.6, 19.1, 2, 9.4, 19.3, 9.1, 19.5, 8.8, 19.6, 1, 5, 20.9, 2, 4.4, 21.1, 3.9, 20.6, 4.1, 20, 1, 5.4, 16.2, 2, 5.5, 15.9, 5.7, 15.6, 5.9, 15.4, 3]),

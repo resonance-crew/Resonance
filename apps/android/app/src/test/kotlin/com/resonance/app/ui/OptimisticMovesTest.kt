@@ -98,7 +98,7 @@ class OptimisticMovesTest {
         // Its page on screen: the composer opens there.
         sends.host("c1", true)
         sends.requestReopen("c1") { opened++ }
-        assertEquals("c1", sends.reopen.value)
+        assertEquals("c1", sends.reopen.value?.cardId)
         assertEquals(0, opened)
         sends.took("c1")
         assertNull(sends.reopen.value)
@@ -106,7 +106,7 @@ class OptimisticMovesTest {
         sends.host("c1", false)
         sends.requestReopen("c1") { opened++ }
         assertEquals(1, opened)
-        assertEquals("c1", sends.reopen.value)
+        assertEquals("c1", sends.reopen.value?.cardId)
         // The same words again go under the same id: a retry, never a second note.
         assertEquals(sends.attempt("c1").clientId("c1", "謝謝"), sends.attempt("c1").clientId("c1", "謝謝 "))
     }

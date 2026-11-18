@@ -230,7 +230,8 @@ private fun NotificationRow(
 ) {
     val source = remember { MutableInteractionSource() }
     val unread = item.isUnread
-    val sentence = bellSentence(item)
+    // A tap row names its newest by who they are (round 26 §U8): their pen name as read.
+    val sentence = bellSentence(item, item.fromHandle ?: item.fromUserId?.let { extras.people[it]?.handle })
     val cardId = item.cardId?.takeIf { it.isNotEmpty() }
     val card = cardId?.let { extras.cards[it] }
     val preview = item.preview?.takeIf { item.type == "note" && it.isNotEmpty() }
@@ -327,7 +328,7 @@ private fun Face(person: Person?, handle: String, uid: String, settled: Boolean)
 @Composable
 private fun GlyphTile(type: String) {
     val glyph = when (type) {
-        "resonance_summary" -> IconName.Sparkle
+        "resonance_summary", "read_summary" -> IconName.Sparkle
         "translation_done" -> IconName.Globe
         "invite_expired" -> IconName.Users
         else -> IconName.Bell
@@ -434,7 +435,8 @@ private data class BellThumbOutline(val seed: Double) : Shape {
 internal fun notificationRoute(item: NotificationsStore.Item): Route? = when {
     item.onAnonymousCard -> item.cardId?.let { Route.Card(it) }
     else -> when (item.type) {
-        "translation_done", "card_link" -> item.cardId?.let { Route.Card(it) }
+        // Someone resonated, or last week's readers (round 26 §U8): the card, named or anonymous alike — never a thread.
+        "translation_done", "card_link", "resonance_tap", "read_summary" -> item.cardId?.let { Route.Card(it) }
         "note" -> item.fromHandle?.let { handle -> Route.Thread(handle, item.cardId?.takeIf { item.noteId != null }, item.noteId?.takeIf { item.cardId != null }, item.fromUserId) }
         "invite_accepted", "message", "resonance" -> item.fromHandle?.let { Route.Thread(it, uid = item.fromUserId) }
         else -> null

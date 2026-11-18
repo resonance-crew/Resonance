@@ -21,6 +21,7 @@ enum class IconName(val key: String) {
     Users("users"),
     Globe("globe"),
     Wave("wave"),
+    WavePair("wave-pair"),
     Pen("pen"),
     Cards("cards"),
     Logout("logout"),
@@ -127,6 +128,10 @@ enum class IconName(val key: String) {
                 IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 3.4f, 8.2f, 2f, 5.4f, 5.9f, 7.3f, 5.8f, 9.2f, 8f, 2f, 11.1f, 10.2f, 13f, 10.3f, 15f, 8.1f, 2f, 16.9f, 6f, 18.8f, 5.9f, 20.7f, 8.1f)),
                 IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 3f, 12.1f, 2f, 5.1f, 9.7f, 7.1f, 9.8f, 9f, 12f, 2f, 10.9f, 14.2f, 12.9f, 14.3f, 14.9f, 12.1f, 2f, 16.8f, 9.9f, 18.8f, 9.8f, 20.9f, 12f)),
                 IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 3.5f, 16f, 2f, 5.4f, 13.8f, 7.4f, 13.7f, 9.3f, 15.9f, 2f, 11.2f, 18.1f, 13.1f, 18.2f, 15.1f, 16f, 2f, 17f, 13.9f, 18.9f, 13.8f, 20.8f, 16f)),
+            ))
+            WavePair -> IconGlyph(24f, fillable = false, strokes = listOf(
+                IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 3.2f, 9.4f, 2f, 5.2f, 7.1f, 7.2f, 7.2f, 9.1f, 9.4f, 2f, 11f, 11.6f, 13f, 11.7f, 14.9f, 9.5f, 2f, 16.8f, 7.3f, 18.8f, 7.2f, 20.8f, 9.4f)),
+                IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 3.3f, 14.7f, 2f, 5.3f, 12.4f, 7.2f, 12.5f, 9.2f, 14.7f, 2f, 11.1f, 16.9f, 13.1f, 17f, 15f, 14.8f, 2f, 16.9f, 12.6f, 18.9f, 12.5f, 20.8f, 14.7f)),
             ))
             Pen -> IconGlyph(24f, fillable = false, strokes = listOf(
                 IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 15.6f, 3.7f, 2f, 16.4f, 2.9f, 17.7f, 2.9f, 18.5f, 3.7f, 1f, 20.3f, 5.5f, 2f, 21.1f, 6.3f, 21.1f, 7.6f, 20.3f, 8.4f, 1f, 9.6f, 19.1f, 2f, 9.4f, 19.3f, 9.1f, 19.5f, 8.8f, 19.6f, 1f, 5f, 20.9f, 2f, 4.4f, 21.1f, 3.9f, 20.6f, 4.1f, 20f, 1f, 5.4f, 16.2f, 2f, 5.5f, 15.9f, 5.7f, 15.6f, 5.9f, 15.4f, 3f)),

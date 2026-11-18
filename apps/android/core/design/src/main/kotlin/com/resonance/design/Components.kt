@@ -308,14 +308,8 @@ fun HandDrawnAvatar(
     /** The picture already loaded (a share card's recording draws nothing still on its way), in place of [imageUrl]. */
     image: ImageBitmap? = null,
 ) {
-    val s = size.value.toDouble()
     // One shape while the size and seed hold: its rim's cache and the picture's clip survive a recomposition.
-    val shape = remember(s, seed) {
-        WobRectShape(
-            s * 0.4, seed, mag = s * 0.022,
-            options = WobRectOptions(curve = 1.3, cornerJitter = 3.2, cornerOffset = s * 0.06, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0)),
-        )
-    }
+    val shape = remember(size, seed) { avatarShape(size, seed) }
     val rim = Tokens.AvatarStroke
     Box(
         Modifier

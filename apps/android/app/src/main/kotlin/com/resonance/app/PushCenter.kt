@@ -46,9 +46,11 @@ object PushCenter {
     const val PICKS_CHANNEL_ID = PushPlacement.PICKS_CHANNEL
     /**
      * What this build does with a push beyond showing it, told to the server with the device:
-     * `chat-push` — it draws a conversation's messages itself, so the server sends those as data.
+     * `chat-push` — it draws a conversation's messages itself, so the server sends those as data;
+     * `bell-tap` and `bell-read-summary` (round 26 §U8.2) — its bell draws the `resonance_tap` and
+     * `read_summary` rows (an older build would show their raw type), so the server writes them.
      */
-    val CAPABILITIES: List<String> = listOf("chat-push")
+    val CAPABILITIES: List<String> = listOf("chat-push", "bell-tap", "bell-read-summary")
     /** The keys of a push's `data` — also the extras of the intent that a tap on it starts the app with. */
     const val EXTRA_ROUTE = "route"
     const val EXTRA_NOTIFICATION_ID = "notificationId"

@@ -12,6 +12,7 @@ import { LockIcon } from './icons/lock';
 import { UsersIcon } from './icons/users';
 import { GlobeIcon } from './icons/globe';
 import { WaveIcon } from './icons/wave';
+import { WavePairIcon } from './icons/wave-pair';
 import { PenIcon } from './icons/pen';
 import { CardsIcon } from './icons/cards';
 import { LogoutIcon } from './icons/logout';
@@ -81,6 +82,8 @@ export const ICONS = {
   users: UsersIcon,
   globe: GlobeIcon,
   wave: WaveIcon,
+  // The 共振 tap once on (round 26): two waves in phase.
+  'wave-pair': WavePairIcon,
   pen: PenIcon,
   cards: CardsIcon,
   logout: LogoutIcon,

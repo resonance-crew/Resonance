@@ -342,11 +342,13 @@ private fun PrivacySettings(session: Session) {
 }
 
 /** A push switch of Settings → Notifications, as the web's NotificationsSection lists them. */
-private data class PushSwitchRow(val switch: NotificationSwitch, val label: String, val hint: String, val seed: Double)
+private data class PushSwitchRow(val switch: NotificationSwitch, val label: String, val hint: String?, val seed: Double)
 
 private val pushSwitchRows: List<PushSwitchRow>
     get() = listOf(
         PushSwitchRow(NotificationSwitch.Messages, L10n.Settings.Notifications.messages, L10n.Settings.Notifications.messagesHint, 79.0),
+        // 有人共振 (round 26 §U8.3): on until turned off, its words alone.
+        PushSwitchRow(NotificationSwitch.ResonanceTaps, L10n.Settings.Notifications.taps, null, 81.0),
         PushSwitchRow(NotificationSwitch.Picks, L10n.Settings.Notifications.picks, L10n.Settings.Notifications.picksHint, 83.0),
         PushSwitchRow(NotificationSwitch.ConnectionCards, L10n.Settings.Notifications.connectionCards, L10n.Settings.Notifications.connectionCardsHint, 91.0), // 91, as the web and iOS: 89's track pinched at its middle
     )
@@ -391,9 +393,12 @@ internal fun showsPermissionNotice(
             )
         )
 
-/** Whether [switch]'s pushes can show now: messages need the app's notifications, the others the picks' channel too ([block]). */
+/**
+ * Whether [switch]'s pushes can show now: messages and taps (the bell's own channel) need the app's notifications,
+ * the others the picks' channel too ([block]).
+ */
 internal fun canShow(switch: NotificationSwitch, block: PushCenter.PicksBlock): Boolean =
-    if (switch == NotificationSwitch.Messages) block != PushCenter.PicksBlock.App else block == PushCenter.PicksBlock.None
+    if (switch == NotificationSwitch.Messages || switch == NotificationSwitch.ResonanceTaps) block != PushCenter.PicksBlock.App else block == PushCenter.PicksBlock.None
 
 /**
  * The push switches as Settings → Notifications lists them (messages and notes, tonight's card, a
@@ -416,7 +421,7 @@ internal fun PushSwitchList(isOn: (NotificationSwitch) -> Boolean, enabled: Bool
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     BasicText(row.label, style = AppFonts.body(16f, lineHeight = 1.45f))
-                    BasicText(row.hint, style = AppFonts.body(Tokens.HintSize, lineHeight = 1.55f, color = Tokens.TextMuted))
+                    row.hint?.let { BasicText(it, style = AppFonts.body(Tokens.HintSize, lineHeight = 1.55f, color = Tokens.TextMuted)) }
                 }
                 // Level with the label's first line.
                 Box(Modifier.padding(top = 1.dp)) {
