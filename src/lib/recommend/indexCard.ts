@@ -217,6 +217,21 @@ export async function indexCard(cardId: string, opts: IndexOptions = {}): Promis
   let usage: TokenUsage = { input: 0, output: 0, reasoning: 0 };
   const count = (u: TokenUsage) => (usage = addUsage(usage, u));
   const signatureRef = db.collection(CARD_SIGNATURES).doc(cardId);
+  /**
+   * Write the card's reading only while the card is there (§A1.6: deleted
+   * with the card), in a transaction that reads the card first: deleteCard's
+   * transaction deletes the card and its reading together, so the two run one
+   * after the other, and a card deleted for good while the models ran (up to
+   * INDEX_DEADLINE_MS) leaves no reading behind. False when the card is gone.
+   */
+  const writeReading = (fields: DocumentData, merge: boolean) =>
+    db.runTransaction(async (tx) => {
+      const [now] = await tx.getAll(ref, { fieldMask: ['authorId'] });
+      if (!now.exists) return false;
+      if (merge) tx.set(signatureRef, fields, { merge: true });
+      else tx.set(signatureRef, fields);
+      return true;
+    });
   let result: CardReadingResult;
   /** Asked once more for its formula phrasings (the cron asks no third time while the text is the same). */
   let rewritten = false;
@@ -235,9 +250,9 @@ export async function indexCard(cardId: string, opts: IndexOptions = {}): Promis
   } catch (e) {
     // No reading: what went wrong is kept beside the last good one, and the card stays owed.
     const error = e instanceof ChatIncomplete ? e.kind : 'failed';
-    await signatureRef
-      .set({ authorId: String(data.authorId ?? ''), error, failedAt: FieldValue.serverTimestamp(), usage }, { merge: true })
-      .catch((err) => console.error('[index] recording a failed reading', cardId, err));
+    await writeReading({ authorId: String(data.authorId ?? ''), error, failedAt: FieldValue.serverTimestamp(), usage }, true).catch((err) =>
+      console.error('[index] recording a failed reading', cardId, err),
+    );
     opts.onUsage?.({ ...usage, embed: 0 });
     if (e instanceof ChatIncomplete) return { indexed: false, reason: 'failed' };
     throw e;
@@ -261,29 +276,33 @@ export async function indexCard(cardId: string, opts: IndexOptions = {}): Promis
     if (isNotFound(e)) return { indexed: false, reason: 'not-found' };
     throw e;
   }
+  /** The reading kept server-only — false when the card was deleted meanwhile (no reading is left for it). */
   const keepReading = (embedTokens: number) =>
-    signatureRef.set({
-      authorId: String(data.authorId ?? ''),
-      version: INDEX_VERSION,
-      model: result.model,
-      embedModel: embeddingModel,
-      ...reading,
-      listedForStrangers: listed,
-      templated,
-      rewritten,
-      error: result.error,
-      usage: { ...usage, embed: embedTokens },
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+    writeReading(
+      {
+        authorId: String(data.authorId ?? ''),
+        version: INDEX_VERSION,
+        model: result.model,
+        embedModel: embeddingModel,
+        ...reading,
+        listedForStrangers: listed,
+        templated,
+        rewritten,
+        error: result.error,
+        usage: { ...usage, embed: embedTokens },
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      false,
+    );
 
   if (!listed) {
     // Not for strangers (or edited down): make sure it isn't lingering in the
     // candidate pool from a previous, listed version.
     await store.deleteByCard(cardId);
-    await keepReading(0);
-    await markIndexed(ref, hash, signature);
+    const kept = await keepReading(0);
+    if (kept) await markIndexed(ref, hash, signature);
     opts.onUsage?.({ ...usage, embed: 0 });
-    return { indexed: false, reason: 'unlisted' };
+    return { indexed: false, reason: kept ? 'unlisted' : 'not-found' };
   }
 
   const parts = readingParts(reading);
@@ -294,8 +313,10 @@ export async function indexCard(cardId: string, opts: IndexOptions = {}): Promis
         parts.map((p) => p.text),
         { signal: deadline, onUsage: (u) => (embedTokens += u.input) },
       );
-  await keepReading(embedTokens);
+  const kept = await keepReading(embedTokens);
   opts.onUsage?.({ ...usage, embed: embedTokens });
+  // Deleted while it was embedded: its reading went with it, and its vectors (deleteCard removes them).
+  if (!kept) return { indexed: false, reason: 'not-found' };
 
   // The card as it is now, after the LLM calls: one deleted meanwhile gets
   // no vectors, and one whose visibility changed — moved to the trash or
