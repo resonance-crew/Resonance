@@ -2,8 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   The app's privacy manifest (App Store): no tracking; what the account keeps
-  is used to run the app only and is linked to the person. The Firebase, Nuke
-  and Google Sign-In packages ship their own manifests.
+  is linked to the person and used to run the app (and, for how they read, to
+  choose what the app offers them). The Firebase, Nuke and Google Sign-In
+  packages ship their own manifests.
 -->
 <plist version="1.0">
 <dict>
@@ -89,6 +90,21 @@
 			<key>NSPrivacyCollectedDataTypePurposes</key>
 			<array>
 				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- How someone else's card was read (round 26 §U7): active seconds, how far, read again, shared; kept
+		     180 days under the account and read by the recommender for that account's picks. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeProductInteraction</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+				<string>NSPrivacyCollectedDataTypePurposeProductPersonalization</string>
 			</array>
 		</dict>
 	</array>

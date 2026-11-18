@@ -107,6 +107,8 @@ struct NoteField: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.window) private var window
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    /// Typing here is reading the card (§U7.1: a key) — the on-screen keyboard's keys come to the page as words only.
+    @Environment(\.cardInteracted) private var interacted
     @State private var text = ""
     @State private var error: String?
     /// The words `error` was said of: other words, and it goes.
@@ -167,6 +169,7 @@ struct NoteField: View {
         .onChange(of: scenePhase) { _, phase in if phase != .active { keepDraft() } }
         .onChange(of: focusRequest) { _, _ in focusSoon() }
         .onChange(of: text) { _, new in
+            interacted()
             if new.utf16.count > NoteInPlace.maxLength { text = String(new.utf16.prefix(NoteInPlace.maxLength)) ?? new }
             hasWords = !words.isEmpty
             // Other words: another note, which the server may take — the refusal and what was said of it go.

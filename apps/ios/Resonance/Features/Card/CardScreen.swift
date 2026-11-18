@@ -41,7 +41,6 @@ struct CardScreen: View {
     /// A tablet's header (round 5 C1): the card's title fades into its centre in place of the author.
     @Environment(\.headerChrome) private var headerChrome
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.scenePhase) private var scenePhase
     /// How this page view of someone else's card is read (round 26 §U7), never drawn.
     @State private var reading = ReadingTracker()
     /// What the page has across.
@@ -88,6 +87,8 @@ struct CardScreen: View {
                     }
                     // Where the paper puppets' marks are measured, and their island laid over: the content's own points.
                     .mascotContent()
+                    // A touch anywhere on the page is reading (§U7.1), told by the scroll view and never taken from it.
+                    .background(ReadingTouches { [reading] in reading.interacted() })
             }
             // The note field's block to just above the keyboard as it takes the focus (round 26: the page scrolls).
             .environment(\.scrollCardTo) { id in
@@ -256,6 +257,11 @@ struct CardScreen: View {
             // A scroll is reading (§U7): how far through the story has been in view.
             reading.scrolled(story: meter.story, visibleTop: viewport.top, visibleHeight: viewport.height)
         }
+        // So is a key (§U7.1), which goes on to whatever it was for.
+        .onKeyPress(phases: .down) { [reading] _ in
+            reading.interacted()
+            return .ignored
+        }
         .onScrollGeometryChange(for: CGFloat.self) { $0.contentInsets.top } action: { _, inset in meter.insetTop = inset }
         // Where the byline ends, as measured under the title (until then, about where a phone's lands).
         .onScrollGeometryChange(for: Bool.self) { [meter] in
@@ -331,21 +337,17 @@ struct CardScreen: View {
         .onDisappear {
             translation?.cancel()
             translation = nil
-            reportReading()
         }
-        .onAppear {
-            resumeTranslation()
-            reading.cameBack()
-        }
+        .onAppear(perform: resumeTranslation)
+        // Reading counts while the page is on show — appeared, on the tab chosen, the app in front — and its running
+        // totals go each time it goes out of show (again each time it does).
+        .modifier(ReadingOnShow(reading: reading) { reportReading($0) })
         // The card has loaded: its page view's reading starts (someone else's card only).
         .onChange(of: model?.phase == .loaded, initial: true) { _, loaded in
             if loaded, let detail = model?.detail { reading.start(detail, viewer: session.uid) }
         }
-        // The app going to the background hides the page: its running totals go (again when it hides again).
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .background { reportReading() } else if phase == .active { reading.cameBack() }
-        }
         .environment(\.cardShared) { [reading] in reading.shared() }
+        .environment(\.cardInteracted) { [reading] in reading.interacted() }
         // Edited, published or re-shelved from the writer or the ⋯ — this card, or a
         // resonance to it: read it again (another card's draft leaves it as it is).
         .onChange(of: writer.changes) {
@@ -361,9 +363,9 @@ struct CardScreen: View {
         }
     }
 
-    /// The page hid: its reading's running totals so far go to the server (kept on the device until they do).
-    private func reportReading() {
-        guard let uid = session.uid, let hid = reading.hid() else { return }
+    /// The page went out of show: its reading's running totals so far go to the server (kept on the device until they do).
+    private func reportReading(_ hid: ReadingTracker.Report?) {
+        guard let uid = session.uid, let hid else { return }
         session.readingReports.report(hid.report, cardId: hid.cardId, uid: uid)
     }
 
@@ -716,6 +718,26 @@ private struct CardChrome: ViewModifier {
     let screen: CardScreen
 
     func body(content: Content) -> some View { screen.chrome(content) }
+}
+
+/// When the card page is on show, for its reading (§U7): it has appeared, its tab is the one chosen (every tab's stack
+/// stays mounted, so a page on a tab left never disappears) and the app is in front — read here, so a tab switch or
+/// the app's phase never draws the page again. Each time it goes out of show, `report` is given its totals so far.
+private struct ReadingOnShow: ViewModifier {
+    let reading: ReadingTracker
+    let report: (ReadingTracker.Report?) -> Void
+    @Environment(\.isSelectedTab) private var onSelectedTab
+    @Environment(\.scenePhase) private var scenePhase
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear { report(reading.appeared(true, onSelectedTab: onSelectedTab)) }
+            .onDisappear { report(reading.appeared(false, onSelectedTab: onSelectedTab)) }
+            .onChange(of: onSelectedTab) { _, chosen in report(reading.tabChosen(chosen)) }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background { report(reading.sceneActive(false)) } else if phase == .active { report(reading.sceneActive(true)) }
+            }
+    }
 }
 
 /// What the card page reads from its own scroll view: the bar's line and the reading progress.
