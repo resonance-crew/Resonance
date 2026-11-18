@@ -54,6 +54,16 @@ class NoteInPlaceTest {
         assertFalse(NoteFieldState("寫到一半", mayNote = false).canSend(mayNote = false))
     }
 
+    @Test fun waitingForTheirReplyItsPlaceSaysSoAndClosesAgain() {
+        // A draft kept, three letters unanswered: 寄小紙條 opens the wait line, and closes it again.
+        val note = NoteFieldState("寫到一半", mayNote = false)
+        note.segment(mayNote = false)
+        assertTrue(note.open)
+        note.segment(mayNote = false)
+        assertFalse(note.open)
+        assertEquals("寫到一半", note.draft)
+    }
+
     @Test fun theQuestionAsksWhichPartWhileTheTapIsOn() {
         assertEquals("哪一段讓你有共鳴？", notePlaceholder(tapOn = true))
         assertEquals("想對作者說的話⋯", notePlaceholder(tapOn = false))

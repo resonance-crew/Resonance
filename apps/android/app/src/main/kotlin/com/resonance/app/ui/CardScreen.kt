@@ -428,7 +428,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     val readingView = model.readingView
     LaunchedEffect(readingView) {
         val view = readingView ?: return@LaunchedEffect
-        snapshotFlow { progress.target }.collect { view.progressed(it.toDouble()) }
+        snapshotFlow { progress.seen }.collect { view.progressed(it.toDouble()) }
     }
     LaunchedEffect(readingView) {
         val view = readingView ?: return@LaunchedEffect
@@ -1127,6 +1127,20 @@ internal class ReadingProgress(private val list: LazyListState, private val line
     }
 
     fun shown(): Float = eased.value
+
+    /**
+     * The share of the story that has come into view, its foot over the page's foot (round 26 §U7: what a reading
+     * report calls progress) — a short story shown whole is all of it, where the bar shows none; once the article has
+     * scrolled out of the list, all of it.
+     */
+    val seen: Float get() = storySeen(top, height, pageHeight - bottomInset, pastArticle = list.firstVisibleItemIndex > 0)
+}
+
+/** How much of a story [height] tall standing at [top] has come into a page whose foot is at [foot] (0…1). */
+internal fun storySeen(top: Float, height: Float, foot: Float, pastArticle: Boolean): Float = when {
+    pastArticle -> 1f
+    height <= 0f -> 0f
+    else -> ((foot - top) / height).coerceIn(0f, 1f)
 }
 
 @Composable

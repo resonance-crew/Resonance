@@ -116,4 +116,14 @@ class ReadingReportTest {
         reports.forget("bob")
         assertTrue(reports.pending("bob").isEmpty())
     }
+
+    @Test fun progressIsTheShareOfTheStoryThatCameIntoView() {
+        // A short story shown whole: all of it, though the bar shows no progress for it.
+        assertEquals(1f, storySeen(top = 300f, height = 400f, foot = 1800f, pastArticle = false))
+        // A long one, a quarter of it over the page's foot.
+        assertEquals(0.25f, storySeen(top = 800f, height = 4000f, foot = 1800f, pastArticle = false))
+        // Scrolled past the article: all of it.
+        assertEquals(1f, storySeen(top = -9000f, height = 4000f, foot = 1800f, pastArticle = true))
+        assertEquals(0f, storySeen(top = 0f, height = 0f, foot = 1800f, pastArticle = false))
+    }
 }

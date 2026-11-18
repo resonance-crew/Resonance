@@ -108,14 +108,14 @@ internal class NoteFieldState(draft: String, mayNote: Boolean) {
     /** The note's words as counted (trimmed, in UTF-16 units, as the web counts them). */
     val count: Int get() = text.trim().length
 
-    /** 寄小紙條 (or Escape in the field). */
-    fun segment() {
+    /** 寄小紙條 (or Escape in the field); with [mayNote] false its place holds only the wait line, which it closes. */
+    fun segment(mayNote: Boolean = true) {
         when {
             !open -> {
                 open = true
                 focusTicket++
             }
-            text.isBlank() -> open = false
+            text.isBlank() || !mayNote -> open = false
             else -> focusTicket++
         }
     }

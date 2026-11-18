@@ -166,7 +166,7 @@ fun CardViewerActions(
     LaunchedEffect(cardId) {
         val asked = DebugLaunch.takeCardEnd()
         if (DebugLaunch.CardEnd.Tap in asked && !switch.on) switch.flip(scope)
-        if (DebugLaunch.CardEnd.Note in asked && !note.open) note.segment()
+        if (DebugLaunch.CardEnd.Note in asked && !note.open) note.segment(mayNote)
         if (DebugLaunch.CardEnd.Taps in asked) openList = true
     }
 
@@ -208,7 +208,7 @@ fun CardViewerActions(
             // While its field is open, its hover wash stays (never solid: solid is the tap on).
             fill = if (note.open) OrganicIndication.Wash.compositeOver(Tokens.ButtonTonal) else null,
             expanded = note.open,
-        ) { note.segment() }
+        ) { note.segment(mayNote) }
         // While your reply card is looked for, its segment waits (a second reply card is never started by accident).
         val replySegment = Segment("reply", reply.label, reply.icon, loading = mine == null) {
             val answered = mine
