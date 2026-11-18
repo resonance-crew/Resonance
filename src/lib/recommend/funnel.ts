@@ -108,11 +108,20 @@ async function llmStep<T>(opts: FunnelOptions, limitMs: number, run: (signal: Ab
   }
 }
 
-/** The records of the cards the reader's taste is made of (any visibility: they read them), the index's model only. */
+/**
+ * The records of the cards the reader's taste is made of, the index's model
+ * only — and only of cards the reader may read now: public ones, their own,
+ * and a connection's connections-only card while they are connected. A
+ * bookmark is a client write that may name any card id, and a card made
+ * private since it was read is its author's again: neither steers anything.
+ */
 async function tasteRecords(profile: UserProfile, embedModel: string): Promise<VectorRecord[]> {
   const ids = [...profile.taste.positive, ...profile.taste.negative].map((t) => t.cardId);
   if (!ids.length) return [];
-  return (await getVectorStore().listByCards(ids)).filter((r) => recordModel(r) === embedModel);
+  const connected = new Set(profile.connections);
+  const readable = (r: VectorRecord) =>
+    r.visibility === 'public' || r.authorId === profile.uid || (r.visibility === 'connections' && connected.has(r.authorId));
+  return (await getVectorStore().listByCards(ids)).filter((r) => recordModel(r) === embedModel && readable(r));
 }
 
 /**

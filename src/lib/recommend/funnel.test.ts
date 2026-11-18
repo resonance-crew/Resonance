@@ -64,8 +64,10 @@ const POOL: VectorRecord[] = [
 const TASTE: VectorRecord[] = [
   rec('t1', 'zed', axis(0), { visibility: 'connections' }),
   rec('t2', 'zed', axis(0, 0.02)),
-  rec('t3', 'yan', axis(0, 0.03), { visibility: 'private' }),
+  rec('t3', 'yan', axis(0, 0.03)),
   rec('t3', 'yan', axis(1), {}, 'situation'),
+  // A card the reader can't read (a bookmark may name any id; a card made private since): it steers nothing.
+  rec('secret', 'kim', axis(11), { visibility: 'private' }),
 ];
 
 const store = { listByVisibility: vi.fn(), listByCards: vi.fn(), nearest: vi.fn(), upsert: vi.fn(), deleteByCard: vi.fn(), setVisibility: vi.fn() };
@@ -74,7 +76,7 @@ const profile = (positives: string[], over: Partial<UserProfile> = {}): UserProf
   taste: { positive: positives.map((cardId, i) => ({ cardId, weight: 2 - i * 0.1 })), negative: [] },
   held: new Set(positives),
   positives: positives.length,
-  connections: [],
+  connections: ['zed'],
   updatedAt: new Date(),
   ...over,
 });
@@ -166,6 +168,18 @@ describe('recommendFeed — the taste', () => {
   it('throws when an LLM step fails without a fallback, so a background build is recorded as failed', async () => {
     vi.mocked(chatJSON).mockRejectedValueOnce(timedOut());
     await expect(recommendFeed('u1')).rejects.toThrow(/timeout/);
+  });
+
+  it("lets no card the reader can't read steer their taste: someone else's private card, a connections card once they aren't", async () => {
+    vi.mocked(buildUserProfile).mockResolvedValue(profile(['secret']));
+    const cold = await recommendFeed('u1');
+    // Its only vote can't be read: as if the reader had done nothing (a cold start), and nothing near it is lifted.
+    expect(cold.coldStart).toBe(true);
+    vi.mocked(buildUserProfile).mockResolvedValue(profile(['t1'], { connections: [] }));
+    expect((await recommendFeed('u1')).coldStart).toBe(true);
+    vi.mocked(buildUserProfile).mockResolvedValue(profile(['t1']));
+    selectAll();
+    expect((await recommendFeed('u1')).coldStart).toBeUndefined();
   });
 
   it('gives fewer than eight when nothing more fits the taste (C5): never padded with what does not', async () => {
