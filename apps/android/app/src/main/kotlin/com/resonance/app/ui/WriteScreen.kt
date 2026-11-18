@@ -571,6 +571,7 @@ private fun WriteForm(
                 model, bridge, bar = bar, compact = compactWindow, pad = pad, columnMax = columnMax, scroll = writeScroll,
                 page = page, docked = docked, dockPx = if (docked) dockPx else 0, pillWidth = pillWidth,
                 titleFocus = titleFocus, onTitleFocus = { titleFocused = it },
+                replying = model.referenceCardId?.let { id -> { ReplyingBand(session, id) } },
                 onRestore = {
                     scope.launch {
                         if (model.restore() == true) trash?.restoredAlone = true
@@ -756,6 +757,8 @@ private fun WritingStep(
     onTitleFocus: (Boolean) -> Unit,
     onRestore: () -> Unit,
     dismissKeyboard: () -> Unit,
+    /** A reply card's band over the title: the story it answers (round 26 §U6). */
+    replying: (@Composable () -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     var viewportCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -838,6 +841,11 @@ private fun WritingStep(
             BasicText(it, style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.Danger), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive })
         }
         if (!bar || line != null || model.saveError != null) Spacer(Modifier.height(16.dp))
+        // 回應〈…〉: what this reply card answers, over its title (round 26 §U6).
+        if (replying != null) {
+            replying()
+            Spacer(Modifier.height(12.dp))
+        }
         TitleField(model, bridge, compact, titleFocus, onTitleFocus)
         // The title → the story's first line (round 11 §4); what the title says of itself lies in this gap.
         Spacer(Modifier.height(writerTitleGap(compact)))
