@@ -36,6 +36,7 @@ import type {
   CardBoxTabName,
   CardDetailBody,
   CardListBody,
+  CardTapBody,
   FeedPageBody,
   ProfileBody,
   RecommendedFeedBody,
@@ -667,6 +668,12 @@ export interface CardPageLists {
    * public path (and if the request failed) each embed reads its own card.
    */
   embeds: CardEmbedSource | null;
+  /**
+   * The resonance tap (共振, round 26) as the server answers this viewer (`CardDetail.tap`): signed in, from the
+   * same request as the lists; undefined while it loads and on the public path (signed out); null where no one
+   * may tap or see the taps (a draft, the trash, a shared card, a block).
+   */
+  tap?: CardTapBody | null;
 }
 
 /** Several lists as one, each card once (the first time it appears). */
@@ -691,12 +698,17 @@ const CARD_PAGE_INCLUDE = 'resonances,related,links,embeds';
 
 const EMPTY: CardsWithAuthors = { cards: [], authors: {} };
 
-interface LoadedCardPageLists {
+export interface LoadedCardPageLists {
   resonances: CardsWithAuthors;
   related: CardsWithAuthors;
   links: CardsWithAuthors;
   embeds: CardsWithAuthors;
+  /** `CardDetail.tap` (null from a server older than the field, as for a card no one may tap). */
+  tap: CardTapBody | null;
 }
+
+/** The SWR key of the card page's one signed-in request (the lists and the tap): the tap's toggle writes through it. */
+export const cardPageKey = (id: string, uid: string) => `cardPage:${id}:${uid}`;
 
 /** One GET /api/v1/cards/{id}?include=…, as the lists the page draws; null: the viewer can't read the card. */
 async function fetchCardPageLists(id: string): Promise<LoadedCardPageLists | null> {
@@ -707,6 +719,7 @@ async function fetchCardPageLists(id: string): Promise<LoadedCardPageLists | nul
     related: summaryList(body.related),
     links: summaryList(body.links),
     embeds: summaryList(body.embeds),
+    tap: body.tap ?? null,
   };
 }
 
@@ -728,7 +741,7 @@ async function fetchCardPageLists(id: string): Promise<LoadedCardPageLists | nul
 export function useCardPageLists(id: string | undefined, referenceCardId: string | undefined): CardPageLists {
   const { user } = useAuth();
   const path = useReadPath();
-  const signedIn = useSWR(path === 'v1' && id ? `cardPage:${id}:${user!.id}` : null, () => fetchCardPageLists(id!));
+  const signedIn = useSWR(path === 'v1' && id ? cardPageKey(id, user!.id) : null, () => fetchCardPageLists(id!));
   const pub = path === 'public';
   const related = useRelated(pub ? id : undefined);
   const incoming = useResonanceCards(pub ? id : undefined);
@@ -742,8 +755,8 @@ export function useCardPageLists(id: string | undefined, referenceCardId: string
   return useMemo<CardPageLists>(() => {
     if (path === 'v1') {
       if (d === undefined) return { embeds: failed ? null : LOADING };
-      if (d === null) return { resonances: EMPTY, related: EMPTY, links: EMPTY, embeds: NONE_EMBEDDED };
-      return { resonances: d.resonances, related: d.related, links: d.links, embeds: { status: 'ready', cards: d.embeds } };
+      if (d === null) return { resonances: EMPTY, related: EMPTY, links: EMPTY, embeds: NONE_EMBEDDED, tap: null };
+      return { resonances: d.resonances, related: d.related, links: d.links, embeds: { status: 'ready', cards: d.embeds }, tap: d.tap };
     }
     if (path === null) return { embeds: LOADING };
     return {

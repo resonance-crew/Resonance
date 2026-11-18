@@ -1,0 +1,212 @@
+// @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { ReactNode } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SWRConfig } from 'swr';
+import { act, fireEvent, renderWithIntl, screen, userEvent, waitFor, within } from '@/../test/render';
+import type { CardTapBody } from '@/lib/api/v1/schemas';
+import { ApiError } from '@/lib/db/firestore/client/api';
+import { keepNoteDraft, readNoteDraft } from '@/lib/data/noteDrafts';
+import { ReadAfterArea } from './ReadAfterArea';
+
+/**
+ * Round 26, SETTLED「The note, in place」(replacing §U4): 寄小紙條 opens the note under the end row — never a dialog
+ * over the story; tapping 共振 opens nothing. The field is the composer's input capsule; its words are the card's
+ * note draft as they are typed; one line under it says one thing at a time.
+ */
+
+const auth = vi.hoisted(() => ({ value: { user: { id: 'viewer' } as { id: string } | null, loading: false } }));
+vi.mock('@/components/providers/AuthProvider', () => ({ useAuth: () => auth.value }));
+const push = vi.fn();
+vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ push, replace: vi.fn() }),
+  Link: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a>,
+}));
+const toast = vi.hoisted(() => ({ show: vi.fn(), dismiss: vi.fn() }));
+vi.mock('@/components/providers/ToastProvider', () => ({ useToast: () => toast }));
+vi.mock('@/lib/data/hooks', async (original) => ({
+  ...(await original<typeof import('@/lib/data/hooks')>()),
+  useMyProfile: () => ({ data: { id: 'viewer', handle: 'viewer-handle', initials: 'VI', accentColor: 'x', avatarSeed: '4' } }),
+  useMyResonance: () => ({ data: null }),
+}));
+vi.mock('@/lib/db/firestore/client/taps', () => ({ setTap: vi.fn(() => Promise.resolve({ on: true, changed: true })), listTaps: vi.fn() }));
+const sendNote = vi.fn((..._a: unknown[]) => Promise.resolve('note-1'));
+vi.mock('@/lib/db/firestore/client/notes', () => ({ sendNote: (...a: unknown[]) => sendNote(...a), NOTE_MAX_LENGTH: 2000 }));
+vi.mock('@/lib/db/firestore/client/bookmarks', () => ({ isBookmarked: vi.fn(() => Promise.resolve(false)), toggleBookmark: vi.fn() }));
+const hint = vi.hoisted(() => ({ visible: true }));
+vi.mock('@/lib/hints', () => ({ useHint: () => ({ visible: hint.visible, dismiss: vi.fn() }) }));
+
+const author = { id: 'author-1', handle: 'bob', initials: 'BO', accentColor: 'x' };
+const TAP: CardTapBody = { mine: false, faces: [], more: false, mayNote: true };
+
+function renderPage(tap: CardTapBody = TAP) {
+  return renderWithIntl(
+    <SWRConfig value={{ provider: () => new Map() }}>
+      <ReadAfterArea cardId="c1" cardTitle="Title" author={author} tap={tap} />
+    </SWRConfig>,
+  );
+}
+
+const user = () => userEvent.setup({ pointerEventsCheck: 0 });
+const noteSegment = () => within(screen.getAllByRole('group')[0]).getByRole('button', { name: 'Note' });
+const field = () => screen.queryByRole('textbox', { name: 'Send the author a little note' });
+
+beforeEach(() => {
+  auth.value = { user: { id: 'viewer' }, loading: false };
+  hint.visible = true;
+  localStorage.clear();
+  sessionStorage.clear();
+});
+afterEach(() => vi.clearAllMocks());
+
+describe('the note, in place', () => {
+  it('opens under the end row when 寄小紙條 is tapped, focused — never in a dialog', async () => {
+    renderPage();
+    expect(field()).toBeNull();
+    await user().click(noteSegment());
+    const box = field()!;
+    expect(box).toHaveFocus();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(noteSegment()).toHaveAttribute('aria-expanded', 'true');
+    const block = document.getElementById(noteSegment().getAttribute('aria-controls')!)!;
+    expect(block).toContainElement(box);
+    // In the page, after the capsule's lines: not over the story.
+    expect(block.compareDocumentPosition(screen.getAllByRole('group')[0]) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(box).toHaveAttribute('placeholder', 'A note for the author…');
+    // The privacy line under it, the envelope's column before it.
+    expect(screen.getByText('Only the author can see this')).toBeInTheDocument();
+  });
+
+  it('tapping 共振 opens no field; with the tap on the field asks which part stayed', async () => {
+    renderPage();
+    await user().click(within(screen.getAllByRole('group')[0]).getByRole('button', { name: 'Resonate' }));
+    expect(field()).toBeNull();
+    const second = renderPage({ ...TAP, mine: true });
+    await user().click(within(second.container.querySelector('[role="group"]') as HTMLElement).getByRole('button', { name: 'Note' }));
+    expect(within(second.container).getByRole('textbox')).toHaveAttribute('placeholder', 'What stayed with you?');
+  });
+
+  it('closes an empty field on the segment or Escape, and only takes the focus back to one with words', async () => {
+    renderPage();
+    await user().click(noteSegment());
+    await user().click(noteSegment());
+    expect(field()).toBeNull();
+    expect(noteSegment()).toHaveAttribute('aria-expanded', 'false');
+
+    await user().click(noteSegment());
+    await user().keyboard('{Escape}');
+    expect(field()).toBeNull();
+    expect(noteSegment()).toHaveFocus();
+
+    await user().click(noteSegment());
+    await user().type(field()!, 'the bridge part');
+    field()!.blur();
+    await user().click(noteSegment());
+    expect(field()).toHaveFocus();
+    await user().keyboard('{Escape}');
+    expect(field()).not.toBeNull();
+    expect(field()).not.toHaveFocus();
+  });
+
+  it('never throws words away: typed is kept, and a draft opens the field with the page', async () => {
+    const first = renderPage();
+    await user().click(noteSegment());
+    await user().type(field()!, 'kept for later');
+    expect(readNoteDraft('viewer', 'c1')).toBe('kept for later');
+    first.unmount();
+
+    renderPage();
+    await waitFor(() => expect(field()).toHaveValue('kept for later'));
+  });
+
+  it('sends at once: the field clears and closes, the toast says so, the draft goes once the server has it', async () => {
+    renderPage();
+    await user().click(noteSegment());
+    expect(screen.getByRole('button', { name: 'Send' })).toHaveAttribute('aria-disabled', 'true');
+    await user().type(field()!, 'the puddles');
+    expect(screen.getByRole('button', { name: 'Send' })).not.toHaveAttribute('aria-disabled');
+    await user().click(screen.getByRole('button', { name: 'Send' }));
+    expect(sendNote).toHaveBeenCalledWith(expect.objectContaining({ cardId: 'c1', text: 'the puddles', clientId: expect.any(String) }));
+    expect(field()).toBeNull();
+    expect(toast.show).toHaveBeenCalledWith({ message: 'Your note is on its way' });
+    await waitFor(() => expect(readNoteDraft('viewer', 'c1')).toBeNull());
+  });
+
+  it('puts the words back and says why when the server refuses while the page is here', async () => {
+    sendNote.mockRejectedValueOnce(new ApiError(409, 'conflict', 'full'));
+    renderPage();
+    await user().click(noteSegment());
+    await user().type(field()!, 'one more');
+    await user().click(screen.getByRole('button', { name: 'Send' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent("You've left notes they haven't answered yet — wait for their reply");
+    expect(field()).toHaveValue('one more');
+    // The error's line wins over the privacy line.
+    expect(screen.queryByText('Only the author can see this')).toBeNull();
+  });
+
+  it('offers 再寄一次 in a toast when the page is gone, opening the card with the field', async () => {
+    let fail!: (e: unknown) => void;
+    sendNote.mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)));
+    const page = renderPage();
+    await user().click(noteSegment());
+    await user().type(field()!, 'gone too soon');
+    await user().click(screen.getByRole('button', { name: 'Send' }));
+    page.unmount();
+    await act(async () => fail(new ApiError(500, 'internal', 'boom')));
+    const shown = toast.show.mock.calls.at(-1)![0] as { message: string; action: { label: string; onAction: () => void } };
+    expect(shown.message).toBe("Your note didn't go out");
+    expect(shown.action.label).toBe('Try again');
+    shown.action.onAction();
+    expect(push).toHaveBeenCalledWith('/card/c1?note=1');
+    // The words wait on the device for that.
+    expect(readNoteDraft('viewer', 'c1')).toBe('gone too soon');
+  });
+
+  it('past 200 offers to make it a card: the words go to the writer out of the address, the field closes', async () => {
+    renderPage();
+    await user().click(noteSegment());
+    const long = 'b'.repeat(220);
+    fireEvent.change(field()!, { target: { value: long } });
+    await user().click(screen.getByRole('button', { name: 'Want to turn this into a card of your own?' }));
+    expect(push).toHaveBeenCalledWith('/write?referenceCardId=c1');
+    expect(sessionStorage.getItem('resonance:write-seed:c1')).toBe(long);
+    expect(readNoteDraft('viewer', 'c1')).toBeNull();
+    expect(field()).toBeNull();
+  });
+
+  it('shows the count only from 1,800 characters', async () => {
+    renderPage();
+    await user().click(noteSegment());
+    fireEvent.change(field()!, { target: { value: 'a'.repeat(1799) } });
+    expect(screen.queryByText(/\/ 2000/)).toBeNull();
+    fireEvent.change(field()!, { target: { value: 'a'.repeat(1800) } });
+    expect(screen.getByText('1800 / 2000')).toBeInTheDocument();
+  });
+
+  it('while three notes wait for the author, opens the one line saying so — and keeps the draft', async () => {
+    renderPage({ ...TAP, mayNote: false });
+    await user().click(noteSegment());
+    expect(field()).toBeNull();
+    expect(screen.getByText("You've left notes they haven't answered yet — wait for their reply")).toBeInTheDocument();
+
+    keepNoteDraft('viewer', 'c2', 'still here');
+    renderWithIntl(<ReadAfterArea cardId="c2" cardTitle="T" author={author} tap={{ ...TAP, mayNote: false }} />);
+    await waitFor(() => expect(screen.getByDisplayValue('still here')).toBeInTheDocument());
+  });
+
+  it('signed out: the segment goes to sign-in, focus alone never navigates', async () => {
+    auth.value = { user: null, loading: false };
+    renderPage();
+    noteSegment().focus();
+    expect(push).not.toHaveBeenCalled();
+    await user().click(noteSegment());
+    expect(push).toHaveBeenCalledWith('/signin');
+    expect(field()).toBeNull();
+  });
+
+  it('leaves no note dialog on the card page', () => {
+    const src = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/ReadAfterArea.tsx'), 'utf8');
+    expect(src).not.toMatch(/Modal|NoteComposer/);
+  });
+});

@@ -119,11 +119,11 @@ describe('ResonatePicker', () => {
   // one muted line under it — when it came out, 匿名 · first for an anonymous card.
   it('leads with writing a new card, then lists the cards that may resonate, saying why some are missing', async () => {
     renderPicker();
-    const dialog = screen.getByRole('dialog', { name: 'Resonate with this card' });
-    expect(within(dialog).getByRole('heading', { name: 'Resonate with this card' })).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog', { name: 'Reply with a card' });
+    expect(within(dialog).getByRole('heading', { name: 'Reply with a card' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Write a new card' })).toBeInTheDocument();
 
-    const choices = await screen.findByRole('radiogroup', { name: 'Resonate with this card' });
+    const choices = await screen.findByRole('radiogroup', { name: 'Reply with a card' });
     const rows = within(choices).getAllByRole('radio');
     expect(rows.map((r) => r.textContent)).toEqual(['Card walkSep 1', 'A day at the seaAnonymous · Sep 1']);
     // Each row is named by its title and described by its meta line.
@@ -134,7 +134,7 @@ describe('ResonatePicker', () => {
     expect(screen.queryByText('Card answering')).toBeNull();
     expect(screen.queryByText('Card friends-only')).toBeNull();
     expect(screen.queryByText('Card origin')).toBeNull();
-    expect(screen.getByText("Cards already resonating with another card aren't listed")).toBeInTheDocument();
+    expect(screen.getByText("Cards already replying to another card aren't listed")).toBeInTheDocument();
     // The round-3 chrome is gone: no subtitle, no hint under "write a new card", no caption over the cards.
     expect(screen.queryByText("Write a new card, or pick one you've written about something similar")).toBeNull();
     expect(screen.queryByText('Start from this card and put your own experience into words')).toBeNull();
@@ -145,7 +145,7 @@ describe('ResonatePicker', () => {
     mockShelf.mockResolvedValue([card('walk'), card('sea')]);
     renderPicker();
     await screen.findByRole('radio', { name: 'Card walk' });
-    expect(screen.queryByText("Cards already resonating with another card aren't listed")).toBeNull();
+    expect(screen.queryByText("Cards already replying to another card aren't listed")).toBeNull();
   });
 
   it('opens the writer for a new card from the first row', async () => {
@@ -160,7 +160,7 @@ describe('ResonatePicker', () => {
     const onResonated = vi.fn();
     const { onClose } = renderPicker({ onResonated });
     await waitFor(() => expect(reads.mine).toHaveBeenCalledTimes(1));
-    const confirm = screen.getByRole('button', { name: 'Resonate' });
+    const confirm = screen.getByRole('button', { name: 'Reply' });
     // Nothing chosen yet: the verb is not pressable.
     expect(confirm).toBeDisabled();
 
@@ -189,7 +189,7 @@ describe('ResonatePicker', () => {
   it('lets a marked card go when it is tapped again, and the verb is not pressable then', async () => {
     renderPicker();
     const walk = await screen.findByRole('radio', { name: 'Card walk' });
-    const confirm = screen.getByRole('button', { name: 'Resonate' });
+    const confirm = screen.getByRole('button', { name: 'Reply' });
     await user().click(walk);
     expect(confirm).toBeEnabled();
     await user().click(walk);
@@ -202,14 +202,14 @@ describe('ResonatePicker', () => {
     mockCallApi.mockRejectedValue(new ApiError(409, 'conflict', 'already answering'));
     const { onClose } = renderPicker();
     await user().click(await screen.findByRole('radio', { name: 'Card walk' }));
-    await user().click(screen.getByRole('button', { name: 'Resonate' }));
+    await user().click(screen.getByRole('button', { name: 'Reply' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('This card already resonates with another card');
+    expect(await screen.findByRole('alert')).toHaveTextContent('This card already replies to another card');
     expect(onClose).not.toHaveBeenCalled();
     await waitFor(() => expect(mockShelf).toHaveBeenCalledTimes(2));
     // The mark goes with what it was based on (as in the apps): nothing is chosen until a card is again.
     expect(screen.getByRole('radio', { name: 'Card walk' })).toHaveAttribute('aria-checked', 'false');
-    expect(screen.getByRole('button', { name: 'Resonate' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Reply' })).toBeDisabled();
   });
 
   // While the choice is on its way, cancel is visibly out of reach (as in the apps), and nothing closes the picker.
@@ -218,7 +218,7 @@ describe('ResonatePicker', () => {
     mockCallApi.mockReturnValue(new Promise((r) => (answer = r)));
     const { onClose } = renderPicker();
     await user().click(await screen.findByRole('radio', { name: 'Card walk' }));
-    await user().click(screen.getByRole('button', { name: 'Resonate' }));
+    await user().click(screen.getByRole('button', { name: 'Reply' }));
     const cancel = screen.getByRole('button', { name: 'Cancel' });
     await waitFor(() => expect(cancel).toBeDisabled());
     expect(onClose).not.toHaveBeenCalled();
@@ -230,9 +230,9 @@ describe('ResonatePicker', () => {
     mockCallApi.mockRejectedValue(new ApiError(403, 'blocked', 'blocked'));
     const { onClose } = renderPicker();
     await user().click(await screen.findByRole('radio', { name: 'Card walk' }));
-    await user().click(screen.getByRole('button', { name: 'Resonate' }));
+    await user().click(screen.getByRole('button', { name: 'Reply' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't resonate — please try again");
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't reply — please try again");
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -241,16 +241,16 @@ describe('ResonatePicker', () => {
     renderPicker();
     expect(await screen.findByText('You have no public cards yet — write your first one above')).toBeInTheDocument();
     expect(screen.queryByRole('radio')).toBeNull();
-    expect(screen.queryByText("Cards already resonating with another card aren't listed")).toBeNull();
-    expect(screen.getByRole('button', { name: 'Resonate' })).toBeDisabled();
+    expect(screen.queryByText("Cards already replying to another card aren't listed")).toBeNull();
+    expect(screen.getByRole('button', { name: 'Reply' })).toBeDisabled();
   });
 
   // Their public cards are there, only none may answer this one: never "no public cards yet".
   it('says why none is listed when every public card answers another, once', async () => {
     mockShelf.mockResolvedValue([card('answering', { referenceCardId: 'someone-elses' })]);
     renderPicker();
-    expect(await screen.findByText("Cards already resonating with another card aren't listed")).toBeInTheDocument();
-    expect(screen.getAllByText("Cards already resonating with another card aren't listed")).toHaveLength(1);
+    expect(await screen.findByText("Cards already replying to another card aren't listed")).toBeInTheDocument();
+    expect(screen.getAllByText("Cards already replying to another card aren't listed")).toHaveLength(1);
     expect(screen.queryByText('You have no public cards yet — write your first one above')).toBeNull();
     expect(screen.queryByRole('radio')).toBeNull();
     expect(screen.getByRole('button', { name: 'Write a new card' })).toBeInTheDocument();
@@ -269,9 +269,9 @@ describe('ResonatePicker', () => {
     expect(screen.queryByRole('radiogroup')).toBeNull();
     expect(screen.queryByRole('list')).toBeNull();
     expect(screen.queryByText('You have no public cards yet — write your first one above')).toBeNull();
-    expect(screen.queryByText("Cards already resonating with another card aren't listed")).toBeNull();
+    expect(screen.queryByText("Cards already replying to another card aren't listed")).toBeNull();
     expect(screen.getByRole('button', { name: 'Write a new card' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Resonate' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Reply' })).toBeDisabled();
   });
 
   it('closes through its tonal cancel', async () => {

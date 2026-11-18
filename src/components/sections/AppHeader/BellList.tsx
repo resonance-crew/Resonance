@@ -181,7 +181,7 @@ export function BellList({ bell, onPicked, variant }: BellListProps) {
  * paper's pen line, never a straight cut short of it. The body reaches past the dialog's box on both sides for that
  * (`--bell-bleed`); the drawn bar stays in the content's gutter, over the bands.
  */
-function DialogScroll({ children }: { children: ReactNode }) {
+export function DialogScroll({ children }: { children: ReactNode }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollEdges = useEdgeFades(scrollRef);
   const paper = useModalPaper();

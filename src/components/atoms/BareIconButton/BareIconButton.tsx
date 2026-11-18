@@ -39,6 +39,8 @@ export interface BareIconButtonProps {
   tipAlign?: 'start' | 'center' | 'end';
   seed?: number;
   className?: string;
+  /** A toggle (the card page's 收藏): whether it is on (aria-pressed), its glyph filled while it is. */
+  pressed?: boolean;
   /** It opens something (a popover, a panel): whether that is open now, and what it is (aria-expanded / -haspopup). */
   expanded?: boolean;
   haspopup?: 'dialog' | 'menu';
@@ -74,6 +76,7 @@ export function BareIconButton({
   expanded,
   haspopup,
   keepFocus = false,
+  pressed,
 }: BareIconButtonProps) {
   // Escape puts the tooltip away until the pointer or focus leaves (content shown on hover or focus has to be dismissible).
   const [tipDismissed, setTipDismissed] = useState(false);
@@ -93,7 +96,7 @@ export function BareIconButton({
         <path d={disc} />
       </svg>
       <span className={styles.glyph} style={turn && !loading ? { transform: turn } : undefined}>
-        {loading ? <ButtonLoader size={iconSize} /> : <Icon name={icon} size={iconSize} strokeWidth={INK} />}
+        {loading ? <ButtonLoader size={iconSize} /> : <Icon name={icon} size={iconSize} strokeWidth={INK} fill={pressed ? 'currentColor' : undefined} />}
       </span>
     </>
   );
@@ -111,6 +114,7 @@ export function BareIconButton({
           aria-busy={loading || undefined}
           aria-expanded={expanded}
           aria-haspopup={haspopup}
+          aria-pressed={pressed}
           onPointerDown={keepFocus ? (e) => e.preventDefault() : undefined}
           onMouseDown={keepFocus ? (e) => e.preventDefault() : undefined}
           onClick={loading ? undefined : onClick}

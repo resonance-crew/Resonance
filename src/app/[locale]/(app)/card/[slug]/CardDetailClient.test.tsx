@@ -521,7 +521,7 @@ describe('the lists around the card and its embedded cards', () => {
     renderPage({ seed: seedWith(EMBEDDING_STORY) });
 
     // The resonance section: the card it answers, then the replies; then the related cards.
-    expect(await screen.findByText('Cards resonating with this')).toBeInTheDocument();
+    expect(await screen.findByText('Cards replying to this one')).toBeInTheDocument();
     expect(screen.getAllByText('The card it answers').length).toBeGreaterThan(0);
     expect(screen.getAllByText('A reply to it').length).toBeGreaterThan(0);
     expect(screen.getByText('Extended cards')).toBeInTheDocument();
@@ -667,7 +667,7 @@ describe("the owner's card in the trash", () => {
     expect(screen.getByText('The core thought of this card')).toBeInTheDocument();
     expect(screen.getByText('The longer story body of this card.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Manage card' })).toBeNull();
-    expect(screen.queryByText('Cards resonating with this')).toBeNull();
+    expect(screen.queryByText('Cards replying to this one')).toBeNull();
     expect(screen.queryByText('Extended cards')).toBeNull();
     // One segmented shape: the verb's solid face, then the danger's tonal one.
     expect(screen.getByRole('button', { name: 'Restore' })).toHaveAttribute('data-face', 'solid');

@@ -1,0 +1,49 @@
+/* The faces' place at the start of the end row's second line (round 26 §U2). */
+.anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+/* One button, 44 tall (the hit area): the faces centred in it, no frame — a face is its own shape. */
+.faces {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 6px;
+  margin: 0;
+  border: none;
+  border-radius: 14px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+span.faces {
+  cursor: default;
+}
+
+.faces:focus-visible {
+  outline: 2px solid var(--color-terracotta);
+  outline-offset: 0;
+}
+
+/* The popover under the faces on a wide screen (§U2.5): 8 below, at their start, 280 wide, six 52 rows then it
+   scrolls inside — the one menu sheet, no shadow. */
+.popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  width: 280px;
+}
+
+.popoverBody {
+  position: relative;
+  z-index: 0;
+  max-height: calc(52px * 6 + 16px);
+  overflow-y: auto;
+  padding-block: 8px;
+  scrollbar-width: thin;
+}

@@ -33,7 +33,7 @@ export function ResonanceCards({ cards, authors }: CardsWithAuthors) {
 
   return (
     <section className={styles.section}>
-      <h2 className={styles.heading}>{t('resonanceSection.title')}</h2>
+      <h2 className={styles.heading}>{t('replies.title')}</h2>
       <CardLinkGrid cards={shown} authors={authors} />
       {!all && cards.length > RESONANCES_SHOWN && (
         <div className={styles.foot}>
