@@ -328,7 +328,48 @@ async function main() {
   }, 50);
   await notify('n-message', 'message', { fromUserId: 'bob', fromHandle: 'bob', preview: '嗨，謝謝你的共振！' }, 20, true);
 
+  // Round 26 (§V3, §A1.9): every published card read as the emulators read one — the fixed offline reading and
+  // vectors derived from the card's id (lib/recommend/offline), as indexCard writes them with no model to ask — so
+  // the emulator's picks, cold start, related cards and landing film have a pool to work with.
+  await seedReadings(db);
+
   console.log(`Seeded ${SEED_USERS.length} users into ${EMULATOR_PROJECT_ID}.`);
+}
+
+/** The offline reading of every published card, and its parts' vectors (what indexCard writes under the emulators). */
+async function seedReadings(db: import('firebase-admin/firestore').Firestore) {
+  const { FieldValue } = await import('firebase-admin/firestore');
+  const { offlineReading, offlineEmbedding, OFFLINE_MODEL } = await import('../src/lib/recommend/offline');
+  const { listedForStrangers } = await import('../src/lib/recommend/signature');
+  const { indexContentHash, INDEX_VERSION } = await import('../src/lib/recommend/indexCard');
+  const { blankCard, thinCard } = await import('../src/lib/cards/blank');
+  const { FirestoreVectorStore } = await import('../src/lib/recommend/vectorStore/firestore');
+  const store = new FirestoreVectorStore(db);
+  const cards = await db.collection('cards').get();
+  for (const doc of cards.docs) {
+    const card = doc.data();
+    if (card.publishedAt == null) continue;
+    const title = String(card.thoughtCore ?? '');
+    const story = String(card.story ?? '');
+    if (blankCard({ thoughtCore: title, story }) || thinCard({ thoughtCore: title, story })) continue;
+    const reading = offlineReading(doc.id, title, story);
+    const visibility = card.trashedAt != null ? 'private' : card.visibility === 'public' || card.visibility === 'connections' ? card.visibility : 'private';
+    await db.doc(`cardSignatures/${doc.id}`).set({
+      authorId: String(card.authorId), version: INDEX_VERSION, model: OFFLINE_MODEL, embedModel: OFFLINE_MODEL, ...reading,
+      listedForStrangers: listedForStrangers(reading), templated: false, rewritten: false, error: null,
+      usage: { input: 0, output: 0, reasoning: 0, embed: 0 }, updatedAt: FieldValue.serverTimestamp(),
+    });
+    await doc.ref.update({
+      signature: { coreInsight: reading.throughLine, placeholder: false, contentHash: indexContentHash(title, story) },
+      indexedAt: card.publishedAt,
+    });
+    await store.upsert(
+      offlineEmbedding(doc.id, reading).map(({ part, vector }) => ({
+        cardId: doc.id, authorId: String(card.authorId), visibility, channel: part.channel, part: part.part, vector, embedModel: OFFLINE_MODEL,
+        insightScore: reading.insightScore, coreInsight: part.insight, situation: part.situation, lifeDomain: reading.lifeDomain, span: part.span,
+      })),
+    );
+  }
 }
 
 main().catch((err) => {
