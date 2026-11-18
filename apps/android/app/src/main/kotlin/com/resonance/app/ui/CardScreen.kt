@@ -267,11 +267,15 @@ class CardPageModel(private val session: Session, private val key: String, previ
         if (readingView == null) readingView = ReadingSession.of(d, now)
     }
 
-    /** Sends where this page view's reading stands (its running totals), unless that is what was sent last. */
-    fun sendReading(now: Long) {
+    /**
+     * The page hid at [now] — behind something (ON_STOP), or away: left for another page or tab, it is disposed with no
+     * ON_STOP reaching it (the scene's lifecycle is held at STARTED while it goes). Its reading stops counting, so a
+     * return counts from then, and where it stands (its running totals) is sent, unless that is what was sent last.
+     */
+    fun hideReading(now: Long) {
         val view = readingView ?: return
+        val report = view.hide(now)
         val id = detail?.card?.id ?: return
-        val report = view.report(now)
         if (report == readingSent || (report.activeSeconds <= 0.0 && report.progress <= 0.0)) return
         readingSent = report
         session.reportReading(id, report)
@@ -436,12 +440,9 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
         snapshotFlow { list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset }.drop(1).collect { view.input(SystemClock.elapsedRealtime()) }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { model.readingView?.front(SystemClock.elapsedRealtime(), true) }
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-        val now = SystemClock.elapsedRealtime()
-        model.readingView?.front(now, false)
-        model.sendReading(now)
-    }
-    DisposableEffect(model) { onDispose { model.sendReading(SystemClock.elapsedRealtime()) } }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { model.hideReading(SystemClock.elapsedRealtime()) }
+    // Left for another page or tab, no ON_STOP comes: the page hides as it goes, or a return would count the time away.
+    DisposableEffect(model) { onDispose { model.hideReading(SystemClock.elapsedRealtime()) } }
     // On a tablet the bar's middle takes the card's title once the article's own has gone up under
     // it (round 5, part C): where the title ends below the article's top, and whether it has.
     val chrome = LocalHeaderChrome.current

@@ -74,6 +74,25 @@ class ReadingReportTest {
         assertEquals(35.0, view.report(305_000L).activeSeconds, 0.0)
     }
 
+    @Test fun aPageLeftForAnotherCountsNothingWhileAway() {
+        // Skimmed to its end row, then a related card tapped: the page is disposed with no ON_STOP, and hides as it goes.
+        val view = ReadingSession.of(page(short), now = 0L, id = "view-0006")!!
+        view.progressed(0.5)
+        view.sawEnd()
+        view.input(1_000L)
+        val left = view.hide(2_000L)
+        assertEquals(2.0, left.activeSeconds, 0.0)
+        assertFalse(left.reachedEnd)
+        // Back five minutes later (the return's ON_START): the time away counts nothing, so 0.4 × 12 s is still not reached.
+        view.front(302_000L, shown = true)
+        val back = view.report(302_000L)
+        assertEquals(left.activeSeconds, back.activeSeconds, 0.0)
+        assertFalse(back.reachedEnd)
+        // Reading on from there counts again.
+        view.input(305_000L)
+        assertEquals(5.0, view.report(305_000L).activeSeconds, 0.0)
+    }
+
     @Test fun nothingIsSentForTheAuthorNorForADraft() {
         assertNull(ReadingSession.of(page(short, isOwner = true), now = 0L))
         assertNull(ReadingSession.of(page(short, published = false), now = 0L))

@@ -59,6 +59,15 @@ internal class ReadingSession(val id: String, private val expectedSeconds: Doubl
         }
     }
 
+    /**
+     * The page hid at [now] — went behind something, or away for another page or tab — and its running totals as it
+     * hid, to send: nothing counts until it is [front] again.
+     */
+    fun hide(now: Long): ReadingReportRequest {
+        front(now, false)
+        return report(now)
+    }
+
     /** The story's share scrolled through now (0…1): the largest is kept. */
     fun progressed(share: Double) {
         progress = max(progress, share.coerceIn(0.0, 1.0))
