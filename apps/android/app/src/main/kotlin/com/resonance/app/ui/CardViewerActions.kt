@@ -90,6 +90,8 @@ fun CardViewerActions(
     onOpenCard: () -> Unit = {},
     onTapChanged: (CardTap) -> Unit = {},
     onRow: (LayoutCoordinates) -> Unit = {},
+    /** What the screenshots ask of this end once it is on screen (`--es cardEnd …`, [DebugLaunch.cardEnd]). */
+    launch: Set<DebugLaunch.CardEnd> = emptySet(),
 ) {
     val cardId = detail.card.id
     val toasts = LocalToasts.current
@@ -161,13 +163,12 @@ fun CardViewerActions(
         sends.took(cardId)
         note.failed(session.noteDrafts?.text(cardId).orEmpty(), ask.error)
     }
-    // The screenshots' states (`--es cardEnd tap,note,taps`), taken once by the first card page that can.
+    // The screenshots' states (`--es cardEnd tap,note,taps`), as the page took them.
     var openList by remember(cardId) { mutableStateOf(false) }
-    LaunchedEffect(cardId) {
-        val asked = DebugLaunch.takeCardEnd()
-        if (DebugLaunch.CardEnd.Tap in asked && !switch.on) switch.flip(scope)
-        if (DebugLaunch.CardEnd.Note in asked && !note.open) note.segment(mayNote)
-        if (DebugLaunch.CardEnd.Taps in asked) openList = true
+    LaunchedEffect(cardId, launch) {
+        if (DebugLaunch.CardEnd.Tap in launch && !switch.on) switch.flip(scope)
+        if (DebugLaunch.CardEnd.Note in launch && !note.open) note.segment(mayNote)
+        if (DebugLaunch.CardEnd.Taps in launch) openList = true
     }
 
     var bookmarked by remember(cardId) { mutableStateOf(false) }

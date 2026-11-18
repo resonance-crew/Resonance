@@ -389,7 +389,7 @@ internal fun showsPermissionNotice(
     !canNotify && (
         refused || (
             settings != null &&
-                (settings.picks || settings.connectionCards || (!appCanNotify && (settings[NotificationSwitch.Messages] || settings[NotificationSwitch.ResonanceTaps])))
+                (settings.picks || settings.connectionCards || (!appCanNotify && settings[NotificationSwitch.Messages]))
             )
         )
 

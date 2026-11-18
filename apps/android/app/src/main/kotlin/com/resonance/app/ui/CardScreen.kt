@@ -9,6 +9,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.resonance.app.DebugLaunch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import com.resonance.app.AppearanceStore
 import androidx.compose.animation.core.AnimationVector1D
@@ -464,6 +465,8 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     val columns = LocalWindowLayout.current.cardPage(rail = phase == "loaded" && headings.isNotEmpty())
     val railed = columns.railStart != null
     var listCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    // Where the story's end row (or the author's line) is: the screenshots bring it into view.
+    var endRowCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val scope = rememberCoroutineScope()
     val reduced = context.prefersReducedMotion()
     // Round 25 §F: the interface's language, the switch, and where the translate line is on screen.
@@ -574,6 +577,17 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                 // Related cards are the feed's kind of list: bands, or the bordered grid when expanded;
                 // the page's other lists follow it.
                 val relatedLayout = cardListLayout()
+                // The screenshots' end of the story (`--es cardEnd …`, round 26): taken once, its row brought to the middle.
+                val launchEnd = remember(card.id) { DebugLaunch.takeCardEnd() }
+                LaunchedEffect(launchEnd) {
+                    if (launchEnd.isEmpty()) return@LaunchedEffect
+                    // The story laid out (its pictures' places) before the row is found.
+                    delay(LAUNCH_END_SETTLE_MS)
+                    val row = endRowCoords?.takeIf { it.isAttached } ?: return@LaunchedEffect
+                    val frame = listCoords?.takeIf { it.isAttached } ?: return@LaunchedEffect
+                    val y = frame.localPositionOf(row, Offset.Zero).y
+                    list.scrollBy(y - frame.size.height * 0.5f)
+                }
                 // The keyboard (the note's field, round 26) shortens the list, so the field is brought above it.
                 LazyColumn(Modifier.fillMaxSize().imePadding().onPlaced { listCoords = it }, state = list, contentPadding = PaddingValues(top = top, bottom = 40.dp)) {
                     item(key = "article") {
@@ -629,15 +643,20 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 40.dp),
                                 onOpenCard = { open(Route.Card(card.id)) },
                                 onTapChanged = model::tapped,
-                                onRow = { row -> if (lineOnScreen(row, pageView.height)) model.readingView?.sawEnd() },
+                                onRow = { row ->
+                                    endRowCoords = row
+                                    if (lineOnScreen(row, pageView.height)) model.readingView?.sawEnd()
+                                },
+                                launch = launchEnd,
                             )
                             // The author's own published card: who resonated, where a reader's row would be (§U3).
                             else if (!trashedOwn && card.publishedAt != null) {
                                 val taps = TapFaces.of(d.tap)
-                                if (!taps.isEmpty) {
-                                    val launchList = remember(card.id) { DebugLaunch.CardEnd.Taps in DebugLaunch.takeCardEnd() }
-                                    AuthorTaps(session, card.id, taps, d.anonymous, open, Modifier.padding(bottom = 40.dp), launchOpen = launchList)
-                                }
+                                if (!taps.isEmpty) AuthorTaps(
+                                    session, card.id, taps, d.anonymous, open,
+                                    Modifier.onGloballyPositioned { endRowCoords = it }.padding(bottom = 40.dp),
+                                    launchOpen = DebugLaunch.CardEnd.Taps in launchEnd,
+                                )
                             }
                         }
                     }
@@ -1182,6 +1201,9 @@ private fun rememberReadingProgress(list: LazyListState, top: Dp): ReadingProgre
  */
 internal fun easesProgress(jump: Float, scrolling: Boolean, interrupted: Boolean, reduced: Boolean): Boolean =
     !reduced && !scrolling && !interrupted && jump >= PROGRESS_JUMP
+
+/** How long a screenshot's card page waits for its story to be laid out before its end is brought into view. */
+private const val LAUNCH_END_SETTLE_MS = 700L
 
 /** The smallest change of the reading progress that eases rather than snaps (2 % of the story). */
 internal const val PROGRESS_JUMP = 0.02f

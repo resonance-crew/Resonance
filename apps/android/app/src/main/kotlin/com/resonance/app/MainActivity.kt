@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
  *   --es writeStep publish         with --es route /write/<id>: the writer opens on its publish step once the card has loaded
  *   --ez coverFrame true           with that step up: 調整封面 opens over the cover's picture once it has loaded
  *   --es scrollToCard <slug>       a person's page (--es route /u/<handle>) scrolls to that card (a tablet: its block) once its cards are in
- *   --es cardEnd tap,note,taps     the next card page's end (round 26): 共振 turned on, the note's field open, the faces' list open (a reader's or the author's)
+ *   --es cardEnd end,tap,note,taps the next card page scrolls its end to the middle (round 26) — and 共振 turned on, the note's field open, the faces' list open (a reader's or the author's)
  *   --es threadDraft …             fills a conversation's composer (--es route /messages/<handle> opens one)
  *   --es pushToken …               registers that stand-in push token under the signed-in account
  *   --es pushTitle … [--es pushBody … --es pushRoute … --es pushId … --es pushFromUserId … --es pushType pick|new_card --es pushCardId …]   posts the notification a push received while open shows
@@ -340,17 +340,20 @@ object DebugLaunch {
         cardScrollIndex(scrollToCard, routeKeys, before, perItem)?.also { scrollToCard = null }
 
     /**
-     * What the next card page's end does once it has loaded (`--es cardEnd tap,note,taps`, round 26's screenshots
-     * `card-tapped`, `card-note-open`, `card-note-wait`, `taps-list`, `taps-author-list`): 共振 turned on, the note's field
-     * opened, the faces' list opened — a reader's, or on the author's own card the author's. Taken once.
+     * What the next card page's end does once it has loaded (`--es cardEnd end,tap,note,taps`, round 26's screenshots
+     * `card-tapped`, `card-note-open`, `card-note-wait`, `card-own-taps`, `taps-list`, `taps-author-list`): any of them
+     * scrolls the end row (or the author's line) to the middle of the window, the story's last lines above it; `tap`
+     * turns 共振 on, `note` opens the note's field, `taps` the faces' list — a reader's, or on the author's own card the
+     * author's. Taken once.
      */
     var cardEnd: Set<CardEnd> = emptySet()
 
-    enum class CardEnd { Tap, Note, Taps }
+    enum class CardEnd { End, Tap, Note, Taps }
 
     /** [cardEnd]'s words (comma-separated; anything else asks nothing). */
     fun cardEndOf(value: String?): Set<CardEnd> = value.orEmpty().split(',').mapNotNull { word ->
         when (word.trim().lowercase()) {
+            "end" -> CardEnd.End
             "tap" -> CardEnd.Tap
             "note" -> CardEnd.Note
             "taps" -> CardEnd.Taps
