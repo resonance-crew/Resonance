@@ -503,7 +503,7 @@ public enum L10n {
             public static func resonanceSummary(count: Int) -> String { Strings.shared.format("app.notifications.resonanceSummary", ["count": count]) }
             /// Translation complete
             public static var translationDone: String { Strings.shared.string("app.notifications.translationDone") }
-            /// {handle} resonated with your card
+            /// {handle} replied to your story with a card
             public static func resonance(handle: String) -> String { Strings.shared.format("app.notifications.resonance", ["handle": handle]) }
             /// {handle} sent you a little note
             public static func note(handle: String) -> String { Strings.shared.format("app.notifications.note", ["handle": handle]) }
@@ -545,6 +545,14 @@ public enum L10n {
             public static func messageSticker(name: String) -> String { Strings.shared.format("app.notifications.messageSticker", ["name": name]) }
             /// Sent {count, plural, one {# photo} other {# photos}}
             public static func messageAlbum(count: Int) -> String { Strings.shared.format("app.notifications.messageAlbum", ["count": count]) }
+            /// {handle} resonated with your card
+            public static func tap(handle: String) -> String { Strings.shared.format("app.notifications.tap", ["handle": handle]) }
+            /// {handle} and {count, plural, one {# other} other {# others}} resonated with your card
+            public static func tapMany(handle: String, count: Int) -> String { Strings.shared.format("app.notifications.tapMany", ["handle": handle, "count": count]) }
+            /// {count, plural, one {# person} other {# people}} read this card to the end last week
+            public static func readSummary(count: Int) -> String { Strings.shared.format("app.notifications.readSummary", ["count": count]) }
+            /// {count, plural, one {# person} other {# people}} read this card to the end last week, and someone came back to read it a
+            public static func readSummaryReread(count: Int) -> String { Strings.shared.format("app.notifications.readSummaryReread", ["count": count]) }
         }
         public enum SignOutConfirm {
             /// Sign out?
@@ -637,7 +645,7 @@ public enum L10n {
             public static var entryShort: String { Strings.shared.string("card.note.entryShort") }
             /// A little note
             public static var label: String { Strings.shared.string("card.note.label") }
-            /// Something you want to tell the author…
+            /// A note for the author…
             public static var placeholder: String { Strings.shared.string("card.note.placeholder") }
             /// Only the author can see this
             public static var hint: String { Strings.shared.string("card.note.hint") }
@@ -657,6 +665,8 @@ public enum L10n {
             public static var failed: String { Strings.shared.string("card.note.failed") }
             /// Try again
             public static var reopen: String { Strings.shared.string("card.note.reopen") }
+            /// Note
+            public static var short: String { Strings.shared.string("card.note.short") }
         }
         public enum Bookmark {
             /// Bookmark
@@ -790,6 +800,42 @@ public enum L10n {
             /// AI translation
             public static var mark: String { Strings.shared.string("card.translate.mark") }
         }
+        public enum Tap {
+            /// Resonate
+            public static var label: String { Strings.shared.string("card.tap.label") }
+            /// Resonated
+            public static var on: String { Strings.shared.string("card.tap.on") }
+            /// You resonated
+            public static var selfOnly: String { Strings.shared.string("card.tap.selfOnly") }
+            /// People you're connected with who resonated: {names}
+            public static func facesReader(names: String) -> String { Strings.shared.format("card.tap.facesReader", ["names": names]) }
+            /// Resonated with this card: {names}
+            public static func facesAuthor(names: String) -> String { Strings.shared.format("card.tap.facesAuthor", ["names": names]) }
+            /// and others
+            public static var more: String { Strings.shared.string("card.tap.more") }
+            /// What stayed with you?
+            public static var ask: String { Strings.shared.string("card.tap.ask") }
+            /// Send
+            public static var send: String { Strings.shared.string("card.tap.send") }
+            /// Didn't go through, try again
+            public static var failed: String { Strings.shared.string("card.tap.failed") }
+        }
+        public enum Reply {
+            /// Reply with a card
+            public static var label: String { Strings.shared.string("card.reply.label") }
+            /// Card
+            public static var short: String { Strings.shared.string("card.reply.short") }
+            /// Replied
+            public static var done: String { Strings.shared.string("card.reply.done") }
+        }
+        public enum Replies {
+            /// Cards replying to this one
+            public static var title: String { Strings.shared.string("card.replies.title") }
+        }
+        /// Replying to “{title}”
+        public static func replying(title: String) -> String { Strings.shared.format("card.replying", ["title": title]) }
+        /// Saved to your box
+        public static var saved: String { Strings.shared.string("card.saved") }
     }
     public enum Share {
         /// Share profile
@@ -1170,7 +1216,7 @@ public enum L10n {
         public static var corePlaceholder: String { Strings.shared.string("write.corePlaceholder") }
         /// Story
         public static var storyLabel: String { Strings.shared.string("write.storyLabel") }
-        /// Start with the moment that made you want to write…
+        /// A moment you lived, and what it changed in you…
         public static var storyPlaceholder: String { Strings.shared.string("write.storyPlaceholder") }
         public enum Editor {
             /// Editor toolbar
@@ -1969,6 +2015,8 @@ public enum L10n {
             public static var saveError: String { Strings.shared.string("settings.notifications.saveError") }
             /// These notifications go to the Resonance app on your phone
             public static var appsOnly: String { Strings.shared.string("settings.notifications.appsOnly") }
+            /// When someone resonates
+            public static var taps: String { Strings.shared.string("settings.notifications.taps") }
         }
         public enum Language {
             /// UI language

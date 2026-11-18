@@ -505,7 +505,7 @@ object L10n {
             fun resonanceSummary(count: Int): String = Strings.format("app.notifications.resonanceSummary", mapOf("count" to count))
             /** Translation complete */
             val translationDone: String get() = Strings.string("app.notifications.translationDone")
-            /** {handle} resonated with your card */
+            /** {handle} replied to your story with a card */
             fun resonance(handle: String): String = Strings.format("app.notifications.resonance", mapOf("handle" to handle))
             /** {handle} sent you a little note */
             fun note(handle: String): String = Strings.format("app.notifications.note", mapOf("handle" to handle))
@@ -547,6 +547,14 @@ object L10n {
             fun messageSticker(name: String): String = Strings.format("app.notifications.messageSticker", mapOf("name" to name))
             /** Sent {count, plural, one {# photo} other {# photos}} */
             fun messageAlbum(count: Int): String = Strings.format("app.notifications.messageAlbum", mapOf("count" to count))
+            /** {handle} resonated with your card */
+            fun tap(handle: String): String = Strings.format("app.notifications.tap", mapOf("handle" to handle))
+            /** {handle} and {count, plural, one {# other} other {# others}} resonated with your card */
+            fun tapMany(handle: String, count: Int): String = Strings.format("app.notifications.tapMany", mapOf("handle" to handle, "count" to count))
+            /** {count, plural, one {# person} other {# people}} read this card to the end last week */
+            fun readSummary(count: Int): String = Strings.format("app.notifications.readSummary", mapOf("count" to count))
+            /** {count, plural, one {# person} other {# people}} read this card to the end last week, and someone came back to read it a */
+            fun readSummaryReread(count: Int): String = Strings.format("app.notifications.readSummaryReread", mapOf("count" to count))
         }
         object SignOutConfirm {
             /** Sign out? */
@@ -639,7 +647,7 @@ object L10n {
             val entryShort: String get() = Strings.string("card.note.entryShort")
             /** A little note */
             val label: String get() = Strings.string("card.note.label")
-            /** Something you want to tell the author… */
+            /** A note for the author… */
             val placeholder: String get() = Strings.string("card.note.placeholder")
             /** Only the author can see this */
             val hint: String get() = Strings.string("card.note.hint")
@@ -659,6 +667,8 @@ object L10n {
             val failed: String get() = Strings.string("card.note.failed")
             /** Try again */
             val reopen: String get() = Strings.string("card.note.reopen")
+            /** Note */
+            val short: String get() = Strings.string("card.note.short")
         }
         object Bookmark {
             /** Bookmark */
@@ -792,6 +802,42 @@ object L10n {
             /** AI translation */
             val mark: String get() = Strings.string("card.translate.mark")
         }
+        object Tap {
+            /** Resonate */
+            val label: String get() = Strings.string("card.tap.label")
+            /** Resonated */
+            val on: String get() = Strings.string("card.tap.on")
+            /** You resonated */
+            val selfOnly: String get() = Strings.string("card.tap.selfOnly")
+            /** People you're connected with who resonated: {names} */
+            fun facesReader(names: String): String = Strings.format("card.tap.facesReader", mapOf("names" to names))
+            /** Resonated with this card: {names} */
+            fun facesAuthor(names: String): String = Strings.format("card.tap.facesAuthor", mapOf("names" to names))
+            /** and others */
+            val more: String get() = Strings.string("card.tap.more")
+            /** What stayed with you? */
+            val ask: String get() = Strings.string("card.tap.ask")
+            /** Send */
+            val send: String get() = Strings.string("card.tap.send")
+            /** Didn't go through, try again */
+            val failed: String get() = Strings.string("card.tap.failed")
+        }
+        object Reply {
+            /** Reply with a card */
+            val label: String get() = Strings.string("card.reply.label")
+            /** Card */
+            val short: String get() = Strings.string("card.reply.short")
+            /** Replied */
+            val done: String get() = Strings.string("card.reply.done")
+        }
+        object Replies {
+            /** Cards replying to this one */
+            val title: String get() = Strings.string("card.replies.title")
+        }
+        /** Replying to “{title}” */
+        fun replying(title: String): String = Strings.format("card.replying", mapOf("title" to title))
+        /** Saved to your box */
+        val saved: String get() = Strings.string("card.saved")
     }
     object Share {
         /** Share profile */
@@ -1172,7 +1218,7 @@ object L10n {
         val corePlaceholder: String get() = Strings.string("write.corePlaceholder")
         /** Story */
         val storyLabel: String get() = Strings.string("write.storyLabel")
-        /** Start with the moment that made you want to write… */
+        /** A moment you lived, and what it changed in you… */
         val storyPlaceholder: String get() = Strings.string("write.storyPlaceholder")
         object Editor {
             /** Editor toolbar */
@@ -1971,6 +2017,8 @@ object L10n {
             val saveError: String get() = Strings.string("settings.notifications.saveError")
             /** These notifications go to the Resonance app on your phone */
             val appsOnly: String get() = Strings.string("settings.notifications.appsOnly")
+            /** When someone resonates */
+            val taps: String get() = Strings.string("settings.notifications.taps")
         }
         object Language {
             /** UI language */

@@ -297,7 +297,7 @@
       "inviteAccepted": "{handle} 接受了你的邀請，你們連上線了 ✿",
       "resonanceSummary": "昨天有 {count} 個人與你共振",
       "translationDone": "卡片翻譯完成",
-      "resonance": "{handle} 與你的卡片共振了",
+      "resonance": "{handle} 用一張卡片回應了你的文章",
       "note": "{handle} 寄來一張小紙條",
       "cardLink": "{handle} 用卡片連結了你的文章",
       "connect": "與 Ta 建立連結",
@@ -317,7 +317,11 @@
       "earlier": "更早",
       "justNow": "剛剛",
       "messageSticker": "傳送了一張貼圖：{name}",
-      "messageAlbum": "傳送了 {count} 張圖片"
+      "messageAlbum": "傳送了 {count} 張圖片",
+      "tap": "{handle} 與你的卡片共振了",
+      "tapMany": "{handle} 和另外 {count} 人與你的卡片共振了",
+      "readSummary": "上週有 {count} 個人把這張卡讀到最後",
+      "readSummaryReread": "上週有 {count} 個人把這張卡讀到最後，有人回來又讀了一遍"
     },
     "signOutConfirm": {
       "title": "確定要登出嗎？",
@@ -381,7 +385,8 @@
       "cancel": "取消",
       "close": "關閉",
       "failed": "紙條沒寄出",
-      "reopen": "再寄一次"
+      "reopen": "再寄一次",
+      "short": "寄小紙條"
     },
     "bookmark": {
       "add": "收藏",
@@ -458,7 +463,28 @@
       "ready": "譯文好了",
       "show": "看譯文",
       "mark": "AI 翻譯"
-    }
+    },
+    "tap": {
+      "label": "共振",
+      "on": "已共振",
+      "selfOnly": "你共振了",
+      "facesReader": "你連結的人裡，與這張卡片共振的：{names}",
+      "facesAuthor": "與這張卡片共振的人：{names}",
+      "more": "還有其他人",
+      "ask": "哪一段讓你有共鳴？",
+      "send": "寄出",
+      "failed": "沒送出去，再試一次"
+    },
+    "reply": {
+      "label": "用卡片回應",
+      "short": "寫卡片",
+      "done": "已回應"
+    },
+    "replies": {
+      "title": "回應這篇的卡片"
+    },
+    "replying": "回應〈{title}〉",
+    "saved": "收藏到卡片盒了"
   },
   "share": {
     "profile": "分享個人頁",
@@ -654,7 +680,7 @@
     "titlePlaceholder": "一句話標題",
     "corePlaceholder": "例：被看見，比被喜歡更難得⋯",
     "storyLabel": "故事本體",
-    "storyPlaceholder": "從那個讓你想寫下來的時刻開始⋯",
+    "storyPlaceholder": "寫下一段經歷，和它讓你有了什麼改變⋯",
     "editor": {
       "toolbarLabel": "編輯工具列",
       "bold": "粗體",
@@ -1076,7 +1102,8 @@
       "permissionDenied": "Resonance 的通知在系統設定裡關閉了，請先到系統設定開啟",
       "openSettings": "打開系統設定",
       "saveError": "沒有存好，再試一次",
-      "appsOnly": "這些通知會送到手機上的 Resonance App"
+      "appsOnly": "這些通知會送到手機上的 Resonance App",
+      "taps": "有人共振"
     },
     "language": {
       "ui": "介面語言",

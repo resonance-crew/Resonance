@@ -39,7 +39,7 @@ describe('NoteComposer', () => {
 
     expect(screen.getByText('Only the author can see this')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText('Something you want to tell the author…'), {
+    fireEvent.change(screen.getByPlaceholderText('A note for the author…'), {
       target: { value: 'Your story stayed with me all day.' },
     });
     await user().click(screen.getByRole('button', { name: 'Send' }));
@@ -77,7 +77,7 @@ describe('NoteComposer', () => {
   it('ends in a lone tonal Close once the note is sent', async () => {
     const onClose = vi.fn();
     renderWithIntl(<NoteComposer cardId="c1" onClose={onClose} />);
-    fireEvent.change(screen.getByPlaceholderText('Something you want to tell the author…'), {
+    fireEvent.change(screen.getByPlaceholderText('A note for the author…'), {
       target: { value: 'Thank you' },
     });
     await user().click(screen.getByRole('button', { name: 'Send' }));
@@ -94,7 +94,7 @@ describe('NoteComposer', () => {
   it('asks the writer to wait for an answer when their letter is full, and never shows the server’s words', async () => {
     vi.mocked(sendNote).mockRejectedValueOnce(new ApiError(409, 'conflict', 'Wait for them to reply.'));
     renderWithIntl(<NoteComposer cardId="c1" />);
-    fireEvent.change(screen.getByPlaceholderText('Something you want to tell the author…'), { target: { value: 'One more thing' } });
+    fireEvent.change(screen.getByPlaceholderText('A note for the author…'), { target: { value: 'One more thing' } });
     await user().click(screen.getByRole('button', { name: 'Send' }));
     expect(await screen.findByText("You've left notes they haven't answered yet — wait for their reply")).toBeInTheDocument();
     expect(screen.queryByText('Wait for them to reply.')).not.toBeInTheDocument();
@@ -111,7 +111,7 @@ describe('NoteComposer', () => {
   it('says the card can’t be found when it is gone, not to try again', async () => {
     vi.mocked(sendNote).mockRejectedValueOnce(new ApiError(404, 'not_found', 'No such card.'));
     renderWithIntl(<NoteComposer cardId="c1" />);
-    fireEvent.change(screen.getByPlaceholderText('Something you want to tell the author…'), { target: { value: 'Still thinking of it' } });
+    fireEvent.change(screen.getByPlaceholderText('A note for the author…'), { target: { value: 'Still thinking of it' } });
     await user().click(screen.getByRole('button', { name: 'Send' }));
     expect(await screen.findByText("This card can't be found")).toBeInTheDocument();
     expect(screen.queryByText("Couldn't send — please try again")).not.toBeInTheDocument();
@@ -124,7 +124,7 @@ describe('NoteComposer', () => {
     vi.mocked(sendNote).mockRejectedValueOnce(new TypeError('Failed to fetch')).mockRejectedValueOnce(new TypeError('Failed to fetch'));
     renderWithIntl(<NoteComposer cardId="c1" />);
     // Looked up each time: the composer shows it was sent at once (round 21), and comes back on a failure.
-    const box = () => screen.getByPlaceholderText('Something you want to tell the author…');
+    const box = () => screen.getByPlaceholderText('A note for the author…');
     const clientIdOf = (call: number) => vi.mocked(sendNote).mock.calls[call][0].clientId;
 
     fireEvent.change(box(), { target: { value: 'First words' } });
@@ -150,7 +150,7 @@ describe('NoteComposer', () => {
     let refuse!: (e: unknown) => void;
     vi.mocked(sendNote).mockReturnValueOnce(new Promise((_resolve, reject) => (refuse = reject)) as never);
     const view = renderWithIntl(<NoteComposer cardId="c1" />);
-    fireEvent.change(screen.getByPlaceholderText('Something you want to tell the author…'), { target: { value: 'Thank you' } });
+    fireEvent.change(screen.getByPlaceholderText('A note for the author…'), { target: { value: 'Thank you' } });
     await user().click(screen.getByRole('button', { name: 'Send' }));
     expect(screen.getByText('Your note is on its way')).toBeInTheDocument();
     view.unmount();
@@ -167,7 +167,7 @@ describe('NoteComposer', () => {
   it('offers the resonance upgrade only past the length threshold, carrying the text', async () => {
     const onUpgrade = vi.fn();
     renderWithIntl(<NoteComposer cardId="c1" onUpgrade={onUpgrade} />);
-    const box = screen.getByPlaceholderText('Something you want to tell the author…');
+    const box = screen.getByPlaceholderText('A note for the author…');
 
     fireEvent.change(box, { target: { value: 'short note' } });
     expect(
@@ -186,7 +186,7 @@ describe('NoteComposer', () => {
   // 小紙條儲存訊息: what was typed outlives the composer — closed by its 取消,
   // the backdrop or the browser — and comes back on the same card, until sent.
   describe('unsent words', () => {
-    const box = () => screen.getByPlaceholderText('Something you want to tell the author…');
+    const box = () => screen.getByPlaceholderText('A note for the author…');
 
     it('come back when the composer opens on the same card again, after any way of closing it', async () => {
       const first = renderWithIntl(<NoteComposer cardId="c1" onClose={vi.fn()} />);
