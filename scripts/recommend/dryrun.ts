@@ -25,7 +25,7 @@ import type { DocumentData } from 'firebase-admin/firestore';
 import { getAdminDb } from '../../src/lib/db/firestore/admin';
 import { ChatIncomplete, embed, type TokenUsage } from '../../src/lib/ai/openai';
 import { costOf, dollars } from '../../src/lib/ai/prices';
-import { INDEX_DEADLINE_MS, readCard, readingText } from '../../src/lib/ai/tasks';
+import { fullReadingChars, INDEX_DEADLINE_MS, readCard, readingText } from '../../src/lib/ai/tasks';
 import { thinCard } from '../../src/lib/cards/blank';
 import { formulaPhrases, listedForStrangers, readingParts } from '../../src/lib/recommend/signature';
 import type { CardReading } from '../../src/lib/db/types';
@@ -130,7 +130,7 @@ async function main() {
           id: doc.id,
           key,
           title: title.trim(),
-          fullChars: `${title.trim()}\n\n${story.trim()}`.trim().length,
+          fullChars: fullReadingChars({ title, story }),
           readChars: readingText({ title, story }).length,
           reading: null,
           listed: false,

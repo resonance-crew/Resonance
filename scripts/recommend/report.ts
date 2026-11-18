@@ -347,8 +347,8 @@ export function renderReport(input: ReportInput): string {
 
   lines.push('## 模型讀到多少', '');
   lines.push(
-    `- 簽名模型只拿到標題加故事的前 ${count(input.readLimit)} 個字（含標點和 Markdown 記號）。${count(stats.cards)} 張裡有 ${count(stats.cut)} 張比這長` +
-      (stats.cut ? `，這些卡片的中位數是只讀到全文的 ${pct(stats.readShare)}。` : '。'),
+    `- 讀卡模型讀標題加故事的純文字（不含 Markdown 記號），最多 ${count(input.readLimit)} 個字，更長的讀開頭和結尾。${count(stats.cards)} 張裡有 ${count(stats.cut)} 張比這長` +
+      (stats.cut ? `，這些卡片的中位數是讀到全文的 ${pct(stats.readShare)}。` : '。'),
   );
   lines.push(`- 核心體悟的長度：最短 ${stats.insightChars.min} 字，中位數 ${stats.insightChars.median} 字，最長 ${stats.insightChars.max} 字。`);
   lines.push(

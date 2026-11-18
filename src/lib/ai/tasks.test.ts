@@ -9,6 +9,7 @@ import {
   insightsLine,
   readCard,
   readingText,
+  fullReadingChars,
   storyUnits,
   SLUG_MAX_TOKENS,
   SLUG_TIMEOUT_MS,
@@ -221,6 +222,10 @@ describe('readCard', () => {
     expect(text).toContain('……');
     const short = '一段不長的故事。'.repeat(100);
     expect(readingText({ title: 't', story: short })).toBe(`t\n\n${short}`);
+    // Uncut, the whole of it is read: its Markdown is no part of its length (the reports counted every story cut).
+    const marked = `**${short}** [連結](https://example.com)`;
+    expect(fullReadingChars({ title: 't', story: marked })).toBe(readingText({ title: 't', story: marked }).length);
+    expect(fullReadingChars({ title: '長篇', story })).toBeGreaterThan(readingText({ title: '長篇', story }).length);
   });
 
   it("holds none of the lines that asked for a saying, and asks the model to check for formula phrasings itself", () => {

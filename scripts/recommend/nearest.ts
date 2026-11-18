@@ -35,7 +35,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import type { DocumentData } from 'firebase-admin/firestore';
 import { getAdminDb } from '../../src/lib/db/firestore/admin';
 import { embed } from '../../src/lib/ai/openai';
-import { READING_MAX_CHARS, readingText } from '../../src/lib/ai/tasks';
+import { fullReadingChars, READING_MAX_CHARS, readingText } from '../../src/lib/ai/tasks';
 import { plainText } from '../../src/lib/markdown/plainText';
 import { currentEmbedModel } from '../../src/lib/recommend/indexCard';
 import { recordModel } from '../../src/lib/recommend/poolStats';
@@ -189,7 +189,7 @@ async function fromIndex() {
       id: doc.id,
       key: typeof data.slug === 'string' && data.slug ? data.slug : doc.id,
       title: title.trim(),
-      fullChars: `${title.trim()}\n\n${story.trim()}`.trim().length,
+      fullChars: fullReadingChars({ title, story }),
       readChars: readingText({ title, story }).length,
       coreInsight: String(reading?.throughLine ?? part0?.coreInsight ?? ''),
       situation: String(first?.situation ?? part0?.situation ?? ''),

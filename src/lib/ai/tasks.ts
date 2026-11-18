@@ -133,6 +133,16 @@ export function readingText(input: ExtractSignatureInput): string {
 }
 
 /**
+ * How long {@link readingText} would be uncut: the title and the story's whole
+ * plain text. Less than this read means the story was cut (the dry run's and
+ * the diagnostic's report): measured with the Markdown in it, every story
+ * with a link or a bold word looked cut.
+ */
+export function fullReadingChars(input: ExtractSignatureInput): number {
+  return `${input.title.trim()}\n\n${plainText(input.story).trim()}`.trim().length;
+}
+
+/**
  * The reading's reply: reasoning first (medium), then the answer. The cap
  * holds both, so a long story's thinking never leaves the answer unwritten
  * (finish_reason `length`, recorded as the card's error).
