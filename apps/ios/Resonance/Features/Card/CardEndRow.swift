@@ -298,9 +298,9 @@ struct CardEndRow: View {
             }
         }
         .frame(maxWidth: NoteInPlace.width(compact: compact, column: column) ?? .infinity, alignment: .leading)
-        // 12 above the keyboard once it has risen under the field (the page scrolls; nothing floats).
-        .padding(.bottom, NoteInPlace.gapAbove)
-        .id(Self.noteBlock)
+        // 12 above the keyboard once it has risen under the field (the page scrolls; nothing floats), with nothing added
+        // under it in the layout: the page's 40 is all there is to the next section.
+        .noteScrollTarget(Self.noteBlock)
     }
 
     private func openNote(focus: Bool) {

@@ -14,9 +14,12 @@ nonisolated enum NoteInPlace {
     static let countFrom = 1800
     /// How long after the last keystroke the words are kept (leaving keeps them at once).
     static let keepDelay: Duration = .milliseconds(400)
-    /// The field's block: 12 under the faces' row, 40 to what follows.
+    /// The field's block: 12 under the faces' row, 40 to what follows (the page's own 40 under the story's end).
     static let gapAbove: CGFloat = 12
     static let gapBelow: CGFloat = 40
+    /// Once the keyboard has risen under the field, its block rests this far over it: the scroll's reach, never the
+    /// layout's (`noteScrollTarget(_:)`).
+    static let keyboardGap: CGFloat = 12
     /// Wider than a phone, the field is as wide as the story's measure at most.
     static let maxWidth: CGFloat = 680
     /// Under the field: its one line, 6 below it.
@@ -75,6 +78,22 @@ nonisolated enum NoteInPlace {
     static func width(compact: Bool, column: CGFloat) -> CGFloat? {
         // Before the column is measured, the column's own width (nothing drawn 0 wide for a frame).
         compact || column <= 0 ? nil : min(column, maxWidth)
+    }
+}
+
+extension View {
+    /// The note's block as the page lays it out and as its focus scrolls it (SETTLED "the note, in place" 2): nothing
+    /// under it in the layout — the page's own 40 follows it to the next section, as on the web and Android — while what
+    /// the scroll brings to the visible bottom (anchor `.bottom`) is a clear reach ``NoteInPlace/keyboardGap`` tall right
+    /// under the block, so the block rests 12 over the keyboard (Android's bring-into-view rect, `NoteKeyboardClearance`).
+    /// The reach carries the id because a scroll takes an element's frame as its parent places it: on the block itself,
+    /// the layout's footprint, which the reach must not add to. It is clear and takes no touch.
+    func noteScrollTarget(_ id: String) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            self
+            Color.clear.frame(width: 1, height: NoteInPlace.keyboardGap).id(id)
+        }
+        .padding(.bottom, -NoteInPlace.keyboardGap)
     }
 }
 

@@ -113,4 +113,59 @@ extension Fixture {
     @Test func theCapsulesSecondLineWearsTheWebsSeed() {
         #expect(CardEndRow.secondLineSeed == 73)
     }
+
+    /// SETTLED "the note, in place" 2: the open field (or the wait line in its place) adds nothing under itself, so the
+    /// next section sits the page's 40 below it, as on the web and Android — 12 more made it 52.
+    @Test func theNoteBlockAddsNothingUnderItself() {
+        let page = VStack(alignment: .leading, spacing: 0) {
+            Color.black.frame(width: 200, height: 100).noteScrollTarget(CardEndRow.noteBlock)
+            Color.black.frame(width: 200, height: 1).padding(.top, NoteInPlace.gapBelow)
+        }
+        let size = UIHostingController(rootView: page.fixedSize()).sizeThatFits(in: CGSize(width: 400, height: 1000))
+        #expect(abs(size.height - (100 + NoteInPlace.gapBelow + 1)) < 0.5, "\(size)")
+    }
+
+    /// … and its focus still brings it to rest 12 over the keyboard: what the page scrolls to reaches 12 under the block.
+    @Test func theFocusStillBringsTheBlockTwelveOverTheKeyboard() async throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 400)
+        let probe = NoteScrollProbe()
+        let host = UIHostingController(rootView: NoteScrollProbe.Page(probe: probe))
+        host.safeAreaRegions = []
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        #expect(await eventually { probe.proxy != nil && probe.viewport.height > 0 && probe.block.height > 0 })
+        probe.proxy?.scrollTo(CardEndRow.noteBlock, anchor: .bottom)
+        let rests = await eventually { abs(probe.block.maxY - (probe.viewport.maxY - NoteInPlace.keyboardGap)) < 1 }
+        #expect(rests, "block \(probe.block) in \(probe.viewport)")
+    }
+}
+
+/// A page with the note's block far down it, and where the block and the page's visible area are once scrolled.
+@MainActor private final class NoteScrollProbe {
+    var proxy: ScrollViewProxy?
+    var block: CGRect = .zero
+    var viewport: CGRect = .zero
+
+    struct Page: View {
+        let probe: NoteScrollProbe
+
+        var body: some View {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        Color.clear.frame(height: 1000)
+                        Color.black.frame(height: 100)
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { probe.block = $0 }
+                            .noteScrollTarget(CardEndRow.noteBlock)
+                        Color.clear.frame(height: 1000)
+                    }
+                }
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { probe.viewport = $0 }
+                .onAppear { probe.proxy = proxy }
+            }
+        }
+    }
 }
