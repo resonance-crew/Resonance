@@ -19,8 +19,10 @@ export const IDLE_AFTER_MS = 30_000;
 export const END_SHARE = 0.4;
 /** A tick's longest stretch: a sleeping tab's timer coming back late counts no more than this. */
 const MAX_TICK_MS = 2_000;
-/** The ID token is fetched again before its hour is up, so a hide never waits for one. */
-const TOKEN_REFRESH_MS = 45 * 60_000;
+/** A fresh ID token is fetched this long before the one at hand runs out, so a hide never waits for one. */
+const TOKEN_REFRESH_EARLY_MS = 5 * 60_000;
+/** A token with less than this left isn't sent: the beacon (the session cookie) goes instead of a certain 401. */
+const TOKEN_MARGIN_MS = 60_000;
 
 /** A page view's id: 8–40 of A–Z a–z 0–9 - (the contract's). */
 export function newReadingSession(): string {
@@ -108,17 +110,19 @@ export function storyShare(story: DOMRect, viewportHeight: number): number {
 interface Credentials {
   token: string;
   headers: Record<string, string>;
-  at: number;
+  /** When the token runs out (its own `exp`, ms): a bearer past it is refused, and the server reads no cookie then. */
+  expires: number;
 }
 
 /**
- * Sends `body` as the page goes: a keepalive fetch with the ID token fetched beforehand (a hide can't wait for one);
- * else a beacon, which carries the session cookie; else nothing — a report is worth less than a page that hangs.
+ * Sends `body` as the page goes: a keepalive fetch with the ID token fetched beforehand (a hide can't wait for one),
+ * while that token has a minute or more left; else a beacon, which carries the session cookie; else nothing — a
+ * report is worth less than a page that hangs.
  */
 export function sendReport(cardId: string, report: ReadingReportInput, creds: Credentials | null): boolean {
   const url = `/api/v1/cards/${encodeURIComponent(cardId)}/reading`;
   const body = JSON.stringify(report);
-  if (creds && Date.now() - creds.at < 55 * 60_000 && typeof fetch === 'function') {
+  if (creds && Date.now() < creds.expires - TOKEN_MARGIN_MS && typeof fetch === 'function') {
     try {
       void fetch(url, {
         method: 'POST',
@@ -166,10 +170,14 @@ export function useReadingReport({ cardId, enabled, expectedSeconds, storyRef, e
     if (!enabled || !cardId) return;
     let creds: Credentials | null = null;
     let lastSent = '';
+    let live = true;
+    let refresh: number | undefined;
     let s = new ReadingSession(expected.current, Date.now());
     session.current = s;
 
-    const fetchCreds = () => {
+    // The token at hand and when it runs out (the SDK hands back its cached one, which may have minutes left); the
+    // next one a few minutes before that — forced, as the SDK would give the same one back until its last 30 s.
+    const fetchCreds = (force = false) => {
       let user: ReturnType<typeof getFirebaseClientAuth>['currentUser'] = null;
       try {
         user = getFirebaseClientAuth().currentUser;
@@ -177,15 +185,20 @@ export function useReadingReport({ cardId, enabled, expectedSeconds, storyRef, e
         // No client SDK here (it couldn't start): the beacon and its cookie will do.
       }
       if (!user) return;
-      void Promise.all([user.getIdToken(), appCheckHeaders().catch(() => ({}))]).then(
-        ([token, headers]) => {
-          creds = { token, headers, at: Date.now() };
+      void Promise.all([user.getIdTokenResult(force), appCheckHeaders().catch(() => ({}))]).then(
+        ([result, headers]) => {
+          if (!live) return;
+          const expires = Date.parse(result.expirationTime);
+          creds = { token: result.token, headers, expires: Number.isFinite(expires) ? expires : 0 };
+          window.clearTimeout(refresh);
+          // A forced one that still comes back short isn't asked for again at once.
+          const wait = Math.max(creds.expires - TOKEN_REFRESH_EARLY_MS - Date.now(), force ? TOKEN_MARGIN_MS : 0);
+          refresh = window.setTimeout(() => fetchCreds(true), wait);
         },
         () => {},
       );
     };
     fetchCreds();
-    const refresh = window.setInterval(fetchCreds, TOKEN_REFRESH_MS);
 
     const visible = () => document.visibilityState === 'visible';
     const measure = () => {
@@ -212,7 +225,8 @@ export function useReadingReport({ cardId, enabled, expectedSeconds, storyRef, e
       if (visible()) {
         s.tick(Date.now(), false);
         s.activity(Date.now());
-        if (!creds || Date.now() - creds.at > TOKEN_REFRESH_MS) fetchCreds();
+        // Back in front after a while away (a background tab's timers sleep): a fresh token if this one is near its end.
+        if (!creds || Date.now() > creds.expires - TOKEN_REFRESH_EARLY_MS) fetchCreds(!!creds);
       } else send();
     };
     const onPageHide = () => send();
@@ -238,8 +252,9 @@ export function useReadingReport({ cardId, enabled, expectedSeconds, storyRef, e
     return () => {
       // The card page going (another page of the site): its totals go with it.
       send();
+      live = false;
       window.clearInterval(tick);
-      window.clearInterval(refresh);
+      window.clearTimeout(refresh);
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('keydown', onActivity);
       window.removeEventListener('pointerdown', onActivity);

@@ -2,7 +2,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 
-const auth = vi.hoisted(() => ({ currentUser: { getIdToken: () => Promise.resolve('token-1') } as { getIdToken: () => Promise<string> } | null }));
+type TokenResult = { token: string; expirationTime: string };
+/** A signed-in user whose ID token runs out an hour from now (the SDK's cached one, as it hands it back). */
+const fullHour = () => ({ getIdTokenResult: (_force?: boolean): Promise<TokenResult> => Promise.resolve({ token: 'token-1', expirationTime: new Date(Date.now() + 3_600_000).toUTCString() }) });
+const auth = vi.hoisted(() => ({
+  currentUser: null as { getIdTokenResult: (force?: boolean) => Promise<{ token: string; expirationTime: string }>; getIdToken?: () => Promise<string> } | null,
+}));
 vi.mock('@/lib/auth/firebase/client', () => ({ getFirebaseClientAuth: () => auth }));
 vi.mock('@/lib/auth/firebase/appCheck', () => ({ appCheckHeaders: () => Promise.resolve({}) }));
 
@@ -21,6 +26,7 @@ function setVisibility(state: 'visible' | 'hidden') {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-11-19T10:00:00Z'));
+  auth.currentUser = fullHour();
   fetchMock.mockClear();
   vi.stubGlobal('fetch', fetchMock);
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
@@ -144,6 +150,45 @@ describe('useReadingReport', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(beacon).toHaveBeenCalledTimes(1);
     expect(beacon.mock.calls[0][0]).toBe('/api/v1/cards/c2/reading');
-    auth.currentUser = { getIdToken: () => Promise.resolve('token-1') };
+  });
+
+  it('never sends a bearer past its end: a token the SDK handed back with two minutes left goes as the beacon', async () => {
+    // The cached token, two minutes from its end — and the refresh fails (offline): nothing fresher comes.
+    const stale = { token: 'token-stale', expirationTime: new Date(Date.now() + 2 * 60_000).toUTCString() };
+    const getIdTokenResult = vi.fn((force?: boolean) => (force ? Promise.reject(new Error('offline')) : Promise.resolve(stale)));
+    // (getIdToken: the same cached token, as the SDK hands it back without its end.)
+    auth.currentUser = { getIdTokenResult, getIdToken: () => Promise.resolve(stale.token) };
+    const beacon = vi.fn((..._args: unknown[]) => true);
+    vi.stubGlobal('navigator', { ...navigator, sendBeacon: beacon });
+    renderHook(() => useReadingReport({ cardId: 'c3', enabled: true, expectedSeconds: 600, storyRef: { current: story }, endEl: null }));
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    window.dispatchEvent(new Event('scroll'));
+    await vi.advanceTimersByTimeAsync(1_000);
+    setVisibility('hidden');
+    // A fresh one was asked for before its end…
+    expect(getIdTokenResult).toHaveBeenCalledWith(true);
+    // …and the expired one never sent: the cookie's beacon carries the report.
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(beacon).toHaveBeenCalledTimes(1);
+  });
+
+  it('fetches a fresh token before the one at hand runs out, and sends with it', async () => {
+    let n = 0;
+    const getIdTokenResult = vi.fn((force?: boolean) => {
+      n += 1;
+      // The cached one with eight minutes left; asked again, a new hour.
+      const left = force ? 3_600_000 : 8 * 60_000;
+      return Promise.resolve({ token: `token-${n}`, expirationTime: new Date(Date.now() + left).toUTCString() });
+    });
+    auth.currentUser = { getIdTokenResult };
+    renderHook(() => useReadingReport({ cardId: 'c4', enabled: true, expectedSeconds: 600, storyRef: { current: story }, endEl: null }));
+    // Fifteen minutes in: past the first token's end.
+    await vi.advanceTimersByTimeAsync(15 * 60_000);
+    window.dispatchEvent(new Event('scroll'));
+    await vi.advanceTimersByTimeAsync(1_000);
+    setVisibility('hidden');
+    expect(getIdTokenResult).toHaveBeenNthCalledWith(2, true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(((fetchMock.mock.calls[0] as [string, RequestInit])[1].headers as Record<string, string>).Authorization).toBe('Bearer token-2');
   });
 });
