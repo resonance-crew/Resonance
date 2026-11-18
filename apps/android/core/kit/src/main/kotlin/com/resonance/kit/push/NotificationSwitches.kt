@@ -12,12 +12,19 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * The push switches of Settings → Notifications: messages and notes (on until turned off), and the
- * two pushes a person can ask for beyond the ones answering them (off until turned on).
+ * The push switches of Settings → Notifications: messages and notes, and someone resonating with
+ * your card (both on until turned off), and the two pushes a person can ask for beyond the ones
+ * answering them (off until turned on).
  */
 enum class NotificationSwitch {
     /** Messages and notes left on their cards: on unless turned off (a server without the switch rings them all). */
     Messages,
+
+    /**
+     * 有人共振 (round 26 §U8): someone tapped 共振 on your card — one push per reader and card, ever. On unless turned
+     * off (a server without the switch rings them).
+     */
+    ResonanceTaps,
 
     /** "A card for tonight": one of their picks, some evenings. */
     Picks,
@@ -29,22 +36,24 @@ enum class NotificationSwitch {
 operator fun NotificationSettings.get(switch: NotificationSwitch): Boolean = when (switch) {
     // Absent: a server from before the switch, which rings every message.
     NotificationSwitch.Messages -> messages ?: true
+    NotificationSwitch.ResonanceTaps -> resonanceTaps ?: true
     NotificationSwitch.Picks -> picks
     NotificationSwitch.ConnectionCards -> connectionCards
 }
 
 fun NotificationSettings.with(switch: NotificationSwitch, on: Boolean): NotificationSettings = when (switch) {
     NotificationSwitch.Messages -> copy(messages = on)
+    NotificationSwitch.ResonanceTaps -> copy(resonanceTaps = on)
     NotificationSwitch.Picks -> copy(picks = on)
     NotificationSwitch.ConnectionCards -> copy(connectionCards = on)
 }
 
 /**
- * What a new account's server holds before anyone flips a switch: messages on, the other two off.
+ * What a new account's server holds before anyone flips a switch: messages and taps on, the other two off.
  * The onboarding's notification step sends only the switches chosen otherwise ([changedFromDefaults]).
  */
 val NotificationSwitch.default: Boolean
-    get() = this == NotificationSwitch.Messages
+    get() = this == NotificationSwitch.Messages || this == NotificationSwitch.ResonanceTaps
 
 /** Of [chosen], the switches that differ from what a new account starts with: all an onboarding PATCH needs to say. */
 fun changedFromDefaults(chosen: Map<NotificationSwitch, Boolean>): Map<NotificationSwitch, Boolean> =

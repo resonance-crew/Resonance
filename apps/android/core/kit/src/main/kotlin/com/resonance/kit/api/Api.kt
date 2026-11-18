@@ -245,6 +245,12 @@ class ReadingApi(private val api: DefaultApi) {
         val target = if (to == "zh-TW") com.resonance.api.models.TranslationRequest.To.zhTW else com.resonance.api.models.TranslationRequest.To.en
         api.translateCard(key, com.resonance.api.models.TranslationRequest(target))
     }
+    /**
+     * How this reader read card [id] in one page view (round 26 §R3, POST /api/v1/cards/{id}/reading): that view's
+     * running totals, sent again as they grow — the server keeps each session's largest and adds sessions up, so a
+     * report sent twice counts once. Always 204, whatever it kept.
+     */
+    suspend fun reportReading(id: String, report: com.resonance.api.models.ReadingReportRequest) = call { api.reportCardReading(id, report) }
     suspend fun resonances(id: String): List<FeedCard> = call { api.getCardResonances(id).cards }
     suspend fun related(id: String): List<FeedCard> = call { api.getRelatedCards(id).cards }
     suspend fun links(id: String): List<FeedCard> = call { api.getCardLinks(id).cards }
