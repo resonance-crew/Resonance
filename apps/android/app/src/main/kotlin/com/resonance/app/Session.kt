@@ -142,6 +142,8 @@ class Session(
     val account = AccountApi(api, http)
     val writing = WritingApi(api, http)
     val messaging = MessagingApi(api, http)
+    /** The resonance tap (round 26 §R1): 共振 on a card, and the faces' lists. */
+    val taps = com.resonance.kit.api.TapApi(api, http)
     /** Pictures in chat: sent up and read back with the account's token, never through a plain image loader. */
     val pictures = ChatPicturesApi(api, pictureHttp)
     /** The thread's pictures on this device: their loader and caches, and the ones sent from here (emptied with the account). */
@@ -252,6 +254,13 @@ class Session(
     val hints: HintService? get() = uid?.let { HintService(it, prefs) }
     /** Notes on their way from the account (round 21): their client ids, and a failed one's 再寄一次. */
     val noteSends = NoteSends()
+
+    /**
+     * The signed-in person as their face is drawn (round 26 §U2: their own face slides in first when they tap 共振), as
+     * the server last drew it — its avatar's seed is the server's, which /me doesn't carry. Learnt from a card page's
+     * faces; forgotten with the account.
+     */
+    @Volatile var selfFace: com.resonance.api.models.Author? = null
     /** The signed-in account's unsent notes, by card (the note composer's words, kept until sent). */
     val noteDrafts: NoteDrafts.Account? get() = uid?.let { noteDraftStore?.of(it) }
     /** The signed-in account's unsent messages, by conversation (round 22 §4.4). */
@@ -384,6 +393,7 @@ class Session(
         }
         // The notes it wrote and didn't send: words to someone, kept for this account alone.
         noteDraftStore?.forget(who)
+        selfFace = null
         // Its unsent messages (round 22) and the stickers it sent last, likewise.
         chatDrafts.forget(who)
         stickerRecentsStore?.forget(who)

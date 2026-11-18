@@ -34,6 +34,7 @@ import kotlinx.coroutines.launch
  *   --es writeStep publish         with --es route /write/<id>: the writer opens on its publish step once the card has loaded
  *   --ez coverFrame true           with that step up: 調整封面 opens over the cover's picture once it has loaded
  *   --es scrollToCard <slug>       a person's page (--es route /u/<handle>) scrolls to that card (a tablet: its block) once its cards are in
+ *   --es cardEnd tap,note,taps     the next card page's end (round 26): 共振 turned on, the note's field open, the faces' list open (a reader's or the author's)
  *   --es threadDraft …             fills a conversation's composer (--es route /messages/<handle> opens one)
  *   --es pushToken …               registers that stand-in push token under the signed-in account
  *   --es pushTitle … [--es pushBody … --es pushRoute … --es pushId … --es pushFromUserId … --es pushType pick|new_card --es pushCardId …]   posts the notification a push received while open shows
@@ -105,6 +106,7 @@ class MainActivity : ComponentActivity() {
             // `--ez` from adb, or a string from Maestro's launchApp arguments.
             DebugLaunch.coverFrame = intent.getStringExtra("coverFrame") == "true" || intent.getBooleanExtra("coverFrame", false)
             DebugLaunch.scrollToCard = intent.getStringExtra("scrollToCard")
+            DebugLaunch.cardEnd = DebugLaunch.cardEndOf(intent.getStringExtra("cardEnd"))
             DebugLaunch.avifDecoder = intent.getBooleanExtra("avifDecoder", false)
             DebugLaunch.feedPicksDelay = intent.getIntExtra("feedPicksDelay", 0)
             DebugLaunch.feedPicksIds = intent.getStringExtra("feedPicks")?.split(',')?.map(String::trim)?.filter(String::isNotEmpty)
@@ -336,6 +338,28 @@ object DebugLaunch {
     /** Takes [scrollToCard]'s place among [routeKeys] (once it is there: a list still loading keeps the ask). */
     fun takeCardScroll(routeKeys: List<String>, before: Int, perItem: Int = 1): Int? =
         cardScrollIndex(scrollToCard, routeKeys, before, perItem)?.also { scrollToCard = null }
+
+    /**
+     * What the next card page's end does once it has loaded (`--es cardEnd tap,note,taps`, round 26's screenshots
+     * `card-tapped`, `card-note-open`, `card-note-wait`, `taps-list`, `taps-author-list`): 共振 turned on, the note's field
+     * opened, the faces' list opened — a reader's, or on the author's own card the author's. Taken once.
+     */
+    var cardEnd: Set<CardEnd> = emptySet()
+
+    enum class CardEnd { Tap, Note, Taps }
+
+    /** [cardEnd]'s words (comma-separated; anything else asks nothing). */
+    fun cardEndOf(value: String?): Set<CardEnd> = value.orEmpty().split(',').mapNotNull { word ->
+        when (word.trim().lowercase()) {
+            "tap" -> CardEnd.Tap
+            "note" -> CardEnd.Note
+            "taps" -> CardEnd.Taps
+            else -> null
+        }
+    }.toSet()
+
+    /** Takes [cardEnd] (once). */
+    fun takeCardEnd(): Set<CardEnd> = cardEnd.also { cardEnd = emptySet() }
 
     /** What the writer's link sheet's field starts with when it opens on no link (screen checks: an IME's keys are slow to drive). */
     var linkDraft: String? = null

@@ -1,5 +1,7 @@
 package com.resonance.app.ui
 
+import androidx.compose.foundation.layout.imePadding
+import com.resonance.app.DebugLaunch
 import com.resonance.app.AppearanceStore
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.ui.platform.LocalView
@@ -233,6 +235,17 @@ class CardPageModel(private val session: Session, private val key: String, previ
         val after = moved(before, move)
         detail = after
         return { if (detail === after) detail = before }
+    }
+
+    /**
+     * The viewer's tap as the end row last left it (round 26 §U1): the page shows it on its way back, and so does the
+     * card's kept page until the next read.
+     */
+    fun tapped(tap: com.resonance.api.models.CardTap) {
+        val d = detail ?: return
+        val next = d.copy(tap = tap)
+        detail = next
+        session.cardCache.page(key)?.let { session.cardCache.rememberPage(key, it.copy(detail = next)) }
     }
 
     /**
@@ -497,7 +510,8 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                 // Related cards are the feed's kind of list: bands, or the bordered grid when expanded;
                 // the page's other lists follow it.
                 val relatedLayout = cardListLayout()
-                LazyColumn(Modifier.fillMaxSize().onPlaced { listCoords = it }, state = list, contentPadding = PaddingValues(top = top, bottom = 40.dp)) {
+                // The keyboard (the note's field, round 26) shortens the list, so the field is brought above it.
+                LazyColumn(Modifier.fillMaxSize().imePadding().onPlaced { listCoords = it }, state = list, contentPadding = PaddingValues(top = top, bottom = 40.dp)) {
                     item(key = "article") {
                         // The translate line (round 25 §F2), for a page that gets one: what it shows, in its own type.
                         val translator = model.translator?.takeIf { it.isFor(card.title, d.story) }
@@ -542,14 +556,24 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 40.dp),
                             )
                             else if (!trashedOwn && !d.isOwner) CardViewerActions(
-                                session, card.id, card.referenceCardId,
+                                session, d,
                                 onWriteNew = { open(Route.Write(referenceCardId = card.id)) },
                                 onModify = { mine -> open(Route.Write(cardId = mine)) },
                                 onOpenMine = { key -> open(Route.Card(key)) },
                                 onUpgradeNote = { words -> open(Route.Write(referenceCardId = card.id, story = words)) },
+                                open = open,
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 40.dp),
                                 onOpenCard = { open(Route.Card(card.id)) },
+                                onTapChanged = model::tapped,
                             )
+                            // The author's own published card: who resonated, where a reader's row would be (§U3).
+                            else if (!trashedOwn && card.publishedAt != null) {
+                                val taps = TapFaces.of(d.tap)
+                                if (!taps.isEmpty) {
+                                    val launchList = remember(card.id) { DebugLaunch.CardEnd.Taps in DebugLaunch.takeCardEnd() }
+                                    AuthorTaps(session, card.id, taps, d.anonymous, open, Modifier.padding(bottom = 40.dp), launchOpen = launchList)
+                                }
+                            }
                         }
                     }
                     // The owner's linked cards and the resonances take the related list's layout (round 5 D3).
@@ -565,9 +589,9 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                         answerCards(linked, open, keyPrefix = "linked:", related = relatedLayout)
                         item(contentType = "spacer") { Spacer(Modifier.height(40.dp)) }
                     }
-                    // 與此文共振: the related list's full cards at every width (round 9 C1) — three, then 查看全部 for the rest, in place.
+                    // 回應這篇的卡片 (round 26 §S2): the related list's full cards at every width (round 9 C1) — three, then 查看全部 for the rest, in place.
                     if (resonance.isNotEmpty()) {
-                        sectionHeading(L10n.Card.ResonanceSection.title, cardSectionAir(cls, phoneBelow = 40))
+                        sectionHeading(L10n.Card.Replies.title, cardSectionAir(cls, phoneBelow = 40))
                         val shown = resonancesShown(resonance, allResonances)
                         storyCards(shown, open, layout = relatedLayout, keyPrefix = "resonance:")
                         if (shown.size < resonance.size) item(key = "resonance:all") {
