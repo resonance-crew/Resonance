@@ -21,6 +21,11 @@ export const NOTE_UPGRADE_THRESHOLD = 200;
 export const NOTE_COUNT_FROM = 1800;
 /** The query a failed note's 再寄一次 opens the card with: the field open and focused. */
 export const NOTE_QUERY = 'note';
+/** How long the note's place takes to open and to close (SETTLED 2); none under reduced motion. */
+export const NOTE_MOVE_MS = 150;
+
+const stillMotion = () =>
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export type NoteMode = 'closed' | 'field' | 'wait';
 
@@ -50,7 +55,18 @@ export interface NoteInPlaceState {
  * card again with the field open (the draft is still there). While three of the reader's notes wait for the
  * author's answer (`mayNote` false), the segment opens the one line saying so instead, and the draft stays.
  */
-export function useNoteInPlace({ cardId, uid, mayNote }: { cardId: string; uid: string | undefined; mayNote: boolean }): NoteInPlaceState {
+export function useNoteInPlace({
+  cardId,
+  uid,
+  mayNote: given,
+}: {
+  cardId: string;
+  uid: string | undefined;
+  /** Whether a note may go now (`CardDetail.tap.mayNote`); undefined while the tap is still being read. */
+  mayNote: boolean | undefined;
+}): NoteInPlaceState {
+  const known = given !== undefined;
+  const mayNote = given ?? true;
   const t = useTranslations('card.note');
   const tCard = useTranslations('card');
   const tMessages = useTranslations('messages');
@@ -74,16 +90,26 @@ export function useNoteInPlace({ cardId, uid, mayNote }: { cardId: string; uid: 
   textRef.current = text;
   const mayRef = useRef(mayNote);
   mayRef.current = mayNote;
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
-  // A draft not yet sent opens the field with the page; so does a failed note's 再寄一次 (?note), focused.
+  // A draft not yet sent opens the field with the page; so does a failed note's 再寄一次 (?note), focused — once the
+  // tap says whether a note may go (never a field shown and taken back). While the reader's notes wait for the
+  // author (`mayNote` false) the draft stays on the device and opens nothing (as on Android); ?note opens the line
+  // saying why.
   useEffect(() => {
-    if (!uid) return;
+    if (!uid || !known) return;
     const draft = readNoteDraft(uid, cardId);
     const asked = new URLSearchParams(window.location.search).has(NOTE_QUERY);
     if (draft) setTextState(draft);
-    if (draft || asked) setMode(mayRef.current || !!draft ? 'field' : 'wait');
+    if (mayRef.current ? draft || asked : asked) setMode(mayRef.current ? 'field' : 'wait');
     if (asked) setFocusNonce((n) => n + 1);
-  }, [uid, cardId]);
+  }, [uid, cardId, known]);
+
+  // The tap read after the field opened says the notes wait: the field gives its place to that line (its words kept).
+  useEffect(() => {
+    if (!mayNote && modeRef.current === 'field') setMode('wait');
+  }, [mayNote]);
 
   const setText = useCallback(
     (next: string) => {
@@ -94,17 +120,15 @@ export function useNoteInPlace({ cardId, uid, mayNote }: { cardId: string; uid: 
     [uid, cardId],
   );
 
-  const modeRef = useRef(mode);
-  modeRef.current = mode;
-
   const toggle = useCallback(() => {
     const m = modeRef.current;
     const words = !!textRef.current.trim();
+    // The notes wait for the author: the segment opens and closes the line saying so, words or not (they stay kept).
+    if (!mayRef.current) {
+      setMode(m === 'wait' ? 'closed' : 'wait');
+      return;
+    }
     if (m === 'closed') {
-      if (!mayRef.current && !words) {
-        setMode('wait');
-        return;
-      }
       setMode('field');
       setFocusNonce((n) => n + 1);
     } else if (m === 'wait' || !words) {
@@ -122,7 +146,8 @@ export function useNoteInPlace({ cardId, uid, mayNote }: { cardId: string; uid: 
 
   const send = useCallback(() => {
     const trimmed = textRef.current.trim();
-    if (!trimmed || trimmed.length > NOTE_MAX_LENGTH) return;
+    // Nothing goes while the notes wait for the author (the server would refuse it after a toast saying it went).
+    if (!trimmed || trimmed.length > NOTE_MAX_LENGTH || !mayRef.current) return;
     if (attempt.current?.text !== trimmed) attempt.current = { text: trimmed, clientId: newClientId() };
     const { clientId } = attempt.current;
     // Sent at once: cleared and closed, the toast saying so; the draft stays until the server has the words.
@@ -209,18 +234,32 @@ export function NoteInPlace({ id, note, asking, onClosedByKey }: NoteInPlaceProp
   const trimmed = note.text.trim();
   const valid = trimmed.length > 0 && trimmed.length <= NOTE_MAX_LENGTH;
 
+  // What the place draws: the open mode — and for 150 ms after it closes the last one, folding away (the height and
+  // the 12 above it to nothing, fading), so what is under it moves up rather than jumps; at once under reduced motion.
+  const [drawn, setDrawn] = useState<Exclude<NoteMode, 'closed'> | null>(note.mode === 'closed' ? null : note.mode);
+  if (note.mode !== 'closed' && drawn !== note.mode) setDrawn(note.mode);
+  const closing = note.mode === 'closed' && drawn !== null;
+  if (closing && stillMotion()) setDrawn(null);
+  useEffect(() => {
+    if (!closing) return;
+    const timer = window.setTimeout(() => setDrawn(null), NOTE_MOVE_MS);
+    return () => window.clearTimeout(timer);
+  }, [closing]);
+
   useEffect(() => {
     if (!note.focusNonce || note.mode !== 'field') return;
     inputRef.current?.focus({ preventScroll: true });
-    // The page scrolls the field's block into view, 12 over a phone's keyboard once it is up (nothing floats).
+    // The page scrolls the field's block into view, 12 over a phone's keyboard once it is up (nothing floats); no
+    // glide under reduced motion.
     const lift = () => {
       const block = blockRef.current;
       const vv = window.visualViewport;
       if (!block) return;
+      const behavior: ScrollBehavior = stillMotion() ? 'instant' : 'smooth';
       const r = block.getBoundingClientRect();
       const bottom = vv ? vv.height + vv.offsetTop : window.innerHeight;
-      if (r.bottom > bottom - 12) window.scrollBy({ top: r.bottom - bottom + 12, behavior: 'smooth' });
-      else if (r.top < 0) block.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      if (r.bottom > bottom - 12) window.scrollBy({ top: r.bottom - bottom + 12, behavior });
+      else if (r.top < 0) block.scrollIntoView({ block: 'nearest', behavior });
     };
     lift();
     const timer = window.setTimeout(lift, 350);
@@ -239,47 +278,62 @@ export function NoteInPlace({ id, note, asking, onClosedByKey }: NoteInPlaceProp
     setLines(Math.max(1, Math.round((el.scrollHeight - room) / line)));
   }, [note.text, note.mode]);
 
-  if (note.mode === 'closed') return null;
+  if (!drawn) return null;
 
-  if (note.mode === 'wait') {
+  // Folding away: out of the tab order and the accessibility tree at once, and no longer the segment's to control.
+  const block = {
+    id: closing ? undefined : id,
+    ref: blockRef,
+    className: styles.block,
+    'data-mode': drawn,
+    'data-closing': closing ? '' : undefined,
+    inert: closing || undefined,
+    'aria-hidden': closing || undefined,
+  };
+
+  if (drawn === 'wait') {
     return (
-      <div id={id} ref={blockRef} className={styles.block} data-mode="wait">
-        <p className={styles.wait}>{t('waitForReply')}</p>
+      <div {...block}>
+        <div className={styles.inner}>
+          <p className={styles.wait}>{t('waitForReply')}</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div id={id} ref={blockRef} className={styles.block} data-mode="field">
-      <ComposerCapsule focused={focused} ready={valid} sendLabel={t('send')} onSend={note.send} block={lines > 1}>
-        <span className={styles.glyph} aria-hidden>
-          <Icon name="note" size={18} color="var(--color-text-muted)" />
-        </span>
-        <div className={styles.field}>
-          <Textarea
-            ref={inputRef}
-            variant="subtle"
-            className={styles.input}
-            value={note.text}
-            onChange={(e) => note.setText(e.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            onKeyDown={(e) => {
-              if (e.key !== 'Escape' || e.nativeEvent.isComposing) return;
-              e.preventDefault();
-              if (note.escape() === 'closed') onClosedByKey?.();
-              else inputRef.current?.blur();
-            }}
-            placeholder={asking ? tTap('ask') : t('placeholder')}
-            aria-label={t('entry')}
-            aria-describedby={`${id}-line`}
-            rows={1}
-            maxLength={NOTE_MAX_LENGTH}
-            data-note-field=""
-          />
-        </div>
-      </ComposerCapsule>
-      <NoteLine id={`${id}-line`} note={note} length={trimmed.length} />
+    <div {...block}>
+      <div className={styles.inner}>
+        <ComposerCapsule focused={focused} ready={valid} sendLabel={t('send')} onSend={note.send} block={lines > 1}>
+          <span className={styles.glyph} aria-hidden>
+            <Icon name="note" size={18} color="var(--color-text-muted)" />
+          </span>
+          <div className={styles.field}>
+            <Textarea
+              ref={inputRef}
+              variant="subtle"
+              className={styles.input}
+              value={note.text}
+              onChange={(e) => note.setText(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Escape' || e.nativeEvent.isComposing) return;
+                e.preventDefault();
+                if (note.escape() === 'closed') onClosedByKey?.();
+                else inputRef.current?.blur();
+              }}
+              placeholder={asking ? tTap('ask') : t('placeholder')}
+              aria-label={t('entry')}
+              aria-describedby={`${id}-line`}
+              rows={1}
+              maxLength={NOTE_MAX_LENGTH}
+              data-note-field=""
+            />
+          </div>
+        </ComposerCapsule>
+        <NoteLine id={`${id}-line`} note={note} length={trimmed.length} />
+      </div>
     </div>
   );
 }

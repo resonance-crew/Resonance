@@ -42,6 +42,9 @@ export interface CardViewerActionsProps {
 /** How the capsule's words fit (§U1.3): in full, short (寫卡片 / Card), or the short ones on two lines (共振 alone first). */
 type Fit = 'full' | 'short' | 'split';
 
+/** At this content width or less the capsule says its short words (§U1.3: 寫卡片), whether the full ones squeeze in or not — as Android. */
+export const NARROW_ROW = 340;
+
 /**
  * The end of a story, for a reader (round 26 §U1): the three answers in one capsule — 共振 (the tap: a switch, so
  * all three are tonal at rest and only a tap that is on is solid, `wave-pair`, 已共振), 寄小紙條 (the note, written in
@@ -61,7 +64,8 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
   const prefill = usePrefillCard();
   const [picking, setPicking] = useState(false);
   const toggleTap = useTapToggle(cardId, user?.id);
-  const note = useNoteInPlace({ cardId, uid: user?.id, mayNote: tap?.mayNote ?? true });
+  // Still being read (undefined): a kept draft waits for it before it opens anything.
+  const note = useNoteInPlace({ cardId, uid: user?.id, mayNote: tap === undefined ? undefined : (tap?.mayNote ?? true) });
   // The viewer's face as it slides in (their id) or out (their face, drawn once more).
   const [arriving, setArriving] = useState<string | undefined>(undefined);
   const [leaving, setLeaving] = useState<AuthorBody | undefined>(undefined);
@@ -71,14 +75,18 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
   const { data: saved, mutate: mutateSaved } = useSWR(user ? `bookmark:${cardId}:${user.id}` : null, () => isBookmarked(cardId));
 
   // --- How the capsule's words fit -------------------------------------------------------------------------------
-  const base: Fit = locale === 'en' ? 'short' : 'full';
-  const [fit, setFit] = useState<Fit>(base);
   const [room, setRoom] = useState(0);
+  // English, or a narrow row (≤ 340 of content: a 360 browser, a 375 phone's 335), starts from the short words.
+  const base: Fit = locale === 'en' || (room > 0 && room <= NARROW_ROW) ? 'short' : 'full';
+  const [fit, setFit] = useState<Fit>(base);
   const containerRef = useRef<HTMLDivElement>(null);
   const firstBar = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const el = containerRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
+    if (!el) return;
+    // Its width now (before the first paint), then as it changes.
+    setRoom(Math.round(el.clientWidth));
+    if (typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(() => setRoom(Math.round(el.clientWidth)));
     ro.observe(el);
     return () => ro.disconnect();
@@ -109,8 +117,8 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
 
   const onTap = useCallback(async () => {
     if (!user) return router.push('/signin');
-    // Still being read: nothing to flip yet.
-    if (tap === undefined) return;
+    // Still being read (the tap, or the reader's own profile — not yet "no pen name"): nothing to flip yet.
+    if (tap === undefined || me === undefined) return;
     if (!me?.handle) return router.push('/signup');
     const face = faceOf(me);
     const on = !tap?.mine;
@@ -130,8 +138,11 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
 
   const onNote = useCallback(() => {
     if (!user) return router.push('/signin');
+    // No pen name yet: asked for one before a word is written (SETTLED 4). A profile still being read opens the
+    // field — the send's 403 asks then, the words kept.
+    if (me !== undefined && !me?.handle) return router.push('/signup');
     note.toggle();
-  }, [user, router, note]);
+  }, [user, me, router, note]);
 
   const onReply = useCallback(() => {
     if (!user) return router.push('/signin');

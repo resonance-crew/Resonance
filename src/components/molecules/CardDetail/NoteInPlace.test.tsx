@@ -8,6 +8,7 @@ import { act, fireEvent, renderWithIntl, screen, userEvent, waitFor, within } fr
 import type { CardTapBody } from '@/lib/api/v1/schemas';
 import { ApiError } from '@/lib/db/firestore/client/api';
 import { keepNoteDraft, readNoteDraft } from '@/lib/data/noteDrafts';
+import { NOTE_MOVE_MS } from './NoteInPlace';
 import { ReadAfterArea } from './ReadAfterArea';
 
 /**
@@ -51,6 +52,13 @@ function renderPage(tap: CardTapBody = TAP) {
 const user = () => userEvent.setup({ pointerEventsCheck: 0 });
 const noteSegment = () => within(screen.getAllByRole('group')[0]).getByRole('button', { name: 'Note' });
 const field = () => screen.queryByRole('textbox', { name: 'Send the author a little note' });
+const WAIT = "You've left notes they haven't answered yet — wait for their reply";
+
+const matchMedia = window.matchMedia;
+/** The reader asked for reduced motion (or not). */
+function reduceMotion(on: boolean) {
+  window.matchMedia = ((query: string) => ({ ...matchMedia(query), matches: on && query.includes('prefers-reduced-motion: reduce') })) as typeof window.matchMedia;
+}
 
 beforeEach(() => {
   auth.value = { user: { id: 'viewer' }, loading: false };
@@ -58,7 +66,10 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
 });
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  window.matchMedia = matchMedia;
+});
 
 describe('the note, in place', () => {
   it('opens under the end row when 寄小紙條 is tapped, focused — never in a dialog', async () => {
@@ -195,14 +206,115 @@ describe('the note, in place', () => {
   });
 
   it('while three notes wait for the author, opens the one line saying so — and keeps the draft', async () => {
-    renderPage({ ...TAP, mayNote: false });
+    const first = renderPage({ ...TAP, mayNote: false });
     await user().click(noteSegment());
     expect(field()).toBeNull();
-    expect(screen.getByText("You've left notes they haven't answered yet — wait for their reply")).toBeInTheDocument();
+    expect(screen.getByText(WAIT)).toBeInTheDocument();
+    first.unmount();
 
+    // A draft kept for this card opens nothing with the page, and the segment opens the line, never the field
+    // (iOS draws only the line, Android opens nothing): nothing to send that the server would refuse after a toast.
     keepNoteDraft('viewer', 'c2', 'still here');
     renderWithIntl(<ReadAfterArea cardId="c2" cardTitle="T" author={author} tap={{ ...TAP, mayNote: false }} />);
-    await waitFor(() => expect(screen.getByDisplayValue('still here')).toBeInTheDocument());
+    await act(async () => {});
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByText(WAIT)).toBeNull();
+    await user().click(noteSegment());
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.getByText(WAIT)).toBeInTheDocument();
+    await user().click(noteSegment());
+    expect(noteSegment()).toHaveAttribute('aria-expanded', 'false');
+    expect(sendNote).not.toHaveBeenCalled();
+    expect(readNoteDraft('viewer', 'c2')).toBe('still here');
+  });
+
+  it('opens a kept draft only once the tap is read: never a field shown and then taken back', async () => {
+    keepNoteDraft('viewer', 'c1', 'half a thought');
+    const tree = (tap: CardTapBody | undefined) => (
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <ReadAfterArea cardId="c1" cardTitle="Title" author={author} tap={tap} />
+      </SWRConfig>
+    );
+    const page = renderWithIntl(tree(undefined));
+    await act(async () => {});
+    expect(field()).toBeNull();
+    // The notes wait: nothing opens, the draft kept.
+    page.rerender(tree({ ...TAP, mayNote: false }));
+    await act(async () => {});
+    expect(field()).toBeNull();
+    expect(screen.queryByText(WAIT)).toBeNull();
+    page.unmount();
+    // A note may go: the draft opens the field.
+    const again = renderWithIntl(tree(undefined));
+    again.rerender(tree(TAP));
+    await waitFor(() => expect(field()).toHaveValue('half a thought'));
+  });
+
+  it('gives the field’s place to the waiting line when the tap, read after the page opened, says the notes wait', async () => {
+    keepNoteDraft('viewer', 'c1', 'half a thought');
+    const page = renderPage();
+    await waitFor(() => expect(field()).toHaveValue('half a thought'));
+    page.rerender(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <ReadAfterArea cardId="c1" cardTitle="Title" author={author} tap={{ ...TAP, mayNote: false }} />
+      </SWRConfig>,
+    );
+    expect(field()).toBeNull();
+    expect(screen.getByText(WAIT)).toBeInTheDocument();
+    expect(readNoteDraft('viewer', 'c1')).toBe('half a thought');
+  });
+
+  it('folds away over 150 ms when it closes, out of reach at once — and goes at once under reduced motion', async () => {
+    const page = renderPage();
+    await act(async () => {});
+    vi.useFakeTimers();
+    try {
+      const tap = () => fireEvent.click(noteSegment());
+      tap();
+      expect(field()).not.toBeNull();
+      tap();
+      // Still drawn, folding: out of the tab order and the accessibility tree, and not the segment's any more.
+      const block = document.querySelector('[data-mode="field"]')!;
+      expect(block).toHaveAttribute('data-closing');
+      expect(block).toHaveAttribute('inert');
+      expect(block).not.toHaveAttribute('id');
+      expect(field()).toBeNull();
+      act(() => void vi.advanceTimersByTime(NOTE_MOVE_MS - 20));
+      expect(document.querySelector('[data-mode]')).not.toBeNull();
+      act(() => void vi.advanceTimersByTime(20));
+      expect(document.querySelector('[data-mode]')).toBeNull();
+      // Opened again while folding: the same place, open again.
+      tap();
+      tap();
+      const again = document.querySelector('[data-mode="field"]')!;
+      tap();
+      expect(document.querySelector('[data-mode="field"]')).toBe(again);
+      expect(again).not.toHaveAttribute('data-closing');
+      act(() => void vi.advanceTimersByTime(NOTE_MOVE_MS));
+      expect(again).toBeInTheDocument();
+      page.unmount();
+
+      reduceMotion(true);
+      renderPage();
+      tap();
+      tap();
+      expect(document.querySelector('[data-mode]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lifts the field over the keyboard without a glide under reduced motion', async () => {
+    reduceMotion(true);
+    const scrollBy = vi.fn();
+    window.scrollBy = scrollBy as typeof window.scrollBy;
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return { top: 900, bottom: 1000, left: 0, right: 0, width: 0, height: 100, x: 0, y: 900, toJSON: () => ({}) } as DOMRect;
+    });
+    renderPage();
+    await user().click(noteSegment());
+    expect(scrollBy).toHaveBeenCalledWith({ top: expect.any(Number), behavior: 'instant' });
+    rect.mockRestore();
   });
 
   it('signed out: the segment goes to sign-in, focus alone never navigates', async () => {

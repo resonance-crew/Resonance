@@ -33,9 +33,11 @@ const mine = vi.hoisted(() => ({ value: null as unknown }));
 const me = {
   id: 'viewer', handle: 'viewer-handle', initials: 'VI', accentColor: 'var(--accent)', avatarSeed: '4', verified: false, region: 'TW',
 };
+/** The reader's own profile as useMyProfile has it: undefined while it is read. */
+let profile: unknown = me;
 vi.mock('@/lib/data/hooks', async (original) => ({
   ...(await original<typeof import('@/lib/data/hooks')>()),
-  useMyProfile: () => ({ data: me }),
+  useMyProfile: () => ({ data: profile }),
   useMyResonance: () => ({ data: mine.value }),
   useMyCardBox: (shelf: string | null) => ({
     data: shelf ? { cards: [{ id: 'mine-1', thoughtCore: 'A card of mine', visibility: 'public', publishedAt: new Date() }], authors: {} } : undefined,
@@ -63,13 +65,14 @@ function Page({ tap }: { tap: CardTapBody }) {
   return <ReadAfterArea cardId="c1" cardTitle="Title" author={author} tap={data?.tap} />;
 }
 
+const pageTree = (tap: CardTapBody, cache = new Map()) => (
+  <SWRConfig value={{ provider: () => cache, dedupingInterval: 60_000, revalidateOnFocus: false }}>
+    <Page tap={tap} />
+  </SWRConfig>
+);
+
 function renderPage(tap: CardTapBody = NO_TAPS, opts: { locale?: 'en' | 'zh-TW' } = {}) {
-  return renderWithIntl(
-    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 60_000, revalidateOnFocus: false }}>
-      <Page tap={tap} />
-    </SWRConfig>,
-    opts.locale === 'zh-TW' ? { locale: 'zh-TW', messages: zhMessages } : {},
-  );
+  return renderWithIntl(pageTree(tap), opts.locale === 'zh-TW' ? { locale: 'zh-TW', messages: zhMessages } : {});
 }
 
 const user = () => userEvent.setup({ pointerEventsCheck: 0 });
@@ -77,6 +80,7 @@ const capsule = () => screen.getAllByRole('group')[0];
 
 beforeEach(() => {
   auth.value = { user: { id: 'viewer' }, loading: false };
+  profile = me;
   mine.value = null;
   bookmarks.saved = false;
   localStorage.clear();
@@ -126,6 +130,24 @@ describe('the end row: three answers in one capsule (§U1)', () => {
     client.mockRestore();
   });
 
+  it('says the short words (寫卡片) on a narrow row — 340 of content or less — even when the full ones would fit', async () => {
+    // Every segment measures nothing here, so only the row's own width can choose: a 375 phone's 335, then 341.
+    let room = 335;
+    const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute('data-end-row') ? room : 0;
+    });
+    const first = renderPage(NO_TAPS, { locale: 'zh-TW' });
+    expect(within(capsule()).getAllByRole('button').map((b) => b.textContent)).toEqual(['共振', '寄小紙條', '寫卡片']);
+    await act(async () => {});
+    first.unmount();
+
+    room = 341;
+    renderPage(NO_TAPS, { locale: 'zh-TW' });
+    expect(within(capsule()).getAllByRole('button').map((b) => b.textContent)).toEqual(['共振', '寄小紙條', '用卡片回應']);
+    await act(async () => {});
+    client.mockRestore();
+  });
+
   it('tapping 共振 opens nothing: the segment fills (已共振, two waves) and the viewer’s face slides in first', async () => {
     const { container } = renderPage({ ...NO_TAPS, faces: [face('dora')] });
     await screen.findByRole('button', { name: /People you're connected with who resonated: dora/ });
@@ -164,6 +186,47 @@ describe('the end row: three answers in one capsule (§U1)', () => {
     await act(async () => {});
     await user().click(within(capsule()).getByRole('button', { name: 'Resonate' }));
     await waitFor(() => expect(push).toHaveBeenCalledWith('/signup'));
+  });
+
+  it('asks a reader with no pen name for one before a note is written — never a field, never 紙條寄出了', async () => {
+    profile = { ...me, handle: '' };
+    renderPage();
+    await act(async () => {});
+    await user().click(within(capsule()).getByRole('button', { name: 'Note' }));
+    expect(push).toHaveBeenCalledWith('/signup');
+    expect(document.querySelector('[data-note-field]')).toBeNull();
+    expect(toast.show).not.toHaveBeenCalled();
+  });
+
+  it('waits for the reader’s own profile before the tap: one still being read is not "no pen name"', async () => {
+    profile = undefined;
+    renderPage();
+    await act(async () => {});
+    await user().click(within(capsule()).getByRole('button', { name: 'Resonate' }));
+    expect(push).not.toHaveBeenCalled();
+    expect(setTap).not.toHaveBeenCalled();
+    // The note opens meanwhile (its send asks for a pen name if the server says there is none).
+    await user().click(within(capsule()).getByRole('button', { name: 'Note' }));
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.getByRole('textbox', { name: 'Send the author a little note' })).toBeInTheDocument();
+  });
+
+  it('gives another account signed in from another tab an end row of its own — never the last one’s unsent words', async () => {
+    const cache = new Map();
+    const page = renderWithIntl(pageTree(NO_TAPS, cache));
+    await user().click(within(capsule()).getByRole('button', { name: 'Note' }));
+    await user().type(screen.getByRole('textbox', { name: 'Send the author a little note' }), 'secret');
+    // Signed out in the other tab (its drafts leave with it), then someone else signed in there: this tab follows.
+    auth.value = { user: null, loading: false };
+    page.rerender(pageTree(NO_TAPS, cache));
+    localStorage.clear();
+    auth.value = { user: { id: 'other' }, loading: false };
+    page.rerender(pageTree(NO_TAPS, cache));
+    expect(screen.queryByDisplayValue('secret')).toBeNull();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    await user().click(within(capsule()).getByRole('button', { name: 'Note' }));
+    expect(screen.getByRole('textbox', { name: 'Send the author a little note' })).toHaveValue('');
+    expect(localStorage.getItem('resonance:note-drafts:other') ?? '').not.toContain('secret');
   });
 
   it('用卡片回應: the picker to write or choose a card; 修改 takes a draft back; 已回應 opens the published one', async () => {

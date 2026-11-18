@@ -64,7 +64,10 @@ export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author, tap,
         transition: 'opacity 0.6s ease, transform 0.6s ease',
       }}
     >
+      {/* Keyed by the account: one signed in from another tab gets its own end row — never the last one's unsent
+          note, its open field or its picker (the note's words leave with the account, lib/auth signOut). */}
       <CardViewerActions
+        key={user?.id ?? ''}
         cardId={cardId}
         cardTitle={cardTitle}
         referenceCardId={referenceCardId}
