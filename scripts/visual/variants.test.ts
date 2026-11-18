@@ -20,7 +20,9 @@ describe('the variant sets', () => {
     expect(keys('android', 'phone', 'release').some((k) => k.startsWith('thread-attach') || k.startsWith('thread-keyboard'))).toBe(false);
     // round 25: six screens (settings-language, card-translated, profile-translated, card-framed, publish-cover,
     // cover-frame) × the web's five, the iPhone's three, the iPad, the Mac, the Android phone's three and the tablet
-    expect(estimate('release').captures).toBe(387);
+    // round 26: six more (card-tapped, card-note-open, card-note-wait, card-own-taps, taps-list, taps-author-list) on
+    // the same fourteen devices and variants: 387 + 6 × 14
+    expect(estimate('release').captures).toBe(471);
   });
 
   it('adds the device states after the device they run on, and only in the extended set', () => {
