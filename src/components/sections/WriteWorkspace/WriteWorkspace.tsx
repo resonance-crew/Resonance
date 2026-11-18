@@ -15,6 +15,7 @@ import { editTitleKey } from '@/components/molecules/CardEditor/writerTitle';
 import { OpenedCardPane } from './OpenedCardPane';
 import { PaneActionButton } from './PaneActionButton';
 import { OriginalCardPanel } from './LazyOriginalCardPanel';
+import { ReplyingBand } from './ReplyingBand';
 import { WorkspaceShell } from './WorkspaceShell';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useLeaveWriter } from '@/lib/hooks/useLeaveWriter';
@@ -290,6 +291,8 @@ export function WriteWorkspace({
             card would start over without its draft and write a second one. */}
         <div className={styles.paneLayer} hidden={showOpened}>
           <div className={styles.editorCol}>
+            {/* Below the split nothing else shows what a reply answers (round 26 §U6): its band, over the title. */}
+            {referenceCardId && split === false && step === 'write' && <ReplyingBand cardId={referenceCardId} />}
             <CardEditor
               ref={editor}
               initial={initial}
