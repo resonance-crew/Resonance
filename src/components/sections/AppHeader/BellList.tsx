@@ -12,7 +12,7 @@ import { markNotificationRead } from '@/lib/db/firestore/client/notifications';
 import { BAND_END_KEY, bandsBelow, translatePath } from '@/lib/design/listBands';
 import { useEdgeFades } from '@/lib/hooks/useEdgeFades';
 import { bellHref } from './bellLink';
-import { BellRowContent } from './BellRow';
+import { BellRowContent, bellFrom } from './BellRow';
 import { bellGroup, bellWhen, type BellGroup } from './bellTime';
 import styles from './NotificationBell.module.css';
 
@@ -138,7 +138,7 @@ export function BellList({ bell, onPicked, variant }: BellListProps) {
           // Where the row leads (as its push does): a note on an anonymous card opens the card, never a thread
           // with its writer — see bellLink.
           const href = bellHref(n);
-          const from = typeof n.payload.fromUserId === 'string' ? n.payload.fromUserId : '';
+          const from = bellFrom(n);
           const cardId = typeof n.payload.cardId === 'string' ? n.payload.cardId : '';
           const inner = (
             <BellRowContent

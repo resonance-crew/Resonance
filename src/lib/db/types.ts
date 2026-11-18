@@ -432,7 +432,10 @@ export interface Notification {
     | 'resonance'
     | 'note'
     | 'card_link'
-    | 'message';
+    | 'message'
+    // Round 26: someone resonated with your card (the tap; `fromUserIds`, newest first), and the weekly read summary.
+    | 'resonance_tap'
+    | 'read_summary';
   payload: Record<string, unknown>;
   readAt: Date | null;
   createdAt: Date;

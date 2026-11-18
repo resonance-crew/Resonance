@@ -29,9 +29,20 @@ const KEYS: Partial<Record<Notification['type'], string>> = {
 /** A row with nobody behind it says what happened beside a glyph. */
 const GLYPHS: Partial<Record<Notification['type'], IconName>> = {
   resonance_summary: 'sparkle',
+  read_summary: 'sparkle',
   translation_done: 'globe',
   invite_expired: 'users',
 };
+
+/**
+ * Who a row is from: `fromUserId`, or — a resonance tap's row (round 26), which names everyone who tapped that
+ * day, newest first — the first of its `fromUserIds`.
+ */
+export function bellFrom(n: Pick<Notification, 'type' | 'payload'>): string {
+  if (typeof n.payload.fromUserId === 'string') return n.payload.fromUserId;
+  const ids = n.type === 'resonance_tap' && Array.isArray(n.payload.fromUserIds) ? n.payload.fromUserIds : [];
+  return typeof ids[0] === 'string' ? ids[0] : '';
+}
 
 /**
  * The row's sentence, its pen name apart: `{ before, handle, after }` — the
@@ -42,20 +53,32 @@ const GLYPHS: Partial<Record<Notification['type'], IconName>> = {
 export function bellSentence(
   t: ReturnType<typeof useTranslations<'app.notifications'>>,
   n: Pick<Notification, 'type' | 'payload'>,
+  /** The pen name of whoever it is from, once read — a tap's row carries ids only. */
+  personHandle?: string,
 ): { before: string; handle: string | null; after: string } {
   const key = KEYS[n.type];
   if (key) {
     const [before = '', after = ''] = t(key as 'note', { handle: NAME }).split(NAME);
     return { before, handle: String(n.payload.fromHandle ?? ''), after };
   }
+  if (n.type === 'resonance_tap') {
+    // 「{handle} 與你的卡片共振了」, or 「{handle} 和另外 {count} 人…」 for everyone else who tapped that day.
+    const ids = Array.isArray(n.payload.fromUserIds) ? n.payload.fromUserIds.filter((v) => typeof v === 'string') : [];
+    const others = Math.max(0, ids.length - 1);
+    const line = others > 0 ? t('tapMany', { handle: NAME, count: others }) : t('tap', { handle: NAME });
+    const [before = '', after = ''] = line.split(NAME);
+    return { before, handle: personHandle ?? '', after };
+  }
   const whole =
     n.type === 'resonance_summary'
       ? t('resonanceSummary', { count: Number(n.payload.count ?? 0) })
-      : n.type === 'translation_done'
-        ? t('translationDone')
-        : n.type === 'invite_expired'
-          ? t('inviteExpired')
-          : '';
+      : n.type === 'read_summary'
+        ? t(n.payload.reread === true ? 'readSummaryReread' : 'readSummary', { count: Number(n.payload.readers ?? 0) })
+        : n.type === 'translation_done'
+          ? t('translationDone')
+          : n.type === 'invite_expired'
+            ? t('inviteExpired')
+            : '';
   return { before: whole, handle: null, after: '' };
 }
 
@@ -85,10 +108,10 @@ export interface BellRowProps {
 export function BellRowContent({ n, band, person, card, settled, when }: BellRowProps) {
   const t = useTranslations('app.notifications');
   const unread = n.readAt === null;
-  const { before, handle, after } = bellSentence(t, n);
+  const { before, handle, after } = bellSentence(t, n, person?.handle);
   const cardId = typeof n.payload.cardId === 'string' ? n.payload.cardId : '';
   const preview = n.type === 'note' && typeof n.payload.preview === 'string' ? n.payload.preview : '';
-  const fromId = typeof n.payload.fromUserId === 'string' ? n.payload.fromUserId : '';
+  const fromId = bellFrom(n);
   const press = useBandPress();
   return (
     <span className={`${styles.row} ${bandHost}`} {...press}>

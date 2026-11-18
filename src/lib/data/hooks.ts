@@ -1005,10 +1005,11 @@ const NO_BELL_EXTRAS: BellExtras = { people: {}, cards: {} };
 export function useBellExtras(items: Notification[] | undefined): BellExtras | undefined {
   const { user, loading } = useAuth();
   const uid = user && !loading ? user.id : null;
-  const idsOf = (field: 'fromUserId' | 'cardId') =>
-    [...new Set((items ?? []).map((n) => n.payload[field]).filter((v): v is string => typeof v === 'string' && v !== ''))].sort();
-  const from = idsOf('fromUserId');
-  const cardIds = idsOf('cardId');
+  const idsOf = (of: (n: Notification) => unknown) =>
+    [...new Set((items ?? []).map(of).filter((v): v is string => typeof v === 'string' && v !== ''))].sort();
+  // Who each row is from: `fromUserId`, or a resonance tap's newest (round 26: its row names `fromUserIds`).
+  const from = idsOf((n) => n.payload.fromUserId ?? (Array.isArray(n.payload.fromUserIds) ? n.payload.fromUserIds[0] : undefined));
+  const cardIds = idsOf((n) => n.payload.cardId);
   const key = uid && (from.length || cardIds.length) ? `bell-extras:${uid}:${from.join(',')}|${cardIds.join(',')}` : null;
   const { data } = useSWR<BellExtras>(
     key,

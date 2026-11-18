@@ -182,6 +182,52 @@ describe('the bell’s faces, cards and parts', () => {
     expect(resonance.querySelectorAll('img')).toHaveLength(0);
   });
 
+  // Round 26 §U8: someone resonated (the tap) — named in bold, the others counted — and the weekly read summary.
+  it('draw a resonance tap: its newest face, the name in bold, 「和另外 n 人」, the card — and open the card', async () => {
+    live.rows = [
+      bell('rtap_walk_20261119', 'resonance_tap', { cardId: 'walk', fromUserIds: ['dora', 'eli', 'fay'] }),
+      bell('rtap_plain_20261119', 'resonance_tap', { cardId: 'plain', fromUserIds: ['eli'] }),
+      bell('rtap_masked_20261119', 'resonance_tap', { cardId: 'masked', fromUserIds: ['gus'], anonymous: true }),
+    ];
+    live.extras = {
+      people: { dora: person('dora', { avatarUrl: 'https://img.example/dora.webp' }), eli: person('eli'), gus: person('gus') },
+      cards: { walk: card('walk'), plain: card('plain', { thoughtCore: '雨天走慢一點' }), masked: card('masked') },
+    };
+    const { list } = await openBell();
+    const [many, one, anonymous] = within(list).getAllByRole('link');
+    expect(many).toHaveTextContent('dora and 2 others resonated with your card');
+    expect(within(many).getByText('dora').tagName).toBe('B');
+    expect(many.querySelector('img')?.getAttribute('src')).toBe('https://img.example/dora.webp');
+    expect(one).toHaveTextContent('eli resonated with your card');
+    expect(one).toHaveTextContent('雨');
+    // Named or anonymous alike, it opens the card — never a thread.
+    expect([many, one, anonymous].map((a) => a.getAttribute('href'))).toEqual(['/card/walk', '/card/plain', '/card/masked']);
+  });
+
+  it('draw the weekly read summary beside the sparkle, with no one’s name, opening the card', async () => {
+    live.rows = [
+      bell('rsum_walk', 'read_summary', { cardId: 'walk', readers: 4, reread: true }),
+      bell('rsum_plain', 'read_summary', { cardId: 'plain', readers: 3, reread: false }),
+    ];
+    live.extras = { people: {}, cards: { walk: card('walk'), plain: card('plain') } };
+    const { list } = await openBell();
+    const [reread, plain] = within(list).getAllByRole('link');
+    expect(reread).toHaveTextContent('4 people read this card to the end last week, and someone came back to read it again');
+    expect(plain).toHaveTextContent('3 people read this card to the end last week');
+    expect(plain.querySelector('b')).toBeNull();
+    expect(plain.querySelector('[class*="glyphTile"]')).not.toBeNull();
+    expect([reread, plain].map((a) => a.getAttribute('href'))).toEqual(['/card/walk', '/card/plain']);
+  });
+
+  it('say the tap in Chinese as the strings do', async () => {
+    live.rows = [bell('rtap_walk', 'resonance_tap', { cardId: 'walk', fromUserIds: ['dora', 'eli'] })];
+    live.extras = { people: { dora: person('dora') }, cards: {} };
+    const user = userEvent.setup();
+    renderWithIntl(<NotificationBell />, { locale: 'zh-TW', messages: zhTW });
+    await user.click(screen.getByRole('link', { name: '通知' }));
+    expect(within(screen.getByRole('dialog')).getByRole('link')).toHaveTextContent('dora 和另外 1 人與你的卡片共振了');
+  });
+
   it('leave out the card of a row whose card the viewer can no longer read, once the extras are in', async () => {
     live.rows = [namedResonance];
     live.extras = undefined;
