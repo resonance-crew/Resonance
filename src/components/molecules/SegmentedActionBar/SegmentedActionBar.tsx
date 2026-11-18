@@ -379,6 +379,7 @@ export function SegmentedActionBar({
           aria-busy={s.loading || undefined}
           aria-disabled={s.loading || undefined}
           className={styles.seg}
+          data-segment={s.key}
           data-icon-only={(s.collapsible && tight >= 1) || (s.collapsibleLast && tight >= 2) || undefined}
           style={{ color: s.textColor ?? 'var(--button-on-tonal)' }}
         >

@@ -94,7 +94,8 @@
   gap: 12px;
   min-height: 18px;
   margin-top: 6px;
-  padding-inline: 4px;
+  /* Under the text, past the envelope's 44 column. */
+  padding-inline: 44px 4px;
   font-size: 13px;
   line-height: 1.4;
 }

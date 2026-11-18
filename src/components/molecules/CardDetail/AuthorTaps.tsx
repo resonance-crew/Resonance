@@ -1,7 +1,7 @@
 'use client';
 
 import { useLocale, useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import useSWRInfinite from 'swr/infinite';
 import { AvatarGroup } from '@/components/atoms/AvatarGroup/AvatarGroup';
 import { Icon } from '@/components/atoms/Icon';
@@ -18,6 +18,8 @@ export interface AuthorTapsProps {
   cardId: string;
   /** `CardDetail.tap` as the card's author reads it: the three newest who resonated, and whether there are more. */
   tap: CardTapBody | null | undefined;
+  /** What ends the line: the card's share and ⋯ after a long story at ≥ 1200 (else they stand alone, CardDetailClient). */
+  trailing?: ReactNode;
 }
 
 /**
@@ -28,7 +30,7 @@ export interface AuthorTapsProps {
  * line, muted, opening that conversation (an unconnected reader's is the letter; replying connects, as ever). Someone
  * who only resonated can't be written to: their row opens their page. On an anonymous card, faces and names only.
  */
-export function AuthorTaps({ cardId, tap }: AuthorTapsProps) {
+export function AuthorTaps({ cardId, tap, trailing }: AuthorTapsProps) {
   const t = useTranslations('card');
   const locale = useLocale();
   const [open, setOpen] = useState(false);
@@ -43,6 +45,7 @@ export function AuthorTaps({ cardId, tap }: AuthorTapsProps) {
         </span>
         <AvatarGroup members={tap.faces.map(memberOf)} more={tap.more} size={28} />
       </button>
+      {trailing && <span className={styles.trailing}>{trailing}</span>}
       {open && (
         <Modal open onClose={() => setOpen(false)} maxWidth={480} seed={53} padding="24px 22px 22px" ariaLabel={t('resonatorsModal.title')} closeButton>
           <h3 className={styles.title}>{t('resonatorsModal.title')}</h3>

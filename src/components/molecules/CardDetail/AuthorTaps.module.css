@@ -3,6 +3,8 @@
   display: flex;
   align-items: center;
   margin-bottom: 40px;
+  /* Brought into view (the screenshots' author screens): the story's last lines stay above it. */
+  scroll-margin-top: 42vh;
 }
 
 .button {
@@ -27,6 +29,26 @@
 
 .glyph {
   display: inline-flex;
+}
+
+/* The card's share and ⋯ at the line's end after a long story, at the desktop's width only (round 12 §5). */
+.trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+@media (pointer: coarse) {
+  .trailing {
+    gap: 0;
+  }
+}
+
+@media (max-width: 1199px) {
+  .trailing {
+    display: none;
+  }
 }
 
 .title {

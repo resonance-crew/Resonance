@@ -1,5 +1,8 @@
 .container {
   margin-bottom: 40px;
+  /* Brought into view (the release screenshots' end-row screens): the story's last lines stay above it. Not
+     focusable, so a Tab never scrolls by it. */
+  scroll-margin-top: 42vh;
 }
 
 /* The end row (round 26 §U1): the capsule, then right under it (0 between) its second line as wide as it — the

@@ -191,7 +191,7 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
   const secondLine = faces || save || trailing;
 
   return (
-    <div ref={containerRef} className={styles.container}>
+    <div ref={containerRef} className={styles.container} data-end-row="">
       <div className={styles.end} data-fit={fit}>
         <div ref={firstBar} className={styles.bars}>
           {fit === 'split' ? (

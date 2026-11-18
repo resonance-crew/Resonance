@@ -434,11 +434,13 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
             {/* The story's end: the response row, the card's share and ⋯ at its end — at ≥ 1200, and only when the
                 story is long enough that the byline's are out of view (round 12 §5); its author's alone. */}
             {isOwner ? (
-              <>
-                {/* Who resonated with it, as faces (round 26 §U3): nothing when no one has. */}
-                {!trashed && <AuthorTaps cardId={card.id} tap={lists.tap} />}
-                {endsApart && wide === true && <div className={styles.endActions}>{cardActions}</div>}
-              </>
+              // Who resonated with it, as faces (round 26 §U3) — its share and ⋯ at that line's end after a long story;
+              // with no faces (no one tapped, or in the trash), those two alone.
+              !trashed && lists.tap?.faces.length ? (
+                <AuthorTaps cardId={card.id} tap={lists.tap} trailing={endsApart && wide === true ? cardActions : undefined} />
+              ) : (
+                endsApart && wide === true && <div className={styles.endActions}>{cardActions}</div>
+              )
             ) : sharedPrivate ? (
               <div className={styles.sharedEnd}>
                 <p className={styles.sharedNote}>{t('sharedPrivately', { handle: author.handle })}</p>
