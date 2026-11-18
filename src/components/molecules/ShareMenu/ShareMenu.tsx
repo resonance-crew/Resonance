@@ -33,6 +33,8 @@ export interface ShareMenuProps {
   /** Where the bare trigger's tooltip hangs. */
   tip?: 'above' | 'below';
   className?: string;
+  /** The link went out (copied, the system sheet, a platform's page): the card page's reading report says it was shared. */
+  onShared?: () => void;
 }
 
 type RowKey = 'copy' | SharePlatform | 'more';
@@ -78,7 +80,7 @@ function pointerIs(kind: 'coarse' | 'fine'): boolean {
  * is decided only when it happens. It reads nothing — everything it shares
  * comes from the page. Copying says so through the shell's toast.
  */
-export function ShareMenu({ target, seed = 5, hint, tip, className }: ShareMenuProps) {
+export function ShareMenu({ target, seed = 5, hint, tip, className, onShared }: ShareMenuProps) {
   const t = useTranslations();
   const translate = t as unknown as ShareTranslate;
   const toast = useToast();
@@ -90,6 +92,7 @@ export function ShareMenu({ target, seed = 5, hint, tip, className }: ShareMenuP
     try {
       if (!navigator.clipboard?.writeText) throw new Error('no clipboard');
       await navigator.clipboard.writeText(url());
+      onShared?.();
       toast.show({ message: t('share.copied') });
     } catch {
       toast.show({ message: t('share.copyFailed') });
@@ -98,6 +101,7 @@ export function ShareMenu({ target, seed = 5, hint, tip, className }: ShareMenuP
 
   function systemShare() {
     const link = url();
+    onShared?.();
     navigator.share({ title: shareTitle(target, translate), url: link }).catch((e: unknown) => {
       // The reader put the sheet away: nothing to say.
       if (e instanceof Error && e.name === 'AbortError') return;
@@ -112,6 +116,7 @@ export function ShareMenu({ target, seed = 5, hint, tip, className }: ShareMenuP
       { url: url(), text: sharePostText(target, translate) },
       { metaAppId: process.env.NEXT_PUBLIC_META_APP_ID },
     );
+    onShared?.();
     if (pointerIs('fine')) window.open(href, 'resonance-share', popupFeatures(window));
     else window.open(href, '_blank', 'noopener,noreferrer');
   }
