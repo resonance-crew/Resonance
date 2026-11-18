@@ -19,10 +19,6 @@ const ALLOWED: Ratchet = {
     count: 1,
     why: "a quoted bubble's keyboard focus: an inset 2px ring in the focus colour (no blur, no offset) — a line",
   },
-  'src/components/atoms/AvatarGroup/AvatarGroup.module.css': {
-    count: 2,
-    why: 'overlapping avatars: a 3px ring in the card paper parts each disc from the one under it, the overflow disc adding a hairline rim — no blur, no offset',
-  },
   'src/components/molecules/CardDetail/ReadingProgress.module.css': {
     count: 1,
     why: "the reading-progress line's soft glow (`--reading-progress-glow`, round 5 E1) — the one glow kept; iOS Chrome.swift and Android Chrome.kt draw its twins",
