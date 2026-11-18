@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { REPLY_CARD_DRAFT, SCREENS, screensFor, shotName, BASE_VARIANT } from './screens';
 import { FILM_END, sceneAtS } from '../../src/components/sections/LandingFilm/script/timeline';
+import { TAP_FACES_MAX } from '../../src/lib/api/v1/schemas';
 import en from '../../src/messages/en.json';
 import zhTW from '../../src/messages/zh-TW.json';
 
@@ -82,6 +83,47 @@ describe('the release screenshots’ screens', () => {
       expect(s.fullPage, `${id} is one window, never the whole film`).toBeFalsy();
       expect(s.web?.query).toBe('rest=1&t=0');
     }
+  });
+
+  // Round 26's end of a story: the apps open the card page at its top, so a screen of the end row must ask each app
+  // for it — Android's `--es cardEnd …`, iOS's `-visualEnd YES` (the Mac takes iOS's arguments). Without them the
+  // review judged the card's title and byline against a line describing the capsule, the faces or a list.
+  it('brings the story’s end into view on iOS and the Mac wherever it does on Android', () => {
+    const ends = SCREENS.filter((s) => s.app?.android?.includes('cardEnd'));
+    expect(ends.map((s) => s.id)).toEqual(
+      expect.arrayContaining(['card-tapped', 'card-note-open', 'card-note-wait', 'card-own-taps', 'taps-list', 'taps-author-list']),
+    );
+    for (const s of ends) {
+      const ios = s.app?.ios ?? [];
+      expect(ios, s.id).toEqual(expect.arrayContaining(['-visualEnd', 'YES']));
+      expect(ios[ios.indexOf('-visualEnd') + 1], s.id).toBe('YES');
+      expect(s.app?.mac, `${s.id}: the Mac falls back to iOS's`).toBeUndefined();
+    }
+    const arg = (id: string, name: string) => {
+      const ios = SCREENS.find((s) => s.id === id)!.app!.ios!;
+      return ios.includes(name) ? ios[ios.indexOf(name) + 1] : undefined;
+    };
+    expect(arg('card-note-open', '-visualNote')).toBe('open');
+    expect(arg('card-note-wait', '-visualNote')).toBe('wait');
+    expect(arg('taps-list', '-visualTaps')).toBe('list');
+    expect(arg('taps-author-list', '-visualTaps')).toBe('author');
+  });
+
+  // The author's faces and list come newest first (lib/api/v1/taps: `orderBy('at', 'desc')`, TAP_FACES_MAX faces):
+  // the lines the review is told a capture should show name them in the order the seed's taps give.
+  it('names the author’s faces and list in the order the seed’s taps on the rich story give them', () => {
+    const line = seed.match(/for \(const \[uid, m\] of (\[.*?\]) as const\) await tapped\('rich-story', uid, m\)/)?.[1];
+    expect(line).toBeDefined();
+    const newest = [...line!.matchAll(/\['(\w+)', (\d+)\]/g)].sort((a, b) => Number(a[2]) - Number(b[2])).map((m) => m[1]);
+    expect(newest.length).toBeGreaterThan(TAP_FACES_MAX);
+    const own = SCREENS.find((s) => s.id === 'card-own-taps')!.expect;
+    expect(own).toContain(`(${newest.slice(0, TAP_FACES_MAX).join(', ')})`);
+    expect(own).toContain(`(${newest.slice(TAP_FACES_MAX).join(', ')})`);
+    const list = SCREENS.find((s) => s.id === 'taps-author-list')!.expect;
+    const from = list.indexOf('then ');
+    const places = newest.map((uid) => list.indexOf(uid, from));
+    expect(places.every((p) => p > from), list).toBe(true);
+    expect(places, list).toEqual([...places].sort((a, b) => a - b));
   });
 
   it('gives the apps their arguments as launch arguments can carry them', () => {
