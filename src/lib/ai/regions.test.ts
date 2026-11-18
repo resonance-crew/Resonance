@@ -12,6 +12,7 @@ const OPENAI = join(ROOT, 'src/lib/ai/openai.ts');
 const vercel = JSON.parse(readFileSync(join(ROOT, 'vercel.json'), 'utf8')) as {
   regions: string[];
   functions?: Record<string, { regions?: string[]; maxDuration?: number }>;
+  crons?: { path: string; schedule: string }[];
 };
 /** Where OpenAI answers "unsupported_country_region_territory". */
 const REFUSED = new Set(['hkg1']);
@@ -90,6 +91,22 @@ describe('function regions', () => {
     expect(regionsOf('src/app/api/cron/push-picks/route.ts')).toEqual(['hkg1']);
     expect(regionsOf('src/app/api/cron/warm-picks/route.ts')).toEqual(['hnd1']);
     expect(openAIRoutes).not.toContain('src/app/api/v1/me/notifications/route.ts');
+  });
+
+  // Round 26: the weekly read summary counts reading records and writes bell rows; the tap, its list and the
+  // reading reports reach no model either. All stay beside Firestore.
+  it('keeps the weekly read summary, the resonance tap and the reading reports in Hong Kong', () => {
+    for (const route of [
+      'src/app/api/cron/read-summary/route.ts',
+      'src/app/api/v1/cards/[key]/tap/route.ts',
+      'src/app/api/v1/cards/[key]/taps/route.ts',
+      'src/app/api/v1/cards/[key]/reading/route.ts',
+    ]) {
+      expect(entries.map((f) => relative(ROOT, f)), route).toContain(route);
+      expect(openAIRoutes, route).not.toContain(route);
+      expect(regionsOf(route), route).toEqual(['hkg1']);
+    }
+    expect(vercel.crons ?? []).toContainEqual({ path: '/api/cron/read-summary', schedule: '0 1 * * 1' });
   });
 
   it('runs none of them where OpenAI refuses requests', () => {
