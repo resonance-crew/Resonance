@@ -249,13 +249,10 @@ fun CardViewerActions(
                     val saving = !bookmarked
                     bookmarked = saving
                     haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                    // Said as it is drawn, as the web does: 收藏到卡片盒了.
+                    if (saving) toasts.show(L10n.Card.saved)
                     scope.launch {
-                        bookmarked = runCatching { bookmarks.toggle(cardId) }
-                            .onSuccess { now ->
-                                session.noteOwnWrite()
-                                if (now && saving) toasts.show(L10n.Card.saved)
-                            }
-                            .getOrElse { !saving }
+                        bookmarked = runCatching { bookmarks.toggle(cardId) }.onSuccess { session.noteOwnWrite() }.getOrElse { !saving }
                     }
                 }
             }

@@ -58,6 +58,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.resonance.design.AppFonts
+import com.resonance.design.LayoutClass
+import com.resonance.design.LocalWindowLayout
 import com.resonance.design.ComposerCapsule
 import com.resonance.design.OrganicIcon
 import com.resonance.design.composerFades
@@ -209,7 +211,7 @@ internal fun NoteInPlace(
     onUpgrade: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val phone = LocalConfiguration.current.screenWidthDp < 600
+    val phone = LocalWindowLayout.current.cls == LayoutClass.Compact
     val shortWindow = LocalConfiguration.current.screenHeightDp < 480
     val enter = if (reducedMotion) fadeIn(snap()) else expandVertically(tween(NOTE_MOVE_MILLIS), expandFrom = Alignment.Top) + fadeIn(tween(NOTE_MOVE_MILLIS))
     val exit = if (reducedMotion) fadeOut(snap()) else shrinkVertically(tween(NOTE_MOVE_MILLIS), shrinkTowards = Alignment.Top) + fadeOut(tween(NOTE_MOVE_MILLIS))

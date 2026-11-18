@@ -99,6 +99,8 @@ internal fun TapFacesButton(
     Box(
         modifier
             .heightIn(min = 48.dp)
+            // The flows find the faces by it (maestro/flows/tap.yaml: the viewer's face slides in).
+            .flowTag(if (author) "author-taps" else "tap-faces")
             .then(
                 if (self) Modifier.clearAndSetSemantics { contentDescription = label }
                 else Modifier
