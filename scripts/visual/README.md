@@ -300,12 +300,14 @@ release set and those states on top, each aimed at the few screens where it bite
 
 | Device (folder) | On | Screens | Setting | For |
 | --- | --- | --- | --- | --- |
-| `android/phone-large` | the phone AVD | card, thread-reply, thread-attach, settings, write-draft, notifications | font 1.5, `wm density 504` (343 dp across) | #14 允許存取 gone at display size + font 1.5; #3 the writer's status line cut |
-| `android/phone-largest` | the phone AVD | the same six | font 2.0 | #3 |
+| `android/phone-large` | the phone AVD | card, thread-reply, thread-attach, settings, write-draft, notifications, card-note-open | font 1.5, `wm density 504` (343 dp across) | #14 允許存取 gone at display size + font 1.5; #3 the writer's status line cut; the note's line grows, never clipped (round 26) |
+| `android/phone-largest` | the phone AVD | the same seven | font 2.0 | #3 |
+| `android/phone-landscape` | the phone AVD | card-note-open | `user_rotation 1` | the note field's two lines in a short window (round 26 SETTLED 9; the iPhone app stands upright only, and the web capturer has no device states) |
 | `android/tablet-portrait` | the tablet AVD | home, messages, thread, thread-stickers, card, notifications | `user_rotation 1` | the tablet was landscape only |
 | `ios/ipad-landscape` | `Visual iPad` | home, messages, thread, thread-stickers, thread-reply, card, notifications, write-draft | the simulator turned to landscape (Maestro's `setOrientation`) | #11 (the iPad was upright only) |
 | `mac/mac-window` | the Mac app | home, messages, thread, thread-stickers, card | a 600 × 800 window | #11, #13: an iPad in a window, as near as the harness gets |
-| `ios/ipad`, `android/tablet`, `web/tablet` | — | five each | dark zh-TW | the tablets in the dark |
+| `ios/ipad`, `android/tablet`, `web/tablet` | — | five each, and card-note-open | dark zh-TW | the tablets in the dark |
+| `web/desktop`, `mac/mac` | — | card-note-open | dark zh-TW | the note in place in the dark wider than a phone (round 26 SETTLED 9) |
 | `android/phone`, `android/tablet` | — | `thread-attach`, `thread-keyboard` (screens.ts `set: extended`) | `--es threadPanel attach` / `keyboard`; the soft keyboard shown beside the hardware one for that screen | #14; #9/#11 the keyboard against the composer |
 
 `npm run visual -- plan` prints what each set takes: release 303 captures (291 compared + 12 film stills), about

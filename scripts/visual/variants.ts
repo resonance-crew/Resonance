@@ -13,6 +13,10 @@
  *     window for an iPad in a window (#11, #13: what the iPad's window does; the iPad itself can't be put in a
  *     window from simctl — see README)
  *   - the tablets in the dark (iPad, Android tablet, the web's tablet: dark mode was the phones' only)
+ *   - the note written in place (round 26 SETTLED 9, `card-note-open`) at the Android phone's large fonts, on the
+ *     Android phone turned sideways (the field's two-line cap in a short window), and in the dark wherever the
+ *     release set has it light only (the tablets, the web's desktop, the Mac). The iPhone app stands upright only
+ *     (Info.plist) and the web's capturer has no device states yet, so neither turns a phone sideways
  *   - two composer states as screens of their own (`set: 'extended'` in screens.ts): the attach panel with its
  *     gallery's ask, and the Android soft keyboard on screen (the AVDs' hardware keyboard never shows one)
  *
@@ -62,15 +66,20 @@ export type DeviceState = {
 
 /** The Android phone's text-densest screens: the reader, the composer with rows riding and its attach panel, settings, the writer, the bell. */
 const TEXT_DENSE = ['card', 'thread-reply', 'thread-attach', 'settings', 'write-draft', 'notifications'];
+/** The note written in place under a story's end (round 26 SETTLED 9): its line grows with the type, never clipped. */
+const NOTE_OPEN = 'card-note-open';
 
 export const DEVICE_STATES: DeviceState[] = [
   // The Pixel 9's 420 dpi at 504 (Settings › Display size, one step past the default's next) with the font at 1.5:
   // 343 dp across with text half again as big — the owner's Pixel 10 Pro at display size 500 + font 1.5, and worse.
-  { platform: 'android', id: 'phone-large', on: 'phone', screens: TEXT_DENSE, variants: [BASE_VARIANT],
+  { platform: 'android', id: 'phone-large', on: 'phone', screens: [...TEXT_DENSE, NOTE_OPEN], variants: [BASE_VARIANT],
     android: { fontScale: 1.5, density: 504 }, why: 'large display size + font 1.5 (#14 允許存取 gone, #3 status line cut)' },
   // Android 14's largest font, at the default display size.
-  { platform: 'android', id: 'phone-largest', on: 'phone', screens: TEXT_DENSE, variants: [BASE_VARIANT],
+  { platform: 'android', id: 'phone-largest', on: 'phone', screens: [...TEXT_DENSE, NOTE_OPEN], variants: [BASE_VARIANT],
     android: { fontScale: 2 }, why: 'the largest font, 2.0 (#3 the writer\'s status line cut off)' },
+  // The phone on its side: a short window, where the note's field stops at two lines (round 26 SETTLED 2 and 9).
+  { platform: 'android', id: 'phone-landscape', on: 'phone', screens: [NOTE_OPEN], variants: [BASE_VARIANT],
+    android: { rotation: 1 }, why: 'the phone turned sideways (the note field\'s two lines in a short window)' },
   { platform: 'android', id: 'tablet-portrait', on: 'tablet', screens: ['home', 'messages', 'thread', 'thread-stickers', 'card', 'notifications'],
     variants: [BASE_VARIANT], android: { rotation: 1 }, why: 'the Android tablet upright (it was landscape only)' },
   { platform: 'ios', id: 'ipad-landscape', on: 'ipad',
@@ -82,11 +91,13 @@ export const DEVICE_STATES: DeviceState[] = [
     variants: [BASE_VARIANT], mac: { width: 600, height: 800 }, why: 'a narrow window: an iPad in a window (#11, #13)' },
 ];
 
-/** More variants a release device takes in the extended set: the tablets in the dark. */
+/** More variants a release device takes in the extended set: the tablets in the dark, and the note in place in the dark wider than a phone. */
 export const EXTRA_VARIANTS: { platform: Platform; device: string; screens: string[]; variants: Variant[]; why: string }[] = [
-  { platform: 'ios', device: 'ipad', screens: ['home', 'thread', 'thread-stickers', 'notifications', 'card'], variants: [DARK], why: 'the iPad in the dark' },
-  { platform: 'android', device: 'tablet', screens: ['home', 'thread', 'thread-stickers', 'notifications', 'card'], variants: [DARK], why: 'the Android tablet in the dark' },
-  { platform: 'web', device: 'tablet', screens: ['home', 'messages', 'thread', 'notifications', 'card'], variants: [DARK], why: 'the web’s tablet in the dark' },
+  { platform: 'ios', device: 'ipad', screens: ['home', 'thread', 'thread-stickers', 'notifications', 'card', NOTE_OPEN], variants: [DARK], why: 'the iPad in the dark' },
+  { platform: 'android', device: 'tablet', screens: ['home', 'thread', 'thread-stickers', 'notifications', 'card', NOTE_OPEN], variants: [DARK], why: 'the Android tablet in the dark' },
+  { platform: 'web', device: 'tablet', screens: ['home', 'messages', 'thread', 'notifications', 'card', NOTE_OPEN], variants: [DARK], why: 'the web’s tablet in the dark' },
+  { platform: 'web', device: 'desktop', screens: [NOTE_OPEN], variants: [DARK], why: 'the note in place on the web’s desktop in the dark' },
+  { platform: 'mac', device: 'mac', screens: [NOTE_OPEN], variants: [DARK], why: 'the note in place on the Mac in the dark' },
 ];
 
 export const stateOf = (platform: Platform, id: string) => DEVICE_STATES.find((d) => d.platform === platform && d.id === id);

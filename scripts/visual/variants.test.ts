@@ -26,7 +26,7 @@ describe('the variant sets', () => {
   });
 
   it('adds the device states after the device they run on, and only in the extended set', () => {
-    expect(devicesFor('android', 'extended')).toEqual(['phone', 'phone-large', 'phone-largest', 'tablet', 'tablet-portrait']);
+    expect(devicesFor('android', 'extended')).toEqual(['phone', 'phone-large', 'phone-largest', 'phone-landscape', 'tablet', 'tablet-portrait']);
     expect(devicesFor('ios', 'extended')).toEqual(['iphone', 'ipad', 'ipad-landscape']);
     expect(devicesFor('mac', 'extended')).toEqual(['mac', 'mac-window']);
     // --device names one by itself: it runs, the set or not.
@@ -35,8 +35,9 @@ describe('the variant sets', () => {
   });
 
   it('takes the large-text states on the text-densest screens, the gallery’s ask among them', () => {
+    // round 26 (SETTLED 9): and the note written in place, whose line grows with the type.
     expect(keys('android', 'phone-large', 'extended').sort()).toEqual(
-      ['card', 'thread-reply', 'thread-attach', 'settings', 'write-draft', 'notifications'].map((id) => `${id}@light-zh-TW.png`).sort(),
+      ['card', 'thread-reply', 'thread-attach', 'settings', 'write-draft', 'notifications', 'card-note-open'].map((id) => `${id}@light-zh-TW.png`).sort(),
     );
     const large = DEVICE_STATES.find((d) => d.id === 'phone-large')!;
     expect(large.android).toEqual({ fontScale: 1.5, density: 504 });
@@ -44,12 +45,25 @@ describe('the variant sets', () => {
 
   it('gives the tablets the dark, and the composer’s extra states, once each', () => {
     const ipad = keys('ios', 'ipad', 'extended');
-    expect(ipad.filter((k) => k.includes('@dark-'))).toHaveLength(5);
+    expect(ipad.filter((k) => k.includes('@dark-'))).toHaveLength(6);
     expect(new Set(ipad).size).toBe(ipad.length);
     expect(keys('android', 'phone', 'extended')).toEqual(expect.arrayContaining(['thread-attach@light-zh-TW.png', 'thread-keyboard@light-zh-TW.png']));
     // The extended screens are light zh-TW only, even on a phone.
     expect(keys('android', 'phone', 'extended').filter((k) => k.startsWith('thread-keyboard'))).toEqual(['thread-keyboard@light-zh-TW.png']);
-    expect(estimate('extended').captures - estimate('release').captures).toBe(50);
+    // 50, and round 26's note in place: 2 large fonts + the phone sideways + 5 in the dark
+    expect(estimate('extended').captures - estimate('release').captures).toBe(58);
+  });
+
+  it('takes the note written in place in large text, on a phone turned sideways, and in the dark wider than a phone (round 26 SETTLED 9)', () => {
+    for (const id of ['phone-large', 'phone-largest', 'phone-landscape']) expect(keys('android', id, 'extended')).toContain('card-note-open@light-zh-TW.png');
+    expect(DEVICE_STATES.find((d) => d.id === 'phone-landscape')).toMatchObject({ platform: 'android', on: 'phone', android: { rotation: 1 } });
+    expect(keys('android', 'phone-landscape', 'extended')).toEqual(['card-note-open@light-zh-TW.png']);
+    for (const [platform, device] of [['ios', 'ipad'], ['android', 'tablet'], ['web', 'tablet'], ['web', 'desktop'], ['mac', 'mac']] as const) {
+      expect(keys(platform, device, 'extended'), `${platform}/${device}`).toContain('card-note-open@dark-zh-TW.png');
+      expect(keys(platform, device, 'release'), `${platform}/${device}`).not.toContain('card-note-open@dark-zh-TW.png');
+    }
+    // The phones have it in the dark in the release set already.
+    expect(keys('web', 'phone', 'release')).toContain('card-note-open@dark-zh-TW.png');
   });
 
   it('names only screens its platform has, and states on devices that exist', () => {
