@@ -17,6 +17,7 @@ const stored = (extra: Partial<StoredRecommendations> = {}): StoredRecommendatio
   failedAt: 0,
   askedOn: null,
   warm: false,
+  coldStart: false,
   ...extra,
 });
 
@@ -62,7 +63,7 @@ describe('readStored', () => {
         leaseUntil: Timestamp.fromMillis(NOW),
         failedAt: 'yesterday',
       }),
-    ).toEqual({ date: TODAY, items: [item], partial: false, leaseUntil: NOW, failedAt: 0, askedOn: null, warm: false });
+    ).toEqual({ date: TODAY, items: [item], partial: false, leaseUntil: NOW, failedAt: 0, askedOn: null, warm: false, coldStart: false });
     // A document written before these fields existed: yesterday's picks, no lease, no failure.
     expect(readStored({ date: '2026-09-30', items: [item] })).toEqual(stored());
   });

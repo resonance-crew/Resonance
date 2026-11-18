@@ -1,6 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
-import { embed } from './openai';
-import { extractInsightSignature, SIGNATURE_TIMEOUT_MS, SLUG_MAX_TOKENS, SLUG_TIMEOUT_MS, suggestStoryTags, TAGS_TIMEOUT_MS, titleToSlugBase } from './tasks';
+import { embed, IMAGE_TIMEOUT_MS } from './openai';
+import {
+  CONCEPT_TIMEOUT_MS,
+  READING_MAX_CHARS,
+  READING_MAX_TOKENS,
+  READING_PROMPT,
+  generateStoryImage,
+  readCard,
+  readingText,
+  SLUG_MAX_TOKENS,
+  SLUG_TIMEOUT_MS,
+  suggestStoryTags,
+  TAGS_TIMEOUT_MS,
+  titleToSlugBase,
+} from './tasks';
 import { SUMMARY_TRANSLATE_TIMEOUT_MS, TRANSLATE_PIECE_TIMEOUT_MS, translateStory, translateSummary } from './translate';
 
 // Every OpenAI call carries a timeout (CLAUDE.md, AI): one that hangs must
@@ -20,7 +33,7 @@ beforeEach(() => {
       requests.push({ url, body: JSON.parse(String(init.body)), signal: init.signal });
       const content = url.endsWith('/embeddings')
         ? null
-        : String(init.body).includes('json_object')
+        : /json_object|json_schema/.test(String(init.body))
           ? JSON.stringify({ core_insight: 'x', insight_score: 0.5 })
           : 'after the rain';
       const body = url.endsWith('/embeddings') ? { data: [{ embedding: [3, 4] }] } : { choices: [{ message: { content } }] };
@@ -48,10 +61,27 @@ describe('OpenAI calls', () => {
     expect(requests[0].signal).toBeInstanceOf(AbortSignal);
   });
 
-  it('abandon the insight signature past SIGNATURE_TIMEOUT_MS', async () => {
-    await extractInsightSignature({ title: 't', story: 's' });
-    expect(timeout).toHaveBeenCalledWith(SIGNATURE_TIMEOUT_MS);
-    expect(requests[0].signal).toBeInstanceOf(AbortSignal);
+  it("abandon the card reading with the caller's deadline", async () => {
+    const deadline = AbortSignal.timeout(100_000);
+    await readCard({ title: 't', story: 's' }, { signal: deadline });
+    expect(requests[0].signal).toBe(deadline);
+  });
+
+  it('abandon an illustration: its concept past CONCEPT_TIMEOUT_MS, the image past IMAGE_TIMEOUT_MS', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        requests.push({ url, body: JSON.parse(String(init.body)), signal: init.signal });
+        const body = url.endsWith('/images/generations')
+          ? { data: [{ b64_json: Buffer.from('png').toString('base64') }] }
+          : { choices: [{ message: { content: 'a lamp in the rain' } }] };
+        return new Response(JSON.stringify(body), { status: 200 });
+      }),
+    );
+    await generateStoryImage('It rained all night.');
+    expect(timeout).toHaveBeenCalledWith(CONCEPT_TIMEOUT_MS);
+    expect(timeout).toHaveBeenCalledWith(IMAGE_TIMEOUT_MS);
+    expect(requests.every((r) => r.signal instanceof AbortSignal)).toBe(true);
   });
 
   it("abandon a story's translation piece past TRANSLATE_PIECE_TIMEOUT_MS, and a title's and excerpt's past SUMMARY_TRANSLATE_TIMEOUT_MS (round 25)", async () => {
@@ -91,5 +121,84 @@ describe('OpenAI calls', () => {
     );
     timeout.mockImplementation(() => AbortSignal.abort(new DOMException('timed out', 'TimeoutError')));
     await expect(titleToSlugBase('雨後')).rejects.toThrow('timed out');
+  });
+});
+
+// Round 26 §A1: the card reading — the whole story, a reasoning model, Structured Outputs, and a story the model
+// won't read falling back to the older prompt rather than losing its reading.
+describe('readCard', () => {
+  const reading = {
+    facts: { events: 'e', particulars: ['巷口'], turn: 't' },
+    insights: [{ span: '雨停', situation: '下雨的巷口', struggle: '迷路', thinking: '想回家', gain: '慢下來', shift: '急 → 慢', insight: '踩著水窪回家', reader: '剛搬家的人', evidence: '雨停的時候', strength: 0.8 }],
+    through_line: '雨後的巷口',
+    mood_only: false,
+    insight_score: 0.7,
+    life_domain: '日常',
+    emotional_register: '平靜',
+    placeholder: false,
+  };
+  const answering = (contents: unknown[]) => {
+    const queue = [...contents];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        requests.push({ url, body: JSON.parse(String(init.body)), signal: init.signal });
+        const next = queue.shift();
+        const message = next === 'refuse' ? { content: null, refusal: 'no' } : { content: JSON.stringify(next) };
+        return new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message }] }), { status: 200 });
+      }),
+    );
+  };
+
+  it('reads the story on the signature model, reasoning medium, to a strict schema with room to think', async () => {
+    answering([reading]);
+    const result = await readCard({ title: '雨後', story: '雨停的時候，**巷口**的積水映出路燈。' });
+    expect(result).toMatchObject({ model: 'gpt-6.2-sol', error: null, reading: { throughLine: '雨後的巷口', insightScore: 0.7 } });
+    expect(result.reading.insights[0]).toMatchObject({ situation: '下雨的巷口', shift: '急 → 慢', evidence: '雨停的時候' });
+    const body = requests[0].body as { model: string; reasoning_effort: string; max_completion_tokens: number; response_format: { type: string; json_schema: { strict: boolean } }; messages: { content: string }[] };
+    expect(body.model).toBe('gpt-6.2-sol');
+    expect(body.reasoning_effort).toBe('medium');
+    expect(body.max_completion_tokens).toBe(READING_MAX_TOKENS);
+    expect(body.response_format.type).toBe('json_schema');
+    expect(body.response_format.json_schema.strict).toBe(true);
+    // The story's plain text, not its Markdown.
+    expect(body.messages.at(-1)!.content).toBe('雨後\n\n雨停的時候，巷口的積水映出路燈。');
+  });
+
+  it("asks the older prompt once, on the slug's model, when the reading model refuses — and says so", async () => {
+    answering(['refuse', { core_insight: '學會慢下來', situation: '雨夜', insight_score: 0.6, life_domain: '日常' }]);
+    const result = await readCard({ title: '失去', story: '那年冬天她走了。' });
+    expect(result.error).toBe('refusal');
+    expect(result.model).toBe('gpt-5.4-mini-2026-03-17');
+    expect(result.reading).toMatchObject({ throughLine: '學會慢下來', insightScore: 0.6, moodOnly: false });
+    expect(result.reading.insights).toEqual([expect.objectContaining({ insight: '學會慢下來', situation: '雨夜', strength: 0.6 })]);
+    expect(requests).toHaveLength(2);
+    expect(requests[1].body.model).toBe('gpt-5.4-mini-2026-03-17');
+    expect(requests[1].body.response_format).toEqual({ type: 'json_object' });
+  });
+
+  it('asks again without the formula phrasings an earlier answer used, when told to (the cron and the backfill)', async () => {
+    answering([reading]);
+    await readCard({ title: 't', story: 's' }, { avoid: ['真正', 'not X but Y'] });
+    const messages = requests[0].body.messages as { role: string; content: string }[];
+    expect(messages[1]).toEqual({ role: 'system', content: expect.stringContaining('真正, not X but Y') });
+  });
+
+  it('reads the whole story up to READING_MAX_CHARS, and both ends of a longer one', () => {
+    const story = `${'開頭。'.repeat(2000)}${'中間。'.repeat(20_000)}結尾的轉折。`;
+    const text = readingText({ title: '長篇', story });
+    expect(text.length).toBeLessThanOrEqual(READING_MAX_CHARS);
+    expect(text.startsWith('長篇\n\n開頭。')).toBe(true);
+    expect(text.endsWith('結尾的轉折。')).toBe(true);
+    expect(text).toContain('……');
+    const short = '一段不長的故事。'.repeat(100);
+    expect(readingText({ title: 't', story: short })).toBe(`t\n\n${short}`);
+  });
+
+  it("holds none of the lines that asked for a saying, and asks the model to check for formula phrasings itself", () => {
+    expect(READING_PROMPT).not.toMatch(/one sentence|the \*?lesson\*?, not the events|similar (core_insight )?wording/i);
+    for (const phrase of ['真正的', '不是……而是……', '往往', 'the real', 'not X but Y']) expect(READING_PROMPT).toContain(phrase);
+    // The matching fields in one language, whatever the story's.
+    expect(READING_PROMPT).toContain('Traditional Chinese');
   });
 });

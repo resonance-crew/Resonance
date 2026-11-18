@@ -6,6 +6,7 @@ import { UNSENT_MESSAGES } from '@/lib/api/v1/messageActions';
 import { READER_SIGNALS } from '@/lib/api/v1/reading';
 import { PRIVATE_SHARES } from '@/lib/api/v1/sharedCards';
 import { TAPS } from '@/lib/api/v1/taps';
+import { CARD_SIGNATURES } from '@/lib/recommend/collections';
 import { purgeTapRows } from '@/lib/push/tapBell';
 import { restoreCard, trashCard } from '@/lib/api/v1/trash';
 import { HANDLE_HOLDS, HANDLES, holdHandle, reservable, handleKey } from '@/lib/db/firestore/handles';
@@ -224,6 +225,8 @@ async function collectAccountData(db: Firestore, uid: string) {
     db.collection('notifications').where('payload.fromUserId', '==', uid),
     db.collection('quotas').where('userId', '==', uid),
     db.collection('cardVectors').where('authorId', '==', uid),
+    // Their cards' readings (lib/recommend/indexCard): server-only, by the card's author.
+    db.collection(CARD_SIGNATURES).where('authorId', '==', uid),
     db.collection('reports').where('reporterId', '==', uid),
     db.collection('devices').where('userId', '==', uid), // push tokens
     db.collection('rateLimits').where('userId', '==', uid), // API budgets (lib/api/rateLimit)

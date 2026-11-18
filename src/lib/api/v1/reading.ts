@@ -19,7 +19,7 @@ import type { ReadingReportInput } from './schemas';
  * was read, ≤ 60), sessions (the last 5 page views: { id, active, progress,
  * startedAt, at, endSeen, end, rereadable, reread }), activeSeconds,
  * maxProgress, reachedEndAt, rereads, rereadAt, shared, reportDay,
- * reportsToday, expireAt }`. `expireAt` is 180 days after the last read, for
+ * reportsToday, expectedSeconds, expireAt }`. `expireAt` is 180 days after the last read, for
  * the Firestore TTL policy on the collection (firestore.indexes.json): a card
  * not opened again for half a year leaves nothing behind. Deleted with the
  * reader's account and with the card (deleteCard, the purge's `byCard`).
@@ -286,7 +286,8 @@ export async function reportReading(db: Firestore, viewerId: string, cardId: str
     if (!current.exists || current.get('trashedAt') != null || current.get('publishedAt') == null) return false;
     const next = foldReading(signalState(record.data()), report, now, expected);
     if (!next) return false;
-    tx.set(ref, signalDoc(viewerId, cardId, next));
+    // The story's reading time beside it: the recommender weighs a part read by it (lib/recommend/weights).
+    tx.set(ref, { ...signalDoc(viewerId, cardId, next), expectedSeconds: expected });
     return true;
   });
 }

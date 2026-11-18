@@ -319,11 +319,14 @@ describe('the recommendation vectors of a card whose visibility changes (PATCH /
       authorId,
       visibility: 'public' as const,
       channel,
+      part: 0,
       vector,
+      embedModel: 'offline',
       insightScore: 0.8,
       coreInsight: `insight ${cardId}`,
       situation: '',
       lifeDomain: 'x',
+      span: '',
     });
     await mocks.store!.upsert([
       record('live', 'alice', 'insight', [1, 0, 0]),
@@ -337,13 +340,13 @@ describe('the recommendation vectors of a card whose visibility changes (PATCH /
 
     await updateCard(db, 'alice', 'live', { visibility: 'private' });
     expect(await pool()).toEqual(['other']);
-    expect(await visibilityOf('live__insight')).toBe('private');
-    expect(await visibilityOf('live__situation')).toBe('private');
-    expect(await visibilityOf('other__insight')).toBe('public');
+    expect(await visibilityOf('live__insight__0')).toBe('private');
+    expect(await visibilityOf('live__situation__0')).toBe('private');
+    expect(await visibilityOf('other__insight__0')).toBe('public');
 
     await updateCard(db, 'alice', 'live', { visibility: 'connections' });
     expect(await pool()).toEqual(['other']);
-    expect(await visibilityOf('live__situation')).toBe('connections');
+    expect(await visibilityOf('live__situation__0')).toBe('connections');
 
     await updateCard(db, 'alice', 'live', { visibility: 'public' });
     expect(await pool()).toEqual(['live', 'other']);
@@ -359,7 +362,7 @@ describe('the recommendation vectors of a card whose visibility changes (PATCH /
 
   it("never touches them for someone else's card", async () => {
     await failure(updateCard(db, 'bob', 'live', { visibility: 'private' }));
-    expect(await visibilityOf('live__insight')).toBe('public');
+    expect(await visibilityOf('live__insight__0')).toBe('public');
   });
 
   it('still changes the card when its vectors cannot be updated', async () => {

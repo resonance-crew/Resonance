@@ -135,6 +135,10 @@ async function seedWorld() {
     set('quotas/alice_2026-09-27', { userId: 'alice', inviteCount: 1 }),
     set('cardVectors/alice-card__insight', { cardId: 'alice-card', authorId: 'alice' }),
     set('cardVectors/bob-card__insight', { cardId: 'bob-card', authorId: 'bob' }),
+    // Round 26: a card's reading (lib/recommend/indexCard), by its author; the parts of a card, by its id.
+    set('cardSignatures/alice-card', { authorId: 'alice', version: 3, insights: [] }),
+    set('cardSignatures/bob-card', { authorId: 'bob', version: 3, insights: [] }),
+    set('cardVectors/alice-card__insight__1', { cardId: 'alice-card', authorId: 'alice' }),
     set('userProfiles/alice', { centroid: [1, 2] }),
     set('recommendations/alice', { items: [] }),
     // Push switches and what was pushed, each person's own.
@@ -289,6 +293,8 @@ describe('purgeAccount', () => {
       'notifications/from-alice',
       'quotas/alice_2026-09-27',
       'cardVectors/alice-card__insight',
+      'cardVectors/alice-card__insight__1',
+      'cardSignatures/alice-card',
       'userProfiles/alice',
       'recommendations/alice',
       'notificationSettings/alice',
@@ -325,6 +331,7 @@ describe('purgeAccount', () => {
       'notifications/rtap_bob-card_20261118',
       'notifications/bob-own',
       'cardVectors/bob-card__insight',
+      'cardSignatures/bob-card',
       'reports/r2', // reports about the deleted user stay for moderation history
       'notificationSettings/bob',
       'pickPushes/bob',

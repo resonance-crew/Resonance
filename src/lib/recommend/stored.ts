@@ -34,6 +34,40 @@ export interface StoredRecommendations {
   askedOn: string | null;
   /** The stored items were built ahead of the reader by the warm-up cron, not on their request. */
   warm: boolean;
+  /** The reader had no positive card yet: the items are the coverage set (round 26 §A3.6). */
+  coldStart: boolean;
+}
+
+/**
+ * How often each card was in the reader's picks on days they opened them
+ * (round 26 §A3.2, C6): `recommendations/{uid}.shown = { [cardId]: { n,
+ * lastDay } }`, counted once a day per card when the reader is answered with
+ * their picks — never for the warm-up's build nobody saw. Three times and
+ * never opened, a card counts against what is near it and isn't shown again
+ * for 14 days (lib/recommend/weights). Kept by the backfill; deleted with the
+ * account (the whole document).
+ */
+export type ShownCounts = Record<string, { n: number; lastDay: string }>;
+/** A count not added to for this long is dropped. */
+const SHOWN_KEEP_DAYS = 60;
+/** The most cards the counts keep (the most recently shown). */
+const SHOWN_MAX = 300;
+
+/** `prev` with `cardIds` shown on `day` (once a day each), old entries dropped. Pure. */
+export function countShown(prev: ShownCounts, cardIds: string[], day: string): ShownCounts {
+  const next: ShownCounts = { ...prev };
+  for (const id of new Set(cardIds)) {
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) continue;
+    const was = next[id];
+    if (was?.lastDay === day) continue;
+    next[id] = { n: (was?.n ?? 0) + 1, lastDay: day };
+  }
+  const oldest = new Date(Date.parse(`${day}T00:00:00Z`) - SHOWN_KEEP_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const kept = Object.entries(next)
+    .filter(([, v]) => v.lastDay >= oldest)
+    .sort(([a, x], [b, y]) => (x.lastDay < y.lastDay ? 1 : x.lastDay > y.lastDay ? -1 : a < b ? -1 : 1))
+    .slice(0, SHOWN_MAX);
+  return Object.fromEntries(kept);
 }
 
 const millis = (v: unknown) => (v instanceof Timestamp ? v.toMillis() : 0);
@@ -55,5 +89,6 @@ export function readStored(data: DocumentData | undefined): StoredRecommendation
     failedAt: millis(data.failedAt),
     askedOn: typeof data.askedOn === 'string' && DAY.test(data.askedOn) ? data.askedOn : null,
     warm: data.warm === true,
+    coldStart: data.coldStart === true,
   };
 }

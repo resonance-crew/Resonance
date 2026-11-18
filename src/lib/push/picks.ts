@@ -2,9 +2,11 @@ import { FieldValue, Timestamp, type DocumentData, type DocumentReference, type 
 import { createTranslator } from 'next-intl';
 import en from '@/messages/en.json';
 import zhTW from '@/messages/zh-TW.json';
-import { blockedByViewer, blockHides, cardVisible } from '@/lib/api/v1/present';
+import { blockedByViewer, blockHides, cardVisible, connected } from '@/lib/api/v1/present';
 import { blankBySummary, LISTING_FIELDS, SUMMARY_FIELDS } from '@/lib/api/v1/summary';
 import { unlistedCard } from '@/lib/cards/blank';
+import { unlistedForStrangers } from '@/lib/recommend/collections';
+import { reasonSafe } from '@/lib/recommend/select';
 import { mapCard } from '@/lib/db/firestore/mapper';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import type { Card, RecommendationItem } from '@/lib/db/types';
@@ -128,9 +130,11 @@ async function chooseCard(db: Firestore, uid: string, items: RecommendationItem[
   const pushed = recentlyPushed(log, now);
   const order = [...new Map(items.map((i) => [i.cardId, i])).values()].filter((i) => !pushed.has(i.cardId) && !isReservedId(i.cardId));
   if (!order.length) return null;
-  const [snaps, blocked] = await Promise.all([
+  const [snaps, blocked, unlisted] = await Promise.all([
     db.getAll(...order.map((i) => db.doc(`cards/${i.cardId}`)), { fieldMask: CARD_FIELDS }),
     blockedByViewer(db, uid),
+    // A card its reading keeps from strangers (round 26 §A1.7) is pushed only by a connection's hand: see below.
+    unlistedForStrangers(db, order.map((i) => i.cardId)),
   ]);
   // A blank card (lib/cards/blank) is never pushed: no title, or a story with no words.
   const byId = new Map(snaps.filter((s) => s.exists && !blankBySummary(s.data()) && !unlistedCard(s.data()!)).map((s) => [s.id, mapCard(s.id, s.data()!)]));
@@ -143,7 +147,12 @@ async function chooseCard(db: Firestore, uid: string, items: RecommendationItem[
     // Their block of the reader as well — for a named card only (blockHides says why never an anonymous one).
     if (card.anonymous !== true && (await db.doc(`users/${card.authorId}/blocks/${uid}`).get()).exists) continue;
     if (await answered(db, uid, card.id)) continue;
-    return { card, reason: typeof item.reason === 'string' ? item.reason : '' };
+    // Not for strangers: only a card by someone the reader is connected with (cold start's first, named only).
+    if (unlisted.has(card.id) && (card.anonymous === true || !(await connected(db, uid, card.authorId)))) continue;
+    // A stored reason goes on the lock screen only if it tells nothing of what the reader did, nor names a sensitive
+    // situation (round 26 §A3.7): otherwise the push's own line.
+    const reason = typeof item.reason === 'string' && reasonSafe(item.reason) ? item.reason : '';
+    return { card, reason };
   }
   return null;
 }

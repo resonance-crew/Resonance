@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import { warmPicks } from '@/lib/recommend/warm';
+import { refreshPoolStats } from '@/lib/recommend/poolStats';
+import { currentEmbedModel } from '@/lib/recommend/indexCard';
 import { cronAuthorized } from '@/lib/api/cronAuth';
 
 export const dynamic = 'force-dynamic';
@@ -22,14 +24,17 @@ const BUILD_DEADLINE_MS = (maxDuration - 5) * 1000;
 
 /**
  * Daily warm-up of tonight's picks (vercel.json: 11:00 UTC, an hour before
- * /api/cron/push-picks; see lib/recommend/warm). Vercel Cron sends
+ * /api/cron/push-picks; see lib/recommend/warm), after the pool's numbers
+ * are worked out again (lib/recommend/poolStats). Vercel Cron sends
  * `Authorization: Bearer $CRON_SECRET`; anyone else, and everyone while the
  * secret is unset, is refused.
  */
 export async function GET(req: Request) {
   if (!cronAuthorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const started = Date.now();
+  // First the pool's numbers (lib/recommend/poolStats: μ, r(x), τ — no model), which today's builds then use.
+  const pool = await refreshPoolStats(currentEmbedModel()).catch((e) => (console.error('[warm-picks] pool stats', e), null));
   const run = await warmPicks(getAdminDb(), { deadline: started + WARM_BUDGET_MS, buildDeadline: started + BUILD_DEADLINE_MS });
-  console.log('[warm-picks]', JSON.stringify(run));
-  return NextResponse.json(run);
+  console.log('[warm-picks]', JSON.stringify({ pool, ...run }));
+  return NextResponse.json({ pool, ...run });
 }

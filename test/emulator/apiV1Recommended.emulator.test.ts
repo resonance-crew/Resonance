@@ -8,26 +8,17 @@ import type { IVectorStore } from '@/lib/recommend/vectorStore/interfaces';
 // at a time, none for an hour after a failure), a first-time reader's quick
 // build, and the vector search's distance direction on real unit vectors.
 // No LLM runs here: the build is injected, and the funnel's OpenAI calls fail.
+// Round 26: the funnel reads the reader's own acts (their taste) and the
+// pool's parts for real on this suite's emulator.
 
-const mocks = vi.hoisted(() => ({ store: null as IVectorStore | null, centroids: [] as number[][], db: null as Firestore | null }));
+const mocks = vi.hoisted(() => ({ store: null as IVectorStore | null, db: null as Firestore | null }));
+vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => mocks.db }));
 vi.mock('@/lib/recommend/vectorStore', () => ({ getVectorStore: () => mocks.store }));
-vi.mock('@/lib/recommend/profile', () => ({
-  getOrBuildProfile: async (uid: string) => ({ uid, centroids: mocks.centroids, summaries: [], updatedAt: new Date() }),
-}));
-// The reader's resonances and the candidates' bylines, read for real on this
-// suite's emulator (a reader with no cards answers no one).
-vi.mock('@/lib/recommend/signals', async (importOriginal) => {
-  const real = await importOriginal<typeof import('@/lib/recommend/signals')>();
-  return {
-    getEngagedAuthorIds: (uid: string) => real.getEngagedAuthorIds(uid, mocks.db!),
-    namedCardIds: (ids: string[]) => real.namedCardIds(ids, mocks.db!),
-  };
-});
-vi.mock('@/lib/ai/openai', () => ({
+vi.mock('@/lib/ai/openai', async (original) => ({
+  ...(await original<typeof import('@/lib/ai/openai')>()),
   chatJSON: async () => {
     throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
   },
-  rerankModel: () => 'cheap-model',
 }));
 
 const { dailyRecommendations, INLINE_BUDGET_MS, LEASE_MS } = await import('@/lib/recommend/daily');
@@ -205,14 +196,20 @@ describe('the vector search', () => {
     authorId,
     visibility,
     channel: 'insight' as const,
+    part: 0,
     vector: unit(v),
+    // The emulators' stand-in model (lib/recommend/offline): the index's current one here.
+    embedModel: 'offline',
     insightScore: 0.8,
     coreInsight: `insight ${cardId}`,
     situation: '',
     lifeDomain: 'x',
+    span: '',
   });
+  const at = Timestamp.fromDate(new Date('2026-09-01T00:00:00Z'));
+  const shown = { visibility: 'public', anonymous: false, publishedAt: at, thoughtCore: 't', story: '' };
 
-  it('ranks by COSINE distance, smaller is closer, so the funnel keeps the closest cards first', async () => {
+  it('ranks by COSINE distance, smaller is closer, and the funnel scores the pool against what the reader tapped', async () => {
     const store = new FirestoreVectorStore(db);
     await store.upsert([
       record('far', 'a3', [-1, 0.2, 0, 0]),
@@ -220,23 +217,30 @@ describe('the vector search', () => {
       record('mid', 'a2', [1, 1, 0, 0]),
       record('mine', 'reader', [1, 0, 0, 0]),
       record('hidden', 'a4', [1, 0, 0, 0], 'private'),
+      record('liked', 'a5', [1, 0.02, 0, 0]),
+      record('other', 'a6', [0, 0, 1, 0]),
+      record('another', 'a7', [0, 0, 0, 1]),
     ]);
     const query = unit([1, 0, 0, 0]);
 
     const hits = await store.nearest({ channel: 'insight', vector: query, filter: { visibility: 'public', excludeAuthorId: 'reader' }, limit: 10 });
-    expect(hits.map((h) => h.record.cardId)).toEqual(['near', 'mid', 'far']);
-    // 1 − cos θ for unit vectors: ~0 for the nearest, ~2 for the opposite.
-    expect(hits[0].distance).toBeCloseTo(1 - unit([1, 0.1, 0, 0])[0], 6);
-    expect(hits[2].distance).toBeGreaterThan(1.9);
+    expect(hits.map((h) => h.record.cardId).slice(0, 3)).toEqual(['liked', 'near', 'mid']);
+    expect(hits.at(-1)!.record.cardId).toBe('far');
+    expect(hits.at(-1)!.distance).toBeGreaterThan(1.9);
+    // 1 − cos θ for unit vectors: ~0 for the nearest.
+    expect(hits[1].distance).toBeCloseTo(1 - unit([1, 0.1, 0, 0])[0], 6);
     // The signature comes back, not the stored vector.
-    expect(hits[0].record).toMatchObject({ coreInsight: 'insight near', authorId: 'a1', vector: [] });
+    expect(hits[0].record).toMatchObject({ coreInsight: 'insight liked', authorId: 'a5', vector: [] });
 
-    // The funnel on these real distances (no LLM: its fallback order is retrieval order).
+    // The reader tapped `liked`: the funnel on these real vectors (no LLM: its fallback order is the taste's).
+    await db.doc('resonanceTaps/liked_reader').set({ cardId: 'liked', userId: 'reader', on: true, at: Timestamp.now() });
     mocks.store = store;
-    mocks.centroids = [query];
     const { items, partial } = await recommendFeed('reader', { fallback: true });
     expect(partial).toBe(true);
-    expect(items.map((i) => i.cardId)).toEqual(['near', 'mid', 'far']);
+    const got = items.map((i) => i.cardId);
+    expect(got[0]).toBe('near');
+    // Never their own card, a private one, nor the one they tapped.
+    for (const id of ['mine', 'hidden', 'liked']) expect(got).not.toContain(id);
   });
 
   // Review: a draft answering anyone's named card made its author one the
@@ -244,37 +248,39 @@ describe('the vector search', () => {
   // card too — a score past 1 could only come from it, and even unseen it
   // reordered the feed: a draft, a feed, and the card's author was named.
   it("lifts only a named card for its author, and only for an answer its original shows — never an anonymous one", async () => {
-    const at = Timestamp.fromDate(new Date('2026-09-01T00:00:00Z'));
-    const shown = { visibility: 'public', anonymous: false, publishedAt: at, thoughtCore: 't', story: '' };
     await Promise.all([
       db.doc('cards/bobNamed').set({ authorId: 'bob', ...shown }),
       db.doc('cards/bobMasked').set({ authorId: 'bob', ...shown, anonymous: true }),
+      db.doc('cards/bobOther').set({ authorId: 'bob', ...shown }),
       db.doc('cards/carolCard').set({ authorId: 'carol', ...shown }),
-      // Alice answers Bob's named card in a draft only: nothing Bob was ever shown.
-      db.doc('cards/aliceDraft').set({ authorId: 'alice', ...shown, publishedAt: null, referenceCardId: 'bobNamed' }),
+      // Alice answers Bob's other card in a draft only: nothing Bob was ever shown.
+      db.doc('cards/aliceDraft').set({ authorId: 'alice', ...shown, publishedAt: null, referenceCardId: 'bobOther' }),
+      // What she read to the end: her taste.
+      db.doc('readerSignals/alice_liked').set({ userId: 'alice', cardId: 'liked', lastAt: Timestamp.now(), reachedEndAt: Timestamp.now(), rereads: 0, activeSeconds: 100, maxProgress: 1 }),
     ]);
     const store = new FirestoreVectorStore(db);
     await store.upsert([
       record('bobNamed', 'bob', [1, 0.2, 0, 0]),
       record('bobMasked', 'bob', [1, 0.2, 0, 0]),
       record('carolCard', 'carol', [1, 0.2, 0, 0]),
+      record('liked', 'dan', [1, 0, 0, 0]),
+      record('x1', 'e1', [0, 1, 0, 0]),
+      record('x2', 'e2', [0, 0, 1, 0]),
+      record('x3', 'e3', [0, 0, 0, 1]),
     ]);
     mocks.store = store;
-    mocks.centroids = [unit([1, 0, 0, 0])];
     const scores = async () => {
       const { items } = await recommendFeed('alice', { fallback: true });
       return Object.fromEntries(items.map((i) => [i.cardId, i.score]));
     };
 
-    // Three cards as close as each other: as alike in score, none past what the distance gives.
+    // Three cards as close as each other: as alike in score.
     let s = await scores();
-    expect(Object.keys(s).sort()).toEqual(['bobMasked', 'bobNamed', 'carolCard']);
     expect(s.bobNamed).toBeCloseTo(s.carolCard, 9);
     expect(s.bobMasked).toBeCloseTo(s.carolCard, 9);
-    expect(s.carolCard).toBeLessThanOrEqual(1);
 
-    // A resonance Bob's card lists under her name: his named card is lifted, his anonymous one still isn't.
-    await db.doc('cards/aliceAnswer').set({ authorId: 'alice', ...shown, referenceCardId: 'bobNamed' });
+    // A reply Bob's card lists under her name: his named card is lifted, his anonymous one still isn't.
+    await db.doc('cards/aliceAnswer').set({ authorId: 'alice', ...shown, referenceCardId: 'bobOther' });
     s = await scores();
     expect(s.bobNamed).toBeCloseTo(s.carolCard + 0.15, 9);
     expect(s.bobMasked).toBeCloseTo(s.carolCard, 9);

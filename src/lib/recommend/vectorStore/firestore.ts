@@ -1,29 +1,51 @@
-import { FieldValue, type Firestore } from 'firebase-admin/firestore';
+import { FieldValue, type DocumentData, type Firestore, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import type { Visibility } from '@/lib/db/types';
 import type { IVectorStore } from './interfaces';
-import type { AuthorVector, NearestHit, VectorChannel, VectorQuery, VectorRecord } from './types';
+import type { NearestHit, VectorChannel, VectorQuery, VectorRecord } from './types';
 
 const COLLECTION = 'cardVectors';
 const DISTANCE_FIELD = '__distance';
+/** The record's fields beside the vector. */
+const RECORD_FIELDS = ['cardId', 'authorId', 'visibility', 'channel', 'part', 'embedModel', 'insightScore', 'coreInsight', 'situation', 'lifeDomain', 'span'];
 /**
- * What a hit carries back: the signature, not the 1536-float vector (six
- * centroids × 60 hits would otherwise download megabytes per feed). The
+ * What a hit carries back: the record, not the 1536-float vector. The
  * distance field must be in the projection or Firestore leaves it out.
  */
-const HIT_FIELDS = ['cardId', 'authorId', 'visibility', 'channel', 'insightScore', 'coreInsight', 'situation', 'lifeDomain', DISTANCE_FIELD];
+const HIT_FIELDS = [...RECORD_FIELDS, DISTANCE_FIELD];
+/** Firestore's `in` takes 30 values. */
+const IN_CHUNK = 30;
+/** A batch's limit on writes. */
+const BATCH_MAX = 500;
 
-/** Deterministic doc id so re-indexing a card overwrites its vectors in place. */
-function docId(cardId: string, channel: VectorChannel): string {
-  return `${cardId}__${channel}`;
+/** Deterministic doc id so reading a card again writes its parts in place. */
+export function vectorDocId(cardId: string, channel: VectorChannel, part: number): string {
+  return `${cardId}__${channel}__${part}`;
+}
+
+function toRecord(data: DocumentData, withVector: boolean): VectorRecord {
+  return {
+    cardId: String(data.cardId),
+    authorId: String(data.authorId),
+    visibility: data.visibility,
+    channel: data.channel === 'situation' ? 'situation' : 'insight',
+    part: Number.isInteger(data.part) ? Number(data.part) : 0,
+    vector: withVector ? ((data.vector?.toArray?.() ?? []) as number[]) : [],
+    embedModel: typeof data.embedModel === 'string' ? data.embedModel : '',
+    insightScore: Number(data.insightScore ?? 0),
+    coreInsight: String(data.coreInsight ?? ''),
+    situation: String(data.situation ?? ''),
+    lifeDomain: String(data.lifeDomain ?? ''),
+    span: String(data.span ?? ''),
+  };
 }
 
 /**
  * Firestore-native KNN backend. Vectors live in the `cardVectors` collection,
- * one doc per `(cardId, channel)`, written with {@link FieldValue.vector}. The
- * `visibility` pre-filter is the privacy boundary — others' feeds only ever see
- * `public` records (see `firebase/firestore.rules`, which deny all client
- * access to this collection).
+ * one doc per `(cardId, channel, part)`, written with {@link FieldValue.vector}.
+ * The `visibility` pre-filter is the privacy boundary — others' feeds only
+ * ever see `public` records (see `firebase/firestore.rules`, which deny all
+ * client access to this collection).
  *
  * Requires a composite vector index on `(visibility, channel, vector)` — see
  * `firestore.indexes.json` (an index serves every distance measure).
@@ -38,27 +60,34 @@ export class FirestoreVectorStore implements IVectorStore {
 
   async upsert(records: VectorRecord[]): Promise<void> {
     if (records.length === 0) return;
-    const batch = this.db().batch();
+    const db = this.db();
+    const keep = new Set(records.map((r) => vectorDocId(r.cardId, r.channel, r.part)));
+    // The references only: a vector is 1536 floats nobody here reads.
+    const cards = [...new Set(records.map((r) => r.cardId))];
+    const existing = await Promise.all(cards.map((id) => db.collection(COLLECTION).where('cardId', '==', id).select().get()));
+    const batch = db.batch();
     for (const r of records) {
-      const ref = this.db().collection(COLLECTION).doc(docId(r.cardId, r.channel));
-      batch.set(ref, {
+      batch.set(db.collection(COLLECTION).doc(vectorDocId(r.cardId, r.channel, r.part)), {
         cardId: r.cardId,
         authorId: r.authorId,
         visibility: r.visibility,
         channel: r.channel,
+        part: r.part,
         vector: FieldValue.vector(r.vector),
+        embedModel: r.embedModel,
         insightScore: r.insightScore,
         coreInsight: r.coreInsight,
         situation: r.situation,
         lifeDomain: r.lifeDomain,
+        span: r.span,
         updatedAt: FieldValue.serverTimestamp(),
       });
     }
+    for (const snap of existing) for (const d of snap.docs) if (!keep.has(d.id)) batch.delete(d.ref);
     await batch.commit();
   }
 
   async deleteByCard(cardId: string): Promise<void> {
-    // The references only: a vector is 1536 floats nobody here reads.
     const snap = await this.db().collection(COLLECTION).where('cardId', '==', cardId).select().get();
     if (snap.empty) return;
     const batch = this.db().batch();
@@ -74,23 +103,34 @@ export class FirestoreVectorStore implements IVectorStore {
     await batch.commit();
   }
 
-  async listByAuthor(authorId: string, channel: VectorChannel): Promise<AuthorVector[]> {
-    // Two equality filters: Firestore merges the single-field indexes on
-    // `authorId` and `channel`, so no composite index is needed — and the
-    // other channel's vectors (and the signature fields) are never downloaded.
-    const snap = await this.db()
-      .collection(COLLECTION)
-      .where('authorId', '==', authorId)
-      .where('channel', '==', channel)
-      .select('cardId', 'vector')
-      .get();
-    const out: AuthorVector[] = [];
-    for (const doc of snap.docs) {
-      const data = doc.data();
-      const vector = (data.vector?.toArray?.() ?? []) as number[];
-      if (vector.length > 0) out.push({ cardId: String(data.cardId), vector });
+  async listByVisibility(visibility: Visibility, channel?: VectorChannel): Promise<VectorRecord[]> {
+    let query = this.db().collection(COLLECTION).where('visibility', '==', visibility);
+    if (channel) query = query.where('channel', '==', channel);
+    const out: VectorRecord[] = [];
+    // A page at a time: the pool's vectors are 12 KB each.
+    let last: QueryDocumentSnapshot | null = null;
+    for (;;) {
+      let page = query.select(...RECORD_FIELDS, 'vector').orderBy('__name__').limit(BATCH_MAX);
+      if (last) page = page.startAfter(last);
+      const snap = await page.get();
+      for (const d of snap.docs) out.push(toRecord(d.data(), true));
+      if (snap.size < BATCH_MAX) return out.filter((r) => r.vector.length > 0);
+      last = snap.docs[snap.docs.length - 1];
     }
-    return out;
+  }
+
+  async listByCards(cardIds: string[]): Promise<VectorRecord[]> {
+    const ids = [...new Set(cardIds.filter((id) => id && !id.includes('/')))];
+    const out: VectorRecord[] = [];
+    for (let i = 0; i < ids.length; i += IN_CHUNK) {
+      const snap = await this.db()
+        .collection(COLLECTION)
+        .where('cardId', 'in', ids.slice(i, i + IN_CHUNK))
+        .select(...RECORD_FIELDS, 'vector')
+        .get();
+      for (const d of snap.docs) out.push(toRecord(d.data(), true));
+    }
+    return out.filter((r) => r.vector.length > 0);
   }
 
   async nearest(query: VectorQuery): Promise<NearestHit[]> {
@@ -104,8 +144,6 @@ export class FirestoreVectorStore implements IVectorStore {
         queryVector: FieldValue.vector(query.vector),
         limit: query.limit,
         // COSINE answers 1 − cos θ: smaller is closer, as the funnel ranks.
-        // (DOT_PRODUCT answers the product itself — larger is closer — which
-        // the funnel's "keep the smallest" would have turned upside down.)
         distanceMeasure: 'COSINE',
         distanceResultField: DISTANCE_FIELD,
       })
@@ -117,24 +155,8 @@ export class FirestoreVectorStore implements IVectorStore {
       // `excludeAuthorId` is applied in code rather than as a `!=` pre-filter so
       // the composite vector index stays equality-only (the author's own cards
       // are few, so over-fetch + drop is cheaper than a second index).
-      if (query.filter.excludeAuthorId && data.authorId === query.filter.excludeAuthorId) {
-        continue;
-      }
-      hits.push({
-        record: {
-          cardId: String(data.cardId),
-          authorId: String(data.authorId),
-          visibility: data.visibility,
-          channel: data.channel,
-          // Not fetched (HIT_FIELDS): rerank works off the signature fields.
-          vector: [],
-          insightScore: Number(data.insightScore ?? 0),
-          coreInsight: String(data.coreInsight ?? ''),
-          situation: String(data.situation ?? ''),
-          lifeDomain: String(data.lifeDomain ?? ''),
-        },
-        distance: Number(data[DISTANCE_FIELD] ?? 0),
-      });
+      if (query.filter.excludeAuthorId && data.authorId === query.filter.excludeAuthorId) continue;
+      hits.push({ record: toRecord(data, false), distance: Number(data[DISTANCE_FIELD] ?? 0) });
     }
     return hits;
   }

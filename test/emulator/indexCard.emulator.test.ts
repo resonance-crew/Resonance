@@ -3,16 +3,23 @@ import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type DocumentData, type Firestore } from 'firebase-admin/firestore';
 import { restoreCard, trashCard } from '@/lib/api/v1/trash';
 import { indexCard } from '@/lib/recommend/indexCard';
+import { indexOwed, markIndexOwed } from '@/lib/recommend/indexOwed';
+import { offlineVector } from '@/lib/recommend/offline';
 import { FirestoreVectorStore } from '@/lib/recommend/vectorStore/firestore';
 import type { IVectorStore } from '@/lib/recommend/vectorStore/interfaces';
-import type { InsightSignature } from '@/lib/db/types';
+import type { CardReading } from '@/lib/db/types';
+import type { CardReadingResult, ReadCardOptions } from '@/lib/ai/tasks';
+import { ChatIncomplete } from '@/lib/ai/openai';
 
 // The recommender's write-time pipeline (indexCard) against the Firestore
-// emulator, with the LLM and the embeddings stood in for. Publish and apply
-// start it after their response and it takes seconds, so a card can go to
-// the trash — and come back — while it runs. Restoring a card only gives its
-// vectors their visibility back (it runs where OpenAI can't be reached), so a
-// card the trash met here must still have its vectors, private while there.
+// emulator, with the LLM and the embeddings stood in for. Publish starts it
+// after its response and it takes seconds, so a card can go to the trash —
+// and come back — while it runs. Restoring a card only gives its vectors
+// their visibility back (it runs where OpenAI can't be reached), so a card
+// the trash met here must still have its vectors, private while there.
+// Round 26 §A1: the reading is kept server-only (`cardSignatures`), the card
+// keeps its through line, placeholder flag and hash, and a card is several
+// parts (`cardVectors/{id}__{channel}__{i}`).
 
 const PROJECT = 'demo-resonance-index-card';
 let app: App;
@@ -24,33 +31,68 @@ const mocks = vi.hoisted(() => ({
   whileEmbedding: null as (() => Promise<unknown>) | null,
   /** Runs inside the vector write, before it lands: what happens between the card's last read and the write. */
   beforeUpsert: null as (() => Promise<unknown>) | null,
-  /** Runs inside the signature's LLM call. */
+  /** Runs inside the reading's LLM call. */
   whileSigning: null as (() => Promise<unknown>) | null,
-  /** How many signatures were asked of the LLM. */
+  /** How many readings were asked of the LLM, and with what. */
   signed: 0,
-  /** What the stand-in model answers beside its fixed signature. */
-  signature: {} as Partial<InsightSignature>,
+  asked: [] as ReadCardOptions[],
+  /** What the stand-in model answers beside its fixed reading. */
+  reading: {} as Partial<CardReading>,
+  /** The next answers of the stand-in model, before its fixed one (a function: throw, or a reading). */
+  next: [] as (() => Partial<CardReadingResult>)[],
+  /** The emulators' stand-in: no model at all (lib/recommend/offline). */
+  offline: false,
 }));
 vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => mocks.db }));
 vi.mock('@/lib/recommend/vectorStore', () => ({ getVectorStore: () => mocks.store }));
+vi.mock('@/lib/text/translation', async (original) => ({
+  ...(await original<typeof import('@/lib/text/translation')>()),
+  modelsOffline: () => mocks.offline,
+}));
+const strongInsight = {
+  span: 'tonight',
+  situation: 'clearing out a drawer',
+  struggle: 'what to keep',
+  thinking: 'everything mattered',
+  gain: 'one letter is enough',
+  shift: 'keeping all → keeping one',
+  insight: 'Letting go is a kind of keeping.',
+  reader: 'someone moving house',
+  evidence: 'I cleared out the drawer',
+  strength: 0.9,
+};
 vi.mock('@/lib/ai/tasks', async (original) => ({
   ...(await original<typeof import('@/lib/ai/tasks')>()),
-  extractInsightSignature: async (): Promise<InsightSignature> => (mocks.signed++, await mocks.whileSigning?.(), {
-    coreInsight: 'Letting go is a kind of keeping.',
-    intent: 'to record',
-    situation: 'clearing out a drawer',
-    lifeDomain: '日常',
-    emotionalRegister: 'quiet',
-    insightScore: 0.9,
-    placeholder: false,
-    ...mocks.signature,
-  }),
+  readCard: async (_input: unknown, opts: ReadCardOptions = {}): Promise<CardReadingResult> => {
+    mocks.signed++;
+    mocks.asked.push(opts);
+    await mocks.whileSigning?.();
+    opts.onUsage?.({ input: 1000, output: 500, reasoning: 300 });
+    const next = mocks.next.shift()?.();
+    return {
+      model: 'gpt-6.2-sol',
+      error: null,
+      ...next,
+      reading: {
+        insights: [strongInsight],
+        throughLine: 'Keeping one letter',
+        moodOnly: false,
+        insightScore: 0.9,
+        lifeDomain: '日常',
+        emotionalRegister: 'quiet',
+        placeholder: false,
+        ...mocks.reading,
+        ...next?.reading,
+      },
+    };
+  },
 }));
 vi.mock('@/lib/ai/openai', async (original) => ({
   ...(await original<typeof import('@/lib/ai/openai')>()),
-  embed: async (texts: string[]) => {
+  embed: async (texts: string[], opts: { onUsage?: (u: { input: number; output: number; reasoning: number }) => void } = {}) => {
     await mocks.whileEmbedding?.();
-    return texts.map(() => [0.1, 0.2, 0.3]);
+    opts.onUsage?.({ input: 40, output: 0, reasoning: 0 });
+    return texts.map((_, i) => [0.1, 0.2, 0.3 + i]);
   },
 }));
 
@@ -82,7 +124,10 @@ beforeEach(async () => {
   mocks.beforeUpsert = null;
   mocks.whileSigning = null;
   mocks.signed = 0;
-  mocks.signature = {};
+  mocks.asked = [];
+  mocks.reading = {};
+  mocks.next = [];
+  mocks.offline = false;
   await Promise.all([
     db.doc('users/alice').set({ handle: 'alice', handleLower: 'alice', initials: 'a', accentColor: 'x' }),
     db.doc('cards/live').set({
@@ -113,8 +158,8 @@ describe('indexing a card the trash reaches meanwhile', () => {
     mocks.whileEmbedding = trash;
     expect(await indexCard('live')).toEqual({ indexed: true, channels: 2 });
     expect(await vectorsOf('live')).toEqual({ insight: 'private', situation: 'private' });
-    // Never lost: the signature is the card's too.
-    expect((await db.doc('cards/live').get()).get('signature')).toMatchObject({ coreInsight: 'Letting go is a kind of keeping.' });
+    // Never lost: the reading is kept, the card has its through line.
+    expect((await db.doc('cards/live').get()).get('signature')).toMatchObject({ coreInsight: 'Keeping one letter' });
 
     await restore();
     expect(await vectorsOf('live')).toEqual({ insight: 'public', situation: 'public' });
@@ -251,25 +296,31 @@ describe('indexing a card whose text has not changed', () => {
   });
 });
 
-// A reader's profile is built from their own vectors of one channel (lib/recommend/profile).
-describe('FirestoreVectorStore.listByAuthor', () => {
-  it("answers one author's vectors of one channel, with two equality filters and no composite index", async () => {
+// A card is its parts (round 26 §A2.1): written in place, and the parts a new reading no longer has — or an older
+// format's ids — go in the same batch.
+describe('FirestoreVectorStore with parts', () => {
+  const record = (cardId: string, authorId: string, channel: 'insight' | 'situation', part: number, vector: number[], visibility: 'public' | 'private' = 'public') => ({
+    cardId, authorId, channel, part, vector, visibility, embedModel: 'm', insightScore: 0.9, coreInsight: 'c', situation: 's', lifeDomain: 'd', span: '',
+  });
+  const idsOf = async (cardId: string) => (await db.collection('cardVectors').where('cardId', '==', cardId).get()).docs.map((d) => d.id).sort();
+
+  it('makes the new parts the card’s, deleting the rest — the older one-per-channel ids too', async () => {
     const store = new FirestoreVectorStore(db);
-    const record = (cardId: string, authorId: string, channel: 'insight' | 'situation', vector: number[]) => ({
-      cardId, authorId, channel, vector, visibility: 'public' as const, insightScore: 0.9, coreInsight: 'c', situation: 's', lifeDomain: 'd',
-    });
-    await store.upsert([
-      record('a1', 'alice', 'insight', [1, 0, 0]),
-      record('a1', 'alice', 'situation', [0, 1, 0]),
-      record('a2', 'alice', 'insight', [0, 0, 1]),
-      record('b1', 'bob', 'insight', [1, 1, 0]),
-    ]);
-    const mine = await store.listByAuthor('alice', 'insight');
-    expect(mine.sort((x, y) => x.cardId.localeCompare(y.cardId))).toEqual([
-      { cardId: 'a1', vector: [1, 0, 0] },
-      { cardId: 'a2', vector: [0, 0, 1] },
-    ]);
-    expect(await store.listByAuthor('alice', 'situation')).toEqual([{ cardId: 'a1', vector: [0, 1, 0] }]);
+    await db.doc('cardVectors/a1__insight').set({ cardId: 'a1', authorId: 'alice', visibility: 'public', channel: 'insight' });
+    await store.upsert([record('a1', 'alice', 'insight', 0, [1, 0, 0]), record('a1', 'alice', 'insight', 1, [0, 1, 0]), record('a1', 'alice', 'situation', 0, [0, 0, 1])]);
+    expect(await idsOf('a1')).toEqual(['a1__insight__0', 'a1__insight__1', 'a1__situation__0']);
+    await store.upsert([record('a1', 'alice', 'insight', 0, [1, 0, 0])]);
+    expect(await idsOf('a1')).toEqual(['a1__insight__0']);
+  });
+
+  it('lists a visibility’s records with their vectors (the pool), and any cards’ whatever their visibility (a taste)', async () => {
+    const store = new FirestoreVectorStore(db);
+    await store.upsert([record('a1', 'alice', 'insight', 0, [1, 0, 0]), record('a2', 'alice', 'insight', 0, [0, 1, 0], 'private'), record('b1', 'bob', 'situation', 0, [0, 0, 1])]);
+    const pool = await store.listByVisibility('public');
+    expect(pool.map((r) => r.cardId).sort()).toEqual(['a1', 'b1']);
+    expect(pool.find((r) => r.cardId === 'a1')!.vector).toEqual([1, 0, 0]);
+    expect((await store.listByVisibility('public', 'situation')).map((r) => r.cardId)).toEqual(['b1']);
+    expect((await store.listByCards(['a2', 'b1'])).map((r) => [r.cardId, r.visibility]).sort()).toEqual([['a2', 'private'], ['b1', 'public']]);
   });
 });
 
@@ -309,9 +360,145 @@ describe('indexing a thin card or a placeholder', () => {
   it("keeps the model's placeholder on the signature and gives the card no vectors, however it scored", async () => {
     expect(await indexCard('live')).toEqual({ indexed: true, channels: 2 });
     await db.doc('cards/live').update({ story: 'lorem ipsum dolor sit amet lorem ipsum dolor sit amet' });
-    mocks.signature = { placeholder: true };
-    expect(await indexCard('live')).toEqual({ indexed: false, reason: 'low-insight' });
+    mocks.reading = { placeholder: true };
+    expect(await indexCard('live')).toEqual({ indexed: false, reason: 'unlisted' });
     expect(await vectorsOf('live')).toEqual({});
     expect((await db.doc('cards/live').get()).get('signature.placeholder')).toBe(true);
+  });
+});
+
+// Round 26 §A1.6: the reading, server-only; the card keeps only what its pages need.
+describe('the reading', () => {
+  const reading = async () => (await db.doc('cardSignatures/live').get()).data();
+
+  it("keeps the whole reading in cardSignatures, and on the card its through line, placeholder flag and hash — the older fields gone", async () => {
+    await db.doc('cards/live').update({ signature: { coreInsight: 'old', intent: 'to record', situation: 'old', lifeDomain: 'x', emotionalRegister: 'y', insightScore: 0.7, placeholder: false } });
+    expect(await indexCard('live')).toEqual({ indexed: true, channels: 2 });
+    const card = (await db.doc('cards/live').get()).data()!;
+    expect(Object.keys(card.signature).sort()).toEqual(['contentHash', 'coreInsight', 'placeholder']);
+    expect(card.signature).toMatchObject({ coreInsight: 'Keeping one letter', placeholder: false });
+    expect(card.indexPendingAt).toBeUndefined();
+    expect(await reading()).toMatchObject({
+      authorId: 'alice',
+      version: 3,
+      model: 'gpt-6.2-sol',
+      embedModel: 'text-embedding-3-small',
+      insights: [strongInsight],
+      throughLine: 'Keeping one letter',
+      moodOnly: false,
+      insightScore: 0.9,
+      listedForStrangers: true,
+      templated: false,
+      rewritten: false,
+      error: null,
+      usage: { input: 1000, output: 500, reasoning: 300, embed: 40 },
+    });
+    // The parts carry the hit's short lines — never the quote, never the reader line.
+    const part = (await db.doc('cardVectors/live__insight__0').get()).data()!;
+    expect(part).toMatchObject({ part: 0, coreInsight: 'Letting go is a kind of keeping.', situation: 'clearing out a drawer', embedModel: 'text-embedding-3-small', span: 'tonight' });
+    expect(JSON.stringify(part)).not.toMatch(/I cleared out the drawer|moving house/);
+  });
+
+  it('embeds each strong insight as its own parts, and a later reading with fewer leaves no stray part', async () => {
+    mocks.reading = { insights: [strongInsight, { ...strongInsight, insight: 'Second', strength: 0.7 }, { ...strongInsight, insight: 'Weak', strength: 0.2 }] };
+    expect(await indexCard('live')).toEqual({ indexed: true, channels: 4 });
+    const ids = async () => (await db.collection('cardVectors').where('cardId', '==', 'live').get()).docs.map((d) => d.id).sort();
+    expect(await ids()).toEqual(['live__insight__0', 'live__insight__1', 'live__situation__0', 'live__situation__1']);
+    mocks.reading = {};
+    expect(await indexCard('live', { force: true })).toEqual({ indexed: true, channels: 2 });
+    expect(await ids()).toEqual(['live__insight__0', 'live__situation__0']);
+  });
+
+  it('keeps a card the reading finds feeling only out of the pool: read, published, not for strangers', async () => {
+    await indexCard('live');
+    mocks.reading = { moodOnly: true };
+    expect(await indexCard('live', { force: true })).toEqual({ indexed: false, reason: 'unlisted' });
+    expect(await vectorsOf('live')).toEqual({});
+    expect(await reading()).toMatchObject({ moodOnly: true, listedForStrangers: false });
+    expect((await db.doc('cards/live').get()).get('publishedAt')).toBeDefined();
+  });
+
+  it("records a reading cut at its cap, keeps the card owed and its last reading, and the next run settles it", async () => {
+    await indexCard('live');
+    await db.doc('cards/live').update({ story: 'I cleared out the drawer tonight, and kept the key too.' });
+    mocks.next = [() => { throw new ChatIncomplete('length', ''); }];
+    expect(await indexCard('live')).toEqual({ indexed: false, reason: 'failed' });
+    expect(await reading()).toMatchObject({ error: 'length', listedForStrangers: true, throughLine: 'Keeping one letter' });
+    expect((await db.doc('cards/live').get()).get('indexPendingAt')).toBeInstanceOf(Timestamp);
+    expect(await vectorsOf('live')).toEqual({ insight: 'public', situation: 'public' });
+    expect(await indexCard('live')).toEqual({ indexed: true, channels: 2 });
+    expect((await db.doc('cards/live').get()).get('indexPendingAt')).toBeUndefined();
+    expect(await reading()).toMatchObject({ error: null });
+  });
+
+  it('says so when the reading model refused and the older prompt read it instead', async () => {
+    mocks.next = [() => ({ error: 'refusal', model: 'gpt-5.4-mini-2026-03-17' })];
+    expect(await indexCard('live')).toEqual({ indexed: true, channels: 2 });
+    expect(await reading()).toMatchObject({ error: 'refusal', model: 'gpt-5.4-mini-2026-03-17' });
+  });
+
+  it('asks once more for a reading in formula phrasings — only when told to (the cron, the backfill), never on publish', async () => {
+    mocks.reading = { throughLine: '真正的放下是留下一封信' };
+    await indexCard('live');
+    expect(mocks.signed).toBe(1);
+    expect(await reading()).toMatchObject({ templated: true, rewritten: false });
+    mocks.next = [() => ({}), () => ({ reading: { throughLine: 'Keeping one letter' } as CardReading })];
+    await indexCard('live', { force: true, rewrite: true });
+    expect(mocks.signed).toBe(3);
+    expect(mocks.asked.at(-1)!.avoid).toEqual(['真正']);
+    expect(await reading()).toMatchObject({ templated: false, rewritten: true, throughLine: 'Keeping one letter' });
+  });
+});
+
+// §A1.9 (D10): under the emulators no model is asked — none of a test card's words leave the machine — and the
+// emulator still has a pool to match on.
+describe('indexing offline', () => {
+  it("writes a fixed reading and vectors derived from the card's id, the same every time, under the stand-in model", async () => {
+    mocks.offline = true;
+    expect(await indexCard('live')).toEqual({ indexed: true, channels: 2 });
+    expect(mocks.signed).toBe(0);
+    const reading = (await db.doc('cardSignatures/live').get()).data()!;
+    expect(reading).toMatchObject({ model: 'offline', embedModel: 'offline', listedForStrangers: true, usage: { input: 0, output: 0, embed: 0 } });
+    const vector = (await db.doc('cardVectors/live__insight__0').get()).get('vector').toArray();
+    expect(vector).toEqual(offlineVector('live', { channel: 'insight', part: 0 }));
+    expect(vector).toHaveLength(1536);
+    expect(offlineVector('live', { channel: 'insight', part: 0 })).toEqual(vector);
+    expect(offlineVector('other', { channel: 'insight', part: 0 })).not.toEqual(vector);
+  });
+});
+
+// §A1.8: applying an edit marks the reading owed; the daily cron reads owed cards again, at most a few a run.
+describe('the daily re-reading of owed cards', () => {
+  it('reads an edited card again, settles an unchanged one without a call, and asks a templated reading once more', async () => {
+    await indexCard('live');
+    await db.doc('cards/other').set({ authorId: 'alice', thoughtCore: 'Another', story: 'Another story about the drawer, the second one.', visibility: 'public', publishedAt: published });
+    mocks.reading = { throughLine: '不是丟掉，而是留下' };
+    await indexCard('other');
+    mocks.reading = {};
+    // live: edited (owed); other: templated, not asked again yet.
+    await db.doc('cards/live').update({ story: 'I cleared out the drawer tonight, and kept the key.' });
+    await markIndexOwed(db, 'live');
+    await markIndexOwed(db, 'gone');
+    const before = mocks.signed;
+    const run = await indexOwed(db);
+    expect(mocks.signed - before).toBe(2);
+    expect(run).toMatchObject({ examined: 2, read: 2, left: 0 });
+    expect(run.tokens.input).toBeGreaterThan(0);
+    expect((await db.doc('cards/live').get()).get('indexPendingAt')).toBeUndefined();
+    expect((await db.doc('cardSignatures/other').get()).get('rewritten')).toBe(false);
+    // Nothing owed now: a second run asks nothing.
+    await markIndexOwed(db, 'live');
+    const again = await indexOwed(db);
+    expect(again.outcomes).toEqual({ unchanged: 1 });
+    expect(again.read).toBe(0);
+  });
+
+  it('stops at its limit and leaves the rest for tomorrow', async () => {
+    for (const id of ['c1', 'c2', 'c3']) {
+      await db.doc(`cards/${id}`).set({ authorId: 'alice', thoughtCore: `Card ${id}`, story: `A story for ${id}, long enough to be read.`, visibility: 'public', publishedAt: published });
+      await markIndexOwed(db, id);
+    }
+    const run = await indexOwed(db, { limit: 2 });
+    expect(run).toMatchObject({ read: 2, left: 1 });
   });
 });

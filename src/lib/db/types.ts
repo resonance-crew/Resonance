@@ -52,15 +52,19 @@ export interface Card {
   /** derived: accent hue seed for organic UI */
   accentHue?: number;
   /**
-   * When the recommendation pipeline last extracted this card's insight
-   * signature and wrote its vectors. Absent → never indexed (or re-index due
-   * after an edit). See {@link InsightSignature}.
+   * When the recommendation pipeline last read this card and wrote its
+   * vectors. Absent → never indexed. See {@link InsightSignature}.
    */
   indexedAt?: Date | null;
   /**
-   * The card's extracted "insight signature" — the structured distillation the
-   * recommender embeds (not the raw story). Stored back on the card so reads
-   * (rerank, "why this resonates") don't re-run the LLM. See `src/lib/recommend`.
+   * A reading is owed (round 26 §A1.8): an applied edit, or a reading that
+   * didn't finish after a publish — the daily `/api/cron/index-cards` reads
+   * it again. Server-only.
+   */
+  indexPendingAt?: Date | null;
+  /**
+   * What the card keeps of its reading (the reading itself is server-only,
+   * `cardSignatures`). See `src/lib/recommend`.
    */
   signature?: InsightSignature;
   /**
@@ -112,36 +116,76 @@ export interface Card {
 }
 
 /**
- * The structured distillation of a card produced once at write-time by a single
- * LLM call. We embed `coreInsight` and `situation` (two retrieval channels) —
- * NOT the raw text — so two pieces that share a *realization* (creative-startup
- * failure vs. sports injury, both "I tied my self-worth to outcomes") land near
- * each other even when their wording is far apart.
+ * What a card keeps of its reading (round 26 §A1.6): the reading itself —
+ * what the story's author lived through, how they thought, what they gained
+ * and what changed — is server-only (`cardSignatures/{cardId}`,
+ * {@link CardReading}); the card holds only what its own pages and lists
+ * need. Cards indexed before round 26 may still carry the older fields
+ * (`intent`, `situation`, `insightScore` …) until `scripts/backfill.ts
+ * recommend-index` deletes them: nothing reads them any more.
  */
 export interface InsightSignature {
-  /** The transferable realization at the heart of the piece. */
-  coreInsight: string;
-  /** Why the author wrote it (to record / to comfort others / to vent…). */
-  intent: string;
-  /** The lived circumstance the insight arose from. */
-  situation: string;
-  /** Coarse life area, e.g.「自我認同 / 職涯」. */
-  lifeDomain: string;
-  /** Emotional colour, e.g.「釋懷中帶著不甘」. */
-  emotionalRegister: string;
   /**
-   * 0–1 — how much genuine, transferable insight the piece carries. Below
-   * {@link INSIGHT_INDEX_THRESHOLD} the card is stored but kept out of the
-   * recommendation candidate pool.
+   * The reading's through line (≤ 60 characters, the card's language): shown
+   * to the card's author only (`CardDetail.coreInsight`), never to a reader.
    */
-  insightScore: number;
+  coreInsight?: string;
   /**
    * The model read it as a test or placeholder (「測試」, lorem ipsum, keys
    * mashed, a word repeated): kept out of every list that picks cards for
-   * readers, as a thin one is (lib/cards/blank: unlistedCard). Absent on
-   * signatures made before it was asked.
+   * readers, as a thin one is (lib/cards/blank: unlistedCard).
    */
   placeholder?: boolean;
+  /** The hash of what the reading was made from (lib/recommend/indexCard): unchanged, nothing is read again. */
+  contentHash?: string;
+}
+
+/**
+ * One realization a card carries (round 26 §A1.4), as the reading model
+ * writes it. The matching fields (situation … reader) are written in
+ * Traditional Chinese for every card, so cards in two languages are compared
+ * in one; `span` and `evidence` quote the story as it is written.
+ */
+export interface ReadingInsight {
+  /** Where in the story it is (a few words of it). */
+  span: string;
+  /** The circumstance, in the author's own nouns. */
+  situation: string;
+  /** What was hard in it. */
+  struggle: string;
+  /** How the author thought about it then. */
+  thinking: string;
+  /** What they came away with. */
+  gain: string;
+  /** What changed, as before → after; empty when nothing did. */
+  shift: string;
+  /** One or two sentences, in words the author would use. */
+  insight: string;
+  /** Who would feel understood reading it (kept, never embedded yet). */
+  reader: string;
+  /** A quote from the story, ≤ 40 characters: never in anyone else's prompt. */
+  evidence: string;
+  /** 0–1: how clearly the story carries it. Parts under 0.5 get no vector. */
+  strength: number;
+}
+
+/**
+ * A card's reading (round 26 §A1), server-only in `cardSignatures/{cardId}`
+ * beside how it was made: one insight for a short card, at most three for a
+ * long one, and the card's own judgments.
+ */
+export interface CardReading {
+  insights: ReadingInsight[];
+  /** ≤ 60 characters in the card's language: the card's `coreInsight`. */
+  throughLine: string;
+  /** Feeling only: no realization, nothing changed. Not listed for strangers. */
+  moodOnly: boolean;
+  /** 0–1: how much a stranger could take from it. */
+  insightScore: number;
+  lifeDomain: string;
+  emotionalRegister: string;
+  /** A test or placeholder, not a piece of writing. */
+  placeholder: boolean;
 }
 
 export interface User {
@@ -198,8 +242,10 @@ export interface Resonance {
 
 /**
  * A private note (小紙條) from a reader to a card's author — the "speak to the
- * author" layer of the three-layer response structure. No audience, no counts,
- * never a recommendation signal.
+ * author" layer of the three-layer response structure. No audience, no counts.
+ * That a note was sent feeds the sender's own taste in the recommender (round
+ * 26 §A3, lib/recommend/weights): its text is never read for it, and it never
+ * lifts the card for anyone else.
  */
 export interface Note {
   id: string;
@@ -216,7 +262,9 @@ export interface Note {
 /**
  * A private bookmark (收藏) — the "speak to yourself" layer. Stored under
  * `users/{uid}/bookmarks/{cardId}` (doc id == card id, so toggling is
- * idempotent). Owner-only; never counted, never notified.
+ * idempotent). Owner-only; never counted, never notified. A saved card feeds
+ * its saver's own taste in the recommender (round 26 §A3, the server reads
+ * it), never the card's standing for anyone else.
  */
 export interface Bookmark {
   cardId: string;

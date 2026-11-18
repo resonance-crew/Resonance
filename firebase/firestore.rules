@@ -177,7 +177,8 @@ service cloud.firestore {
 
       // --- bookmarks (users/{uid}/bookmarks/{cardId}) ---
       // Purely private "speak to yourself" layer: owner-only, never counted,
-      // never notified, never a recommendation signal.
+      // never notified. The server reads it (Admin SDK) for its owner's own
+      // taste in the recommender (round 26) — never a card's standing.
       match /bookmarks/{cardId} {
         allow read, delete: if isSelf(userId);
         allow create, update: if isSelf(userId)
@@ -812,14 +813,22 @@ service cloud.firestore {
     }
 
     // --- recommendation engine (server-only) ---
-    // cardVectors / userProfiles / recommendations are written and read solely
-    // by the Admin SDK (which bypasses these rules). They hold the insight
-    // vectors, per-user profile centroids, and cached feeds — including data
-    // derived from PRIVATE cards. The client must never touch them: a private
+    // cardVectors / cardSignatures / userProfiles / recommendations are written
+    // and read solely by the Admin SDK (which bypasses these rules). They hold
+    // the cards' readings and vectors, each reader's taste (card ids and
+    // weights) and cached feeds — including data derived from PRIVATE cards. The client must never touch them: a private
     // card's vector feeds only its own author's profile and is hard-filtered
     // out of everyone else's retrieval at query time. Deny all client access so
     // that boundary can't be probed.
     match /cardVectors/{docId} {
+      allow read, write: if false;
+    }
+    // cardSignatures/{cardId}: a card's reading (round 26: what its author
+    // lived, thought, gained and how it changed them, whether it is for
+    // strangers) — written and read by the server alone (lib/recommend/
+    // indexCard); the card keeps only its through line, shown to its author.
+    // Deleted with the card and with its author's account.
+    match /cardSignatures/{cardId} {
       allow read, write: if false;
     }
     match /userProfiles/{userId} {

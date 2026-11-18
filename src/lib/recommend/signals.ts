@@ -1,13 +1,120 @@
-import type { Firestore } from 'firebase-admin/firestore';
+import { Timestamp, type DocumentData, type Firestore } from 'firebase-admin/firestore';
 import { getAdminDb } from '@/lib/db/firestore/admin';
+import type { CardEvents } from './weights';
 
 /**
- * The chosen quality signal: authors whose cards this reader has *responded to*
- * by writing a resonance card (a card with `referenceCardId`). Unlike likes /
- * dwell-time (rejected by the Not-Doing List), authoring a response is a costly,
- * deliberate act — the strongest evidence of genuine resonance we have. We use
- * it as a light retrieval boost, and the data stays joinable for future offline
- * tuning.
+ * What a reader did, read for their own picks (round 26 §A3): the cards they
+ * wrote, replied to with a card, left a note on (that one was sent — the
+ * text is never read), tapped 共振, saved, read (lib/api/v1/reading's
+ * records), and were shown in their picks. Each describes the reader's own
+ * taste; none is counted across readers or lifts a card for anyone else.
+ * Signals on an anonymous card feed only the reader's content taste: the
+ * author boost below counts named originals only (safety.md).
+ */
+
+/** How many of each kind are read (the newest are what the taste keeps anyway). */
+const EVENTS_READ = 300;
+
+const ms = (v: unknown): number | null => (v instanceof Timestamp ? v.toMillis() : v instanceof Date ? v.getTime() : null);
+const idOk = (id: unknown): id is string => typeof id === 'string' && id.length > 0 && !id.includes('/');
+const finite = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? n : 0);
+
+/** The latest of two times (null: neither). */
+const latest = (a: number | undefined, b: number | null) => (b === null ? a : a === undefined ? b : Math.max(a, b));
+
+/**
+ * Everything `uid` did, by card (./weights CardEvents), and the shown counts
+ * `recommendations/{uid}.shown` keeps. Reads only the fields it needs, never
+ * a note's text nor a story.
+ */
+export async function readerEvents(uid: string, db: Firestore = getAdminDb()): Promise<CardEvents[]> {
+  const [own, notes, taps, saved, reading, stored] = await Promise.all([
+    db.collection('cards').where('authorId', '==', uid).select('referenceCardId', 'publishedAt', 'trashedAt').limit(EVENTS_READ).get(),
+    db.collection('notes').where('fromUserId', '==', uid).select('cardId', 'createdAt').limit(EVENTS_READ).get(),
+    db.collection('resonanceTaps').where('userId', '==', uid).select('cardId', 'on', 'at').limit(EVENTS_READ).get(),
+    db.collection(`users/${uid}/bookmarks`).select('cardId', 'createdAt').limit(EVENTS_READ).get(),
+    db
+      .collection('readerSignals')
+      .where('userId', '==', uid)
+      .select('cardId', 'lastAt', 'reachedEndAt', 'rereads', 'rereadAt', 'shared', 'activeSeconds', 'maxProgress', 'expectedSeconds')
+      .limit(EVENTS_READ)
+      .get(),
+    db.collection('recommendations').doc(uid).get(),
+  ]);
+  const byCard = new Map<string, CardEvents>();
+  const of = (cardId: string) => {
+    const e = byCard.get(cardId) ?? { cardId };
+    byCard.set(cardId, e);
+    return e;
+  };
+  for (const d of own.docs) {
+    const at = ms(d.get('publishedAt'));
+    if (at === null || d.get('trashedAt') != null) continue;
+    of(d.id).wrote = at;
+    const ref = d.get('referenceCardId');
+    if (idOk(ref)) of(ref).replied = latest(of(ref).replied, at);
+  }
+  for (const d of notes.docs) {
+    const cardId = d.get('cardId');
+    if (idOk(cardId)) of(cardId).noted = latest(of(cardId).noted, ms(d.get('createdAt')) ?? 0);
+  }
+  for (const d of taps.docs) {
+    const cardId = d.get('cardId');
+    if (!idOk(cardId)) continue;
+    of(cardId).tappedEver = true;
+    if (d.get('on') === true) of(cardId).tapped = ms(d.get('at')) ?? 0;
+  }
+  for (const d of saved.docs) {
+    const cardId = d.get('cardId') ?? d.id;
+    if (idOk(cardId)) of(cardId).saved = ms(d.get('createdAt')) ?? 0;
+  }
+  for (const d of reading.docs) {
+    const cardId = d.get('cardId');
+    const lastAt = ms(d.get('lastAt'));
+    if (!idOk(cardId) || lastAt === null) continue;
+    const expected = d.get('expectedSeconds');
+    of(cardId).reading = {
+      lastAt,
+      reachedEndAt: ms(d.get('reachedEndAt')),
+      rereads: Math.max(0, Math.floor(finite(d.get('rereads')))),
+      rereadAt: ms(d.get('rereadAt')),
+      shared: d.get('shared') === true,
+      activeSeconds: Math.max(0, finite(d.get('activeSeconds'))),
+      maxProgress: Math.min(1, Math.max(0, finite(d.get('maxProgress')))),
+      expectedSeconds: typeof expected === 'number' && Number.isFinite(expected) && expected > 0 ? expected : null,
+    };
+  }
+  for (const [cardId, shown] of Object.entries(shownCounts(stored.data()))) of(cardId).shown = shown;
+  return [...byCard.values()];
+}
+
+/** `recommendations/{uid}.shown`, read defensively: `{ [cardId]: { n, lastDay } }`. */
+export function shownCounts(data: DocumentData | undefined): Record<string, { n: number; lastDay: string }> {
+  const raw = data?.shown;
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<string, { n: number; lastDay: string }> = {};
+  for (const [cardId, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!idOk(cardId) || !v || typeof v !== 'object') continue;
+    const n = Math.floor(finite((v as DocumentData).n));
+    const lastDay = (v as DocumentData).lastDay;
+    if (n > 0 && typeof lastDay === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(lastDay)) out[cardId] = { n, lastDay };
+  }
+  return out;
+}
+
+/** Whose named public cards the reader is connected with (their connections' uids). */
+export async function connectionIds(uid: string, db: Firestore = getAdminDb()): Promise<string[]> {
+  const snap = await db.collection('connections').where('userIds', 'array-contains', uid).select('userIds').get();
+  const out = new Set<string>();
+  for (const d of snap.docs) for (const id of (d.get('userIds') ?? []) as unknown[]) if (idOk(id) && id !== uid) out.add(id);
+  return [...out].sort();
+}
+
+/**
+ * The light author boost's signal: authors whose cards this reader has
+ * *responded to* by writing a card (a card with `referenceCardId`) — a
+ * costly, deliberate act. A light lift for their other named cards (+0.15 in
+ * the funnel), never a card's standing for anyone else.
  *
  * Only a resonance that reaches its original counts — published, public and
  * under the reader's name, as the original's list shows it: a draft or a

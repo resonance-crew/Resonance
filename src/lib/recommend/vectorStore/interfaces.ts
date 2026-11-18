@@ -1,5 +1,5 @@
 import type { Visibility } from '@/lib/db/types';
-import type { AuthorVector, NearestHit, VectorChannel, VectorQuery, VectorRecord } from './types';
+import type { NearestHit, VectorChannel, VectorQuery, VectorRecord } from './types';
 
 /**
  * Storage-agnostic vector index. Firestore native KNN is the current backend
@@ -9,24 +9,31 @@ import type { AuthorVector, NearestHit, VectorChannel, VectorQuery, VectorRecord
  */
 export interface IVectorStore {
   /**
-   * Insert or replace the vectors for one or more cards. Implementations key by
-   * `(cardId, channel)` so re-indexing an edited card overwrites in place.
+   * Make these records the cards' parts: each written in place by
+   * `(cardId, channel, part)`, and every other part a card had — an insight
+   * the new reading no longer holds, an older format's id — deleted in the
+   * same batch.
    */
   upsert(records: VectorRecord[]): Promise<void>;
-  /** Remove every channel's vector for a card (on delete / unpublish). */
+  /** Remove every part of a card (on delete, or when it is no longer listed). */
   deleteByCard(cardId: string): Promise<void>;
   /**
-   * Follow a card's visibility change: every channel's record takes it, so a
-   * card that is no longer public leaves others' candidate pool at once (and
-   * comes back when it is public again) without being re-embedded.
+   * Follow a card's visibility change: every part takes it, so a card that is
+   * no longer public leaves others' candidate pool at once (and comes back
+   * when it is public again) without being embedded again.
    */
   setVisibility(cardId: string, visibility: Visibility): Promise<void>;
-  /** Approximate-nearest-neighbour search within a single channel. */
+  /** Approximate-nearest-neighbour search within a single channel (raw vectors). */
   nearest(query: VectorQuery): Promise<NearestHit[]>;
   /**
-   * Read back one author's own vectors for a channel (all visibilities). Used
-   * to build that author's profile — including from their PRIVATE cards, which
-   * shape their own recommendations but are never exposed to anyone else.
+   * Every record at this visibility, vectors included: the pool the funnel
+   * scores exactly in memory while it is small (lib/recommend/match, §A2.3).
    */
-  listByAuthor(authorId: string, channel: VectorChannel): Promise<AuthorVector[]>;
+  listByVisibility(visibility: Visibility, channel?: VectorChannel): Promise<VectorRecord[]>;
+  /**
+   * The parts of these cards, whatever their visibility, vectors included:
+   * the cards a reader engaged with (their taste). Read for that reader's own
+   * picks only — a private card's vectors never reach anyone else's.
+   */
+  listByCards(cardIds: string[]): Promise<VectorRecord[]>;
 }

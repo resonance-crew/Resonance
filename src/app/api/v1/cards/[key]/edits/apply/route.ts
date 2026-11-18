@@ -5,7 +5,7 @@ import { tryReachResonance } from '@/lib/api/v1/resonate';
 import { CardIdParam } from '@/lib/api/v1/schemas';
 import { revalidateLocalized } from '@/lib/api/revalidate';
 import { getAdminDb } from '@/lib/db/firestore/admin';
-import { indexCard } from '@/lib/recommend/indexCard';
+import { markIndexOwed } from '@/lib/recommend/indexOwed';
 import { makeSummaryTranslations } from '@/lib/api/v1/summaryTranslationsMake';
 import { unfurlCardLinks } from '@/lib/links/cardLinks';
 import { ringAfter } from '@/lib/push/ring';
@@ -14,7 +14,9 @@ import { spend } from '@/lib/api/rateLimit';
 import { getVectorStore } from '@/lib/recommend/vectorStore';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+// The title's and excerpt's translations after the response (one small call); the card's reading is the daily
+// cron's (indexPendingAt), never asked here.
+export const maxDuration = 120;
 
 /**
  * POST /api/v1/cards/{id}/edits/apply — apply your pending edit to a
@@ -38,14 +40,15 @@ export const POST = withUser(async (user, _req, ctx: RouteContext<'key'>) => {
   if (result.applied) {
     after(() =>
       // After "save changes", side by side as publishing does: the story's link previews (new links fetched,
-      // removed ones dropped) and then the cached pages; and the recommendation index — an LLM call when what
-      // the signature reads changed, which spends the author's reindex budget (over it the card keeps its last index).
+      // removed ones dropped) and then the cached pages; and the card's reading marked owed (round 26 §A1.8, D6:
+      // reading the whole story again on every save would be a reasoning model's call each time) — the daily
+      // cron reads it again, and asks no model when what the reading reads is unchanged.
       Promise.all([
         (async () => {
           await unfurlCardLinks(getAdminDb(), id).catch((e) => console.error('[api/v1] unfurl', e));
           revalidateLocalized(stale);
         })(),
-        indexCard(id, { mayCall: () => reindexAllowed(user.id) }).catch((e) => console.error('[api/v1] index', e)),
+        markIndexOwed(getAdminDb(), id).catch((e) => console.error('[api/v1] index owed', e)),
         // The title's and excerpt's translations, made again only when either changed (the same budget as the index).
         makeSummaryTranslations(getAdminDb(), id, { mayCall: () => reindexAllowed(user.id) }).catch((e) =>
           console.error('[api/v1] summary translations', e),

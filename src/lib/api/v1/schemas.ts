@@ -298,7 +298,10 @@ export const CardDetail = named(
     visibility: z.enum(['public', 'connections', 'private']),
     anonymous: z.boolean(),
     resonanceCount: z.number().int(),
-    /** The insight the recommender distilled from the story, if indexed. */
+    /**
+     * The through line the card's reading found (round 26: ≤ 60 characters, the story's language), if read — for
+     * its author only; null to everyone else (no screen shows a reader what the model read).
+     */
     coreInsight: z.string().nullable(),
     /** The viewer wrote this card. */
     isOwner: z.boolean(),
