@@ -4,7 +4,9 @@
  *
  * Two connected people (Alice, Bob) with cards, a conversation, a
  * stranger (Carol), and a newcomer with no cards yet (Dora — the write
- * page's first-card guide shows for her). The accounts exist only in the Auth emulator of the
+ * page's first-card guide shows for her), connected to Alice. Four more
+ * readers who never sign in (eli, fay — Alice's connections —, gus, hana)
+ * resonated with cards (round 26's tap: their faces). The accounts exist only in the Auth emulator of the
  * `demo-resonance` project; the password below is a local test value.
  * In the browser (dev:emulator), sign in from devtools with:
  *   await window.__emulatorSignIn('alice@resonance.test')
@@ -276,6 +278,34 @@ async function main() {
     senderId: 'carol', text: '讀到搬家那段，好像看見自己。', sentAt: at(50), cardRef: 'rich-story', kind: 'note',
   });
   await db.doc('letters/carol_alice').set({ from: 'carol', to: 'alice', count: 1, cardId: 'rich-story', at: at(50) });
+
+  // Round 26 (§V3): who resonated (共振, the tap — resonanceTaps, lib/api/v1/taps). alice is connected to bob, dora and
+  // two readers who never sign in (eli, fay: profiles only); carol stays a stranger to her (her letter waits) and so
+  // do gus and hana. On bob's walk, alice sees the faces of the connections who tapped — dora, eli, fay (her own
+  // first, and a blank disc after three, once she taps too) — and bob sees them all with carol. On alice's rich story
+  // strangers and bob tapped, carol among them with the note she left there. Each rang already (rangAt), and no
+  // bell row is seeded: the installed apps would draw its type as a raw string, and alice's bell screen stays as it was.
+  const readers = [
+    { uid: 'eli', accent: 'oklch(90% 0.05 160)' },
+    { uid: 'fay', accent: 'oklch(90% 0.05 20)' },
+    { uid: 'gus', accent: 'oklch(90% 0.05 250)' },
+    { uid: 'hana', accent: 'oklch(90% 0.05 330)' },
+  ];
+  for (const r of readers) {
+    await db.doc(`users/${r.uid}`).set({
+      handle: r.uid, handleLower: r.uid, bio: `${r.uid} 的測試帳號`, region: 'TW', primaryLocale: 'zh-TW', verified: false,
+      avatarSeed: String(r.uid.charCodeAt(0) * 7), initials: r.uid.slice(0, 2).toUpperCase(), accentColor: r.accent,
+      joinedAt: at(60 * 24 * 20), handleChangedAt: at(60 * 24 * 20),
+    });
+    await db.doc(`handles/${r.uid}`).set({ uid: r.uid, handle: r.uid, reservedAt: at(60 * 24 * 20) });
+  }
+  for (const other of ['dora', 'eli', 'fay']) {
+    await db.doc(`connections/alice_${other}`).set({ userIds: ['alice', other], establishedAt: at(60 * 24 * 3) });
+  }
+  const tapped = (cardId: string, uid: string, minutesAgo: number) =>
+    db.doc(`resonanceTaps/${cardId}_${uid}`).set({ cardId, userId: uid, on: true, at: at(minutesAgo), rangAt: at(minutesAgo) });
+  for (const [uid, m] of [['dora', 8], ['carol', 12], ['eli', 18], ['fay', 22]] as const) await tapped('rain-walk', uid, m);
+  for (const [uid, m] of [['gus', 9], ['carol', 48], ['hana', 30], ['bob', 35]] as const) await tapped('rich-story', uid, m);
 
   // A card alice moved to the trash three days ago (public before): its page says so and offers 還原. By the real
   // clock, not SEED_NOW: the trash forgets a card 30 days on (and the days left stay the same from run to run).
