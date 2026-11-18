@@ -44,12 +44,12 @@ const zh: FilmCopy = {
   hero: {
     lineA: { before: '用故事', accent: '', after: '' },
     lineB: { before: '', accent: '回應', after: '故事' },
-    sub: '讀到觸動你的故事，不必按讚——寫一張自己的卡片回應它',
+    sub: '讀到有共鳴的體悟，按一下共振；想多說一點，留一張小紙條，或用自己的卡片回應它',
   },
   scenes: [
     { name: '寫下', line: '有人把自己的一段人生，寫成了一張卡片' },
-    { name: '回應', line: '讀到它的人，不按讚，寫一張自己的卡片回應' },
-    { name: '相遇', line: '兩張卡片連在一起，兩個人就能開始聊聊' },
+    { name: '回應', line: '讀到它的人起了共鳴，按一下共振，再用一張自己的卡片回應' },
+    { name: '相遇', line: '兩張卡片連在一起，兩個同頻的人相遇了' },
     { name: '換你', line: '下一個故事，由你來寫' },
   ],
   lip: {
@@ -71,7 +71,7 @@ const zh: FilmCopy = {
     subtitle: '真實的人、真實的經歷 — 每個聲音都承載著一個世界',
     all: '瀏覽所有故事',
     ctaTitle: '換你寫下一個故事',
-    ctaLine: '讀到觸動你的故事，不必按讚——寫一張自己的卡片回應它',
+    ctaLine: '讀到有共鳴的體悟，按一下共振；想多說一點，留一張小紙條，或用自己的卡片回應它',
     kinBanner: '預覽：第二張卡片是最相近的故事，還不是真的回應',
     region: '小紙團的動畫',
   },
@@ -82,12 +82,12 @@ const en: FilmCopy = {
   hero: {
     lineA: { before: '', accent: 'Answer', after: ' stories' },
     lineB: { before: 'with stories', accent: '', after: '' },
-    sub: 'When a story moves you, skip the like — answer it with a card of your own',
+    sub: 'When an insight stays with you, tap Resonate; to say more, leave a note, or answer with a card of your own',
   },
   scenes: [
     { name: 'Write', line: 'Someone writes a piece of their life on a card' },
-    { name: 'Answer', line: 'Whoever it moves skips the like and answers with a card of their own' },
-    { name: 'Meet', line: 'Two cards linked, and two people can start to talk' },
+    { name: 'Answer', line: 'Whoever it stays with taps Resonate, then answers with a card of their own' },
+    { name: 'Meet', line: 'Two cards linked, and two people on one wavelength meet' },
     { name: 'Your turn', line: 'The next story is yours to write' },
   ],
   lip: {
@@ -109,7 +109,7 @@ const en: FilmCopy = {
     subtitle: 'Real people, real experiences — every voice carries a world',
     all: 'Browse all stories',
     ctaTitle: 'Your turn to write one',
-    ctaLine: 'When a story moves you, skip the like — answer it with a card of your own',
+    ctaLine: 'When an insight stays with you, tap Resonate; to say more, leave a note, or answer with a card of your own',
     kinBanner: 'Preview: the second card is the nearest story, not yet a real reply',
     region: 'The Paper Pals film',
   },

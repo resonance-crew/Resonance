@@ -52,7 +52,7 @@
   },
   "about": {
     "metaTitle": "關於我們",
-    "metaDescription": "我們相信人人都是故事的分享者。在共振，讀到觸動你的故事時，回應不是按讚，而是寫下自己的卡片去共振它。",
+    "metaDescription": "我們相信人人都是故事的分享者。在共振，讀到有共鳴的體悟，按一下共振；想多說一點，留一張小紙條，或用自己的卡片回應它。",
     "tag": "✦ 關於我們",
     "title": "我們相信\n人人都是​故事的分享者",
     "lead": "每個人都生而立體、獨一無二，帶著只屬於自己的經驗和體悟；而故事，是串起人與人、讓生命影響生命最好的方式——這是我們打造「共振」的原因",
@@ -61,7 +61,7 @@
       "title": "讓世界上每個立體的人\n都能透過真實故事彼此相遇",
       "p1": "日常裡，我們常被壓成扁平的樣子：一個校名、一個職稱、一串追蹤數字",
       "p2": "而故事，能讓一個人重新立體起來",
-      "p3": "在共振，你把一段人生寫成一張故事卡片；讀到觸動你的故事時，回應不是按讚，而是寫下自己的卡片去「共振」它"
+      "p3": "在共振，你把一段人生寫成一張故事卡片；讀到有共鳴的體悟時，回應不是按讚，而是按一下共振、留一張小紙條，或寫下自己的卡片回應它"
     },
     "cycle": {
       "kicker": "三件我們深信不疑的事",
@@ -87,7 +87,7 @@
     },
     "how": {
       "kicker": "共振怎麼運作",
-      "title": "回應一個故事的，是另一個故事",
+      "title": "讀到同頻的體悟，就回應它",
       "sketchLabel": "兩張故事卡片，後一張以漣漪回應前一張",
       "write": {
         "title": "寫下一段人生",
@@ -98,12 +98,12 @@
         "body": "在別人的人生故事裡，遇見與你同頻的人"
       },
       "resonate": {
-        "title": "寫一張卡片共振它",
-        "body": "用你的故事回應，兩張卡片從此相連"
+        "title": "共振、小紙條，或一張卡片",
+        "body": "按一下共振；想多說一點，留一張小紙條給作者，或用自己的卡片回應它"
       },
       "connect": {
         "title": "讓對方知道是你",
-        "body": "你的卡片公開並具名時，對方會收到通知，你們兩人也從此相連，可以開始私訊"
+        "body": "作者回覆你的小紙條時，你們兩人就從此相連，可以開始私訊"
       }
     },
     "shift": {
@@ -149,7 +149,7 @@
       },
       "likes": {
         "them": "按一個讚",
-        "us": "寫一張卡片去共振"
+        "us": "共振、小紙條、用卡片回應"
       }
     },
     "team": {
@@ -378,7 +378,7 @@
       "label": "小紙條",
       "placeholder": "想對作者說的話⋯",
       "hint": "這段話只有作者看得到",
-      "upgrade": "這段話想寫成一張共振卡嗎？",
+      "upgrade": "這段話想寫成一張卡片嗎？",
       "sent": "紙條寄出了",
       "waitForReply": "你留的紙條對方還沒回覆，先等等對方吧",
       "send": "寄出",
@@ -393,9 +393,9 @@
       "remove": "取消收藏"
     },
     "resonanceSection": {
-      "title": "與此文共振的文章",
-      "sourceTitle": "此文共振自",
-      "empty": "還沒有人與這篇文章共振，成為第一個吧",
+      "title": "回應這篇的卡片",
+      "sourceTitle": "這篇回應的卡片",
+      "empty": "還沒有卡片回應這篇，成為第一個吧",
       "showAll": "查看全部 {count} 篇"
     },
     "linkModal": {
@@ -414,14 +414,14 @@
       "title": "與這張卡片共振的人"
     },
     "resonatePicker": {
-      "title": "與這張卡片共振",
+      "title": "用卡片回應這篇",
       "writeNew": "寫一張新卡片",
       "empty": "你還沒有公開發表的卡片，從上面寫第一張吧",
-      "hiddenNote": "已與其他卡片共振的卡片不會列在這裡",
-      "confirm": "共振",
+      "hiddenNote": "已回應其他卡片的卡片不會列在這裡",
+      "confirm": "回應",
       "cancel": "取消",
-      "failed": "共振沒有成功，請再試一次",
-      "alreadyAnswering": "這張卡片已經與其他卡片共振了",
+      "failed": "沒有回應成功，請再試一次",
+      "alreadyAnswering": "這張卡片已經回應了其他卡片",
       "anonymous": "匿名"
     },
     "translateTo": "翻譯成",
@@ -512,7 +512,7 @@
     "title": "私訊",
     "subtitle": "與你連結的人，安靜地把話說下去",
     "emptyTitle": "還沒有對話",
-    "empty": "在喜歡的卡片留一張小紙條，或與它共振，對話就會從這裡開始",
+    "empty": "在喜歡的卡片留一張小紙條，作者回覆以後，對話就會從這裡開始",
     "startSection": "已連結、還沒說過話",
     "pickOne": "從左邊選一段對話",
     "noMessagesYet": "還沒有訊息——說聲嗨吧",
@@ -835,7 +835,7 @@
     "tabs": {
       "published": "已發布",
       "draft": "私人卡",
-      "resonated": "我共振過的",
+      "resonated": "我回應過的",
       "linked": "被連結",
       "bookmarks": "收藏",
       "trash": "垃圾桶",
@@ -891,10 +891,10 @@
       "deleteConfirmBody": "刪除後無法復原，卡片的故事與共振連結都會消失",
       "deleteConfirm": "刪除卡片",
       "deleteCancel": "先留著",
-      "unresonate": "取消共振",
-      "unresonateConfirmTitle": "不再與〈{title}〉共振？",
-      "unresonateConfirmBody": "卡片會留著。如果是這次共振讓你們連結、對方也還沒寫信給你，你們的連結會一併收回。",
-      "unresonateConfirm": "取消共振",
+      "unresonate": "取消回應",
+      "unresonateConfirmTitle": "不再回應〈{title}〉？",
+      "unresonateConfirmBody": "卡片會留著。如果是這次回應讓你們連結、對方也還沒寫信給你，你們的連結會一併收回。",
+      "unresonateConfirm": "取消回應",
       "trashed": "已移到垃圾桶",
       "undo": "復原",
       "undoTrash": "已移到垃圾桶 · 復原",
@@ -914,15 +914,15 @@
       "deletedForever": "已永久刪除",
       "notInTrash": "這張卡片已經不在垃圾桶裡",
       "deleteForeverFailed": "沒能永久刪除，再試一次",
-      "trashResonanceTitle": "刪除這張共振卡？",
-      "trashResonanceBody": "卡片會移到垃圾桶，{days} 天內都能還原。如果是這次共振讓你們連結、對方也還沒寫信給你，你們的連結會一併收回，還原後也不會回來。",
+      "trashResonanceTitle": "刪除這張回應卡？",
+      "trashResonanceBody": "卡片會移到垃圾桶，{days} 天內都能還原。如果是這次回應讓你們連結、對方也還沒寫信給你，你們的連結會一併收回，還原後也不會回來。",
       "trashResonanceConfirm": "移到垃圾桶",
       "emptyTrash": "清空垃圾桶",
       "emptyTrashTitle": "清空垃圾桶？",
       "emptyTrashBody": "垃圾桶裡的卡片都會永久刪除，無法復原",
       "emptyTrashShort": "清空",
       "emptyTrashFailed": "沒能清空垃圾桶，再試一次",
-      "unresonateFailed": "沒能取消共振，再試一次",
+      "unresonateFailed": "沒能取消回應，再試一次",
       "makePrivateFailed": "沒能轉為私人卡，再試一次"
     },
     "anonymousBadge": "匿名發布",
@@ -1103,7 +1103,8 @@
       "openSettings": "打開系統設定",
       "saveError": "沒有存好，再試一次",
       "appsOnly": "這些通知會送到手機上的 Resonance App",
-      "taps": "有人共振"
+      "taps": "有人共振",
+      "tapsHint": "有人與你的卡片共振時通知你"
     },
     "language": {
       "ui": "介面語言",

@@ -52,7 +52,7 @@
   },
   "about": {
     "metaTitle": "About us",
-    "metaDescription": "We believe everyone has a story to share. On Resonance, when a story moves you, you don't answer with a like: you write a card of your own that resonates with it.",
+    "metaDescription": "We believe everyone has a story to share. On Resonance, when an insight stays with you, tap Resonate; to say more, leave the author a note, or reply with a card of your own.",
     "tag": "✦ About us",
     "title": "We believe everyone has a story to share",
     "lead": "Every one of us is born whole and singular, carrying experiences and insights all our own — and stories are the best way to connect one person to another and to let lives influence lives; that's why we built Resonance",
@@ -61,7 +61,7 @@
       "title": "Let every person, in all their dimensions,\nmeet one another through real stories",
       "p1": "Day to day we get pressed flat: a school, a job title, a follower count",
       "p2": "Stories give a person their depth back",
-      "p3": "On Resonance you write a stretch of your life as a story card. When a story moves you, you don't answer with a like: you write a card of your own that resonates with it."
+      "p3": "On Resonance you write a stretch of your life as a story card. When an insight stays with you, you don't answer with a like: you tap Resonate, leave a little note, or reply with a card of your own."
     },
     "cycle": {
       "kicker": "Three things we hold to",
@@ -87,7 +87,7 @@
     },
     "how": {
       "kicker": "How it works",
-      "title": "A story is answered by another story",
+      "title": "When a story finds you, answer it",
       "sketchLabel": "Two story cards, the second answering the first with ripples",
       "write": {
         "title": "Write a stretch of your life",
@@ -98,12 +98,12 @@
         "body": "Meet people on your wavelength in the stories of their lives"
       },
       "resonate": {
-        "title": "Resonate with a card of your own",
-        "body": "Answer with your own story, and the two cards stay linked"
+        "title": "Resonate, a note, or a card",
+        "body": "Tap Resonate; to say more, leave the author a little note, or reply with a card of your own"
       },
       "connect": {
         "title": "Let them know it's you",
-        "body": "When your card is public and under your pen name, they're notified and the two of you are linked too, free to message each other"
+        "body": "When the author answers your note, the two of you are connected and free to message each other"
       }
     },
     "shift": {
@@ -149,7 +149,7 @@
       },
       "likes": {
         "them": "A like",
-        "us": "A card written in resonance"
+        "us": "Resonate, a note, a card in reply"
       }
     },
     "team": {
@@ -378,7 +378,7 @@
       "label": "A little note",
       "placeholder": "A note for the author…",
       "hint": "Only the author can see this",
-      "upgrade": "Want to turn this into a resonance card?",
+      "upgrade": "Want to turn this into a card of your own?",
       "sent": "Your note is on its way",
       "waitForReply": "You've left notes they haven't answered yet — wait for their reply",
       "send": "Send",
@@ -393,9 +393,9 @@
       "remove": "Remove bookmark"
     },
     "resonanceSection": {
-      "title": "Cards resonating with this",
-      "sourceTitle": "Resonating with",
-      "empty": "No one has resonated with this card yet — be the first",
+      "title": "Cards replying to this one",
+      "sourceTitle": "Replying to",
+      "empty": "No card has replied to this one yet — be the first",
       "showAll": "Show all {count}"
     },
     "linkModal": {
@@ -414,14 +414,14 @@
       "title": "Resonated with this card"
     },
     "resonatePicker": {
-      "title": "Resonate with this card",
+      "title": "Reply with a card",
       "writeNew": "Write a new card",
       "empty": "You have no public cards yet — write your first one above",
-      "hiddenNote": "Cards already resonating with another card aren't listed",
-      "confirm": "Resonate",
+      "hiddenNote": "Cards already replying to another card aren't listed",
+      "confirm": "Reply",
       "cancel": "Cancel",
-      "failed": "Couldn't resonate — please try again",
-      "alreadyAnswering": "This card already resonates with another card",
+      "failed": "Couldn't reply — please try again",
+      "alreadyAnswering": "This card already replies to another card",
       "anonymous": "Anonymous"
     },
     "translateTo": "Translate to",
@@ -512,7 +512,7 @@
     "title": "Messages",
     "subtitle": "Quiet conversations with the people you're connected with",
     "emptyTitle": "No conversations yet",
-    "empty": "Leave a note on a card you love, or resonate with it, and your conversations begin here",
+    "empty": "Leave a note on a card you love; once its author answers, your conversation begins here",
     "startSection": "Connected — no conversation yet",
     "pickOne": "Pick a conversation from the left",
     "noMessagesYet": "No messages yet — say hello",
@@ -835,7 +835,7 @@
     "tabs": {
       "published": "Published",
       "draft": "Private",
-      "resonated": "Resonated",
+      "resonated": "Replied",
       "linked": "Linked",
       "bookmarks": "Bookmarks",
       "trash": "Trash",
@@ -891,10 +891,10 @@
       "deleteConfirmBody": "This cannot be undone — the story and its resonance links will be gone.",
       "deleteConfirm": "Delete card",
       "deleteCancel": "Keep it",
-      "unresonate": "Stop resonating",
-      "unresonateConfirmTitle": "Stop resonating with \"{title}\"?",
-      "unresonateConfirmBody": "Your card stays. If this resonance is what connected you two and they haven't written to you, you won't be connected any more.",
-      "unresonateConfirm": "Stop resonating",
+      "unresonate": "Stop replying",
+      "unresonateConfirmTitle": "Stop replying to \"{title}\"?",
+      "unresonateConfirmBody": "Your card stays. If this reply is what connected you two and they haven't written to you, you won't be connected any more.",
+      "unresonateConfirm": "Stop replying",
       "trashed": "Moved to the trash",
       "undo": "Undo",
       "undoTrash": "Moved to the trash · Undo",
@@ -914,15 +914,15 @@
       "deletedForever": "Deleted forever",
       "notInTrash": "This card isn't in the trash any more",
       "deleteForeverFailed": "Couldn't delete it forever — try again",
-      "trashResonanceTitle": "Delete this resonance?",
-      "trashResonanceBody": "The card moves to the trash, where you can restore it for {days} days. If this resonance is what connected you two and they haven't written to you, you won't be connected any more, even after you restore it.",
+      "trashResonanceTitle": "Delete this reply?",
+      "trashResonanceBody": "The card moves to the trash, where you can restore it for {days} days. If this reply is what connected you two and they haven't written to you, you won't be connected any more, even after you restore it.",
       "trashResonanceConfirm": "Move to trash",
       "emptyTrash": "Empty trash",
       "emptyTrashTitle": "Empty the trash?",
       "emptyTrashBody": "Every card in the trash will be deleted forever. This can't be undone.",
       "emptyTrashShort": "Empty",
       "emptyTrashFailed": "Couldn't empty the trash — try again",
-      "unresonateFailed": "Couldn't stop resonating — try again",
+      "unresonateFailed": "Couldn't stop replying — try again",
       "makePrivateFailed": "Couldn't make it private — try again"
     },
     "anonymousBadge": "Anonymous",
@@ -1103,7 +1103,8 @@
       "openSettings": "Open Settings",
       "saveError": "Couldn't save that — try again",
       "appsOnly": "These notifications go to the Resonance app on your phone",
-      "taps": "When someone resonates"
+      "taps": "When someone resonates",
+      "tapsHint": "When someone resonates with one of your cards"
     },
     "language": {
       "ui": "UI language",
