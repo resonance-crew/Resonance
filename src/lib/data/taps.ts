@@ -3,7 +3,6 @@
 import { useCallback, useRef } from 'react';
 import { useSWRConfig } from 'swr';
 import type { AuthorBody, CardTapBody } from '@/lib/api/v1/schemas';
-import { TAP_FACES_MAX } from '@/lib/api/v1/schemas';
 import type { User } from '@/lib/db/types';
 import { setTap } from '@/lib/db/firestore/client/taps';
 import { cardPageKey, type LoadedCardPageLists } from './hooks';
@@ -24,15 +23,15 @@ export function faceOf(me: Pick<User, 'id' | 'handle' | 'initials' | 'accentColo
 
 /**
  * The tap as it reads once the viewer turned it `on` or off, before the server
- * says so: on, their own face first (the others after it, at most three in
- * all, the rest a blank disc); off, their face gone and the others as they
- * were. What the server answers next replaces it.
+ * says so: on, their own face first and the others after it; off, their face
+ * gone and the others as they were. The list stays whole and `more` stays the
+ * server's — it is cut to three (the blank disc after) only where it is drawn
+ * (TapFaces' `shownFaces`), so on and off again gives every face back, as the
+ * apps do. What the server answers next replaces it.
  */
 export function withMine(tap: CardTapBody, on: boolean, me: AuthorBody): CardTapBody {
   const others = tap.faces.filter((f) => f.id !== me.id);
-  if (!on) return { ...tap, mine: false, faces: others };
-  const faces = [me, ...others];
-  return { ...tap, mine: true, faces: faces.slice(0, TAP_FACES_MAX), more: tap.more || faces.length > TAP_FACES_MAX };
+  return { ...tap, mine: on, faces: on ? [me, ...others] : others };
 }
 
 /** Why a tap didn't go through: no pen name yet (ask for one), or anything else (say so and put it back). */

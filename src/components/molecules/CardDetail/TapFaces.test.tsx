@@ -67,11 +67,17 @@ describe('TapFaces', () => {
 
   it('is one button, its faces spoken and never written, then the blank disc for more', () => {
     const { container } = renderFaces({ mine: true, faces: [face('alice'), face('dora'), face('eli')], more: true, mayNote: true }, { zh: true });
-    const button = screen.getByRole('button', { name: '你連結的人裡，與這張卡片共振的：dora、eli，還有其他人' });
+    // The viewer's own face first is said first, as the apps say it (iOS TapState.spoken, Android facesLabel).
+    const button = screen.getByRole('button', { name: '你共振了，你連結的人裡，與這張卡片共振的：dora、eli，還有其他人' });
     // On screen: only faces (their initials) — no sentence, no number.
     expect(button.textContent).toBe('ALDOEL');
     expect(container.querySelector('[data-more]')).not.toBeNull();
     expect([...container.querySelectorAll('[data-face]')].map((f) => f.getAttribute('data-face'))).toEqual(['alice', 'dora', 'eli']);
+  });
+
+  it('says what is seen when only the viewer’s face is drawn before the blank disc — never an empty list of names', () => {
+    renderFaces({ mine: true, faces: [face('alice')], more: true, mayNote: true }, { zh: true });
+    expect(screen.getByRole('button', { name: '你共振了，你連結的人裡，與這張卡片共振的：還有其他人' })).toBeInTheDocument();
   });
 
   it('opens a popover under the faces on a wide screen, on the menu sheet, and Escape gives the focus back', async () => {
@@ -103,5 +109,27 @@ describe('TapFaces', () => {
     expect(dialog.querySelectorAll('[data-band]')).toHaveLength(2);
     await user().click(within(dialog).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('never shows one account’s people to the next one signed in this tab (the list is the viewer’s own)', async () => {
+    // One cache for the tab, as the app has it: alice opens the list, then bob — signed in from another tab — does.
+    const cache = new Map();
+    const open = async (viewerId: string, tap: CardTapBody) => {
+      const page = renderWithIntl(
+        <SWRConfig value={{ provider: () => cache }}>
+          <TapFaces cardId="c1" tap={tap} viewerId={viewerId} />
+        </SWRConfig>,
+      );
+      await user().click(screen.getByRole('button', { name: /who resonated/ }));
+      const rows = await within(screen.getByRole('dialog')).findAllByRole('link');
+      const hrefs = rows.map((r) => r.getAttribute('href'));
+      page.unmount();
+      return hrefs;
+    };
+    listTaps.mockResolvedValueOnce({ people: [person('alice'), person('dora')], nextPageToken: null });
+    expect(await open('alice', { mine: true, faces: [face('alice'), face('dora')], more: false, mayNote: true })).toEqual(['/u/alice', '/u/dora']);
+    listTaps.mockResolvedValueOnce({ people: [person('gus')], nextPageToken: null });
+    expect(await open('bob', { mine: false, faces: [face('gus')], more: false, mayNote: true })).toEqual(['/u/gus']);
+    expect(listTaps).toHaveBeenCalledTimes(2);
   });
 });

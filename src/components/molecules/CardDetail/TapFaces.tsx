@@ -7,7 +7,7 @@ import { AvatarGroup, type AvatarGroupMember } from '@/components/atoms/AvatarGr
 import { PaperSheet, sheetPath } from '@/components/atoms/PaperSheet/PaperSheet';
 import { Modal } from '@/components/molecules/Modal/Modal';
 import { DialogScroll } from '@/components/sections/AppHeader/BellList';
-import type { AuthorBody, CardTapBody } from '@/lib/api/v1/schemas';
+import { TAP_FACES_MAX, type AuthorBody, type CardTapBody } from '@/lib/api/v1/schemas';
 import { listTaps } from '@/lib/db/firestore/client/taps';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
@@ -19,12 +19,38 @@ export function memberOf(a: AuthorBody): AvatarGroupMember {
   return { id: a.id, initials: a.initials, accentColor: a.accentColor, avatarSeed: a.avatarSeed ?? '', avatarUrl: a.avatarUrl ?? undefined };
 }
 
-/** The names a screen reader hears for the faces: everyone but the viewer, then 還有其他人 when there are more. */
+/**
+ * The faces drawn (at most three) and whether the blank disc follows them: the server's `more`, or a face past the
+ * three — the viewer's own, turned on, puts the third one there (lib/data/taps keeps the list whole).
+ */
+export function shownFaces(tap: CardTapBody): { faces: AuthorBody[]; more: boolean } {
+  return { faces: tap.faces.slice(0, TAP_FACES_MAX), more: tap.more || tap.faces.length > TAP_FACES_MAX };
+}
+
+/** The names a screen reader hears for the faces: everyone but the viewer. */
 export function facesNames(faces: AuthorBody[], viewerId: string | undefined, locale: string): string {
   return faces
     .filter((f) => f.id !== viewerId)
     .map((f) => f.handle)
     .join(locale === 'en' ? ', ' : '、');
+}
+
+/**
+ * What a screen reader says of a reader's faces (§U2.4), as the apps say it: what is seen — the faces drawn, then
+ * 還有其他人 for the blank disc — and, when the first face is the viewer's own, 你共振了 before it:
+ * 「你共振了，你連結的人裡，與這張卡片共振的：小安、阿明，還有其他人」.
+ */
+export function readerFacesLabel(
+  shown: { faces: AuthorBody[]; more: boolean },
+  mine: boolean,
+  viewerId: string | undefined,
+  locale: string,
+  words: { selfOnly: string; more: string; reader: (names: string) => string },
+): string {
+  const and = locale === 'en' ? ', ' : '，';
+  const others = facesNames(shown.faces, viewerId, locale);
+  const said = words.reader(`${others}${shown.more ? `${others ? and : ''}${words.more}` : ''}`);
+  return mine && shown.faces.some((f) => f.id === viewerId) ? `${words.selfOnly}${and}${said}` : said;
 }
 
 /** Where the list opens as a dialog rather than a popover under the faces: a phone (layout.md: the web ≤ 720). */
@@ -54,11 +80,13 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving }: TapFacesP
   const buttonRef = useRef<HTMLButtonElement>(null);
   const listId = useId();
   const faces = tap.faces;
+  // At most three drawn, the blank disc after them for the rest (the list itself stays whole: lib/data/taps).
+  const shown = shownFaces(tap);
   const group = (
-    <AvatarGroup members={faces.map(memberOf)} more={tap.more} size={28} arriving={arriving} leaving={leaving ? memberOf(leaving) : undefined} />
+    <AvatarGroup members={shown.faces.map(memberOf)} more={shown.more} size={28} arriving={arriving} leaving={leaving ? memberOf(leaving) : undefined} />
   );
   if (!faces.length && !leaving) return null;
-  const onlyMine = !tap.more && faces.length === 1 && faces[0].id === viewerId;
+  const onlyMine = !shown.more && faces.length === 1 && faces[0].id === viewerId;
   if (onlyMine || !faces.length) {
     return (
       <span className={styles.faces} role="img" aria-label={faces.length ? t('selfOnly') : undefined} aria-hidden={faces.length ? undefined : true}>
@@ -66,8 +94,11 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving }: TapFacesP
       </span>
     );
   }
-  const names = facesNames(faces, viewerId, locale);
-  const label = `${t('facesReader', { names })}${tap.more ? (locale === 'en' ? `, ${t('more')}` : `，${t('more')}`) : ''}`;
+  const label = readerFacesLabel(shown, tap.mine, viewerId, locale, {
+    selfOnly: t('selfOnly'),
+    more: t('more'),
+    reader: (names) => t('facesReader', { names }),
+  });
   const close = (refocus = true) => {
     setOpen(false);
     if (refocus) buttonRef.current?.focus();
@@ -100,21 +131,25 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving }: TapFacesP
             closeButton
           >
             <DialogScroll>
-              <ReaderList cardId={cardId} size="dialog" onPick={() => close(false)} />
+              <ReaderList cardId={cardId} viewerId={viewerId} size="dialog" onPick={() => close(false)} />
             </DialogScroll>
           </Modal>
         ) : (
           <Popover id={listId} label={label} onClose={close}>
-            <ReaderList cardId={cardId} size="popover" onPick={() => close(false)} />
+            <ReaderList cardId={cardId} viewerId={viewerId} size="popover" onPick={() => close(false)} />
           </Popover>
         ))}
     </span>
   );
 }
 
-/** The reader's one page of people (themselves, then their connections), read as the list opens. */
-function ReaderList({ cardId, size, onPick }: { cardId: string; size: 'dialog' | 'popover'; onPick: () => void }) {
-  const { data } = useSWR(['taps', cardId], () => listTaps(cardId), { revalidateOnFocus: false });
+/**
+ * The reader's one page of people (themselves, then their connections), read as the list opens. Keyed by the viewer
+ * too, as every answer about who someone is connected with: another account in this tab (signed in from another
+ * one) never sees the last one's people.
+ */
+function ReaderList({ cardId, viewerId, size, onPick }: { cardId: string; viewerId: string; size: 'dialog' | 'popover'; onPick: () => void }) {
+  const { data } = useSWR(['taps', cardId, viewerId], () => listTaps(cardId), { revalidateOnFocus: false });
   if (!data) return <TapPeopleSkeleton size={size} />;
   return <TapPeople people={data.people} size={size} onPick={onPick} />;
 }
