@@ -86,7 +86,7 @@ import { listenNotifications } from '@/lib/db/firestore/client/notifications';
 import { resetLive } from './live';
 import { ApiError, callApi } from '@/lib/db/firestore/client/api';
 import { loadMyThoughtMap } from '@/lib/db/firestore/client/thoughtMap';
-import type { CardDetailBody, FeedCardBody, FeedPageBody, RecommendedFeedBody } from '@/lib/api/v1/schemas';
+import type { CardDetailBody, CardListBody, FeedCardBody, FeedPageBody, RecommendedFeedBody } from '@/lib/api/v1/schemas';
 import { getMyBlockedIds } from '@/lib/db/firestore/client/blocks';
 import {
   hideConversation,
@@ -277,16 +277,15 @@ describe('blocked authors', () => {
   // The block list waits for Auth to restore the viewer (client/blocks.ts), so
   // reading it only after the cards came back would add that wait to every load.
   it('reads the block list beside the cards, not after them', async () => {
-    let answer: (cards: Card[]) => void = () => {};
+    let answer: (body: CardListBody) => void = () => {};
     vi.mocked(getRelatedCards).mockReturnValue(new Promise((resolve) => (answer = resolve)));
     vi.mocked(getMyBlockedIds).mockResolvedValue(new Set(['bad']));
-    vi.mocked(getUsersByIds).mockResolvedValue({ a1: user('a1') });
 
     const { result } = renderHook(() => useRelated('c0'), { wrapper });
     await waitFor(() => expect(getMyBlockedIds).toHaveBeenCalled());
     expect(result.current.data).toBeUndefined();
 
-    answer([card('c1', 'bad'), card('c2', 'a1')]);
+    answer({ cards: [summary('c1', 'bad'), summary('c2', 'a1')] });
     await waitFor(() => expect(result.current.data).toBeDefined());
     expect(result.current.data!.cards.map((c) => c.id)).toEqual(['c2']);
   });
@@ -313,12 +312,24 @@ describe('blocked authors', () => {
 
   it('drops blocked people from resonance and related lists', async () => {
     vi.mocked(getMyBlockedIds).mockResolvedValue(new Set(['bad']));
-    vi.mocked(getRelatedCards).mockResolvedValue([card('c2', 'bad'), card('c3', 'a1')]);
-    vi.mocked(getUsersByIds).mockResolvedValue({ a1: user('a1') });
+    vi.mocked(getRelatedCards).mockResolvedValue({ cards: [summary('c2', 'bad'), summary('c3', 'a1')] });
 
     const { result } = renderHook(() => useRelated('c1'), { wrapper });
     await waitFor(() => expect(result.current.data).toBeDefined());
     expect(result.current.data!.cards.map((c) => c.id)).toEqual(['c3']);
+    // The server's bylines: no profile read of its own.
+    expect(result.current.data!.authors.a1?.handle).toBe('h-a1');
+    expect(getUsersByIds).not.toHaveBeenCalled();
+  });
+
+  // A block hides people and their named cards, never an anonymous card (the server sends it without an author).
+  it('keeps an anonymous related card whatever the viewer blocked', async () => {
+    vi.mocked(getMyBlockedIds).mockResolvedValue(new Set(['bad']));
+    vi.mocked(getRelatedCards).mockResolvedValue({ cards: [summary('anon', null), summary('c3', 'bad')] });
+
+    const { result } = renderHook(() => useRelated('c1'), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data!.cards.map((c) => c.id)).toEqual(['anon']);
   });
 });
 
@@ -328,12 +339,11 @@ describe('blocked authors', () => {
 describe('public reads do not wait on a signed-in viewer', () => {
   it('useRelated fetches with just a card id, no viewer required', async () => {
     mockUseAuth.mockReturnValue({ user: null, loading: false });
-    vi.mocked(getRelatedCards).mockResolvedValue([card('c2', 'a1')]);
-    vi.mocked(getUsersByIds).mockResolvedValue({ a1: user('a1') });
+    vi.mocked(getRelatedCards).mockResolvedValue({ cards: [summary('c2', 'a1')] });
 
     const { result } = renderHook(() => useRelated('c1'), { wrapper });
     await waitFor(() => expect(result.current.data).toBeDefined());
-    expect(getRelatedCards).toHaveBeenCalledWith('c1', 3);
+    expect(getRelatedCards).toHaveBeenCalledWith('c1');
   });
 });
 

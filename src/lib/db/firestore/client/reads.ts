@@ -12,11 +12,10 @@ import {
   where,
   Timestamp,
 } from './sdk';
-import { blankCard, unlistedCard } from '@/lib/cards/blank';
 import type { Card, User } from '@/lib/db/types';
 import type { CardBoxTab } from '@/lib/db/interfaces';
 import type { CardSeed } from '@/lib/data/cardSeed';
-import type { FeedPageBody } from '@/lib/api/v1/schemas';
+import type { CardListBody, FeedPageBody } from '@/lib/api/v1/schemas';
 import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
 import { getClientDb } from './init';
 import { isAbsent } from './errors';
@@ -121,21 +120,18 @@ export async function getLatestPublishedFeed(limit = 12, cursor?: Date): Promise
   return snap.docs.map((d) => mapCard(d.id, d.data()));
 }
 
-/** Cards sharing tags with the given card. Mirrors FirestoreCardRepository.findRelated. */
-export async function getRelatedCards(cardId: string, limit = 3): Promise<Card[]> {
-  // An anonymous card is its author's alone to read here: then there are no tags to match.
-  const base = await getDoc(doc(getClientDb(), 'cards', cardId)).catch(() => null);
-  const tags = ((base?.data()?.tags ?? []) as string[]).slice(0, 5);
-  const pool = await getLatestPublishedFeed(limit + 6);
-  let cards = pool.filter((c) => c.id !== cardId && !blankCard(c) && !unlistedCard(c));
-  if (tags.length) {
-    cards = cards.sort((a, b) => {
-      const as = a.tags.filter((tag) => tags.includes(tag)).length;
-      const bs = b.tags.filter((tag) => tags.includes(tag)).length;
-      return bs - as;
-    });
-  }
-  return cards.slice(0, limit);
+/**
+ * The related cards under a card for a signed-out reader, from the server
+ * (GET /api/cards/related): what a signed-in page and the apps get, without
+ * a viewer — recent public cards sharing its tags, only those their reading
+ * lets strangers see (round 26 §A1.7: the readings are the server's alone, so
+ * the browser's own query could never leave those out), anonymous ones
+ * without their byline.
+ */
+export async function getRelatedCards(cardId: string): Promise<CardListBody> {
+  const res = await fetch(`/api/cards/related?id=${encodeURIComponent(cardId)}`);
+  if (!res.ok) throw new Error(`Related request failed (${res.status})`);
+  return (await res.json()) as CardListBody;
 }
 
 /**

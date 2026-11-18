@@ -431,12 +431,19 @@ export function useCard(slugOrId: string | undefined, seed?: CardSeed | null) {
   };
 }
 
-/** Cards related to the given card, with authors. */
+/**
+ * Cards related to the given card, with their bylines, for the public path
+ * (useCardPageLists): from the server (GET /api/cards/related), the same for
+ * everyone — only it may leave out the cards their reading keeps from
+ * strangers (round 26 §A1.7). It needs no viewer, so it fetches as soon as
+ * there is a card id; the block list is read beside it, for a browser whose
+ * viewer turns out signed in (an anonymous card is never left out for one).
+ */
 export function useRelated(id: string | undefined) {
-  // Related cards come from the public feed, so this is anonymous-readable and
-  // can fetch as soon as we have a card id.
   return useSWR<CardsWithAuthors>(id ? `related:${id}` : null, async () => {
-    return withAuthors(getRelatedCards(id!, 3));
+    const [body, blocked] = await Promise.all([getRelatedCards(id!), getMyBlockedIds()]);
+    const { cards, authors } = summaryList(body);
+    return { cards: blocked.size ? cards.filter((c) => c.anonymous || !blocked.has(c.authorId)) : cards, authors };
   });
 }
 
@@ -719,8 +726,9 @@ async function fetchCardPageLists(id: string): Promise<LoadedCardPageLists | nul
  * which applies the viewer's blocks and visibility on the server, and whose
  * embeds the story's embedded cards look up instead of reading one each.
  * It starts with the id the server render found, beside the page's own read
- * of the card. Signed out, each list reads public cards through the rules,
- * as before, and each embed its own card.
+ * of the card. Signed out, the resonances read public cards through the
+ * rules, as before, the related cards come from the server's signed-out
+ * route (useRelated), and each embed reads its own card.
  *
  * `id` is the card's document id; `referenceCardId` the card it resonates
  * with (the public path reads it; the server finds it on its own).

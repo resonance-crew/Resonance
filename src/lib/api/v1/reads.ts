@@ -400,6 +400,30 @@ export async function getRelated(db: Firestore, viewerId: string, id: string): P
   return { cards: relatedOf(await present(db, viewerId, relatedPool(base, recent), { blocked })) };
 }
 
+/** What a stranger's related cards read of the card they sit under: its tags, and whether anyone may read it. */
+const PUBLIC_BASE_FIELDS = ['tags', 'visibility', 'publishedAt', 'trashedAt'] as const;
+
+/**
+ * getRelated for a reader nobody is signed in as (GET /api/cards/related, the
+ * web's signed-out card page): the same pool — recent public cards, only those
+ * their reading lets strangers see (listedOnly, round 26 §A1.7: the browser
+ * can't read `cardSignatures`), the ones sharing the most of the card's tags
+ * first — without a viewer, so without blocks, the same for everyone; an
+ * anonymous card without its byline, as the signed-out feed has it. Null for a
+ * card no one signed out may read (not public, not published, in the trash).
+ */
+export async function getPublicRelated(db: Firestore, id: string): Promise<CardListBody | null> {
+  if (!id || id.includes('/')) return null;
+  const [base, recent] = await Promise.all([
+    cardDoc(db, id, PUBLIC_BASE_FIELDS),
+    recentPublic(db).get().then((snap) => listedOnly(db, toCards(snap))),
+  ]);
+  if (!base || base.visibility !== 'public' || !base.publishedAt || base.trashedAt != null) return null;
+  const pool = relatedPool(base, recent).filter((c) => !inTrash(c));
+  const [authors] = await Promise.all([loadAuthors(db, pool), withStories(db, pool)]);
+  return { cards: relatedOf(pool.map((c) => toFeedCard(c, authors.get(c.authorId)))) };
+}
+
 /** Cards that link to this one — shown to its author only, as on the web. */
 export async function getLinksToCard(db: Firestore, viewerId: string, id: string): Promise<CardListBody> {
   const card = await visibleCardById(db, viewerId, id);
