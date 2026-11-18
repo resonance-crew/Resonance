@@ -107,4 +107,10 @@ extension Fixture {
         #expect(abs(empty.height - 44) < 0.5)
         #expect(abs(three.height - 44) < 0.5)
     }
+
+    /// A window too narrow for one line splits the capsule: its second line (寄小紙條 · 寫卡片) wears the web's and
+    /// Android's seed, so the same state has the same wobble on every platform.
+    @Test func theCapsulesSecondLineWearsTheWebsSeed() {
+        #expect(CardEndRow.secondLineSeed == 73)
+    }
 }

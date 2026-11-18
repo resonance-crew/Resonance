@@ -52,6 +52,9 @@ struct CardEndRow: View {
     private var compact: Bool { window.layoutClass == .compact }
     /// The block the note field's focus scrolls into view (12 above the keyboard).
     static let noteBlock = "card.end.note"
+    /// The capsule's second line, when it takes two (寄小紙條 · 寫卡片): the web's and Android's 73; the first keeps the
+    /// bar's own 71.
+    static let secondLineSeed: Double = 73
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -171,7 +174,7 @@ struct CardEndRow: View {
             // Still too wide (large text, a narrow window): two lines, 8 apart; the puppets stand on the first.
             VStack(alignment: .leading, spacing: 8) {
                 SegmentedActionBar([tapSegment(short)]).readingMark(.respond)
-                SegmentedActionBar([noteSegment(short), replySegment(short)], seed: 79)
+                SegmentedActionBar([noteSegment(short), replySegment(short)], seed: Self.secondLineSeed)
             }
         }
     }
