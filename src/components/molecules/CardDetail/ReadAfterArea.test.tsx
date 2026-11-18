@@ -132,7 +132,7 @@ describe('ReadAfterArea', () => {
     renderWithIntl(<ReadAfterArea cardId="c1" cardTitle="Title" author={author} />);
     await user().click(screen.getByRole('button', { name: 'Send the author a little note' }));
     expect(mockPush).toHaveBeenCalledWith('/signin');
-    expect(screen.queryByPlaceholderText('Something you want to tell the author…')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('A note for the author…')).not.toBeInTheDocument();
   });
 
   it('opens the resonate picker on Resonate: write a new card, or pick one already written', async () => {
@@ -181,7 +181,7 @@ describe('ReadAfterArea', () => {
     await user().click(screen.getByRole('button', { name: 'Send the author a little note' }));
 
     const long = 'b'.repeat(220);
-    fireEvent.change(screen.getByPlaceholderText('Something you want to tell the author…'), {
+    fireEvent.change(screen.getByPlaceholderText('A note for the author…'), {
       target: { value: long },
     });
     await user().click(

@@ -14,6 +14,7 @@ import { letterReadsAsConnection } from './preLetter';
 import { blockedByViewer, blockHides, canView, connected, loadAuthors, presentLinkPreviews, toAuthor, toFeedCard, trashedAtOf, visibilityOf, visibleTo } from './present';
 import { properlyPublished } from './service';
 import { sharedAmong, sharedWith } from './sharedCards';
+import { cardTap } from './taps';
 import {
   CARD_KEYS_MAX,
   type CardBoxBody,
@@ -70,12 +71,19 @@ async function cardDoc(db: Firestore, id: string, fields?: readonly string[]): P
  * (GET /cards/{key}) and reports one, and answers none.
  */
 export async function visibleCard(db: Firestore, viewerId: string, key: string, opts: SharedOption = {}): Promise<Card> {
+  return (await readableCard(db, viewerId, key, opts)).card;
+}
+
+/** visibleCard, saying whether the viewer reads it only through a shared-card pass (`pass`: answer nothing on it). */
+async function readableCard(db: Firestore, viewerId: string, key: string, opts: SharedOption = {}): Promise<{ card: Card; pass: boolean }> {
   const found = await cardByKey(db, key);
   const snap = found && !anonymousBySlug(found, key, viewerId) ? found : null;
   const card = snap ? mapCard(snap.id, snap.data()!) : null;
   const shared = opts.shared ?? true;
-  if (!card || !((await canView(db, card, viewerId)) || (shared && (await sharedWith(db, viewerId, card))))) throw notFound();
-  return card;
+  if (!card) throw notFound();
+  if (await canView(db, card, viewerId)) return { card, pass: false };
+  if (shared && (await sharedWith(db, viewerId, card))) return { card, pass: true };
+  throw notFound();
 }
 
 /**
@@ -279,7 +287,7 @@ export async function getCardDetail(
   include: ReadonlySet<CardInclude> = new Set(),
   opts: SharedOption = {},
 ): Promise<CardDetailBody> {
-  const card = await visibleCard(db, viewerId, key, opts);
+  const { card, pass } = await readableCard(db, viewerId, key, opts);
   const isOwner = card.authorId === viewerId;
   // Your own card in the trash (no one else's to read): the card and its
   // story, the cards it embeds — and none of the lists around it, which a
@@ -292,7 +300,7 @@ export async function getCardDetail(
   // one by someone they blocked is the client's to hide (its page knows the
   // byline), and an anonymous one is there for everyone (blockHides). The
   // viewer's blocks only thin the lists around it.
-  const [authorSnap, reference, blocked, resonances, recent, linking, embedded] = await Promise.all([
+  const [authorSnap, reference, blocked, resonances, recent, linking, embedded, tap] = await Promise.all([
     card.anonymous ? null : db.doc(`users/${card.authorId}`).get(),
     card.referenceCardId ? cardsByIds(db, [card.referenceCardId]) : [],
     card.referenceCardId || include.size ? blockedByViewer(db, viewerId) : new Set<string>(),
@@ -300,6 +308,8 @@ export async function getCardDetail(
     lists.has('related') ? recentPublic(db).get().then(toCards) : [],
     ownerLinks ? cardsLinkingTo(db, card.id) : [],
     embedKeys.length ? cardsByKeys(db, embedKeys).then((cards) => askedByKey(cards, embedKeys, viewerId)) : [],
+    // The resonance tap (./taps): who resonated as the viewer may see them — none through a shared-card pass.
+    cardTap(db, viewerId, card, { pass }),
   ]);
   const [referenceCard, resonanceCards, relatedCards, linkCards, embedCards] = await presentAll(
     db,
@@ -316,6 +326,7 @@ export async function getCardDetail(
     coreInsight: card.signature?.coreInsight || null,
     isOwner,
     referenceCard: referenceCard[0] ?? null,
+    tap,
     ...(include.has('resonances') ? { resonances: { cards: resonanceCards } } : {}),
     ...(include.has('related') ? { related: { cards: relatedOf(relatedCards) } } : {}),
     ...(include.has('links') ? { links: { cards: linkCards } } : {}),

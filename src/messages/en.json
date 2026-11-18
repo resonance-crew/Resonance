@@ -297,7 +297,7 @@
       "inviteAccepted": "{handle} accepted your invite — you're connected ✿",
       "resonanceSummary": "{count} people resonated with you yesterday",
       "translationDone": "Translation complete",
-      "resonance": "{handle} resonated with your card",
+      "resonance": "{handle} replied to your story with a card",
       "note": "{handle} sent you a little note",
       "cardLink": "{handle} linked a card to your card",
       "connect": "Connect with them",
@@ -317,7 +317,11 @@
       "earlier": "Earlier",
       "justNow": "Just now",
       "messageSticker": "Sent a sticker: {name}",
-      "messageAlbum": "Sent {count, plural, one {# photo} other {# photos}}"
+      "messageAlbum": "Sent {count, plural, one {# photo} other {# photos}}",
+      "tap": "{handle} resonated with your card",
+      "tapMany": "{handle} and {count, plural, one {# other} other {# others}} resonated with your card",
+      "readSummary": "{count, plural, one {# person} other {# people}} read this card to the end last week",
+      "readSummaryReread": "{count, plural, one {# person} other {# people}} read this card to the end last week, and someone came back to read it again"
     },
     "signOutConfirm": {
       "title": "Sign out?",
@@ -372,7 +376,7 @@
       "entry": "Send the author a little note",
       "entryShort": "Send a note",
       "label": "A little note",
-      "placeholder": "Something you want to tell the author…",
+      "placeholder": "A note for the author…",
       "hint": "Only the author can see this",
       "upgrade": "Want to turn this into a resonance card?",
       "sent": "Your note is on its way",
@@ -381,7 +385,8 @@
       "cancel": "Cancel",
       "close": "Close",
       "failed": "Your note didn't go out",
-      "reopen": "Try again"
+      "reopen": "Try again",
+      "short": "Note"
     },
     "bookmark": {
       "add": "Bookmark",
@@ -458,7 +463,28 @@
       "ready": "Translation ready",
       "show": "Show",
       "mark": "AI translation"
-    }
+    },
+    "tap": {
+      "label": "Resonate",
+      "on": "Resonated",
+      "selfOnly": "You resonated",
+      "facesReader": "People you're connected with who resonated: {names}",
+      "facesAuthor": "Resonated with this card: {names}",
+      "more": "and others",
+      "ask": "What stayed with you?",
+      "send": "Send",
+      "failed": "Didn't go through, try again"
+    },
+    "reply": {
+      "label": "Reply with a card",
+      "short": "Card",
+      "done": "Replied"
+    },
+    "replies": {
+      "title": "Cards replying to this one"
+    },
+    "replying": "Replying to “{title}”",
+    "saved": "Saved to your box"
   },
   "share": {
     "profile": "Share profile",
@@ -654,7 +680,7 @@
     "titlePlaceholder": "One-line title",
     "corePlaceholder": "e.g. Being seen matters more than being liked",
     "storyLabel": "Story",
-    "storyPlaceholder": "Start with the moment that made you want to write…",
+    "storyPlaceholder": "A moment you lived, and what it changed in you…",
     "editor": {
       "toolbarLabel": "Editor toolbar",
       "bold": "Bold",
@@ -1076,7 +1102,8 @@
       "permissionDenied": "Notifications for Resonance are off in your device settings. Turn them on there first.",
       "openSettings": "Open Settings",
       "saveError": "Couldn't save that — try again",
-      "appsOnly": "These notifications go to the Resonance app on your phone"
+      "appsOnly": "These notifications go to the Resonance app on your phone",
+      "taps": "When someone resonates"
     },
     "language": {
       "ui": "UI language",

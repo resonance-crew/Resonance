@@ -114,6 +114,16 @@ async function seedWorld() {
     set('cardReads/alice_bob-card', { userId: 'alice', cardId: 'bob-card', day: '2026-10-31', expireAt: now }),
     set('cardReads/bob_alice-card', { userId: 'bob', cardId: 'alice-card', day: '2026-10-31', expireAt: now }),
     set('cardReads/carol_bob-card', { userId: 'carol', cardId: 'bob-card', day: '2026-10-31', expireAt: now }),
+    // Round 26: taps (共振) and reading records (server-only) — hers, others' on her card, and someone else's alone.
+    set('resonanceTaps/bob-card_alice', { cardId: 'bob-card', userId: 'alice', on: true, at: now, rangAt: now }),
+    set('resonanceTaps/alice-card_bob', { cardId: 'alice-card', userId: 'bob', on: true, at: now, rangAt: now }),
+    set('resonanceTaps/bob-card_carol', { cardId: 'bob-card', userId: 'carol', on: true, at: now, rangAt: now }),
+    set('readerSignals/alice_bob-card', { userId: 'alice', cardId: 'bob-card', activeSeconds: 40, expireAt: now }),
+    set('readerSignals/bob_alice-card', { userId: 'bob', cardId: 'alice-card', activeSeconds: 40, expireAt: now }),
+    set('readerSignals/carol_bob-card', { userId: 'carol', cardId: 'bob-card', activeSeconds: 40, expireAt: now }),
+    // Bob's bell rows of taps: one naming her among others (she leaves it), one naming her alone (it goes).
+    set('notifications/rtap_bob-card_20261118', { userId: 'bob', type: 'resonance_tap', payload: { cardId: 'bob-card', fromUserIds: ['carol', 'alice'] } }),
+    set('notifications/rtap_bob-card_20261117', { userId: 'bob', type: 'resonance_tap', payload: { cardId: 'bob-card', fromUserIds: ['alice'] } }),
 
     set('cardLinks/bob-card_alice-card', { sourceAuthorId: 'bob', targetAuthorId: 'alice' }),
     set('cardLinks/alice-card_bob-card', { sourceAuthorId: 'alice', targetAuthorId: 'bob' }),
@@ -268,6 +278,11 @@ describe('purgeAccount', () => {
       'privateShares/alice-private',
       'cardReads/alice_bob-card',
       'cardReads/bob_alice-card', // Bob's read of Alice's deleted card
+      'resonanceTaps/bob-card_alice',
+      'resonanceTaps/alice-card_bob', // Bob's tap on Alice's deleted card
+      'readerSignals/alice_bob-card',
+      'readerSignals/bob_alice-card', // how Bob read Alice's deleted card
+      'notifications/rtap_bob-card_20261117', // a row of Bob's that named her alone
       'cardLinks/bob-card_alice-card',
       'cardLinks/alice-card_bob-card',
       'notifications/to-alice',
@@ -305,6 +320,9 @@ describe('purgeAccount', () => {
       'unsentMessages/bob_carol_u3',
       'privateShares/bob-private',
       'cardReads/carol_bob-card',
+      'resonanceTaps/bob-card_carol',
+      'readerSignals/carol_bob-card',
+      'notifications/rtap_bob-card_20261118',
       'notifications/bob-own',
       'cardVectors/bob-card__insight',
       'reports/r2', // reports about the deleted user stay for moderation history
@@ -329,6 +347,8 @@ describe('purgeAccount', () => {
       expect(Object.keys((await db.doc(`cardTombstones/${id}`).get()).data() ?? {}), id).toEqual(['deletedAt']);
     }
     expect((await db.doc('cardTombstones/bob-card').get()).exists).toBe(false);
+    // Out of the row that named her among others; the others stay.
+    expect((await db.doc('notifications/rtap_bob-card_20261118').get()).get('payload.fromUserIds')).toEqual(['carol']);
 
     expect(deleteAuthUser).toHaveBeenCalledWith('alice');
     // Older keys carry the uid; newer ones are found by their records.
@@ -752,7 +772,7 @@ describe('exportAccountData', () => {
     expect(data.cards).toHaveLength(232);
     expect(new Set(data.cards.map((c: { id: string }) => c.id)).size).toBe(232);
     expect(data.messagesSent).toHaveLength(151);
-    expect(Object.keys(data)).toEqual(['exportedAt', 'profile', 'cards', 'bookmarks', 'thoughtMap', 'notesSent', 'messagesSent']);
+    expect(Object.keys(data)).toEqual(['exportedAt', 'profile', 'cards', 'bookmarks', 'thoughtMap', 'notesSent', 'messagesSent', 'cardsResonated', 'reading']);
     expect(await exportAccountData(db, 'alice', new Date('2026-10-01T00:00:00Z'))).toEqual(data);
   });
 
@@ -765,6 +785,38 @@ describe('exportAccountData', () => {
       thoughtMap: { nodes: [], edges: [], groups: [] },
       notesSent: [],
       messagesSent: [],
+      cardsResonated: [],
+      reading: [],
     });
+  });
+
+  // Round 26 (§R1.6, §Q5): what the service records of a person on its own goes into their backup too — the
+  // cards they resonated with (a title and a link, never an author) and how they read cards.
+  it('holds the cards they resonated with — a title only while they may still read it — and their reading records', async () => {
+    const now = new Date('2026-11-19T10:00:00Z');
+    await Promise.all([
+      db.doc('users/alice').set({ handle: 'alice', handleLower: 'alice' }),
+      db.doc('cards/walk').set({ authorId: 'bob', thoughtCore: 'A walk', story: 's', visibility: 'public', anonymous: false, publishedAt: now }),
+      db.doc('cards/masked').set({ authorId: 'bob', thoughtCore: 'Unsigned', story: 's', visibility: 'public', anonymous: true, publishedAt: now }),
+      db.doc('cards/hidden').set({ authorId: 'bob', thoughtCore: 'Gone private', story: 's', visibility: 'private', anonymous: false, publishedAt: now }),
+      db.doc('resonanceTaps/walk_alice').set({ cardId: 'walk', userId: 'alice', on: true, at: now, rangAt: now }),
+      db.doc('resonanceTaps/masked_alice').set({ cardId: 'masked', userId: 'alice', on: true, at: now, rangAt: now }),
+      db.doc('resonanceTaps/hidden_alice').set({ cardId: 'hidden', userId: 'alice', on: true, at: now, rangAt: now }),
+      db.doc('resonanceTaps/taken_alice').set({ cardId: 'walk', userId: 'alice', on: false, at: now, rangAt: now }),
+      db.doc('readerSignals/alice_walk').set({
+        userId: 'alice', cardId: 'walk', firstAt: now, lastAt: now, days: ['2026-11-19'], sessions: [], activeSeconds: 40, maxProgress: 1,
+        reachedEndAt: now, rereads: 0, rereadAt: null, shared: false, reportDay: '2026-11-19', reportsToday: 1, expireAt: new Date('2027-05-18T10:00:00Z'),
+      }),
+    ]);
+    const { cardsResonated, reading } = await exportAccountData(db, 'alice');
+    expect(cardsResonated).toEqual([
+      { cardId: 'hidden', title: null, link: '/card/hidden', at: '2026-11-19T10:00:00.000Z' },
+      { cardId: 'masked', title: 'Unsigned', link: '/card/masked', at: '2026-11-19T10:00:00.000Z' },
+      { cardId: 'walk', title: 'A walk', link: '/card/walk', at: '2026-11-19T10:00:00.000Z' },
+    ]);
+    expect(reading).toEqual([
+      expect.objectContaining({ cardId: 'walk', title: 'A walk', link: '/card/walk', activeSeconds: 40, maxProgress: 1, keptUntil: '2027-05-18T10:00:00.000Z' }),
+    ]);
+    expect(JSON.stringify({ cardsResonated, reading })).not.toContain('bob');
   });
 });

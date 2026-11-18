@@ -25,8 +25,17 @@ import { CARD_VISIBILITY_FIELDS, canView } from './present';
  * reader's account and with the cards of a purged account). One document per
  * reader and card, overwritten on a later day, so it never grows past what a
  * reader has opened; `expireAt` (the end of the next UTC day) is there for a
- * Firestore TTL policy on the collection, which leaves no reading history
- * behind once the marker has done its work.
+ * Firestore TTL policy on the collection, so the marker itself is gone once it
+ * has done its work.
+ *
+ * How a reader read a card is kept elsewhere since round 26, and for one
+ * reason only — picking cards for that reader: `readerSignals/{uid}_{cardId}`
+ * (./reading, POST …/reading) holds their active time, how far they read,
+ * the days they came back and whether they shared it, for 180 days after
+ * their last read (its own TTL), deleted with their account and with the
+ * card. Its author hears no name from it, only a weekly count of three
+ * readers or more (lib/push/readSummary). This count is apart from all that,
+ * and shown to no one yet.
  *
  * Counted reads spend the reader's `read` budget (already counted today
  * spends nothing): a script walking every card can't count more than that a

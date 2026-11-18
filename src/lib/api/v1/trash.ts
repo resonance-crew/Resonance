@@ -10,6 +10,7 @@ import { ApiFailure } from './http';
 import { readTakeBack, takeBack } from './origins';
 import { toFeedCard } from './present';
 import { becameReachable, reachOriginal, readReach } from './resonate';
+import { deleteTapsOn } from './taps';
 import type { FeedCardBody } from './schemas';
 
 /**
@@ -33,10 +34,11 @@ import type { FeedCardBody } from './schemas';
  *
  * Its slug (the URL comes back), its dates (a draft keeps its place in edit
  * order, no list summary is retired), its story and the rest, its pending
- * edit, its place on the thought map and the notes on a named card stay.
- * The notes on an anonymous card go as it goes in, as deleting it takes
- * them: their writers' backups must lose them when the card's page goes,
- * never later with its author's account, which would say whose card it was.
+ * edit, its place on the thought map and the notes and taps (共振, ./taps) on
+ * a named card stay. The notes and taps on an anonymous card go as it goes
+ * in, as deleting it takes them: their writers' backups must lose them when
+ * the card's page goes, never later with its author's account, which would
+ * say whose card it was — and restoring it brings none back.
  *
  * Nothing about it answers anyone else differently from a private card,
  * with or without a block: someone else's card in the trash is not_found
@@ -86,9 +88,9 @@ export interface TrashedCardResult {
  * connection goes when no other reason holds it. Restoring it never brings
  * that connection back — its bell is the record that it rang once.
  *
- * After the write: the notes on an anonymous card are deleted (delivered and
- * withheld alike) before the answer — a failure is logged, and left for
- * `backfill.ts orphan-notes`; the recommender's copy goes private.
+ * After the write: the notes and taps on an anonymous card are deleted (notes
+ * delivered and withheld alike) before the answer — a failure is logged, and
+ * left for `backfill.ts orphan-notes`; the recommender's copy goes private.
  */
 export async function trashCard(
   db: Firestore,
@@ -135,6 +137,12 @@ export async function trashCard(
         ? deleteNotesOn(db, id)
             .catch(() => deleteNotesOn(db, id))
             .catch((e) => console.error('[trash] notes', id, e))
+        : null,
+      // And who resonated with it (./taps), for the same reason: restoring it brings none back.
+      before.anonymous === true
+        ? deleteTapsOn(db, id)
+            .catch(() => deleteTapsOn(db, id))
+            .catch((e) => console.error('[trash] taps', id, e))
         : null,
       before.visibility !== 'private'
         ? Promise.resolve()

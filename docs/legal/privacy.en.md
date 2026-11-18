@@ -1,7 +1,7 @@
 ---
 title: Privacy Policy
 description: What Resonance collects, why, who processes it, and how to download or delete it.
-updated: 2026-11-15
+updated: 2026-11-19
 ---
 
 Resonance is a place to share stories as cards, made up of the website resonance.channel and the iOS and Android apps. It is built and run by the Resonance team ("we"). This policy explains what we collect, why, who processes it for us, and how you can manage or delete it.
@@ -17,13 +17,22 @@ Resonance is a place to share stories as cards, made up of the website resonance
 - **Account**: the email address you sign in with (provided by Google or Apple if you use them; Apple may give us a private relay address) and an account ID the system creates.
 - **Profile**: your pen name, bio, region, preferred languages and avatar. These are shown publicly on your profile page.
 - **What you write**: cards (title, story, tags, images) and drafts, resonances, links between cards, notes to authors, messages with your connections (including the pictures sent in them), your thought map, bookmarks, your block list, and reports you send.
-- **Interactions**: who you're connected with and the notifications you receive.
+- **Interactions**: who you're connected with, the notifications you receive, and which cards you resonate with (the Resonate button under a card).
+- **Reading**: when you read someone else's card, we note how long you actually read it (the page in front and you recently scrolling or tapping), how far you got, whether you reached the end, whether you came back later to read it again, and whether you shared it with the share button. Reading your own cards leaves no record.
 - **Device (apps only)**: a push token, an ID for this installation, the app version, platform, interface language and time zone, so notifications reach your phone in your language. They are removed when you sign out.
 - **Technical logs**: our hosting provider keeps connection logs (such as IP address, browser type and time) for operations and abuse prevention. The website only uses the cookie that keeps you signed in; interface preferences (such as which tips you've seen) are stored in your browser or on your device.
 
 ## Who can see your content
 
 Each card can be **public**, **connections only** or **only me**. Public cards can be seen by anyone and may appear in other people's recommendations; messages are seen only by the people in the conversation; your pen name, bio and avatar are public. We look at non-public content only to handle a report, keep the service safe, or when the law requires it.
+
+## Resonating and reading
+
+When you tap Resonate, your profile picture shows under that card to the people you're connected with; the card's author can see who resonated too, on anonymous cards as well (though that tells no one who the author is). Resonating connects no one and opens no conversation, and it gives the author no way to message you. The first time you resonate with a card its author gets a notification, and never again for that card; authors can turn these pushes off under Settings → Notifications → When someone resonates. Taking a resonance back tells no one, and your picture leaves the list at once. No count of resonances is shown anywhere.
+
+Your reading record is used only to pick cards for you (the stories picked for you and the evening card), and never shows anyone what you read. A card's author only hears, when three or more people read it to the end in a week, that "this many people read this card to the end last week", with no names; for fewer, they hear nothing.
+
+Each card's reading record is deleted automatically 180 days after you last read it, and with the card, or with your account. "Download my data" includes the cards you resonated with (their titles and links) and your reading records.
 
 ## How we use it
 
@@ -53,11 +62,11 @@ On the website, and in versions of the apps that have a trash, a card you delete
 
 A message you unsend disappears for both of you; what it said (including any picture in it) is kept on our servers for 30 days, read only if the conversation is reported, and then deleted for good.
 
-You can delete your account at any time under Settings → Delete account (on the website and in the apps). You're signed out right away, and signing back in within 7 days cancels it. After 7 days your account, profile, cards and drafts, resonances, notes, every conversation you took part in (including the other person's messages and pictures in it), connections, notifications, notification settings and the record of what we've sent you, thought map, push devices and uploaded images are deleted for good.
+You can delete your account at any time under Settings → Delete account (on the website and in the apps). You're signed out right away, and signing back in within 7 days cancels it. After 7 days your account, profile, cards and drafts, resonances, reading records, notes, every conversation you took part in (including the other person's messages and pictures in it), connections, notifications, notification settings and the record of what we've sent you, thought map, push devices and uploaded images are deleted for good.
 
 We keep reports other people made about you (safety and moderation records). Cards other people wrote in response to yours belong to them and stay, but no longer link to your card.
 
-Before deleting, you can use "Download my data" on the same page to get everything you've written as a JSON file. If you can't sign in, email us from the address you registered with and we'll delete the account once we've confirmed it's yours.
+Before deleting, you can use "Download my data" on the same page to get everything you've written, with the cards you resonated with and your reading records, as a JSON file. If you can't sign in, email us from the address you registered with and we'll delete the account once we've confirmed it's yours.
 
 ## Your rights
 

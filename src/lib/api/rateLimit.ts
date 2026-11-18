@@ -58,6 +58,17 @@ export const LIMITS = {
    * Once per reader, card and day already; this bounds a script walking every card. Over it reads go uncounted.
    */
   read: { max: 500, windowMs: DAY },
+  /**
+   * Resonating with a card (共振, the tap: PUT and DELETE …/tap, lib/api/v1/taps): it rings the card's author once
+   * per reader and card ever, so taking it back and tapping again reaches no one twice — this bounds a script
+   * tapping its way through every card.
+   */
+  tap: { max: 200, windowMs: DAY },
+  /**
+   * Reading reports (POST …/reading, lib/api/v1/reading): what a reader's page view read, kept for their own picks.
+   * At most 20 a card a day are kept anyway; past this, reports go unkept, still 204.
+   */
+  readReport: { max: 2000, windowMs: DAY },
   /** /api/upload: files, and their bytes (see `weight`). */
   upload: { max: 50, windowMs: DAY },
   uploadBytes: { max: 200 * 1024 * 1024, windowMs: DAY },

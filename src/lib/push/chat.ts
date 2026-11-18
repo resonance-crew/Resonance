@@ -9,6 +9,7 @@ import { stickerName, type StickerRef } from '@/lib/stickers/catalog';
 import { storageKeyOf } from '@/lib/storage/publicUrl';
 import type { DeviceLocale } from './devices';
 import { wantsMessagePushes } from './settings';
+import { noteRidesTap } from './tapCollapse';
 import {
   MESSAGES_CHANNEL,
   deviceTargets,
@@ -202,6 +203,11 @@ export async function pushMessage(db: Firestore, push: MessagePush, sender: Push
         : {};
   const picture = message.get('image') != null;
   const face = faceOf(author);
+  // A note left just after its writer's tap on that card rang: it takes the tap's line on the lock screen
+  // (lib/push/tapCollapse) — the same Android tag and APNs collapse id, in place of the conversation's.
+  const cardRef = str(message.get('cardRef'));
+  const rides =
+    message.get('kind') === NOTE_MESSAGE_KIND && cardRef ? await noteRidesTap(db, from, cardRef, epochMillis(message.get('sentAt'))) : null;
 
   // Every language's and kind's multicast side by side (multicastAll).
   const groups: MulticastGroup[] = [];
@@ -241,9 +247,10 @@ export async function pushMessage(db: Firestore, push: MessagePush, sender: Push
               apns: { ...collapsing(messageId), payload: { aps: { threadId: conversationId, 'interruption-level': 'passive' } } },
             }
           : {
-              android: { priority: 'high' as const, notification: { channelId: MESSAGES_CHANNEL, tag: conversationId } },
+              android: { priority: 'high' as const, notification: { channelId: MESSAGES_CHANNEL, tag: rides ?? conversationId } },
               // The message's own collapse id: never merging two messages, but what an unsend replaces (pushUnsend).
-              apns: { ...collapsing(messageId), payload: { aps: { sound: 'default', threadId: conversationId } } },
+              // A note riding a tap takes the tap's (a note is never unsent).
+              apns: { ...(rides ? { headers: { 'apns-collapse-id': rides } } : collapsing(messageId)), payload: { aps: { sound: 'default', threadId: conversationId } } },
             }),
       }));
     }

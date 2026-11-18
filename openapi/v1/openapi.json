@@ -1239,6 +1239,317 @@
         }
       }
     },
+    "/cards/{key}/reading": {
+      "post": {
+        "operationId": "reportCardReading",
+        "summary": "How you read this card in one page view, as its running totals (204 whatever the card, and whether it was kept)",
+        "description": "Send it when the card page is left or hidden (and again if it comes back and is left again): the `session` is the page view's own id, the numbers its totals so far — never deltas. The server keeps the largest each session has said and adds sessions up, so sending one twice counts once. Kept only for picking cards for you; the card's author hears at most a weekly count of three readers or more, never a name. Counted only for a card you may read and didn't write (published, not in the trash; a named card across a block either way is not counted, an anonymous one is). Numbers out of range are clamped. The answer is always `204` for a well-formed request — it says nothing about the card — and the keeping happens after it; past a daily budget, reports go unkept, still `204`.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "The card id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadingReportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Received"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cards/{key}/tap": {
+      "put": {
+        "operationId": "tapCard",
+        "summary": "Resonate with a card (共振, the tap): its author is told once, ever, and your face shows to your connections",
+        "description": "Checked in this order: the contract (`400`); your budget (`429`); the card (`404` for one you can't read, a draft, one in the trash, or someone else's 私人卡 shared with you in a conversation — a card is never resonated with on that pass); your own card (`400`); your pen name (`403 forbidden`, \"Choose a pen name first.\"); a block either way on a named card (`403 blocked`). An anonymous card is answered exactly as without a block — its author just never hears of it. Its author is told after the answer, the first time only: a bell row and a push naming you (never across a block). A tap connects no one and lets the author write to no one. `changed: false` when you already resonated: nothing written, no one told. `409 conflict` is documented for a refusal to come; nothing answers it yet.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "The card id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TapResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "untapCard",
+        "summary": "Take your resonance with a card back: it tells no one, and you leave its author's list and the faces at once",
+        "description": "Checked in this order: the contract (`400`); your budget (`429`); the card (`404` as for `tapCard`); your own card (`400`). It reaches no one: across a block too, and with no pen name. Resonating again tells its author nothing (once, ever). `changed: false` when there was nothing to take back. `403` and `409` are documented for refusals to come; nothing answers them yet.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "The card id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TapResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cards/{key}/taps": {
+      "get": {
+        "operationId": "getCardTaps",
+        "summary": "Who resonated with a card (共振), as you may see them",
+        "description": "The card's author gets everyone, newest first, 30 a page (pass `nextPageToken` back as `pageToken`), each with the excerpt of the latest note they left on a named card (`note`; open your conversation with them) — never across a block, and never a note on an anonymous card. A reader gets the faces of `CardDetail.tap` without its cap: themselves first, then the people they are connected with, in one page, with no notes. `404` wherever `CardDetail.tap` is null. `429` is documented for a budget to come; nothing answers it yet.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "The card id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageToken",
+            "in": "query",
+            "required": false,
+            "description": "A page's `nextPageToken`",
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TapList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/cards/{key}/related": {
       "get": {
         "operationId": "getRelatedCards",
@@ -3354,6 +3665,33 @@
         ],
         "description": "What a link says about itself: the title, description, site name and picture of its page, as the server read it."
       },
+      "CardTap": {
+        "type": "object",
+        "properties": {
+          "mine": {
+            "type": "boolean"
+          },
+          "faces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Author"
+            }
+          },
+          "more": {
+            "type": "boolean"
+          },
+          "mayNote": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mine",
+          "faces",
+          "more",
+          "mayNote"
+        ],
+        "description": "The resonance tap (共振) on a card: whether you resonated, and the faces of who did as you may see them."
+      },
       "CardDetail": {
         "type": "object",
         "properties": {
@@ -3391,6 +3729,14 @@
             "allOf": [
               {
                 "$ref": "#/components/schemas/FeedCard"
+              }
+            ]
+          },
+          "tap": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CardTap"
               }
             ]
           },
@@ -3710,6 +4056,101 @@
           "changed"
         ]
       },
+      "TapResponse": {
+        "type": "object",
+        "properties": {
+          "on": {
+            "type": "boolean"
+          },
+          "changed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on",
+          "changed"
+        ]
+      },
+      "TapNote": {
+        "type": "object",
+        "properties": {
+          "excerpt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "excerpt"
+        ]
+      },
+      "TapPerson": {
+        "type": "object",
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/Author"
+          },
+          "note": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TapNote"
+              }
+            ]
+          }
+        },
+        "required": [
+          "author",
+          "note"
+        ]
+      },
+      "TapList": {
+        "type": "object",
+        "properties": {
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TapPerson"
+            }
+          },
+          "nextPageToken": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "people",
+          "nextPageToken"
+        ],
+        "description": "Who resonated with a card (共振): everyone, for its author; the people you are connected with, for a reader."
+      },
+      "ReadingReportRequest": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9-]{8,40}$"
+          },
+          "activeSeconds": {
+            "type": "number"
+          },
+          "progress": {
+            "type": "number"
+          },
+          "reachedEnd": {
+            "type": "boolean"
+          },
+          "shared": {
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "session",
+          "activeSeconds",
+          "progress",
+          "reachedEnd"
+        ],
+        "description": "How a reader read a card in one page view, as the session's running totals so far (send it again as they grow)."
+      },
       "SendNoteRequest": {
         "type": "object",
         "properties": {
@@ -3974,13 +4415,16 @@
           },
           "messages": {
             "type": "boolean"
+          },
+          "resonanceTaps": {
+            "type": "boolean"
           }
         },
         "required": [
           "picks",
           "connectionCards"
         ],
-        "description": "Which pushes you want. picks and connectionCards go beyond the ones answering you and are off until turned on; messages (messages and notes) is on until turned off. Resonances always ring."
+        "description": "Which pushes you want. picks and connectionCards go beyond the ones answering you and are off until turned on; messages (messages and notes) and resonanceTaps (someone resonated with your card) are on until turned off. A card answering yours always rings."
       },
       "UpdateNotificationSettingsRequest": {
         "type": "object",
@@ -3994,6 +4438,10 @@
             "type": "boolean"
           },
           "messages": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "resonanceTaps": {
             "nullable": true,
             "type": "boolean"
           }

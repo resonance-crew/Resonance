@@ -479,6 +479,59 @@ describe("cardReads/* (when a reader's read was last counted) are the server's a
   });
 });
 
+// Round 26: who resonated with what (共振, the tap) and how readers read cards are the server's to answer — a
+// reader sees only their connections, an author everyone but across a block, and no one a name in a read count.
+describe("resonanceTaps/* and readerSignals/* are the server's alone", () => {
+  it('lets no one read, list, forge, flip or clear a tap — not the reader who tapped, not the card\'s author', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'resonanceTaps', 'alice-card_bob'), { cardId: 'alice-card', userId: 'bob', on: true, at: new Date(), rangAt: new Date() });
+    });
+    for (const uid of ['alice', 'bob', 'carol']) {
+      const db = as(uid);
+      await assertFails(getDoc(doc(db, 'resonanceTaps', 'alice-card_bob')));
+      await assertFails(getDocs(query(collection(db, 'resonanceTaps'), where('cardId', '==', 'alice-card'))));
+      await assertFails(getDocs(query(collection(db, 'resonanceTaps'), where('userId', '==', uid))));
+      await assertFails(updateDoc(doc(db, 'resonanceTaps', 'alice-card_bob'), { on: false }));
+      await assertFails(deleteDoc(doc(db, 'resonanceTaps', 'alice-card_bob')));
+      await assertFails(setDoc(doc(db, 'resonanceTaps', `alice-card_${uid}`), { cardId: 'alice-card', userId: uid, on: true, at: new Date(), rangAt: null }));
+    }
+    await assertFails(getDoc(doc(anonymous(), 'resonanceTaps', 'alice-card_bob')));
+  });
+
+  it('lets no one read, list, forge or clear a reading record — not the reader, not the card\'s author', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'readerSignals', 'bob_alice-card'), { userId: 'bob', cardId: 'alice-card', activeSeconds: 40, maxProgress: 1, expireAt: new Date() });
+    });
+    for (const uid of ['alice', 'bob', 'carol']) {
+      const db = as(uid);
+      await assertFails(getDoc(doc(db, 'readerSignals', 'bob_alice-card')));
+      await assertFails(getDocs(query(collection(db, 'readerSignals'), where('cardId', '==', 'alice-card'))));
+      await assertFails(getDocs(query(collection(db, 'readerSignals'), where('userId', '==', uid))));
+      await assertFails(updateDoc(doc(db, 'readerSignals', 'bob_alice-card'), { rereads: 9 }));
+      await assertFails(deleteDoc(doc(db, 'readerSignals', 'bob_alice-card')));
+      await assertFails(setDoc(doc(db, 'readerSignals', `${uid}_alice-card`), { userId: uid, cardId: 'alice-card', activeSeconds: 1 }));
+    }
+    await assertFails(getDoc(doc(anonymous(), 'readerSignals', 'bob_alice-card')));
+  });
+
+  it("refuses a client's resonance_tap or read_summary bell, and lets its recipient mark one read, nothing else", async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'notifications', 'rtap_alice-card_20261119'), {
+        userId: 'alice', type: 'resonance_tap', payload: { cardId: 'alice-card', fromUserIds: ['bob'] }, readAt: null, createdAt: new Date(), pushedAt: new Date(),
+      });
+    });
+    await assertFails(setDoc(doc(as('bob'), 'notifications', 'rtap_alice-card_20261120'), {
+      userId: 'alice', type: 'resonance_tap', payload: { cardId: 'alice-card', fromUserIds: ['bob'] }, readAt: null, createdAt: new Date(),
+    }));
+    await assertFails(setDoc(doc(as('carol'), 'notifications', 'rsum_alice-card_20261119'), {
+      userId: 'alice', type: 'read_summary', payload: { cardId: 'alice-card', readers: 9, reread: true }, readAt: null, createdAt: new Date(),
+    }));
+    await assertFails(getDoc(doc(as('bob'), 'notifications', 'rtap_alice-card_20261119')));
+    await assertFails(updateDoc(doc(as('alice'), 'notifications', 'rtap_alice-card_20261119'), { 'payload.fromUserIds': [] }));
+    await assertSucceeds(updateDoc(doc(as('alice'), 'notifications', 'rtap_alice-card_20261119'), { readAt: serverTimestamp() }));
+  });
+});
+
 describe('notifications', () => {
   beforeEach(seedProfiles);
 

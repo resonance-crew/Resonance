@@ -21,6 +21,9 @@ import { CardBoxTab } from '@/lib/api/v1/schemas';
 import { getFeed } from '@/lib/api/v1/service';
 import { restoreCard, trashCard } from '@/lib/api/v1/trash';
 import { exportAccountData } from '@/lib/account/export';
+import { cardTap, listTaps, setTap } from '@/lib/api/v1/taps';
+import { mapCard } from '@/lib/db/firestore/mapper';
+import { ringTap } from '@/lib/push/tapBell';
 import { readCardForPage } from '@/app/[locale]/(app)/card/[slug]/cardPageData';
 import { toCardSeed } from '@/lib/data/cardSeed';
 
@@ -235,6 +238,50 @@ describe('writes: a block changes no answer about an anonymous card', () => {
   });
 });
 
+// Round 26 (§R1, A1): the resonance tap. Alice taps Bob's anonymous card; Carol is connected to her and sees her
+// face. Whatever stands between Alice and Bob, Alice's answer, her own view and Carol's are the same — only Bob's
+// side (his list, his bell) leaves her out across a block.
+describe('the resonance tap on an anonymous card', () => {
+  const tapOf = async (viewer: string) => cardTap(db, viewer, mapCard('masked', (await db.doc('cards/masked').get()).data()!), { pass: false });
+
+  it('answers the tapper, and shows the tapper and their connection, the same — block or not', async () => {
+    const answer = await sameInEveryState(async () => {
+      const { ring: _ring, ...on } = await setTap(db, 'alice', 'masked', true);
+      const seen = {
+        on,
+        detail: (await getCardDetail(db, 'alice', 'masked', ALL)).tap,
+        hers: await tapOf('alice'),
+        herList: await listTaps(db, 'alice', 'masked'),
+        carols: await tapOf('carol'),
+        carolsList: await listTaps(db, 'carol', 'masked'),
+      };
+      const { ring: _r, ...off } = await setTap(db, 'alice', 'masked', false);
+      return { ...seen, off };
+    });
+    expect(answer.on).toEqual({ on: true, changed: true });
+    expect(answer.off).toEqual({ on: false, changed: true });
+    expect(answer.hers).toMatchObject({ mine: true, faces: [expect.objectContaining({ handle: 'alice' })], more: false, mayNote: true });
+    expect(answer.detail).toEqual(answer.hers);
+    expect(answer.carols).toMatchObject({ mine: false, faces: [expect.objectContaining({ handle: 'alice' })] });
+    expect(answer.carolsList.people.map((p) => p.author.handle)).toEqual(['alice']);
+  });
+
+  it("leaves her out of the author's side alone across a block: his faces, his list, his bell", async () => {
+    for (const state of STATES) {
+      await state.apply();
+      await setTap(db, 'alice', 'masked', true);
+      const blocked = state.name !== 'no block';
+      expect((await listTaps(db, 'bob', 'masked')).people.map((p) => p.author.handle), state.name).toEqual(blocked ? [] : ['alice']);
+      expect((await tapOf('bob'))!.faces.map((f) => f.handle), state.name).toEqual(blocked ? [] : ['alice']);
+      expect(await ringTap(db, 'alice', 'masked'), state.name).toEqual(blocked ? null : expect.objectContaining({ to: 'bob' }));
+      await setTap(db, 'alice', 'masked', false);
+      await db.doc('resonanceTaps/masked_alice').update({ rangAt: null });
+      await db.recursiveDelete(db.collection('notifications'));
+      await unblock();
+    }
+  });
+});
+
 describe('a named card keeps every block behaviour', () => {
   beforeEach(async () => {
     await card('named', 'bob', 0);
@@ -253,6 +300,9 @@ describe('a named card keeps every block behaviour', () => {
       }
       expect((await failure(sendNote(db, 'alice', { cardId: 'named', text: 'hi' }))).code).toBe('blocked');
       expect((await failure(resonateWith(db, 'alice', 'named', 'aliceCard'))).code).toBe('blocked');
+      // Round 26: no tap across a block on a named card, and its page answers no tap.
+      expect((await failure(setTap(db, 'alice', 'named', true))).code).toBe('blocked');
+      expect((await getCardDetail(db, 'alice', 'named')).tap).toBeNull();
       await unblock();
     }
   });
@@ -353,6 +403,10 @@ describe('an anonymous card in the trash', () => {
       await outcome(sendNote(db, 'alice', { cardId: id, text: 'whose is this?' })),
       await outcome(resonateWith(db, 'alice', id, 'aliceCard')),
       await outcome(reportCard(db, 'alice', id, { reason: 'spam' })),
+      // Round 26: the tap (共振) and its list.
+      await outcome(setTap(db, 'alice', id, true)),
+      await outcome(setTap(db, 'alice', id, false)),
+      await outcome(listTaps(db, 'alice', id)),
     ];
   };
 

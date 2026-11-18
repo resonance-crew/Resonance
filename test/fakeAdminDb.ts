@@ -1,13 +1,15 @@
 // A tiny in-memory stand-in for the Admin SDK's Firestore, for suites that
 // render server code (pages, route handlers) without the emulator: documents
-// by path, `doc(path).get()` / `.set()`, `getAll(…refs, { fieldMask })`, `collection(name).doc(id)` and
-// queries — `where` (`==`, `!=`, `in`) chained, `orderBy` (a field, or `FieldPath.documentId()`), `select` (which, as
-// in Firestore, leaves only the named fields in `data()`), `limit`, `get`.
+// by path, `doc(path).get()` / `.set()` / `.create()`, `getAll(…refs, { fieldMask })`, `collection(name).doc(id)`,
+// `batch()` and queries — `where` (`==`, `!=`, `in`, `array-contains`, `<`, `<=`, `>`, `>=`) chained, `orderBy` (a
+// field, or `FieldPath.documentId()`), `startAfter` (the order's values, or a snapshot), `select` (which, as in
+// Firestore, leaves only the named fields in `data()`), `limit`, `get`. A snapshot's `get` reads a dotted field path
+// (`payload.cardId`), as Firestore's does.
 // Store timestamps as firebase-admin `Timestamp`s so the real mappers convert
 // them. Every read path is recorded in `reads` (a query as
 // `name?field==value&…`), so a test can prove a document was never read, and
-// every write path in `writes`. `update` merges top-level fields (taking
-// `FieldValue.delete()` and `FieldValue.increment(n)`), and `runTransaction` runs its function once with a
+// every write path in `writes`. `update` merges fields — a dotted key (`payload.fromUserIds`) sets that nested
+// field — taking `FieldValue.delete()` and `FieldValue.increment(n)`, and `runTransaction` runs its function once with a
 // transaction whose get/getAll/set/update/delete act at once (no isolation: a suite
 // that needs a conflict makes it happen inside a fake it passes in).
 // `hold(read)`, if given, is awaited before a read answers (it is logged in
@@ -28,11 +30,25 @@ export interface FakeAdminDb {
   writes: string[];
 }
 
+type Op = '==' | '!=' | 'in' | 'array-contains' | '<' | '<=' | '>' | '>=';
+const OPS = new Set<string>(['==', '!=', 'in', 'array-contains', '<', '<=', '>', '>=']);
+
 interface Filter {
   field: string;
-  op: '==' | '!=' | 'in';
+  op: Op;
   value: unknown;
 }
+
+/** A dotted field path's value in `data` (`payload.cardId`). */
+function fieldOf(data: Data | undefined, field: string): unknown {
+  let cur: unknown = data;
+  for (const part of field.split('.')) {
+    if (!cur || typeof cur !== 'object' || Array.isArray(cur)) return undefined;
+    cur = (cur as Data)[part];
+  }
+  return cur;
+}
+const hasField = (data: Data, field: string) => fieldOf(data, field) !== undefined;
 
 export interface FakeAdminDbOptions {
   hold?: (read: string) => Promise<void> | void;
@@ -89,7 +105,8 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
       id: path.split('/').pop()!,
       exists: data !== undefined,
       data: () => data,
-      get: (field: string) => data?.[field],
+      get: (field: string) => fieldOf(data, field),
+      ref: Object.assign(docRef(path), { path, id: path.split('/').pop()! }),
     };
   };
   const docRef = (path: string) => ({
@@ -103,18 +120,37 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
       docs[path] = data;
     },
     update: async (data: Data) => update(path, data),
+    // Fails (code 6, ALREADY_EXISTS) when the document is there, as Firestore's does.
+    create: async (data: Data) => {
+      if (docs[path] !== undefined) throw Object.assign(new Error(`fakeAdminDb: ${path} exists`), { code: 6 });
+      writes.push(path);
+      docs[path] = data;
+    },
+    delete: async () => {
+      writes.push(path);
+      delete docs[path];
+    },
   });
   const update = (path: string, data: Data) => {
     if (!docs[path]) throw Object.assign(new Error(`fakeAdminDb: no document to update at ${path}`), { code: 5 });
     writes.push(path);
-    const next = { ...docs[path] };
-    for (const [field, value] of Object.entries(data)) {
-      if (value instanceof FieldValue && value.isEqual(FieldValue.delete())) delete next[field];
+    const next: Data = { ...docs[path] };
+    for (const [key, value] of Object.entries(data)) {
+      // A dotted key is a field path: the nested field it names, its parents copied rather than shared.
+      const parts = key.split('.');
+      let into = next;
+      for (const part of parts.slice(0, -1)) {
+        const inner = into[part];
+        into[part] = inner && typeof inner === 'object' && !Array.isArray(inner) && !(inner instanceof Timestamp) ? { ...(inner as Data) } : {};
+        into = into[part] as Data;
+      }
+      const field = parts[parts.length - 1];
+      if (value instanceof FieldValue && value.isEqual(FieldValue.delete())) delete into[field];
       else if (value instanceof FieldValue && typeof (value as { operand?: unknown }).operand === 'number') {
         // FieldValue.increment(n): added to what is there (a missing or non-number field counts as 0).
-        const was = next[field];
-        next[field] = (typeof was === 'number' ? was : 0) + (value as unknown as { operand: number }).operand;
-      } else next[field] = value;
+        const was = into[field];
+        into[field] = (typeof was === 'number' ? was : 0) + (value as unknown as { operand: number }).operand;
+      } else into[field] = value;
     }
     docs[path] = next;
   };
@@ -123,34 +159,62 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
     order: { field: string; dir: 'asc' | 'desc' }[];
     fields?: string[];
     max: number;
+    /** startAfter's boundary: the order's values, or a document path whose values it takes. */
+    after?: unknown[] | string;
   }
   const query = (name: string, spec: Spec) => ({
     where: (field: string, op: string, value: unknown) => {
-      if (op !== '==' && op !== '!=' && op !== 'in') throw new Error(`fakeAdminDb: unsupported operator ${op}`);
-      return query(name, { ...spec, filters: [...spec.filters, { field, op, value }] });
+      if (!OPS.has(op)) throw new Error(`fakeAdminDb: unsupported operator ${op}`);
+      return query(name, { ...spec, filters: [...spec.filters, { field, op: op as Op, value }] });
     },
     // `FieldPath.documentId()` orders by the document's id (kept as NAME).
     orderBy: (field: string | object, dir: 'asc' | 'desc' = 'asc') =>
       query(name, { ...spec, order: [...spec.order, { field: typeof field === 'string' ? field : NAME, dir }] }),
     select: (...fields: string[]) => query(name, { ...spec, fields }),
     limit: (n: number) => query(name, { ...spec, max: n }),
+    // A snapshot (its path), or the order's values — a document id where the order names it.
+    startAfter: (...values: unknown[]) => {
+      const first = values[0] as { ref?: { path?: string } } | undefined;
+      return query(name, { ...spec, after: values.length === 1 && first?.ref?.path ? first.ref.path : values });
+    },
     get: async () => {
       await held(`${name}?${spec.filters.map((f) => `${f.field}${f.op === 'in' ? ' in ' : f.op}${String(f.value)}`).join('&')}`);
-      const matches = (f: Filter, v: unknown) =>
-        f.op === 'in' ? (f.value as unknown[]).some((x) => same(v, x)) : same(v, f.value) === (f.op === '==');
-      const hits = Object.keys(docs)
-        .filter((p) => p.startsWith(`${name}/`) && p.split('/').length === 2)
-        // As in Firestore, a document missing a filtered or ordered field never matches.
-        .filter((p) => spec.filters.every((f) => f.field in docs[p] && matches(f, docs[p][f.field])))
-        .filter((p) => spec.order.every((o) => o.field === NAME || o.field in docs[p]))
-        .sort((a, b) => {
-          const value = (p: string, field: string) => (field === NAME ? p.split('/')[1] : docs[p][field]);
-          for (const o of spec.order) {
-            const c = compare(value(a, o.field), value(b, o.field));
-            if (c) return o.dir === 'desc' ? -c : c;
+      const matches = (f: Filter, v: unknown) => {
+        switch (f.op) {
+          case 'in':
+            return (f.value as unknown[]).some((x) => same(v, x));
+          case 'array-contains':
+            return Array.isArray(v) && v.some((x) => same(x, f.value));
+          case '==':
+            return same(v, f.value);
+          case '!=':
+            return !same(v, f.value);
+          default: {
+            // A range compares within one type, as Firestore's does.
+            if (rank(v) !== rank(f.value)) return false;
+            const c = compare(v, f.value);
+            return f.op === '<' ? c < 0 : f.op === '<=' ? c <= 0 : f.op === '>' ? c > 0 : c >= 0;
           }
-          return 0;
-        })
+        }
+      };
+      const value = (p: string, field: string) => (field === NAME ? p.split('/').pop() : fieldOf(docs[p], field));
+      const byOrder = (a: unknown[], b: unknown[]) => {
+        for (const [i, o] of spec.order.entries()) {
+          const c = compare(a[i], b[i]);
+          if (c) return o.dir === 'desc' ? -c : c;
+        }
+        return 0;
+      };
+      const keyOf = (p: string) => spec.order.map((o) => value(p, o.field));
+      const boundary = typeof spec.after === 'string' ? keyOf(spec.after) : spec.after;
+      const hits = Object.keys(docs)
+        // The collection's own documents (a subcollection's too: `users/bob/blocks`), never those under them.
+        .filter((p) => p.startsWith(`${name}/`) && p.split('/').length === name.split('/').length + 1)
+        // As in Firestore, a document missing a filtered or ordered field never matches.
+        .filter((p) => spec.filters.every((f) => hasField(docs[p], f.field) && matches(f, fieldOf(docs[p], f.field))))
+        .filter((p) => spec.order.every((o) => o.field === NAME || hasField(docs[p], o.field)))
+        .sort((a, b) => byOrder(keyOf(a), keyOf(b)))
+        .filter((p) => !boundary || byOrder(keyOf(p), boundary) > 0)
         .slice(0, spec.max)
         .map((p) => snap(p, spec.fields));
       return { docs: hits, empty: hits.length === 0, size: hits.length };
@@ -159,7 +223,7 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
   type Ref = ReturnType<typeof docRef> & { path?: string };
   const pathOf = (ref: Ref) => ref.path!;
   const db = {
-    doc: (path: string) => Object.assign(docRef(path), { path }),
+    doc: (path: string) => Object.assign(docRef(path), { path, id: path.split('/').pop()! }),
     // getAll(ref…, { fieldMask }?): each document as `doc().get()` gives it, with only the masked fields.
     getAll: async (...args: unknown[]) => {
       const last = args.at(-1) as { fieldMask?: string[]; path?: string } | undefined;
@@ -180,9 +244,27 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
         },
       }),
     collection: (name: string) => ({
-      doc: (id: string) => Object.assign(docRef(`${name}/${id}`), { path: `${name}/${id}` }),
+      doc: (id?: string) => {
+        // No id: a new one, as Firestore makes (20 letters and digits).
+        const own = id ?? Array.from({ length: 20 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
+        return Object.assign(docRef(`${name}/${own}`), { path: `${name}/${own}`, id: own });
+      },
       ...query(name, { filters: [], order: [], max: Infinity }),
     }),
+    // Writes queued and made on commit, in order.
+    batch: () => {
+      const queued: (() => void)[] = [];
+      const b = {
+        set: (ref: Ref, data: Data) => (queued.push(() => void ref.set(data)), b),
+        update: (ref: Ref, data: Data) => (queued.push(() => update(pathOf(ref), data)), b),
+        delete: (ref: Ref) => (queued.push(() => (writes.push(pathOf(ref)), delete docs[pathOf(ref)])), b),
+        commit: async () => {
+          for (const write of queued) write();
+          return [];
+        },
+      };
+      return b;
+    },
   };
   return { db: db as unknown as Firestore, docs, reads, writes };
 }

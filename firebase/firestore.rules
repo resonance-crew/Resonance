@@ -510,6 +510,29 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // --- resonance taps (server-only) ---
+    // resonanceTaps/{cardId}_{uid}: `{ cardId, userId, on, at, rangAt }`, a
+    // reader's 共振 on a card (PUT/DELETE /api/v1/cards/{id}/tap,
+    // lib/api/v1/taps) — who tapped what is read only through the server,
+    // which shows a reader their connections alone and the author everyone
+    // but across a block (an anonymous card's author is never in any answer).
+    // Taking one back keeps the document (`rangAt`: it rang once, ever).
+    // Deleted with the card and with either account.
+    match /resonanceTaps/{tapId} {
+      allow read, write: if false;
+    }
+
+    // --- reading records (server-only) ---
+    // readerSignals/{uid}_{cardId}: how a reader read a card (POST
+    // /api/v1/cards/{id}/reading, lib/api/v1/reading) — active time, how far,
+    // re-reads, a share — kept 180 days past the last read (a TTL on
+    // expireAt) to pick cards for that reader; its author hears only a weekly
+    // count of three or more, never a name. Deleted with the card and with
+    // either account. Clients never see it.
+    match /readerSignals/{signalId} {
+      allow read, write: if false;
+    }
+
     // --- letters (server-only) ---
     // letters/{writer}_{recipient}: how many notes someone has left a person
     // they aren't connected with, still unanswered (`{ from, to, count, at,
