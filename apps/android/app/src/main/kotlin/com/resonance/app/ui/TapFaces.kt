@@ -83,13 +83,14 @@ internal fun TapFacesButton(
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (faces.isEmpty) return
     val reduced = LocalContext.current.prefersReducedMotion()
+    // No faces: nothing to say or open — but the group stays composed, so a face taken back slides out.
+    val none = faces.isEmpty
     val self = !author && faces.selfOnly(viewerId)
     val label = facesLabel(faces, viewerId, author)
     val group: @Composable () -> Unit = {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (author) {
+            if (author && !none) {
                 OrganicIcon(IconName.Wave, size = 16.dp, color = Tokens.TextMuted)
                 Spacer(Modifier.width(8.dp))
             }
@@ -102,7 +103,8 @@ internal fun TapFacesButton(
             // The flows find the faces by it (maestro/flows/tap.yaml: the viewer's face slides in).
             .flowTag(if (author) "author-taps" else "tap-faces")
             .then(
-                if (self) Modifier.clearAndSetSemantics { contentDescription = label }
+                if (none) Modifier.clearAndSetSemantics { }
+                else if (self) Modifier.clearAndSetSemantics { contentDescription = label }
                 else Modifier
                     .plainClickable(role = Role.Button, onClick = onOpen)
                     // The clickable's role and action stay (they are this node's); the faces inside are said as one name.

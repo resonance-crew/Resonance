@@ -101,10 +101,11 @@ fun CardViewerActions(
 
     // Your card answering this one (draft or published): null while looking, NONE when there is none.
     var mine by remember(cardId) { mutableStateOf<DraftService.Resonance?>(null) }
+    var looking by remember(cardId) { mutableStateOf(true) }
     var picking by remember(cardId) { mutableStateOf(false) }
     val changes by session.cardChanges.collectAsStateWithLifecycle()
     LaunchedEffect(cardId, changes) {
-        // A failed lookup stays dimmed, as on the web — better than risking a second reply card.
+        // A failed lookup stays inert, as on the web — better than risking a second reply card.
         val drafts = session.drafts
         mine = if (drafts == null) NONE else try {
             drafts.myResonance(cardId) ?: NONE
@@ -113,6 +114,7 @@ fun CardViewerActions(
         } catch (e: Exception) {
             null
         }
+        looking = false
     }
 
     // The tap: the server's faces, and the viewer's own drawn at once.
@@ -211,7 +213,7 @@ fun CardViewerActions(
             expanded = note.open,
         ) { note.segment(mayNote) }
         // While your reply card is looked for, its segment waits (a second reply card is never started by accident).
-        val replySegment = Segment("reply", reply.label, reply.icon, loading = mine == null) {
+        val replySegment = Segment("reply", reply.label, reply.icon, loading = mine == null && looking) {
             val answered = mine
             when {
                 answered == null -> Unit
