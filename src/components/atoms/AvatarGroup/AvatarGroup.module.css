@@ -1,51 +1,96 @@
-.button {
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  display: inline-flex;
-  border-radius: 999px;
-  transition: transform 160ms ease;
-}
-
-.button:hover {
-  transform: translateY(-1px);
-}
-
-.button:focus-visible {
-  outline: 2px solid var(--color-terracotta);
-  outline-offset: 4px;
-}
-
+/* The faces, each stepping in over the one before (round 26 §U2.2). The paper they sit on is the host's
+   (`--avatar-group-paper`): the card page's cream by default. */
 .stack {
   display: inline-flex;
   align-items: center;
+  --avatar-group-paper: var(--color-cream);
 }
 
 .item {
   position: relative;
-  margin-left: calc(var(--avatar-size) * -0.34);
-  /* Soft cream ring so overlapping avatars read as separate discs. */
-  border-radius: 999px;
-  box-shadow: 0 0 0 3px var(--color-card-bg, var(--color-cream));
+  display: inline-flex;
+  flex: none;
+  margin-left: calc(var(--avatar-step) * -1);
 }
 
 .item:first-child {
   margin-left: 0;
 }
 
-.more {
+/* The face's pad: its own outline 3 bigger on every side, in the paper — no stroke. */
+.pad {
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.pad path {
+  fill: var(--avatar-group-paper);
+}
+
+.item > :not(.pad) {
   position: relative;
-  margin-left: calc(var(--avatar-size) * -0.34);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: var(--color-cream-dark);
-  box-shadow: 0 0 0 3px var(--color-card-bg, var(--color-cream)),
-    inset 0 0 0 1.5px color-mix(in oklch, var(--field-border-hover) 45%, transparent);
-  font-family: var(--font-body);
-  font-weight: 700;
-  font-size: 12px;
-  color: var(--color-text-muted);
+}
+
+/* The blank disc for "more": the avatar's shape in the waiting disc's paper (the cream-dark by day, raised at night), the faces' own pen line. */
+.disc {
+  position: relative;
+  display: block;
+  overflow: visible;
+}
+
+.disc path {
+  fill: var(--avatar-wait);
+  stroke: var(--avatar-stroke);
+  stroke-linejoin: round;
+}
+
+/* At night the waiting disc's paper sits too close to the page's: lifted toward the muted ink, about 3:1 against the
+   dark page (§U2.2), still no colour of anyone's. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-scheme='light']) .disc path {
+    fill: color-mix(in oklch, var(--color-text-muted) 66%, var(--color-cream));
+  }
+}
+
+:root[data-scheme='dark'] .disc path {
+  fill: color-mix(in oklch, var(--color-text-muted) 66%, var(--color-cream));
+}
+
+/* The viewer's own face slides in as their tap turns on, and out as it turns off (150 ms). */
+.item[data-arriving] {
+  animation: faceIn 150ms ease-out;
+}
+
+.item[data-leaving] {
+  animation: faceOut 150ms ease-in forwards;
+}
+
+@keyframes faceIn {
+  from {
+    opacity: 0;
+    margin-right: calc(var(--avatar-step) - var(--avatar-size));
+    transform: translateX(-6px);
+  }
+}
+
+@keyframes faceOut {
+  to {
+    opacity: 0;
+    margin-right: calc(var(--avatar-step) - var(--avatar-size));
+    transform: translateX(-6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item[data-arriving],
+  .item[data-leaving] {
+    animation: none;
+  }
+
+  .item[data-leaving] {
+    display: none;
+  }
 }

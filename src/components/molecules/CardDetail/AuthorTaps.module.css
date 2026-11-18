@@ -1,0 +1,64 @@
+/* The author's own line where a reader's end row would be (round 26 §U3): the wave, 8, the faces — one button. */
+.line {
+  display: flex;
+  align-items: center;
+  margin-bottom: 40px;
+  /* Brought into view (the screenshots' author screens): the story's last lines stay above it. */
+  scroll-margin-top: 42vh;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 8px 0 4px;
+  margin: 0;
+  border: none;
+  border-radius: 14px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--color-terracotta);
+  outline-offset: 0;
+}
+
+.glyph {
+  display: inline-flex;
+}
+
+/* The card's share and ⋯ at the line's end after a long story, at the desktop's width only (round 12 §5). */
+.trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+@media (pointer: coarse) {
+  .trailing {
+    gap: 0;
+  }
+}
+
+@media (max-width: 1199px) {
+  .trailing {
+    display: none;
+  }
+}
+
+.title {
+  font-family: var(--font-heading);
+  font-size: 20px;
+  margin: 0 0 14px;
+}
+
+.more {
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
+}

@@ -174,7 +174,7 @@ describe('CardActionsMenu', () => {
   it.each([
     ['a draft', { id: 'd1', visibility: 'public' as const, published: false }, ['Edit', 'Delete']],
     ['a draft kept private', { id: 'd2', visibility: 'private' as const, published: false, anonymous: true }, ['Edit', 'Delete']],
-    ['a draft resonance', { ...reaching, published: false }, ['Edit', 'Stop resonating', 'Delete']],
+    ['a draft resonance', { ...reaching, published: false }, ['Edit', 'Stop replying', 'Delete']],
   ])('offers no Make public / Make private on %s', async (_what, card, rows) => {
     renderMenu(<CardActionsMenu card={card} referenceTitle="A walk" />);
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
@@ -255,11 +255,11 @@ describe('CardActionsMenu', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     await userEvent.click(screen.getByText('Delete'));
 
-    expect(await screen.findByText('Delete this resonance?')).toBeInTheDocument();
+    expect(await screen.findByText('Delete this reply?')).toBeInTheDocument();
     expect(trashCalls()).toHaveLength(0);
     expect(
       screen.getByText(
-        "The card moves to the trash, where you can restore it for 30 days. If this resonance is what connected you two and they haven't written to you, you won't be connected any more, even after you restore it.",
+        "The card moves to the trash, where you can restore it for 30 days. If this reply is what connected you two and they haven't written to you, you won't be connected any more, even after you restore it.",
       ),
     ).toBeInTheDocument();
     const verb = screen.getByRole('button', { name: 'Move to trash' });
@@ -350,7 +350,7 @@ describe('CardActionsMenu', () => {
     expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual([
       'Edit',
       'Make private',
-      'Stop resonating',
+      'Stop replying',
       'Delete',
     ]);
   });
@@ -367,19 +367,19 @@ describe('CardActionsMenu', () => {
     await waitFor(() => expect(resonanceReads.originalButton).toHaveBeenCalledTimes(1));
 
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
-    await userEvent.click(screen.getByText('Stop resonating'));
+    await userEvent.click(screen.getByText('Stop replying'));
 
     // Nothing sent yet: the question names the card it resonates with.
     expect(mockCallApi).not.toHaveBeenCalled();
-    expect(screen.getByText('Stop resonating with "A walk"?')).toBeInTheDocument();
+    expect(screen.getByText('Stop replying to "A walk"?')).toBeInTheDocument();
     // The card stays — and the connection it made may not.
     expect(
       screen.getByText(
-        "Your card stays. If this resonance is what connected you two and they haven't written to you, you won't be connected any more.",
+        "Your card stays. If this reply is what connected you two and they haven't written to you, you won't be connected any more.",
       ),
     ).toBeInTheDocument();
     // The card stays, so the verb is the dialog's plain solid fill, not the red of a delete.
-    const confirm = screen.getByRole('button', { name: 'Stop resonating' });
+    const confirm = screen.getByRole('button', { name: 'Stop replying' });
     expect(confirm).toHaveAttribute('data-variant', 'solid');
 
     await userEvent.click(confirm);
@@ -411,9 +411,9 @@ describe('CardActionsMenu', () => {
     );
     renderMenu(<CardActionsMenu card={{ id: 'c5', visibility: 'public', referenceCardId: 'orig' }} />);
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
-    await userEvent.click(screen.getByText('Stop resonating'));
+    await userEvent.click(screen.getByText('Stop replying'));
 
-    expect(await screen.findByText('Stop resonating with "Rain on the way home"?')).toBeInTheDocument();
+    expect(await screen.findByText('Stop replying to "Rain on the way home"?')).toBeInTheDocument();
     expect(mockCallApi).toHaveBeenCalledWith('/api/v1/cards?keys=orig');
   });
 
@@ -423,12 +423,12 @@ describe('CardActionsMenu', () => {
     mockCallApi.mockRejectedValue(new Error('offline'));
     renderMenu(<CardActionsMenu card={{ id: 'c5', visibility: 'public', referenceCardId: 'orig' }} referenceTitle="A walk" patchCard={patchCard} />);
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
-    await userEvent.click(screen.getByText('Stop resonating'));
-    await userEvent.click(screen.getByRole('button', { name: 'Stop resonating' }));
+    await userEvent.click(screen.getByText('Stop replying'));
+    await userEvent.click(screen.getByRole('button', { name: 'Stop replying' }));
 
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(patchCard).toHaveBeenCalledWith({ referenceCardId: undefined });
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent("Couldn't stop resonating — try again"));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent("Couldn't stop replying — try again"));
     expect(putBack).toHaveBeenCalledTimes(1);
   });
 
@@ -467,7 +467,7 @@ describe('CardActionsMenu', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     await userEvent.click(screen.getByText('Delete'));
     await userEvent.click(await screen.findByRole('button', { name: 'Move to trash' }));
-    expect(screen.queryByRole('dialog', { name: 'Delete this resonance?' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Delete this reply?' })).toBeNull();
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent("Couldn't move it to the trash — try again"));
   });
 

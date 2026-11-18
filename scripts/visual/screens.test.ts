@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { REPLY_CARD_DRAFT, SCREENS, screensFor, shotName, BASE_VARIANT } from './screens';
@@ -124,6 +124,44 @@ describe('the release screenshots’ screens', () => {
     const places = newest.map((uid) => list.indexOf(uid, from));
     expect(places.every((p) => p > from), list).toBe(true);
     expect(places, list).toEqual([...places].sort((a, b) => a - b));
+  });
+
+  // Round 26's review: r26/base took the iOS and Android lanes but not the web's, so the end row's web screens clicked
+  // `[data-end-row] …`, `button[data-tap-faces]` and `[data-tap-author] button` while no web component drew them —
+  // each click waited out its timeout on every web device. A web screen clicks and scrolls to what the web draws.
+  it('clicks and scrolls the web to data attributes a web component draws', () => {
+    const root = join(process.cwd(), 'src');
+    const drawn = (readdirSync(root, { recursive: true }) as string[])
+      .filter((f) => /\.tsx$/.test(f) && !/\.test\.tsx$/.test(f))
+      .map((f) => readFileSync(join(root, f), 'utf8'))
+      .join('\n');
+    const asked = screensFor('web').flatMap((s) =>
+      [s.web?.click, s.web?.scrollTo].flatMap((sel) => [...(sel ?? '').matchAll(/\[(data-[a-z-]+)/g)].map((m) => [s.id, m[1]] as const)),
+    );
+    expect(asked.map(([, name]) => name)).toEqual(expect.arrayContaining(['data-end-row', 'data-tap-faces', 'data-tap-author']));
+    for (const [id, name] of asked) expect(new RegExp(`\\b${name}[=\\s>{}]`).test(drawn), `${id}: no web component draws ${name}`).toBe(true);
+  });
+
+  // The reader's side of the end row (card-tapped, card-note-open, taps-list) is bob's first coffee, which alice
+  // resonated with after dora, eli and fay; card-note-wait is carol's card read by dora, whose notes to carol are as
+  // many as she may leave before carol answers. Base's seed had neither, so those captures showed another state.
+  it('seeds the reader’s taps and the waiting notes the end row’s screens describe', () => {
+    const line = seed.match(/for \(const \[uid, m\] of (\[.*?\]) as const\) await tapped\('first-coffee', uid, m\)/)?.[1];
+    expect(line, 'the seed taps first-coffee').toBeDefined();
+    const newest = [...line!.matchAll(/\['(\w+)', (\d+)\]/g)].sort((a, b) => Number(a[2]) - Number(b[2])).map((m) => m[1]);
+    expect(newest.length).toBeGreaterThan(TAP_FACES_MAX);
+    const tapped = SCREENS.find((s) => s.id === 'card-tapped')!;
+    expect([tapped.route, tapped.as]).toEqual(['/card/first-coffee', newest[0]]);
+    expect(tapped.expect).toContain(`${newest[0]}'s face first, then ${newest.slice(1, TAP_FACES_MAX).map((u) => `${u}'s`).join(' and ')}`);
+    expect(SCREENS.find((s) => s.id === 'taps-list')!.expect).toContain(`(${newest.join(', ')} `);
+
+    const max = Number(readFileSync(join(process.cwd(), 'src/lib/api/v1/conversations.ts'), 'utf8').match(/export const NOTE_REQUEST_MAX = (\d+);/)?.[1]);
+    expect(max).toBeGreaterThan(0);
+    const wait = SCREENS.find((s) => s.id === 'card-note-wait')!;
+    expect([wait.route, wait.as]).toEqual(['/card/carol-note', 'dora']);
+    const count = Number(seed.match(/letters\/dora_carol'\)\.set\(\{ from: 'dora', to: 'carol', count: (\d+)/)?.[1]);
+    expect(count, 'dora’s unanswered notes to carol').toBeGreaterThanOrEqual(max);
+    expect(seed).not.toMatch(/connections\/(carol_dora|dora_carol)/);
   });
 
   it('gives the apps their arguments as launch arguments can carry them', () => {

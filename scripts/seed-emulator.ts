@@ -306,6 +306,13 @@ async function main() {
     db.doc(`resonanceTaps/${cardId}_${uid}`).set({ cardId, userId: uid, on: true, at: at(minutesAgo), rangAt: at(minutesAgo) });
   for (const [uid, m] of [['dora', 8], ['carol', 12], ['eli', 18], ['fay', 22]] as const) await tapped('rain-walk', uid, m);
   for (const [uid, m] of [['gus', 9], ['carol', 48], ['hana', 30], ['bob', 35]] as const) await tapped('rich-story', uid, m);
+  // The end row's screens (round 26 §V4, scripts/visual/screens.ts card-tapped, card-note-open, taps-list): alice
+  // resonated with bob's first coffee, after her connections dora, eli and fay — her face first, then dora's and
+  // eli's, a blank disc for fay. (bob's walk stays untapped by her: the tap flows tap it there.)
+  for (const [uid, m] of [['alice', 6], ['dora', 14], ['eli', 26], ['fay', 40]] as const) await tapped('first-coffee', uid, m);
+  // card-note-wait: dora left carol three notes she hasn't answered, so on carol's named cards dora may leave no
+  // more until she does (CardDetail.tap.mayNote false; letters/*, lib/api/v1/conversations).
+  await db.doc('letters/dora_carol').set({ from: 'dora', to: 'carol', count: 3, at: at(70), cardId: 'carol-note' });
 
   // A card alice moved to the trash three days ago (public before): its page says so and offers 還原. By the real
   // clock, not SEED_NOW: the trash forgets a card 30 days on (and the days left stay the same from run to run).

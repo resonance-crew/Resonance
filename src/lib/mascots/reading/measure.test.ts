@@ -138,3 +138,52 @@ describe.each([
     expect(JSON.stringify(risen)).toContain(`"y":${bar[1]}`);
   });
 });
+
+/**
+ * Round 26 §U1.5: the end row grew a second line (the faces, 收藏) under the capsule and a note written in place
+ * under that — the puppets still stand on the capsule alone (its first `role="group"`), and neither line, nor the
+ * note opening, moves their ground. Split over two lines (共振 alone first), they stand on the first.
+ */
+describe.each([
+  ['a phone', 390, 'phone'],
+  ['a desktop', 1440, 'desktop'],
+] as const)('the end row on %s', (_name, width, preset) => {
+  function grow(opts: { split?: boolean; note?: boolean }) {
+    const { layer, respond, bar } = install(width);
+    const group = respond.querySelector('[role="group"]')!;
+    group.textContent = opts.split ? '共振' : '共振 寄小紙條 用卡片回應';
+    if (opts.split) {
+      const second = document.createElement('div');
+      second.setAttribute('role', 'group');
+      second.textContent = '寄小紙條 寫卡片';
+      group.after(second);
+      BOXES.set(second, [bar[0], bar[1] + bar[3] + 8, bar[2], bar[3]]);
+    }
+    const line = document.createElement('div');
+    line.innerHTML = '<button aria-label="faces"><span data-face="alice"></span></button><button aria-label="收藏"></button>';
+    respond.append(line);
+    BOXES.set(line, [bar[0], bar[1] + bar[3], bar[2], 44]);
+    if (opts.note) {
+      const note = document.createElement('div');
+      note.id = 'card-note';
+      note.innerHTML = '<textarea></textarea>';
+      respond.append(note);
+      BOXES.set(note, [bar[0], bar[1] + bar[3] + 56, 680, 72]);
+    }
+    return { layer, bar };
+  }
+
+  it('stands on the capsule, not on its second line or the note under it', () => {
+    const { layer, bar } = grow({});
+    const closed = respondLedge(layer, preset);
+    expect(readingScene(document, layer).scene.respond).toEqual({ x: bar[0], y: bar[1], w: bar[2], h: bar[3] });
+    document.body.innerHTML = '';
+    const open = grow({ note: true });
+    expect(respondLedge(open.layer, preset)).toEqual(closed);
+  });
+
+  it('stands on the first line when the capsule takes two', () => {
+    const { layer, bar } = grow({ split: true, note: true });
+    expect(readingScene(document, layer).scene.respond).toEqual({ x: bar[0], y: bar[1], w: bar[2], h: bar[3] });
+  });
+});

@@ -43,7 +43,6 @@ const COUNTS: Record<string, number> = {
   'src/components/molecules/MiniStoryCard/MiniCardGrid.tsx': 1,
   'src/components/molecules/MiniStoryCard/MiniStoryCard.tsx': 3,
   'src/components/molecules/Modal/Modal.tsx': 2,
-  'src/components/molecules/NoteComposer/NoteComposer.tsx': 9,
   'src/components/molecules/PageShell/PageShell.tsx': 14,
   'src/components/molecules/SegmentedActionBar/SegmentedActionBar.tsx': 1,
   'src/components/molecules/StoryCard/StoryCard.tsx': 2,

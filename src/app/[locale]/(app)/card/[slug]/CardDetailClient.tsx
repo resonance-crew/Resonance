@@ -10,7 +10,7 @@ import { LoadError } from '@/components/molecules/LoadError/LoadError';
 import { CardLinkGrid } from '@/components/molecules/CardLinkGrid/CardLinkGrid';
 import { MiniCardGrid } from '@/components/molecules/MiniStoryCard/MiniCardGrid';
 import { publishedDate } from '@/lib/publishedDate';
-import { readMinutes } from '@/lib/readTime';
+import { readMinutes, readSeconds } from '@/lib/readTime';
 import { storyType } from '@/lib/text/script';
 import { CardToc, storyHasContents, tocHeadings, type TocHeading } from '@/components/molecules/CardDetail/CardToc';
 import { LatinMarkText } from '@/components/molecules/CardDetail/LatinMarkText';
@@ -24,6 +24,7 @@ import { ReadingStage } from '@/components/sections/ReadingStage/ReadingStage';
 import { RestoredAloneNotice } from '@/components/molecules/TrashActionsMenu/RestoredAloneNotice';
 import { CardSafetyMenu } from '@/components/molecules/CardDetail/CardSafetyMenu';
 import { ReadAfterArea } from '@/components/molecules/CardDetail/ReadAfterArea';
+import { AuthorTaps } from '@/components/molecules/CardDetail/AuthorTaps';
 import { ResonanceCards } from '@/components/molecules/CardDetail/ResonanceCards';
 import { OrganicImage } from '@/components/atoms/OrganicImage/OrganicImage';
 import { StoryMarkdown } from '@/components/molecules/CardDetail/StoryMarkdown';
@@ -39,6 +40,7 @@ import type { CardSeed } from '@/lib/data/cardSeed';
 import type { Card } from '@/lib/db/types';
 import { useCard, useCardPageLists, useMyBlockedIds, type CardView } from '@/lib/data/hooks';
 import { useCountCardRead } from '@/lib/data/cardReads';
+import { useReadingReport } from '@/lib/data/readingReport';
 import { SectionEdge } from '@/components/atoms/SectionEdge/SectionEdge';
 import { HEADER_TOTAL_H } from '@/components/sections/AppHeader/HeaderChrome';
 import { useEndsApart } from '@/lib/hooks/useEndsApart';
@@ -170,11 +172,8 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   // A signed-in reader reading someone else's published card counts toward its reads (lib/data/cardReads):
   // once the browser's own read shows it — the server decides the rest (its author's reads, a block, a day).
   const shown = data?.card;
-  useCountCardRead(
-    user?.id,
-    shown?.id,
-    !!shown && !fromServer && gate === 'show' && !isOwner && !!shown.publishedAt && shown.visibility !== 'private' && !shown.trashedAt,
-  );
+  const reading = !!shown && !fromServer && gate === 'show' && !isOwner && !!shown.publishedAt && shown.visibility !== 'private' && !shown.trashedAt;
+  useCountCardRead(user?.id, shown?.id, reading);
 
   const storyRef = useRef<HTMLDivElement>(null);
   const [headings, setHeadings] = useState<TocHeading[]>([]);
@@ -197,6 +196,14 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   const [tagsEl, setTagsEl] = useState<HTMLDivElement | null>(null);
   const wide = useMediaQuery('(min-width: 1200px)');
   const endsApart = useEndsApart(bylineEl, tagsEl, { header: HEADER_TOTAL_H, extra: END_ROW_H });
+  // How it is read (round 26 §U7): a signed-in reader's, never its author's — for their own picks, never by name.
+  const readingReport = useReadingReport({
+    cardId: shown?.id,
+    enabled: reading && !!user,
+    expectedSeconds: readSeconds(shown?.story ?? ''),
+    storyRef,
+    endEl: tagsEl,
+  });
 
   // Derive the ToC from the rendered headings so the anchor ids match the ones
   // rehype-slug generated exactly.
@@ -291,6 +298,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
           seed={hue + 5}
           // Its owner, sharing it from their own account, may give away that it is theirs.
           hint={isOwner && card.anonymous ? tShare('anonymousHint') : undefined}
+          onShared={readingReport.markShared}
         />
       )}
       {privateCard && !trashed && (
@@ -426,7 +434,13 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
             {/* The story's end: the response row, the card's share and ⋯ at its end — at ≥ 1200, and only when the
                 story is long enough that the byline's are out of view (round 12 §5); its author's alone. */}
             {isOwner ? (
-              endsApart && wide === true && <div className={styles.endActions}>{cardActions}</div>
+              // Who resonated with it, as faces (round 26 §U3) — its share and ⋯ at that line's end after a long story;
+              // with no faces (no one tapped, or in the trash), those two alone.
+              !trashed && lists.tap?.faces.length ? (
+                <AuthorTaps cardId={card.id} tap={lists.tap} trailing={endsApart && wide === true ? cardActions : undefined} />
+              ) : (
+                endsApart && wide === true && <div className={styles.endActions}>{cardActions}</div>
+              )
             ) : sharedPrivate ? (
               <div className={styles.sharedEnd}>
                 <p className={styles.sharedNote}>{t('sharedPrivately', { handle: author.handle })}</p>
@@ -443,7 +457,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
                   initials: author.initials,
                   accentColor: author.accentColor,
                 }}
-                coreInsight={card.signature?.coreInsight}
+                tap={lists.tap}
                 trailing={endsApart && wide === true ? cardActions : undefined}
               />
             )}

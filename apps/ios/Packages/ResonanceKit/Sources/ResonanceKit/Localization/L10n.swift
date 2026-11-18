@@ -94,7 +94,7 @@ public enum L10n {
     public enum About {
         /// About us
         public static var metaTitle: String { Strings.shared.string("about.metaTitle") }
-        /// We believe everyone has a story to share. On Resonance, when a story moves you, you don't answer with a like: you write 
+        /// We believe everyone has a story to share. On Resonance, when an insight stays with you, tap Resonate; to say more, leave
         public static var metaDescription: String { Strings.shared.string("about.metaDescription") }
         /// ✦ About us
         public static var tag: String { Strings.shared.string("about.tag") }
@@ -111,7 +111,7 @@ public enum L10n {
             public static var p1: String { Strings.shared.string("about.belief.p1") }
             /// Stories give a person their depth back
             public static var p2: String { Strings.shared.string("about.belief.p2") }
-            /// On Resonance you write a stretch of your life as a story card. When a story moves you, you don't answer with a like: you
+            /// On Resonance you write a stretch of your life as a story card. When an insight stays with you, you don't answer with a l
             public static var p3: String { Strings.shared.string("about.belief.p3") }
         }
         public enum Cycle {
@@ -153,7 +153,7 @@ public enum L10n {
         public enum How {
             /// How it works
             public static var kicker: String { Strings.shared.string("about.how.kicker") }
-            /// A story is answered by another story
+            /// When a story finds you, answer it
             public static var title: String { Strings.shared.string("about.how.title") }
             /// Two story cards, the second answering the first with ripples
             public static var sketchLabel: String { Strings.shared.string("about.how.sketchLabel") }
@@ -170,15 +170,15 @@ public enum L10n {
                 public static var body: String { Strings.shared.string("about.how.read.body") }
             }
             public enum Resonate {
-                /// Resonate with a card of your own
+                /// Resonate, a note, or a card
                 public static var title: String { Strings.shared.string("about.how.resonate.title") }
-                /// Answer with your own story, and the two cards stay linked
+                /// Tap Resonate; to say more, leave the author a little note, or reply with a card of your own
                 public static var body: String { Strings.shared.string("about.how.resonate.body") }
             }
             public enum Connect {
                 /// Let them know it's you
                 public static var title: String { Strings.shared.string("about.how.connect.title") }
-                /// When your card is public and under your pen name, they're notified and the two of you are linked too, free to message ea
+                /// When the author answers your note, the two of you are connected and free to message each other
                 public static var body: String { Strings.shared.string("about.how.connect.body") }
             }
         }
@@ -248,7 +248,7 @@ public enum L10n {
             public enum Likes {
                 /// A like
                 public static var them: String { Strings.shared.string("about.compare.likes.them") }
-                /// A card written in resonance
+                /// Resonate, a note, a card in reply
                 public static var us: String { Strings.shared.string("about.compare.likes.us") }
             }
         }
@@ -649,7 +649,7 @@ public enum L10n {
             public static var placeholder: String { Strings.shared.string("card.note.placeholder") }
             /// Only the author can see this
             public static var hint: String { Strings.shared.string("card.note.hint") }
-            /// Want to turn this into a resonance card?
+            /// Want to turn this into a card of your own?
             public static var upgrade: String { Strings.shared.string("card.note.upgrade") }
             /// Your note is on its way
             public static var sent: String { Strings.shared.string("card.note.sent") }
@@ -675,11 +675,11 @@ public enum L10n {
             public static var remove: String { Strings.shared.string("card.bookmark.remove") }
         }
         public enum ResonanceSection {
-            /// Cards resonating with this
+            /// Cards replying to this one
             public static var title: String { Strings.shared.string("card.resonanceSection.title") }
-            /// Resonating with
+            /// Replying to
             public static var sourceTitle: String { Strings.shared.string("card.resonanceSection.sourceTitle") }
-            /// No one has resonated with this card yet — be the first
+            /// No card has replied to this one yet — be the first
             public static var empty: String { Strings.shared.string("card.resonanceSection.empty") }
             /// Show all {count}
             public static func showAll(count: Int) -> String { Strings.shared.format("card.resonanceSection.showAll", ["count": count]) }
@@ -709,21 +709,21 @@ public enum L10n {
             public static var title: String { Strings.shared.string("card.resonatorsModal.title") }
         }
         public enum ResonatePicker {
-            /// Resonate with this card
+            /// Reply with a card
             public static var title: String { Strings.shared.string("card.resonatePicker.title") }
             /// Write a new card
             public static var writeNew: String { Strings.shared.string("card.resonatePicker.writeNew") }
             /// You have no public cards yet — write your first one above
             public static var empty: String { Strings.shared.string("card.resonatePicker.empty") }
-            /// Cards already resonating with another card aren't listed
+            /// Cards already replying to another card aren't listed
             public static var hiddenNote: String { Strings.shared.string("card.resonatePicker.hiddenNote") }
-            /// Resonate
+            /// Reply
             public static var confirm: String { Strings.shared.string("card.resonatePicker.confirm") }
             /// Cancel
             public static var cancel: String { Strings.shared.string("card.resonatePicker.cancel") }
-            /// Couldn't resonate — please try again
+            /// Couldn't reply — please try again
             public static var failed: String { Strings.shared.string("card.resonatePicker.failed") }
-            /// This card already resonates with another card
+            /// This card already replies to another card
             public static var alreadyAnswering: String { Strings.shared.string("card.resonatePicker.alreadyAnswering") }
             /// Anonymous
             public static var anonymous: String { Strings.shared.string("card.resonatePicker.anonymous") }
@@ -884,7 +884,7 @@ public enum L10n {
         public static var subtitle: String { Strings.shared.string("messages.subtitle") }
         /// No conversations yet
         public static var emptyTitle: String { Strings.shared.string("messages.emptyTitle") }
-        /// Leave a note on a card you love, or resonate with it, and your conversations begin here
+        /// Leave a note on a card you love; once its author answers, your conversation begins here
         public static var empty: String { Strings.shared.string("messages.empty") }
         /// Connected — no conversation yet
         public static var startSection: String { Strings.shared.string("messages.startSection") }
@@ -1507,7 +1507,7 @@ public enum L10n {
             public static var published: String { Strings.shared.string("me.tabs.published") }
             /// Private
             public static var draft: String { Strings.shared.string("me.tabs.draft") }
-            /// Resonated
+            /// Replied
             public static var resonated: String { Strings.shared.string("me.tabs.resonated") }
             /// Linked
             public static var linked: String { Strings.shared.string("me.tabs.linked") }
@@ -1613,13 +1613,13 @@ public enum L10n {
             public static var deleteConfirm: String { Strings.shared.string("me.actions.deleteConfirm") }
             /// Keep it
             public static var deleteCancel: String { Strings.shared.string("me.actions.deleteCancel") }
-            /// Stop resonating
+            /// Stop replying
             public static var unresonate: String { Strings.shared.string("me.actions.unresonate") }
-            /// Stop resonating with \"{title}\"?
+            /// Stop replying to \"{title}\"?
             public static func unresonateConfirmTitle(title: String) -> String { Strings.shared.format("me.actions.unresonateConfirmTitle", ["title": title]) }
-            /// Your card stays. If this resonance is what connected you two and they haven't written to you, you won't be connected any
+            /// Your card stays. If this reply is what connected you two and they haven't written to you, you won't be connected any mor
             public static var unresonateConfirmBody: String { Strings.shared.string("me.actions.unresonateConfirmBody") }
-            /// Stop resonating
+            /// Stop replying
             public static var unresonateConfirm: String { Strings.shared.string("me.actions.unresonateConfirm") }
             /// Moved to the trash
             public static var trashed: String { Strings.shared.string("me.actions.trashed") }
@@ -1659,9 +1659,9 @@ public enum L10n {
             public static var notInTrash: String { Strings.shared.string("me.actions.notInTrash") }
             /// Couldn't delete it forever — try again
             public static var deleteForeverFailed: String { Strings.shared.string("me.actions.deleteForeverFailed") }
-            /// Delete this resonance?
+            /// Delete this reply?
             public static var trashResonanceTitle: String { Strings.shared.string("me.actions.trashResonanceTitle") }
-            /// The card moves to the trash, where you can restore it for {days} days. If this resonance is what connected you two and t
+            /// The card moves to the trash, where you can restore it for {days} days. If this reply is what connected you two and they 
             public static func trashResonanceBody(days: Int) -> String { Strings.shared.format("me.actions.trashResonanceBody", ["days": days]) }
             /// Move to trash
             public static var trashResonanceConfirm: String { Strings.shared.string("me.actions.trashResonanceConfirm") }
@@ -1675,7 +1675,7 @@ public enum L10n {
             public static var emptyTrashShort: String { Strings.shared.string("me.actions.emptyTrashShort") }
             /// Couldn't empty the trash — try again
             public static var emptyTrashFailed: String { Strings.shared.string("me.actions.emptyTrashFailed") }
-            /// Couldn't stop resonating — try again
+            /// Couldn't stop replying — try again
             public static var unresonateFailed: String { Strings.shared.string("me.actions.unresonateFailed") }
             /// Couldn't make it private — try again
             public static var makePrivateFailed: String { Strings.shared.string("me.actions.makePrivateFailed") }
@@ -2017,6 +2017,8 @@ public enum L10n {
             public static var appsOnly: String { Strings.shared.string("settings.notifications.appsOnly") }
             /// When someone resonates
             public static var taps: String { Strings.shared.string("settings.notifications.taps") }
+            /// When someone resonates with one of your cards
+            public static var tapsHint: String { Strings.shared.string("settings.notifications.tapsHint") }
         }
         public enum Language {
             /// UI language

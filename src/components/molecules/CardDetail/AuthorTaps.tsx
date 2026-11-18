@@ -1,0 +1,85 @@
+'use client';
+
+import { useLocale, useTranslations } from 'next-intl';
+import { useState, type ReactNode } from 'react';
+import useSWRInfinite from 'swr/infinite';
+import { AvatarGroup } from '@/components/atoms/AvatarGroup/AvatarGroup';
+import { Icon } from '@/components/atoms/Icon';
+import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
+import { Modal } from '@/components/molecules/Modal/Modal';
+import { DialogScroll } from '@/components/sections/AppHeader/BellList';
+import type { CardTapBody, TapListBody } from '@/lib/api/v1/schemas';
+import { listTaps } from '@/lib/db/firestore/client/taps';
+import { facesNames, memberOf } from './TapFaces';
+import { TapPeople, TapPeopleSkeleton } from './TapPeople';
+import styles from './AuthorTaps.module.css';
+
+export interface AuthorTapsProps {
+  cardId: string;
+  /** `CardDetail.tap` as the card's author reads it: the three newest who resonated, and whether there are more. */
+  tap: CardTapBody | null | undefined;
+  /** What ends the line: the card's share and ⋯ after a long story at ≥ 1200 (else they stand alone, CardDetailClient). */
+  trailing?: ReactNode;
+}
+
+/**
+ * What the author sees where a reader's end row would be (round 26 §U3): one line — the `wave` glyph, muted, then
+ * the faces of the three newest who resonated (a blank disc after them when there are more). Nothing at all when no
+ * one has (no 「還沒有人共振」), and no number anywhere. Tapping it opens who they are in a centred dialog on every
+ * device: 30 at a time then 顯示更多, each a face and a pen name, and — when they left a note on this card — its first
+ * line, muted, opening that conversation (an unconnected reader's is the letter; replying connects, as ever). Someone
+ * who only resonated can't be written to: their row opens their page. On an anonymous card, faces and names only.
+ */
+export function AuthorTaps({ cardId, tap, trailing }: AuthorTapsProps) {
+  const t = useTranslations('card');
+  const locale = useLocale();
+  const [open, setOpen] = useState(false);
+  if (!tap || !tap.faces.length) return null;
+  const names = facesNames(tap.faces, undefined, locale);
+  const label = `${t('tap.facesAuthor', { names })}${tap.more ? (locale === 'en' ? `, ${t('tap.more')}` : `，${t('tap.more')}`) : ''}`;
+  return (
+    <div className={styles.line} data-tap-author="">
+      <button type="button" className={styles.button} aria-label={label} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
+        <span className={styles.glyph} aria-hidden>
+          <Icon name="wave" size={16} color="var(--color-text-muted)" />
+        </span>
+        <AvatarGroup members={tap.faces.map(memberOf)} more={tap.more} size={28} />
+      </button>
+      {trailing && <span className={styles.trailing}>{trailing}</span>}
+      {open && (
+        <Modal open onClose={() => setOpen(false)} maxWidth={480} seed={53} padding="24px 22px 22px" ariaLabel={t('resonatorsModal.title')} closeButton>
+          <h3 className={styles.title}>{t('resonatorsModal.title')}</h3>
+          <AuthorList cardId={cardId} onPick={() => setOpen(false)} />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/** The author's pages of who resonated, 30 at a time, newest first. */
+function AuthorList({ cardId, onPick }: { cardId: string; onPick: () => void }) {
+  const tHome = useTranslations('home');
+  const { data, size, setSize, isValidating } = useSWRInfinite<TapListBody>(
+    (i, prev: TapListBody | null) => (i === 0 ? ['taps-author', cardId, ''] : prev?.nextPageToken ? ['taps-author', cardId, prev.nextPageToken] : null),
+    ([, id, token]: [string, string, string]) => listTaps(id, token || null),
+    { revalidateOnFocus: false, revalidateFirstPage: false },
+  );
+  if (!data) return <TapPeopleSkeleton size="dialog" />;
+  const people = data.flatMap((p) => p.people);
+  const next = data.at(-1)?.nextPageToken;
+  const loadingMore = isValidating && size > data.length;
+  return (
+    <>
+      <DialogScroll>
+        <TapPeople people={people} size="dialog" onPick={onPick} endKey={next ? 'taps:more' : undefined} />
+      </DialogScroll>
+      {next && (
+        <div className={styles.more}>
+          <OrganicButton variant="tonal" size="sm" loading={loadingMore} onClick={() => void setSize(size + 1)}>
+            {tHome('moreBtn')}
+          </OrganicButton>
+        </div>
+      )}
+    </>
+  );
+}

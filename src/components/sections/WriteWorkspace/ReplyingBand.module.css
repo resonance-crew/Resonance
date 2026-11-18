@@ -1,0 +1,101 @@
+/* What a reply answers, above the title below the split (round 26 §U6): one 44 band — the original's cover at 36,
+   「回應〈…〉」 in the muted ink, one line — washed under a pointer or a press, as a band is, never framed. */
+.band {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  margin: 0 0 12px;
+  padding: 4px 8px 4px 4px;
+  border: none;
+  border-radius: 14px;
+  background: none;
+  font: inherit;
+  text-align: start;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 160ms ease;
+}
+
+.band[data-pending] {
+  cursor: default;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .band:not([data-pending]):hover {
+    background: color-mix(in oklch, var(--toward-ink) 6%, transparent);
+  }
+}
+
+.band:not([data-pending]):active {
+  background: color-mix(in oklch, var(--toward-ink) 12%, transparent);
+}
+
+.band:focus-visible {
+  outline: 2px solid var(--color-terracotta);
+  outline-offset: 0;
+}
+
+.words {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.thumb {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 36px;
+}
+
+.thumbFace {
+  position: absolute;
+  inset: -3px;
+  overflow: hidden;
+  background: var(--thumb-paper);
+}
+
+.thumbFace img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumbWord {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-story-serif);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--thumb-word);
+}
+
+/* The original in the dialog: the panel's own type, without the room it keeps for a header beside the writer. */
+.original {
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+}
+
+.original > div {
+  height: auto;
+  padding: 0;
+  overflow: visible;
+  background: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .band {
+    transition: none;
+  }
+}

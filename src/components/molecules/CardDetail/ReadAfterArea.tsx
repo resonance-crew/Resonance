@@ -1,43 +1,31 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useTranslations } from 'next-intl';
-import { Modal } from '@/components/molecules/Modal/Modal';
-import { NoteComposer } from '@/components/molecules/NoteComposer/NoteComposer';
 import { CardViewerActions } from './CardViewerActions';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { useRouter } from '@/i18n/navigation';
-import { leaveWriteSeed } from '@/lib/data/writeSeed';
+import type { CardTapBody } from '@/lib/api/v1/schemas';
 
 export interface ReadAfterAreaProps {
   cardId: string;
   cardTitle: string;
-  /** The card this one resonates with, if any (the picker never offers it). */
+  /** The card this one replies to, if any (the picker never offers it). */
   referenceCardId?: string;
   author: { id: string; handle: string; initials: string; accentColor: string };
-  coreInsight?: string;
-  /** What ends the response row, aligned right: the card's share and ⋯ (round 8 §10.2). */
+  /** The resonance tap as the server answers this reader (`CardDetail.tap`). */
+  tap?: CardTapBody | null;
+  /** What ends the second line, aligned right: the card's share and ⋯ after a long story at ≥ 1200 (round 8 §10.2). */
   trailing?: ReactNode;
 }
 
 /**
- * The「讀後區」— everything a reader can do after finishing a story, in one
- * container with a deliberate hierarchy: 共振 is the only primary button,
- * the note is a text link (a gentle aside), the bookmark is a quiet icon —
- * all three on one horizontal line, the note composer opening in a Modal.
- * It fades in only when scrolled to, so reading itself carries no pressure.
- *
- * Also the junction for the up/downgrade paths: note ↔ resonance drafts move
- * in both directions, so choosing the wrong door costs nothing.
+ * The「讀後區」— everything a reader can do after finishing a story (round 26 §U1): the three answers in one capsule
+ * (共振, 寄小紙條, 用卡片回應), the faces and 收藏 under it, and the note written in place under those — never a
+ * dialog over the story (SETTLED, the owner's: 「不要做成 pop ups，因為它會擋住這個畫面上其他東西」). It fades in only
+ * when scrolled to, so reading itself carries no pressure. The paper puppets stand on the capsule alone (its
+ * `role="group"`, lib/mascots/reading): the second line and the note never move their ground.
  */
-export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author, trailing }: ReadAfterAreaProps) {
-  const t = useTranslations('card.note');
-  const router = useRouter();
+export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author, tap, trailing }: ReadAfterAreaProps) {
   const { user, loading } = useAuth();
-
-  const [noteOpen, setNoteOpen] = useState(false);
-  const [noteDraft, setNoteDraft] = useState<string | undefined>(undefined);
-  const [noteNonce, setNoteNonce] = useState(0);
 
   // Fade in on first viewport entry (IntersectionObserver; shows immediately
   // where the API is unavailable, e.g. jsdom).
@@ -63,27 +51,8 @@ export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author, trai
   }, []);
 
   if (loading) return null;
-  // The author sees no response actions on their own card (resonating with,
-  // writing to, or bookmarking yourself all mean nothing).
+  // The author sees their own line instead (AuthorTaps): resonating with, writing to, or saving yourself mean nothing.
   if (user && user.id === author.id) return null;
-
-  function openNote(draft?: string) {
-    if (!user) {
-      router.push('/signin');
-      return;
-    }
-    setNoteDraft(draft);
-    setNoteNonce((n) => n + 1);
-    setNoteOpen(true);
-  }
-
-  // 紙條 → 共振: hand the text up into the resonance editor — through this tab's storage, never the address
-  // (private words don't go in a request or the history).
-  function handleUpgrade(text: string) {
-    setNoteOpen(false);
-    leaveWriteSeed(cardId, text);
-    router.push(`/write?referenceCardId=${cardId}`);
-  }
 
   return (
     <div
@@ -100,27 +69,9 @@ export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author, trai
         cardTitle={cardTitle}
         referenceCardId={referenceCardId}
         author={author}
-        onOpenNote={() => openNote()}
+        tap={tap}
         trailing={trailing}
       />
-
-      {user && (
-        <Modal
-          open={noteOpen}
-          onClose={() => setNoteOpen(false)}
-          maxWidth={520}
-          ariaLabel={t('label')}
-        >
-          <NoteComposer
-            key={noteNonce}
-            variant="plain"
-            cardId={cardId}
-            initialText={noteDraft}
-            onUpgrade={handleUpgrade}
-            onClose={() => setNoteOpen(false)}
-          />
-        </Modal>
-      )}
     </div>
   );
 }

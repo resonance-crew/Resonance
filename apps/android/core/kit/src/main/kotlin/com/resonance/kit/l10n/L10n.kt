@@ -96,7 +96,7 @@ object L10n {
     object About {
         /** About us */
         val metaTitle: String get() = Strings.string("about.metaTitle")
-        /** We believe everyone has a story to share. On Resonance, when a story moves you, you don't answer with a like: you write  */
+        /** We believe everyone has a story to share. On Resonance, when an insight stays with you, tap Resonate; to say more, leave */
         val metaDescription: String get() = Strings.string("about.metaDescription")
         /** ✦ About us */
         val tag: String get() = Strings.string("about.tag")
@@ -113,7 +113,7 @@ object L10n {
             val p1: String get() = Strings.string("about.belief.p1")
             /** Stories give a person their depth back */
             val p2: String get() = Strings.string("about.belief.p2")
-            /** On Resonance you write a stretch of your life as a story card. When a story moves you, you don't answer with a like: you */
+            /** On Resonance you write a stretch of your life as a story card. When an insight stays with you, you don't answer with a l */
             val p3: String get() = Strings.string("about.belief.p3")
         }
         object Cycle {
@@ -155,7 +155,7 @@ object L10n {
         object How {
             /** How it works */
             val kicker: String get() = Strings.string("about.how.kicker")
-            /** A story is answered by another story */
+            /** When a story finds you, answer it */
             val title: String get() = Strings.string("about.how.title")
             /** Two story cards, the second answering the first with ripples */
             val sketchLabel: String get() = Strings.string("about.how.sketchLabel")
@@ -172,15 +172,15 @@ object L10n {
                 val body: String get() = Strings.string("about.how.read.body")
             }
             object Resonate {
-                /** Resonate with a card of your own */
+                /** Resonate, a note, or a card */
                 val title: String get() = Strings.string("about.how.resonate.title")
-                /** Answer with your own story, and the two cards stay linked */
+                /** Tap Resonate; to say more, leave the author a little note, or reply with a card of your own */
                 val body: String get() = Strings.string("about.how.resonate.body")
             }
             object Connect {
                 /** Let them know it's you */
                 val title: String get() = Strings.string("about.how.connect.title")
-                /** When your card is public and under your pen name, they're notified and the two of you are linked too, free to message ea */
+                /** When the author answers your note, the two of you are connected and free to message each other */
                 val body: String get() = Strings.string("about.how.connect.body")
             }
         }
@@ -250,7 +250,7 @@ object L10n {
             object Likes {
                 /** A like */
                 val them: String get() = Strings.string("about.compare.likes.them")
-                /** A card written in resonance */
+                /** Resonate, a note, a card in reply */
                 val us: String get() = Strings.string("about.compare.likes.us")
             }
         }
@@ -651,7 +651,7 @@ object L10n {
             val placeholder: String get() = Strings.string("card.note.placeholder")
             /** Only the author can see this */
             val hint: String get() = Strings.string("card.note.hint")
-            /** Want to turn this into a resonance card? */
+            /** Want to turn this into a card of your own? */
             val upgrade: String get() = Strings.string("card.note.upgrade")
             /** Your note is on its way */
             val sent: String get() = Strings.string("card.note.sent")
@@ -677,11 +677,11 @@ object L10n {
             val remove: String get() = Strings.string("card.bookmark.remove")
         }
         object ResonanceSection {
-            /** Cards resonating with this */
+            /** Cards replying to this one */
             val title: String get() = Strings.string("card.resonanceSection.title")
-            /** Resonating with */
+            /** Replying to */
             val sourceTitle: String get() = Strings.string("card.resonanceSection.sourceTitle")
-            /** No one has resonated with this card yet — be the first */
+            /** No card has replied to this one yet — be the first */
             val empty: String get() = Strings.string("card.resonanceSection.empty")
             /** Show all {count} */
             fun showAll(count: Int): String = Strings.format("card.resonanceSection.showAll", mapOf("count" to count))
@@ -711,21 +711,21 @@ object L10n {
             val title: String get() = Strings.string("card.resonatorsModal.title")
         }
         object ResonatePicker {
-            /** Resonate with this card */
+            /** Reply with a card */
             val title: String get() = Strings.string("card.resonatePicker.title")
             /** Write a new card */
             val writeNew: String get() = Strings.string("card.resonatePicker.writeNew")
             /** You have no public cards yet — write your first one above */
             val empty: String get() = Strings.string("card.resonatePicker.empty")
-            /** Cards already resonating with another card aren't listed */
+            /** Cards already replying to another card aren't listed */
             val hiddenNote: String get() = Strings.string("card.resonatePicker.hiddenNote")
-            /** Resonate */
+            /** Reply */
             val confirm: String get() = Strings.string("card.resonatePicker.confirm")
             /** Cancel */
             val cancel: String get() = Strings.string("card.resonatePicker.cancel")
-            /** Couldn't resonate — please try again */
+            /** Couldn't reply — please try again */
             val failed: String get() = Strings.string("card.resonatePicker.failed")
-            /** This card already resonates with another card */
+            /** This card already replies to another card */
             val alreadyAnswering: String get() = Strings.string("card.resonatePicker.alreadyAnswering")
             /** Anonymous */
             val anonymous: String get() = Strings.string("card.resonatePicker.anonymous")
@@ -886,7 +886,7 @@ object L10n {
         val subtitle: String get() = Strings.string("messages.subtitle")
         /** No conversations yet */
         val emptyTitle: String get() = Strings.string("messages.emptyTitle")
-        /** Leave a note on a card you love, or resonate with it, and your conversations begin here */
+        /** Leave a note on a card you love; once its author answers, your conversation begins here */
         val empty: String get() = Strings.string("messages.empty")
         /** Connected — no conversation yet */
         val startSection: String get() = Strings.string("messages.startSection")
@@ -1509,7 +1509,7 @@ object L10n {
             val published: String get() = Strings.string("me.tabs.published")
             /** Private */
             val draft: String get() = Strings.string("me.tabs.draft")
-            /** Resonated */
+            /** Replied */
             val resonated: String get() = Strings.string("me.tabs.resonated")
             /** Linked */
             val linked: String get() = Strings.string("me.tabs.linked")
@@ -1615,13 +1615,13 @@ object L10n {
             val deleteConfirm: String get() = Strings.string("me.actions.deleteConfirm")
             /** Keep it */
             val deleteCancel: String get() = Strings.string("me.actions.deleteCancel")
-            /** Stop resonating */
+            /** Stop replying */
             val unresonate: String get() = Strings.string("me.actions.unresonate")
-            /** Stop resonating with \"{title}\"? */
+            /** Stop replying to \"{title}\"? */
             fun unresonateConfirmTitle(title: String): String = Strings.format("me.actions.unresonateConfirmTitle", mapOf("title" to title))
-            /** Your card stays. If this resonance is what connected you two and they haven't written to you, you won't be connected any */
+            /** Your card stays. If this reply is what connected you two and they haven't written to you, you won't be connected any mor */
             val unresonateConfirmBody: String get() = Strings.string("me.actions.unresonateConfirmBody")
-            /** Stop resonating */
+            /** Stop replying */
             val unresonateConfirm: String get() = Strings.string("me.actions.unresonateConfirm")
             /** Moved to the trash */
             val trashed: String get() = Strings.string("me.actions.trashed")
@@ -1661,9 +1661,9 @@ object L10n {
             val notInTrash: String get() = Strings.string("me.actions.notInTrash")
             /** Couldn't delete it forever — try again */
             val deleteForeverFailed: String get() = Strings.string("me.actions.deleteForeverFailed")
-            /** Delete this resonance? */
+            /** Delete this reply? */
             val trashResonanceTitle: String get() = Strings.string("me.actions.trashResonanceTitle")
-            /** The card moves to the trash, where you can restore it for {days} days. If this resonance is what connected you two and t */
+            /** The card moves to the trash, where you can restore it for {days} days. If this reply is what connected you two and they  */
             fun trashResonanceBody(days: Int): String = Strings.format("me.actions.trashResonanceBody", mapOf("days" to days))
             /** Move to trash */
             val trashResonanceConfirm: String get() = Strings.string("me.actions.trashResonanceConfirm")
@@ -1677,7 +1677,7 @@ object L10n {
             val emptyTrashShort: String get() = Strings.string("me.actions.emptyTrashShort")
             /** Couldn't empty the trash — try again */
             val emptyTrashFailed: String get() = Strings.string("me.actions.emptyTrashFailed")
-            /** Couldn't stop resonating — try again */
+            /** Couldn't stop replying — try again */
             val unresonateFailed: String get() = Strings.string("me.actions.unresonateFailed")
             /** Couldn't make it private — try again */
             val makePrivateFailed: String get() = Strings.string("me.actions.makePrivateFailed")
@@ -2019,6 +2019,8 @@ object L10n {
             val appsOnly: String get() = Strings.string("settings.notifications.appsOnly")
             /** When someone resonates */
             val taps: String get() = Strings.string("settings.notifications.taps")
+            /** When someone resonates with one of your cards */
+            val tapsHint: String get() = Strings.string("settings.notifications.tapsHint")
         }
         object Language {
             /** UI language */

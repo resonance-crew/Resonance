@@ -1,0 +1,145 @@
+/* The note in place (round 26, SETTLED): 12 under the end row's second line, the column's width on a phone and
+   min(the story's column, 680) wider, starting where the capsule and the story start. Opens in 150 ms. */
+.block {
+  width: 100%;
+  max-width: 680px;
+  margin-top: 12px;
+  animation: noteIn 150ms ease-out;
+}
+
+@keyframes noteIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .block {
+    animation: none;
+  }
+}
+
+/* The envelope's column at the capsule's start, where the composer's ＋ stands: 44 × 48, the glyph 18, muted —
+   it says what the field is, and does nothing. */
+.glyph {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 48px;
+}
+
+/* The text: no frame of its own (the capsule is its frame), 16 (iOS Safari doesn't zoom into it), one line centred
+   in 48 by its own padding — (48 − its line) / 2 above and below — growing to three lines on a phone, then
+   scrolling. The element + class outrank the field's own rules. */
+.field {
+  flex: 1;
+  min-width: 0;
+  padding: 0 10px 0 0;
+  font-size: 16px;
+  line-height: 1.5;
+  cursor: text;
+}
+
+.block textarea.input {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  max-height: 96px;
+  max-height: calc(2lh + 48px);
+  margin: 0;
+  padding: 0;
+  padding-block: calc((48px - 1lh) / 2);
+  border: none;
+  border-radius: 0;
+  font-size: inherit;
+  line-height: inherit;
+  overflow-y: auto;
+  resize: none;
+  scrollbar-width: none;
+}
+
+.block textarea.input::-webkit-scrollbar {
+  display: none;
+}
+
+.block textarea.input:focus-visible {
+  border: none;
+  outline: none;
+}
+
+/* Tablet, Mac, desktop: five lines before it scrolls (no keyboard to make room for). */
+@media (min-width: 721px) {
+  .block textarea.input {
+    max-height: 144px;
+    max-height: calc(4lh + 48px);
+  }
+}
+
+/* A short window under a finger (a phone on its side, the keyboard up): two lines at most. */
+@media (pointer: coarse) and (max-height: 500px) {
+  .block textarea.input {
+    max-height: 72px;
+    max-height: calc(1lh + 48px);
+  }
+}
+
+/* The one line under the field: one message at a time, the count at its end from 1,800. Grows with the type,
+   never clipped. */
+.line {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-height: 18px;
+  margin-top: 6px;
+  /* Under the text, past the envelope's 44 column. */
+  padding-inline: 44px 4px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.lineMessage {
+  flex: 1;
+  min-width: 0;
+}
+
+.hint {
+  color: var(--color-text-muted);
+}
+
+.error {
+  color: var(--danger-fill);
+}
+
+/* 「這段話想寫成一張卡片嗎？」: a quiet text button in the tonal label's ink (4.5:1 — the terracotta's 3.5:1 is too
+   faint for 13 px, M5). */
+.upgrade {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--button-on-tonal);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.upgrade:focus-visible {
+  outline: 2px solid var(--color-terracotta);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* While the reader's notes wait for the author: the same place holds one muted line, a capsule's height. */
+.wait {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  margin: 0;
+  padding-inline: 4px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}

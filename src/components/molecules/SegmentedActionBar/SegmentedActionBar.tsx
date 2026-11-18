@@ -40,6 +40,17 @@ export interface SegmentSpec {
    */
   collapsibleLast?: boolean;
   /**
+   * It opens something in the page and that is open now (the card page's 寄小紙條 and its note in place, round 26):
+   * `aria-expanded`, and `controls` names what it opened (`aria-controls`).
+   */
+  expanded?: boolean;
+  controls?: string;
+  /**
+   * Its hover wash stays while this is true, pointer or not (what it opened is open: never the solid face, which
+   * on the card page means a tap that is on).
+   */
+  held?: boolean;
+  /**
    * Its action is on its way (B6, as OrganicButton's `loading`): a pen loop
    * in place of its icon (else just before its label), no click, aria-busy;
    * the segment keeps its size and colour.
@@ -289,9 +300,9 @@ export function SegmentedActionBar({
                 height={h * 3}
               >
                 <circle
-                  cx={pos.x}
-                  cy={pos.y}
-                  r={hovered === i ? hoverMaxR : 0}
+                  cx={hovered === i || !s.held ? pos.x : (bounds[i]?.left ?? 0) + (bounds[i]?.width ?? 0) / 2}
+                  cy={hovered === i || !s.held ? pos.y : h / 2}
+                  r={hovered === i ? hoverMaxR : s.held ? Math.hypot(w, h) : 0}
                   // colour-fixed: a mask's luminance, not a colour anyone sees
                   fill="white"
                   style={{ transition: 'r 340ms linear' }}
@@ -363,9 +374,12 @@ export function SegmentedActionBar({
           onBlur={() => setHovered((cur) => (cur === i ? null : cur))}
           aria-label={s.ariaLabel}
           aria-pressed={s.pressed}
+          aria-expanded={s.expanded}
+          aria-controls={s.controls}
           aria-busy={s.loading || undefined}
           aria-disabled={s.loading || undefined}
           className={styles.seg}
+          data-segment={s.key}
           data-icon-only={(s.collapsible && tight >= 1) || (s.collapsibleLast && tight >= 2) || undefined}
           style={{ color: s.textColor ?? 'var(--button-on-tonal)' }}
         >

@@ -8,9 +8,15 @@ import type { NotificationSettingsBody } from '@/lib/api/v1/schemas';
 
 export type NotificationSwitch = keyof NotificationSettingsBody;
 
-/** Whether `name` is on: `messages` unless said off (an older server leaves it out), the others only once turned on. */
+/** The switches on until turned off: what answers you (messages and notes, and since round 26 有人共振). */
+const ON_UNLESS_OFF: ReadonlySet<NotificationSwitch> = new Set(['messages', 'resonanceTaps']);
+
+/**
+ * Whether `name` is on: `messages` and `resonanceTaps` unless said off (an older server leaves them out), the
+ * others only once turned on.
+ */
 export function isOn(data: NotificationSettingsBody | undefined, name: NotificationSwitch): boolean {
-  return name === 'messages' ? data?.messages !== false : data?.[name] === true;
+  return ON_UNLESS_OFF.has(name) ? data?.[name] !== false : data?.[name] === true;
 }
 
 const PATH = '/api/v1/me/notifications';
@@ -45,7 +51,7 @@ export function useNotificationSettings(): NotificationSettingsState {
       setSaveFailed(false);
       try {
         await mutate(() => callApi<NotificationSettingsBody>(PATH, { method: 'PATCH', body: { [name]: on } }), {
-          optimisticData: (current) => ({ picks: false, connectionCards: false, messages: true, ...current, [name]: on }),
+          optimisticData: (current) => ({ picks: false, connectionCards: false, messages: true, resonanceTaps: true, ...current, [name]: on }),
           rollbackOnError: true,
           populateCache: true,
           revalidate: false,

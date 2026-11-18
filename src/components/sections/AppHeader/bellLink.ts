@@ -51,6 +51,9 @@ export function bellHref(n: Bell): BellHref | null {
     }
     case 'translation_done':
     case 'card_link':
+    // Round 26: a tap opens the card (named or anonymous alike — never a thread), as the weekly summary does.
+    case 'resonance_tap':
+    case 'read_summary':
       return cardId ? `/card/${cardId}` : null;
     default:
       return null;
