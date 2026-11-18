@@ -250,6 +250,55 @@ describe('the note, in place', () => {
     await waitFor(() => expect(field()).toHaveValue('half a thought'));
   });
 
+  it('holds a kept draft at once, before the tap is read: the segment opens it, and typing adds to it', async () => {
+    keepNoteDraft('viewer', 'c1', 'half a thought');
+    const tree = (tap: CardTapBody | undefined) => (
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <ReadAfterArea cardId="c1" cardTitle="Title" author={author} tap={tap} />
+      </SWRConfig>
+    );
+    // The card's lists still on their way (or failing): the end row is there, the tap not yet.
+    const page = renderWithIntl(tree(undefined));
+    await act(async () => {});
+    expect(field()).toBeNull();
+    await user().click(noteSegment());
+    expect(field()).toHaveValue('half a thought');
+    await user().type(field()!, ' x');
+    expect(readNoteDraft('viewer', 'c1')).toBe('half a thought x');
+    // The tap arrives: the field stays as it is, the words with it.
+    page.rerender(tree(TAP));
+    await act(async () => {});
+    expect(field()).toHaveValue('half a thought x');
+    // …or it says the notes wait: the line takes the field's place, and the words are still the draft.
+    page.rerender(tree({ ...TAP, mayNote: false }));
+    expect(field()).toBeNull();
+    expect(screen.getByText(WAIT)).toBeInTheDocument();
+    expect(readNoteDraft('viewer', 'c1')).toBe('half a thought x');
+  });
+
+  it('opens nothing by itself when the tap arrives after the reader has used the segment', async () => {
+    const tree = (tap: CardTapBody | undefined) => (
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <ReadAfterArea cardId="c1" cardTitle="Title" author={author} tap={tap} />
+      </SWRConfig>
+    );
+    let land!: (id: string) => void;
+    sendNote.mockImplementationOnce(() => new Promise((resolve) => (land = resolve)));
+    const page = renderWithIntl(tree(undefined));
+    await act(async () => {});
+    // Written and sent before the tap was read: the words stay kept until the server has them.
+    await user().click(noteSegment());
+    await user().type(field()!, 'on its way');
+    await user().click(screen.getByRole('button', { name: 'Send' }));
+    expect(field()).toBeNull();
+    expect(readNoteDraft('viewer', 'c1')).toBe('on its way');
+    page.rerender(tree(TAP));
+    await act(async () => {});
+    expect(field()).toBeNull();
+    await act(async () => land('note-1'));
+    expect(readNoteDraft('viewer', 'c1')).toBeNull();
+  });
+
   it('gives the field’s place to the waiting line when the tap, read after the page opened, says the notes wait', async () => {
     keepNoteDraft('viewer', 'c1', 'half a thought');
     const page = renderPage();

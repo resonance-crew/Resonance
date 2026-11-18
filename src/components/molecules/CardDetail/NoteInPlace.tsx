@@ -92,16 +92,26 @@ export function useNoteInPlace({
   mayRef.current = mayNote;
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  // The reader has used the segment on this card: from then on the page opens nothing by itself.
+  const acted = useRef(false);
 
-  // A draft not yet sent opens the field with the page; so does a failed note's 再寄一次 (?note), focused — once the
-  // tap says whether a note may go (never a field shown and taken back). While the reader's notes wait for the
-  // author (`mayNote` false) the draft stays on the device and opens nothing (as on Android); ?note opens the line
-  // saying why.
+  // A draft not yet sent is the field's words at once, the tap read or not: the segment opens on them, so a keystroke
+  // adds to them rather than replacing them.
   useEffect(() => {
-    if (!uid || !known) return;
+    acted.current = false;
+    if (!uid) return;
+    const draft = readNoteDraft(uid, cardId);
+    if (draft) setTextState(draft);
+  }, [uid, cardId]);
+
+  // Only the opening waits for the tap (never a field shown and taken back): a kept draft opens the field with the
+  // page, as does a failed note's 再寄一次 (?note), focused — unless the reader has already opened or closed it
+  // (or sent from it) while the tap was being read. While the reader's notes wait for the author (`mayNote` false)
+  // the draft stays on the device and opens nothing (as on Android); ?note opens the line saying why.
+  useEffect(() => {
+    if (!uid || !known || acted.current) return;
     const draft = readNoteDraft(uid, cardId);
     const asked = new URLSearchParams(window.location.search).has(NOTE_QUERY);
-    if (draft) setTextState(draft);
     if (mayRef.current ? draft || asked : asked) setMode(mayRef.current ? 'field' : 'wait');
     if (asked) setFocusNonce((n) => n + 1);
   }, [uid, cardId, known]);
@@ -121,6 +131,7 @@ export function useNoteInPlace({
   );
 
   const toggle = useCallback(() => {
+    acted.current = true;
     const m = modeRef.current;
     const words = !!textRef.current.trim();
     // The notes wait for the author: the segment opens and closes the line saying so, words or not (they stay kept).
