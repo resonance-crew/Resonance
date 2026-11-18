@@ -4,8 +4,8 @@ import Observation
 import ResonanceKit
 
 /// A note's unsent words (小紙條), kept on the device for each signed-in account and card, so that
-/// closing the composer — a tap beside it, 取消, the app going away — never loses what was typed:
-/// opened again on the same card, the composer starts from them. A draft goes once its note is sent
+/// leaving the note field — the page going, the app going away — never loses what was typed:
+/// the card's page opens again with its field open on them. A draft goes once its note is sent
 /// (the server's 201), when its words are emptied, and with the account's other local data on
 /// sign-out or a switch of account (`retainOnly`). At most `limit` drafts are kept (the oldest
 /// dropped) and none older than `maxAge`. The web keeps the same in localStorage.
@@ -121,18 +121,21 @@ import ResonanceKit
     }
 }
 
-/// Notes on their way after their composer closed (round 21): 寄出 closes the composer at once and the note
-/// goes on behind it. Kept here, for the session, are what must outlive the composer: each card's attempt —
-/// the client id its words go under, so sending them again after a failure is a retry the server
-/// recognises, never a second note — the words the server refused (the composer opened on them again waits
-/// for an edit), and the toast's 再寄一次: the composer to open again on a card (on its page if it shows,
-/// else the card's page is opened first).
+/// Notes on their way after their field closed (round 21; in place under the story since round 26): 寄出 clears
+/// and closes the field at once and the note goes on behind it. Kept here, for the session, are what must outlive
+/// the field: each card's attempt — the client id its words go under, so sending them again after a failure is a
+/// retry the server recognises, never a second note — the words the server refused (the field opened on them again
+/// waits for an edit), and the way back to the words: the note field to open again, focused, on a card — at once
+/// while its page is there (`why` says in the field's line what went wrong), else from the toast's 再寄一次, which
+/// opens the card's page first.
 @MainActor @Observable
 final class NoteSends {
-    /// The composer to open again on a card: its page's composer opens it and takes it (`take`).
+    /// The note field to open again on a card: its page opens it, focused, and takes it (`take`).
     struct Reopen: Equatable {
         let cardId: String
         let id: Int
+        /// What went wrong, for the field's line (nil: the toast already said it).
+        var why: String?
     }
 
     private(set) var reopening: Reopen?
@@ -140,10 +143,10 @@ final class NoteSends {
     @ObservationIgnored private var attempts: [String: NoteAttempt] = [:]
     /// The words the server refused on a card, and what was said.
     @ObservationIgnored private var refusals: [String: (words: String, message: String)] = [:]
-    /// The card pages whose composer can open now (one page or two of the same card).
+    /// The card pages whose note field can open now (one page or two of the same card).
     @ObservationIgnored private var hosts: [String: Int] = [:]
 
-    /// The attempt the words to `cardId` go under, the same across the composer closing and opening again.
+    /// The attempt the words to `cardId` go under, the same across the field closing and opening again.
     func attempt(_ cardId: String) -> NoteAttempt {
         if let kept = attempts[cardId] { return kept }
         let made = NoteAttempt()
@@ -151,14 +154,14 @@ final class NoteSends {
         return made
     }
 
-    /// The server refused `words` on `cardId` (`message`: what the composer says of it); nil once other words go.
+    /// The server refused `words` on `cardId` (`message`: what the field says of it); nil once other words go.
     func refused(_ cardId: String, words: String?, message: String = "") {
         refusals[cardId] = words.map { ($0, message) }
     }
 
     func refusal(_ cardId: String) -> (words: String, message: String)? { refusals[cardId] }
 
-    /// A card's page with its composer is showing (`true`) or gone (`false`).
+    /// A card's page with its note field is showing (`true`) or gone (`false`).
     func host(_ cardId: String, _ showing: Bool) {
         hosts[cardId, default: 0] += showing ? 1 : -1
         if hosts[cardId, default: 0] <= 0 { hosts[cardId] = nil }
@@ -166,13 +169,13 @@ final class NoteSends {
 
     func isHosted(_ cardId: String) -> Bool { hosts[cardId] != nil }
 
-    /// Opens the composer again on `cardId` (the toast's 再寄一次).
-    func reopen(_ cardId: String) {
+    /// Opens the note field again, focused, on `cardId` (the toast's 再寄一次, or a failure while its page is there).
+    func reopen(_ cardId: String, why: String? = nil) {
         count += 1
-        reopening = Reopen(cardId: cardId, id: count)
+        reopening = Reopen(cardId: cardId, id: count, why: why)
     }
 
-    /// The page's composer opened for `request`.
+    /// The page's note field opened for `request`.
     func take(_ request: Reopen) {
         if reopening == request { reopening = nil }
     }

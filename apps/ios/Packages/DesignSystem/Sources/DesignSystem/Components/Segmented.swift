@@ -27,12 +27,15 @@ public struct SegmentSpec: Identifiable {
     public var selected: Bool?
     /// Working on the last tap: the pen inks where its glyph was, and a tap does nothing.
     public var working: Bool
+    /// What it opened is open (round 26: 寄小紙條 while its note field shows): its press's wash stays on — never
+    /// the solid face, which says something is on.
+    public var held: Bool
     public let action: () -> Void
 
     public init(id: String, icon: IconName? = nil, iconFilled: Bool = false, label: String, accessibilityLabel: String? = nil,
                 fill: Color? = nil, ink: Color = Tokens.buttonOnTonal, pressInk: Color = Tokens.terracotta.opacity(0.14),
                 collapsible: Bool = false, collapsesAt: Int? = nil, selected: Bool? = nil, working: Bool = false,
-                action: @escaping () -> Void) {
+                held: Bool = false, action: @escaping () -> Void) {
         self.id = id
         self.icon = icon
         self.iconFilled = iconFilled
@@ -44,6 +47,7 @@ public struct SegmentSpec: Identifiable {
         self.collapsesAt = collapsesAt ?? (collapsible ? 1 : nil)
         self.selected = selected
         self.working = working
+        self.held = held
         self.action = action
     }
 
@@ -262,7 +266,7 @@ private struct SegmentButton: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
         }
-        .buttonStyle(SegmentPressStyle(region: region, fill: spec.fill ?? barFill, pressInk: spec.pressInk,
+        .buttonStyle(SegmentPressStyle(region: region, fill: spec.fill ?? barFill, pressInk: spec.pressInk, held: spec.held,
                                        seam: index > 0 ? SegmentRegion.leftSeam(seed: seamSeed(index - 1)) : nil, seamColor: seam))
         .accessibilityLabel(spec.accessibilityLabel ?? spec.label)
         .accessibilityAddTraits(spec.selected == true ? .isSelected : [])
@@ -322,11 +326,12 @@ private struct SegmentPressStyle: ButtonStyle {
     let region: SegmentRegion
     let fill: Color
     let pressInk: Color
+    var held = false
     let seam: SeamShape?
     let seamColor: Color
 
     func makeBody(configuration: Configuration) -> some View {
-        SegmentFace(isPressed: configuration.isPressed, region: region, fill: fill, pressInk: pressInk, seam: seam,
+        SegmentFace(isPressed: configuration.isPressed, region: region, fill: fill, pressInk: pressInk, held: held, seam: seam,
                     seamColor: seamColor) { configuration.label }
     }
 }
@@ -336,6 +341,7 @@ private struct SegmentFace<Label: View>: View {
     let region: SegmentRegion
     let fill: Color
     let pressInk: Color
+    var held = false
     let seam: SeamShape?
     let seamColor: Color
     @ViewBuilder let label: Label
@@ -349,7 +355,8 @@ private struct SegmentFace<Label: View>: View {
             .background {
                 region.fill(fill)
                 GrainLayer(shape: region, mode: .tile, opacity: 0.38, tile: "grain-button", overflow: 16)
-                region.fill(pressInk).opacity(ink)
+                region.fill(pressInk).opacity(held ? 1 : ink)
+                    .animation(.easeOut(duration: 0.15), value: held)
                 if let seam {
                     seam.stroke(seamColor, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round))
                 }

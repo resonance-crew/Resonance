@@ -1,0 +1,43 @@
+# alice reads carol's card 陌生人的一句話 and replies with a card she has already published (round 26: what 共振 used to
+# mean is 用卡片回應 now): 用卡片回應 opens the picker, she picks 寫給十年前的自己 and confirms; the segment turns 已回應 and
+# her card is listed under carol's. Then she saves it: 收藏 → 取消收藏. The picker's words are matched old and new
+# (與這張卡片共振 / 用卡片回應這篇, 共振 / 回應) while the strings move (§S2).
+appId: com.resonance.stories
+name: reply-with-card
+tags:
+  - card
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /card/carol-note
+- extendedWaitUntil:
+    visible: 陌生人的一句話
+    timeout: 30000
+# 用卡片回應: the segment's name, also where a narrow capsule shows 寫卡片 (which is the write tab's name too).
+- scrollUntilVisible:
+    element: 用卡片回應
+    direction: DOWN
+- tapOn: 用卡片回應
+- extendedWaitUntil:
+    visible: (與這張卡片共振|用卡片回應這篇)
+    timeout: 10000
+- tapOn: 寫給十年前的自己
+- tapOn:
+    text: (共振|回應)
+    rightOf: 取消
+- extendedWaitUntil:
+    notVisible: (與這張卡片共振|用卡片回應這篇)
+    timeout: 15000
+- scrollUntilVisible:
+    element: 已回應
+    direction: DOWN
+- tapOn: 收藏
+- extendedWaitUntil:
+    visible: 取消收藏
+    timeout: 10000
+- scrollUntilVisible:
+    element: 寫給十年前的自己
+    direction: DOWN
+- takeScreenshot: reply-with-card

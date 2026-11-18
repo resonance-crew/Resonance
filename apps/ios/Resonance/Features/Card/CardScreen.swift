@@ -41,11 +41,16 @@ struct CardScreen: View {
     /// A tablet's header (round 5 C1): the card's title fades into its centre in place of the author.
     @Environment(\.headerChrome) private var headerChrome
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    /// How this page view of someone else's card is read (round 26 §U7), never drawn.
+    @State private var reading = ReadingTracker()
     /// What the page has across.
     @State private var width: CGFloat?
     private static let pageSpace = "card.page"
     /// The page's head, where the trash banner stands.
     private static let pageHead = "card.head"
+    /// The story's end: the reader's row, or the author's line of who resonated.
+    static let pageEnd = "card.end"
 
     /// A tablet's card page sets its lists' headings apart (round 5 E2): 64 above each, 56 down to its
     /// cards — the same for every list.
@@ -76,8 +81,17 @@ struct CardScreen: View {
         ScrollViewReader { proxy in
             ScrollView {
                 column.id(Self.pageHead)
+                    // A tablet's or the Mac's list of who resonated hangs under the faces, over the page's own content
+                    // (so it scrolls with them, round 26 §U2.5).
+                    .overlayPreferenceValue(TapsPopoverKey.self) { request in
+                        if let request { TapsPopover(request: request) }
+                    }
                     // Where the paper puppets' marks are measured, and their island laid over: the content's own points.
                     .mascotContent()
+            }
+            // The note field's block to just above the keyboard as it takes the focus (round 26: the page scrolls).
+            .environment(\.scrollCardTo) { id in
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .bottom) }
             }
             // The toast's 看譯文 brings the reader back to the same place in the translated story.
             .scrollPosition($position)
@@ -94,6 +108,14 @@ struct CardScreen: View {
             }
             // A story with a table of contents slides over from the centre to make room for its rail.
             .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: layout)
+            #if DEBUG
+            // `-visualEnd YES` (the release screenshots' round 26 screens): once the card is in, its end in view.
+            .task(id: model?.phase == .loaded) {
+                guard model?.phase == .loaded, UserDefaults.standard.bool(forKey: "visualEnd") else { return }
+                try? await Task.sleep(for: .milliseconds(400))
+                proxy.scrollTo(Self.pageEnd, anchor: .center)
+            }
+            #endif
             .modifier(CardChrome(screen: self))
             // 刪除 here: once the banner shows (the card read again), the page goes up to it.
             .onChange(of: model?.detail.map(TrashedCardBanner.shows) == true) { _, banner in bringBanner(banner, proxy: proxy) }
@@ -231,6 +253,8 @@ struct CardScreen: View {
             .init(top: geo.contentOffset.y + geo.contentInsets.top, height: geo.containerSize.height)
         } action: { _, viewport in
             meter.viewport = viewport
+            // A scroll is reading (§U7): how far through the story has been in view.
+            reading.scrolled(story: meter.story, visibleTop: viewport.top, visibleHeight: viewport.height)
         }
         .onScrollGeometryChange(for: CGFloat.self) { $0.contentInsets.top } action: { _, inset in meter.insetTop = inset }
         // Where the byline ends, as measured under the title (until then, about where a phone's lands).
@@ -307,8 +331,21 @@ struct CardScreen: View {
         .onDisappear {
             translation?.cancel()
             translation = nil
+            reportReading()
         }
-        .onAppear { resumeTranslation() }
+        .onAppear {
+            resumeTranslation()
+            reading.cameBack()
+        }
+        // The card has loaded: its page view's reading starts (someone else's card only).
+        .onChange(of: model?.phase == .loaded, initial: true) { _, loaded in
+            if loaded, let detail = model?.detail { reading.start(detail, viewer: session.uid) }
+        }
+        // The app going to the background hides the page: its running totals go (again when it hides again).
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { reportReading() } else if phase == .active { reading.cameBack() }
+        }
+        .environment(\.cardShared) { [reading] in reading.shared() }
         // Edited, published or re-shelved from the writer or the ⋯ — this card, or a
         // resonance to it: read it again (another card's draft leaves it as it is).
         .onChange(of: writer.changes) {
@@ -322,6 +359,12 @@ struct CardScreen: View {
             guard let model, moved.concerns(model.seenThroughConnection) else { return }
             Task { await model.load() }
         }
+    }
+
+    /// The page hid: its reading's running totals so far go to the server (kept on the device until they do).
+    private func reportReading() {
+        guard let uid = session.uid, let hid = reading.hid() else { return }
+        session.readingReports.report(hid.report, cardId: hid.cardId, uid: uid)
     }
 
     /// The card's share and its ⋯, as the bar's ghost glyphs: the share only for a card whoever gets its
@@ -467,6 +510,12 @@ struct CardScreen: View {
                         .padding(.bottom, 40)
                 } else if !trashed, !detail.isOwner {
                     endRow(detail).padding(.bottom, 40)
+                } else if !trashed, AuthorTaps.shows(detail), let tap = detail.tap?.value1 {
+                    // The author's own card (§U3): who resonated, as faces after the wave — nothing when no one has.
+                    AuthorTaps(cardId: card.id, faces: tap.faces, more: tap.more)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .id(Self.pageEnd)
+                        .padding(.bottom, 40)
                 }
                 if !trashed, !model.links.isEmpty {
                     Text(L10n.Card.linkedCards)
@@ -489,7 +538,7 @@ struct CardScreen: View {
             let resonance = trashed ? [] : model.resonanceSection
             if !resonance.isEmpty {
                 // The same full cards as 延伸的卡片 (C1): three, then 查看全部 shows the rest in place.
-                section(L10n.Card.ResonanceSection.title, headingGap: tablet ? Self.tabletHeadingGap : 56) {
+                section(L10n.Card.Replies.title, headingGap: tablet ? Self.tabletHeadingGap : 56) {
                     StoryCardList(cards: Self.shownResonances(resonance, all: allResonances)).padding(.horizontal, -bleed)
                     if Self.resonancesHidden(resonance, all: allResonances) {
                         OrganicButton(L10n.Card.ResonanceSection.showAll(count: resonance.count), variant: .tonal, size: .sm) {
@@ -525,18 +574,14 @@ struct CardScreen: View {
         !all && cards.count > resonancesShownFirst
     }
 
-    /// The story's end (round 9 §3): the reader's response bar (共振 · 寄小紙條 · 收藏) alone — the card's
-    /// share and ⋯ are in the bar or the byline already. A phone spreads it across the column; wider, it
-    /// keeps its own width at the row's start. It fades in once scrolled to.
+    /// The story's end (round 26 §U1): the three kinds of feedback (共振 · 寄小紙條 · 用卡片回應), the faces and 收藏 under
+    /// them, and the note in place when it is open (``CardEndRow``) — the card's share and ⋯ are in the bar or the
+    /// byline already. It fades in once scrolled to; its coming into view is the story read through (§U7).
     private func endRow(_ detail: CardDetail) -> some View {
-        let card = detail.card
-        return CardViewerActions(cardId: card.id, referenceCardId: card.referenceCardId)
-            .frame(maxWidth: window.layoutClass == .compact ? .infinity : nil, alignment: .leading)
-            .fixedSize(horizontal: window.layoutClass != .compact, vertical: false)
-            // The response bar, over which a puppet may peek.
-            .readingMark(.respond)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        CardEndRow(detail: detail)
+            .id(Self.pageEnd)
             .revealedOnScroll()
+            .onScrollVisibilityChange(threshold: 0.3) { [reading] visible in if visible { reading.sawEnd() } }
     }
 
     /// Cover, title and byline: what a list already knows of the card. The cover, `coverGap`, the

@@ -18,8 +18,9 @@ import Testing
         var answersYes = true
         var asked = 0
         var registered = 0
-        /// Messages off here, so the opt-in switches alone decide what the cases below check.
-        var stored = Settings(picks: false, connectionCards: false, messages: false)
+        /// Messages and 有人共振 (round 26: both on until turned off) off here, so the opt-in switches alone decide what
+        /// the cases below check.
+        var stored = Settings(picks: false, connectionCards: false, messages: false, resonanceTaps: false)
         var readFails = false
         var saveFails = false
         /// Holds a save's answer back until the test opens it.
@@ -163,7 +164,7 @@ import Testing
     @Test func aSwitchOnWhileTheSystemSaysNoIsShownWithTheWayToSettings() async {
         let world = World()
         world.permission = .denied
-        world.stored = Settings(picks: true, connectionCards: false, messages: false)
+        world.stored = Settings(picks: true, connectionCards: false, messages: false, resonanceTaps: false)
         let model = model(world)
         await model.load()
         // Turned on elsewhere (the web, another phone): nothing it asks for can show here.
@@ -177,8 +178,9 @@ import Testing
     @Test func messagesAreOnUntilTurnedOffAndCountForTheWayToSettings() async {
         let world = World()
         world.permission = .denied
-        // An account that never touched the switch (or an older server that leaves it out).
-        world.stored = Settings(picks: false, connectionCards: false)
+        // An account that never touched the switch (or an older server that leaves it out); 有人共振 turned off, so
+        // messages alone decide it here.
+        world.stored = Settings(picks: false, connectionCards: false, resonanceTaps: false)
         let model = model(world)
         await model.load()
         #expect(model.isOn(.messages) && !model.isOn(.picks))
@@ -186,6 +188,21 @@ import Testing
         #expect(model.permissionDenied)
         await model.set(.messages, false)
         #expect(world.asked == 0 && world.saves == ["messages=false"])
+        #expect(!model.permissionDenied)
+    }
+
+    /// Round 26 §U8: 有人共振 (resonanceTaps) is on until turned off, as messages are — an account that never touched it
+    /// (or a server that leaves it out) has it on, so a system that keeps notifications off this phone is said.
+    @Test func tapsAreOnUntilTurnedOffAndCountForTheWayToSettings() async {
+        let world = World()
+        world.permission = .denied
+        world.stored = Settings(picks: false, connectionCards: false, messages: false)
+        let model = model(world)
+        await model.load()
+        #expect(model.isOn(.resonanceTaps) && !model.isOn(.messages))
+        #expect(model.permissionDenied)
+        await model.set(.resonanceTaps, false)
+        #expect(world.asked == 0 && world.saves == ["resonanceTaps=false"])
         #expect(!model.permissionDenied)
     }
 

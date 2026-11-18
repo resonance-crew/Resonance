@@ -285,3 +285,60 @@ import UIKit
         func cards(_ keys: [String]) { cardKeys.append(keys) }
     }
 }
+
+/// Round 26 §U8: the bell draws someone resonating — the newest named in bold, the others counted (「小安和另外 2 人與
+/// 你的卡片共振了」), their face, the card's thumbnail — and the weekly read summary, no one named, the sparkle glyph;
+/// both open the card, never a thread.
+extension NotificationRowTests {
+    private func bell(_ type: String, payload: [String: Any]) -> NotificationsStore.Item {
+        NotificationsStore.item(id: "rtap_c1_20261119", data: ["type": type, "payload": payload, "readAt": NSNull()])
+    }
+
+    @Test func aTapRowNamesItsNewestTapperAndCountsTheOthers() async {
+        let one = bell("resonance_tap", payload: ["cardId": "c1", "fromUserIds": ["dora"]])
+        let three = bell("resonance_tap", payload: ["cardId": "c1", "fromUserIds": ["dora", "eli", "fay"]])
+        #expect(three.fromUserId == "dora" && three.fromUserIds == ["dora", "eli", "fay"])
+        #expect(BellSentence.namesSomeone("resonance_tap"))
+        // The row keeps no pen name: it is its newest tapper's, as read.
+        let extras = BellExtras(cards: CardSummaries { _ in [] }) { _ in .failed }
+        await extras.load([three]) { $0 == "dora" ? Person(id: "dora", data: ["handle": "小安"]) : nil }
+        let handle = NotificationsScreen.handle(of: three, extras: extras)
+        #expect(handle == "小安")
+        let many = BellSentence.of(three, handle: handle)
+        #expect(many.handle == "小安")
+        #expect(many.whole == L10n.App.Notifications.tapMany(handle: "小安", count: 2))
+        #expect(BellSentence.of(one, handle: "小安").whole == L10n.App.Notifications.tap(handle: "小安"))
+        if case .person = NotificationsScreen.face(of: three, extras: extras) {} else { Issue.record("the tapper's face") }
+    }
+
+    @Test func theReadSummaryNamesNoOne() {
+        let summary = bell("read_summary", payload: ["cardId": "c1", "readers": 5, "reread": false])
+        let again = bell("read_summary", payload: ["cardId": "c1", "readers": 5, "reread": true])
+        #expect(summary.readers == 5 && !summary.reread && again.reread)
+        #expect(BellSentence.of(summary).handle == nil)
+        #expect(BellSentence.of(summary).whole == L10n.App.Notifications.readSummary(count: 5))
+        #expect(BellSentence.of(again).whole == L10n.App.Notifications.readSummaryReread(count: 5))
+        #expect(!BellSentence.namesSomeone("read_summary"))
+        #expect(BellSentence.glyph("read_summary") == .sparkle)
+    }
+
+    @Test func bothOpenTheCardNeverAThread() {
+        let tap = bell("resonance_tap", payload: ["cardId": "c1", "fromUserIds": ["dora"]])
+        let anonymous = bell("resonance_tap", payload: ["cardId": "c1", "fromUserIds": ["dora"], "anonymous": true])
+        let summary = bell("read_summary", payload: ["cardId": "c1", "readers": 3, "reread": false])
+        #expect(NotificationsScreen.route(for: tap) == .card("c1"))
+        #expect(NotificationsScreen.route(for: anonymous) == .card("c1"))
+        #expect(NotificationsScreen.route(for: summary) == .card("c1"))
+    }
+
+    @Test func thisBuildSaysItDrawsBoth() {
+        #expect(PushAPI.capabilities == ["bell-tap", "bell-read-summary"])
+    }
+
+    @Test func aTapRowDrawsItsCardOnTheRight() throws {
+        let label = NotificationRowLabel(sentence: BellSentence.of(type: "resonance_tap", handle: "小安", count: 2), preview: nil,
+                                         unread: true, face: .initials("小安", seed: 3), card: .pending)
+        let size = UIHostingController(rootView: label.frame(width: 402)).sizeThatFits(in: CGSize(width: 402, height: 400))
+        #expect(size.height >= NotificationRowLabel.thumbSize)
+    }
+}
