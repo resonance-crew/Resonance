@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type DocumentData, type Firestore } from 'firebase-admin/firestore';
+import { deleteCard } from '@/lib/api/v1/cards';
 import { restoreCard, trashCard } from '@/lib/api/v1/trash';
 import { indexCard } from '@/lib/recommend/indexCard';
 import { indexOwed, markIndexOwed } from '@/lib/recommend/indexOwed';
@@ -31,6 +32,8 @@ const mocks = vi.hoisted(() => ({
   whileEmbedding: null as (() => Promise<unknown>) | null,
   /** Runs inside the vector write, before it lands: what happens between the card's last read and the write. */
   beforeUpsert: null as (() => Promise<unknown>) | null,
+  /** Runs inside the vectors' removal, before it lands: what happens while an unlisted reading leaves the pool. */
+  whileDeletingVectors: null as (() => Promise<unknown>) | null,
   /** Runs inside the reading's LLM call. */
   whileSigning: null as (() => Promise<unknown>) | null,
   /** How many readings were asked of the LLM, and with what. */
@@ -107,6 +110,10 @@ beforeAll(() => {
       await mocks.beforeUpsert?.();
       return real.upsert(records);
     },
+    deleteByCard: async (cardId: string) => {
+      await mocks.whileDeletingVectors?.();
+      return real.deleteByCard(cardId);
+    },
   });
 });
 
@@ -122,6 +129,7 @@ beforeEach(async () => {
   });
   mocks.whileEmbedding = null;
   mocks.beforeUpsert = null;
+  mocks.whileDeletingVectors = null;
   mocks.whileSigning = null;
   mocks.signed = 0;
   mocks.asked = [];
@@ -152,6 +160,15 @@ async function vectorsOf(cardId: string): Promise<Record<string, unknown>> {
 
 const trash = () => trashCard(db, 'alice', 'live', { vectors: mocks.store! });
 const restore = () => restoreCard(db, 'alice', 'live', { vectors: mocks.store! });
+/** Its author's 永久刪除 (DELETE /cards/{id}): the card, its reading and its vectors, for good. */
+const deleteForGood = () => deleteCard(db, 'alice', 'live', { vectors: mocks.store! });
+/** A hook that runs once: the delete lands at that point of the run, and the delete's own calls pass through. */
+const once = (hook: 'whileEmbedding' | 'whileSigning' | 'whileDeletingVectors', run: () => Promise<unknown>) => {
+  mocks[hook] = async () => {
+    mocks[hook] = null;
+    await run();
+  };
+};
 
 describe('indexing a card the trash reaches meanwhile', () => {
   it('indexes a card trashed while the LLM ran, its vectors private, and the restore brings them back public', async () => {
@@ -214,6 +231,42 @@ describe('indexing a card the trash reaches meanwhile', () => {
     };
     expect(await indexCard('live')).toEqual({ indexed: false, reason: 'not-found' });
     expect(await vectorsOf('live')).toEqual({});
+  });
+});
+
+// Round 26 §A1.6: a card's reading is deleted with it (deleteCard's transaction), and indexCard writes the reading
+// only in a transaction that finds the card still there — so a card deleted for good while the models ran (up to
+// INDEX_DEADLINE_MS after its publish or applied edit) is left with no reading, and no vectors.
+describe('indexing a card deleted for good while it runs', () => {
+  const reading = () => db.doc('cardSignatures/live').get();
+
+  it('leaves no reading and no vectors for a card deleted while its vectors were embedded', async () => {
+    once('whileEmbedding', deleteForGood);
+    expect(await indexCard('live')).toEqual({ indexed: false, reason: 'not-found' });
+    expect((await reading()).exists).toBe(false);
+    expect(await vectorsOf('live')).toEqual({});
+    expect((await db.doc('cards/live').get()).exists).toBe(false);
+  });
+
+  it('leaves none for an unlisted reading (feeling only) whose card was deleted as it left the pool', async () => {
+    expect(await indexCard('live')).toEqual({ indexed: true, channels: 2 });
+    mocks.reading = { moodOnly: true };
+    once('whileDeletingVectors', deleteForGood);
+    expect(await indexCard('live', { force: true })).toEqual({ indexed: false, reason: 'not-found' });
+    expect((await reading()).exists).toBe(false);
+    expect(await vectorsOf('live')).toEqual({});
+    expect((await db.doc('cards/live').get()).exists).toBe(false);
+  });
+
+  it('records no failed reading for a card deleted while it was read, the model cut off at its cap', async () => {
+    expect(await indexCard('live')).toEqual({ indexed: true, channels: 2 });
+    await db.doc('cards/live').update({ story: 'I cleared out the drawer tonight, and kept the key.' });
+    once('whileSigning', deleteForGood);
+    mocks.next = [() => { throw new ChatIncomplete('length', ''); }];
+    expect((await indexCard('live')).indexed).toBe(false);
+    expect((await reading()).exists).toBe(false);
+    expect(await vectorsOf('live')).toEqual({});
+    expect((await db.doc('cards/live').get()).exists).toBe(false);
   });
 });
 

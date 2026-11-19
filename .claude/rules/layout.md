@@ -29,6 +29,12 @@ The owner reads three kinds of device, each with its own look — decide by the 
 - **Lines meet, fills fill**: a band or panel reaches every line next to it — the bar's pen line, a pane divider, the next band's rule — with no strip of another paper or a gap between; a rule ends on the line it meets; anything a scroll or a pull reveals past an edge continues the paper at that edge.
 - Check every such change on a phone, a tablet in both orientations and the Mac (the screenshots' iPhone, iPad, Android phone/tablet and Mac captures), and make it on every platform in the same change.
 
+## The end of a story (round 26)
+
+- **The end row** (the capsule 共振 · 寄小紙條 · 用卡片回應 and the faces' line under it, 0 apart, 44 tall — Android 48): full words, then short (寫卡片; English is short on both apps: Resonate · Note · Card), then two lines with 共振 alone on the first (8 between); no segment ever hidden or reduced to a glyph. A content width ≤ 340 starts from the short words, the same threshold on the three platforms (web `NARROW_ROW`, iOS `EndRowLabels.narrowRow`, Android `EndRowLayout.NARROW`).
+- **Who resonated**: a reader's list is a centred `Modal` at ≤ 720 (`TAP_LIST_DIALOG_QUERY`) and wider a `PaperSheet` popover at the faces (8 below, aligned to their start, 280 wide, scrolling after six rows of 52); iPad and Mac draw it as a popover over the scrolling content (it scrolls with the faces), Android tablets as `PaperPopover`. The author's list is a centred dialog 480 wide on every device.
+- **The note in place** (design-system.md, Dialogs): phone = the column; tablet, Mac, desktop = min(the story's column, 680) from where the capsule starts; 3 lines on a phone (2 in a short window), 5 elsewhere, then it scrolls inside. On focus the page scrolls the field's block to 12 above the keyboard and nothing floats: Android's card page `LazyColumn` carries `imePadding`, so the field rises over the keyboard; iOS gives the block no bottom spacing in the layout and keeps the 12 with the scroll target's transparent range (`noteScrollTarget(_:)`, `NoteInPlace.keyboardGap`), the next section 40 under the field.
+
 ## Never a bottom sheet
 
 No bottom sheets, on any platform (the owner, round 17: 「button sheet 现在不在我们的整个设计里面……应该要做成 model」): what would rise from the foot is the modal dialog, a popover at its control on a wide screen, or a panel in the keyboard's place — `src/lib/design/noBottomSheets.test.ts` refuses the apps' system sheets (SwiftUI `.sheet` / `presentationDetents`, UIKit's sheet controller, Compose's `ModalBottomSheet`).

@@ -50,6 +50,14 @@ npx tsx scripts/ci/claudeMdCoverage.ts        # old CLAUDE.md at 343c6f21 agains
 | Sentence | Why |
 | --- | --- |
 | `all still under reduced motion, Save-Data, Low Power or battery saver` | Round 25 (2026-11-15), the owner: 「省电模式应该没有影响这么大」 — Low Power Mode and battery saver no longer hold the sticker picker still, so the picker's sentence in `.claude/rules/messages-ui.md` now says reduced motion (and the web's Save-Data) only. The rest of the sentence is unchanged |
+| search the vector store by COSINE distance (smaller = closer) | Round 26 (2026-11-19, §A2): the recommender matches cards by their parts' vectors — exactly in memory while the pool is ≤ 300 cards, by a vector search's candidates rescored past it (`.claude/rules/ai.md`); the rest of the sentence (`indexCard`, the trash, the named-only author boost) is kept there |
+| restates existing cards | Round 26 (2026-11-19, §A5.1): `scripts/backfill-recommend-index.ts` became `npx tsx scripts/backfill.ts recommend-index --all [--apply]`, a dry run unless `--apply`, run on production only after the push (`.claude/rules/ai.md`) |
+| a tap marks it, 共振 sends it), and the owner's ⋯ takes a resonance back (取消共振) | Round 26 (2026-11-19, §Q1, M1): 共振 is the tap now; the card page's 用卡片回應 opens the picker, 回應 sends, the ⋯ says 取消回應 (`.claude/rules/data-layer.md`) |
+| A published resonance turns the button into 已共振 | Round 26: a published reply turns the segment into ✓ 已回應 (`.claude/rules/data-layer.md`); 已共振 is the tap's segment while it is on |
+| and the lists around it; reporting it (the server fills in an anonymous author) | Round 26 (2026-11-19): the card's answer adds `CardDetail.tap` and gives `coreInsight` to its author alone (`.claude/rules/api.md`, the row kept with that clause added) |
+| the build draws a conversation's notification itself) and | Round 26: `PUT /me/devices` capabilities add `bell-tap` and `bell-read-summary` (`.claude/rules/api.md`, the row kept with them added) |
+| the push switches `{ picks, connectionCards, messages }` — the opt-in two | Round 26: the switches add `resonanceTaps` (有人共振), on until turned off like `messages` (`.claude/rules/api.md`, the row kept with it added) |
+| respond to others by authoring a *resonance* (a response card with a | Round 26 (2026-11-19, §Q1, M1): 共振 became the tap, the reply card is 用卡片回應 (still a resonance in the code), and the note the third way to answer; `CLAUDE.md`'s Architecture says the three |
 
 ## Where each old line went
 

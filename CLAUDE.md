@@ -39,7 +39,7 @@ Seed the emulators with known test accounts: `npx tsx scripts/seed-emulator.ts`.
 
 ## Architecture
 
-**Resonance**（共振）is a multilingual social storytelling platform built around "story cards" — users write cards, respond to others by authoring a *resonance* (a response card with a `referenceCardId`, **not** a like), and form one-to-one connections by resonating, or when a card's author replies to a note (older invites can still be answered, none are sent).
+**Resonance**（共振）is a multilingual social storytelling platform built around "story cards" — users write cards and answer others' in three ways (round 26): **共振**, the tap (a quiet signal to the author, kept on the server, never a public number: `resonanceTaps`, `PUT /api/v1/cards/{id}/tap`), a **note** to the author (小紙條, written in place under the story, never in a dialog), or **用卡片回應** — a reply card with a `referenceCardId`, which the code still calls a *resonance* (`resonate.ts`, `/resonances`). They form one-to-one connections by replying with a public, named card, or when a card's author replies to a note (older invites can still be answered, none are sent); a tap connects no one.
 Built with Next.js 15 (App Router) + React 19 + TypeScript 5.7 (strict).
 No Tailwind — all styling uses CSS Modules + CSS custom properties defined in `src/styles/tokens.css`.
 `README.md` is the project's landing page (what, why, download, getting started; `README.zh-TW.md` in Chinese) and `CONTRIBUTING.md` / `SECURITY.md` say how to help and how to report a vulnerability; the older architecture write-up in Chinese is `docs/ARCHITECTURE.zh-TW.md` (this file is the current one).

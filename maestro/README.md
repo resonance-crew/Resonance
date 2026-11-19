@@ -21,8 +21,9 @@ come, are Playwright's.
 | `sticker-replies` | alice | sends 心暖暖, answers bob's 謝謝 (the row names 貼圖：謝謝), then her own 心暖暖: the row now names it and no longer 謝謝 (#10) |
 | `send-picture` | alice | `addMedia` puts `assets/paper.png` in the library; ＋ (附上圖片或卡片) → Android's 允許存取 and the system's question / iOS's inline picker → the picture rides (移除第 1 張圖片) → 送出 → 查看圖片 in the thread |
 | `answer-letter` | alice | `/messages/carol`: carol's letter (her note quoting alice's card, 回覆後，你們就能開始聊天); alice's reply connects them, the hint goes |
-| `leave-note` | alice | bob's card `rain-walk`: 寄小紙條, writes, 寄出, 紙條寄出了 |
-| `resonate` | alice | carol's card `carol-note`: 共振 → the picker → 寫給十年前的自己 → 共振: 已共振, her card listed under carol's; 收藏 → 取消收藏 |
+| `leave-note` | alice | bob's card `rain-walk`: 寄小紙條 opens the note in place (`note-field`) — no dialog on screen (no 取消) — writes, 寄出, 紙條寄出了 |
+| `tap` | alice | bob's card `rain-walk` (round 26): 共振 → 已共振, her face in the faces (`tap-faces`) and no field appears; 寄小紙條 opens the note in place (no 取消), writes, 寄出, 紙條寄出了, the field closes; 已共振 takes the tap back → 共振 |
+| `reply-with-card` | alice | carol's card `carol-note`: 用卡片回應 → the picker (用卡片回應這篇) → 寫給十年前的自己 → 回應: ✓ 已回應, her card listed under carol's; 收藏 → 取消收藏 |
 | `open-link` | alice | links into the app (#8): bob's card by its link; a crafted thread link (a note id with a `/`) opens the thread alone; a card key with a `/` names no page; the app still routes: bob's profile by its link. Android: `openLink` with `autoVerify`; iOS: a relaunch with `-openLink` (`common/open-link.yaml` says why) |
 | `open-notification` | alice | the tab bar's 通知: carol's letter and bob's note unread with their words; carol's row opens their conversation (her note quoting alice's card, 回覆後，你們就能開始聊天) |
 | `publish-card` | alice | `/write`: title, Return, a line of story, ✓, 公開, 發布 → the card's page with its title, story and share |
@@ -51,6 +52,7 @@ VISUAL_SKIP_BUILD=1 npx tsx scripts/visual/flows.ts ios      # the last build, i
 | `media` | send-picture | pictures, the attach panel, the gallery |
 | `links` | open-link | Route, links, App Links / Universal Links |
 | `animations` | sticker-breath | what moves by itself: before such a flow the runner turns the system's animations on (animator scale 1, which it otherwise holds at 0) and battery saver on, and puts both back after (`flowSettings` in `scripts/visual/flows.ts`, Android) |
+| `card` | leave-note, tap, reply-with-card, translate-story, trash-restore | the card page: its end row (共振, the note in place, 用卡片回應, 收藏), the translate line, the trash |
 | `translation` | translate-story | the translate line, the story translation's client, 自動翻譯 |
 | `tablet` | sign-in, send-message, send-sticker, sticker-replies, open-notification | written to hold on two panes and popovers: `--device tablet` runs these alone |
 
@@ -139,7 +141,8 @@ name); add it to `ORDER` in `scripts/visual/flows.ts` to place it.
   `與 bob 的對話|想說的話⋯`, `寄(一張)?小紙條(給作者)?`); a field whose hint is drawn rather than
   said gets an id — `accessibilityIdentifier` on iOS, `Modifier.flowTag("…")` on Android (a test tag
   shown as the resource id in debug builds, `apps/android/.../ui/FlowTag.kt`). Ids so far:
-  `emulator-email`, `emulator-password`, `note-field`. A selector's words are checked against
+  `emulator-email`, `emulator-password`, `note-field`, `tap-faces` (a reader's faces under the end row), `author-taps`
+  (the author's line of who resonated) — the same `accessibilityIdentifier` on iOS. A selector's words are checked against
   `src/messages` and the seed by `scripts/visual/flows.test.ts`, so a renamed string fails in `npm test`.
 - **Tags**: every flow has some; a new one joins a group above, and `tablet` only once it has passed on
   a tablet.

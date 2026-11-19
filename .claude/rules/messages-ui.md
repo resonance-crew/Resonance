@@ -41,6 +41,7 @@ The outline is steady (web `wobRect` `steady` through `segmentCapsuleShape(…, 
 Pictures dropped anywhere on the thread's pane are taken.
 A quote of a sticker is its thumb alone (the reply row too), and a quote over a sticker reply keeps no overlap room.
 Drafts per account and conversation on the device (web `lib/data/chatDrafts`, iOS `ChatDrafts`, Android `ChatDraftBook`): words, reply, note, card — never pictures; gone on send, when emptied, with the conversation and at sign-out; the list shows a draft after a pen, in `--terracotta-deep` (never the word 草稿).
+The card page's note (round 26) is this composer's input capsule written in place under the story — the envelope's column 44 (Android 48), the field, the send segment 52 (tonal at rest, solid only with text), no ☺, ＋ or ⤢ — never a dialog (design-system.md, Dialogs); on Android the card page's `LazyColumn` carries `imePadding`, so the field rises over the keyboard with nothing floating (layout.md).
 
 ## The thread, as drawn (from the design system)
 
