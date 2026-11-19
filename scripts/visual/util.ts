@@ -108,19 +108,26 @@ export function pixelsApart(a: Buffer, b: Buffer): number {
 /**
  * Takes a screenshot again and again until two in a row match: a screen still
  * loading (skeletons, a fade, a font swapping in) never makes it into a capture.
- * `tolerance` pixels may differ (a blinking caret the platform can't hide).
+ * `tolerance` pixels may differ (a blinking caret the platform can't hide), or
+ * `same` says what matches (Android's: apart only by a caret's blink).
  * Gives back the last one, and whether it settled, once `timeoutMs` runs out.
  */
 export async function settle(
   take: () => Promise<Buffer>,
-  { intervalMs = 400, timeoutMs = 20_000, tolerance = 0 } = {},
+  {
+    intervalMs = 400,
+    timeoutMs = 20_000,
+    tolerance = 0,
+    same,
+  }: { intervalMs?: number; timeoutMs?: number; tolerance?: number; same?: (a: Buffer, b: Buffer) => boolean | Promise<boolean> } = {},
 ): Promise<{ png: Buffer; settled: boolean }> {
+  const match = same ?? ((a: Buffer, b: Buffer) => a.equals(b) || pixelsApart(a, b) <= tolerance);
   const end = Date.now() + timeoutMs;
   let last = await take();
   while (Date.now() < end) {
     await sleep(intervalMs);
     const next = await take();
-    if (next.equals(last) || pixelsApart(last, next) <= tolerance) return { png: next, settled: true };
+    if (await match(last, next)) return { png: next, settled: true };
     last = next;
   }
   return { png: last, settled: false };

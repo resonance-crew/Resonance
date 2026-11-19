@@ -1,7 +1,8 @@
+import { PNG } from 'pngjs';
 import { describe, expect, it } from 'vitest';
 import en from '../../src/messages/en.json';
 import zhTW from '../../src/messages/zh-TW.json';
-import { GBOARD_PACKAGE, keysOn, stillLoading } from './android';
+import { GBOARD_PACKAGE, apartBox, caretBlink, keysOn, stillLoading, textFields } from './android';
 
 // The 2.5.0 release run kept three Android card pages taken before they loaded: a skeleton holds still as long as a
 // page does. The app names its skeletons for TalkBack (L10n.Home.moreLoading), and uiautomator's dump shows that name.
@@ -42,5 +43,54 @@ describe('keysOn', () => {
     const { commands, run } = device([VOICE]);
     expect(await keysOn(run)).toBeNull();
     expect(commands).toEqual(['ime list -s -a']);
+  });
+});
+
+// The same run: the tablet's thread-keyboard and dark card-note-open never held still — the focused field's caret blinks
+// every 500 ms whatever the animation scales, so two looks matched only when they met it in the same phase.
+describe('a caret blinking in a text field', () => {
+  const W = 200;
+  const H = 120;
+  const frame = (paint: (put: (x: number, y: number, rgb: [number, number, number]) => void) => void = () => {}) => {
+    const png = new PNG({ width: W, height: H });
+    png.data.fill(240);
+    const put = (x: number, y: number, [r, g, b]: [number, number, number]) => {
+      const i = (y * W + x) * 4;
+      png.data[i] = r; png.data[i + 1] = g; png.data[i + 2] = b; png.data[i + 3] = 255;
+    };
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) put(x, y, [240, 232, 220]);
+    paint(put);
+    return PNG.sync.write(png);
+  };
+  const bar = (x0: number, y0: number, w: number, h: number) => (put: (x: number, y: number, rgb: [number, number, number]) => void) => {
+    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) put(x, y, [60, 40, 30]);
+  };
+  const field = { x: 20, y: 30, width: 160, height: 60 };
+  const dump = `<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy rotation="0"><node index="0" class="android.widget.FrameLayout" bounds="[0,0][200,120]"><node index="1" text="" class="android.widget.EditText" focusable="true" focused="true" bounds="[20,30][180,90]" /></node></hierarchy>`;
+
+  it('reads the window’s text fields from the dump', () => {
+    expect(textFields(dump)).toEqual([field]);
+    expect(textFields('')).toEqual([]);
+  });
+
+  it('counts frames apart only by a caret in a field as one, and names the caret’s box for the comparison to skip', () => {
+    const on = frame(bar(40, 40, 5, 40));
+    const off = frame();
+    const box = apartBox(on, off);
+    expect(box).toEqual({ x: 40, y: 40, width: 5, height: 40 });
+    expect(caretBlink(box, textFields(dump))).toEqual({ x: 36, y: 36, width: 13, height: 48 });
+    // Skipped from then on: the same frames are no longer apart.
+    expect(apartBox(on, off, [caretBlink(box, textFields(dump))!])).toBeNull();
+    expect(apartBox(off, frame())).toBeNull();
+  });
+
+  it('never forgives a change bigger than a caret, or one outside every field', () => {
+    const wide = apartBox(frame(bar(40, 40, 60, 40)), frame());
+    expect(caretBlink(wide, [field])).toBeNull();
+    const outside = apartBox(frame(bar(5, 5, 4, 20)), frame());
+    expect(outside).toEqual({ x: 5, y: 5, width: 4, height: 20 });
+    expect(caretBlink(outside, [field])).toBeNull();
+    expect(caretBlink(apartBox(frame(bar(40, 40, 5, 40)), frame()), [])).toBeNull();
+    expect(caretBlink(null, [field])).toBeNull();
   });
 });

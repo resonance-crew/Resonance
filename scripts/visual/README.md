@@ -370,7 +370,10 @@ change near one of those states (`capture android --device phone-large --only se
 - **Motion is never captured mid-way.** Web: `reducedMotion: 'reduce'`, CSS animations finished and
   the caret hidden by Playwright. iOS and Mac: the debug-only `-visualCapture YES` turns UIKit and
   SwiftUI animations off and hides scroll indicators (Mac also `-AppleShowScrollBars WhenScrolling`).
-  Android: the three system animation scales at 0.
+  Android: the three system animation scales at 0. Android's caret can't be hidden from outside the
+  app (Compose blinks it every 500 ms whatever the scales): frames apart only by a caret-sized box inside a
+  text field count as the same, and that box is written beside the capture for the comparison to skip
+  (`steady` in `android.ts`).
 - **First-times hints** (a hint shown for its first three displays, counted on the device and in the
   account's profile, on the one stack every platform shares): a screen naming them (`hints`, card-note-open's
   privacy line) starts every capture with them unspent (`hints.ts`).

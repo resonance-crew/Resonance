@@ -32,11 +32,12 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import en from '../../src/messages/en.json';
 import zhTW from '../../src/messages/zh-TW.json';
+import { PNG } from 'pngjs';
 import { forgetBooted, mayShutDown, noteBooted } from './devices';
 import { unspendHints } from './hints';
-import { lookNote, secondLook, type Look } from './secondLook';
+import { lookNote, secondLook, type Look, type Shot } from './secondLook';
 import { shotName, type Account, type Screen, type Variant } from './screens';
-import { ROOT, SEED_PASSWORD, pixelsApart, settle, shotPath, sleep, type Capture, type CaptureContext } from './util';
+import { ROOT, SEED_PASSWORD, ignorePath, pixelsApart, settle, shotPath, sleep, type Capture, type CaptureContext, type Rect } from './util';
 import { devicesFor, groups, plan, stateOf, type DeviceState } from './variants';
 
 const execFileAsync = promisify(execFile);
@@ -243,6 +244,61 @@ async function hierarchy(serial: string): Promise<string | null> {
 }
 
 /**
+ * A text field's caret at its largest, in device pixels: Compose draws it 2 dp wide (about 6 px at the phone's density,
+ * antialiased a pixel either side) and a line of text tall (at the large-text state's font scale 2, under 220 px).
+ */
+export const CARET_MAX = { width: 16, height: 220 };
+
+/**
+ * The window's text fields in a `uiautomator dump` (Compose's text fields are `android.widget.EditText` to
+ * accessibility), in device pixels. Focused or not: only the focused one blinks a caret, and the dump's `focused`
+ * is not always the input focus.
+ */
+export function textFields(xml: string): Rect[] {
+  const fields: Rect[] = [];
+  for (const [tag] of xml.matchAll(/<node\b[^>]*>/g)) {
+    if (!/\bclass="android\.widget\.EditText"/.test(tag)) continue;
+    const b = /\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/.exec(tag);
+    if (b) fields.push({ x: +b[1], y: +b[2], width: +b[3] - +b[1], height: +b[4] - +b[2] });
+  }
+  return fields;
+}
+
+const inside = (x: number, y: number, r: Rect) => x >= r.x && y >= r.y && x < r.x + r.width && y < r.y + r.height;
+
+/** Where two frames differ (any channel of any pixel), outside `ignore`: one box round all of it, or null where nothing does. */
+export function apartBox(a: Buffer, b: Buffer, ignore: Rect[] = []): Rect | null {
+  const pa = PNG.sync.read(a);
+  const pb = PNG.sync.read(b);
+  if (pa.width !== pb.width || pa.height !== pb.height) return { x: 0, y: 0, width: Math.max(pa.width, pb.width), height: Math.max(pa.height, pb.height) };
+  let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+  for (let y = 0; y < pa.height; y++) {
+    for (let x = 0; x < pa.width; x++) {
+      const i = (y * pa.width + x) * 4;
+      if (pa.data[i] === pb.data[i] && pa.data[i + 1] === pb.data[i + 1] && pa.data[i + 2] === pb.data[i + 2] && pa.data[i + 3] === pb.data[i + 3]) continue;
+      if (ignore.some((r) => inside(x, y, r))) continue;
+      x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+    }
+  }
+  return x1 < 0 ? null : { x: x0, y: y0, width: x1 - x0 + 1, height: y1 - y0 + 1 };
+}
+
+/**
+ * Whether what two frames differ by (`apartBox`) is a caret blinking: no bigger than a caret (CARET_MAX), inside one of
+ * the window's text fields. Answers that box with a few pixels to spare — a region the capture asks the comparison to
+ * skip (`<capture>.ignore.json`, as the web's cover titles) — or null.
+ */
+export function caretBlink(box: Rect | null, fields: Rect[]): Rect | null {
+  if (!box || box.width > CARET_MAX.width || box.height > CARET_MAX.height) return null;
+  const within = fields.some((f) => box.x >= f.x && box.y >= f.y && box.x + box.width <= f.x + f.width && box.y + box.height <= f.y + f.height);
+  if (!within) return null;
+  const spare = 4;
+  const x = Math.max(0, box.x - spare);
+  const y = Math.max(0, box.y - spare);
+  return { x, y, width: box.x + box.width + spare - x, height: box.y + box.height + spare - y };
+}
+
+/**
  * A frame that holds still is not yet the page: with the animations off, the launch's waves,
  * a loader and a page's skeleton all hold still while the account and the page are read, and
  * none can be told from a quiet page by its pixels (a private card in the writer is as bare as
@@ -251,28 +307,47 @@ async function hierarchy(serial: string): Promise<string | null> {
  * hierarchy names no skeleton (`stillLoading`: the 2.5.0 release run kept three cards taken before
  * they loaded, a skeleton that held still for longer than both looks). One still loading at the
  * end is unsettled, which fails the run.
+ *
+ * A focused field's caret blinks every 500 ms whatever the animation scales (Compose's
+ * CursorAnimationState; the web and the Apple apps hide theirs, the Android app has no switch for
+ * it): frames apart only by a caret in a text field (`caretBlink`) count as the same, and its box
+ * joins `ignore` — the regions this capture's comparisons skip, written beside it. Without that,
+ * a keyboard screen held still only when two looks met the caret in the same phase (run
+ * 20261118-235458: the tablet's thread-keyboard and dark card-note-open never did).
  */
-async function steady(serial: string): Promise<{ png: Buffer; settled: boolean }> {
+async function steady(serial: string, ignore: Rect[] = []): Promise<Shot> {
+  const same = async (a: Buffer, b: Buffer) => {
+    if (a.equals(b) || pixelsApart(a, b) === 0) return true;
+    const box = apartBox(a, b, ignore);
+    if (!box) return true;
+    const blink = caretBlink(box, box.width <= CARET_MAX.width && box.height <= CARET_MAX.height ? textFields((await hierarchy(serial)) ?? '') : []);
+    if (!blink) return false;
+    ignore.push(blink);
+    return true;
+  };
   const end = Date.now() + 90_000;
   for (;;) {
-    const shot = await settle(() => screencap(serial), { intervalMs: 1000, timeoutMs: 45_000 });
+    const shot = await settle(() => screencap(serial), { intervalMs: 1000, timeoutMs: 45_000, same });
     await sleep(3500);
     const again = await screencap(serial);
-    const still = again.equals(shot.png) || pixelsApart(again, shot.png) === 0;
+    const still = await same(again, shot.png);
     const loading = still && stillLoading((await hierarchy(serial)) ?? '');
     if (still && !loading) return { png: again, settled: shot.settled };
     if (Date.now() > end) return { png: again, settled: false };
   }
 }
 
-async function shoot(serial: string, ctx: CaptureContext, screen: Screen, first: boolean, key: string): Promise<Look> {
+async function shoot(serial: string, ctx: CaptureContext, screen: Screen, first: boolean, key: string): Promise<Look & { ignore: Rect[] }> {
   // Its hints unspent for its account on the stack (hints.ts), before the app reads the profile.
   await unspendHints(ctx, screen);
   await launch(serial, ctx, screen.as, screen.route, screen.app?.android);
   // A cold start reads the account and the page over the network (an account's first launch also signs in).
   await sleep(first ? 8000 : 4000);
   await demoBar(serial);
-  return secondLook(await steady(serial), () => steady(serial), { key });
+  // A caret's box found by either look is skipped by both, and by the comparison with the baseline.
+  const ignore: Rect[] = [];
+  const look = await secondLook(await steady(serial, ignore), () => steady(serial, ignore), { key, ignore });
+  return { ...look, ignore };
 }
 
 /**
@@ -351,14 +426,17 @@ async function captureDevice(id: string, serial: string, ctx: CaptureContext): P
       const name = shotName(screen, v);
       const key = `android/${id}/${name}`;
       if (screen.keyboard) await softKeyboard(serial, true);
-      let look: Look;
+      let look: Look & { ignore: Rect[] };
       try {
         look = await shoot(serial, ctx, screen, first, key);
       } finally {
         if (screen.keyboard) await softKeyboard(serial, false);
       }
       first = false;
-      writeFileSync(shotPath(ctx.runDir, 'android', id, name), look.png);
+      const file = shotPath(ctx.runDir, 'android', id, name);
+      writeFileSync(file, look.png);
+      // The caret's box, which the comparison skips (steady).
+      if (look.ignore.length) writeFileSync(ignorePath(file), JSON.stringify(look.ignore));
       if (!look.settled) unsettled.push(key);
       if (look.retaken) ctx.retaken.push(key);
       ctx.log(`  ${key}${lookNote(look)}`);
