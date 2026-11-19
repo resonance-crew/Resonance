@@ -316,7 +316,10 @@ private fun NoteCapsule(
     // page; where even the field has no room under the bar (a phone on its side), the bar steps aside ([onRoom]).
     val ime = WindowInsets.ime
     val statusBars = WindowInsets.statusBars
-    val barBottom = with(density) { inlineBarTop().toPx() }
+    // Read through rememberUpdatedState as the rest: the effect below lives as long as the focus, and the activity handles
+    // turning and unfolding itself (AndroidManifest configChanges), so the bar's height can change under a field that
+    // keeps it — the next reveal measures against the bar now, not the one there when the field took the focus.
+    val barBottom by rememberUpdatedState(with(density) { inlineBarTop().toPx() })
     val clearance = with(density) { NoteKeyboardClearance.toPx() }
     val room by rememberUpdatedState(onRoom)
     val lineNow by rememberUpdatedState(lineBelow)
