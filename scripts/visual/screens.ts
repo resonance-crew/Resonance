@@ -168,7 +168,7 @@ export const SCREENS: Screen[] = [
   { id: 'card-trashed', route: '/card/old-poem', as: 'alice',
     expect: "alice's card 一首沒寫完的詩 in her trash: the page says it is in the trash (days left before it goes) and offers 還原" },
   { id: 'messages', route: '/messages', as: 'alice',
-    expect: "The conversation list: bob (his note's words as the last line) and carol (her letter, waiting for an answer)" },
+    expect: "The conversation list: bob (his note's words as the last line) and carol (her letter, waiting for an answer), then under 已連結、還沒說過話 the connections alice hasn't written to yet — dora, eli and fay, each 還沒有訊息——說聲嗨吧" },
   { id: 'thread', route: '/messages/bob', as: 'alice',
     expect: "The thread with bob: a bubble with a heart reaction chip in its gutter, a 小紙團 sticker (牽牽 謝謝) with no bubble, alice's reply quoting his first line (a hug reaction), one dashed unsent line, bob's note quoting alice's card 寫給十年前的自己 above its words, the floating composer capsule (＋, field, ☺, send) at the foot" },
   // Round 23: the sticker panel (a popover on the web's desktop and the Mac), captured still.
