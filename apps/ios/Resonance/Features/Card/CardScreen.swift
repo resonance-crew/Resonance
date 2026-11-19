@@ -80,11 +80,6 @@ struct CardScreen: View {
         ScrollViewReader { proxy in
             ScrollView {
                 column.id(Self.pageHead)
-                    // A tablet's or the Mac's list of who resonated hangs under the faces, over the page's own content
-                    // (so it scrolls with them, round 26 §U2.5).
-                    .overlayPreferenceValue(TapsPopoverKey.self) { request in
-                        if let request { TapsPopover(request: request) }
-                    }
                     // Where the paper puppets' marks are measured, and their island laid over: the content's own points.
                     .mascotContent()
                     // A touch anywhere on the page is reading (§U7.1), told by the scroll view and never taken from it.

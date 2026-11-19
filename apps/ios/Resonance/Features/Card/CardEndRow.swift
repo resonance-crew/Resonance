@@ -92,9 +92,9 @@ struct CardEndRow: View {
             }
             .withSession(session)
         }
-        // A phone's list of who resonated: a centred dialog with no title (the reader sees only their connections).
-        .organicModal(isPresented: Binding(get: { listOpen && Self.listIsDialog(window) }, set: { if !$0 { listOpen = false } }),
-                      seed: 29, maxWidth: TapListMetrics.dialogWidth, closeLabel: L10n.Native.close) {
+        // The reader's list of who resonated: a centred dialog with no title (the reader sees only their connections),
+        // a phone's, a tablet's and the Mac's alike.
+        .organicModal(isPresented: $listOpen, seed: 29, maxWidth: TapListMetrics.dialogWidth, closeLabel: L10n.Native.close) {
             ReaderTapList(cardId: cardId) { listOpen = false }.withSession(session)
         }
         // The note field opens again, focused, on its words: the toast's 再寄一次, or a failure while the page is here.
@@ -248,10 +248,6 @@ struct CardEndRow: View {
             if !tap.shownFaces.isEmpty {
                 TapFaces(faces: tap.shownFaces, more: tap.showsMore, spoken: tap.spoken(viewer: session.uid),
                          isButton: !tap.onlyMine(viewer: session.uid)) { listOpen = true }
-                    .anchorPreference(key: TapsPopoverKey.self, value: .bounds) { anchor in
-                        listOpen && !Self.listIsDialog(window)
-                            ? TapsPopoverRequest(anchor: anchor, cardId: cardId, close: { listOpen = false }) : nil
-                    }
             }
         } end: {
             // 收藏: pressed while saved (filled), flipped at once; saving says 「收藏到卡片盒了」.
@@ -309,9 +305,6 @@ struct CardEndRow: View {
             scroll(Self.noteBlock)
         }
     }
-
-    /// The reader's list is a centred dialog on a phone, a popover under the faces wider.
-    static func listIsDialog(_ window: WindowLayout) -> Bool { window.layoutClass == .compact }
 }
 
 // MARK: - Row 2
