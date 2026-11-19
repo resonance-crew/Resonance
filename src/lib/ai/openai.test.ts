@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ChatIncomplete, EMBED_DIMENSIONS, IMAGE_TIMEOUT_MS, chatJSON, embed, generateImage, selectModel, signatureModel, type TokenUsage } from './openai';
+import { ChatIncomplete, EMBED_DIMENSIONS, IMAGE_TIMEOUT_MS, chatJSON, embed, embedModel, generateImage, selectModel, signatureModel, type TokenUsage } from './openai';
 
 // The low-level OpenAI helpers (round 26 §A1.3, D5): Structured Outputs and
 // reasoning models. A reasoning model spends its thinking from the reply's
@@ -101,6 +101,15 @@ describe('the models', () => {
 });
 
 describe('embed', () => {
+  it('embeds with text-embedding-3-large by default (the owner’s pick after the bake-off), at the index’s 1536 dimensions', async () => {
+    expect(embedModel()).toBe('text-embedding-3-large');
+    answer = { data: [{ embedding: [3, 4] }], usage: { prompt_tokens: 1 } };
+    await embed(['a'], { model: embedModel() });
+    expect(requests[0].body).toEqual({ model: 'text-embedding-3-large', input: ['a'], dimensions: 1536 });
+    vi.stubEnv('OPENAI_EMBED_MODEL', 'text-embedding-3-small');
+    expect(embedModel()).toBe('text-embedding-3-small');
+  });
+
   it('asks a third-generation model for the index’s 1536 dimensions, and tells its tokens', async () => {
     answer = { data: [{ embedding: [3, 4] }], usage: { prompt_tokens: 42 } };
     const usage: TokenUsage[] = [];

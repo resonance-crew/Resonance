@@ -19,8 +19,15 @@ export function imageModel(): string {
   return process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-2';
 }
 
+/**
+ * What a card's parts are embedded with. `text-embedding-3-large`, asked at
+ * the index's EMBED_DIMENSIONS, is the owner's pick after round 26's bake-off
+ * (2026-11-19): its neighbours ranked kin cards highest. The pool compares one
+ * model's vectors only (poolStats `recordModel`), so a change of model needs
+ * every card embedded again (the `recommend-index` backfill).
+ */
 export function embedModel(): string {
-  return process.env.OPENAI_EMBED_MODEL ?? 'text-embedding-3-small';
+  return process.env.OPENAI_EMBED_MODEL ?? 'text-embedding-3-large';
 }
 
 /**
@@ -42,8 +49,8 @@ export function rerankModel(): string {
  * read for what happened, how the author thought, what they gained and what
  * changed — a reasoning model, its own setting. Never `llmModel()`, whose
  * slug cap (SLUG_MAX_TOKENS) a reasoning model's thinking would spend.
- * The default is the round's first choice until the owner's pick after the
- * bake-off (scripts/recommend/dryrun.ts) is set in OPENAI_SIGNATURE_MODEL.
+ * The default is the owner's pick after round 26's bake-off
+ * (scripts/recommend/dryrun.ts, 2026-11-19): it read cards best to blind judges.
  */
 export function signatureModel(): string {
   return process.env.OPENAI_SIGNATURE_MODEL ?? 'gpt-6.2-sol';
