@@ -127,7 +127,7 @@ export const SCREENS: Screen[] = [
   { id: 'card', route: '/card/rich-story', as: 'alice',
     expect: "alice's own card 搬家後的第一個安靜夜晚: title, byline, bold/italic, a heading, a quote, lists, an embedded card, a link, a rule, an English line at the end" },
   { id: 'card-other', route: '/card/rain-walk', as: 'alice',
-    expect: "bob's card read by alice: byline with bob; where the story's end is in view, the end row — one capsule 共振 · 寄小紙條 · ✓ 已回應 (alice replied with 我也在雨裡走過), all tonal — and under it dora's, eli's and fay's faces on paper pads with 收藏 at the line's end" },
+    expect: "bob's card read by alice: byline with bob; where the story's end is in view, the end row — one capsule 共振 · 寄小紙條 · ✓ 已回應 (alice replied with 我也在雨裡走過), all tonal — and under it dora's, eli's and fay's faces overlapping, each on no pad of paper (the front face's pen line parts them), with 收藏 at the line's end" },
   { id: 'card-anonymous', route: '/card/unsigned-letter', as: 'alice',
     expect: 'An anonymous card: 匿名 in the byline, never a pen name; where its end is in view, the same end row as a named card (共振 · 寄小紙條 · 用卡片回應, 收藏)' },
   // Round 26 (§V4, SETTLED 9): the end of a story — the tap, its faces and their list, the note written in place, and
@@ -136,7 +136,7 @@ export const SCREENS: Screen[] = [
   // row to just under the middle of the window (its scroll-margin), the story's last lines above it.
   { id: 'card-tapped', route: '/card/first-coffee', as: 'alice', web: { scrollTo: '[data-end-row]' },
     app: { ios: ['-visualEnd', 'YES'], android: ['--es', 'cardEnd', 'end'] },
-    expect: "bob's 第一杯自己沖的咖啡 read by alice, who resonated with it: the capsule 已共振 (the verb's solid face, two waves) · 寄小紙條 · 用卡片回應 (tonal), and right under it alice's face first, then dora's and eli's, overlapping on pads of the page's paper, a blank paper disc after them (no number, no words), 收藏 at the line's end" },
+    expect: "bob's 第一杯自己沖的咖啡 read by alice, who resonated with it: the capsule 已共振 (the verb's solid face, two waves) · 寄小紙條 · 用卡片回應 (tonal), and right under it alice's face first, then dora's and eli's, overlapping with no pad of paper round any (the front face's own pen line parts them), a blank paper disc after them (no number, no words), 收藏 at the line's end" },
   { id: 'card-note-open', route: '/card/first-coffee', as: 'alice',
     web: { click: '[data-end-row] button[data-segment="note"]', scrollTo: '[data-end-row]' }, hints: ['note-privacy'],
     app: { ios: ['-visualEnd', 'YES', '-visualNote', 'open'], android: ['--es', 'cardEnd', 'note'] },

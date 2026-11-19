@@ -1,9 +1,8 @@
-/* The faces, each stepping in over the one before (round 26 §U2.2). The paper they sit on is the host's
-   (`--avatar-group-paper`): the card page's cream by default. */
+/* The faces, each stepping in over the one before (round 26 §U2.2), each its own drawing on no pad: the front
+   face's fill covers the one behind, its pen line parts them (the owner, 2026-11-19). */
 .stack {
   display: inline-flex;
   align-items: center;
-  --avatar-group-paper: var(--color-cream);
 }
 
 .item {
@@ -15,23 +14,6 @@
 
 .item:first-child {
   margin-left: 0;
-}
-
-/* The face's pad: its own outline 3 bigger on every side, in the paper — no stroke. */
-.pad {
-  position: absolute;
-  top: -3px;
-  left: -3px;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.pad path {
-  fill: var(--avatar-group-paper);
-}
-
-.item > :not(.pad) {
-  position: relative;
 }
 
 /* The blank disc for "more": the avatar's shape in the waiting disc's paper (the cream-dark by day, raised at night), the faces' own pen line. */

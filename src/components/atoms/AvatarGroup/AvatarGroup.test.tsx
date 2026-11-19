@@ -35,17 +35,21 @@ describe('AvatarGroup', () => {
     expect(container.querySelector('[data-more]')).toBeNull();
   });
 
-  it('puts each face on a pad of paper in its own outline, the first face on top', () => {
-    const { container } = render(<AvatarGroup members={['a', 'b', 'c'].map(member)} size={28} />);
-    const items = [...container.querySelectorAll<HTMLElement>('[data-face]')];
-    // A pad per face, 6 bigger than it (3 on every side), its outline the avatar's own (a path, not a circle).
+  it('draws each face on no pad — the face alone, stepping 0.34 of its size over the one before, the first on top', () => {
+    // The owner, 2026-11-19: a pad of the page's paper round each face made the overlap read wider. Each face is its
+    // own drawing now (its fill, initials or photo, its pen line); the front face's fill covers the one behind.
+    const { container } = render(<AvatarGroup members={['a', 'b', 'c'].map(member)} size={28} more />);
+    const items = [...container.querySelectorAll<HTMLElement>('[data-face], [data-more]')];
     for (const item of items) {
-      const pad = item.querySelector('svg');
-      expect(pad?.getAttribute('width')).toBe('34');
-      expect(pad?.querySelector('path')?.getAttribute('d')).toMatch(/^M/);
+      // One drawing per face, as big as the face: nothing larger laid under it.
+      expect(item.children).toHaveLength(1);
+      for (const svg of item.querySelectorAll('svg')) expect(svg.getAttribute('width')).toBe('28');
     }
+    const stack = container.firstElementChild as HTMLElement;
+    expect(stack.style.getPropertyValue('--avatar-step')).toBe(`${28 * 0.34}px`);
     const z = items.map((el) => Number(el.style.zIndex));
     expect(z).toEqual([...z].sort((a, b) => b - a));
+    expect(css).not.toMatch(/\.pad\b|--avatar-group-paper/);
   });
 
   it('is only faces: no button of its own, no shadow, no lift', () => {
@@ -53,8 +57,6 @@ describe('AvatarGroup', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(css).not.toMatch(/box-shadow\s*:/);
     expect(css).not.toMatch(/:hover/);
-    // The pad is filled, never stroked (a 3px ring broke one pen, M3).
-    expect(css).toMatch(/\.pad path\s*\{\s*fill: var\(--avatar-group-paper\);\s*\}/);
   });
 
   it('slides the arriving face in and the leaving face out, never under reduced motion', () => {

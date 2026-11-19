@@ -30,24 +30,6 @@ export interface AvatarGroupProps {
 
 /** How far each face steps in over the one before it, as a share of its size. */
 export const AVATAR_STEP = 0.34;
-/** How much bigger than a face its paper pad is (3 on every side). */
-export const AVATAR_PAD = 6;
-
-/**
- * A face's paper pad (round 26 §U2.2): the avatar's own outline grown by AVATAR_PAD, filled with the paper the
- * group sits on (`--avatar-group-paper`, the card page's cream) and never stroked — so where it overlaps the face
- * under it, that face is cut by a thin margin of the page, the way overlapping paper discs read. A ring stroke
- * failed onePen, and a circle cut the avatar's corners (M3).
- */
-function Pad({ size, seed }: { size: number; seed: number }) {
-  const s = size + AVATAR_PAD;
-  const d = useMemo(() => avatarWobPath(s, seed), [s, seed]);
-  return (
-    <svg className={styles.pad} width={s} height={s} viewBox={`0 0 ${s} ${s}`} aria-hidden="true">
-      <path d={d} />
-    </svg>
-  );
-}
 
 /** The blank paper disc after the faces when there are more (the avatar's shape, the faces' pen line, no number). */
 function BlankDisc({ size, seed }: { size: number; seed: number }) {
@@ -63,7 +45,9 @@ const seedOf = (m: AvatarGroupMember, i: number) => Number(m.avatarSeed) || i + 
 
 /**
  * Overlapping hand-drawn faces (the "avatar group"): each steps in over the one before by 0.34 of its size, the
- * first on top, each on a pad of paper in its own shape; when there are more than `max`, one blank paper disc
+ * first on top, each its own drawing — its fill (initials or photo) and its pen line, on no pad: the front face's
+ * fill covers the one behind and its own pen line is what parts them (the owner, 2026-11-19: a pad of the page's
+ * paper round each face made the overlap read wider). When there are more than `max`, one blank paper disc
  * follows — who, never how many. It draws faces only: its host makes it a button (the card page's faces open
  * their list) and names it. No shadow, no lift (round 18).
  */
@@ -88,13 +72,11 @@ export function AvatarGroup({ members, max = 3, size = 28, more = false, arrivin
           data-leaving={leaving?.id === m.id || undefined}
           data-face={m.id}
         >
-          <Pad size={size} seed={seedOf(m, i)} />
           <HandDrawnAvatar src={m.avatarUrl} initials={m.initials} size={size} color={m.accentColor} seed={seedOf(m, i)} />
         </span>
       ))}
       {overflow && (
         <span className={styles.item} style={{ zIndex: 0 }} data-more="">
-          <Pad size={size} seed={97} />
           <BlankDisc size={size} seed={97} />
         </span>
       )}
