@@ -64,14 +64,14 @@ function AuthorList({ cardId, onPick }: { cardId: string; onPick: () => void }) 
     ([, id, token]: [string, string, string]) => listTaps(id, token || null),
     { revalidateOnFocus: false, revalidateFirstPage: false },
   );
-  if (!data) return <TapPeopleSkeleton size="dialog" />;
+  if (!data) return <TapPeopleSkeleton />;
   const people = data.flatMap((p) => p.people);
   const next = data.at(-1)?.nextPageToken;
   const loadingMore = isValidating && size > data.length;
   return (
     <>
       <DialogScroll>
-        <TapPeople people={people} size="dialog" onPick={onPick} endKey={next ? 'taps:more' : undefined} />
+        <TapPeople people={people} onPick={onPick} endKey={next ? 'taps:more' : undefined} />
       </DialogScroll>
       {next && (
         <div className={styles.more}>

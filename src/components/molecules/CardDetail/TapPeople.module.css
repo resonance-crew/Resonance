@@ -1,5 +1,5 @@
-/* Who resonated (round 26 §U2.5, §U3.2): bands, as the bell's rows. In a dialog the bands run to the paper's
-   edges (the bell's DialogScroll, its --bell-inset); in the popover to the sheet's. */
+/* Who resonated (round 26 §U2.5, §U3.2): bands, as the bell's rows, in a dialog on every screen — the bands run to
+   the paper's edges (the bell's DialogScroll, its --bell-inset). */
 .list {
   list-style: none;
   margin: 0;
@@ -20,11 +20,6 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.list[data-size='popover'] .row {
-  min-height: 52px;
-  padding-inline: 20px;
-}
-
 .row:focus-visible {
   outline: 2px solid var(--color-terracotta);
   outline-offset: -4px;
@@ -38,10 +33,6 @@
   min-width: 0;
   align-items: center;
   gap: 12px;
-}
-
-.list[data-size='popover'] .rowInner {
-  gap: 10px;
 }
 
 .words {
@@ -59,10 +50,6 @@
   line-height: 1.35;
   color: var(--color-text);
   overflow-wrap: anywhere;
-}
-
-.list[data-size='popover'] .handle {
-  font-size: 14px;
 }
 
 /* The first line of the note they left on the card (the author's list, a named card), muted, one line. */

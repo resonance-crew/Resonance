@@ -15,11 +15,12 @@ export function tapPersonHref(p: TapPersonBody): string {
   return p.note ? `/messages/${handle}?u=${encodeURIComponent(p.author.id)}` : `/u/${handle}`;
 }
 
+/** A row's face: 36, in the reader's dialog and the author's alike (a row 60 tall, a note's line under the name in the author's). */
+export const TAP_PERSON_FACE = 36;
+
 export interface TapPeopleProps {
   people: TapPersonBody[];
-  /** The rows' measures: a phone's dialog (60, faces 36), a popover (52, faces 28), the author's dialog (faces 36, a note's line under the name). */
-  size: 'dialog' | 'popover';
-  /** A row was opened (its dialog or popover closes). */
+  /** A row was opened (its dialog closes). */
   onPick?: () => void;
   /** The key the last band ends on (a "show more" under it, or the list's end). */
   endKey?: string;
@@ -31,20 +32,20 @@ export interface TapPeopleProps {
  * of the note they left on the card, muted, under the name. A row opens that note's conversation, or else their page:
  * a tap alone gives no way to write to anyone.
  */
-export function TapPeople({ people, size, onPick, endKey = BAND_END_KEY }: TapPeopleProps) {
+export function TapPeople({ people, onPick, endKey = BAND_END_KEY }: TapPeopleProps) {
   const below = bandsBelow(people.map((p) => p.author.id), endKey);
   return (
-    <ul className={styles.list} data-size={size}>
+    <ul className={styles.list}>
       {people.map((p, i) => (
         <li key={p.author.id}>
-          <PersonRow person={p} size={size} band={{ top: p.author.id, bottom: below[i] }} onPick={onPick} />
+          <PersonRow person={p} band={{ top: p.author.id, bottom: below[i] }} onPick={onPick} />
         </li>
       ))}
     </ul>
   );
 }
 
-function PersonRow({ person, size, band, onPick }: { person: TapPersonBody; size: TapPeopleProps['size']; band: { top: string; bottom: string }; onPick?: () => void }) {
+function PersonRow({ person, band, onPick }: { person: TapPersonBody; band: { top: string; bottom: string }; onPick?: () => void }) {
   const press = useBandPress();
   const a = person.author;
   return (
@@ -54,7 +55,7 @@ function PersonRow({ person, size, band, onPick }: { person: TapPersonBody; size
         <HandDrawnAvatar
           src={a.avatarUrl ?? undefined}
           initials={a.initials}
-          size={size === 'popover' ? 28 : 36}
+          size={TAP_PERSON_FACE}
           color={a.accentColor}
           seed={Number(a.avatarSeed) || 1}
         />
@@ -68,11 +69,11 @@ function PersonRow({ person, size, band, onPick }: { person: TapPersonBody; size
 }
 
 /** The list's rows on their way: a face and a name's line each, touching as the bands do. */
-export function TapPeopleSkeleton({ size, rows = 3 }: { size: TapPeopleProps['size']; rows?: number }) {
+export function TapPeopleSkeleton({ rows = 3 }: { rows?: number }) {
   const t = useTranslations('home');
-  const face = size === 'popover' ? 28 : 36;
+  const face = TAP_PERSON_FACE;
   return (
-    <ul className={styles.list} data-size={size} role="status" aria-label={t('moreLoading')}>
+    <ul className={styles.list} role="status" aria-label={t('moreLoading')}>
       {Array.from({ length: rows }, (_, i) => (
         <li key={i} aria-hidden>
           <span className={styles.row}>

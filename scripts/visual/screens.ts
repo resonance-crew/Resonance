@@ -152,7 +152,7 @@ export const SCREENS: Screen[] = [
   { id: 'taps-list', route: '/card/first-coffee', as: 'alice',
     web: { click: 'button[data-tap-faces]' },
     app: { ios: ['-visualEnd', 'YES', '-visualTaps', 'list'], android: ['--es', 'cardEnd', 'taps'] },
-    expect: "Who among alice's connections resonated with bob's first coffee: a phone a centred dialog with no title, banded rows (alice, dora, eli, fay — each a face 36 and a pen name), the small 關閉 at its foot; tablet and desktop a popover on the menu sheet 8 under the faces, at their start, 280 wide, its rows 52 — never a bottom sheet" },
+    expect: "Who among alice's connections resonated with bob's first coffee: a centred dialog with no title on every device (a phone's the column less 16 a side, tablet and desktop 480 wide, as the author's list), banded rows (alice, dora, eli, fay — each a face 36 and a pen name), the small 關閉 at the foot's end — never a popover, never a bottom sheet" },
   { id: 'taps-author-list', route: '/card/rich-story', as: 'alice',
     web: { click: '[data-tap-author] button' },
     app: { ios: ['-visualEnd', 'YES', '-visualTaps', 'author'], android: ['--es', 'cardEnd', 'taps'] },

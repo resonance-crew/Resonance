@@ -9,7 +9,7 @@ import { TapFaces } from './TapFaces';
 
 /**
  * Round 26 §U2: who resonated, as faces — the viewer first, then the people they are connected with; no words on
- * screen; one button opening who they are (a dialog on a phone, a popover wider), except the viewer's face alone.
+ * screen; one button opening who they are (a centred dialog on every screen), except the viewer's face alone.
  */
 
 vi.mock('@/i18n/navigation', () => ({
@@ -80,35 +80,47 @@ describe('TapFaces', () => {
     expect(screen.getByRole('button', { name: '你共振了，你連結的人裡，與這張卡片共振的：還有其他人' })).toBeInTheDocument();
   });
 
-  it('opens a popover under the faces on a wide screen, on the menu sheet, and Escape gives the focus back', async () => {
-    listTaps.mockResolvedValueOnce({ people: [person('alice'), person('dora'), person('eli'), person('fay')], nextPageToken: null });
-    renderFaces({ mine: true, faces: [face('alice'), face('dora'), face('eli')], more: true, mayNote: true });
-    const button = screen.getByRole('button', { name: /who resonated/ });
-    await user().click(button);
-    const pop = screen.getByRole('dialog');
-    expect(button).toHaveAttribute('aria-expanded', 'true');
-    expect(button).toHaveAttribute('aria-controls', pop.id);
-    const rows = await within(pop).findAllByRole('link');
-    expect(rows.map((r) => r.getAttribute('href'))).toEqual(['/u/alice', '/u/dora', '/u/eli', '/u/fay']);
-    expect(listTaps).toHaveBeenCalledWith('c1');
-    await user().keyboard('{Escape}');
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(button).toHaveFocus();
-  });
-
-  it('opens a centred dialog with no title on a phone: banded rows of face and name, each to their page', async () => {
-    phone(true);
+  // The owner, 2026-11-19: 「我在想这个直接做成这个 model 会不会好一点呢」 — a phone's list was a dialog already; tablets,
+  // the Mac and the desktop opened a popover under the faces, and now open the same dialog.
+  it.each([
+    ['a phone', true],
+    ['a wide screen', false],
+  ])('opens a centred dialog with no title on %s: banded rows of face and name, each to their page, 關閉 at its foot', async (_, onPhone) => {
+    phone(onPhone);
     listTaps.mockResolvedValueOnce({ people: [person('dora'), person('eli')], nextPageToken: null });
     renderFaces({ mine: false, faces: [face('dora'), face('eli')], more: false, mayNote: true });
-    await user().click(screen.getByRole('button', { name: /who resonated: dora, eli$/ }));
+    const button = screen.getByRole('button', { name: /who resonated: dora, eli$/ });
+    await user().click(button);
     const dialog = await screen.findByRole('dialog');
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    // A modal, centred over the page — never a popover laid at the faces.
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(button.parentElement?.contains(dialog)).toBe(false);
+    // As wide as the author's list on a wide screen (480); on a phone the column less 16 a side.
+    expect(dialog.style.maxWidth).toBe('min(480px, calc(100vw - 32px))');
     // A reader sees only their connections: a title would claim everyone (S2).
     expect(within(dialog).queryByRole('heading')).toBeNull();
     const rows = await within(dialog).findAllByRole('link');
     expect(rows.map((r) => r.textContent)).toEqual(['DOdora', 'ELeli']);
+    expect(rows.map((r) => r.getAttribute('href'))).toEqual(['/u/dora', '/u/eli']);
+    expect(listTaps).toHaveBeenCalledWith('c1');
     expect(dialog.querySelectorAll('[data-band]')).toHaveLength(2);
+    // Each row's face 36, whatever the screen (the popover's 28 went with it).
+    for (const row of rows) expect(row.querySelector('svg')?.getAttribute('width')).toBe('36');
     await user().click(within(dialog).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog')).toBeNull();
+    expect(button).toHaveFocus();
+  });
+
+  it('closes on Escape and gives the focus back to the faces', async () => {
+    listTaps.mockResolvedValueOnce({ people: [person('alice'), person('dora')], nextPageToken: null });
+    renderFaces({ mine: true, faces: [face('alice'), face('dora')], more: false, mayNote: true });
+    const button = screen.getByRole('button', { name: /who resonated/ });
+    await user().click(button);
+    await within(await screen.findByRole('dialog')).findAllByRole('link');
+    await user().keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(button).toHaveFocus();
   });
 
   it('never shows one account’s people to the next one signed in this tab (the list is the viewer’s own)', async () => {

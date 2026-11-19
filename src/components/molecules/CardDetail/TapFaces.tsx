@@ -1,16 +1,13 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import useSWR from 'swr';
 import { AvatarGroup, type AvatarGroupMember } from '@/components/atoms/AvatarGroup/AvatarGroup';
-import { PaperSheet, sheetPath } from '@/components/atoms/PaperSheet/PaperSheet';
 import { Modal } from '@/components/molecules/Modal/Modal';
 import { DialogScroll } from '@/components/sections/AppHeader/BellList';
 import { TAP_FACES_MAX, type AuthorBody, type CardTapBody } from '@/lib/api/v1/schemas';
 import { listTaps } from '@/lib/db/firestore/client/taps';
-import { useElementSize } from '@/lib/hooks/useElementSize';
-import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { TapPeople, TapPeopleSkeleton } from './TapPeople';
 import styles from './TapFaces.module.css';
 
@@ -53,8 +50,11 @@ export function readerFacesLabel(
   return mine && shown.faces.some((f) => f.id === viewerId) ? `${words.selfOnly}${and}${said}` : said;
 }
 
-/** Where the list opens as a dialog rather than a popover under the faces: a phone (layout.md: the web ≤ 720). */
-export const TAP_LIST_DIALOG_QUERY = '(max-width: 720px)';
+/**
+ * The list's dialog at its widest: a phone's column less 16 on each side (as it was), and on a tablet, the Mac and
+ * the desktop 480, as the author's list and the app's other one-exit dialogs there.
+ */
+export const TAP_LIST_DIALOG_WIDTH = 'min(480px, calc(100vw - 32px))';
 
 export interface TapFacesProps {
   cardId: string;
@@ -69,16 +69,15 @@ export interface TapFacesProps {
 /**
  * The faces at the start of the end row's second line (round 26 §U2): the viewer first when they resonated, then
  * the people they are connected with who did — no words on screen, ever (the owner: 「不要寫這樣的文字，直接放那個頭像就好」).
- * The whole group is one button opening who they are — a dialog on a phone, a popover under the faces wider —
- * except when the only face is the viewer's own: then it is a picture that says 你共振了, not in the tab order.
+ * The whole group is one button opening who they are — a centred dialog on every screen (the owner, 2026-11-19:
+ * 「我在想这个直接做成这个 model 会不会好一点呢」; on a wide screen it was a popover under the faces) — except when
+ * the only face is the viewer's own: then it is a picture that says 你共振了, not in the tab order.
  */
 export function TapFaces({ cardId, tap, viewerId, arriving, leaving }: TapFacesProps) {
   const t = useTranslations('card.tap');
   const locale = useLocale();
   const [open, setOpen] = useState(false);
-  const dialog = useMediaQuery(TAP_LIST_DIALOG_QUERY) !== false;
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const listId = useId();
   const faces = tap.faces;
   // At most three drawn, the blank disc after them for the rest (the list itself stays whole: lib/data/taps).
   const shown = shownFaces(tap);
@@ -113,32 +112,26 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving }: TapFacesP
         aria-label={label}
         aria-expanded={open}
         aria-haspopup="dialog"
-        aria-controls={open && !dialog ? listId : undefined}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(true)}
       >
         {group}
       </button>
-      {open &&
-        (dialog ? (
-          <Modal
-            open
-            onClose={() => close()}
-            maxWidth="min(400px, calc(100vw - 32px))"
-            seed={43}
-            padding="22px 22px 22px"
-            // No visible title (S2): a reader sees only their connections, and a title would claim everyone.
-            ariaLabel={label}
-            closeButton
-          >
-            <DialogScroll>
-              <ReaderList cardId={cardId} viewerId={viewerId} size="dialog" onPick={() => close(false)} />
-            </DialogScroll>
-          </Modal>
-        ) : (
-          <Popover id={listId} label={label} onClose={close}>
-            <ReaderList cardId={cardId} viewerId={viewerId} size="popover" onPick={() => close(false)} />
-          </Popover>
-        ))}
+      {open && (
+        <Modal
+          open
+          onClose={() => close()}
+          maxWidth={TAP_LIST_DIALOG_WIDTH}
+          seed={43}
+          padding="22px 22px 22px"
+          // No visible title (S2): a reader sees only their connections, and a title would claim everyone.
+          ariaLabel={label}
+          closeButton
+        >
+          <DialogScroll>
+            <ReaderList cardId={cardId} viewerId={viewerId} onPick={() => close(false)} />
+          </DialogScroll>
+        </Modal>
+      )}
     </span>
   );
 }
@@ -148,45 +141,8 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving }: TapFacesP
  * too, as every answer about who someone is connected with: another account in this tab (signed in from another
  * one) never sees the last one's people.
  */
-function ReaderList({ cardId, viewerId, size, onPick }: { cardId: string; viewerId: string; size: 'dialog' | 'popover'; onPick: () => void }) {
+function ReaderList({ cardId, viewerId, onPick }: { cardId: string; viewerId: string; onPick: () => void }) {
   const { data } = useSWR(['taps', cardId, viewerId], () => listTaps(cardId), { revalidateOnFocus: false });
-  if (!data) return <TapPeopleSkeleton size={size} />;
-  return <TapPeople people={data.people} size={size} onPick={onPick} />;
-}
-
-/**
- * The faces' list on a wide screen (§U2.5): a popover 8 under them, at their start, 280 wide, on the one menu sheet
- * (PaperSheet: its paper, its grey pen line, no shadow), its rows banded and cut to its outline; six rows, then it
- * scrolls inside. Escape or a press outside closes it, and the focus goes back to the faces.
- */
-function Popover({ id, label, onClose, children }: { id: string; label: string; onClose: (refocus?: boolean) => void; children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const { w, h } = useElementSize(ref);
-  const seed = 59;
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.preventDefault();
-      onClose(true);
-    };
-    const onDown = (e: PointerEvent) => {
-      const anchor = ref.current?.parentElement;
-      if (anchor && !anchor.contains(e.target as Node)) onClose(false);
-    };
-    document.addEventListener('keydown', onKey);
-    document.addEventListener('pointerdown', onDown);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.removeEventListener('pointerdown', onDown);
-    };
-  }, [onClose]);
-  const clip = w && h ? `path('${sheetPath(w, h, 20, seed)}')` : undefined;
-  return (
-    <div ref={ref} id={id} role="dialog" aria-label={label} className={styles.popover}>
-      <PaperSheet w={w} h={h} seed={seed} />
-      <div className={styles.popoverBody} style={clip ? { clipPath: clip } : undefined}>
-        {children}
-      </div>
-    </div>
-  );
+  if (!data) return <TapPeopleSkeleton />;
+  return <TapPeople people={data.people} onPick={onPick} />;
 }
