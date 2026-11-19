@@ -308,7 +308,7 @@ private fun NoteCapsule(state: NoteFieldState, tapOn: Boolean, maxLines: Int, on
         seed = 23.0,
         // From the second line Send is the block on the last row, as the composer's.
         block = false,
-        leading = { OrganicIcon(IconName.Note, size = 20.dp, color = Tokens.ButtonOnTonal) },
+        leading = { NoteLeadGlyph() },
     ) { vertical ->
         val scroll = rememberScrollState()
         Box(
@@ -352,6 +352,18 @@ private fun NoteCapsule(state: NoteFieldState, tapOn: Boolean, maxLines: Int, on
         }
     }
 }
+
+/**
+ * The envelope in the field's lead column (item 2): what the field is, a mark and not a button — the muted text ink at
+ * [NoteLeadGlyphSize], the web's and iOS's (never the capsule's label brown), with the icon's own pen as the web's.
+ */
+@Composable
+internal fun NoteLeadGlyph(modifier: Modifier = Modifier) {
+    OrganicIcon(IconName.Note, modifier, size = NoteLeadGlyphSize, color = Tokens.TextMuted)
+}
+
+/** The envelope's size: the web's 18 (NoteInPlace.module.css `.glyph`), iOS's `NoteFieldCapsule.leadGlyph`. */
+internal val NoteLeadGlyphSize: Dp = 18.dp
 
 /** Under row 2, to the field (item 2). */
 internal val NoteInPlaceGap: Dp = 12.dp

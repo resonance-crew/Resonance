@@ -43,6 +43,7 @@ import com.resonance.app.DebugLaunch
 import com.resonance.app.DraftService
 import com.resonance.app.Session
 import com.resonance.design.AppFonts
+import com.resonance.design.AvatarGroup
 import com.resonance.design.LocalToasts
 import com.resonance.design.OrganicIcon
 import com.resonance.design.OrganicIndication
@@ -240,14 +241,15 @@ fun CardViewerActions(
                 )
             }
             // Row 2: the faces at its start, under 共振; 收藏 at its end. Always there, so nothing moves as faces come.
-            Row(Modifier.width(capsule.dp).height(Row2Height), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.padding(start = 6.dp)) {
+            EndRowTwo(
+                Modifier.width(capsule.dp),
+                faces = {
                     TapFacesButton(faces, session.uid, author = false, onOpen = { openList = true })
                     if (openList && !faces.isEmpty && !faces.selfOnly(session.uid)) {
                         ReaderTapList(session, cardId, onDismiss = { openList = false }, open = open)
                     }
-                }
-                Spacer(Modifier.weight(1f))
+                },
+            ) {
                 BookmarkButton(bookmarked) {
                     val bookmarks = session.bookmarks ?: return@BookmarkButton
                     // Optimistic, then reconciled with what the write returns.
@@ -288,7 +290,36 @@ fun CardViewerActions(
 }
 
 /** Row 2's height (§U1.2: 44 on the web and iOS, 48 here, a finger's). */
-private val Row2Height = 48.dp
+internal val Row2Height = 48.dp
+
+/**
+ * Where a face stands in from row 2's start: its pad (3) here, so the face itself is 12 in — the web's, whose faces'
+ * line (6) and their button (6) both pad it (CardViewerActions.module.css `.faces`, TapFaces.module.css `.faces`).
+ */
+internal val Row2FacesStart = 12.dp - AvatarGroup.PAD
+
+/**
+ * How far in from row 2's end 收藏's glyph stands, in its 48 to the finger flush with that end: the web's — its glyph
+ * centred in a 44 button (a finger's pointer) on the row's end — so its 48 box keeps the finger's room and only the
+ * glyph moves (centred, it stood 14 in).
+ */
+internal val Row2GlyphEnd = 12.dp
+
+/** 收藏's glyph (the web's 20). */
+internal val BookmarkGlyph = 20.dp
+
+/**
+ * Row 2 (§U1.2): as wide as the capsule ([modifier] gives the width), [Row2Height] tall — [faces] at its start, a face
+ * [Row2FacesStart] (its pad's) in; [end] (收藏) at its end.
+ */
+@Composable
+internal fun EndRowTwo(modifier: Modifier, faces: @Composable () -> Unit, end: @Composable () -> Unit) {
+    Row(modifier.height(Row2Height), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.padding(start = Row2FacesStart)) { faces() }
+        Spacer(Modifier.weight(1f))
+        end()
+    }
+}
 
 /** How long after the last keystroke a note's draft is written down. */
 private const val NOTE_DRAFT_DELAY_MS = 400L
@@ -300,23 +331,25 @@ private fun keepDraft(session: Session, cardId: String, text: String) {
 }
 
 /**
- * 收藏 (§U1.2): a glyph alone at row 2's end, a 48 square to the finger — the bookmark drawn filled once saved, and
- * named by what a tap does (收藏 / 取消收藏, what the flows say to it).
+ * 收藏 (§U1.2): a glyph alone at row 2's end, a 48 square to the finger — a bare glyph (the web's BareIconButton): the
+ * muted text ink with the one pen (INK) at rest and once saved, drawn filled then, never the capsule's label brown —
+ * its glyph [Row2GlyphEnd] in from the square's end, where the web's stands. Named by what a tap does (收藏 / 取消收藏,
+ * what the flows say to it).
  */
 @Composable
-private fun BookmarkButton(saved: Boolean, onClick: () -> Unit) {
+internal fun BookmarkButton(saved: Boolean, onClick: () -> Unit) {
     val label = if (saved) L10n.Card.Bookmark.remove else L10n.Card.Bookmark.add
     Box(
         Modifier
             .size(48.dp)
             .plainClickable(role = Role.Button, onClick = onClick)
             .clearAndSetSemantics { contentDescription = label },
-        contentAlignment = Alignment.Center,
+        contentAlignment = Alignment.CenterEnd,
     ) {
         OrganicIcon(
-            IconName.Bookmark, size = 20.dp, color = Tokens.ButtonOnTonal,
-            fill = if (saved) Tokens.ButtonOnTonal else null,
-            strokeWidth = if (saved) 2f else 1.6f,
+            IconName.Bookmark, Modifier.padding(end = Row2GlyphEnd), size = BookmarkGlyph, color = Tokens.TextMuted,
+            fill = if (saved) Tokens.TextMuted else null,
+            strokeWidth = Tokens.Ink.value,
         )
     }
 }
