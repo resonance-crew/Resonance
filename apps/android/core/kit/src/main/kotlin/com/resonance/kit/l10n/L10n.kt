@@ -813,8 +813,6 @@ object L10n {
             fun facesAuthor(names: String): String = Strings.format("card.tap.facesAuthor", mapOf("names" to names))
             /** and others */
             val more: String get() = Strings.string("card.tap.more")
-            /** What stayed with you? */
-            val ask: String get() = Strings.string("card.tap.ask")
             /** Send */
             val send: String get() = Strings.string("card.tap.send")
             /** Didn't go through, try again */

@@ -113,6 +113,6 @@ class NoteInPlaceKeysTest {
         compose.waitForIdle()
         compose.onNodeWithText("悄悄告訴作者，哪一段打動你", useUnmergedTree = true).assertExists()
         compose.onNodeWithText(L10n.Card.Note.hint, useUnmergedTree = true).assertDoesNotExist()
-        compose.onNodeWithText(L10n.Card.Tap.ask, useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("哪一段讓你有共鳴？", useUnmergedTree = true).assertDoesNotExist()
     }
 }

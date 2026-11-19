@@ -811,8 +811,6 @@ public enum L10n {
             public static func facesAuthor(names: String) -> String { Strings.shared.format("card.tap.facesAuthor", ["names": names]) }
             /// and others
             public static var more: String { Strings.shared.string("card.tap.more") }
-            /// What stayed with you?
-            public static var ask: String { Strings.shared.string("card.tap.ask") }
             /// Send
             public static var send: String { Strings.shared.string("card.tap.send") }
             /// Didn't go through, try again

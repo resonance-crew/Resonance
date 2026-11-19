@@ -470,7 +470,6 @@
       "facesReader": "People you're connected with who resonated: {names}",
       "facesAuthor": "Resonated with this card: {names}",
       "more": "and others",
-      "ask": "What stayed with you?",
       "send": "Send",
       "failed": "Didn't go through, try again"
     },

@@ -470,7 +470,6 @@
       "facesReader": "你連結的人裡，與這張卡片共振的：{names}",
       "facesAuthor": "與這張卡片共振的人：{names}",
       "more": "還有其他人",
-      "ask": "哪一段讓你有共鳴？",
       "send": "寄出",
       "failed": "沒送出去，再試一次"
     },
