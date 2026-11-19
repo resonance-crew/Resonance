@@ -219,7 +219,7 @@ extension Fixture {
         let drawn = try DrawnPixels(row.frame(width: width).background(Tokens.cream))
         #expect(drawn.width == Int(width * 2) && drawn.height == Int(TapFaces.rowHeight * 2), "\(drawn.width) × \(drawn.height)")
         let paper = try DrawnPixels(Color.clear.frame(width: 4, height: 4).background(Tokens.cream)).rgb(2, 2)
-        // Anything off the paper: the face (its pad is the paper itself) on the left half, 收藏's ink on the right.
+        // Anything off the paper: the face on the left half, 收藏's ink on the right.
         var first: Int?, last: Int?
         for y in 0 ..< drawn.height {
             for x in 0 ..< drawn.width {

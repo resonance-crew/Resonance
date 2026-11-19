@@ -17,10 +17,9 @@ struct TapFaces: View {
     static let rowHeight: CGFloat = 44
     /// The reader's own face sliding in or out (none under Reduce Motion).
     static let slide = Animation.easeOut(duration: 0.15)
-    /// The button's pad at each side of the faces, the web's 6 (TapFaces.module.css `.faces`) less the faces' own pad
-    /// (``FaceStack/padGrow`` / 2, drawn inside the stack's width here, around it on the web): after row 2's line
-    /// (``RowTwo/facesLine``), a face stands ``RowTwo/faceInset`` in.
-    static let buttonPad: CGFloat = RowTwo.faceInset - RowTwo.facesLine - FaceStack.padGrow / 2
+    /// The button's pad at each side of the faces, the web's 6 (TapFaces.module.css `.faces`): after row 2's line
+    /// (``RowTwo/facesLine``), the first face's rim stands ``RowTwo/faceInset`` in.
+    static let buttonPad: CGFloat = RowTwo.faceInset - RowTwo.facesLine
 
     var body: some View {
         let stack = FaceStack(faces: faces.map(Self.face), more: more)
@@ -357,15 +356,19 @@ struct TapsPopoverRows: View {
 
 // MARK: - What the author sees
 
-/// On the author's own published card, where a reader's row would be (§U3): one line — the 16 wave in the muted ink, 8
-/// before the three newest faces (and the blank disc when there are more) — the whole of it one button opening who
-/// resonated. Nothing when no one has; no number anywhere.
+/// On the author's own published card, where a reader's row would be (§U3): one line — the 16 wave in the muted ink,
+/// ``facesGap`` before the three newest faces (and the blank disc when there are more) — the whole of it one button
+/// opening who resonated. Nothing when no one has; no number anywhere.
 struct AuthorTaps: View {
     let cardId: String
     let faces: [Author]
     let more: Bool
     @State private var open = false
     @Environment(SessionStore.self) private var session
+
+    /// From the wave's box to the first face's: the line's 8 and the 3 a face's paper pad stood in before it went
+    /// (2026-11-19), so the first face's rim stays where it stood.
+    static let facesGap: CGFloat = 11
 
     /// The author's line shows once someone has resonated — nothing at all before (no 「還沒有人共振」).
     static func shows(_ detail: CardDetail) -> Bool {
@@ -374,7 +377,7 @@ struct AuthorTaps: View {
 
     var body: some View {
         Button { open = true } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: Self.facesGap) {
                 OrganicIcon(.wave, size: 16, color: Tokens.textMuted, strokeWidth: Tokens.ink)
                 FaceStack(faces: faces.prefix(FaceStack.maxFaces).map(TapFaces.face), more: more || faces.count > FaceStack.maxFaces)
             }

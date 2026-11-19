@@ -7,15 +7,15 @@ import UIKit
 @testable import Resonance
 
 /// Who resonated, as faces with no words (round 26 §U2; the owner: 「不要寫這樣的文字，直接放那個頭像就好」): three faces at
-/// most, each stepping in by 0.34 of a face, then a blank paper disc when there are more — never a number; a pad of the
-/// face's own shape in the page's paper under each, no ring; the group one button opening the list, except when the
-/// only face is the reader's own; and a screen reader hears who they are.
+/// most, each stepping in by 0.34 of a face, then a blank paper disc when there are more — never a number; each face its
+/// own drawing lying straight on the next (no paper pad, no ring); the group one button opening the list, except when
+/// the only face is the reader's own; and a screen reader hears who they are.
 @MainActor @Suite(.serialized) struct TapFacesTests {
     @Test func threeFacesStepInAndTheDiscStandsForTheRest() {
-        // 28 faces on 34 pads, each 18.48 after the last.
+        // 28 faces with nothing around them (they stood on 34 pads), each 18.48 after the last.
         #expect(abs(FaceStack.step(28) - 28 * 0.66) < 0.001)
-        #expect(abs(FaceStack.width(count: 3, more: false, size: 28) - (2 * 28 * 0.66 + 34)) < 0.001)
-        #expect(abs(FaceStack.width(count: 3, more: true, size: 28) - (3 * 28 * 0.66 + 34)) < 0.001)
+        #expect(abs(FaceStack.width(count: 3, more: false, size: 28) - (2 * 28 * 0.66 + 28)) < 0.001)
+        #expect(abs(FaceStack.width(count: 3, more: true, size: 28) - (3 * 28 * 0.66 + 28)) < 0.001)
         // Never more than three faces, whatever is handed over.
         #expect(abs(FaceStack.width(count: 5, more: false, size: 28) - FaceStack.width(count: 3, more: false, size: 28)) < 0.001)
         #expect(FaceStack.width(count: 0, more: false, size: 28) == 0)
@@ -26,25 +26,53 @@ import UIKit
         let stack = FaceStack(faces: faces, more: true)
         let size = UIHostingController(rootView: stack.fixedSize()).sizeThatFits(in: CGSize(width: 400, height: 400))
         #expect(abs(size.width - FaceStack.width(count: 3, more: true, size: 28)) < 0.5)
-        #expect(abs(size.height - 34) < 0.5)
+        // A face's own 28: nothing around it (its pad made it 34).
+        #expect(abs(size.height - 28) < 0.5)
     }
 
-    /// The pad under a face is the page's paper: where a face lies over the next one, the cream shows between them.
-    @Test func eachFaceSitsOnAPadOfThePagesPaper() throws {
-        let faces = ["dora", "eli"].map { TapFaces.face(Fixture.author($0)) }
-        let renderer = ImageRenderer(content: FaceStack(faces: faces, more: false, paper: .white).background(Color.black))
-        renderer.scale = 2
-        let image = try #require(renderer.cgImage)
-        let width = image.width, height = image.height
-        var pixels = [UInt8](repeating: 0, count: width * height * 4)
-        let context = try #require(CGContext(data: &pixels, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
-                                             space: CGColorSpaceCreateDeviceRGB(),
-                                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
-        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-        // Just past the first face's right edge, mid-height: the first face's pad (white), not the second face's ink.
-        let x = Int((3 + 28 + 1.5) * 2), y = height / 2
-        let i = (y * width + x) * 4
-        #expect(pixels[i] > 240 && pixels[i + 1] > 240 && pixels[i + 2] > 240, "\(pixels[i ..< i + 3])")
+    /// No paper pad under a face any more (the owner, 2026-11-19: 「它的這個框 border 外面還有一個白色的框，所以它又會讓那個重疊的
+    /// 區域又變更大」): each face lies straight on the one behind it, by day and at night — just past the front face's rim
+    /// the face behind shows (it was the pad's paper there, and the front face 3 further on), and where they overlap the
+    /// front face's fill covers the one behind, so the one behind still reads as behind. The blank disc the same.
+    @Test func eachFaceLiesStraightOnTheOneBehindIt() throws {
+        let front = FaceStack.Face(id: "a", initials: "", imageURL: nil, color: Color(red: 1, green: 0, blue: 0), seed: 7)
+        let behind = FaceStack.Face(id: "b", initials: "", imageURL: nil, color: Color(red: 0, green: 0, blue: 1), seed: 9)
+        func drawn(_ stack: FaceStack, _ scheme: ColorScheme) throws -> (pixels: [UInt8], width: Int, height: Int) {
+            let renderer = ImageRenderer(content: stack.background(Color.black).environment(\.colorScheme, scheme))
+            renderer.scale = 2
+            let image = try #require(renderer.cgImage)
+            let width = image.width, height = image.height
+            var pixels = [UInt8](repeating: 0, count: width * height * 4)
+            let context = try #require(CGContext(data: &pixels, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                                 space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return (pixels, width, height)
+        }
+        func rgb(_ d: (pixels: [UInt8], width: Int, height: Int), x: CGFloat) -> [Int] {
+            let i = ((d.height / 2) * d.width + Int(x * 2)) * 4
+            return [Int(d.pixels[i]), Int(d.pixels[i + 1]), Int(d.pixels[i + 2])]
+        }
+        for scheme in [ColorScheme.light, .dark] {
+            let two = try drawn(FaceStack(faces: [front, behind], more: false), scheme)
+            // The faces' own boxes: 28 tall, the second's 28 one step on.
+            #expect(two.height == 56 && abs(CGFloat(two.width) - 2 * (FaceStack.step(28) + 28)) <= 1, "\(scheme): \(two.width) × \(two.height)")
+            // 2.5 past the front face's edge (its pen reaches 0.9 out), mid-height: the face behind.
+            let past = rgb(two, x: 28 + 2.5)
+            #expect(past[2] > 200 && past[0] < 60 && past[1] < 60, "\(scheme): \(past)")
+            // Inside the overlap, a little past where the face behind begins: still the front face.
+            let over = rgb(two, x: FaceStack.step(28) + 4)
+            #expect(over[0] > 200 && over[1] < 60 && over[2] < 60, "\(scheme): \(over)")
+
+            // The blank disc behind the last face: just past that face's rim, the disc's own paper.
+            let disc = try drawn(FaceStack(faces: [front], more: true), scheme)
+            var want: (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat) = (0, 0, 0, 0)
+            UIColor(FaceStack.discFill).resolvedColor(with: UITraitCollection { $0.userInterfaceStyle = scheme == .dark ? .dark : .light })
+                .getRed(&want.r, green: &want.g, blue: &want.b, alpha: &want.a)
+            let got = rgb(disc, x: 28 + 2.5)
+            let expected = [want.r, want.g, want.b].map { Int(($0 * 255).rounded()) }
+            #expect(zip(got, expected).allSatisfy { abs($0 - $1) <= 6 }, "\(scheme): \(got) vs \(expected)")
+        }
     }
 
     /// §U2.2: at night the blank disc stands 3 : 1 off the page (the web's `.disc path`: the muted ink at 66 % over the
