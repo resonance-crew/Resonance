@@ -67,6 +67,20 @@ import UIKit
         #expect(abs(size.height - ComposerMetrics.height) < 1, "\(size.height)")
     }
 
+    /// The envelope in the field's lead column is the web's (round 26, the screens' review): 18, the muted text ink, with
+    /// the icon's own pen (INK_STRONG) — it wore the lighter INK here. Android's NoteLeadGlyph is the same.
+    @Test func theEnvelopeWearsTheIconsOwnPenInTheMutedInk() throws {
+        #expect(NoteLeadGlyph.size == 18)
+        #expect(NoteFieldCapsule<EmptyView>.leadGlyph == 18)
+        let drawn = try DrawnPixels(NoteLeadGlyph().background(Tokens.cream))
+        let web = try DrawnPixels(OrganicIcon(.note, size: 18, color: Tokens.textMuted).background(Tokens.cream))
+        let difference = try #require(drawn.difference(web), "drawn \(drawn.width) × \(drawn.height)")
+        #expect(difference <= 8, "\(difference)")
+        // The lighter pen it wore is told apart.
+        let before = try DrawnPixels(OrganicIcon(.note, size: 18, color: Tokens.textMuted, strokeWidth: Tokens.ink).background(Tokens.cream))
+        #expect((drawn.difference(before) ?? .max) > 8)
+    }
+
     @Test func aFailureWhileThePageIsThereOpensTheFieldAgainSayingWhy() {
         let sends = NoteSends()
         sends.host("c1", true)

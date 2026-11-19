@@ -17,10 +17,16 @@ struct TapFaces: View {
     static let rowHeight: CGFloat = 44
     /// The reader's own face sliding in or out (none under Reduce Motion).
     static let slide = Animation.easeOut(duration: 0.15)
+    /// The button's pad at each side of the faces, the web's 6 (TapFaces.module.css `.faces`) less the faces' own pad
+    /// (``FaceStack/padGrow`` / 2, drawn inside the stack's width here, around it on the web): after row 2's line
+    /// (``RowTwo/facesLine``), a face stands ``RowTwo/faceInset`` in.
+    static let buttonPad: CGFloat = RowTwo.faceInset - RowTwo.facesLine - FaceStack.padGrow / 2
 
     var body: some View {
         let stack = FaceStack(faces: faces.map(Self.face), more: more)
-            .frame(minHeight: Self.rowHeight)
+            .padding(.horizontal, Self.buttonPad)
+            // A finger's 44 at the least, the faces at its start (the web's `min-width: 44px`).
+            .frame(minWidth: Self.rowHeight, minHeight: Self.rowHeight, alignment: .leading)
             .contentShape(Rectangle())
         if isButton {
             Button(action: onOpen) { stack }

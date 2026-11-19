@@ -18,7 +18,7 @@ public struct NoteFieldCapsule<Field: View>: View {
     @ViewBuilder let field: Field
     @State private var sendPressed = false
 
-    public static var leadGlyph: CGFloat { 18 }
+    public static var leadGlyph: CGFloat { NoteLeadGlyph.size }
 
     public init(focused: Bool, canSend: Bool, block: Bool = false, sendLabel: String, seed: Double = 17,
                 onSend: @escaping () -> Void, @ViewBuilder field: () -> Field) {
@@ -34,7 +34,7 @@ public struct NoteFieldCapsule<Field: View>: View {
     public var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
             // The envelope: what this field is (a note), in ＋'s column — read by no one, tapped by no one.
-            OrganicIcon(.note, size: Self.leadGlyph, color: Tokens.textMuted, strokeWidth: Tokens.ink)
+            NoteLeadGlyph()
                 .frame(width: ComposerMetrics.attachWidth, height: ComposerMetrics.height)
                 .accessibilityHidden(true)
             field
@@ -70,5 +70,18 @@ private struct NotePressReport: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .onChange(of: configuration.isPressed) { _, now in pressed = now }
+    }
+}
+
+/// The envelope in the note field's lead column (item 2): what the field is, a mark and not a button — the web's
+/// (`<Icon name="note" size={18} color="var(--color-text-muted)" />`, NoteInPlace.module.css `.glyph`): 18, the muted
+/// text ink, with the icon's own pen (INK_STRONG), never a lighter one. Android's `NoteLeadGlyph` is the same.
+public struct NoteLeadGlyph: View {
+    public static let size: CGFloat = 18
+
+    public init() {}
+
+    public var body: some View {
+        OrganicIcon(.note, size: Self.size, color: Tokens.textMuted, strokeWidth: Tokens.inkStrong)
     }
 }

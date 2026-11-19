@@ -183,3 +183,92 @@ extension Fixture {
         }
     }
 }
+
+/// Row 2 as the web draws it (round 26, the screens' review: iOS's faces stood 3 in, 收藏 in the story's text ink with
+/// its glyph on the capsule's edge): a face 12 in from the row's start (the faces' line 6, their button 6), 收藏 a bare
+/// glyph of 20 in the muted text ink with the one pen (INK), filled in that ink once saved, centred in a 44 flush with
+/// the row's end, so its glyph ends 12 in — Android's EndRowTwoTest measures the same.
+@MainActor @Suite(.serialized) struct RowTwoTests {
+    @Test func theBookmarkIsTheWebsBareGlyphInTheMutedInk() throws {
+        for saved in [false, true] {
+            // A finger's 44, flush with the row's end: it no longer hangs 12 past it.
+            let size = UIHostingController(rootView: RowTwoBookmark(saved: saved) {}).sizeThatFits(in: CGSize(width: 400, height: 400))
+            #expect(abs(size.width - RowTwo.touch) < 0.5 && abs(size.height - RowTwo.touch) < 0.5, "\(size)")
+            let drawn = try DrawnPixels(RowTwoBookmark(saved: saved) {}.background(Tokens.cream))
+            let web = try DrawnPixels(OrganicIcon(.bookmark, size: 20, color: Tokens.textMuted, strokeWidth: Tokens.ink,
+                                                  fill: saved ? Tokens.textMuted : nil)
+                .frame(width: 44, height: 44).background(Tokens.cream))
+            let difference = try #require(drawn.difference(web), "drawn \(drawn.width) × \(drawn.height)")
+            #expect(difference <= 8, "saved \(saved): \(difference)")
+            // What it drew before — the story's text ink, the strong pen once saved — is told apart.
+            let before = try DrawnPixels(OrganicIcon(.bookmark, size: 20, color: Tokens.text,
+                                                     strokeWidth: saved ? Tokens.inkStrong : Tokens.ink, fill: saved ? Tokens.text : nil)
+                .frame(width: 44, height: 44).background(Tokens.cream))
+            #expect((drawn.difference(before) ?? .max) > 24, "saved \(saved)")
+        }
+    }
+
+    @Test func aFaceStandsTwelveInAndTheBookmarksGlyphEndsTwelveIn() throws {
+        #expect(RowTwo.faceInset == 12 && RowTwo.glyphEnd == 12)
+        let width: CGFloat = 300
+        let row = EndRowTwo {
+            TapFaces(faces: [Fixture.author("dora")], more: false, spoken: "", isButton: true) {}
+        } end: {
+            RowTwoBookmark(saved: false) {}
+        }
+        let drawn = try DrawnPixels(row.frame(width: width).background(Tokens.cream))
+        #expect(drawn.width == Int(width * 2) && drawn.height == Int(TapFaces.rowHeight * 2), "\(drawn.width) × \(drawn.height)")
+        let paper = try DrawnPixels(Color.clear.frame(width: 4, height: 4).background(Tokens.cream)).rgb(2, 2)
+        // Anything off the paper: the face (its pad is the paper itself) on the left half, 收藏's ink on the right.
+        var first: Int?, last: Int?
+        for y in 0 ..< drawn.height {
+            for x in 0 ..< drawn.width {
+                let off = zip(drawn.rgb(x, y), paper).reduce(0) { $0 + abs($1.0 - $1.1) }
+                guard off > 30 else { continue }
+                if x < drawn.width / 2 { first = min(first ?? x, x) } else { last = max(last ?? x, x) }
+            }
+        }
+        let faceStart = CGFloat(try #require(first)) / 2
+        let inkEnd = width - CGFloat(try #require(last) + 1) / 2
+        // The face's rim (its pen half outside the shape) at 12; it stood at 3.
+        #expect(faceStart >= RowTwo.faceInset - 1.5 && faceStart <= RowTwo.faceInset + 1, "\(faceStart)")
+        // The glyph's 20 box ends 12 in, its ink a little inside it (the web's about 16 in); it stood on the edge.
+        #expect(inkEnd >= RowTwo.glyphEnd && inkEnd <= RowTwo.glyphEnd + 8, "\(inkEnd)")
+    }
+}
+
+/// A view drawn at 2×, as RGBA bytes, rows top down — for the drawings the twins must match.
+struct DrawnPixels {
+    let bytes: [UInt8]
+    let width: Int
+    let height: Int
+
+    @MainActor init(_ view: some View, scale: CGFloat = 2) throws {
+        let renderer = ImageRenderer(content: view.environment(\.colorScheme, .light))
+        renderer.scale = scale
+        let image = try #require(renderer.cgImage)
+        width = image.width
+        height = image.height
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let context = try #require(CGContext(data: &bytes, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                             space: CGColorSpaceCreateDeviceRGB(),
+                                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        self.bytes = bytes
+    }
+
+    func rgb(_ x: Int, _ y: Int) -> [Int] {
+        let i = (y * width + x) * 4
+        return [Int(bytes[i]), Int(bytes[i + 1]), Int(bytes[i + 2])]
+    }
+
+    /// The largest difference of any channel at any pixel from `other`; nil when they are not the same size.
+    func difference(_ other: DrawnPixels) -> Int? {
+        guard width == other.width, height == other.height else { return nil }
+        var most = 0
+        for i in stride(from: 0, to: bytes.count, by: 4) {
+            for c in 0 ..< 3 { most = max(most, abs(Int(bytes[i + c]) - Int(other.bytes[i + c]))) }
+        }
+        return most
+    }
+}

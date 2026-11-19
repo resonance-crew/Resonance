@@ -244,7 +244,7 @@ struct CardEndRow: View {
     // MARK: Row 2, the faces and 收藏
 
     private var rowTwo: some View {
-        HStack(spacing: 0) {
+        EndRowTwo {
             if !tap.shownFaces.isEmpty {
                 TapFaces(faces: tap.shownFaces, more: tap.showsMore, spoken: tap.spoken(viewer: session.uid),
                          isButton: !tap.onlyMine(viewer: session.uid)) { listOpen = true }
@@ -253,31 +253,16 @@ struct CardEndRow: View {
                             ? TapsPopoverRequest(anchor: anchor, cardId: cardId, close: { listOpen = false }) : nil
                     }
             }
-            Spacer(minLength: 12)
-            bookmarkButton
+        } end: {
+            // 收藏: pressed while saved (filled), flipped at once; saving says 「收藏到卡片盒了」.
+            RowTwoBookmark(saved: bookmark.active) {
+                guard let bookmarks = session.bookmarks else { return }
+                let saving = bookmark.flip()
+                if saving { session.toasts.show(L10n.Card.saved) }
+                Task { bookmark.settled(saving: saving, result: try? await bookmarks.toggle(cardId)) }
+            }
+            .sensoryFeedback(.selection, trigger: bookmark.active)
         }
-        .frame(height: TapFaces.rowHeight)
-    }
-
-    /// 收藏: a glyph, pressed while saved (filled), flipped at once; saving says 「收藏到卡片盒了」.
-    private var bookmarkButton: some View {
-        Button {
-            guard let bookmarks = session.bookmarks else { return }
-            let saving = bookmark.flip()
-            if saving { session.toasts.show(L10n.Card.saved) }
-            Task { bookmark.settled(saving: saving, result: try? await bookmarks.toggle(cardId)) }
-        } label: {
-            OrganicIcon(.bookmark, size: 20, color: Tokens.text, strokeWidth: bookmark.active ? Tokens.inkStrong : Tokens.ink,
-                        fill: bookmark.active ? Tokens.text : nil)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(OrganicPressStyle(inset: 2))
-        // Its pad in the margin, its ink on the capsule's edge.
-        .padding(.trailing, -12)
-        .accessibilityLabel(bookmark.active ? L10n.Card.Bookmark.remove : L10n.Card.Bookmark.add)
-        .accessibilityAddTraits(bookmark.active ? .isSelected : [])
-        .sensoryFeedback(.selection, trigger: bookmark.active)
     }
 
     // MARK: The note, in place
@@ -327,6 +312,68 @@ struct CardEndRow: View {
 
     /// The reader's list is a centred dialog on a phone, a popover under the faces wider.
     static func listIsDialog(_ window: WindowLayout) -> Bool { window.layoutClass == .compact }
+}
+
+// MARK: - Row 2
+
+/// Row 2's measures (§U1.2), the web's: its faces' line pads 6 (CardViewerActions.module.css `.faces`) and their button
+/// 6 more (TapFaces.module.css `.faces`), so a face stands 12 in from the row's start; 收藏 is a bare glyph of 20
+/// (BareIconButton, `iconSize` 20) centred in a 44 to the finger flush with the row's end, so its glyph ends 12 in.
+/// Android's `Row2FacesStart` / `Row2GlyphEnd` (EndRowTwoTest) stand the same; the Mac's 77 % scales them all alike.
+nonisolated enum RowTwo {
+    /// The faces' line, padded at its start (the web's `.faces` `padding-inline-start`).
+    static let facesLine: CGFloat = 6
+    /// Where a face stands in from row 2's start: the line, then the button's own 6.
+    static let faceInset: CGFloat = 12
+    /// 收藏's touch box: a finger's, flush with the row's end (never hung past it).
+    static let touch: CGFloat = 44
+    /// 收藏's glyph, centred in its touch box.
+    static let glyph: CGFloat = 20
+    /// How far in from the row's end 收藏's glyph box ends: (44 − 20) / 2.
+    static var glyphEnd: CGFloat { (touch - glyph) / 2 }
+}
+
+/// Row 2 (§U1.2), laid out alone: as wide as the capsule above it (the caller gives the width), 44 tall, `faces` at its
+/// start on their line ``RowTwo/facesLine`` in, `end` (收藏) at its end. Always there, faces or none, so a face coming
+/// in never moves the page.
+struct EndRowTwo<Faces: View, End: View>: View {
+    @ViewBuilder let faces: Faces
+    @ViewBuilder let end: End
+
+    var body: some View {
+        HStack(spacing: 0) {
+            faces.padding(.leading, RowTwo.facesLine)
+            Spacer(minLength: 12)
+            end
+        }
+        .frame(height: TapFaces.rowHeight)
+    }
+}
+
+/// 收藏 (§U1.2): a bare glyph at row 2's end, the web's BareIconButton — the muted text ink with the one pen (INK) at
+/// rest and once saved, drawn filled in that ink then (never the story's text ink, never a heavier pen) — centred in a 44
+/// square to the finger flush with the row's end, so its glyph ends ``RowTwo/glyphEnd`` in. Named by what a tap does
+/// (收藏 / 取消收藏, what the flows say to it).
+struct RowTwoBookmark: View {
+    let saved: Bool
+    let action: () -> Void
+
+    /// The glyph as the web draws it: `--color-text-muted`, INK, filled in the same ink once saved.
+    static func glyph(saved: Bool) -> some View {
+        OrganicIcon(.bookmark, size: RowTwo.glyph, color: Tokens.textMuted, strokeWidth: Tokens.ink,
+                    fill: saved ? Tokens.textMuted : nil)
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Self.glyph(saved: saved)
+                .frame(width: RowTwo.touch, height: RowTwo.touch)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(OrganicPressStyle(inset: 2))
+        .accessibilityLabel(saved ? L10n.Card.Bookmark.remove : L10n.Card.Bookmark.add)
+        .accessibilityAddTraits(saved ? .isSelected : [])
+    }
 }
 
 // MARK: - The capsule's words
