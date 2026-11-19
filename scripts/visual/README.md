@@ -372,6 +372,8 @@ change near one of those states (`capture android --device phone-large --only se
 - **First-times hints** (a hint shown for its first three displays, counted on the device and in the
   account's profile, on the one stack every platform shares): a screen naming them (`hints`, card-note-open's
   privacy line) starts every capture with them unspent (`hints.ts`).
+- **No picks**: the stack seeds with `SEED_PICKS=none` (`noPicks.ts`), so home is the latest cards on every
+  platform and run, never picks that one capture built and a later one found.
 - **Waiting for the real page**: a capture is taken again and again until two in a row match
   (`settle` in `util.ts`). A page waiting for a compile or a read holds still too, so the web first
   waits for its requests to drain (bar the realtime channels), and Android checks a settled frame

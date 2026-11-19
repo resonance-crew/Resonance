@@ -23,12 +23,17 @@ const emulatorPorts = () => ({
  */
 export const SEED_NOW = '2026-09-01T12:00:00+08:00';
 
+/**
+ * What the seed is run with: the stack's emulators; EMULATOR_DEV_PORT, where the seed's stored cover is served from
+ * (this stack's dev server), so the apps load it too; SEED_NOW, the world's fixed day; SEED_RESET, since the stack's
+ * emulators are its own, so each seed starts from an empty database (a flow's writes never carry into the next flow
+ * or capture); SEED_PICKS=none, so nobody has picks and home is the same on every platform and run (noPicks.ts).
+ */
+export const seedEnv = () => ({ ...emulatorPorts(), EMULATOR_DEV_PORT: String(PORTS.dev), SEED_NOW, SEED_RESET: '1', SEED_PICKS: 'none' });
+
 export async function seed(log: (line: string) => void) {
   log('Seeding the test world (scripts/seed-emulator.ts)…');
-  // SEED_RESET: the stack's emulators are its own, so each seed starts from an empty database (a flow's writes never
-  // carry into the next flow or capture).
-  // EMULATOR_DEV_PORT: where the seed's stored cover is served from (this stack's dev server), so the apps load it too
-  run('npx', ['tsx', 'scripts/seed-emulator.ts'], { ...emulatorPorts(), EMULATOR_DEV_PORT: String(PORTS.dev), SEED_NOW, SEED_RESET: '1' });
+  run('npx', ['tsx', 'scripts/seed-emulator.ts'], seedEnv());
 }
 
 export async function startStack(logDir: string, log: (line: string) => void): Promise<Stack> {

@@ -340,6 +340,13 @@ async function main() {
   // the emulator's picks, cold start, related cards and landing film have a pool to work with.
   await seedReadings(db);
 
+  // SEED_PICKS=none (the release screenshots, scripts/visual/stack.ts): nobody has picks or gets any built, so home
+  // shows the latest cards on every platform and run (scripts/visual/noPicks.ts says why). Manual testing keeps picks.
+  if (process.env.SEED_PICKS === 'none') {
+    const { noPicks } = await import('./visual/noPicks');
+    for (const u of SEED_USERS) await db.doc(`recommendations/${u.uid}`).set(noPicks());
+  }
+
   console.log(`Seeded ${SEED_USERS.length} users into ${EMULATOR_PROJECT_ID}.`);
 }
 
