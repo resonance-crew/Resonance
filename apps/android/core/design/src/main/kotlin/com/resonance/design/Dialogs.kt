@@ -761,49 +761,6 @@ private fun MenuHost(
 }
 
 /**
- * A popover hanging from the control it is drawn beside (round 26 §U2: the faces' list on a tablet): a flat
- * paper sheet ([paperSheet]: the menu paper inside the header's quiet grey pen at INK, no grain, no shadow) [width]
- * wide, [MenuPlacement]'s [gap] under the control's box — over it when there is no room under — its leading edge on
- * the control's ([alignStart]) or its trailing one. Called inside the control's own Box, as a menu is: the popup
- * hangs from its parent. A tap beside it, Back or Escape closes it ([onDismiss]), and the focus goes back where it
- * was. Never a bottom sheet.
- */
-@Composable
-fun PaperPopover(
-    onDismiss: () -> Unit,
-    width: Dp,
-    modifier: Modifier = Modifier,
-    seed: Double = 31.0,
-    alignStart: Boolean = true,
-    gap: Dp = 8.dp,
-    paneTitle: String? = null,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    val density = LocalDensity.current
-    val gapPx = with(density) { gap.roundToPx() }
-    val roomPx = with(density) { MenuSheet.Room.roundToPx() }
-    Popup(
-        popupPositionProvider = remember(gapPx, roomPx, alignStart) { MenuPlacement(gapPx, 0, above = false, alignStart = alignStart, room = roomPx) },
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true, clippingEnabled = false),
-    ) {
-        CappedTextScale {
-            Box(Modifier.pointerInput(Unit) { detectTapGestures { onDismiss() } }.padding(MenuSheet.Room)) {
-                Column(
-                    modifier
-                        .width(width)
-                        // A tap on the sheet stays on it.
-                        .pointerInput(Unit) { detectTapGestures { } }
-                        .semantics { if (paneTitle != null) this.paneTitle = paneTitle }
-                        .paperSheet(seed),
-                    content = content,
-                )
-            }
-        }
-    }
-}
-
-/**
  * Where a menu's panel goes (px): [gap] under its trigger (the web's `top: 100% + 8px`), or over it
  * when [above] — on the other side when that side has no room and this one has, and kept in the
  * window across; the trailing edges lined up (`right: 0`), or the leading ones when [alignStart].

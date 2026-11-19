@@ -242,12 +242,7 @@ fun CardViewerActions(
             // Row 2: the faces at its start, under 共振; 收藏 at its end. Always there, so nothing moves as faces come.
             EndRowTwo(
                 Modifier.width(capsule.dp),
-                faces = {
-                    TapFacesButton(faces, session.uid, author = false, onOpen = { openList = true })
-                    if (openList && !faces.isEmpty && !faces.selfOnly(session.uid)) {
-                        ReaderTapList(session, cardId, onDismiss = { openList = false }, open = open)
-                    }
-                },
+                faces = { TapFacesButton(faces, session.uid, author = false, onOpen = { openList = true }) },
             ) {
                 BookmarkButton(bookmarked) {
                     val bookmarks = session.bookmarks ?: return@BookmarkButton
@@ -280,6 +275,10 @@ fun CardViewerActions(
                 onRoom = onNoteRoom,
             )
         }
+    }
+    // Who resonated, behind the faces: the phone's dialog on every device (the owner's look, 2026-11-19).
+    if (openList && !faces.isEmpty && !faces.selfOnly(session.uid)) {
+        ReaderTapList(session, cardId, onDismiss = { openList = false }, open = open)
     }
     if (picking) ResonatePicker(
         session, cardId, detail.card.referenceCardId,

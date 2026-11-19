@@ -13,10 +13,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -52,7 +50,6 @@ import com.resonance.design.ModalTitle
 import com.resonance.design.OrganicButton
 import com.resonance.design.OrganicIcon
 import com.resonance.design.OrganicModal
-import com.resonance.design.PaperPopover
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.plainClickable
@@ -180,35 +177,39 @@ internal fun tapRowExcerpt(person: TapPerson, anonymous: Boolean): String? =
 internal fun showsMore(list: TapPeople): Boolean = list.next != null && !list.loading
 
 /**
- * A reader's list behind the faces (§U2.5): the same people as the faces, without the cap. On a phone a centred
- * modal (min(column, 400), **no visible title** — the reader sees only connections; a title would claim all —, the
- * close at its foot, banded rows of 60 with a face of 36 and the pen name, each to the profile); wider, a popover under
- * the faces ([PaperPopover]: 8 below, start-aligned, 280 wide, [TapRowMeasure.Popover]'s rows, six then it scrolls
- * inside its [TapPopoverPad]). Never a bottom sheet. Called inside the faces' own Box (the popover hangs from it).
+ * A reader's list behind the faces (§U2.5, as the owner's look of 2026-11-19 amends it: 「我在想这个直接做成这个 model
+ * 会不会好一点呢」 — 「手机上已经是这个 model 的设计了」): the same people as the faces, without the cap, in the phone's
+ * dialog on every device ([ReaderTapDialog]). Never a bottom sheet, never a popover.
  */
 @Composable
 internal fun ReaderTapList(session: Session, cardId: String, onDismiss: () -> Unit, open: (Route) -> Unit) {
     val list = remember(cardId) { TapPeople { token -> session.taps.taps(cardId, token) } }
     LaunchedEffect(list) { list.first() }
-    val phone = LocalWindowLayout.current.cls == LayoutClass.Compact
-    val go: (TapPerson) -> Unit = { p ->
+    ReaderTapDialog(list, onDismiss) { p ->
         onDismiss()
         open(Route.Author(p.author.handle))
     }
-    if (phone) {
-        OrganicModal(onDismiss, L10n.Card.Tap.label, seed = 41.0, closeLabel = L10n.Native.close, maxWidth = 400.dp) {
-            TapRows(list, TapRowMeasure.Dialog, anonymous = true, onRow = go)
-            ModalCloseButton(L10n.Native.close, onDismiss)
-        }
-    } else {
-        PaperPopover(onDismiss, width = 280.dp, paneTitle = L10n.Card.Tap.label) {
-            val rows = TapRowMeasure.Popover
-            Column(Modifier.heightIn(max = rows.height * 6 + TapPopoverPad * 2).verticalScroll(rememberScrollState()).padding(vertical = TapPopoverPad)) {
-                TapRows(list, rows, anonymous = true, bands = false, onRow = go)
-            }
-        }
+}
+
+/**
+ * The reader's list as it is drawn: a centred dialog [readerListWidth] wide — **no visible title** (the reader sees only
+ * connections; a title would claim all) — the banded rows of 60 with a face of 36 and the pen name, each [onRow] (to the
+ * profile), and 關閉 at the foot's end, as every one-exit dialog.
+ */
+@Composable
+internal fun ReaderTapDialog(list: TapPeople, onDismiss: () -> Unit, onRow: (TapPerson) -> Unit) {
+    val width = readerListWidth(LocalWindowLayout.current.cls)
+    OrganicModal(onDismiss, L10n.Card.Tap.label, seed = 41.0, closeLabel = L10n.Native.close, maxWidth = width) {
+        TapRows(list, TapRowMeasure.Dialog, anonymous = true, onRow = onRow)
+        ModalCloseButton(L10n.Native.close, onDismiss)
     }
 }
+
+/**
+ * The reader's dialog's widest: a phone's 400 (min(the column, 400)); wider, the author's list's 480 — the width of
+ * the app's other one-exit dialogs there ([AuthorTapList], the media dialog).
+ */
+internal fun readerListWidth(cls: LayoutClass): Dp = if (cls == LayoutClass.Compact) 400.dp else 480.dp
 
 /**
  * What the author sees where a reader's row would be (§U3.1): one line — a 16 wave in the muted ink, 8 before the
@@ -255,23 +256,14 @@ internal fun AuthorTapList(session: Session, cardId: String, anonymous: Boolean,
  */
 internal data class TapRowMeasure(val height: Dp, val face: Dp, val inset: Dp, val gap: Dp, val handle: Float) {
     companion object {
-        /** A dialog's (a reader's on a phone, the author's everywhere): 60, a face of 36, its bands' own 12 in. */
+        /** A dialog's (the reader's and the author's, on every device): 60, a face of 36, its bands' own 12 in. */
         val Dialog = TapRowMeasure(60.dp, 36.dp, 12.dp, 12.dp, 15f)
-
-        /**
-         * The popover's, the web's (TapPeople.module.css `.list[data-size='popover']`): 52, a face of 28, 10 to the name in
-         * 14, the face 20 in from the sheet's pen line — every menu sheet's rows' inset (design-system.md).
-         */
-        val Popover = TapRowMeasure(52.dp, TapFaceSize, 20.dp, 10.dp, 14f)
     }
 }
 
-/** Over the popover's first row and under its last, inside the sheet: the web's 8 (TapFaces.module.css `.popoverBody`). */
-internal val TapPopoverPad: Dp = 8.dp
-
-/** The list's rows: banded (a dialog's), each the face, the pen name and the excerpt; the rows' shapes while read. */
+/** The list's rows: banded, each the face, the pen name and the excerpt; the rows' shapes while read. */
 @Composable
-private fun TapRows(list: TapPeople, measure: TapRowMeasure, anonymous: Boolean, bands: Boolean = true, onRow: (TapPerson) -> Unit) {
+private fun TapRows(list: TapPeople, measure: TapRowMeasure, anonymous: Boolean, onRow: (TapPerson) -> Unit) {
     val rowHeight = measure.height
     val face = measure.face
     val people = list.people
@@ -302,7 +294,7 @@ private fun TapRows(list: TapPeople, measure: TapRowMeasure, anonymous: Boolean,
                     Modifier
                         .fillMaxWidth()
                         .heightIn(min = rowHeight)
-                        .then(if (bands) Modifier.listBand(keys[i], below[i], source, { false }, cut = true) else Modifier)
+                        .listBand(keys[i], below[i], source, { false }, cut = true)
                         .plainClickable(role = Role.Button) { onRow(p) }
                         .padding(horizontal = measure.inset, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,

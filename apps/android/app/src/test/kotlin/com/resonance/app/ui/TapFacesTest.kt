@@ -114,34 +114,10 @@ class TapFacesTest {
         assertEquals(11f, AuthorFacesGap.value, 0f)
     }
 
-    /** One declaration of a rule in the web's CSS module, in px. */
-    private fun px(css: String, selector: String, property: String): Float {
-        val block = Regex(Regex.escape(selector) + "\\s*\\{([^}]*)\\}").find(css)?.groupValues?.get(1)
-            ?: error("no $selector")
-        val value = Regex("(?:^|[;\\s])" + Regex.escape(property) + "\\s*:\\s*([0-9.]+)px").find(block)?.groupValues?.get(1)
-            ?: error("no $property in $selector")
-        return value.toFloat()
-    }
-
-    @Test fun thePopoversRowsStandAsTheWebsTwentyInFromTheSheetsPenLine() {
-        // The relook of round 26 (android/tablet/taps-list): the face stood 12 from the popover's pen line, the web's 20 —
-        // the inset of every menu sheet's rows. The popover's rows are the web's: TapPeople.module.css, data-size popover.
-        val css = File("../../../src/components/molecules/CardDetail/TapPeople.module.css").readText()
-        val popover = ".list[data-size='popover']"
-        val rows = TapRowMeasure.Popover
-        assertEquals(px(css, "$popover .row", "padding-inline"), rows.inset.value, 0f)
-        assertEquals(20f, rows.inset.value, 0f)
-        assertEquals(px(css, "$popover .row", "min-height"), rows.height.value, 0f)
-        assertEquals(px(css, "$popover .rowInner", "gap"), rows.gap.value, 0f)
-        assertEquals(px(css, "$popover .handle", "font-size"), rows.handle, 0f)
-        // Its face: TapPeople.tsx's 28 on a popover, the faces' own size.
-        val tsx = File("../../../src/components/molecules/CardDetail/TapPeople.tsx").readText()
-        assertTrue(tsx.contains("size={size === 'popover' ? 28 : 36}"))
-        assertEquals(28f, rows.face.value, 0f)
-        // Over the first row and under the last, inside the sheet: TapFaces.module.css's 8.
-        val sheet = File("../../../src/components/molecules/CardDetail/TapFaces.module.css").readText()
-        assertEquals(px(sheet, ".popoverBody", "padding-block"), TapPopoverPad.value, 0f)
-        // The phone's dialog keeps its bands' own 12 (its band layout, not a menu sheet's).
+    @Test fun theListsRowsAreADialogsOnEveryDevice() {
+        // The reader's list is the phone's dialog everywhere now (the owner's look, 2026-11-19), the author's already
+        // was: one measure of rows, 60 tall with a face of 36, its bands' own 12 in — no popover's rows any more.
+        assertEquals(60f, TapRowMeasure.Dialog.height.value, 0f)
         assertEquals(12f, TapRowMeasure.Dialog.inset.value, 0f)
         assertEquals(36f, TapRowMeasure.Dialog.face.value, 0f)
     }
