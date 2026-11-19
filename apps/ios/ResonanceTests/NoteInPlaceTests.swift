@@ -19,23 +19,27 @@ import UIKit
         #expect(NoteInPlace.segmentTap(open: true, text: "寫了一半") == .focus)
     }
 
+    /// One line at a time under the field, and none at all with nothing to say: the privacy line (「這段話只有作者看得到」,
+    /// the first three times) is gone — the owner, 2026-11-19: 「把这段话只有作者会看到这句把它移除掉」.
     @Test func theLineSaysOneThingAtATime() {
         // Why it failed, first.
-        #expect(NoteInPlace.line(error: "沒送出去", count: 500, privacy: true) == .error("沒送出去"))
+        #expect(NoteInPlace.line(error: "沒送出去", count: 500) == .error("沒送出去"))
         // Then, past 200, the offer to make it a card.
-        #expect(NoteInPlace.line(error: nil, count: 201, privacy: true) == .upgrade)
-        #expect(NoteInPlace.line(error: nil, count: 200, privacy: true) == .privacy)
-        // Then that only the author sees it (the first three times); else nothing.
-        #expect(NoteInPlace.line(error: nil, count: 10, privacy: false) == nil)
+        #expect(NoteInPlace.line(error: nil, count: 201) == .upgrade)
+        // Else nothing, the field's first time or not: no line under it (it said who reads the note).
+        #expect(NoteInPlace.line(error: nil, count: 200) == nil)
+        #expect(NoteInPlace.line(error: nil, count: 0) == nil)
         // The count only near the limit.
         #expect(!NoteInPlace.showsCount(1799))
         #expect(NoteInPlace.showsCount(1800))
         #expect(NoteInPlace.count("  一二三  ") == 3)
     }
 
-    @Test func theFieldAsksWhichPartOnceTheReaderResonated() {
-        #expect(NoteInPlace.placeholder(tapOn: true) == L10n.Card.Tap.ask)
-        #expect(NoteInPlace.placeholder(tapOn: false) == L10n.Card.Note.placeholder)
+    /// The field has one placeholder in every state (「悄悄告訴作者，哪一段打動你」), the reader's tap on or not: it turned
+    /// to 「哪一段讓你有共鳴？」 (card.tap.ask) while the tap was on.
+    @Test func theFieldHasOnePlaceholderWhateverTheTap() {
+        #expect(NoteInPlace.placeholder == L10n.Card.Note.placeholder)
+        #expect(!NoteInPlace.placeholder.isEmpty && NoteInPlace.placeholder != "card.note.placeholder")
     }
 
     @Test func aDraftOpensTheFieldWithThePage() {
@@ -58,7 +62,7 @@ import UIKit
     @Test func theFieldIsTheComposersCapsuleOneLineIn48() {
         let type = ComposerText.current()
         let capsule = NoteFieldCapsule(focused: false, canSend: false, sendLabel: L10n.Card.Tap.send, onSend: {}) {
-            TextField("", text: .constant(""), prompt: Text(L10n.Card.Tap.ask), axis: .vertical)
+            TextField("", text: .constant(""), prompt: Text(NoteInPlace.placeholder), axis: .vertical)
                 .font(Font(type.font))
                 .lineLimit(1...3)
                 .padding(.vertical, type.padding)

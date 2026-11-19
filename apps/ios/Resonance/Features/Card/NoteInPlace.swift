@@ -27,18 +27,17 @@ nonisolated enum NoteInPlace {
     /// Opening and closing (none under Reduce Motion).
     static let change = Animation.easeOut(duration: 0.15)
 
-    /// The one line under the field, by priority: why a send failed > the offer to make it a card (past 200) > that
-    /// only the author sees it (the first three times). Nil: nothing to say.
+    /// The one line under the field, by priority: why a send failed > the offer to make it a card (past 200). Nil:
+    /// nothing to say, and nothing is under the field. (No line says who reads it any more: the placeholder does —
+    /// the owner, 2026-11-19: 「把这段话只有作者会看到这句把它移除掉」.)
     enum Line: Equatable {
         case error(String)
         case upgrade
-        case privacy
     }
 
-    static func line(error: String?, count: Int, privacy: Bool) -> Line? {
+    static func line(error: String?, count: Int) -> Line? {
         if let error { return .error(error) }
-        if count > upgradeThreshold { return .upgrade }
-        return privacy ? .privacy : nil
+        return count > upgradeThreshold ? .upgrade : nil
     }
 
     /// The count shows at the line's end only near the limit.
@@ -49,10 +48,9 @@ nonisolated enum NoteInPlace {
         text.trimmingCharacters(in: .whitespacesAndNewlines).utf16.count
     }
 
-    /// The field asks 「哪一段讓你有共鳴？」 once the reader resonated, else for a note to the author.
-    static func placeholder(tapOn: Bool) -> String {
-        tapOn ? L10n.Card.Tap.ask : L10n.Card.Note.placeholder
-    }
+    /// The field's one placeholder, whatever the reader's tap (「悄悄告訴作者，哪一段打動你」: where the words go and what
+    /// to write, the owner's 2026-11-19 ask) — it no longer turns to 「哪一段讓你有共鳴？」 while the tap is on.
+    static var placeholder: String { L10n.Card.Note.placeholder }
 
     /// What a tap on 寄小紙條 does (Escape the same once the field is open): closed, it opens (focused); open and
     /// empty, it closes; open with words, it only takes the focus back — words are never hidden.
@@ -106,8 +104,6 @@ extension View {
 /// the words with the line saying why; once the page is gone, a toast's 再寄一次 opens the card with the field open.
 struct NoteField: View {
     let cardId: String
-    /// The reader resonated with the card: the field asks 「哪一段讓你有共鳴？」.
-    let tapOn: Bool
     /// Opened by the reader (the segment, a reopen): it takes the focus as it appears. A draft opening the field with
     /// the page doesn't — no keyboard comes unasked.
     var focusOnAppear = true
@@ -132,7 +128,6 @@ struct NoteField: View {
     @State private var error: String?
     /// The words `error` was said of: other words, and it goes.
     @State private var errorFor: String?
-    @State private var showsHint = false
     /// The words the server refused (three notes already wait, a block): Send waits for an edit.
     @State private var refused: String?
     /// Who is writing: the account signed in as the field opened, whose draft it keeps.
@@ -152,7 +147,7 @@ struct NoteField: View {
         let type = ComposerText.current()
         VStack(alignment: .leading, spacing: NoteInPlace.lineGap) {
             NoteFieldCapsule(focused: focused, canSend: valid, block: block, sendLabel: L10n.Card.Tap.send, onSend: send) {
-                TextField(text: $text, prompt: fieldPrompt(NoteInPlace.placeholder(tapOn: tapOn), size: type.font.pointSize),
+                TextField(text: $text, prompt: fieldPrompt(NoteInPlace.placeholder, size: type.font.pointSize),
                           axis: .vertical) { Text(L10n.Card.Note.entry) }
                     .lineLimit(1...NoteInPlace.maxLines(compact: window.layoutClass == .compact,
                                                          shortWindow: verticalSizeClass == .compact))
@@ -169,7 +164,7 @@ struct NoteField: View {
                         return .handled
                     }
             }
-            if let line = NoteInPlace.line(error: error, count: count, privacy: showsHint) {
+            if let line = NoteInPlace.line(error: error, count: count) {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     lineView(line)
                     Spacer(minLength: 0)
@@ -203,13 +198,6 @@ struct NoteField: View {
                 if !Task.isCancelled { keepDraft() }
             }
         }
-        .task {
-            #if DEBUG
-            // The release screenshots' `card-note-open` shows the privacy line whatever this account has seen.
-            if UserDefaults.standard.string(forKey: "visualNote") == "open" { return showsHint = true }
-            #endif
-            showsHint = await session.hints?.claim("note-privacy") ?? false
-        }
     }
 
     /// A beat after it is asked, once the field is in the page to take the keyboard.
@@ -236,9 +224,6 @@ struct NoteField: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .buttonStyle(.plain)
-        case .privacy:
-            Text(L10n.Card.Note.hint).font(AppFonts.body(12.5)).foregroundStyle(Tokens.textMuted)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
