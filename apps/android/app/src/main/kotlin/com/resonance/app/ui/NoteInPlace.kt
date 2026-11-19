@@ -321,6 +321,7 @@ private fun NoteCapsule(
     // keeps it — the next reveal measures against the bar now, not the one there when the field took the focus.
     val barBottom by rememberUpdatedState(with(density) { inlineBarTop().toPx() })
     val clearance = with(density) { NoteKeyboardClearance.toPx() }
+    val air = with(density) { NoteRevealAir.toPx() }
     val room by rememberUpdatedState(onRoom)
     val lineNow by rememberUpdatedState(lineBelow)
     LaunchedEffect(focused) {
@@ -339,7 +340,7 @@ private fun NoteCapsule(
             val window = at.findRootCoordinates().size.height.toFloat()
             val reveal = noteReveal(
                 keyboardTop = window - keys, barBottom = barBottom, statusBottom = statusBars.getTop(density).toFloat(),
-                field = field.toFloat(), line = line.toFloat(), clearance = clearance,
+                field = field.toFloat(), line = line.toFloat(), clearance = clearance, air = air,
             )
             room(reveal.barAside)
             relocate.bringIntoView(reveal.rect(at.size.width.toFloat()))
@@ -428,6 +429,13 @@ internal val NoteFieldMax: Dp = 680.dp
 /** How far over the keyboard the field's block stands once the page has brought it there. */
 internal val NoteKeyboardClearance: Dp = 12.dp
 
+/**
+ * With the bar aside, how far under the status bar the field stands when the page has more room over it than the
+ * [NoteInPlaceGap] under row 2: half that gap, so the page's top edge falls in the air between row 2 and the field and
+ * neither row 2 (a cut sliver of its faces) nor the field's pen line meets the status bar.
+ */
+internal val NoteRevealAir: Dp = NoteInPlaceGap / 2
+
 /** How long the keyboard stands still before the page brings the field over it (its rise is followed, not raced). */
 private const val NOTE_KEYBOARD_SETTLE_MILLIS = 120L
 
@@ -438,7 +446,10 @@ private const val NOTE_KEYBOARD_SETTLE_MILLIS = 120L
  * page takes, so brought fully into the viewport the field stands under the bar, never behind it — and ends [below]
  * under it: the field, the line under it where both fit, and the 12 over the keyboard. [barAside]: not even the field
  * fits under the bar (a phone on its side, the keyboard up: about 28 between the header's line and the keyboard on a
- * 411-tall window), so the bar steps aside while the keyboard is up and only the status bar stands over the page.
+ * 411-tall window), so the bar steps aside while the keyboard is up and only the status bar stands over the page; there
+ * the rect, where the room allows, is the whole viewport, from [NoteRevealAir] over the field under the status bar to
+ * the keyboard — what shows over the field starts in the air under row 2, never in a sliver of it (round 26's relook:
+ * the lower edges of row 2's faces cut thin under the status bar's paper).
  */
 internal data class NoteReveal(val barAside: Boolean, val above: Float, val below: Float) {
     fun rect(width: Float): Rect = Rect(0f, -above, width, below)
@@ -448,19 +459,22 @@ internal data class NoteReveal(val barAside: Boolean, val above: Float, val belo
  * [NoteReveal] for a window whose keyboard's top is [keyboardTop] (px from the window's top), the bar's line at
  * [barBottom], the status bar's foot at [statusBottom], the field [field] tall, the line under it [line] (0 without
  * one): the field and its line where both fit under the bar, else the field alone; where not even the field fits, the
- * same under the status bar with the bar aside.
+ * same under the status bar with the bar aside — and there, when the block brought 12 over the keyboard would leave
+ * more than [air] over the field (the page's top edge in row 2 under the status bar — or, where row 2 would show whole,
+ * in the capsule over it, which never fits too), the field stands [air] under the status bar instead and the room
+ * left goes under the block, over the keyboard.
  */
-internal fun noteReveal(keyboardTop: Float, barBottom: Float, statusBottom: Float, field: Float, line: Float, clearance: Float): NoteReveal {
+internal fun noteReveal(keyboardTop: Float, barBottom: Float, statusBottom: Float, field: Float, line: Float, clearance: Float, air: Float): NoteReveal {
     val block = field + line + clearance
     val alone = field + clearance
     val underBar = keyboardTop - barBottom
     val underStatus = keyboardTop - statusBottom
-    return when {
-        block <= underBar -> NoteReveal(false, barBottom, block)
-        alone <= underBar -> NoteReveal(false, barBottom, alone)
-        block <= underStatus -> NoteReveal(true, statusBottom, block)
-        else -> NoteReveal(true, statusBottom, alone)
-    }
+    if (block <= underBar) return NoteReveal(false, barBottom, block)
+    if (alone <= underBar) return NoteReveal(false, barBottom, alone)
+    val shown = if (block <= underStatus) block else alone
+    // What the page would show over the field, under the status bar: past [air], row 2's foot (its faces' lower edges) cut thin.
+    return if (underStatus - shown > air) NoteReveal(true, statusBottom + air, underStatus - air)
+    else NoteReveal(true, statusBottom, shown)
 }
 
 /** The field opening and closing. */
