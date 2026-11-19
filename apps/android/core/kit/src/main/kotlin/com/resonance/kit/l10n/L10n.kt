@@ -647,7 +647,7 @@ object L10n {
             val entryShort: String get() = Strings.string("card.note.entryShort")
             /** A little note */
             val label: String get() = Strings.string("card.note.label")
-            /** A note for the author… */
+            /** Tell the author what moved you */
             val placeholder: String get() = Strings.string("card.note.placeholder")
             /** Only the author can see this */
             val hint: String get() = Strings.string("card.note.hint")

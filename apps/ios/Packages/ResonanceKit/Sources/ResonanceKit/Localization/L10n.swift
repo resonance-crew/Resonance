@@ -645,7 +645,7 @@ public enum L10n {
             public static var entryShort: String { Strings.shared.string("card.note.entryShort") }
             /// A little note
             public static var label: String { Strings.shared.string("card.note.label") }
-            /// A note for the author…
+            /// Tell the author what moved you
             public static var placeholder: String { Strings.shared.string("card.note.placeholder") }
             /// Only the author can see this
             public static var hint: String { Strings.shared.string("card.note.hint") }
