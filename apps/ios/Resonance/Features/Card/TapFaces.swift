@@ -91,10 +91,12 @@ final class TapPeople {
 
 /// The lists' measures (§U2.5, §U3.2). Both lists — a reader's, the author's — are a centred dialog on every device
 /// (the owner, 2026-11-19, of the reader's popover under the faces on a tablet and the Mac: 「我在想这个直接做成这个 model
-/// 会不会好一点呢」), 480 wide at most (on a phone the column less the dialog's 12 a side; the web's
-/// `TAP_LIST_DIALOG_WIDTH`), rows 60 with faces 36.
+/// 会不会好一点呢」), rows 60 with faces 36. The author's is 480 wide at most everywhere; a reader's keeps a phone's 400
+/// (「手机上已经是这个 model 的设计了，所以可能只有平板和电脑网页和 Mac APP 需要更改哦」) and is 480 on a tablet and the Mac,
+/// as the web's `TAP_LIST_DIALOG_WIDTH` and Android's `readerListWidth`.
 enum TapListMetrics {
     static let dialogWidth: CGFloat = 480
+    static func readerWidth(compact: Bool) -> CGFloat { compact ? 400 : dialogWidth }
     static let dialogRow: CGFloat = 60
     static let dialogFace: CGFloat = 36
 }

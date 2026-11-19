@@ -56,13 +56,14 @@ import Testing
         #expect(people.people.isEmpty)
     }
 
-    /// Both lists are the same centred dialog on every device, 480 wide at most, rows 60 with faces 36 — a reader's
-    /// too, which on a tablet and the Mac was a popover under the faces, 280 wide with rows 52 (the owner, 2026-11-19:
-    /// 「我发现其实手机上已经是这个 model 的设计了，所以可能只有平板和电脑网页和 Mac APP 需要更改哦」). On a phone it is the column
-    /// less the dialog's 12 a side, as it was under its old 400 on every phone but the widest (the web's
-    /// `min(480px, 100vw - 32px)`).
+    /// Both lists are the same centred dialog on every device, rows 60 with faces 36 — a reader's too, which on a
+    /// tablet and the Mac was a popover under the faces, 280 wide with rows 52 (the owner, 2026-11-19: 「我发现其实手机上
+    /// 已经是这个 model 的设计了，所以可能只有平板和电脑网页和 Mac APP 需要更改哦」). The author's is 480 at most everywhere; a
+    /// reader's keeps the phone's 400 and is 480 on a tablet and the Mac (the web's and Android's alike).
     @Test func bothListsAreTheSameDialogOnEveryDevice() {
         #expect(TapListMetrics.dialogWidth == 480)
+        #expect(TapListMetrics.readerWidth(compact: true) == 400)
+        #expect(TapListMetrics.readerWidth(compact: false) == 480)
         #expect(TapListMetrics.dialogRow == 60 && TapListMetrics.dialogFace == 36)
     }
 }

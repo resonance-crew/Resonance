@@ -94,7 +94,7 @@ struct CardEndRow: View {
         }
         // The reader's list of who resonated: a centred dialog with no title (the reader sees only their connections),
         // a phone's, a tablet's and the Mac's alike.
-        .organicModal(isPresented: $listOpen, seed: 29, maxWidth: TapListMetrics.dialogWidth, closeLabel: L10n.Native.close) {
+        .organicModal(isPresented: $listOpen, seed: 29, maxWidth: TapListMetrics.readerWidth(compact: compact), closeLabel: L10n.Native.close) {
             ReaderTapList(cardId: cardId) { listOpen = false }.withSession(session)
         }
         // The note field opens again, focused, on its words: the toast's 再寄一次, or a failure while the page is here.

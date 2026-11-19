@@ -83,9 +83,9 @@ describe('TapFaces', () => {
   // The owner, 2026-11-19: 「我在想这个直接做成这个 model 会不会好一点呢」 — a phone's list was a dialog already; tablets,
   // the Mac and the desktop opened a popover under the faces, and now open the same dialog.
   it.each([
-    ['a phone', true],
-    ['a wide screen', false],
-  ])('opens a centred dialog with no title on %s: banded rows of face and name, each to their page, 關閉 at its foot', async (_, onPhone) => {
+    ['a phone', true, 'min(400px, calc(100vw - 32px))'],
+    ['a wide screen', false, '480px'],
+  ])('opens a centred dialog with no title on %s: banded rows of face and name, each to their page, 關閉 at its foot', async (_, onPhone, width) => {
     phone(onPhone);
     listTaps.mockResolvedValueOnce({ people: [person('dora'), person('eli')], nextPageToken: null });
     renderFaces({ mine: false, faces: [face('dora'), face('eli')], more: false, mayNote: true });
@@ -96,8 +96,8 @@ describe('TapFaces', () => {
     // A modal, centred over the page — never a popover laid at the faces.
     expect(dialog).toHaveAttribute('aria-modal', 'true');
     expect(button.parentElement?.contains(dialog)).toBe(false);
-    // As wide as the author's list on a wide screen (480); on a phone the column less 16 a side.
-    expect(dialog.style.maxWidth).toBe('min(480px, calc(100vw - 32px))');
+    // On a phone the width it always had (400, or the column less 16 a side); wider, the author's list's 480.
+    expect(dialog.style.maxWidth).toBe(width);
     // A reader sees only their connections: a title would claim everyone (S2).
     expect(within(dialog).queryByRole('heading')).toBeNull();
     const rows = await within(dialog).findAllByRole('link');

@@ -8,6 +8,7 @@ import { Modal } from '@/components/molecules/Modal/Modal';
 import { DialogScroll } from '@/components/sections/AppHeader/BellList';
 import { TAP_FACES_MAX, type AuthorBody, type CardTapBody } from '@/lib/api/v1/schemas';
 import { listTaps } from '@/lib/db/firestore/client/taps';
+import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { TapPeople, TapPeopleSkeleton } from './TapPeople';
 import styles from './TapFaces.module.css';
 
@@ -50,11 +51,15 @@ export function readerFacesLabel(
   return mine && shown.faces.some((f) => f.id === viewerId) ? `${words.selfOnly}${and}${said}` : said;
 }
 
+/** A phone (layout.md: the web ≤ 720): there the list keeps the width it always had. */
+export const TAP_LIST_PHONE_QUERY = '(max-width: 720px)';
+
 /**
- * The list's dialog at its widest: a phone's column less 16 on each side (as it was), and on a tablet, the Mac and
- * the desktop 480, as the author's list and the app's other one-exit dialogs there.
+ * The list's dialog at its widest: on a phone what it always was, 400 or the column less 16 a side (the owner,
+ * 2026-11-19: 「手机上已经是这个 model 的设计了，所以可能只有平板和电脑网页和 Mac APP 需要更改哦」); on a tablet, the Mac
+ * and the desktop 480, as the author's list and the app's other one-exit dialogs there.
  */
-export const TAP_LIST_DIALOG_WIDTH = 'min(480px, calc(100vw - 32px))';
+export const TAP_LIST_DIALOG_WIDTH = { phone: 'min(400px, calc(100vw - 32px))', wide: 480 } as const;
 
 export interface TapFacesProps {
   cardId: string;
@@ -77,6 +82,7 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving }: TapFacesP
   const t = useTranslations('card.tap');
   const locale = useLocale();
   const [open, setOpen] = useState(false);
+  const onPhone = useMediaQuery(TAP_LIST_PHONE_QUERY) !== false;
   const buttonRef = useRef<HTMLButtonElement>(null);
   const faces = tap.faces;
   // At most three drawn, the blank disc after them for the rest (the list itself stays whole: lib/data/taps).
@@ -120,7 +126,7 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving }: TapFacesP
         <Modal
           open
           onClose={() => close()}
-          maxWidth={TAP_LIST_DIALOG_WIDTH}
+          maxWidth={onPhone ? TAP_LIST_DIALOG_WIDTH.phone : TAP_LIST_DIALOG_WIDTH.wide}
           seed={43}
           padding="22px 22px 22px"
           // No visible title (S2): a reader sees only their connections, and a title would claim everyone.
