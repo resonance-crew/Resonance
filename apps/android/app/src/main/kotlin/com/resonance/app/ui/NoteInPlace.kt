@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -24,12 +25,14 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -44,6 +47,9 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -59,19 +65,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.resonance.design.AppFonts
+import com.resonance.design.ComposerCapsule
 import com.resonance.design.LayoutClass
 import com.resonance.design.LocalWindowLayout
-import com.resonance.design.ComposerCapsule
 import com.resonance.design.OrganicIcon
 import com.resonance.design.composerFades
 import com.resonance.design.fieldHintStyle
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
+import com.resonance.design.inlineBarTop
 import com.resonance.design.lineHeightOf
 import com.resonance.design.plainClickable
 import com.resonance.kit.l10n.L10n
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collectLatest
 
 /** The one line under the note's field (round 26, the note in place, item 3): one message at a time, by priority. */
 internal sealed interface NoteLine {
@@ -214,6 +221,8 @@ internal fun NoteInPlace(
     onSend: (String) -> Unit,
     onUpgrade: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** The page's bar to step aside (true) while the keyboard leaves no room under it for the field, or back (false). */
+    onRoom: (Boolean) -> Unit = {},
 ) {
     val phone = LocalWindowLayout.current.cls == LayoutClass.Compact
     val shortWindow = LocalConfiguration.current.screenHeightDp < 480
@@ -229,12 +238,19 @@ internal fun NoteInPlace(
                 )
                 return@Column
             }
-            NoteCapsule(state, tapOn, noteMaxLines(phone, shortWindow), onSend, Modifier.widthIn(max = NoteFieldMax).fillMaxWidth())
             val line = state.line(hint)
             val count = state.countShown
-            if (line != null || count != null) {
+            // The line under the field, as tall as it is drawn (its 6 above included): brought into view with the field
+            // where there is room for both.
+            var lineHeight by remember { mutableIntStateOf(0) }
+            val lineShown = line != null || count != null
+            NoteCapsule(
+                state, tapOn, noteMaxLines(phone, shortWindow), onSend, Modifier.widthIn(max = NoteFieldMax).fillMaxWidth(),
+                lineBelow = { if (lineShown) lineHeight else 0 }, onRoom = onRoom,
+            )
+            if (lineShown) {
                 Row(
-                    Modifier.widthIn(max = NoteFieldMax).fillMaxWidth().padding(top = 6.dp),
+                    Modifier.onSizeChanged { lineHeight = it.height }.widthIn(max = NoteFieldMax).fillMaxWidth().padding(top = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.Top,
                 ) {
@@ -267,14 +283,23 @@ internal fun NoteInPlace(
 
 /** The capsule itself: the envelope, the words (`note-field`, the flows' id), 寄出. */
 @Composable
-private fun NoteCapsule(state: NoteFieldState, tapOn: Boolean, maxLines: Int, onSend: (String) -> Unit, modifier: Modifier) {
+private fun NoteCapsule(
+    state: NoteFieldState,
+    tapOn: Boolean,
+    maxLines: Int,
+    onSend: (String) -> Unit,
+    modifier: Modifier,
+    lineBelow: () -> Int,
+    onRoom: (Boolean) -> Unit,
+) {
     var focused by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     val relocate = remember { BringIntoViewRequester() }
     val density = LocalDensity.current
-    var blockHeight by remember { mutableIntStateOf(0) }
+    var capsule by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var fieldHeight by remember { mutableIntStateOf(0) }
     val canSend = state.canSend(mayNote = true)
     val placeholder = notePlaceholder(tapOn)
     val line = lineHeightOf(ComposerText)
@@ -286,15 +311,38 @@ private fun NoteCapsule(state: NoteFieldState, tapOn: Boolean, maxLines: Int, on
         runCatching { focus.requestFocus() }
         keyboard?.show()
     }
-    // Focused: the page brings the block 12 above the keyboard once it has risen (and again as it settles).
+    // Focused, once the keyboard has risen and stood still a moment (and again as it, the field or its line change):
+    // the page brings the field — with its line where both fit — 12 above the keyboard and clear of the bar over the
+    // page; where even the field has no room under the bar (a phone on its side), the bar steps aside ([onRoom]).
     val ime = WindowInsets.ime
+    val statusBars = WindowInsets.statusBars
+    val barBottom = with(density) { inlineBarTop().toPx() }
+    val clearance = with(density) { NoteKeyboardClearance.toPx() }
+    val room by rememberUpdatedState(onRoom)
+    val lineNow by rememberUpdatedState(lineBelow)
     LaunchedEffect(focused) {
-        if (!focused) return@LaunchedEffect
-        snapshotFlow { ime.getBottom(density) }.first { it > 0 }
-        delay(NOTE_MOVE_MILLIS.toLong())
-        val below = with(density) { NoteKeyboardClearance.toPx() }
-        relocate.bringIntoView(Rect(0f, 0f, 1f, blockHeight + below))
+        if (!focused) {
+            room(false)
+            return@LaunchedEffect
+        }
+        snapshotFlow { Triple(ime.getBottom(density), fieldHeight, lineNow()) }.collectLatest { (keys, field, line) ->
+            if (keys <= 0) {
+                room(false)
+                return@collectLatest
+            }
+            delay(NOTE_KEYBOARD_SETTLE_MILLIS)
+            val at = capsule?.takeIf { it.isAttached } ?: return@collectLatest
+            // The page lies on the whole window under the bar laid over it, and stops at the keyboard (its imePadding).
+            val window = at.findRootCoordinates().size.height.toFloat()
+            val reveal = noteReveal(
+                keyboardTop = window - keys, barBottom = barBottom, statusBottom = statusBars.getTop(density).toFloat(),
+                field = field.toFloat(), line = line.toFloat(), clearance = clearance,
+            )
+            room(reveal.barAside)
+            relocate.bringIntoView(reveal.rect(at.size.width.toFloat()))
+        }
     }
+    DisposableEffect(Unit) { onDispose { room(false) } }
     val send = {
         if (canSend) onSend(state.text.trim())
     }
@@ -304,7 +352,10 @@ private fun NoteCapsule(state: NoteFieldState, tapOn: Boolean, maxLines: Int, on
         onSend = send,
         focused = { focused },
         textStyle = ComposerText,
-        modifier = modifier.bringIntoViewRequester(relocate).onSizeChanged { blockHeight = it.height },
+        modifier = modifier
+            .bringIntoViewRequester(relocate)
+            .onGloballyPositioned { capsule = it }
+            .onSizeChanged { fieldHeight = it.height },
         seed = 23.0,
         // From the second line Send is the block on the last row, as the composer's.
         block = false,
@@ -372,7 +423,42 @@ internal val NoteInPlaceGap: Dp = 12.dp
 internal val NoteFieldMax: Dp = 680.dp
 
 /** How far over the keyboard the field's block stands once the page has brought it there. */
-private val NoteKeyboardClearance: Dp = 12.dp
+internal val NoteKeyboardClearance: Dp = 12.dp
+
+/** How long the keyboard stands still before the page brings the field over it (its rise is followed, not raced). */
+private const val NOTE_KEYBOARD_SETTLE_MILLIS = 120L
+
+/**
+ * Where the page brings the note's field once it has the focus (item 2: 12 above the keyboard, nothing floating),
+ * along the page's viewport, which runs from the window's top (the bar lies over it) to the keyboard's top. The rect
+ * asked of the page ([rect], in the field's own place) starts [above] over the field's top — the room the bar over the
+ * page takes, so brought fully into the viewport the field stands under the bar, never behind it — and ends [below]
+ * under it: the field, the line under it where both fit, and the 12 over the keyboard. [barAside]: not even the field
+ * fits under the bar (a phone on its side, the keyboard up: about 28 between the header's line and the keyboard on a
+ * 411-tall window), so the bar steps aside while the keyboard is up and only the status bar stands over the page.
+ */
+internal data class NoteReveal(val barAside: Boolean, val above: Float, val below: Float) {
+    fun rect(width: Float): Rect = Rect(0f, -above, width, below)
+}
+
+/**
+ * [NoteReveal] for a window whose keyboard's top is [keyboardTop] (px from the window's top), the bar's line at
+ * [barBottom], the status bar's foot at [statusBottom], the field [field] tall, the line under it [line] (0 without
+ * one): the field and its line where both fit under the bar, else the field alone; where not even the field fits, the
+ * same under the status bar with the bar aside.
+ */
+internal fun noteReveal(keyboardTop: Float, barBottom: Float, statusBottom: Float, field: Float, line: Float, clearance: Float): NoteReveal {
+    val block = field + line + clearance
+    val alone = field + clearance
+    val underBar = keyboardTop - barBottom
+    val underStatus = keyboardTop - statusBottom
+    return when {
+        block <= underBar -> NoteReveal(false, barBottom, block)
+        alone <= underBar -> NoteReveal(false, barBottom, alone)
+        block <= underStatus -> NoteReveal(true, statusBottom, block)
+        else -> NoteReveal(true, statusBottom, alone)
+    }
+}
 
 /** The field opening and closing. */
 internal const val NOTE_MOVE_MILLIS = 150

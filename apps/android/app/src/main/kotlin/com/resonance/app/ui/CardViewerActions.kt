@@ -93,6 +93,8 @@ fun CardViewerActions(
     onRow: (LayoutCoordinates) -> Unit = {},
     /** What the screenshots ask of this end once it is on screen (`--es cardEnd …`, [DebugLaunch.cardEnd]). */
     launch: Set<DebugLaunch.CardEnd> = emptySet(),
+    /** The note's field asks the page's bar to step aside (true) — no room under it over the keyboard — or come back. */
+    onNoteRoom: (Boolean) -> Unit = {},
 ) {
     val cardId = detail.card.id
     val toasts = LocalToasts.current
@@ -278,6 +280,7 @@ fun CardViewerActions(
                     note.upgraded()
                     onUpgradeNote(words)
                 },
+                onRoom = onNoteRoom,
             )
         }
     }

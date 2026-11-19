@@ -2,6 +2,10 @@ package com.resonance.app.ui
 
 import android.os.SystemClock
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.animation.core.snap
+import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -420,6 +424,9 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
 
     // The bar lies over the page, so the story scrolls right up to its pen line.
     val top = inlineBarTop()
+    // The note's field asked the bar aside: the keyboard up leaves it no room under the bar (a phone on its side).
+    var barAside by remember { mutableStateOf(false) }
+    val imeInsets = WindowInsets.ime
     // Once the byline under the title has scrolled under the bar, the bar names the author (Threads' header, in the byline's language).
     val byline = remember { HeadingUnderBar() }
     val bylineGone by remember(list) {
@@ -584,6 +591,9 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                     if (launchEnd.isEmpty()) return@LaunchedEffect
                     // The story laid out (its pictures' places) before the row is found.
                     delay(LAUNCH_END_SETTLE_MS)
+                    // The note's field open, the keyboard up: the field has brought itself over the keyboard (and asked
+                    // the bar aside where it must) — centring the row now would push it back under the keyboard.
+                    if (DebugLaunch.CardEnd.Note in launchEnd && imeInsets.getBottom(density) > 0) return@LaunchedEffect
                     val row = endRowCoords?.takeIf { it.isAttached } ?: return@LaunchedEffect
                     val frame = listCoords?.takeIf { it.isAttached } ?: return@LaunchedEffect
                     val y = frame.localPositionOf(row, Offset.Zero).y
@@ -649,6 +659,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                     if (lineOnScreen(row, pageView.height)) model.readingView?.sawEnd()
                                 },
                                 launch = launchEnd,
+                                onNoteRoom = { barAside = it },
                             )
                             // The author's own published card: who resonated, where a reader's row would be (§U3).
                             else if (!trashedOwn && card.publishedAt != null) {
@@ -703,6 +714,14 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     // while the article scrolls, leaving with its end. The author is under the title at every width (round 8 §10.1).
     val railStart = columns.railStart
     if (railStart != null && detail != null) ContentsRail(railStart, list, top + articleTop(cls, detail.card, ownTrashed(detail)), headings, tapped ?: reading, onHeading)
+    // The bar stepped aside for the note's field (a phone on its side, the keyboard up): the status bar keeps the
+    // page's paper under it, so the story never runs under the clock.
+    if (barAside) Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).cream())
+    AnimatedVisibility(
+        !barAside,
+        enter = if (reduced) fadeIn(snap()) else slideInVertically(tween(NOTE_MOVE_MILLIS)) { -it },
+        exit = if (reduced) fadeOut(snap()) else slideOutVertically(tween(NOTE_MOVE_MILLIS)) { -it },
+    ) {
     OrganicInlineBar(
         L10n.App.Nav.back, back, scrolled = list.scrolledPast20(),
         // A tablet's header has the card's title in its middle instead of the author beside the arrow.
@@ -726,6 +745,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                 exit = fadeOut(tween(140)),
             ) { actions() }
         }
+    }
     }
     // Where the share card is drawn into its pictures: out of sight, taking no room.
     ShareCardRendererHost(sharing.renderer)
