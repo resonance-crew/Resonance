@@ -8,6 +8,8 @@ import { summaryHash } from '@/lib/api/v1/summaryTranslations';
 import { translateCard } from '@/lib/api/v1/translation';
 import { translationHash } from '@/lib/api/v1/translationHash';
 import { backfillSummaryTranslations } from '../../scripts/backfills/summaryTranslations';
+import { backfillStoryTranslations } from '../../scripts/backfills/storyTranslations';
+import { TRANSLATE_MAX_CHARS } from '@/lib/text/translation';
 
 // What the rules give the client the server re-checks (round 25 §F5, §F7):
 // a story is translated only for a reader who may read it, only while it is
@@ -127,5 +129,55 @@ describe('backfill.ts summary-translations', () => {
     expect((await db.doc('cards/pub').get()).get('summaryTranslations')).toEqual({ of: summaryHash(TITLE, old), en: { title: `EN ${TITLE}`, excerpt: `EN ${old}` } });
     // and done: the next count finds none (it counted this card for ever while it compared with the story's excerpt)
     expect((await backfillSummaryTranslations(db, { apply: false, log: quiet })).candidates).toBe(0);
+  });
+});
+
+describe('backfill.ts story-translations', () => {
+  const quiet = () => {};
+  const failing = async () => {
+    throw new Error('the model was asked');
+  };
+
+  it('keeps every public story translated as the route keeps it, so the first reader is answered at once', async () => {
+    await Promise.all([
+      db.doc('cards/trashed').set(card({ trashedAt: Timestamp.fromMillis(Date.now() - 1_000) })),
+      db.doc('cards/long').set(card({ story: '字'.repeat(TRANSLATE_MAX_CHARS + 1) })),
+      db.doc('cards/draft').set(card({ publishedAt: null })),
+    ]);
+    const dry = await backfillStoryTranslations(db, { apply: false, log: quiet });
+    // The named and the anonymous public card; never a connection's card, a 私人卡, a draft or one in the trash.
+    expect(dry).toMatchObject({ publicCards: 3, candidates: 2, tooLong: 1, made: 0 });
+    expect((await db.doc('cards/pub/translations/en').get()).exists).toBe(false);
+
+    const asked: string[] = [];
+    const run = await backfillStoryTranslations(db, {
+      apply: true,
+      log: quiet,
+      pauseMs: 0,
+      translate: async (input, to) => {
+        asked.push(`${input.title}→${to}`);
+        return made;
+      },
+    });
+    expect(run).toMatchObject({ candidates: 2, made: 2, failed: 0 });
+    expect(asked).toEqual([`${TITLE}→en`, `${TITLE}→en`]);
+    const kept = (await db.doc('cards/pub/translations/en').get()).data()!;
+    expect(kept).toMatchObject({ ...made, hash: translationHash(TITLE, STORY) });
+    expect(typeof kept.model).toBe('string');
+    // The route answers what it kept, without the model or the reader's budget.
+    expect(await translateCard(db, 'carol', 'a-walk', 'en', { translate: failing })).toEqual({ to: 'en', ...made });
+    expect(await translateCard(db, 'carol', 'anon', 'en', { translate: failing })).toEqual({ to: 'en', ...made });
+    expect((await db.doc('cards/priv/translations/en').get()).exists).toBe(false);
+    expect((await db.doc('cards/trashed/translations/en').get()).exists).toBe(false);
+    // Done: none the next time, until a story changes.
+    expect((await backfillStoryTranslations(db, { apply: false, log: quiet })).candidates).toBe(0);
+    await db.doc('cards/pub').update({ story: `${STORY}後來又下起雨。` });
+    expect((await backfillStoryTranslations(db, { apply: false, log: quiet })).candidates).toBe(1);
+  });
+
+  it('keeps nothing for a story the model failed, and counts it', async () => {
+    const run = await backfillStoryTranslations(db, { apply: true, log: quiet, pauseMs: 0, translate: failing });
+    expect(run).toMatchObject({ candidates: 2, made: 0, failed: 2 });
+    expect((await db.collection('cards/pub/translations').get()).empty).toBe(true);
   });
 });
