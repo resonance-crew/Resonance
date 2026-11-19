@@ -107,19 +107,21 @@ enum TapListMetrics {
 }
 
 /// A list row's measures: how tall, its face, the pad from the list's edge to the face (and from the name to the other
-/// edge) and the gap from the face to the name.
+/// edge), the gap from the face to the name, and the name's type size.
 struct TapRowMeasure: Equatable {
     let height: CGFloat
     let face: CGFloat
     let inset: CGFloat
     let gap: CGFloat
+    let name: CGFloat
 
     /// A dialog's (60, faces 36): the rows pad 12 and the dialog's scroll runs 12 past its padding, so a face stands at
     /// the dialog's own padding and the bands reach nearer its paper's edges.
-    static let dialog = TapRowMeasure(height: TapListMetrics.dialogRow, face: TapListMetrics.dialogFace, inset: 12, gap: 12)
-    /// The popover's (52, faces 28): 20 in from the sheet's pen line, 10 to the name — a menu sheet's rows, as the web's
-    /// (TapPeople.module.css `.list[data-size='popover']`). Its scroll runs to the sheet's edges, so nothing cancels it.
-    static let popover = TapRowMeasure(height: TapListMetrics.popoverRow, face: TapListMetrics.popoverFace, inset: 20, gap: 10)
+    static let dialog = TapRowMeasure(height: TapListMetrics.dialogRow, face: TapListMetrics.dialogFace, inset: 12, gap: 12, name: 15)
+    /// The popover's (52, faces 28): 20 in from the sheet's pen line, 10 to the name, the name at 14 — a menu sheet's
+    /// rows, as the web's (TapPeople.module.css `.list[data-size='popover']`). Its scroll runs to the sheet's edges, so
+    /// nothing cancels it.
+    static let popover = TapRowMeasure(height: TapListMetrics.popoverRow, face: TapListMetrics.popoverFace, inset: 20, gap: 10, name: 14)
 }
 
 /// One person of a list: their face and pen name, banded (the curves show as a press's wash), leading to their page —
@@ -141,7 +143,7 @@ struct TapPersonRow: View {
                                 color: author.accent, size: measure.face, seed: author.avatarSeedValue)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(author.handle)
-                        .font(AppFonts.body(15, weight: .semibold))
+                        .font(AppFonts.body(measure.name, weight: .semibold))
                         .foregroundStyle(Tokens.text)
                         .lineLimit(1)
                     if let note {
@@ -324,7 +326,7 @@ struct TapsPopover: View {
         }
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.basedOnSize)
-        .frame(width: TapListMetrics.popoverWidth, height: CGFloat(rows) * TapListMetrics.popoverRow + 12)
+        .frame(width: TapListMetrics.popoverWidth, height: CGFloat(rows) * TapListMetrics.popoverRow + 2 * TapsPopoverRows.edge)
         .background { shape.fill(MenuSheetColors.paper(hue: nil)) }
         .overlay {
             shape.stroke(MenuSheetColors.pen(hue: nil), style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
@@ -334,9 +336,11 @@ struct TapsPopover: View {
     }
 }
 
-/// The popover's rows, as its sheet scrolls them: 6 above and below, each face 20 in from the sheet's pen line and 10
-/// before the name (``TapRowMeasure/popover``).
+/// The popover's rows, as its sheet scrolls them: 8 above and below (the web's `.popoverBody`), each face 20 in from
+/// the sheet's pen line and 10 before the name (``TapRowMeasure/popover``).
 struct TapsPopoverRows: View {
+    /// The paper above the first row and below the last.
+    static let edge: CGFloat = 8
     let people: TapPeople?
     let open: (Route) -> Void
 
@@ -347,7 +351,7 @@ struct TapsPopoverRows: View {
                 TapListState(people: people, measure: .popover)
             }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, Self.edge)
     }
 }
 

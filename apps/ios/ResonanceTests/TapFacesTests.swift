@@ -149,20 +149,21 @@ import UIKit
 }
 
 /// A wide window's list of who resonated (§U2.5) is a menu sheet: a row's face stands 20 in from the sheet's pen line
-/// and the name 10 after the face, as the web's popover rows (TapPeople.module.css `.list[data-size='popover']`). They
-/// stood 12 and 12, the dialogs' rows, which only a dialog pulls back to its own padding.
+/// and the name 10 after the face, at 14, with 8 of paper above the first row and below the last, as the web's popover
+/// (TapPeople.module.css `.list[data-size='popover']`, TapFaces.module.css `.popoverBody`). They stood 12 and 12 at 15
+/// with 6 above and below, the dialogs' rows, which only a dialog pulls back to its own padding.
 @MainActor @Suite(.serialized) struct TapsPopoverRowsTests {
     @Test func aFaceStandsTwentyInAndTheNameTenAfterIt() async throws {
-        #expect(TapRowMeasure.popover == TapRowMeasure(height: 52, face: 28, inset: 20, gap: 10))
+        #expect(TapRowMeasure.popover == TapRowMeasure(height: 52, face: 28, inset: 20, gap: 10, name: 14))
         // The dialogs' rows are not the popover's: 12 a side, pulled back by their scroll's -12.
-        #expect(TapRowMeasure.dialog == TapRowMeasure(height: 60, face: 36, inset: 12, gap: 12))
+        #expect(TapRowMeasure.dialog == TapRowMeasure(height: 60, face: 36, inset: 12, gap: 12, name: 15))
 
         let people = TapPeople { _ in TapList(people: [TapPerson(author: Fixture.author("dora"), note: nil)], nextPageToken: nil) }
         await people.load()
         let width = TapListMetrics.popoverWidth
         let drawn = try DrawnPixels(TapsPopoverRows(people: people) { _ in }.frame(width: width).background(Tokens.cream))
-        // 6 above, the row's 52, 6 below.
-        #expect(drawn.width == Int(width * 2) && drawn.height == Int((TapListMetrics.popoverRow + 12) * 2),
+        // 8 above, the row's 52, 8 below (the web's .popoverBody); it was 6 and 6.
+        #expect(drawn.width == Int(width * 2) && drawn.height == Int((TapListMetrics.popoverRow + 16) * 2),
                 "\(drawn.width) × \(drawn.height)")
         let paper = try DrawnPixels(Color.clear.frame(width: 4, height: 4).background(Tokens.cream)).rgb(2, 2)
         // The columns anything is drawn in: the face, then — after the paper between them — the name.
