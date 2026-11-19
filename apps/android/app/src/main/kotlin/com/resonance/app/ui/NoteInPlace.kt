@@ -80,14 +80,16 @@ import com.resonance.kit.l10n.L10n
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 
-/** The one line under the note's field (round 26, the note in place, item 3): one message at a time, by priority. */
+/**
+ * The one line under the note's field (round 26, the note in place, item 3): one message at a time, by priority — and
+ * none with nothing to say. No privacy line any more (the owner's look, 2026-11-19: 「把這段話只有作者會看到這句把它移除
+ * 掉」): the placeholder says where the words go.
+ */
 internal sealed interface NoteLine {
     /** Why the last note didn't go. */
     data class Error(val text: String) : NoteLine
     /** Past [NOTE_UPGRADE_THRESHOLD]: 這段話想寫成一張卡片嗎？, taking the words to the writer. */
     data object Upgrade : NoteLine
-    /** 這段話只有作者看得到, the first three times. */
-    data object Privacy : NoteLine
 }
 
 /**
@@ -149,11 +151,10 @@ internal class NoteFieldState(draft: String, mayNote: Boolean) {
     /** Whether 寄出 sends: words, within the cap, and a note may be left. */
     fun canSend(mayNote: Boolean): Boolean = mayNote && count in 1..NOTE_MAX_LENGTH
 
-    /** The line under the field, by priority: the error, then the offer of a card, then the privacy hint ([hint]). */
-    fun line(hint: Boolean): NoteLine? = when {
+    /** The line under the field, by priority: the error, then the offer of a card; else none. */
+    fun line(): NoteLine? = when {
         error != null -> NoteLine.Error(error!!)
         count > NOTE_UPGRADE_THRESHOLD -> NoteLine.Upgrade
-        hint -> NoteLine.Privacy
         else -> null
     }
 
@@ -190,8 +191,11 @@ internal class NoteFieldState(draft: String, mayNote: Boolean) {
     }
 }
 
-/** The field's question (item 2): 「哪一段讓你有共鳴？」 while the viewer's tap is on, else the note's own. */
-internal fun notePlaceholder(tapOn: Boolean): String = if (tapOn) L10n.Card.Tap.ask else L10n.Card.Note.placeholder
+/**
+ * The field's placeholder (item 2, as the owner's look of 2026-11-19 amends it): card.note.placeholder in every state —
+ * 「悄悄告訴作者，哪一段打動你」, where the words go and what to write — whether the viewer's tap is on or not.
+ */
+internal fun notePlaceholder(): String = L10n.Card.Note.placeholder
 
 /**
  * How many lines the field grows to before it scrolls inside: 3 on a phone, 5 wider — and 2 in a short window whatever
@@ -208,15 +212,13 @@ internal fun noteMaxLines(phone: Boolean, shortWindow: Boolean): Int = when {
  * lead column (48), the words, and 寄出 as its end segment (the paper plane, tonal at rest, solid only with words) —
  * [NoteInPlaceGap] under row 2, as wide as the column on a phone and min(the story's column, 680) wider, from where the
  * capsule starts. One line 48, growing to [noteMaxLines], then scrolling inside; no ⤢. Focused, the page brings the
- * field's block 12 above the keyboard (nothing floats). Under it the one [NoteLine] and, near the cap, the count; with
- * [mayNote] false, the wait line alone in its place.
+ * field's block 12 above the keyboard (nothing floats). Under it the one [NoteLine] and, near the cap, the count —
+ * nothing with nothing to say; with [mayNote] false, the wait line alone in its place.
  */
 @Composable
 internal fun NoteInPlace(
     state: NoteFieldState,
-    tapOn: Boolean,
     mayNote: Boolean,
-    hint: Boolean,
     reducedMotion: Boolean,
     onSend: (String) -> Unit,
     onUpgrade: (String) -> Unit,
@@ -238,14 +240,14 @@ internal fun NoteInPlace(
                 )
                 return@Column
             }
-            val line = state.line(hint)
+            val line = state.line()
             val count = state.countShown
             // The line under the field, as tall as it is drawn (its 6 above included): brought into view with the field
             // where there is room for both.
             var lineHeight by remember { mutableIntStateOf(0) }
             val lineShown = line != null || count != null
             NoteCapsule(
-                state, tapOn, noteMaxLines(phone, shortWindow), onSend, Modifier.widthIn(max = NoteFieldMax).fillMaxWidth(),
+                state, noteMaxLines(phone, shortWindow), onSend, Modifier.widthIn(max = NoteFieldMax).fillMaxWidth(),
                 lineBelow = { if (lineShown) lineHeight else 0 }, onRoom = onRoom,
             )
             if (lineShown) {
@@ -266,7 +268,6 @@ internal fun NoteInPlace(
                                 style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.ButtonOnTonal).copy(textDecoration = TextDecoration.Underline),
                                 modifier = Modifier.plainClickable(role = Role.Button) { onUpgrade(state.text) },
                             )
-                            NoteLine.Privacy -> BasicText(L10n.Card.Note.hint, style = AppFonts.body(12f, lineHeight = 1.5f, color = Tokens.TextMuted))
                             null -> Unit
                         }
                     }
@@ -285,7 +286,6 @@ internal fun NoteInPlace(
 @Composable
 private fun NoteCapsule(
     state: NoteFieldState,
-    tapOn: Boolean,
     maxLines: Int,
     onSend: (String) -> Unit,
     modifier: Modifier,
@@ -301,7 +301,7 @@ private fun NoteCapsule(
     var capsule by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var fieldHeight by remember { mutableIntStateOf(0) }
     val canSend = state.canSend(mayNote = true)
-    val placeholder = notePlaceholder(tapOn)
+    val placeholder = notePlaceholder()
     val line = lineHeightOf(ComposerText)
     // Asked to take the focus (opened, reopened after a failure, 寄小紙條 again): the field and the keyboard.
     LaunchedEffect(state.focusTicket) {
@@ -400,7 +400,7 @@ private fun NoteCapsule(
                         } else false
                     }
                     // Named as the web's aria-label and iOS's label are (寄一張小紙條給作者), not by the placeholder, which
-                    // changes with the 共振 tap and is its own text beside the field.
+                    // is its own text beside the field.
                     .semantics { contentDescription = L10n.Card.Note.entry }
                     .flowTag("note-field"),
             )

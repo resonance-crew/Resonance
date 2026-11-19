@@ -98,7 +98,7 @@ class NoteBarTurnTest {
             view = LocalView.current
             CompositionLocalProvider(LocalInlineBarHeight provides bar) {
                 Box(Modifier.fillMaxSize()) {
-                    NoteInPlace(note, tapOn = false, mayNote = true, hint = false, reducedMotion = true, onSend = {}, onUpgrade = {}, onRoom = { room = it })
+                    NoteInPlace(note, mayNote = true, reducedMotion = true, onSend = {}, onUpgrade = {}, onRoom = { room = it })
                 }
             }
         }

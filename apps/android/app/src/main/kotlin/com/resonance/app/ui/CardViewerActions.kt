@@ -147,8 +147,6 @@ fun CardViewerActions(
 
     // The note in place.
     val note = remember(cardId) { NoteFieldState(session.noteDrafts?.text(cardId).orEmpty(), mayNote) }
-    var hint by remember(cardId) { mutableStateOf(false) }
-    LaunchedEffect(note.open) { if (note.open && !hint) hint = session.hints?.claim("note-privacy") ?: false }
     // Kept a moment after typing stops, as the app leaves the screen, and as the page goes.
     val typed by rememberUpdatedState(note.draft)
     LaunchedEffect(note.draft) {
@@ -265,7 +263,7 @@ fun CardViewerActions(
                 }
             }
             NoteInPlace(
-                note, tapOn = switch.on, mayNote = mayNote, hint = hint, reducedMotion = reduced,
+                note, mayNote = mayNote, reducedMotion = reduced,
                 onSend = { words ->
                     // Kept until the server has it: a failure brings these words back into the field.
                     keepDraft(session, cardId, words)

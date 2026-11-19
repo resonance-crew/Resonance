@@ -64,26 +64,28 @@ class NoteInPlaceTest {
         assertEquals("寫到一半", note.draft)
     }
 
-    @Test fun theQuestionAsksWhichPartWhileTheTapIsOn() {
-        assertEquals("哪一段讓你有共鳴？", notePlaceholder(tapOn = true))
-        assertEquals("想對作者說的話⋯", notePlaceholder(tapOn = false))
+    // The owner's look (2026-11-19): the placeholder itself says where the words go and what to write — the same in
+    // every state, the reader's tap on or not (card.tap.ask is no longer asked here).
+    @Test fun theFieldAsksTheSameInEveryState() {
+        assertEquals("悄悄告訴作者，哪一段打動你", notePlaceholder())
         Strings.language = Strings.Language.En
-        assertEquals("What stayed with you?", notePlaceholder(tapOn = true))
-        assertEquals("A note for the author…", notePlaceholder(tapOn = false))
+        assertEquals("Tell the author what moved you", notePlaceholder())
     }
 
-    @Test fun oneLineUnderTheFieldByPriority() {
+    @Test fun oneLineUnderTheFieldByPriorityAndNoneWithNothingToSay() {
         val note = NoteFieldState("", mayNote = true)
         note.segment()
-        assertEquals(NoteLine.Privacy, note.line(hint = true))
-        assertNull(note.line(hint = false))
+        // No privacy line (「這段話只有作者看得到」 is gone): an empty field has nothing under it.
+        assertNull(note.line())
+        note.edit("謝謝你寫下這場雨")
+        assertNull(note.line())
         note.edit("字".repeat(NOTE_UPGRADE_THRESHOLD + 1))
-        assertEquals(NoteLine.Upgrade, note.line(hint = true))
+        assertEquals(NoteLine.Upgrade, note.line())
         note.failed("", "沒送出去，再試一次")
-        assertEquals(NoteLine.Error("沒送出去，再試一次"), note.line(hint = true))
+        assertEquals(NoteLine.Error("沒送出去，再試一次"), note.line())
         // Writing again clears the error.
         note.edit(note.text + "。")
-        assertEquals(NoteLine.Upgrade, note.line(hint = true))
+        assertEquals(NoteLine.Upgrade, note.line())
     }
 
     @Test fun theCountShowsOnlyNearTheCap() {

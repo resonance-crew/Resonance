@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
@@ -70,8 +71,8 @@ class NoteInPlaceKeysTest {
         Strings.language = language
     }
 
-    private fun show(note: NoteFieldState, tapOn: Boolean = false) = compose.setContent {
-        NoteInPlace(note, tapOn = tapOn, mayNote = true, hint = false, reducedMotion = true, onSend = {}, onUpgrade = {})
+    private fun show(note: NoteFieldState) = compose.setContent {
+        NoteInPlace(note, mayNote = true, reducedMotion = true, onSend = {}, onUpgrade = {})
     }
 
     private val field get() = compose.onNode(hasSetTextAction())
@@ -100,13 +101,18 @@ class NoteInPlaceKeysTest {
 
     // TalkBack names the field as the web's aria-label and iOS's label do — 寄一張小紙條給作者 — not by its placeholder.
     @Test fun theFieldIsNamedByTheEntryNotThePlaceholder() {
-        show(NoteFieldState("", mayNote = true).apply { segment() }, tapOn = true)
+        show(NoteFieldState("", mayNote = true).apply { segment() })
         assertEquals("寄一張小紙條給作者", L10n.Card.Note.entry)
         field.assertContentDescriptionEquals(L10n.Card.Note.entry)
     }
 
-    @Test fun theFieldKeepsItsNameWithoutTheTap() {
+    // The owner's look (2026-11-19): 「把這段話只有作者會看到這句把它移除掉」 and the placeholder says the action. An
+    // open, empty field shows card.note.placeholder and nothing under it — no 這段話只有作者看得到, no 哪一段讓你有共鳴？.
+    @Test fun anEmptyFieldAsksTheNotesOwnQuestionWithNoLineUnderIt() {
         show(NoteFieldState("", mayNote = true).apply { segment() })
-        field.assertContentDescriptionEquals(L10n.Card.Note.entry)
+        compose.waitForIdle()
+        compose.onNodeWithText("悄悄告訴作者，哪一段打動你", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText(L10n.Card.Note.hint, useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText(L10n.Card.Tap.ask, useUnmergedTree = true).assertDoesNotExist()
     }
 }
