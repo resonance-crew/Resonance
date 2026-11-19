@@ -18,7 +18,6 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
-import com.resonance.design.AvatarGroup
 import com.resonance.design.OrganicIcon
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
@@ -123,16 +122,16 @@ class EndRowTwoTest {
             Box(Modifier.width(320.dp).testTag("column")) {
                 EndRowTwo(
                     Modifier.width(320.dp),
-                    // A face as the group draws it: its pad 3 round a 28.
-                    faces = { Box(Modifier.size(28.dp + AvatarGroup.PAD * 2).testTag("pad")) },
+                    // A face as the group draws it now: the 28 itself, nothing round it (round 26: the pads are gone).
+                    faces = { Box(Modifier.size(28.dp).testTag("face")) },
                 ) { Box(Modifier.size(48.dp).testTag("end")) }
             }
         }
         val row = compose.onNodeWithTag("column").getBoundsInRoot()
-        val pad = compose.onNodeWithTag("pad").getBoundsInRoot()
+        val face = compose.onNodeWithTag("face").getBoundsInRoot()
         val end = compose.onNodeWithTag("end").getBoundsInRoot()
-        // The face itself, inside its pad: 12 in, the web's.
-        assertEquals(12f, (pad.left + AvatarGroup.PAD - row.left).value, 0.5f)
+        // The face's rim 12 in, the web's — where it stood when a pad of 3 came before it.
+        assertEquals(12f, (face.left - row.left).value, 0.5f)
         // 收藏's 48 on the row's end, the row 48 tall.
         assertEquals(row.right.value, end.right.value, 0.5f)
         assertEquals(Row2Height.value, (row.bottom - row.top).value, 0.5f)

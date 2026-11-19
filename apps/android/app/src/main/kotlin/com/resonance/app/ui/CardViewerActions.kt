@@ -43,7 +43,6 @@ import com.resonance.app.DebugLaunch
 import com.resonance.app.DraftService
 import com.resonance.app.Session
 import com.resonance.design.AppFonts
-import com.resonance.design.AvatarGroup
 import com.resonance.design.LocalToasts
 import com.resonance.design.OrganicIcon
 import com.resonance.design.OrganicIndication
@@ -296,10 +295,11 @@ fun CardViewerActions(
 internal val Row2Height = 48.dp
 
 /**
- * Where a face stands in from row 2's start: its pad (3) here, so the face itself is 12 in — the web's, whose faces'
- * line (6) and their button (6) both pad it (CardViewerActions.module.css `.faces`, TapFaces.module.css `.faces`).
+ * Where the first face's rim stands in from row 2's start: 12 — the web's, whose faces' line (6) and their button (6)
+ * both pad it (CardViewerActions.module.css `.faces`, TapFaces.module.css `.faces`). A face has nothing under it now,
+ * so the group's start is the face's.
  */
-internal val Row2FacesStart = 12.dp - AvatarGroup.PAD
+internal val Row2FacesStart = 12.dp
 
 /**
  * How far in from row 2's end 收藏's glyph stands, in its 48 to the finger flush with that end: the web's — its glyph
@@ -312,8 +312,8 @@ internal val Row2GlyphEnd = 12.dp
 internal val BookmarkGlyph = 20.dp
 
 /**
- * Row 2 (§U1.2): as wide as the capsule ([modifier] gives the width), [Row2Height] tall — [faces] at its start, a face
- * [Row2FacesStart] (its pad's) in; [end] (收藏) at its end.
+ * Row 2 (§U1.2): as wide as the capsule ([modifier] gives the width), [Row2Height] tall — [faces] at its start, the
+ * first face [Row2FacesStart] in; [end] (收藏) at its end.
  */
 @Composable
 internal fun EndRowTwo(modifier: Modifier, faces: @Composable () -> Unit, end: @Composable () -> Unit) {

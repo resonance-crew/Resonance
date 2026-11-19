@@ -64,6 +64,12 @@ import kotlinx.coroutines.launch
 /** The faces under the capsule and on the author's line (§U2.2): the apps' 28. */
 internal val TapFaceSize: Dp = 28.dp
 
+/**
+ * On the author's line, from the wave to the first face's rim: where that rim has stood since §U3.1 — the 8 before the
+ * group, and the 3 of the paper pad the face sat on then. The pads are gone (the owner, round 26); the face stays put.
+ */
+internal val AuthorFacesGap: Dp = 11.dp
+
 /** A face's group record: its avatar as [HandDrawnAvatar] draws it everywhere else. */
 @Composable
 internal fun Author.groupFace(): GroupFace = GroupFace(id, initials, avatarUrl, accent(), avatarSeedValue())
@@ -92,7 +98,7 @@ internal fun TapFacesButton(
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (author && !none) {
                 OrganicIcon(IconName.Wave, size = 16.dp, color = Tokens.TextMuted)
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(AuthorFacesGap))
             }
             AvatarGroup(faces.shown.map { it.groupFace() }, faces.showsMore, size = TapFaceSize, reducedMotion = reduced)
         }

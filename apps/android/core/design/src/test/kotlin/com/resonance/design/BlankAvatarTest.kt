@@ -71,7 +71,7 @@ class BlankAvatarTest {
                     palettes.forEachIndexed { i, palette ->
                         CompositionLocalProvider(LocalResonanceColors provides palette) {
                             Box(Modifier.background(palette.Cream).padding(12.dp)) {
-                                Box(Modifier.testTag("disc$i")) { BlankAvatar(28.dp, palette.Cream) }
+                                Box(Modifier.testTag("disc$i")) { BlankAvatar(28.dp) }
                             }
                         }
                     }

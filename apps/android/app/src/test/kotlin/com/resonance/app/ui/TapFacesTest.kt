@@ -101,14 +101,17 @@ class TapFacesTest {
         assertEquals(null, viewerFace(me, known = dora).avatarSeed)
     }
 
-    @Test fun theFacesStepInByAThirdOfTheirSizeOnPadsOfThePaper() {
-        // §U2.2: 28, each stepping in by 0.34 × 28; the pads 3 past each face.
+    @Test fun theFacesStepInByAThirdOfTheirSizeWithNothingUnderThem() {
+        // §U2.2: 28, each stepping in by 0.34 × 28 — and no pad of the paper round a face any more (the owner's look,
+        // 2026-11-19: it read as a white frame outside the border): the group is its faces' own width.
         assertEquals(28f * 0.66f, AvatarGroup.step(28.dp).value, 0.01f)
         assertEquals(0f, AvatarGroup.width(0, 28.dp).value, 0.01f)
-        assertEquals(34f, AvatarGroup.width(1, 28.dp).value, 0.01f)
+        assertEquals(28f, AvatarGroup.width(1, 28.dp).value, 0.01f)
         // Three faces and the disc.
-        assertEquals(28f * 0.66f * 3 + 34f, AvatarGroup.width(4, 28.dp).value, 0.01f)
+        assertEquals(28f * 0.66f * 3 + 28f, AvatarGroup.width(4, 28.dp).value, 0.01f)
         assertEquals(150, AvatarGroup.MOVE_MILLIS)
+        // The author's line keeps its first face's rim where it stood on its pad: 8 and the pad's 3 after the wave.
+        assertEquals(11f, AuthorFacesGap.value, 0f)
     }
 
     /** One declaration of a rule in the web's CSS module, in px. */
