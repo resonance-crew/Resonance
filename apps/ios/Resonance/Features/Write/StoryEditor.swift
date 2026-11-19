@@ -67,6 +67,8 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
     @ObservationIgnored private var heldMarkdown: String?
     @ObservationIgnored private var heldPreviews: (previews: [HostLinkPreview], origin: URL)?
     @ObservationIgnored private var textScale: CGFloat = 1
+    /// The canvas story's least height in points (`setStoryMinHeight`), 0 for none.
+    @ObservationIgnored private var storyMinHeight: CGFloat = 0
     /// The Mac's share of the text scale (`TextScale.macReadingBoost`, 1 elsewhere): the page draws it itself, its
     /// stylesheet's sizes scaled (`EditorPage.url`'s `scale`) — under the Mac's 77 % a zoomed body put a click's
     /// caret at the line's start, and a page zoom didn't reflow.
@@ -300,6 +302,28 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
         textScale = factor
         guard ready else { return }
         Task { _ = try? await webView.callAsyncJavaScript("document.body.style.zoom = z", arguments: ["z": factor / pageScale], contentWorld: .page) }
+        // The least height is drawn under that zoom: asked again, so it stays as tall in points.
+        applyStoryMinHeight()
+    }
+
+    /// The canvas story's own least height, in points (``StoryCanvasField``'s: what is left of the screen under
+    /// the title): its editable root fills it, so the placeholder has the room to wrap. Under `embed` the page's
+    /// body clips what overflows it, and the placeholder is a float of no height (island.css), so an empty story's
+    /// body stood one line tall and a placeholder on two lines lost its second (round 26: the English one on a
+    /// phone). Host styling only, as Android's twin (StoryEditorBridge.setMinHeight): the island's own sheet keeps
+    /// `min-height: 0` for hosts that don't ask. Not on a Mac, whose page fills itself (EditorPage's `fill`).
+    func setStoryMinHeight(_ points: CGFloat) {
+        guard layout == .canvas, !ProcessInfo.processInfo.isMacCatalystApp, points != storyMinHeight else { return }
+        storyMinHeight = points
+        applyStoryMinHeight()
+    }
+
+    private func applyStoryMinHeight() {
+        guard ready, storyMinHeight > 0 else { return }
+        // In the page's px: the body's zoom (setTextScale) draws them that much larger.
+        let px = Double(storyMinHeight / max(textScale / pageScale, 0.01))
+        let script = "const root = document.querySelector('#editor .ProseMirror'); if (root) root.style.minHeight = px + 'px';"
+        Task { _ = try? await webView.callAsyncJavaScript(script, arguments: ["px": px], contentWorld: .page) }
     }
 
     /// The state message's `link`: `{ href, display, standalone, words }`, or null for none.
@@ -519,6 +543,8 @@ struct StoryCanvasField: View {
             }
             // A story's words follow the person's text size up to 2× (the reading curve), as the reader's do.
             .onChange(of: TextScale.readingFactor(relativeTo: .body), initial: true) { _, factor in bridge.setTextScale(factor) }
+            // The story's editable root at least that tall, so an empty story's placeholder wraps whole (Android's twin).
+            .onChange(of: minHeight, initial: true) { _, room in bridge.setStoryMinHeight(room) }
             .accessibilityLabel(L10n.Write.storyLabel)
     }
 }

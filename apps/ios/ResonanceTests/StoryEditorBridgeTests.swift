@@ -103,6 +103,36 @@ import WebKit
         #expect(story == "The street shone like glass.")
     }
 
+    /// An empty story's placeholder that wraps (round 26: the English one on a phone) is drawn whole: the page's
+    /// body, which clips what overflows it, stands as tall as the least height the writer hands over, so the
+    /// placeholder — a float of no height (island.css) — keeps its second line. Without it the body stood one
+    /// line tall and the sentence ended at "and what".
+    @Test func aWrappedPlaceholderIsDrawnWhole() async throws {
+        let editor = StoryEditorBridge(placeholder: "A moment you lived, and what it changed in you…", layout: .canvas, locale: "en")
+        editor.webView.frame = CGRect(x: 0, y: 0, width: 280, height: 320)
+        editor.setStoryMinHeight(320)
+        try await waitReady(editor)
+        // The placeholder's foot (the empty line's own height and the float overflowing it) and the body's.
+        let measure = """
+        const p = document.querySelector('.ProseMirror p.is-editor-empty');
+        if (!p) return null;
+        return [p.offsetHeight, p.scrollHeight, p.getBoundingClientRect().top + p.scrollHeight, document.body.getBoundingClientRect().bottom];
+        """
+        var feet: [Double] = []
+        let end = ContinuousClock.now.advanced(by: .seconds(5))
+        repeat {
+            feet = (try await editor.webView.callAsyncJavaScript(measure, arguments: [:], contentWorld: .page) as? [NSNumber])?
+                .map(\.doubleValue) ?? []
+            if feet.count == 4, feet[2] <= feet[3] { break }
+            try await Task.sleep(for: .milliseconds(50))
+        } while ContinuousClock.now < end
+        try #require(feet.count == 4)
+        // It does wrap at this width (two lines over the empty line's one)…
+        #expect(feet[1] > feet[0] * 1.5)
+        // …and the body reaches past its last line.
+        #expect(feet[2] <= feet[3])
+    }
+
     private func waitReady(_ editor: StoryEditorBridge) async throws {
         let end = ContinuousClock.now.advanced(by: .seconds(15))
         while !editor.ready, ContinuousClock.now < end { try await Task.sleep(for: .milliseconds(50)) }
