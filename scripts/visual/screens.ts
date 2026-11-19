@@ -176,21 +176,23 @@ export const SCREENS: Screen[] = [
     web: { click: 'button[aria-label="貼圖"], button[aria-label="Stickers"]' },
     app: { ios: ['-threadPanel', 'stickers'], android: ['--es', 'threadPanel', 'stickers'] },
     expect: "The thread with bob, the 小紙團 sticker panel open in the keyboard's place (on the web's desktop and the Mac a popover of four columns standing on the capsule's top edge): the pack bar of the five heads, then the grid of bigger cells, four to a row on phones (six on tablets), no preview sheet over the capsule" },
-  // Round 23: what rides the next message, inside the capsule.
-  { id: 'thread-reply', route: '/messages/bob', as: 'alice',
-    web: { storage: REPLY_CARD_DRAFT },
-    app: { ios: ['-visualRide', 'replyCard'], android: ['--es', 'visualRide', 'replyCard'] },
-    expect: "The thread with bob, alice's composer answering bob's newest message (his note 你的信讓我想起我自己的十年前。) with her card 我也在雨裡走過 riding: both rows inside the capsule's outline over its text line — the reply's wavy rule and the card's tile over the ＋, their words where the text starts, each ✕ over Send — Send the 52 × 48 block at the bottom right, nothing riding above the capsule" },
   // The extended set's composer states (escaped bugs #14 and #9/#11 in the 2026-11-13 audit): the ＋'s panel, where a
   // fresh install's gallery asks for access first (the 允許存取 a large display size hid), and the soft keyboard up — the
   // AVDs' hardware keyboard never shows one. Android only: iOS's attach panel is the system's photo picker over the
   // simulator's own library, which the flows add pictures to (maestro/flows/send-picture.yaml).
+  // Taken before thread-reply: the app keeps a conversation's draft, rides and all, so after it these two showed its
+  // reply and card in the capsule in a whole run and not in a slice of them (run 20261119-184839).
   { id: 'thread-attach', route: '/messages/bob', as: 'alice', platforms: ['android'], set: 'extended',
     app: { android: ['--es', 'threadPanel', 'attach'] },
     expect: "The thread with bob, the ＋'s attach panel open in the keyboard's place: its wavy grip, 圖片｜卡片 floating, and (a fresh install) the gallery's ask for access — its words whole and the 允許存取 button in full view, nothing cut at any text size" },
   { id: 'thread-keyboard', route: '/messages/bob', as: 'alice', platforms: ['android'], set: 'extended', keyboard: true,
     app: { android: ['--es', 'threadPanel', 'keyboard'] },
     expect: "The thread with bob, the composer's field focused and the system's soft keyboard up: the capsule stands right on the keyboard, the foot's paper reaching it with no strip of another paper or gap, bob's newest message still in view above" },
+  // Round 23: what rides the next message, inside the capsule.
+  { id: 'thread-reply', route: '/messages/bob', as: 'alice',
+    web: { storage: REPLY_CARD_DRAFT },
+    app: { ios: ['-visualRide', 'replyCard'], android: ['--es', 'visualRide', 'replyCard'] },
+    expect: "The thread with bob, alice's composer answering bob's newest message (his note 你的信讓我想起我自己的十年前。) with her card 我也在雨裡走過 riding: both rows inside the capsule's outline over its text line — the reply's wavy rule and the card's tile over the ＋, their words where the text starts, each ✕ over Send — Send the 52 × 48 block at the bottom right, nothing riding above the capsule" },
   { id: 'thread-letter', route: '/messages/carol', as: 'alice',
     expect: "carol's letter to alice (not connected): her note quoting alice's card 搬家後的第一個安靜夜晚, and the hint that replying connects them" },
   // The web's bell is a link: a phone follows it to the 通知 page (round 23 §4), wider it opens its dialog over the feed.
