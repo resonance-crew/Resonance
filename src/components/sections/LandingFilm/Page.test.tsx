@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithIntl, screen, within } from '@/../test/render';
 import type { FilmModel, FilmTile } from './model';
@@ -20,6 +22,7 @@ vi.mock('./runtime', () => ({ loadChangeStyle: () => Promise.resolve(undefined),
 vi.mock('@/components/sections/SiteHeader/SiteHeaderAccount', () => ({ SiteHeaderAccountMenu: () => null, SiteHeaderSignedInNav: () => null }));
 
 import Page from './Page';
+import film from './film.module.css';
 
 const tile = (id: string, over: Partial<FilmTile> = {}): FilmTile => ({
   id,
@@ -162,6 +165,19 @@ describe('the film page', () => {
     expect(within(band).getByRole('link', { name: '寫下你的故事' }).getAttribute('href')).toBe('/write');
     expect(within(band).getByRole('button', { name: '重看一次' })).toBeTruthy();
     expect(container.querySelector('footer')).toBeTruthy();
+  });
+
+  // Round 26: the band's longer sentence, centred, broke with only 回應它 under a full line at a tablet's 600 px; it is
+  // balanced, as the band's title is (jsdom lays nothing out: the line takes the class, and the class balances).
+  it('balances the closing band’s sentence, so its last line is never a few characters alone', () => {
+    const { container } = renderWithIntl(<Page model={MODEL} locale="zh-TW" />);
+    const line = within(container.querySelector('#download') as HTMLElement).getByText(/或用自己的卡片回應它$/);
+    expect(line.tagName).toBe('P');
+    expect(line.classList).toContain(film.ctaLine);
+    const css = readFileSync(join(__dirname, 'film.module.css'), 'utf8');
+    const at = css.indexOf('\n.download .ctaLine {');
+    expect(at).toBeGreaterThan(-1);
+    expect(css.slice(at, css.indexOf('}', at))).toMatch(/\n\s*text-wrap: balance;/);
   });
 
   it('answers with 聆聆\'s drawing when there is no B, and with the card when a real resonance answers', () => {

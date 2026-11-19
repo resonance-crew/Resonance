@@ -1719,6 +1719,11 @@
   justify-content: center;
   margin-top: 40px;
 }
+/* the band's sentence, centred: balanced as the band's title is, so its last line is never a few characters under a
+   full one (round 26's longer sentence broke with only 回應它 on its second line at a tablet's 600 px) */
+.download .ctaLine {
+  text-wrap: balance;
+}
 .film[data-film='film'] ~ .download {
   scroll-margin-top: 0;
 }

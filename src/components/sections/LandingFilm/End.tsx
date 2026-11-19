@@ -72,7 +72,7 @@ export function End({ model, locale }: { model: FilmModel; locale: string }) {
           <h2 id="film-download" className={band.title}>
             {c.end.ctaTitle}
           </h2>
-          <p className={band.description}>{c.end.ctaLine}</p>
+          <p className={`${band.description} ${styles.ctaLine}`}>{c.end.ctaLine}</p>
           <div className={band.ctaRow}>
             <Link href="/write" style={{ textDecoration: 'none' }}>
               <OrganicButton variant="ctaLight" block>
