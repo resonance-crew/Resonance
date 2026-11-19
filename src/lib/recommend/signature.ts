@@ -54,6 +54,15 @@ export function line(value: unknown, max = SIGNATURE_FIELD_MAX): string {
   return Array.from(one).slice(0, max).join('');
 }
 
+/**
+ * A line shown as one sentence ends without a full stop (CLAUDE.md, Copy):
+ * the through line is shown to the author as their card's core insight. A
+ * question or an exclamation keeps its mark.
+ */
+export function unstopped(text: string): string {
+  return text.replace(/[。．.]+$/u, '').trimEnd();
+}
+
 /** Clamp an arbitrary value into a 0–1 score, defaulting to 0. */
 function clamp01(value: unknown): number {
   const n = typeof value === 'number' ? value : Number(value);
@@ -101,7 +110,7 @@ export function parseReading(raw: unknown, max = INSIGHTS_MAX): CardReading {
           .map(({ insight }) => insight);
   return {
     insights,
-    throughLine: line(r.through_line ?? r.throughLine, THROUGH_LINE_MAX),
+    throughLine: unstopped(line(r.through_line ?? r.throughLine, THROUGH_LINE_MAX)),
     // Only a plain `true` takes a card out: anything else the model says reads as false.
     moodOnly: (r.mood_only ?? r.moodOnly) === true,
     insightScore: clamp01(r.insight_score ?? r.insightScore),
@@ -123,7 +132,7 @@ export function readingFromLegacy(raw: unknown): CardReading {
     insights: core
       ? [{ span: '', situation: line(r.situation), struggle: '', thinking: '', gain: '', shift: '', insight: core, reader: '', evidence: '', strength: score }]
       : [],
-    throughLine: line(core, THROUGH_LINE_MAX),
+    throughLine: unstopped(line(core, THROUGH_LINE_MAX)),
     moodOnly: false,
     insightScore: score,
     lifeDomain: line(r.life_domain ?? r.lifeDomain),

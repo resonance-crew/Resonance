@@ -15,6 +15,7 @@ import {
   readingFromLegacy,
   readingParts,
   restatesTitle,
+  unstopped,
 } from './signature';
 
 // Round 26 §A1: what is kept of a card's reading, whether strangers are shown the card, the formula phrasings a
@@ -81,6 +82,16 @@ describe('parseReading', () => {
     expect(insightsFor(SHORT_STORY_UNITS)).toBe(2);
     expect(insightsFor(LONG_STORY_UNITS - 1)).toBe(2);
     expect(insightsFor(LONG_STORY_UNITS)).toBe(INSIGHTS_MAX);
+  });
+
+  // The second bake-off: most through lines, shown to the author as one line, ended in a full stop.
+  it('keeps the through line without a full stop at its end, a question or an exclamation with its mark', () => {
+    expect(parseReading({ through_line: '踩著水窪回家，我第一次讓自己慢下來。' }).throughLine).toBe('踩著水窪回家，我第一次讓自己慢下來');
+    expect(parseReading({ through_line: 'I let myself slow down.' }).throughLine).toBe('I let myself slow down');
+    expect(parseReading({ through_line: '錢是什麼？' }).throughLine).toBe('錢是什麼？');
+    expect(readingFromLegacy({ core_insight: '學會一個人吃飯。' }).throughLine).toBe('學會一個人吃飯');
+    expect(unstopped('一。。')).toBe('一');
+    expect(unstopped('…')).toBe('…');
   });
 
   it("reads the older prompt's answer (the refusal's fallback) as a one-insight reading", () => {

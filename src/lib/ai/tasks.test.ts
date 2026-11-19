@@ -242,5 +242,7 @@ describe('readCard', () => {
     expect(READING_PROMPT).toMatch(/Write only what the story says/);
     expect(READING_PROMPT).toMatch(/never 他 or 她 \(he or she\) for the author unless the story says which/);
     expect(READING_PROMPT).toMatch(/No semicolons/);
+    // The second bake-off: through lines that named a side detail, a lifted sentence or only the problem.
+    expect(READING_PROMPT).toMatch(/where the author lands[^\n]*Not a closing remark, one technique or episode, a sentence lifted from the story, or only the problem/);
   });
 });
