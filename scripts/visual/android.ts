@@ -132,6 +132,8 @@ export async function holdStill(serial: string, ctx: CaptureContext) {
   }
   // With the AVD's hardware keyboard, no soft keyboard comes up under the writer.
   await shell(serial, 'settings put secure show_ime_with_hard_keyboard 0');
+  // Where one does come up, Gboard's keys (keysOn).
+  await keysOn((command) => shell(serial, command));
   await shell(serial, 'settings put global sysui_demo_allowed 1');
   await demoBar(serial);
   // Pictures stored against the emulators are served by the dev server at localhost:<dev port>.
@@ -151,6 +153,28 @@ async function demoBar(serial: string) {
   await demo('network', '-e wifi show -e level 4 -e fully true');
   await demo('network', '-e mobile hide');
   await demo('notifications', '-e visible false');
+}
+
+/** Gboard's package: the keyboard every capture that raises one shows. */
+export const GBOARD_PACKAGE = 'com.google.android.inputmethod.latin';
+
+/**
+ * Gboard as the AVD's input method, so a field that raises the soft keyboard shows its keys. The flows put Google's
+ * voice input in its place while they type (flows.ts, `keyboardsOff`) and put back the one they found when they end;
+ * a flows run cut off before that, or one that found voice input already there, leaves the AVD with voice input as its
+ * keyboard — its "Tap to speak" panel where card-note-open's keys were on both AVDs' first variant in run
+ * 20261118-235458 (a voice session that hears nothing then hands back to Gboard, so the later variants had keys).
+ * Answers the input method set, or null on an AVD without Gboard (left as it is).
+ */
+export async function keysOn(run: (command: string) => Promise<string>): Promise<string | null> {
+  const gboard = (await run('ime list -s -a'))
+    .split('\n')
+    .map((line) => line.trim())
+    .find((ime) => ime.startsWith(`${GBOARD_PACKAGE}/`));
+  if (!gboard) return null;
+  await run(`ime enable ${gboard}`);
+  await run(`ime set ${gboard}`);
+  return gboard;
 }
 
 async function wear(serial: string, v: Variant) {
@@ -320,6 +344,8 @@ async function captureDevice(id: string, serial: string, ctx: CaptureContext): P
     if (worn?.theme !== v.theme) await wear(serial, v);
     worn = v;
     await reset(serial, v);
+    // Gboard's keys again before each variant (keysOn): whatever a screen's field raises starts from them.
+    await keysOn((command) => shell(serial, command));
     let first = true;
     for (const screen of screens) {
       const name = shotName(screen, v);

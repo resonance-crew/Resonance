@@ -334,7 +334,9 @@ hardware keyboard stays a check on the owner's device; **iOS's attach panel** â€
 picker over the simulator's library, which the flows add pictures to (`maestro/flows/send-picture.yaml`), so
 it would change from run to run; **motion** â€” still captured at rest; the flows assert what a jump would
 break (`maestro/flows/composer-toggle.yaml`). The soft keyboard is Gboard's own drawing: an update of the
-AVD's Gboard changes `thread-keyboard`, an accept with the reason "Gboard updated".
+AVD's Gboard changes `thread-keyboard`, an accept with the reason "Gboard updated". Gboard is made the AVD's
+keyboard before every variant (`keysOn` in `android.ts`): the flows type through Google's voice input, and an
+AVD left with it showed its "Tap to speak" panel where the keys belong (run 20261118-235458).
 
 When to run it: before a release (`capture --flows --review --variants extended`), and on a slice after a
 change near one of those states (`capture android --device phone-large --only settings`).
