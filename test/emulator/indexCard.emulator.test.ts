@@ -435,7 +435,7 @@ describe('the reading', () => {
       authorId: 'alice',
       version: 3,
       model: 'gpt-6.2-sol',
-      embedModel: 'text-embedding-3-small',
+      embedModel: 'text-embedding-3-large',
       insights: [strongInsight],
       throughLine: 'Keeping one letter',
       moodOnly: false,
@@ -448,7 +448,7 @@ describe('the reading', () => {
     });
     // The parts carry the hit's short lines — never the quote, never the reader line.
     const part = (await db.doc('cardVectors/live__insight__0').get()).data()!;
-    expect(part).toMatchObject({ part: 0, coreInsight: 'Letting go is a kind of keeping.', situation: 'clearing out a drawer', embedModel: 'text-embedding-3-small', span: 'tonight' });
+    expect(part).toMatchObject({ part: 0, coreInsight: 'Letting go is a kind of keeping.', situation: 'clearing out a drawer', embedModel: 'text-embedding-3-large', span: 'tonight' });
     expect(JSON.stringify(part)).not.toMatch(/I cleared out the drawer|moving house/);
   });
 
