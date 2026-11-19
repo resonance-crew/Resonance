@@ -177,8 +177,8 @@ internal fun showsMore(list: TapPeople): Boolean = list.next != null && !list.lo
  * A reader's list behind the faces (§U2.5): the same people as the faces, without the cap. On a phone a centred
  * modal (min(column, 400), **no visible title** — the reader sees only connections; a title would claim all —, the
  * close at its foot, banded rows of 60 with a face of 36 and the pen name, each to the profile); wider, a popover under
- * the faces ([PaperPopover]: 8 below, start-aligned, 280 wide, rows 52 with faces of 28, six rows then it scrolls).
- * Never a bottom sheet. Called inside the faces' own Box (the popover hangs from it).
+ * the faces ([PaperPopover]: 8 below, start-aligned, 280 wide, [TapRowMeasure.Popover]'s rows, six then it scrolls
+ * inside its [TapPopoverPad]). Never a bottom sheet. Called inside the faces' own Box (the popover hangs from it).
  */
 @Composable
 internal fun ReaderTapList(session: Session, cardId: String, onDismiss: () -> Unit, open: (Route) -> Unit) {
@@ -191,13 +191,14 @@ internal fun ReaderTapList(session: Session, cardId: String, onDismiss: () -> Un
     }
     if (phone) {
         OrganicModal(onDismiss, L10n.Card.Tap.label, seed = 41.0, closeLabel = L10n.Native.close, maxWidth = 400.dp) {
-            TapRows(list, rowHeight = 60.dp, face = 36.dp, anonymous = true, onRow = go)
+            TapRows(list, TapRowMeasure.Dialog, anonymous = true, onRow = go)
             ModalCloseButton(L10n.Native.close, onDismiss)
         }
     } else {
         PaperPopover(onDismiss, width = 280.dp, paneTitle = L10n.Card.Tap.label) {
-            Column(Modifier.heightIn(max = 52.dp * 6 + 12.dp).verticalScroll(rememberScrollState()).padding(vertical = 6.dp)) {
-                TapRows(list, rowHeight = 52.dp, face = TapFaceSize, anonymous = true, bands = false, onRow = go)
+            val rows = TapRowMeasure.Popover
+            Column(Modifier.heightIn(max = rows.height * 6 + TapPopoverPad * 2).verticalScroll(rememberScrollState()).padding(vertical = TapPopoverPad)) {
+                TapRows(list, rows, anonymous = true, bands = false, onRow = go)
             }
         }
     }
@@ -229,7 +230,7 @@ internal fun AuthorTapList(session: Session, cardId: String, anonymous: Boolean,
     LaunchedEffect(list) { list.first() }
     OrganicModal(onDismiss, L10n.Card.ResonatorsModal.title, seed = 43.0, closeLabel = L10n.Native.close, maxWidth = 480.dp) {
         ModalTitle(L10n.Card.ResonatorsModal.title)
-        TapRows(list, rowHeight = 60.dp, face = 36.dp, anonymous = anonymous) { p ->
+        TapRows(list, TapRowMeasure.Dialog, anonymous = anonymous) { p ->
             onDismiss()
             open(tapRowRoute(p, anonymous))
         }
@@ -242,23 +243,45 @@ internal fun AuthorTapList(session: Session, cardId: String, anonymous: Boolean,
     }
 }
 
+/**
+ * A row of who resonated, measured for where it stands: [height] at least, the [face], [inset] from the paper's edge to
+ * the face (and from the name's end), [gap] from the face to the name, the name at [handle] sp.
+ */
+internal data class TapRowMeasure(val height: Dp, val face: Dp, val inset: Dp, val gap: Dp, val handle: Float) {
+    companion object {
+        /** A dialog's (a reader's on a phone, the author's everywhere): 60, a face of 36, its bands' own 12 in. */
+        val Dialog = TapRowMeasure(60.dp, 36.dp, 12.dp, 12.dp, 15f)
+
+        /**
+         * The popover's, the web's (TapPeople.module.css `.list[data-size='popover']`): 52, a face of 28, 10 to the name in
+         * 14, the face 20 in from the sheet's pen line — every menu sheet's rows' inset (design-system.md).
+         */
+        val Popover = TapRowMeasure(52.dp, TapFaceSize, 20.dp, 10.dp, 14f)
+    }
+}
+
+/** Over the popover's first row and under its last, inside the sheet: the web's 8 (TapFaces.module.css `.popoverBody`). */
+internal val TapPopoverPad: Dp = 8.dp
+
 /** The list's rows: banded (a dialog's), each the face, the pen name and the excerpt; the rows' shapes while read. */
 @Composable
-private fun TapRows(list: TapPeople, rowHeight: Dp, face: Dp, anonymous: Boolean, bands: Boolean = true, onRow: (TapPerson) -> Unit) {
+private fun TapRows(list: TapPeople, measure: TapRowMeasure, anonymous: Boolean, bands: Boolean = true, onRow: (TapPerson) -> Unit) {
+    val rowHeight = measure.height
+    val face = measure.face
     val people = list.people
     when {
         !list.loaded && list.failed -> {
             val scope = rememberCoroutineScope()
-            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = measure.inset), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 BasicText(L10n.Native.loadError, style = AppFonts.body(14f, lineHeight = 1.5f, color = Tokens.TextMuted))
                 OrganicButton(L10n.Native.retry, variant = ButtonVariant.Tonal, small = true) { scope.launch { list.first() } }
             }
         }
         !list.loaded -> Column(Modifier.clearAndSetSemantics { contentDescription = L10n.Home.moreLoading }) {
             repeat(3) {
-                Row(Modifier.fillMaxWidth().height(rowHeight).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().height(rowHeight).padding(horizontal = measure.inset), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(face).background(Mixes.SkeletonBase, RoundedCornerShape(face * 0.35f)))
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(measure.gap))
                     Box(Modifier.width(96.dp).height(12.dp).background(Mixes.SkeletonBase, RoundedCornerShape(6.dp)))
                 }
             }
@@ -275,13 +298,13 @@ private fun TapRows(list: TapPeople, rowHeight: Dp, face: Dp, anonymous: Boolean
                         .heightIn(min = rowHeight)
                         .then(if (bands) Modifier.listBand(keys[i], below[i], source, { false }, cut = true) else Modifier)
                         .plainClickable(role = Role.Button) { onRow(p) }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = measure.inset, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(measure.gap),
                 ) {
                     HandDrawnAvatar(p.author.initials, p.author.avatarUrl, p.author.accent(), face, p.author.avatarSeedValue())
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        BasicText(p.author.handle, style = AppFonts.body(15f, 600, lineHeight = 1.4f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        BasicText(p.author.handle, style = AppFonts.body(measure.handle, 600, lineHeight = 1.4f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (excerpt != null) BasicText(
                             excerpt,
                             style = AppFonts.body(13f, lineHeight = 1.45f, color = Tokens.TextMuted),
@@ -293,7 +316,7 @@ private fun TapRows(list: TapPeople, rowHeight: Dp, face: Dp, anonymous: Boolean
             if (list.failed) BasicText(
                 L10n.Native.loadError,
                 style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.TextMuted),
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = measure.inset, vertical = 8.dp),
             )
         }
     }
