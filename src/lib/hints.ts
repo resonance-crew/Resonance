@@ -43,7 +43,7 @@ export interface HintState {
 }
 
 /**
- * `useHint('note-privacy')` → show the hint while it has been displayed fewer
+ * `useHint('some-hint')` → show the hint while it has been displayed fewer
  * than {@link HINT_LIMIT} times (each mount counts as one display). Starts
  * hidden so SSR and the client's first paint agree, then reveals in an effect.
  */

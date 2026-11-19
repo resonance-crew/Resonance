@@ -125,13 +125,15 @@
   line-height: 1.4;
 }
 
+/* Nothing to say (no error, under 200, no count): no line at all — the capsule stands 40 above the next section. */
+.line[data-empty] {
+  min-height: 0;
+  margin-top: 0;
+}
+
 .lineMessage {
   flex: 1;
   min-width: 0;
-}
-
-.hint {
-  color: var(--color-text-muted);
 }
 
 .error {

@@ -249,7 +249,6 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
         <NoteInPlace
           id={NOTE_FIELD_ID}
           note={note}
-          asking={tapOn}
           onClosedByKey={() => containerRef.current?.querySelector<HTMLButtonElement>(`button[aria-controls="${NOTE_FIELD_ID}"]`)?.focus()}
         />
       )}

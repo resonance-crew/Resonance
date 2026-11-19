@@ -375,8 +375,8 @@ change near one of those states (`capture android --device phone-large --only se
   text field count as the same, and that box is written beside the capture for the comparison to skip
   (`steady` in `android.ts`).
 - **First-times hints** (a hint shown for its first three displays, counted on the device and in the
-  account's profile, on the one stack every platform shares): a screen naming them (`hints`, card-note-open's
-  privacy line) starts every capture with them unspent (`hints.ts`).
+  account's profile, on the one stack every platform shares): a screen naming them (`hints`; none does
+  since card-note-open's privacy line went, 2026-11-19) starts every capture with them unspent (`hints.ts`).
 - **No picks**: the stack seeds with `SEED_PICKS=none` (`noPicks.ts`), so home is the latest cards on every
   platform and run, never picks that one capture built and a later one found.
 - **Waiting for the real page**: a capture is taken again and again until two in a row match

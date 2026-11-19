@@ -6,8 +6,8 @@
  * 20261118-235458: card-note-open's privacy line on the web phone only, of the web and Android). A screen naming its
  * hints (`hints` in screens.ts) starts every capture with them unspent: the account's synced count is taken away on the
  * stack just before it, and the device's own is 0 — the web's storage (`webStorageOf`), Android's from `pm clear`
- * (each variant starts from one, and no other screen claims the hint). iOS and the Mac show card-note-open's line
- * under their launch argument (`-visualNote open`, NoteInPlace.swift) without claiming it; the reset is theirs too.
+ * (each variant starts from one). No screen names one today: card-note-open's privacy line, the one that needed it,
+ * went on 2026-11-19 (the owner); the mechanism stays for the next hint a screen shows.
  */
 import { EMULATOR_PROJECT_ID } from '../emulator-env.mjs';
 import type { Screen } from './screens';
@@ -24,7 +24,7 @@ export function webStorageOf(screen: Pick<Screen, 'web' | 'hints'>): Record<stri
 /**
  * The Firestore emulator's REST request taking `keys` out of `uid`'s `hintsSeen` (a field in the mask and not in the
  * body is deleted; the emulator's `owner` token passes the rules). A key with characters a field path can't hold bare
- * (`note-privacy`'s hyphen) is quoted in backticks. The seeded accounts' uids are their names (seed-emulator.ts).
+ * (a hyphen, as in `some-hint`) is quoted in backticks. The seeded accounts' uids are their names (seed-emulator.ts).
  */
 export function unspendRequest(firestorePort: number, uid: string, keys: string[]): { url: string; init: RequestInit } {
   const doc = `http://127.0.0.1:${firestorePort}/v1/projects/${EMULATOR_PROJECT_ID}/databases/(default)/documents/users/${uid}`;

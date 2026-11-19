@@ -12,7 +12,6 @@ import { forgetNoteDraft, keepNoteDraft, readNoteDraft } from '@/lib/data/noteDr
 import { leaveWriteSeed } from '@/lib/data/writeSeed';
 import { ApiError } from '@/lib/db/firestore/client/api';
 import { NOTE_MAX_LENGTH, sendNote } from '@/lib/db/firestore/client/notes';
-import { useHint } from '@/lib/hints';
 import styles from './NoteInPlace.module.css';
 
 /** Past this length the quiet「這段話想寫成一張卡片嗎？」line takes the line under the field. */
@@ -222,8 +221,6 @@ export interface NoteInPlaceProps {
   /** The block's id: the segment's `aria-controls`. */
   id: string;
   note: NoteInPlaceState;
-  /** The viewer resonated: the field asks 哪一段讓你有共鳴？ (else the note's own placeholder). */
-  asking: boolean;
   /** Escape closed the empty field: the focus goes back to the segment. */
   onClosedByKey?: () => void;
 }
@@ -231,13 +228,14 @@ export interface NoteInPlaceProps {
 /**
  * The note's place under the end row: the composer's input capsule (messages-ui) — the envelope's column, the
  * text, the send segment (tonal at rest, solid with words) — one line 48 tall growing to three on a phone (two in a
- * short window), five wider, then scrolling inside; and one line under it, one message at a time: why a send was
- * refused > 「這段話想寫成一張卡片嗎？」 past 200 > 「這段話只有作者看得到」 (its first three showings). The count at
- * the line's end from 1,800. Or, while the reader's notes wait for the author, that one line instead.
+ * short window), five wider, then scrolling inside, its placeholder 「悄悄告訴作者，哪一段打動你」 whatever the tap
+ * (the owner, 2026-11-19: the placeholder says where the words go, so no privacy line under it); and one line under
+ * it, one message at a time: why a send was refused > 「這段話想寫成一張卡片嗎？」 past 200 — nothing else, so with
+ * nothing to say it is empty. The count at the line's end from 1,800. Or, while the reader's notes wait for the
+ * author, that one line instead.
  */
-export function NoteInPlace({ id, note, asking, onClosedByKey }: NoteInPlaceProps) {
+export function NoteInPlace({ id, note, onClosedByKey }: NoteInPlaceProps) {
   const t = useTranslations('card.note');
-  const tTap = useTranslations('card.tap');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const blockRef = useRef<HTMLDivElement>(null);
   const [focused, setFocused] = useState(false);
@@ -334,7 +332,7 @@ export function NoteInPlace({ id, note, asking, onClosedByKey }: NoteInPlaceProp
                 if (note.escape() === 'closed') onClosedByKey?.();
                 else inputRef.current?.blur();
               }}
-              placeholder={asking ? tTap('ask') : t('placeholder')}
+              placeholder={t('placeholder')}
               aria-label={t('entry')}
               aria-describedby={`${id}-line`}
               rows={1}
@@ -349,10 +347,9 @@ export function NoteInPlace({ id, note, asking, onClosedByKey }: NoteInPlaceProp
   );
 }
 
-/** The one line under the field: the error > the card prompt > the privacy line; the count at its end from 1,800. */
+/** The one line under the field: the error > the card prompt (else nothing); the count at its end from 1,800. */
 function NoteLine({ id, note, length }: { id: string; note: NoteInPlaceState; length: number }) {
   const t = useTranslations('card.note');
-  const privacy = useHint('note-privacy');
   const count = length >= NOTE_COUNT_FROM ? <CharCount count={length} max={NOTE_MAX_LENGTH} /> : null;
   const message = note.error ? (
     <span role="alert" className={styles.error}>
@@ -362,8 +359,6 @@ function NoteLine({ id, note, length }: { id: string; note: NoteInPlaceState; le
     <button type="button" className={styles.upgrade} onClick={note.upgrade}>
       {t('upgrade')}
     </button>
-  ) : privacy.visible ? (
-    <span className={styles.hint}>{t('hint')}</span>
   ) : null;
   if (!message && !count) return <div id={id} className={styles.line} data-empty="" />;
   return (

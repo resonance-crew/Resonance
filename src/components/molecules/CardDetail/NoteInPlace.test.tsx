@@ -35,8 +35,8 @@ vi.mock('@/lib/db/firestore/client/taps', () => ({ setTap: vi.fn(() => Promise.r
 const sendNote = vi.fn((..._a: unknown[]) => Promise.resolve('note-1'));
 vi.mock('@/lib/db/firestore/client/notes', () => ({ sendNote: (...a: unknown[]) => sendNote(...a), NOTE_MAX_LENGTH: 2000 }));
 vi.mock('@/lib/db/firestore/client/bookmarks', () => ({ isBookmarked: vi.fn(() => Promise.resolve(false)), toggleBookmark: vi.fn() }));
-const hint = vi.hoisted(() => ({ visible: true }));
-vi.mock('@/lib/hints', () => ({ useHint: () => ({ visible: hint.visible, dismiss: vi.fn() }) }));
+// Every first-times hint unspent: were the field's old privacy line still there, it would show.
+vi.mock('@/lib/hints', () => ({ useHint: () => ({ visible: true, dismiss: vi.fn() }) }));
 
 const author = { id: 'author-1', handle: 'bob', initials: 'BO', accentColor: 'x' };
 const TAP: CardTapBody = { mine: false, faces: [], more: false, mayNote: true };
@@ -62,7 +62,6 @@ function reduceMotion(on: boolean) {
 
 beforeEach(() => {
   auth.value = { user: { id: 'viewer' }, loading: false };
-  hint.visible = true;
   localStorage.clear();
   sessionStorage.clear();
 });
@@ -84,18 +83,31 @@ describe('the note, in place', () => {
     expect(block).toContainElement(box);
     // In the page, after the capsule's lines: not over the story.
     expect(block.compareDocumentPosition(screen.getAllByRole('group')[0]) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-    expect(box).toHaveAttribute('placeholder', 'A note for the author…');
-    // The privacy line under it, the envelope's column before it.
-    expect(screen.getByText('Only the author can see this')).toBeInTheDocument();
+    // The placeholder says where the words go and what to write; no privacy line under it (the owner, 2026-11-19):
+    // with nothing to say, the line under the field is empty.
+    expect(box).toHaveAttribute('placeholder', 'Tell the author what moved you');
+    expect(screen.queryByText('Only the author can see this')).toBeNull();
+    const line = document.getElementById(box.getAttribute('aria-describedby')!)!;
+    expect(line).toHaveAttribute('data-empty');
+    expect(line).toHaveTextContent('');
+    // …and takes no room: the capsule stands the container's 40 above the next section.
+    const css = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/NoteInPlace.module.css'), 'utf8');
+    expect(css).toMatch(/\.line\[data-empty\]\s*\{\s*min-height: 0;\s*margin-top: 0;\s*\}/);
   });
 
-  it('tapping 共振 opens no field; with the tap on the field asks which part stayed', async () => {
+  it('tapping 共振 opens no field, and the field’s placeholder is one, the tap on, off or never', async () => {
     renderPage();
-    await user().click(within(screen.getAllByRole('group')[0]).getByRole('button', { name: 'Resonate' }));
+    const resonate = () => within(screen.getAllByRole('group')[0]).getByRole('button', { name: /Resonate/ });
+    await user().click(resonate());
     expect(field()).toBeNull();
+    await user().click(noteSegment());
+    expect(field()).toHaveAttribute('placeholder', 'Tell the author what moved you');
+    // Taken back: nothing changes.
+    await user().click(resonate());
+    expect(field()).toHaveAttribute('placeholder', 'Tell the author what moved you');
     const second = renderPage({ ...TAP, mine: true });
     await user().click(within(second.container.querySelector('[role="group"]') as HTMLElement).getByRole('button', { name: 'Note' }));
-    expect(within(second.container).getByRole('textbox')).toHaveAttribute('placeholder', 'What stayed with you?');
+    expect(within(second.container).getByRole('textbox')).toHaveAttribute('placeholder', 'Tell the author what moved you');
   });
 
   it('closes an empty field on the segment or Escape, and only takes the focus back to one with words', async () => {
@@ -152,8 +164,6 @@ describe('the note, in place', () => {
     await user().click(screen.getByRole('button', { name: 'Send' }));
     expect(await screen.findByRole('alert')).toHaveTextContent("You've left notes they haven't answered yet — wait for their reply");
     expect(field()).toHaveValue('one more');
-    // The error's line wins over the privacy line.
-    expect(screen.queryByText('Only the author can see this')).toBeNull();
   });
 
   it('asks for a pen name first when the server says there is none, the words kept', async () => {
