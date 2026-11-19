@@ -106,13 +106,28 @@ enum TapListMetrics {
     static let authorWidth: CGFloat = 480
 }
 
+/// A list row's measures: how tall, its face, the pad from the list's edge to the face (and from the name to the other
+/// edge) and the gap from the face to the name.
+struct TapRowMeasure: Equatable {
+    let height: CGFloat
+    let face: CGFloat
+    let inset: CGFloat
+    let gap: CGFloat
+
+    /// A dialog's (60, faces 36): the rows pad 12 and the dialog's scroll runs 12 past its padding, so a face stands at
+    /// the dialog's own padding and the bands reach nearer its paper's edges.
+    static let dialog = TapRowMeasure(height: TapListMetrics.dialogRow, face: TapListMetrics.dialogFace, inset: 12, gap: 12)
+    /// The popover's (52, faces 28): 20 in from the sheet's pen line, 10 to the name — a menu sheet's rows, as the web's
+    /// (TapPeople.module.css `.list[data-size='popover']`). Its scroll runs to the sheet's edges, so nothing cancels it.
+    static let popover = TapRowMeasure(height: TapListMetrics.popoverRow, face: TapListMetrics.popoverFace, inset: 20, gap: 10)
+}
+
 /// One person of a list: their face and pen name, banded (the curves show as a press's wash), leading to their page —
 /// or, on the author's list when they left a note on the card, its first line muted under the name, leading to that
 /// conversation (an unconnected reader's is the letter; replying connects, as today).
 struct TapPersonRow: View {
     let person: TapPerson
-    let face: CGFloat
-    let height: CGFloat
+    let measure: TapRowMeasure
     let top: String
     let bottom: String
     let open: (Route) -> Void
@@ -121,9 +136,9 @@ struct TapPersonRow: View {
         let author = person.author
         let note = person.note?.value1.excerpt
         Button { open(Self.route(for: person)) } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: measure.gap) {
                 HandDrawnAvatar(initials: author.initials, imageURL: author.avatarUrl.flatMap(URL.init(string:)),
-                                color: author.accent, size: face, seed: author.avatarSeedValue)
+                                color: author.accent, size: measure.face, seed: author.avatarSeedValue)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(author.handle)
                         .font(AppFonts.body(15, weight: .semibold))
@@ -139,8 +154,8 @@ struct TapPersonRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 12)
-            .frame(minHeight: height)
+            .padding(.horizontal, measure.inset)
+            .frame(minHeight: measure.height)
             .contentShape(Rectangle())
         }
         .buttonStyle(BandWashStyle(top: top, bottom: bottom, cut: true))
@@ -158,8 +173,7 @@ struct TapPersonRow: View {
 /// The rows of a list, banded, each curve keyed by the row under it (``ListBands``).
 private struct TapRows: View {
     let people: [TapPerson]
-    let face: CGFloat
-    let height: CGFloat
+    let measure: TapRowMeasure
     let open: (Route) -> Void
 
     var body: some View {
@@ -167,7 +181,7 @@ private struct TapRows: View {
         let below = ListBands.below(ids, after: ListBands.endKey)
         VStack(spacing: 0) {
             ForEach(Array(people.enumerated()), id: \.element.author.id) { i, person in
-                TapPersonRow(person: person, face: face, height: height, top: ids[i], bottom: below[i], open: open)
+                TapPersonRow(person: person, measure: measure, top: ids[i], bottom: below[i], open: open)
             }
         }
     }
@@ -176,21 +190,20 @@ private struct TapRows: View {
 /// While the list is read: two rows' shapes; when it couldn't be, a line and 重試.
 private struct TapListState: View {
     let people: TapPeople
-    let face: CGFloat
-    let height: CGFloat
+    let measure: TapRowMeasure
 
     var body: some View {
         switch people.phase {
         case .loading:
             VStack(spacing: 0) {
                 ForEach(0..<2, id: \.self) { i in
-                    HStack(spacing: 12) {
-                        SkeletonBlock(width: face, circle: true)
+                    HStack(spacing: measure.gap) {
+                        SkeletonBlock(width: measure.face, circle: true)
                         SkeletonBlock(width: i == 0 ? 112 : 88, height: 14)
                         Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, 12)
-                    .frame(height: height)
+                    .padding(.horizontal, measure.inset)
+                    .frame(height: measure.height)
                 }
             }
             .accessibilityElement(children: .ignore)
@@ -201,7 +214,7 @@ private struct TapListState: View {
                 ModalError(L10n.Native.loadError)
                 OrganicButton(L10n.Native.retry, variant: .tonal, size: .sm) { Task { await people.load() } }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, measure.inset)
             .padding(.vertical, 8)
         case .loaded:
             EmptyView()
@@ -224,11 +237,11 @@ struct ReaderTapList: View {
         VStack(alignment: .leading, spacing: 0) {
             if let people {
                 ScrollView {
-                    TapRows(people: people.people, face: TapListMetrics.dialogFace, height: TapListMetrics.dialogRow) { route in
+                    TapRows(people: people.people, measure: .dialog) { route in
                         onClose()
                         openRoute(route)
                     }
-                    TapListState(people: people, face: TapListMetrics.dialogFace, height: TapListMetrics.dialogRow)
+                    TapListState(people: people, measure: .dialog)
                 }
                 .scrollIndicators(.hidden)
                 .scrollBounceBehavior(.basedOnSize)
@@ -304,16 +317,10 @@ struct TapsPopover: View {
         let shape = MenuSheetShape(seed: 37)
         let rows = min(TapListMetrics.popoverRows, max(2, people?.people.count ?? 2))
         return ScrollView {
-            VStack(spacing: 0) {
-                if let people {
-                    TapRows(people: people.people, face: TapListMetrics.popoverFace, height: TapListMetrics.popoverRow) { route in
-                        request.close()
-                        openRoute(route)
-                    }
-                    TapListState(people: people, face: TapListMetrics.popoverFace, height: TapListMetrics.popoverRow)
-                }
+            TapsPopoverRows(people: people) { route in
+                request.close()
+                openRoute(route)
             }
-            .padding(.vertical, 6)
         }
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.basedOnSize)
@@ -324,6 +331,23 @@ struct TapsPopover: View {
                 .allowsHitTesting(false)
         }
         .clipShape(shape)
+    }
+}
+
+/// The popover's rows, as its sheet scrolls them: 6 above and below, each face 20 in from the sheet's pen line and 10
+/// before the name (``TapRowMeasure/popover``).
+struct TapsPopoverRows: View {
+    let people: TapPeople?
+    let open: (Route) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if let people {
+                TapRows(people: people.people, measure: .popover, open: open)
+                TapListState(people: people, measure: .popover)
+            }
+        }
+        .padding(.vertical, 6)
     }
 }
 
@@ -388,11 +412,11 @@ struct AuthorTapList: View {
             ModalTitle(L10n.Card.ResonatorsModal.title).padding(.bottom, 10)
             if let people {
                 ScrollView {
-                    TapRows(people: people.people, face: TapListMetrics.dialogFace, height: TapListMetrics.dialogRow) { route in
+                    TapRows(people: people.people, measure: .dialog) { route in
                         onClose()
                         openRoute(route)
                     }
-                    TapListState(people: people, face: TapListMetrics.dialogFace, height: TapListMetrics.dialogRow)
+                    TapListState(people: people, measure: .dialog)
                     if people.next != nil {
                         OrganicButton(L10n.Home.moreBtn, variant: .tonal, size: .sm) { Task { await people.more() } }
                             .loading(people.loadingMore)

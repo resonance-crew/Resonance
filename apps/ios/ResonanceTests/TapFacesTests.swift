@@ -147,3 +147,35 @@ import UIKit
         #expect(found.filter { $0.accessibilityLabel == "DO" || $0.accessibilityLabel == "EL" }.isEmpty)
     }
 }
+
+/// A wide window's list of who resonated (§U2.5) is a menu sheet: a row's face stands 20 in from the sheet's pen line
+/// and the name 10 after the face, as the web's popover rows (TapPeople.module.css `.list[data-size='popover']`). They
+/// stood 12 and 12, the dialogs' rows, which only a dialog pulls back to its own padding.
+@MainActor @Suite(.serialized) struct TapsPopoverRowsTests {
+    @Test func aFaceStandsTwentyInAndTheNameTenAfterIt() async throws {
+        #expect(TapRowMeasure.popover == TapRowMeasure(height: 52, face: 28, inset: 20, gap: 10))
+        // The dialogs' rows are not the popover's: 12 a side, pulled back by their scroll's -12.
+        #expect(TapRowMeasure.dialog == TapRowMeasure(height: 60, face: 36, inset: 12, gap: 12))
+
+        let people = TapPeople { _ in TapList(people: [TapPerson(author: Fixture.author("dora"), note: nil)], nextPageToken: nil) }
+        await people.load()
+        let width = TapListMetrics.popoverWidth
+        let drawn = try DrawnPixels(TapsPopoverRows(people: people) { _ in }.frame(width: width).background(Tokens.cream))
+        // 6 above, the row's 52, 6 below.
+        #expect(drawn.width == Int(width * 2) && drawn.height == Int((TapListMetrics.popoverRow + 12) * 2),
+                "\(drawn.width) × \(drawn.height)")
+        let paper = try DrawnPixels(Color.clear.frame(width: 4, height: 4).background(Tokens.cream)).rgb(2, 2)
+        // The columns anything is drawn in: the face, then — after the paper between them — the name.
+        let inked = (0 ..< drawn.width).map { x in
+            (0 ..< drawn.height).contains { y in zip(drawn.rgb(x, y), paper).reduce(0) { $0 + abs($1.0 - $1.1) } > 30 }
+        }
+        let faceStart = try #require(inked.firstIndex(of: true))
+        let faceEnd = try #require(inked[faceStart...].firstIndex(of: false))
+        let nameStart = try #require(inked[faceEnd...].firstIndex(of: true))
+        let face = CGFloat(faceStart) / 2, name = CGFloat(nameStart) / 2
+        // The face's rim (its pen half outside the shape) at 20; it stood at 12.
+        #expect(face >= 20 - 1.5 && face <= 20 + 1, "\(face)")
+        // The name's ink 10 after the face's 28, a glyph's side bearing in; it began at 52.
+        #expect(name >= 20 + 28 + 10 - 0.5 && name <= 20 + 28 + 10 + 3, "\(name)")
+    }
+}
