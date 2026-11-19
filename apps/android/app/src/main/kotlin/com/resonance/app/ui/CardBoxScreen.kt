@@ -78,6 +78,8 @@ import com.resonance.design.OrganicIconButton
 import com.resonance.design.OrganicButton
 import com.resonance.design.ButtonVariant
 import com.resonance.design.Skeleton
+import com.resonance.design.textGrowth
+import com.resonance.design.SkeletonLines
 import com.resonance.design.plainClickable
 import com.resonance.design.cardListLayout
 import com.resonance.design.CardListLayout
@@ -405,12 +407,13 @@ fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
                 }
                 Session.Profile.Missing -> OrganicEmptyState(L10n.Auth.stepHandle)
                 Session.Profile.Failed -> OrganicEmptyState(L10n.Native.loadError, L10n.Native.retry, { scope.launch { session.loadMe() } }, action = EmptyAction.Outline)
-                // Still loading: the identity row's shape in shimmering blocks.
+                // Still loading: the identity row's shape in shimmering blocks — the pen name's line (heading 24) over the
+                // bio's (14), 4 apart, in their own type, so the row is as tall as the loaded one at any text size.
                 else -> Row(Modifier.padding(horizontal = layout.headerInset), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Skeleton(height = 72.dp, circle = true)
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Skeleton(Modifier.width(140.dp), height = 24.dp)
-                        Skeleton(Modifier.fillMaxWidth(0.7f), height = 14.dp)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        SkeletonLines(AppFonts.heading(24f), 24.dp, Modifier.width(140.dp * textGrowth(24f)))
+                        SkeletonLines(AppFonts.body(14f), 14.dp, Modifier.fillMaxWidth(0.7f))
                     }
                 }
             }

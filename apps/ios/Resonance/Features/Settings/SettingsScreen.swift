@@ -647,7 +647,7 @@ private struct BlockedListContent: View {
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(Array(people.enumerated()), id: \.element.id) { i, person in
                                 if i > 0 { WavyDivider(seed: Double(100 + i * 7)).padding(.vertical, 2) }
-                                row(person)
+                                BlockedPersonRow(person: person) { Task { await unblock(person) } }
                             }
                         }
                     }
@@ -659,29 +659,36 @@ private struct BlockedListContent: View {
                 }
             } else {
                 // Still reading: two rows' shapes, the rule between them as the list has.
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(0..<2, id: \.self) { i in
-                        if i > 0 { WavyDivider(seed: Double(100 + i * 7)).padding(.vertical, 2) }
-                        HStack(spacing: 12) {
-                            SkeletonBlock(width: 36, circle: true)
-                            VStack(alignment: .leading, spacing: 7) {
-                                SkeletonBlock(width: i == 0 ? 112 : 88, height: 14)
-                                SkeletonBlock(width: 72, height: 11)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .padding(.vertical, 10)
-                    }
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(L10n.Home.moreLoading)
+                BlockedListSkeleton()
             }
             ModalCloseButton(L10n.Safety.BlockedList.close, action: onClose)
         }
         .task { people = (try? await session.safety?.blocked()) ?? [] }
     }
 
-    private func row(_ person: SafetyService.BlockedPerson) -> some View {
+    /// The row goes at once (round 21); refused, it is back where it stood and a toast says so.
+    private func unblock(_ person: SafetyService.BlockedPerson) async {
+        guard let at = people?.firstIndex(of: person) else { return }
+        let toasts = session.toasts
+        withAnimation(.easeOut(duration: 0.2)) { _ = people?.remove(at: at) }
+        do {
+            try await session.safety?.unblock(person.id)
+        } catch {
+            withAnimation(.easeOut(duration: 0.2)) {
+                if people?.contains(person) == false { people?.insert(person, at: min(at, people?.count ?? 0)) }
+            }
+            toasts.show(L10n.Safety.unblockFailed)
+        }
+    }
+}
+
+/// One blocked person in the list: their avatar, the pen name over when they were blocked, and the
+/// small Unblock.
+struct BlockedPersonRow: View {
+    let person: SafetyService.BlockedPerson
+    let onUnblock: () -> Void
+
+    var body: some View {
         HStack(spacing: 12) {
             HandDrawnAvatar(initials: person.initials, imageURL: person.avatarUrl.flatMap(URL.init(string:)),
                             color: OKLCHColor.avatar(person.accentColor) ?? Tokens.avatarWait, size: 36,
@@ -698,26 +705,43 @@ private struct BlockedListContent: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            OrganicButton(L10n.Safety.unblock, variant: .tonal, size: .sm) {
-                Task { await unblock(person) }
-            }
+            OrganicButton(L10n.Safety.unblock, variant: .tonal, size: .sm, action: onUnblock)
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 2)
     }
+}
 
-    /// The row goes at once (round 21); refused, it is back where it stood and a toast says so.
-    private func unblock(_ person: SafetyService.BlockedPerson) async {
-        guard let at = people?.firstIndex(of: person) else { return }
-        let toasts = session.toasts
-        withAnimation(.easeOut(duration: 0.2)) { _ = people?.remove(at: at) }
-        do {
-            try await session.safety?.unblock(person.id)
-        } catch {
-            withAnimation(.easeOut(duration: 0.2)) {
-                if people?.contains(person) == false { people?.insert(person, at: min(at, people?.count ?? 0)) }
+/// The block list still on its way: two of ``BlockedPersonRow``'s shapes — the 36 avatar, the pen name's
+/// line over the date's in their own type (``SkeletonLine``), the row's Unblock kept unseen, so a row is
+/// as tall as a person's at any text size — the rule between them as the list has.
+struct BlockedListSkeleton: View {
+    var body: some View {
+        let grow = TextScale.factor(relativeTo: .body)
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(0..<2, id: \.self) { i in
+                if i > 0 { WavyDivider(seed: Double(100 + i * 7)).padding(.vertical, 2) }
+                HStack(spacing: 12) {
+                    SkeletonBlock(width: 36, circle: true)
+                    VStack(alignment: .leading, spacing: 0) {
+                        SkeletonLine(font: AppFonts.body(15, weight: .semibold), width: (i == 0 ? 112 : 88) * grow) {
+                            SkeletonBlock(width: (i == 0 ? 112 : 88) * grow, height: 14 * grow)
+                        }
+                        SkeletonLine(font: AppFonts.body(12.5), width: 72 * grow) {
+                            SkeletonBlock(width: 72 * grow, height: 11 * grow)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // The Unblock the row will end in, unseen: the row takes its height as a person's does.
+                    OrganicButton(L10n.Safety.unblock, variant: .tonal, size: .sm) {}
+                        .hidden()
+                        .accessibilityHidden(true)
+                }
+                .padding(.vertical, 10)
+                .padding(.horizontal, 2)
             }
-            toasts.show(L10n.Safety.unblockFailed)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L10n.Home.moreLoading)
     }
 }

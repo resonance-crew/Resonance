@@ -472,28 +472,27 @@ fun StoryCardSkeleton(position: Int, isLast: Boolean = false, modifier: Modifier
     }
 }
 
+/**
+ * [StoryCardBody]'s parts as shimmering blocks, each in that part's own type so the card that
+ * replaces it stands where it did, at any text size: two tags as tall as a pill, the title's two
+ * lines and a typical excerpt's lines ([excerptSample]: the stored 96 characters, as many lines as
+ * they take here) in their CSS line boxes, the byline's two lines beside the 30 avatar.
+ */
 @Composable
 private fun ColumnScope.StoryCardSkeletonBody(palette: CardPalette, seed: Double) {
     Skeleton(Modifier.aspectRatio(1 / 0.62f), height = Dp.Unspecified, radius = 18.dp)
     Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Skeleton(Modifier.width(56.dp), height = 22.dp, radius = 11.dp)
-        Skeleton(Modifier.width(72.dp), height = 22.dp, radius = 11.dp)
+        SkeletonTag(56.dp)
+        SkeletonTag(72.dp)
     }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Skeleton(Modifier.fillMaxWidth(0.9f), height = 18.dp)
-        Skeleton(Modifier.fillMaxWidth(0.55f), height = 18.dp)
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Skeleton(height = 13.dp)
-        Skeleton(height = 13.dp)
-        Skeleton(Modifier.fillMaxWidth(0.7f), height = 13.dp)
-    }
+    CssSkeletonLines(18f, 1.3f, 18.dp, Modifier.fillMaxWidth(0.9f), Modifier.fillMaxWidth(0.55f))
+    CssSkeletonParagraph(excerptSample(), AppFonts.Family.Body, 14f, 400, 1.65f, 13.dp)
     BylineRule(seed, palette.separator)
     Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Skeleton(height = 30.dp, circle = true)
         Column(Modifier.weight(1f)) {
-            Skeleton(Modifier.width(96.dp), height = 13.dp)
-            Skeleton(Modifier.padding(top = 6.dp).width(56.dp), height = 11.dp)
+            SkeletonLines(AppFonts.body(13f, 600, lineHeight = 1.4f), 13.dp, Modifier.width(96.dp * textGrowth(13f)))
+            SkeletonLines(AppFonts.body(12f, lineHeight = 1.4f), 11.dp, Modifier.width(56.dp * textGrowth(12f)))
         }
         Skeleton(height = 18.dp, circle = true)
     }

@@ -75,6 +75,7 @@ import com.resonance.design.EmptyAction
 import com.resonance.design.OrganicButton
 import com.resonance.design.SharedShimmer
 import com.resonance.design.Skeleton
+import com.resonance.design.SkeletonLines
 import com.resonance.design.cardListLayout
 import com.resonance.design.storyCardSkeletons
 import com.resonance.geometry.seedFromString
@@ -359,14 +360,17 @@ private fun ProfileHeroSkeleton() {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = LocalWindowLayout.current.cls.peopleHeadGap(), bottom = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(ProfileHeroGap),
         ) {
-            // The name's line is 38.4 (32 × 1.2); its 34 block sits in its middle, 16 under the avatar.
-            Skeleton(Modifier.padding(bottom = PeopleNameGap - 16.dp + 2.dp), height = 96.dp, circle = true)
-            Skeleton(Modifier.fillMaxWidth(0.6f).widthIn(max = 220.dp), height = 34.dp, radius = 10.dp)
-            Skeleton(Modifier.fillMaxWidth(0.8f).widthIn(max = 440.dp), height = 16.dp, radius = 8.dp)
-            Skeleton(Modifier.fillMaxWidth(0.6f).widthIn(max = 300.dp), height = 16.dp, radius = 8.dp)
-            Skeleton(Modifier.fillMaxWidth(0.7f).widthIn(max = 280.dp), height = 13.dp, radius = 8.dp)
+            // As the masthead stands: the avatar with the name 16 under it, then the name's line (heading 32 × 1.2),
+            // two of the bio's (15 × 1.6) and the meta line (13), [ProfileHeroGap] apart, each in its own type.
+            Skeleton(Modifier.padding(bottom = PeopleNameGap - ProfileHeroGap), height = 96.dp, circle = true)
+            SkeletonLines(AppFonts.heading(32f, lineHeight = 1.2f), 34.dp, Modifier.fillMaxWidth(0.6f).widthIn(max = 220.dp), alignment = Alignment.Center, radius = 10.dp)
+            SkeletonLines(
+                AppFonts.body(15f, lineHeight = 1.6f), 16.dp,
+                Modifier.fillMaxWidth(0.8f).widthIn(max = 440.dp), Modifier.fillMaxWidth(0.6f).widthIn(max = 300.dp), alignment = Alignment.Center, radius = 8.dp,
+            )
+            SkeletonLines(AppFonts.body(13f), 13.dp, Modifier.fillMaxWidth(0.7f).widthIn(max = 280.dp), alignment = Alignment.Center, radius = 8.dp)
         }
         Spacer(Modifier.height(28.dp))
     }

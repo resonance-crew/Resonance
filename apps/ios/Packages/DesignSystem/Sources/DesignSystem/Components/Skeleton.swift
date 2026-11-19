@@ -1,4 +1,5 @@
 import Synchronization
+import UIKit
 import SwiftUI
 
 /// Skeleton.tsx: one placeholder block with the warm shimmer — sand, then a
@@ -179,5 +180,142 @@ extension View {
     /// that is a skeleton all through, never around content that stays (the timeline runs while it shows).
     public func skeletonTimeline() -> some View {
         SkeletonTimeline { self }
+    }
+}
+
+// MARK: - Lines of words
+
+extension EnvironmentValues {
+    /// Whether the words a skeleton stands for are a Chinese interface's: a line holding Han takes the
+    /// fallback face's height, taller than a Latin line's, so each ``SkeletonLine`` is measured on Han
+    /// beside Latin, and an English interface's on Latin alone — the rows a reader mostly sees are the
+    /// ones it matches. Set once at the app's root, from the interface language.
+    @Entry public var skeletonHan: Bool = false
+}
+
+/// What a skeleton measures a line of interface words on (``EnvironmentValues/skeletonHan``).
+public enum SkeletonSample {
+    public static func line(han: Bool) -> String { han ? "讀Ag" : "Ag" }
+}
+
+/// One line of words as a skeleton draws it: the line box of a line of `font` — an unseen sample
+/// laid out in the words' own font, so it is as tall as the line that replaces it at every text size,
+/// Han or Latin (``EnvironmentValues/skeletonHan``) — at `width` or the width it is offered, the bar
+/// in its middle at the line's start (or centred, for centred words). Give the bar the words' growth
+/// (`TextScale.factor(relativeTo:)` of the font's style) so it grows with them. The owner, at a large
+/// text size: 「私訊頁面的 skeleton 和實際位置不一樣」. Android's SkeletonLines.
+public struct SkeletonLine<Bar: View>: View {
+    let font: Font
+    var width: CGFloat?
+    var alignment: Alignment
+    let bar: Bar
+    @Environment(\.skeletonHan) private var han
+
+    public init(font: Font, width: CGFloat? = nil, alignment: Alignment = .leading, @ViewBuilder bar: () -> Bar) {
+        self.font = font
+        self.width = width
+        self.alignment = alignment
+        self.bar = bar()
+    }
+
+    public var body: some View {
+        Text(verbatim: SkeletonSample.line(han: han)).font(font).lineLimit(1).hidden()
+            .frame(maxWidth: width ?? .infinity, alignment: alignment)
+            .frame(width: width)
+            .overlay(alignment: alignment) { bar }
+            .accessibilityHidden(true)
+    }
+}
+
+/// One line of words drawn in CSS line boxes (`CSSText`, `ProseStyle`, a story's title and body): those
+/// are exactly the face's size × the line height tall, whatever glyphs they hold, so this is that
+/// height — the face given at the person's text size (`scaledUIFont`, `storyUIFont`), as the words take
+/// it — with the bar in its middle. Android's CssSkeletonLines.
+public struct SkeletonLineBox<Bar: View>: View {
+    let lineBox: CGFloat
+    var width: CGFloat?
+    var alignment: Alignment
+    let bar: Bar
+
+    public init(lineBox: CGFloat, width: CGFloat? = nil, alignment: Alignment = .leading, @ViewBuilder bar: () -> Bar) {
+        self.lineBox = lineBox
+        self.width = width
+        self.alignment = alignment
+        self.bar = bar()
+    }
+
+    /// The line box of `font` at CSS `line-height` `lineHeight` (a multiple of its size), as `CSSText` draws it.
+    public init(font: UIFont, lineHeight: CGFloat, width: CGFloat? = nil, alignment: Alignment = .leading,
+                @ViewBuilder bar: () -> Bar) {
+        self.init(lineBox: font.pointSize * lineHeight, width: width, alignment: alignment, bar: bar)
+    }
+
+    public var body: some View {
+        Color.clear
+            .frame(height: lineBox)
+            .frame(maxWidth: width ?? .infinity)
+            .frame(width: width)
+            .overlay(alignment: alignment) { bar }
+            .accessibilityHidden(true)
+    }
+}
+
+/// A paragraph in CSS line boxes whose length is known but not its words (a card's excerpt: the story's
+/// first 96 characters and 「…」): `sample` laid out unseen as `CSSText` sets it, at the width offered,
+/// and a bar in each line box it takes — `bar(line, lines)` — so it holds as many lines as the words
+/// that replace it, at any width and text size. Android's CssSkeletonParagraph.
+public struct SkeletonParagraph<Bar: View>: View {
+    let sample: String
+    let font: UIFont
+    let lineHeight: CGFloat
+    let bar: (Int, Int) -> Bar
+
+    public init(sample: String, font: UIFont, lineHeight: CGFloat, @ViewBuilder bar: @escaping (_ line: Int, _ lines: Int) -> Bar) {
+        self.sample = sample
+        self.font = font
+        self.lineHeight = lineHeight
+        self.bar = bar
+    }
+
+    public var body: some View {
+        let lineBox = font.pointSize * lineHeight
+        CSSText(sample, font: font, lineHeight: lineHeight)
+            .hidden()
+            .overlay(alignment: .topLeading) {
+                GeometryReader { geo in
+                    let lines = max(1, Int((geo.size.height / lineBox).rounded()))
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(0..<lines), id: \.self) { line in
+                            SkeletonLineBox(lineBox: lineBox) { bar(line, lines) }
+                        }
+                    }
+                }
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+/// A tag still on its way: ``TagPill``'s box — a line of its type (`size`'s, semibold) with its padding
+/// above and below — `width` wide grown with the words, the whole pill shimmering. Android's SkeletonTag.
+public struct SkeletonTag: View {
+    let width: CGFloat
+    var size: TagPill.Size
+    @Environment(\.skeletonHan) private var han
+
+    public init(width: CGFloat, size: TagPill.Size = .md) {
+        self.width = width
+        self.size = size
+    }
+
+    public var body: some View {
+        Text(verbatim: SkeletonSample.line(han: han).uppercased())
+            .font(AppFonts.body(size.font, weight: .semibold))
+            .lineLimit(1)
+            .hidden()
+            .frame(width: width * TextScale.factor(relativeTo: .body))
+            .padding(.vertical, size.padY)
+            // A radius past half the height: SwiftUI draws the rounded rectangle's ends round, the pill's.
+            .overlay { SkeletonBlock(height: nil, radius: 999) }
+            .accessibilityHidden(true)
     }
 }

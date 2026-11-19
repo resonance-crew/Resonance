@@ -167,16 +167,7 @@ struct CardBoxScreen: View {
             }
         } else {
             // Who I am, still on its way: the head's shapes where they will land, so nothing moves (round 9 §9).
-            HStack(spacing: 16) {
-                SkeletonBlock(width: 72, circle: true)
-                VStack(alignment: .leading, spacing: 10) {
-                    SkeletonBlock(width: 120, height: 24, radius: 8)
-                    SkeletonBlock(width: 180, height: 14)
-                }
-                Spacer(minLength: 0)
-            }
-            .accessibilityElement()
-            .accessibilityLabel("Loading")
+            CardBoxHeadSkeleton()
         }
     }
 
@@ -617,5 +608,29 @@ private struct TrashCardList: View {
                     .padding(.trailing, (bordered ? 14 : 34) - 3)
             }
         }
+    }
+}
+
+/// The card box's head still on its way: the 72 avatar, then the pen name's line over the bio's, 4 apart,
+/// each in its own type (``SkeletonLine``: the name's Playfair 24 grows as a heading does), so the words
+/// stand where the head's will at any text size (round 9 §9).
+struct CardBoxHeadSkeleton: View {
+    var body: some View {
+        let name = TextScale.factor(relativeTo: .title1)
+        let grow = TextScale.factor(relativeTo: .body)
+        HStack(spacing: 16) {
+            SkeletonBlock(width: 72, circle: true)
+            VStack(alignment: .leading, spacing: 4) {
+                SkeletonLine(font: AppFonts.heading(24), width: 120 * name) {
+                    SkeletonBlock(width: 120 * name, height: 24 * name, radius: 8)
+                }
+                SkeletonLine(font: AppFonts.body(14), width: 180 * grow) {
+                    SkeletonBlock(width: 180 * grow, height: 14 * grow)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Loading")
     }
 }

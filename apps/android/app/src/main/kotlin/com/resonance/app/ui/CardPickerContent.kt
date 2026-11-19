@@ -63,6 +63,7 @@ import com.resonance.design.OrganicIcon
 import com.resonance.design.fade
 import com.resonance.design.SharedShimmer
 import com.resonance.design.Skeleton
+import com.resonance.design.SkeletonLines
 import com.resonance.design.OrganicButton
 import com.resonance.design.ButtonVariant
 import androidx.compose.ui.semantics.contentDescription
@@ -221,7 +222,7 @@ internal fun CardPickList(
 }
 
 @Composable
-private fun CardPickRow(card: FeedCard, index: Int, choosing: Boolean, chosen: Boolean, enabled: Boolean, anonymousLabel: String?, privateLabel: String?, onClick: () -> Unit) {
+internal fun CardPickRow(card: FeedCard, index: Int, choosing: Boolean, chosen: Boolean, enabled: Boolean, anonymousLabel: String?, privateLabel: String?, onClick: () -> Unit) {
     val press = if (choosing) Modifier.selectable(chosen, enabled = enabled, role = Role.RadioButton, interactionSource = null, indication = null, onClick = onClick)
     else Modifier.plainClickable(role = Role.Button, onClick = onClick)
     Row(
@@ -359,7 +360,8 @@ internal fun shareableCards(published: List<FeedCard>, private: List<FeedCard>?,
 /**
  * The rows' footprint while the cards are read (round 9 C2): shimmering rows shaped as the real ones
  * — the 40 thumb in its own lopsided square, a title bar 60 % wide on the title's line and a date bar
- * 35 % on the meta line, the rows' own padding — so nothing moves when the cards come.
+ * 35 % on the meta line, each line in its own type ([SkeletonLines]: as tall as the row's at any text
+ * size), the rows' own padding — so nothing moves when the cards come.
  */
 @Composable
 internal fun PickSkeleton(rows: Int) {
@@ -374,13 +376,9 @@ internal fun PickSkeleton(rows: Int) {
                 ) {
                     Skeleton(Modifier.size(40.dp), height = 40.dp, shape = remember(i) { pickThumbShape((i * 7 + 3).toDouble()) })
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        // As tall as the title's line (15 × 1.3) and the meta's (13 × 1.4), a bar in the middle of each.
-                        Box(Modifier.fillMaxWidth().height(19.5.dp), contentAlignment = Alignment.CenterStart) {
-                            Skeleton(Modifier.fillMaxWidth(0.6f), height = 14.dp)
-                        }
-                        Box(Modifier.fillMaxWidth().height(18.2.dp), contentAlignment = Alignment.CenterStart) {
-                            Skeleton(Modifier.fillMaxWidth(0.35f), height = 11.dp)
-                        }
+                        // The title's line (15 × 1.3) and the meta's (13 × 1.4) in their own type, a bar in the middle of each.
+                        SkeletonLines(AppFonts.body(15f, 600, lineHeight = 1.3f), 14.dp, Modifier.fillMaxWidth(0.6f))
+                        SkeletonLines(AppFonts.body(13f, lineHeight = 1.4f), 11.dp, Modifier.fillMaxWidth(0.35f))
                     }
                 }
             }

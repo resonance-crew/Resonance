@@ -289,13 +289,18 @@ public nonisolated struct CardOutlineShape: Shape {
 }
 
 /// The loading card (StoryCard `loading`): the real band — tint, grain and
-/// rules — with the picture, words and avatar swapped for shimmering blocks.
+/// rules — with the picture, words and avatar swapped for shimmering blocks, each in the card's own
+/// type so the card that replaces it stands where it did, at any text size: two tags as tall as a
+/// pill, the title's two lines and a typical excerpt's lines (``excerptSample(han:)``: as many lines as
+/// it takes here) in their CSS line boxes, the byline's two lines beside the 30 avatar. Android's
+/// StoryCardSkeleton.
 public struct StoryCardSkeleton: View {
     let position: Int
     var isLast: Bool
     var underBar: Bool
     var bordered: Bool
     var family: Int?
+    @Environment(\.skeletonHan) private var han
 
     public init(position: Int, isLast: Bool = false, underBar: Bool = false, bordered: Bool = false, palette: Int? = nil) {
         self.position = position
@@ -305,33 +310,52 @@ public struct StoryCardSkeleton: View {
         self.family = palette
     }
 
+    /// A card's excerpt as most are: the story's first 96 characters and 「…」 (the web's EXCERPT_CHARS,
+    /// src/lib/markdown/plainText.ts; most stories run longer) — ordinary prose, Han in a Chinese
+    /// interface and Latin words in an English one, its punctuation (narrower than a Han character in
+    /// the face) as often as a story's, so it takes the lines a real excerpt takes. Android's
+    /// excerptSample, word for word.
+    public static func excerptSample(han: Bool) -> String {
+        String((han ? zhExcerpt : enExcerpt).prefix(96)) + "…"
+    }
+
+    private static let zhExcerpt = "緣分真的是件很奇妙的事。我們在同一間教室裡待了三年，卻直到畢業那天才第一次好好說話。那天下著雨，走廊盡頭的燈一盞一盞地熄了，"
+        + "她說：「原來你也在這裡。」我想了很久，才知道那句話的意思。後來每次下雨，我都會想起她。"
+    private static let enExcerpt = "We met on the first day of school and talked until the lights went out at the far end of the long hallway, and then we walked home."
+
     public var body: some View {
         let palette = family.map(CardPalette.init(index:)) ?? CardPalette(accentHue: nil, position: position)
         let seed = Double(position * 77 + 13)
+        // The card's faces at the person's text size, as StoryCardView sets its words.
+        let title = AppFonts.scaledUIFont(.heading, size: 18, weight: .bold)
+        let excerpt = AppFonts.scaledUIFont(.body, size: 14)
+        let grow = TextScale.factor(relativeTo: .body)
         VStack(alignment: .leading, spacing: 14) {
             // OrganicImage's pre-wobble radius, where the curve will land.
             SkeletonBlock(height: nil, radius: 18)
                 .aspectRatio(1 / 0.62, contentMode: .fit)
             HStack(spacing: 6) {
-                SkeletonBlock(width: 56, height: 22, radius: 11)
-                SkeletonBlock(width: 72, height: 22, radius: 11)
+                SkeletonTag(width: 56)
+                SkeletonTag(width: 72)
             }
             .padding(.top, 8)
-            VStack(alignment: .leading, spacing: 8) {
-                SkeletonBlock(fraction: 0.9, height: 18)
-                SkeletonBlock(fraction: 0.55, height: 18)
+            VStack(alignment: .leading, spacing: 0) {
+                SkeletonLineBox(font: title, lineHeight: 1.3) { SkeletonBlock(fraction: 0.9, height: title.pointSize) }
+                SkeletonLineBox(font: title, lineHeight: 1.3) { SkeletonBlock(fraction: 0.55, height: title.pointSize) }
             }
-            VStack(alignment: .leading, spacing: 8) {
-                SkeletonBlock(height: 13)
-                SkeletonBlock(height: 13)
-                SkeletonBlock(fraction: 0.7, height: 13)
+            SkeletonParagraph(sample: Self.excerptSample(han: han), font: excerpt, lineHeight: 1.65) { line, lines in
+                SkeletonBlock(fraction: line == lines - 1 ? 0.7 : 1, height: excerpt.pointSize * 13 / 14)
             }
             StoryCardSeparator(palette: palette, seed: seed)
             HStack(spacing: 10) {
                 SkeletonBlock(width: 30, circle: true)
-                VStack(alignment: .leading, spacing: 6) {
-                    SkeletonBlock(width: 96, height: 13)
-                    SkeletonBlock(width: 56, height: 11)
+                VStack(alignment: .leading, spacing: 1) {
+                    SkeletonLine(font: AppFonts.body(13, weight: .semibold), width: 96 * grow) {
+                        SkeletonBlock(width: 96 * grow, height: 13 * grow)
+                    }
+                    SkeletonLine(font: AppFonts.body(12), width: 56 * grow) {
+                        SkeletonBlock(width: 56 * grow, height: 11 * grow)
+                    }
                 }
                 Spacer()
                 SkeletonBlock(width: 18, circle: true)

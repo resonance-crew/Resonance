@@ -177,7 +177,7 @@ struct ConversationsScreen: View {
 /// a tablet, the Mac and beside the thread pane, a faint hand-drawn wash while
 /// pressed or under a pointer — and beside the thread pane, the chosen row's
 /// terracotta wash.
-private struct ConversationRow: View {
+struct ConversationRow: View {
     let person: Person
     let preview: String
     let time: String?
@@ -276,24 +276,36 @@ nonisolated struct ConversationsFrame: Equatable {
 }
 
 /// The conversations still on their way: six rows in a row's measures — the 40 face, the pen name
-/// over the last line, the time at the end — in the warm shimmer. Android's ConversationsSkeleton.
-private struct ConversationsSkeleton: View {
+/// over the last line, the time at the end — in the warm shimmer. Each bar stands in the line box of
+/// the words it stands for, in their font, so the rows are as tall as the conversations' at every text
+/// size (the owner, at a large text size: 「私訊頁面的 skeleton 和實際位置不一樣」), and grows with them
+/// (``SkeletonLine``). Android's ConversationsSkeleton.
+struct ConversationsSkeleton: View {
     /// The rows' own sides (``ConversationsFrame/rowInset``).
     var inset: CGFloat = 14
     private static let names: [CGFloat] = [96, 128, 80, 112, 88, 120]
     private static let lines: [CGFloat] = [0.78, 0.56, 0.7, 0.48, 0.64, 0.52]
 
     var body: some View {
+        // How much the rows' words have grown with the person's text size (AppFonts.body's curve).
+        let grow = TextScale.factor(relativeTo: .body)
         VStack(spacing: 0) {
             ForEach(0..<6, id: \.self) { i in
                 HStack(spacing: 12) {
                     SkeletonBlock(width: 40, circle: true)
-                    VStack(alignment: .leading, spacing: 8) {
-                        SkeletonBlock(width: Self.names[i], height: 13)
-                        SkeletonBlock(fraction: Self.lines[i], height: 12)
+                    // The row's words: the pen name over the last line, 3 apart.
+                    VStack(alignment: .leading, spacing: 3) {
+                        SkeletonLine(font: AppFonts.body(14, weight: .semibold)) {
+                            SkeletonBlock(width: Self.names[i] * grow, height: 13 * grow)
+                        }
+                        SkeletonLine(font: AppFonts.body(13)) {
+                            SkeletonBlock(fraction: Self.lines[i], height: 12 * grow)
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    SkeletonBlock(width: 30, height: 10)
+                    SkeletonLine(font: AppFonts.body(11), width: 30 * grow) {
+                        SkeletonBlock(width: 30 * grow, height: 10 * grow)
+                    }
                 }
                 .padding(.vertical, ListBands.rowPad)
                 .padding(.horizontal, inset)

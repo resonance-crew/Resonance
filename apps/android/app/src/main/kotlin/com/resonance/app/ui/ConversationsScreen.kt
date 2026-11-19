@@ -11,7 +11,10 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.Dp
 import com.resonance.design.SharedShimmer
+import com.resonance.design.SkeletonLines
+import com.resonance.design.textGrowth
 import com.resonance.design.Skeleton
 import com.resonance.design.readableColumn
 import com.resonance.design.HeaderEdgeHeight
@@ -221,7 +224,7 @@ private fun Route.Thread.isWith(person: Person): Boolean = if (uid != null) uid 
  * (MessagesPage's active row).
  */
 @Composable
-private fun ConversationRow(
+internal fun ConversationRow(
     person: Person,
     preview: String,
     time: String?,
@@ -258,8 +261,11 @@ private fun ConversationRow(
             person.initials, person.avatarUrl, avatarFill(person.accentColor),
             size = 40.dp, seed = seedOr(person.avatarSeed, 5.0),
         )
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            BasicText(person.handle, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(14f, 600, lineHeight = 1.3f))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ConversationRowType.LineGap)) {
+            BasicText(
+                person.handle, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = AppFonts.body(ConversationRowType.Name, ConversationRowType.NameWeight, lineHeight = ConversationRowType.Leading),
+            )
             if (draft != null) {
                 // Left unsent (round 22 §4.4): the words after a small pen, in the accent — never the word 草稿.
                 Row(
@@ -268,14 +274,22 @@ private fun ConversationRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     OrganicIcon(IconName.Pen, size = 13.dp, color = Tokens.ButtonOnTonal, strokeWidth = Tokens.Ink.value)
-                    BasicText(draft, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(13f, lineHeight = 1.3f, color = Tokens.ButtonOnTonal))
+                    BasicText(
+                        draft, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        style = AppFonts.body(ConversationRowType.Line, lineHeight = ConversationRowType.Leading, color = Tokens.ButtonOnTonal),
+                    )
                 }
             } else {
-                BasicText(preview, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(13f, lineHeight = 1.3f, color = Tokens.TextMuted))
+                BasicText(
+                    preview, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = AppFonts.body(ConversationRowType.Line, lineHeight = ConversationRowType.Leading, color = Tokens.TextMuted),
+                )
             }
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            if (time != null) BasicText(time, maxLines = 1, style = AppFonts.body(11f, lineHeight = 1.3f, color = Tokens.TextMuted))
+            if (time != null) {
+                BasicText(time, maxLines = 1, style = AppFonts.body(ConversationRowType.Time, lineHeight = ConversationRowType.Leading, color = Tokens.TextMuted))
+            }
             if (unread > 0) CountBadge(unread)
         }
     }
@@ -308,15 +322,35 @@ private fun Modifier.rowBlob(id: String, source: MutableInteractionSource, chose
 private const val StartersKey = "starters"
 
 /**
+ * A conversation row's words, as [ConversationRow] sets them and [ConversationsSkeleton] stands in for
+ * them: their sizes (sp, so they grow with the person's text size), each line [Leading] of its size,
+ * the pen name ([NameWeight]) [LineGap] over the last line.
+ */
+internal object ConversationRowType {
+    const val Name = 14f
+    const val NameWeight = 600
+    const val Line = 13f
+    const val Time = 11f
+    const val Leading = 1.3f
+    val LineGap: Dp = 3.dp
+}
+
+/**
  * The conversations still on their way: six rows in a row's measures — the 40 face, the pen name
- * over the last line, the time at the end — in the warm shimmer, in the rows' own frame. iOS's ConversationsSkeleton.
+ * over the last line, the time at the end — in the warm shimmer, in the rows' own frame. Each bar
+ * stands in a line of the words it stands for in their type ([ConversationRowType], [SkeletonLines]),
+ * so the rows are as tall as the conversations' at every text size and in either script (the owner, at
+ * 1.5× text: 「私訊頁面的 skeleton 和實際位置不一樣」), and grows with them. iOS's ConversationsSkeleton.
  */
 @Composable
-private fun ConversationsSkeleton(frame: ConversationsFrame) {
+internal fun ConversationsSkeleton(frame: ConversationsFrame) {
     // One clock for its blocks (composed together).
     SharedShimmer {
         val names = listOf(96, 128, 80, 112, 88, 120)
         val lines = listOf(0.78f, 0.56f, 0.7f, 0.48f, 0.64f, 0.52f)
+        val name = AppFonts.body(ConversationRowType.Name, ConversationRowType.NameWeight, lineHeight = ConversationRowType.Leading)
+        val line = AppFonts.body(ConversationRowType.Line, lineHeight = ConversationRowType.Leading)
+        val time = AppFonts.body(ConversationRowType.Time, lineHeight = ConversationRowType.Leading)
         Column(Modifier.readableColumn().padding(start = frame.start, end = frame.end).semantics { contentDescription = L10n.Home.moreLoading }) {
             for (i in 0 until 6) {
                 Row(
@@ -325,13 +359,14 @@ private fun ConversationsSkeleton(frame: ConversationsFrame) {
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Skeleton(height = 40.dp, circle = true)
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Skeleton(Modifier.width(names[i].dp), height = 13.dp)
-                        Skeleton(Modifier.fillMaxWidth(lines[i]), height = 12.dp)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ConversationRowType.LineGap)) {
+                        SkeletonLines(name, 13.dp, Modifier.width(names[i].dp * textGrowth(ConversationRowType.Name)))
+                        SkeletonLines(line, 12.dp, Modifier.fillMaxWidth(lines[i]))
                     }
-                    Skeleton(Modifier.width(30.dp), height = 10.dp)
+                    SkeletonLines(time, 10.dp, Modifier.fillMaxWidth(), modifier = Modifier.width(30.dp * textGrowth(ConversationRowType.Time)))
                 }
             }
         }
     }
 }
+

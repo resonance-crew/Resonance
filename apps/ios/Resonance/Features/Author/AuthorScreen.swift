@@ -250,24 +250,17 @@ private struct BarPerson: View {
 
 /// The profile's loading state: the hero's avatar, name, bio and meta as
 /// blocks, then four loading cards (u/[handle]/page.tsx).
-private struct ProfileSkeleton: View {
+struct ProfileSkeleton: View {
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 14) {
-                SkeletonBlock(width: 96, circle: true)
-                    .padding(.bottom, Tokens.peopleNameGap - 14)
-                SkeletonBlock(width: 220, height: 34, radius: 10)
-                SkeletonBlock(fraction: 0.8, height: 16, alignment: .center)
-                SkeletonBlock(fraction: 0.6, height: 16, alignment: .center)
-                SkeletonBlock(fraction: 0.7, height: 13, alignment: .center)
-            }
-            // The blocks are centred like the hero they stand in for.
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 24)
-            // Where the page's avatar will stand (round 9 §9): nothing moves as it loads.
-            .peopleHeadGap()
-            .padding(.bottom, 36)
-            .readableColumn()
+            ProfileHeroSkeleton()
+                // The blocks are centred like the hero they stand in for.
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 24)
+                // Where the page's avatar will stand (round 9 §9): nothing moves as it loads.
+                .peopleHeadGap()
+                .padding(.bottom, 36)
+                .readableColumn()
             FeedSkeleton(count: 4)
         }
         .skeletonTimeline()
@@ -277,5 +270,33 @@ private struct ProfileSkeleton: View {
 private extension View {
     func metaStyle() -> some View {
         font(AppFonts.body(13)).foregroundStyle(Tokens.textMuted)
+    }
+}
+
+/// The profile's hero still on its way, centred as it is: the 96 avatar, the pen name's line, the bio's
+/// two lines as far apart as its line spacing puts them, and the meta line — each in its own type
+/// (``SkeletonLine``: the name's Playfair 32 grows as a heading does), 14 apart as the hero's parts are.
+struct ProfileHeroSkeleton: View {
+    var body: some View {
+        let name = TextScale.factor(relativeTo: .title1)
+        let grow = TextScale.factor(relativeTo: .body)
+        VStack(spacing: 14) {
+            SkeletonBlock(width: 96, circle: true)
+                .padding(.bottom, Tokens.peopleNameGap - 14)
+            SkeletonLine(font: AppFonts.heading(32), width: 220 * name, alignment: .center) {
+                SkeletonBlock(width: 220 * name, height: 34 * name, radius: 10)
+            }
+            VStack(spacing: 15 * 0.6) {
+                SkeletonLine(font: AppFonts.body(15), alignment: .center) {
+                    SkeletonBlock(fraction: 0.8, height: 16 * grow, alignment: .center)
+                }
+                SkeletonLine(font: AppFonts.body(15), alignment: .center) {
+                    SkeletonBlock(fraction: 0.6, height: 16 * grow, alignment: .center)
+                }
+            }
+            SkeletonLine(font: AppFonts.body(13), alignment: .center) {
+                SkeletonBlock(fraction: 0.7, height: 13 * grow, alignment: .center)
+            }
+        }
     }
 }

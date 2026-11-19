@@ -52,6 +52,8 @@ struct RootView: View {
         .tint(Tokens.terracotta)
         // What VoiceOver says of a button at work (round 5 B6), in the interface's language.
         .environment(\.organicBusyLabel, L10n.App.busy)
+        // The skeletons' lines measured on the interface's script: a Chinese line holding Han is taller.
+        .environment(\.skeletonHan, Strings.shared.language == .zhTW)
         .launchCover(ready: launchReady, covering: $launchCovering)
         #if DEBUG
         .modifier(DebugWindow())

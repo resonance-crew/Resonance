@@ -96,19 +96,22 @@ struct CardPickerContent: View {
 }
 
 /// A card list still on its way (C2): rows shaped as the real ones — a 40 wobbly thumb, a title bar
-/// 60 % of the row and a date bar 35 % — in the app's shimmer, the rows' own padding round them.
+/// 60 % of the row and a date bar 35 %, each in its line's own type and 3 apart as the row's lines are
+/// (``SkeletonLine``), so a row is as tall as a card's at any text size — in the app's shimmer, the
+/// rows' own padding round them.
 struct CardPickSkeleton: View {
     var rows = 4
 
     var body: some View {
+        let grow = TextScale.factor(relativeTo: .body)
         VStack(alignment: .leading, spacing: 0) {
             ForEach(0..<rows, id: \.self) { i in
                 HStack(spacing: 12) {
                     SkeletonBlock(width: 40, height: 40, radius: 0)
                         .clipShape(HandDrawnThumb.shape(size: 40, seed: Double(i * 7 + 3)))
-                    VStack(alignment: .leading, spacing: 8) {
-                        SkeletonBlock(fraction: 0.6, height: 14)
-                        SkeletonBlock(fraction: 0.35, height: 11)
+                    VStack(alignment: .leading, spacing: 3) {
+                        SkeletonLine(font: AppFonts.body(15, weight: .semibold)) { SkeletonBlock(fraction: 0.6, height: 14 * grow) }
+                        SkeletonLine(font: AppFonts.body(13)) { SkeletonBlock(fraction: 0.35, height: 11 * grow) }
                     }
                 }
                 .padding(.vertical, 10).padding(.horizontal, 6)

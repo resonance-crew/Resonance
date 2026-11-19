@@ -77,7 +77,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
@@ -85,7 +84,6 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -880,14 +878,14 @@ fun ColumnScope.SharedCardSkeleton(pictureBleed: Dp = PictureBleed) {
             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Skeleton(height = 32.dp, circle = true)
                 Column(Modifier.weight(1f)) {
-                    SkeletonLines(AppFonts.body(14f, 600, lineHeight = 1.3f), 12.dp, Modifier.width(88.dp))
-                    SkeletonLines(AppFonts.body(12f, lineHeight = 1.35f), 10.dp, Modifier.width(64.dp))
+                    SkeletonLines(AppFonts.body(14f, 600, lineHeight = 1.3f), 12.dp, Modifier.width(88.dp), sample = SharedCardSample)
+                    SkeletonLines(AppFonts.body(12f, lineHeight = 1.35f), 10.dp, Modifier.width(64.dp), sample = SharedCardSample)
                 }
             }
             Box(Modifier.fillMaxWidth().height(SharedCardBand).bleedSides(pictureBleed).background(Tokens.Text.copy(alpha = 0.06f)))
             Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                SkeletonLines(AppFonts.heading(16f, 700, lineHeight = 1.3f), 15.dp, Modifier.fillMaxWidth(0.85f))
-                SkeletonLines(AppFonts.body(13f, lineHeight = 1.45f), 11.dp, Modifier.fillMaxWidth(0.9f), Modifier.fillMaxWidth(0.6f))
+                SkeletonLines(AppFonts.heading(16f, 700, lineHeight = 1.3f), 15.dp, Modifier.fillMaxWidth(0.85f), sample = SharedCardSample)
+                SkeletonLines(AppFonts.body(13f, lineHeight = 1.45f), 11.dp, Modifier.fillMaxWidth(0.9f), Modifier.fillMaxWidth(0.6f), sample = SharedCardSample)
             }
             Row(
                 Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 12.dp),
@@ -896,22 +894,14 @@ fun ColumnScope.SharedCardSkeleton(pictureBleed: Dp = PictureBleed) {
             ) {
                 // The wave's slot holds a dot of its size, so the bar beside it doesn't read as indented.
                 Skeleton(height = 14.dp, circle = true)
-                Box(Modifier.weight(1f)) { SkeletonLines(AppFonts.body(12f, lineHeight = 1.3f), 11.dp, Modifier.width(56.dp)) }
+                Box(Modifier.weight(1f)) { SkeletonLines(AppFonts.body(12f, lineHeight = 1.3f), 11.dp, Modifier.width(56.dp), sample = SharedCardSample) }
             }
         }
     }
 }
 
 /**
- * As tall as one line of [style] for each of [bars] — measured on unseen words in both scripts, so
- * as tall as the loaded card's words, Latin or CJK — with a bar [height] tall centred on each.
+ * What [SharedCardSkeleton] measures its lines on: words in both scripts, so as tall as the loaded
+ * card's words, Latin or CJK, whatever the interface's language ([SkeletonLines]).
  */
-@Composable
-private fun SkeletonLines(style: TextStyle, height: Dp, vararg bars: Modifier) {
-    Box(Modifier.fillMaxWidth()) {
-        BasicText("Aa字", style = style, minLines = bars.size, maxLines = bars.size, modifier = Modifier.alpha(0f).clearAndSetSemantics { })
-        Column(Modifier.matchParentSize()) {
-            bars.forEach { bar -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.CenterStart) { Skeleton(bar, height = height) } }
-        }
-    }
-}
+private const val SharedCardSample = "Aa字"

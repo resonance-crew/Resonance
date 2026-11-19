@@ -74,6 +74,7 @@ import com.resonance.design.OrganicEmptyState
 import com.resonance.design.OrganicIcon
 import com.resonance.design.SharedShimmer
 import com.resonance.design.Skeleton
+import com.resonance.design.SkeletonLines
 import com.resonance.design.WobRectShape
 import com.resonance.design.avatarFill
 import com.resonance.design.generated.IconName
@@ -189,26 +190,39 @@ internal fun bellBands(parts: List<Pair<BellGroup, List<NotificationsStore.Item>
     }
 
 /**
- * The bell's rows still on their way: six of a row's measures — the 40 face, two lines of words, and
- * on two of them the 46 card — touching as the bands do, with no rules between them. iOS's NotificationsSkeleton.
+ * The bell's rows still on their way: six of a row's measures — the 40 face, the sentence's line or
+ * lines over the time's, and on two of them the 46 card — touching as the bands do, with no rules
+ * between them. Each line in [NotificationRow]'s own type ([SkeletonLines]), so the rows are as tall as
+ * the bell's at any text size; a row beside a card says what became of it in two lines, as its narrower
+ * sentence mostly does. iOS's NotificationsSkeleton.
  */
 @Composable
 private fun NotificationsSkeleton() {
     // One clock for its blocks (composed together).
     SharedShimmer {
         val lines = listOf(0.82f, 0.64f, 0.9f, 0.58f, 0.76f, 0.7f)
-        Column(Modifier.readableColumn().padding(horizontal = ListBands.ContentInset).semantics { contentDescription = L10n.Home.moreLoading }) {
-            for (i in lines.indices) {
-                Row(Modifier.fillMaxWidth().padding(vertical = ListBands.RowPad), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Skeleton(Modifier.width(BellFace), height = BellFace, radius = 13.dp)
-                    Column(Modifier.weight(1f).padding(top = 3.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                        Skeleton(Modifier.fillMaxWidth(lines[i]), height = 14.dp)
-                        Skeleton(Modifier.fillMaxWidth(0.3f), height = 11.dp)
-                    }
-                    if (i == 0 || i == 2) Skeleton(Modifier.width(BellThumb), height = BellThumb, radius = 12.dp)
-                }
-            }
+        Column(Modifier.readableColumn().semantics { contentDescription = L10n.Home.moreLoading }) {
+            for (i in lines.indices) NotificationSkeletonRow(lines[i], card = i == 0 || i == 2)
         }
+    }
+}
+
+/**
+ * One of [NotificationsSkeleton]'s rows, in [NotificationRow]'s frame and type: the 40 face, the
+ * sentence's last line [last] wide (its second, beside a [card]), the time's line under it, 4 apart.
+ */
+@Composable
+internal fun NotificationSkeletonRow(last: Float, card: Boolean) {
+    val sentence = AppFonts.body(14f, lineHeight = 1.45f)
+    val time = AppFonts.body(12f, lineHeight = 1.4f)
+    Row(Modifier.fillMaxWidth().padding(horizontal = ListBands.ContentInset, vertical = ListBands.RowPad), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Skeleton(Modifier.width(BellFace), height = BellFace, radius = 13.dp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (card) SkeletonLines(sentence, 14.dp, Modifier, Modifier.fillMaxWidth(last))
+            else SkeletonLines(sentence, 14.dp, Modifier.fillMaxWidth(last))
+            SkeletonLines(time, 11.dp, Modifier.fillMaxWidth(0.3f))
+        }
+        if (card) Skeleton(Modifier.width(BellThumb), height = BellThumb, radius = 12.dp)
     }
 }
 
@@ -221,7 +235,7 @@ private fun NotificationsSkeleton() {
  * content in the reading column 20 from the edges.
  */
 @Composable
-private fun NotificationRow(
+internal fun NotificationRow(
     item: NotificationsStore.Item,
     extras: NotificationsStore.Extras,
     time: String,

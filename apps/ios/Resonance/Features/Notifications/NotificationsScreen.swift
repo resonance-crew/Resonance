@@ -579,23 +579,34 @@ private nonisolated struct BellQuoteRule: Shape {
     }
 }
 
-/// The bell's rows still on their way: six of the new row's measures — a 40 face tile, two lines of
-/// words, and on two of them a 46 card tile — touching as the bands do, no rules. Android's NotificationsSkeleton.
-private struct NotificationsSkeleton: View {
+/// The bell's rows still on their way: six of a row's measures — a 40 face tile, the sentence's line or
+/// lines over the time's, and on two of them a 46 card tile — touching as the bands do, no rules. Each
+/// line in ``NotificationRowLabel``'s own type and spacing (``SkeletonLine``), so the rows are as tall as
+/// the bell's at any text size; a row beside a card says what became of it in two lines, as its narrower
+/// sentence mostly does. Android's NotificationsSkeleton.
+struct NotificationsSkeleton: View {
     private static let lines: [CGFloat] = [0.82, 0.64, 0.9, 0.58, 0.76, 0.7]
 
     var body: some View {
+        let grow = TextScale.factor(relativeTo: .body)
+        let sentence = AppFonts.body(14)
         VStack(alignment: .leading, spacing: 0) {
             ForEach(0..<6, id: \.self) { i in
+                let card = i == 0 || i == 2
                 HStack(alignment: .top, spacing: 12) {
                     SkeletonBlock(width: NotificationRowLabel.faceSize, height: NotificationRowLabel.faceSize, radius: 13)
-                    VStack(alignment: .leading, spacing: 9) {
-                        SkeletonBlock(fraction: Self.lines[i], height: 14)
-                        SkeletonBlock(fraction: 0.32, height: 11)
+                    VStack(alignment: .leading, spacing: 4) {
+                        // The sentence's lines as far apart as its CSS line height puts them.
+                        VStack(alignment: .leading, spacing: NotificationRowLabel.lineSpacing(.body, size: 14, lineHeight: 1.45)) {
+                            if card {
+                                SkeletonLine(font: sentence) { SkeletonBlock(height: 14 * grow) }
+                            }
+                            SkeletonLine(font: sentence) { SkeletonBlock(fraction: Self.lines[i], height: 14 * grow) }
+                        }
+                        SkeletonLine(font: AppFonts.body(12)) { SkeletonBlock(fraction: 0.32, height: 11 * grow) }
                     }
-                    .padding(.top, 3)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    if i == 0 || i == 2 {
+                    if card {
                         SkeletonBlock(width: NotificationRowLabel.thumbSize, height: NotificationRowLabel.thumbSize, radius: 12)
                     }
                 }

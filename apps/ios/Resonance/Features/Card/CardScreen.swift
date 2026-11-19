@@ -885,29 +885,23 @@ private struct BarAuthor: View {
 }
 
 /// CardDetailSkeleton: the cover, the title, the byline, the story and its tags as shimmering blocks
-/// where they will land — the title's bars its line box's size apart, the story's the body's (its
-/// script unknown yet: a CJK story's, the site's own).
-private struct CardDetailSkeleton: View {
+/// where they will land — each in the line boxes of the words it stands for, at the person's text
+/// size (the title's and the story's CSS line boxes on the reading curve, the byline's lines in its
+/// own type), its script unknown yet: a CJK story's, the site's own.
+struct CardDetailSkeleton: View {
     @Environment(\.window) private var window
 
     var body: some View {
         let story = StoryTypography(script: .cjk, layout: window.layoutClass)
         VStack(alignment: .leading, spacing: 0) {
-            SkeletonBlock(height: 180, radius: 18).padding(.bottom, story.coverGap)
-            VStack(alignment: .leading, spacing: story.titleSize * (story.titleLeading - 1)) {
-                SkeletonBlock(fraction: 0.9, height: story.titleSize)
-                SkeletonBlock(fraction: 0.55, height: story.titleSize)
-            }
-            .padding(.bottom, story.metaGap)
-            HStack(spacing: 12) {
-                SkeletonBlock(width: story.bylineAvatar, circle: true)
-                VStack(alignment: .leading, spacing: 7) {
-                    SkeletonBlock(width: 120, height: 15)
-                    SkeletonBlock(width: 160, height: story.metaSize)
-                }
-            }
-            .frame(minHeight: 44, alignment: .leading)
-            .padding(.bottom, story.leadGap)
+            // The cover's own 0.52 cut of the column (the page's `head`), where the picture will land.
+            SkeletonBlock(height: nil, radius: 18)
+                .aspectRatio(1 / 0.52, contentMode: .fit)
+                .padding(.bottom, story.coverGap)
+            StoryTitleSkeleton(typography: story)
+                .padding(.bottom, story.metaGap)
+            StoryBylineSkeleton(typography: story)
+                .padding(.bottom, story.leadGap)
             StorySkeleton(typography: story)
         }
         .padding(.horizontal, 20)
@@ -919,25 +913,64 @@ private struct CardDetailSkeleton: View {
     }
 }
 
-/// The story and its tags, still loading (under a real or skeleton head): bars the body's size, a
-/// line box apart.
-private struct StorySkeleton: View {
+/// A story's title still on its way: two lines in ``StoryTitle``'s CSS line boxes (its face on the
+/// reading curve × its leading), bars its size.
+struct StoryTitleSkeleton: View {
     let typography: StoryTypography
 
     var body: some View {
-        let size = typography.bodySize
+        let font = typography.titleFont()
+        let lineBox = font.pointSize * typography.titleLeading
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: size * (typography.bodyLeading - 1)) {
-                SkeletonBlock(height: size)
-                SkeletonBlock(height: size)
-                SkeletonBlock(height: size)
-                SkeletonBlock(fraction: 0.65, height: size)
+            SkeletonLineBox(lineBox: lineBox) { SkeletonBlock(fraction: 0.9, height: font.pointSize) }
+            SkeletonLineBox(lineBox: lineBox) { SkeletonBlock(fraction: 0.55, height: font.pointSize) }
+        }
+    }
+}
+
+/// ``StoryBylineRow`` still on its way: the avatar, then the pen name's line over the meta line in their
+/// own type, 2 apart, at least 44 tall, as the row stands.
+struct StoryBylineSkeleton: View {
+    let typography: StoryTypography
+
+    var body: some View {
+        let grow = TextScale.factor(relativeTo: .body)
+        HStack(spacing: 12) {
+            SkeletonBlock(width: typography.bylineAvatar, circle: true)
+            VStack(alignment: .leading, spacing: 2) {
+                SkeletonLine(font: AppFonts.body(15, weight: .semibold), width: 120 * grow) {
+                    SkeletonBlock(width: 120 * grow, height: 15 * grow)
+                }
+                SkeletonLine(font: AppFonts.body(typography.metaSize), width: 160 * grow) {
+                    SkeletonBlock(width: 160 * grow, height: typography.metaSize * grow)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(minHeight: 44)
+    }
+}
+
+/// The story and its tags, still loading (under a real or skeleton head): four lines in the body's
+/// CSS line boxes (its face on the reading curve × its leading), bars its size, then the end's tags
+/// as tall as their pills, as far apart as theirs.
+struct StorySkeleton: View {
+    let typography: StoryTypography
+
+    var body: some View {
+        let font = typography.bodyFont()
+        let lineBox = font.pointSize * typography.bodyLeading
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(0..<4, id: \.self) { line in
+                    SkeletonLineBox(lineBox: lineBox) { SkeletonBlock(fraction: line == 3 ? 0.65 : 1, height: font.pointSize) }
+                }
             }
             .padding(.bottom, typography.endGap)
             HStack(spacing: 8) {
-                SkeletonBlock(width: 64, height: 26, radius: 13)
-                SkeletonBlock(width: 84, height: 26, radius: 13)
-                SkeletonBlock(width: 56, height: 26, radius: 13)
+                SkeletonTag(width: 64)
+                SkeletonTag(width: 84)
+                SkeletonTag(width: 56)
             }
         }
         .accessibilityElement()

@@ -52,6 +52,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -98,6 +100,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onPlaced
 import com.resonance.design.Skeleton
+import com.resonance.design.textGrowth
+import com.resonance.design.SkeletonLines
 import com.resonance.design.WavyDivider
 import com.resonance.design.cream
 import com.resonance.design.generated.IconName
@@ -842,9 +846,16 @@ private fun ColumnScope.BlockedListContent(session: Session, onClose: () -> Unit
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Skeleton(height = 36.dp, circle = true)
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        Skeleton(Modifier.width(if (i == 0) 112.dp else 88.dp), height = 14.dp)
-                        Skeleton(Modifier.width(72.dp), height = 11.dp)
+                    // The row's pen name (15, 600) over its 封鎖於 line (12.5), in their own type: as tall at any text size.
+                    Column(Modifier.weight(1f)) {
+                        SkeletonLines(AppFonts.body(15f, 600), 14.dp, Modifier.width((if (i == 0) 112.dp else 88.dp) * textGrowth(15f)))
+                        SkeletonLines(AppFonts.body(12.5f), 11.dp, Modifier.width(72.dp * textGrowth(12.5f)))
+                    }
+                    // The 解除封鎖 the row ends in, measured and never placed (so never drawn, never tapped): the row
+                    // takes its height as a person's does. iOS's BlockedListSkeleton.
+                    Layout(content = { OrganicButton(L10n.Safety.unblock, variant = ButtonVariant.Tonal, small = true) {} }, modifier = Modifier.clearAndSetSemantics { }) { parts, constraints ->
+                        val button = parts.first().measure(constraints)
+                        layout(button.width, button.height) {}
                     }
                 }
             }
