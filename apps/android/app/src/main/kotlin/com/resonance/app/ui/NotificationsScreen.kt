@@ -50,6 +50,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -277,17 +278,26 @@ private fun NotificationRow(
 /**
  * The sentence: the pen name semibold in the text's ink, the words around it in the text's ink while
  * unread and muted once read, and the unread dot 8 after it — inline, so it ends the sentence's line.
+ * The dot is held to the sentence's last character (round 26, the web's BellLine): alone it could break
+ * onto a line of its own where the words fill the column exactly (「bob 用一張卡片回應了你的文章」 at the
+ * largest text), growing the row a line for a dot. A word joiner before it leaves no break there, so it
+ * goes down with that character — in Chinese, which breaks between any two, the last of them; a word
+ * whole, since nothing breaks inside one.
  */
 @Composable
-private fun Sentence(sentence: BellSentence, unread: Boolean) {
+internal fun Sentence(sentence: BellSentence, unread: Boolean, onTextLayout: (TextLayoutResult) -> Unit = {}) {
     val density = LocalDensity.current
     val name = Tokens.Text
     val dot = Tokens.Terracotta
     val text = buildAnnotatedString {
         append(sentence.before)
         if (sentence.handle != null) withStyle(SpanStyle(fontFamily = AppFonts.family(AppFonts.Family.Body, 600), color = name)) { append(sentence.handle) }
-        append(sentence.after)
-        if (unread) appendInlineContent(DOT, "•")
+        // Held to the last word, not to a space after it.
+        append(if (unread) sentence.after.trimEnd() else sentence.after)
+        if (unread) {
+            append(WORD_JOINER)
+            appendInlineContent(DOT, "•")
+        }
     }
     val inline = if (!unread) emptyMap() else mapOf(
         DOT to InlineTextContent(
@@ -301,11 +311,15 @@ private fun Sentence(sentence: BellSentence, unread: Boolean) {
         text,
         style = AppFonts.body(14f, lineHeight = 1.45f, color = if (unread) Tokens.Text else Tokens.TextMuted),
         inlineContent = inline,
+        onTextLayout = onTextLayout,
         modifier = Modifier.clearAndSetSemantics { contentDescription = spoken },
     )
 }
 
 private const val DOT = "unread"
+
+/** U+2060: no line break on either side of it, and nothing drawn. */
+private const val WORD_JOINER = "\u2060"
 
 /**
  * Who it is from: their photo, else their initials on their colour (the conversation list's avatar);
