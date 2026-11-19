@@ -2,14 +2,15 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import type { CardSeed } from '@/lib/data/cardSeed';
-import type { FeedPageBody } from '@/lib/api/v1/schemas';
+import type { CardListBody, FeedPageBody } from '@/lib/api/v1/schemas';
 import { OG_COVER_PATH } from '@/lib/og';
 
 // What a signed-out browser asks the server for, now that the rules keep an
 // anonymous card (whose document names its author) out of its own reads:
-// GET /api/cards/view (a card page's seed) and GET /api/cards/latest (the
-// home feed), against the Firestore emulator. Neither ever names an
-// anonymous card's author, and neither is more than a signed-out reader may see.
+// GET /api/cards/view (a card page's seed), GET /api/cards/latest (the
+// home feed) and GET /api/cards/related (the cards under a card page),
+// against the Firestore emulator. None ever names an anonymous card's
+// author, and none is more than a signed-out reader may see.
 
 const PROJECT = 'demo-resonance-public-cards';
 let app: App;
@@ -18,6 +19,7 @@ vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => db }));
 
 const { GET: view } = await import('@/app/api/cards/view/route');
 const { GET: latest } = await import('@/app/api/cards/latest/route');
+const { GET: related } = await import('@/app/api/cards/related/route');
 const { GET: cardImage } = await import('@/app/api/og/card/[id]/route');
 const { GET: userImage } = await import('@/app/api/og/user/[id]/route');
 
@@ -143,6 +145,25 @@ describe('GET /api/cards/latest', () => {
   it('refuses a malformed page', async () => {
     expect((await get('?limit=500')).status).toBe(400);
     expect((await get('?cursor=yesterday')).status).toBe(400);
+  });
+});
+
+describe('GET /api/cards/related', () => {
+  const get = (id: string) => related(new Request(`http://localhost/api/cards/related?id=${encodeURIComponent(id)}`));
+
+  // Round 26 §A1.7 (getPublicRelated's listedOnly): the browser can't read `cardSignatures`, so the server leaves out
+  // a card its reading keeps from strangers (feeling only, too little to take) — a signed-out reader is one. A card
+  // read for strangers stays, and so does one not read yet: nothing has judged it.
+  it('leaves out a card its reading keeps from strangers, and keeps one read for them or not read yet', async () => {
+    await card('base', { tags: ['雨'], publishedAt: minutesAgo(10) });
+    await card('kept', { tags: ['雨'], publishedAt: minutesAgo(2) });
+    await card('listed', { tags: ['雨'], publishedAt: minutesAgo(3) });
+    await card('unread', { tags: ['雨'], publishedAt: minutesAgo(4) });
+    await db.doc('cardSignatures/kept').set({ authorId: 'bob', version: 3, listedForStrangers: false });
+    await db.doc('cardSignatures/listed').set({ authorId: 'bob', version: 3, listedForStrangers: true });
+    const res = await get('base');
+    expect(((await res.json()) as CardListBody).cards.map((c) => c.id)).toEqual(['listed', 'unread']);
+    expect(res.headers.get('cache-control')).toContain('s-maxage=60');
   });
 });
 
