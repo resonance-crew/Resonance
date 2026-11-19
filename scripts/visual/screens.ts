@@ -68,6 +68,13 @@ export type Screen = {
   set?: 'extended';
   /** The system's soft keyboard on screen (Android: shown beside the AVD's hardware keyboard for this screen). */
   keyboard?: boolean;
+  /**
+   * First-times hints (lib/hints.ts: shown for their first three displays) this screen shows: every capture of it starts
+   * with them unspent — its account's synced count (`users/{uid}.hintsSeen`) taken away on the run's stack just before it
+   * (hints.ts), and the web's own (`hint:<key>` in localStorage) put at 0. The web and Android mirror each showing to the
+   * profile and every platform shares the run's one stack, so earlier captures (any platform's) would spend them.
+   */
+  hints?: string[];
 };
 
 /** The landing film's moment `t`: the lab's exact frame (`rest=1`) at that second (`t`), the page's own address otherwise. */
@@ -131,9 +138,9 @@ export const SCREENS: Screen[] = [
     app: { ios: ['-visualEnd', 'YES'], android: ['--es', 'cardEnd', 'end'] },
     expect: "bob's 第一杯自己沖的咖啡 read by alice, who resonated with it: the capsule 已共振 (the verb's solid face, two waves) · 寄小紙條 · 用卡片回應 (tonal), and right under it alice's face first, then dora's and eli's, overlapping on pads of the page's paper, a blank paper disc after them (no number, no words), 收藏 at the line's end" },
   { id: 'card-note-open', route: '/card/first-coffee', as: 'alice',
-    web: { click: '[data-end-row] button[data-segment="note"]', scrollTo: '[data-end-row]', storage: { 'hint:note-privacy': '0' } },
+    web: { click: '[data-end-row] button[data-segment="note"]', scrollTo: '[data-end-row]' }, hints: ['note-privacy'],
     app: { ios: ['-visualEnd', 'YES', '-visualNote', 'open'], android: ['--es', 'cardEnd', 'note'] },
-    expect: "The note written in place, under the end row (no dialog, nothing over the story): 寄小紙條 held in its hover wash, then 12 under the faces' line the composer's capsule — the envelope's column, the field asking 哪一段讓你有共鳴？ (alice resonated), the send segment tonal (nothing to send) — and under it 這段話只有作者看得到 (the line shows only the first three times alice sees it: later captures of the same run have none)" },
+    expect: "The note written in place, under the end row (no dialog, nothing over the story): 寄小紙條 held in its hover wash, then 12 under the faces' line the composer's capsule — the envelope's column, the field asking 哪一段讓你有共鳴？ (alice resonated), the send segment tonal (nothing to send) — and under it 這段話只有作者看得到 on every capture (a first-times hint: each capture starts with alice's three showings unspent)" },
   { id: 'card-note-wait', route: '/card/carol-note', as: 'dora',
     web: { click: '[data-end-row] button[data-segment="note"]', scrollTo: '[data-end-row]' },
     app: { ios: ['-visualEnd', 'YES', '-visualNote', 'wait'], android: ['--es', 'cardEnd', 'note'] },

@@ -15,6 +15,7 @@ import { promisify } from 'node:util';
 import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { mayShutDown, noteBooted } from './devices';
+import { unspendHints } from './hints';
 import { lookNote, secondLook, type Look } from './secondLook';
 import { PNG } from 'pngjs';
 import { screensFor, shotName, type Account, type Variant } from './screens';
@@ -226,6 +227,8 @@ export const captureIos: Capture = async (ctx) => {
           launch(udid, launchArgs(ctx, account, null, v));
           await sleep(10_000);
           for (const screen of screens) {
+            // Its hints unspent for its account on the stack (hints.ts), before the app reads the profile.
+            await unspendHints(ctx, screen);
             launch(udid, launchArgs(ctx, account, screen.route, v, screen.app?.ios));
             const name = shotName(screen, v);
             const key = `ios/${id}/${name}`;

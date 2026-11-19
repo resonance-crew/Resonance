@@ -369,6 +369,9 @@ change near one of those states (`capture android --device phone-large --only se
   the caret hidden by Playwright. iOS and Mac: the debug-only `-visualCapture YES` turns UIKit and
   SwiftUI animations off and hides scroll indicators (Mac also `-AppleShowScrollBars WhenScrolling`).
   Android: the three system animation scales at 0.
+- **First-times hints** (a hint shown for its first three displays, counted on the device and in the
+  account's profile, on the one stack every platform shares): a screen naming them (`hints`, card-note-open's
+  privacy line) starts every capture with them unspent (`hints.ts`).
 - **Waiting for the real page**: a capture is taken again and again until two in a row match
   (`settle` in `util.ts`). A page waiting for a compile or a read holds still too, so the web first
   waits for its requests to drain (bar the realtime channels), and Android checks a settled frame

@@ -14,6 +14,7 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PNG } from 'pngjs';
+import { unspendHints } from './hints';
 import { BUNDLE_ID, inXcodeLine, launchArgs, prepareProject, runLogged } from './ios';
 import { lookNote, secondLook, type Look } from './secondLook';
 import { shotName } from './screens';
@@ -129,6 +130,8 @@ export const captureMac: Capture = async (ctx) => {
       await sleep(10_000);
       quit(signIn.pid);
       for (const screen of screens) {
+        // Its hints unspent for its account on the stack (hints.ts), before the app reads the profile.
+        await unspendHints(ctx, screen);
         const window = await launch(launchArgs(ctx, account, screen.route, v, screen.app?.mac ?? screen.app?.ios), size);
         try {
           const name = shotName(screen, v);

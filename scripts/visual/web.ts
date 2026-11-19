@@ -11,6 +11,7 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Frame, type Page } from 'playwright';
+import { unspendHints, webStorageOf } from './hints';
 import { SCREENS, screensFor, shotName, type Account, type Screen, type Variant } from './screens';
 import { lookNote, secondLook, type Look } from './secondLook';
 import { GLANCE_DIR, SEED_PASSWORD, ignorePath, settle, shotPath, type Capture, type CaptureContext, type Rect } from './util';
@@ -104,16 +105,16 @@ function trackErrors(page: Page) {
   return list;
 }
 
-/** Every key any screen writes to the site's localStorage (`web.storage`). */
-const STORED = [...new Set(SCREENS.flatMap((s) => Object.keys(s.web?.storage ?? {})))];
+/** Every key any screen writes to the site's localStorage (`web.storage`, its hints' counts). */
+const STORED = [...new Set(SCREENS.flatMap((s) => Object.keys(webStorageOf(s))))];
 
 /**
- * What this browser keeps for `screen` (its `web.storage`), written on the site's own origin before
+ * What this browser keeps for `screen` (its `web.storage`, its hints at 0: hints.ts), written on the site's own origin before
  * its page opens; what another screen kept is taken away first, so nothing of one screen (a draft)
  * shows on the next. The page is on the site already (signed in, or the last screen).
  */
 async function keep(page: Page, screen: Screen) {
-  const wanted = screen.web?.storage ?? {};
+  const wanted = webStorageOf(screen);
   if (!STORED.length || !page.url().startsWith('http')) return;
   await page.evaluate(
     ([keys, set]) => {
@@ -180,6 +181,8 @@ async function shootOnce(
   watch: () => void,
 ): Promise<Look & { ignore: Rect[]; findings: Finding[] }> {
   errors.get(page)!.length = 0;
+  // Its hints unspent for its account on the stack (hints.ts), before the page reads the profile.
+  await unspendHints(ctx, screen);
   await keep(page, screen);
   const route = screen.web?.route ?? screen.route;
   const query = screen.web?.query ? `?${screen.web.query}` : '';

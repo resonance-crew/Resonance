@@ -33,6 +33,7 @@ import { promisify } from 'node:util';
 import en from '../../src/messages/en.json';
 import zhTW from '../../src/messages/zh-TW.json';
 import { forgetBooted, mayShutDown, noteBooted } from './devices';
+import { unspendHints } from './hints';
 import { lookNote, secondLook, type Look } from './secondLook';
 import { shotName, type Account, type Screen, type Variant } from './screens';
 import { ROOT, SEED_PASSWORD, pixelsApart, settle, shotPath, sleep, type Capture, type CaptureContext } from './util';
@@ -241,6 +242,8 @@ async function steady(serial: string): Promise<{ png: Buffer; settled: boolean }
 }
 
 async function shoot(serial: string, ctx: CaptureContext, screen: Screen, first: boolean, key: string): Promise<Look> {
+  // Its hints unspent for its account on the stack (hints.ts), before the app reads the profile.
+  await unspendHints(ctx, screen);
   await launch(serial, ctx, screen.as, screen.route, screen.app?.android);
   // A cold start reads the account and the page over the network (an account's first launch also signs in).
   await sleep(first ? 8000 : 4000);
