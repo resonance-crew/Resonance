@@ -144,6 +144,11 @@ section:first-child > .groupTitle {
   color: var(--color-text);
 }
 
+/* The sentence's last character and the dot: one unit, so the dot never takes a line of its own. */
+.held {
+  white-space: nowrap;
+}
+
 /* Ends the first line, beside who it is from — never under a note's words. */
 .dot {
   display: inline-block;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef } from 'react';
+import { Fragment, useMemo, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
 import { Icon, type IconName } from '@/components/atoms/Icon';
@@ -126,10 +126,7 @@ export function BellRowContent({ n, band, person, card, settled, when }: BellRow
         )}
         <span className={styles.words} data-unread={unread || undefined}>
           <span className={styles.line}>
-            {before}
-            {handle != null && <b className={styles.handle}>{handle}</b>}
-            {after}
-            {unread && <span aria-hidden data-unread-dot className={styles.dot} />}
+            <BellLine before={before} handle={handle} after={after} dot={unread} />
             {unread && <span className={styles.srOnly}>{`, ${t('unread')}`}</span>}
           </span>
           {/* A note's content IS the notification: the reader wrote to the author, so its words are here. */}
@@ -139,6 +136,63 @@ export function BellRowContent({ n, band, person, card, settled, when }: BellRow
         {cardId && (card ? <BellCardThumb card={card} /> : !settled && <BellThumbPending cardId={cardId} />)}
       </span>
     </span>
+  );
+}
+
+/** `text` without its last character (a grapheme: a letter with its marks, an emoji), and that character. */
+export function splitLastGrapheme(text: string): [string, string] {
+  const s = text.trimEnd();
+  let last = '';
+  if (typeof Intl.Segmenter === 'function') {
+    for (const { segment } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(s)) last = segment;
+  } else {
+    const chars = Array.from(s);
+    last = chars[chars.length - 1] ?? '';
+  }
+  return [s.slice(0, s.length - last.length), last];
+}
+
+/**
+ * The sentence, the pen name in bold — and, unread, the dot after it, held to the sentence's last character
+ * (round 26): a lone inline-block may break onto a line of its own when the words fill the column exactly
+ * ("bob replied to your story with a card" at 390), and the row grew a line for a dot. In a span that never
+ * wraps with that character, the dot goes down with it; a word stays whole since nothing breaks inside one,
+ * and Chinese, which may break between any two characters, keeps the last of them with the dot.
+ */
+function BellLine({ before, handle, after, dot }: { before: string; handle: string | null; after: string; dot: boolean }) {
+  const parts: { text: string; bold: boolean }[] = [
+    { text: before, bold: false },
+    ...(handle != null ? [{ text: handle, bold: true }] : []),
+    { text: after, bold: false },
+  ];
+  let last = -1;
+  if (dot) for (let i = 0; i < parts.length; i++) if (parts[i].text.trim() !== '') last = i;
+  const mark = <span aria-hidden data-unread-dot className={styles.dot} />;
+  return (
+    <>
+      {parts.map((p, i) => {
+        if (last >= 0 && i > last) return null; // nothing after the last word but spaces
+        const [head, tail] = i === last ? splitLastGrapheme(p.text) : [p.text, ''];
+        const held = i === last && (
+          <span className={styles.held}>
+            {tail}
+            {mark}
+          </span>
+        );
+        return p.bold ? (
+          <b key={i} className={styles.handle}>
+            {head}
+            {held}
+          </b>
+        ) : (
+          <Fragment key={i}>
+            {head}
+            {held}
+          </Fragment>
+        );
+      })}
+      {dot && last < 0 && mark}
+    </>
   );
 }
 

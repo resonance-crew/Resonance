@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { MouseEvent, ReactNode } from 'react';
-import { fireEvent, renderWithIntl, screen, userEvent, within } from '@/../test/render';
+import { cleanup, fireEvent, renderWithIntl, screen, userEvent, within } from '@/../test/render';
 import type { Card, Notification, User } from '@/lib/db/types';
 import type { BellExtras } from '@/lib/data/hooks';
 import { bellHref, onAnonymousCard } from './bellLink';
@@ -126,6 +126,29 @@ describe('the bell’s rows', () => {
     expect(words.contains(dot)).toBe(false);
   });
 
+  // Round 26: "bob replied to your story with a card" filled the 390 column exactly, and the dot, a lone
+  // inline-block, wrapped onto a line of its own. It is held to the sentence's last character in a span that
+  // never wraps, so it goes down with that word (or, in Chinese, that character) and never alone.
+  it('hold the unread dot to the sentence’s last character, in English and in Chinese', async () => {
+    const { list } = await openBell();
+    const resonance = within(list).getAllByRole('link')[3];
+    const dot = resonance.querySelector('[data-unread-dot]')!;
+    expect(dot.parentElement!.textContent).toBe('d');
+    expect(dot.parentElement!.previousSibling?.textContent).toBe(' replied to your story with a car');
+    expect(resonance.querySelector('[data-unread]')!.firstElementChild).toHaveTextContent(/^carol replied to your story with a card, Unread$/);
+    cleanup();
+
+    live.rows = [namedResonance, bell('n6', 'invite_accepted', { fromUserId: 'dora', fromHandle: 'dora' }), bell('n7', 'translation_done', {})];
+    const user = userEvent.setup();
+    renderWithIntl(<NotificationBell />, { locale: 'zh-TW', messages: zhTW });
+    await user.click(screen.getByRole('link', { name: zhTW.app.nav.notifications }));
+    const zh = screen.getByRole('dialog');
+    const held = Array.from(zh.querySelectorAll('[data-unread-dot]'), (d) => d.parentElement!.textContent);
+    expect(held).toEqual(['章', '✿', '成']);
+    expect(zh).toHaveTextContent('carol 用一張卡片回應了你的文章');
+    expect(zh).toHaveTextContent('dora 接受了你的邀請，你們連上線了 ✿');
+  });
+
   // In the reader's language, the bell and its list as every row: never English words in zh-TW.
   it('name the bell and its list, and an expired invite, in the reader’s language', async () => {
     live.rows = [bell('n5', 'invite_expired', {})];
@@ -133,8 +156,9 @@ describe('the bell’s rows', () => {
     renderWithIntl(<NotificationBell />, { locale: 'zh-TW', messages: zhTW });
     await user.click(screen.getByRole('link', { name: zhTW.app.nav.notifications }));
     const list = screen.getByRole('dialog', { name: zhTW.app.nav.notifications });
-    expect(within(list).getByText(zhTW.app.notifications.inviteExpired)).toBeInTheDocument();
-    expect(screen.queryByText('Invite expired')).toBeNull();
+    // Its last character is held with the unread dot, so the sentence is the row's words, not one text node.
+    expect(list).toHaveTextContent(zhTW.app.notifications.inviteExpired);
+    expect(list).not.toHaveTextContent(/invite expired/i);
     expect(screen.queryByRole('link', { name: 'Notifications' })).toBeNull();
   });
 
