@@ -31,9 +31,25 @@ export const SEED_NOW = '2026-09-01T12:00:00+08:00';
  */
 export const seedEnv = () => ({ ...emulatorPorts(), EMULATOR_DEV_PORT: String(PORTS.dev), SEED_NOW, SEED_RESET: '1', SEED_PICKS: 'none' });
 
-export async function seed(log: (line: string) => void) {
-  log('Seeding the test world (scripts/seed-emulator.ts)…');
-  run('npx', ['tsx', 'scripts/seed-emulator.ts'], seedEnv());
+/**
+ * The seed, once more when it fails. After a long run of flows the emulator now and then cancels one of the seed's
+ * writes ("1 CANCELLED: call already cancelled", run 20261119-030144 and the one before it, both in the iOS flows):
+ * the seed stopped there and so did every flow after it. SEED_RESET makes a second seed start from an empty database
+ * again, so it can simply be run again; a seed that fails twice is a real fault and stops the run.
+ */
+export async function seed(log: (line: string) => void, attempts = 2, pause = 2_000) {
+  for (let attempt = 1; ; attempt++) {
+    log(attempt === 1 ? 'Seeding the test world (scripts/seed-emulator.ts)…' : 'Seeding the test world again…');
+    try {
+      run('npx', ['tsx', 'scripts/seed-emulator.ts'], seedEnv());
+      return;
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      const said = String((error as { stderr?: string }).stderr || (error as Error).message || error).split('\n').find((l) => l.trim()) ?? '';
+      log(`  the seed failed (${said.trim().slice(0, 120)}): once more`);
+      await sleep(pause);
+    }
+  }
 }
 
 export async function startStack(logDir: string, log: (line: string) => void): Promise<Stack> {
