@@ -884,6 +884,7 @@ extension SharedCardSection {
             title: card.title, excerpt: card.excerpt, imageURL: card.listCoverURL,
             accentHue: card.accentHue, source: Self.source(card), onOpen: onOpen)
         coverFrame = card.coverFraming
+        imageFallbackURL = card.listCoverFallbackURL
     }
 
     /// The source line's word: 「私人卡」 for a card only its author (and whoever they sent it to) reads, else 「共振」.

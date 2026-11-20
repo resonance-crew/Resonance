@@ -9,12 +9,14 @@ import SwiftUI
 /// Decoded at the size it is drawn (`side` points, at 3×), never the whole cover or photo (audit I2).
 struct OrganicAvatarPhoto: View {
     let url: URL
+    /// Asked for once when `url` fails (a card thumb's smaller cover → the cover itself, B2).
+    var fallback: URL? = nil
     let side: CGFloat
     var body: some View {
         Color.clear
             .overlay {
-                LazyImage(request: ImageSizeBuckets.request(url, square: side)) { state in
-                    if let image = state.image { image.resizable().scaledToFill() }
+                CoverLazyImage(url: url, fallback: fallback, request: { ImageSizeBuckets.request($0, square: side) }) { image, _, _ in
+                    if let image { image.resizable().scaledToFill() }
                 }
             }
             .clipped()

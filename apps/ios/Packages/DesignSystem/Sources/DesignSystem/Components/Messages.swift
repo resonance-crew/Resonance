@@ -347,21 +347,33 @@ public struct MessagePictureSection<Content: View>: View {
 /// A picture edge to edge across a bubble at 1.91:1 (the share-image ratio); `onError` when it won't load.
 private struct BubblePicture: View {
     let url: URL
+    /// A shared card's cover itself, when `url` is its smaller copy (B2): asked for once if that fails, or at once
+    /// where the bubble needs more pixels than the copy has.
+    var fallback: URL? = nil
     let onError: () -> Void
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.coverFraming) private var framing
 
     var body: some View {
         Color.clear
             .aspectRatio(1.91, contentMode: .fit)
             .background(Tokens.text.opacity(0.06))
             .overlay {
-                // At most a bubble's 520 pt across at 3× (audit I2): never the whole picture's bitmap.
-                LazyImage(request: ImageSizeBuckets.request(url, box: CGSize(width: 1560, height: 1560 / 1.91))) { state in
-                    if let image = state.image {
-                        // A shared card's cover on its frame (round 25 §G1); a link's picture has none.
-                        FramedCover(image, pictureSize: state.imageContainer?.image.size)
-                    } else if state.error != nil {
-                        Color.clear.onAppear(perform: onError)
+                GeometryReader { geo in
+                    // As wide as the bubble is drawn, at the screen's scale (audit I2): never the whole picture's bitmap.
+                    let box = CGSize(width: geo.size.width * displayScale, height: geo.size.height * displayScale)
+                    let zoom = framing?.zoom ?? 1
+                    let source = ImageSizeBuckets.listSource(url, fallback: fallback, box: box, zoom: zoom)
+                    CoverLazyImage(url: source.url, fallback: source.fallback,
+                                   request: { ImageSizeBuckets.request($0, box: box, zoom: zoom) }) { image, pictureSize, failed in
+                        if let image {
+                            // A shared card's cover on its frame (round 25 §G1); a link's picture has none.
+                            FramedCover(image, pictureSize: pictureSize)
+                        } else if failed {
+                            Color.clear.onAppear(perform: onError)
+                        }
                     }
+                    .frame(width: geo.size.width, height: geo.size.height)
                 }
             }
             .clipped()
@@ -574,6 +586,8 @@ public struct SharedCardSection: View {
     let imageURL: URL?
     /// The card's cover frame (round 25 §G1): its 1.91 : 1 band is cut from it.
     public var coverFrame: CoverFraming?
+    /// The cover itself when `imageURL` is its smaller copy (B2): asked for if that fails, or where the bubble needs more.
+    public var imageFallbackURL: URL?
     let accentHue: Double?
     let source: String
     let onOpen: (() -> Void)?
@@ -607,7 +621,7 @@ public struct SharedCardSection: View {
             }
             .padding(12)
             if let imageURL, !coverFailed {
-                BubblePicture(url: imageURL) { coverFailed = true }
+                BubblePicture(url: imageURL, fallback: imageFallbackURL) { coverFailed = true }
                     .coverFraming(coverFrame)
             } else {
                 let palette = CardPalette(accentHue: accentHue, position: 0)
@@ -1462,7 +1476,8 @@ extension ComposerRow where Media == EmptyView {
 public struct ComposerRowTile: View {
     public enum Face {
         case picture(UIImage?)
-        case cover(URL)
+        /// A card's cover; `fallback`, the cover itself, asked for once if a list's smaller copy fails (B2).
+        case cover(URL, fallback: URL? = nil)
         case glyph(IconName)
     }
 
@@ -1493,10 +1508,11 @@ public struct ComposerRowTile: View {
                 } else {
                     Self.tonal.overlay { SketchLoader(size: 16) }
                 }
-            case let .cover(url):
+            case let .cover(url, fallback):
                 Self.tonal.overlay {
-                    LazyImage(request: ImageSizeBuckets.request(url, square: side)) { state in
-                        if let image = state.image { image.resizable().scaledToFill() }
+                    CoverLazyImage(url: url, fallback: fallback,
+                                   request: { ImageSizeBuckets.request($0, square: side) }) { image, _, _ in
+                        if let image { image.resizable().scaledToFill() }
                     }
                 }
             case let .glyph(icon):

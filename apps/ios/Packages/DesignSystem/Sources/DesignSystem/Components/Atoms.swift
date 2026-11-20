@@ -183,13 +183,16 @@ public struct HandDrawnAvatar: View {
 /// accent with the button's grain and a cream tick, inside the same outline.
 public struct HandDrawnThumb: View {
     let url: URL?
+    /// The cover itself, asked for once when `url` (a list's smaller copy, B2) fails.
+    let fallback: URL?
     let fill: Color
     var size: CGFloat
     var seed: Double
     var chosen: Bool
 
-    public init(url: URL?, fill: Color, size: CGFloat = 40, seed: Double, chosen: Bool = false) {
+    public init(url: URL?, fallback: URL? = nil, fill: Color, size: CGFloat = 40, seed: Double, chosen: Bool = false) {
         self.url = url
+        self.fallback = fallback
         self.fill = fill
         self.size = size
         self.seed = seed
@@ -206,7 +209,7 @@ public struct HandDrawnThumb: View {
         let shape = Self.shape(size: size, seed: seed)
         ZStack {
             shape.fill(fill)
-            if let url { OrganicAvatarPhoto(url: url, side: size).clipShape(shape) }
+            if let url { OrganicAvatarPhoto(url: url, fallback: fallback, side: size).clipShape(shape) }
             if chosen {
                 ZStack {
                     shape.fill(Tokens.terracotta.opacity(0.82))

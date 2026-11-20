@@ -536,7 +536,7 @@ private struct BellThumbView: View {
             ZStack {
                 (cover == nil ? family.fill : family.skeleton)
                 if let cover {
-                    RemoteImage(url: cover, pixelSize: CGSize(width: face * 3, height: face * 3))
+                    RemoteImage(url: cover, fallback: card.listCoverFallbackURL, pixelSize: CGSize(width: face * 3, height: face * 3))
                         .frame(width: face, height: face)
                 } else {
                     Text(verbatim: card.title.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "")

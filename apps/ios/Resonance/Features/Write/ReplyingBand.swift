@@ -58,7 +58,7 @@ struct ReplyingBandRow: View {
     var body: some View {
         if let card, let title = ReplyingBand.title(of: card) {
             Button(action: open) {
-                ReplyingBandLabel(title: title, cover: card.listCoverURL, hue: card.accentHue, seed: seed)
+                ReplyingBandLabel(title: title, cover: card.listCoverURL, coverFallback: card.listCoverFallbackURL, hue: card.accentHue, seed: seed)
             }
             .buttonStyle(OrganicPressStyle(inset: -4))
             .accessibilityLabel(ReplyingBand.label(title: title))
@@ -72,12 +72,14 @@ struct ReplyingBandRow: View {
 struct ReplyingBandLabel: View {
     let title: String
     let cover: URL?
+    /// The cover itself, asked for once when `cover` (its smaller copy, B2) fails.
+    var coverFallback: URL? = nil
     let hue: Double?
     let seed: Double
 
     var body: some View {
         HStack(spacing: 10) {
-            HandDrawnThumb(url: cover, fill: ReplyingBand.hueFill(hue), size: ReplyingBand.cover, seed: seed)
+            HandDrawnThumb(url: cover, fallback: coverFallback, fill: ReplyingBand.hueFill(hue), size: ReplyingBand.cover, seed: seed)
             Text(ReplyingBand.label(title: title))
                 .font(AppFonts.body(14))
                 .foregroundStyle(Tokens.textMuted)

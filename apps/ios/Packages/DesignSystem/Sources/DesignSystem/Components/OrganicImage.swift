@@ -19,7 +19,6 @@ public struct OrganicImage<Placeholder: View>: View {
     let fallback: URL?
     @Environment(\.displayScale) private var displayScale
     @Environment(\.coverFraming) private var framing
-    @State private var failed: URL?
 
     /// `grain` is the web's GrainOverlay opacity laid over the picture (the
     /// story cards' paper texture, StoryGrain.cover); 0 draws none.
@@ -37,23 +36,22 @@ public struct OrganicImage<Placeholder: View>: View {
         GeometryReader { geo in
             let w = geo.size.width, h = geo.size.height
             let bleed = organicImageBleed(w, h)
-            let shown = failed != nil && failed == url && fallback != url ? fallback : url
+            let box = CGSize(width: (w + bleed * 2) * displayScale, height: (h + bleed * 2) * displayScale)
+            let zoom = framing?.zoom ?? 1
             ZStack {
-                if let shown {
-                    let box = CGSize(width: (w + bleed * 2) * displayScale, height: (h + bleed * 2) * displayScale)
-                    LazyImage(request: ImageSizeBuckets.request(shown, box: box, zoom: framing?.zoom ?? 1)) { state in
-                        if let image = state.image {
+                if let url {
+                    // The smaller cover only where it has the pixels the box needs, else the cover itself (B2).
+                    let source = ImageSizeBuckets.listSource(url, fallback: fallback, box: box, zoom: zoom)
+                    CoverLazyImage(url: source.url, fallback: source.fallback,
+                                   request: { ImageSizeBuckets.request($0, box: box, zoom: zoom) }) { image, pictureSize, failed in
+                        if let image {
                             ZStack {
                                 placeholder
                                 // On the cover's frame when it has one (round 25 §G1), centred otherwise.
-                                FramedCover(image, pictureSize: state.imageContainer?.image.size)
+                                FramedCover(image, pictureSize: pictureSize)
                             }
-                        } else if state.error != nil {
-                            if shown == url, let fallback, fallback != url {
-                                SkeletonBlock(height: nil, radius: 0).onAppear { failed = url }
-                            } else {
-                                placeholder
-                            }
+                        } else if failed {
+                            placeholder
                         } else {
                             SkeletonBlock(height: nil, radius: 0)
                         }
@@ -93,18 +91,68 @@ public nonisolated enum ImageSizeBuckets {
         return request
     }
 
-    /// The box (pixels) a picture shown in `box` is decoded to fill: its longer side the bucket above
-    /// what is shown (× the frame's zoom). Nil for a box not laid out yet.
+    /// The box (pixels) a picture shown in `box` is decoded to fill: a square whose side is the bucket above the
+    /// longer side shown (× the frame's zoom), which the picture fills. It depends on that bucket alone, so a box
+    /// whose width changes a little (a rotation, Stage Manager, a Mac window or divider dragged) keeps its request
+    /// and cache key, and its cover stays up instead of going back to the skeleton. Nil for a box not laid out yet.
     public static func decodeSize(box: CGSize, zoom: Double = 1) -> CGSize? {
-        let longer = max(box.width, box.height)
-        guard box.width > 0, box.height > 0, longer.isFinite else { return nil }
-        let factor = bucket(longer * max(1, min(zoom, 2))) / longer
-        return CGSize(width: (box.width * factor).rounded(.up), height: (box.height * factor).rounded(.up))
+        guard box.width > 0, box.height > 0 else { return nil }
+        let needed = neededSide(box: box, zoom: zoom)
+        guard needed.isFinite else { return nil }
+        let side = bucket(needed)
+        return CGSize(width: side, height: side)
+    }
+
+    /// The longer side (pixels) of the picture a `box` shows: the box's, × the frame's zoom (1…2).
+    public static func neededSide(box: CGSize, zoom: Double = 1) -> CGFloat {
+        max(box.width, box.height) * max(1, min(zoom, 2))
+    }
+
+    /// The smaller cover's longer side (`imageThumbUrl`, B2).
+    public static let listCoverSide: CGFloat = 960
+
+    /// Which picture a list's `box` asks for: the smaller cover `url`, with `fallback` (the cover itself) to try if
+    /// it fails — or, where the box needs more than the smaller cover has (a wide card, a bubble, a zoomed frame, at
+    /// the screen's scale), the cover itself at once, with nothing after it. Without a fallback, `url` alone.
+    public static func listSource(_ url: URL, fallback: URL?, box: CGSize, zoom: Double = 1) -> (url: URL, fallback: URL?) {
+        guard let fallback, fallback != url else { return (url, nil) }
+        return neededSide(box: box, zoom: zoom) > listCoverSide ? (fallback, nil) : (url, fallback)
     }
 
     /// The same for a square `side` points across, at 3× (an avatar, a 40 pt thumb).
     public static func request(_ url: URL, square side: CGFloat) -> ImageRequest {
         request(url, box: CGSize(width: side * 3, height: side * 3))
+    }
+}
+
+/// A remote picture that, when `url` fails, asks once for `fallback` (a list's smaller cover falling back to the
+/// cover itself), never round again. `content` gets the picture and its size, and `failed` once nothing more is
+/// coming; while the fallback is on its way it gets neither, as while loading.
+public struct CoverLazyImage<Content: View>: View {
+    let url: URL
+    let fallback: URL?
+    let request: (URL) -> ImageRequest
+    let content: (Image?, CGSize?, Bool) -> Content
+    @State private var failed: URL?
+
+    public init(url: URL, fallback: URL?, request: @escaping (URL) -> ImageRequest,
+                @ViewBuilder content: @escaping (_ image: Image?, _ pictureSize: CGSize?, _ failed: Bool) -> Content) {
+        self.url = url
+        self.fallback = fallback
+        self.request = request
+        self.content = content
+    }
+
+    public var body: some View {
+        let next = fallback.flatMap { $0 != url ? $0 : nil }
+        let shown = failed == url ? (next ?? url) : url
+        LazyImage(request: request(shown)) { state in
+            if state.error != nil, shown == url, next != nil {
+                Color.clear.onAppear { failed = url }
+            } else {
+                content(state.image, state.imageContainer?.image.size, state.error != nil)
+            }
+        }
     }
 }
 
@@ -166,17 +214,22 @@ public enum CoverPrefetch {
 public struct RemoteImage: View {
     let url: URL
     let pixelSize: CGSize
+    /// Asked for once when `url` fails: a list's smaller cover falls back to the cover itself.
+    let fallback: URL?
 
-    public init(url: URL, pixelSize: CGSize) {
+    public init(url: URL, fallback: URL? = nil, pixelSize: CGSize) {
         self.url = url
+        self.fallback = fallback
         self.pixelSize = pixelSize
     }
 
     public var body: some View {
+        let source = ImageSizeBuckets.listSource(url, fallback: fallback, box: pixelSize)
         // An ImageIO thumbnail (audit I2): the whole cover is never decoded first, then shrunk.
-        LazyImage(request: ImageSizeBuckets.request(url, box: pixelSize)) { state in
+        CoverLazyImage(url: source.url, fallback: source.fallback,
+                       request: { ImageSizeBuckets.request($0, box: pixelSize) }) { image, pictureSize, _ in
             // On the cover's frame when it has one (round 25 §G1): the decoded thumbnail keeps the picture's proportions.
-            if let image = state.image { FramedCover(image, pictureSize: state.imageContainer?.image.size) }
+            if let image { FramedCover(image, pictureSize: pictureSize) }
         }
     }
 }
