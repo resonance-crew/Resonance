@@ -1,8 +1,8 @@
 import { parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { listTaps } from '@/lib/api/v1/taps';
 import { CardIdParam, TapListQuery } from '@/lib/api/v1/schemas';
 import { OWN, cachedJson } from '@/lib/api/v1/cache';
-import { getAdminDb } from '@/lib/db/firestore/admin';
+import { serverCtx } from '@/server/ctx';
+import { listTapsIn } from '@/server/app/taps';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,5 +16,5 @@ export const dynamic = 'force-dynamic';
 export const GET = withUser(async (user, req, ctx: RouteContext<'key'>) => {
   const id = parse(CardIdParam, await routeParam(ctx, 'key'));
   const { pageToken } = parse(TapListQuery, Object.fromEntries(new URL(req.url).searchParams));
-  return cachedJson(req, await listTaps(getAdminDb(), user.id, id, pageToken), OWN);
+  return cachedJson(req, await listTapsIn(serverCtx(), user.id, id, pageToken), OWN);
 });

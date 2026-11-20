@@ -1,12 +1,11 @@
-import { NextResponse, after } from 'next/server';
+import { NextResponse } from 'next/server';
 import { ApiFailure, parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { setTap } from '@/lib/api/v1/taps';
 import { CardIdParam } from '@/lib/api/v1/schemas';
-import { spend } from '@/lib/api/rateLimit';
-import { budgetFirst } from '@/lib/api/v1/conversations';
-import { getAdminDb, getAdminMessaging } from '@/lib/db/firestore/admin';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
-import { pushTap, ringTap, untapBell } from '@/lib/push/tapBell';
+import { serverCtx } from '@/server/ctx';
+import { budgetFirst } from '@/server/app/conversations';
+import { pushTapIn, ringTapIn, untapBellIn } from '@/server/app/pushTap';
+import { setTapIn } from '@/server/app/taps';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,20 +29,20 @@ async function tap(uid: string, ctx: RouteContext<'key'>, on: boolean): Promise<
   const id = parse(CardIdParam, await routeParam(ctx, 'key'));
   // An id Firestore keeps for itself names no card: answered as one, before it costs any of the budget.
   if (isReservedId(id)) throw new ApiFailure('not_found', 'No such card.');
-  const db = getAdminDb();
+  const server = serverCtx();
   // The budget is spent beside the tap's reads, not before them (B7), and still answers first (budgetFirst).
-  const spent = spend(db, uid, 'tap');
-  const { ring, ...result } = await budgetFirst(spent, () => setTap(db, uid, id, on, Date.now(), spent));
+  const spent = server.limits.spend(uid, 'tap');
+  const { ring, ...result } = await budgetFirst(spent, () => setTapIn(server, uid, id, on, Date.now(), spent));
   if (result.changed && ring) {
-    after(async () => {
+    server.later.later(async () => {
       try {
-        const rang = await ringTap(db, uid, id);
-        if (rang) await pushTap(db, await getAdminMessaging(), { ...rang, from: uid, cardId: id });
+        const rang = await ringTapIn(server, uid, id);
+        if (rang) await pushTapIn(server, { ...rang, from: uid, cardId: id });
       } catch (e) {
         console.error('[tap] ring', id, e);
       }
-    });
+    }, 'tap');
   }
-  if (result.changed && !on) after(() => untapBell(db, uid, id).catch((e) => console.error('[tap] bell', id, e)));
+  if (result.changed && !on) server.later.later(() => untapBellIn(server, uid, id).catch((e) => console.error('[tap] bell', id, e)), 'tap');
   return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } });
 }

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { deleteConversation } from '@/lib/api/v1/conversations';
 import { ConversationIdParam } from '@/lib/api/v1/schemas';
-import { getAdminDb } from '@/lib/db/firestore/admin';
+import { serverCtx } from '@/server/ctx';
+import { deleteConversationIn } from '@/server/app/conversations';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +14,6 @@ export const dynamic = 'force-dynamic';
  */
 export const DELETE = withUser(async (user, _req, ctx: RouteContext<'pair'>) => {
   const pair = parse(ConversationIdParam, await routeParam(ctx, 'pair'));
-  await deleteConversation(getAdminDb(), user.id, pair);
+  await deleteConversationIn(serverCtx(), user.id, pair);
   return new NextResponse(null, { status: 204 });
 });

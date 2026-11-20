@@ -7,7 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
-vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
+const DB = {};
+vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => DB }));
 const revalidatePath = vi.fn();
 vi.mock('next/cache', () => ({ revalidatePath: (p: string) => revalidatePath(p) }));
 let afterWork: Promise<unknown>[] = [];
@@ -16,35 +17,43 @@ vi.mock('next/server', async (orig) => ({
   after: (fn: () => unknown) => void afterWork.push(Promise.resolve().then(fn)),
 }));
 const getCardDetail = vi.fn();
-vi.mock('@/lib/api/v1/reads', () => ({ getCardDetail: (...a: unknown[]) => getCardDetail(...a) }));
+vi.mock('@/server/app/cardsRead', async (orig) => ({ ...(await orig<object>()), getCardDetail: (...a: unknown[]) => getCardDetail(...a) }));
 const updateCard = vi.fn();
 const deleteCard = vi.fn();
-vi.mock('@/lib/api/v1/cards', () => ({
-  updateCard: (...a: unknown[]) => updateCard(...a),
-  deleteCard: (...a: unknown[]) => deleteCard(...a),
+vi.mock('@/server/app/cards', async (orig) => ({
+  ...(await orig<object>()),
+  updateCardIn: (...a: unknown[]) => updateCard(...a),
+  deleteCardIn: (...a: unknown[]) => deleteCard(...a),
 }));
 const applyCardEdit = vi.fn();
-vi.mock('@/lib/api/v1/edits', () => ({ applyCardEdit: (...a: unknown[]) => applyCardEdit(...a) }));
+vi.mock('@/server/app/edits', () => ({ applyCardEditIn: (...a: unknown[]) => applyCardEdit(...a) }));
 const indexCard = vi.fn(async (_id: string) => ({ indexed: true }));
 vi.mock('@/lib/recommend/indexCard', () => ({ indexCard: (id: string) => indexCard(id) }));
 // Round 26 §A1.8: an applied edit marks the card's reading owed (the daily cron reads it), never reads it at once.
 const markIndexOwed = vi.fn(async (_db: unknown, _id: string) => {});
-vi.mock('@/lib/recommend/indexOwed', () => ({ markIndexOwed: (db: unknown, id: string) => markIndexOwed(db, id) }));
+vi.mock('@/server/app/recommendIndex', async (orig) => ({ ...(await orig<object>()), markIndexOwedIn: (ctx: unknown, id: string) => markIndexOwed(ctx, id) }));
 const unfurlCardLinks = vi.fn(async (_db: unknown, _id: string) => ({ written: true }));
-vi.mock('@/lib/links/cardLinks', () => ({ unfurlCardLinks: (db: unknown, id: string) => unfurlCardLinks(db, id) }));
+vi.mock('@/server/app/links', async (orig) => ({ ...(await orig<object>()), unfurlCardLinksIn: (ctx: unknown, id: string) => unfurlCardLinks(ctx, id) }));
 const publishCard = vi.fn();
-vi.mock('@/lib/api/v1/publish', () => ({ publishCard: (...a: unknown[]) => publishCard(...a) }));
-vi.mock('@/lib/api/rateLimit', () => ({ spend: async () => {} }));
+vi.mock('@/server/app/publish', async (orig) => ({ ...(await orig<object>()), publishCardIn: (...a: unknown[]) => publishCard(...a) }));
+vi.mock('@/server/infra/firestore/rateLimit', () => ({ firestoreRateLimiter: () => ({ spend: async () => {}, spendAll: async () => {}, limited: async () => null }) }));
 const ringAfter = vi.fn();
-vi.mock('@/lib/push/ring', () => ({ ringAfter: (...a: unknown[]) => ringAfter(...a) }));
 const announceNewCard = vi.fn(async (..._a: unknown[]) => {});
-vi.mock('@/lib/push/connectionCards', () => ({ announceNewCard: (...a: unknown[]) => announceNewCard(...a) }));
+vi.mock('@/server/app/pushAfter', () => ({
+  ringAfterIn: (...a: unknown[]) => ringAfter(...a),
+  announceNewCardIn: (...a: unknown[]) => announceNewCard(...a),
+}));
 const tryReachResonance = vi.fn(async (..._a: unknown[]) => 'resonance_alice_orig' as string | null);
-vi.mock('@/lib/api/v1/resonate', () => ({ tryReachResonance: (...a: unknown[]) => tryReachResonance(...a) }));
+vi.mock('@/server/app/resonate', async (orig) => ({ ...(await orig<object>()), tryReachResonanceIn: (...a: unknown[]) => tryReachResonance(...a) }));
 
 const { GET, PATCH, DELETE } = await import('./route');
 const { POST: applyEdit } = await import('./edits/apply/route');
 const { POST: publish } = await import('./publish/route');
+const { serverCtx } = await import('@/server/ctx');
+// The route's context: serverCtx() on the mocked database, built once per instance.
+const CTX = serverCtx();
+// The route's context with the configured vector store handed in (lib/api/v1/cards legacyVectors).
+const WITH_VECTORS = expect.objectContaining({ uow: CTX.uow, data: CTX.data });
 
 const ctx = (key: string) => ({ params: Promise.resolve({ key }) });
 const settled = async () => {
@@ -67,18 +76,18 @@ describe('GET /api/v1/cards/{key}', () => {
     getCardDetail.mockResolvedValue({ card: { id: 'c1' } });
     const res = await GET(new Request('http://localhost/api/v1/cards/a-walk?include=embeds,%20resonances,likes,'), ctx('a-walk'));
     expect(res.status).toBe(200);
-    expect(getCardDetail).toHaveBeenCalledWith({}, 'alice', 'a-walk', new Set(['embeds', 'resonances']), { shared: true });
+    expect(getCardDetail).toHaveBeenCalledWith(CTX, 'alice', 'a-walk', new Set(['embeds', 'resonances']), { shared: true });
     await GET(new Request('http://localhost/api/v1/cards/a-walk'), ctx('a-walk'));
-    expect(getCardDetail).toHaveBeenLastCalledWith({}, 'alice', 'a-walk', new Set(), { shared: true });
+    expect(getCardDetail).toHaveBeenLastCalledWith(CTX, 'alice', 'a-walk', new Set(), { shared: true });
   });
 
   it("reads no 私人卡 pass for a store build that would offer answers the server refuses, and keeps no answer that one gave", async () => {
     getCardDetail.mockResolvedValue({ card: { id: 'c1', publishedAt: null }, visibility: 'private', isOwner: false });
     const old = { 'user-agent': 'Resonance/2.2.0 (iOS 26.0; build 12)' };
     await GET(new Request('http://localhost/api/v1/cards/c1', { headers: old }), ctx('c1'));
-    expect(getCardDetail).toHaveBeenLastCalledWith({}, 'alice', 'c1', new Set(), { shared: false });
+    expect(getCardDetail).toHaveBeenLastCalledWith(CTX, 'alice', 'c1', new Set(), { shared: false });
     const res = await GET(new Request('http://localhost/api/v1/cards/c1', { headers: { 'user-agent': 'Resonance/2.2.0 (iOS 26.0; build 13)' } }), ctx('c1'));
-    expect(getCardDetail).toHaveBeenLastCalledWith({}, 'alice', 'c1', new Set(), { shared: true });
+    expect(getCardDetail).toHaveBeenLastCalledWith(CTX, 'alice', 'c1', new Set(), { shared: true });
     expect(res.headers.get('cache-control')).toContain('no-store');
   });
 });
@@ -92,7 +101,7 @@ describe('PATCH /api/v1/cards/{id}', () => {
     const res = await patch({ visibility: 'private', anonymous: null });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ id: 'c1', visibility: 'private' });
-    expect(updateCard).toHaveBeenCalledWith({}, 'alice', 'c1', { visibility: 'private', anonymous: null });
+    expect(updateCard).toHaveBeenCalledWith(WITH_VECTORS, 'alice', 'c1', { visibility: 'private', anonymous: null });
     expect(await settled()).toEqual(LOCALIZED);
     // Writes ask Firebase Auth whether the session still stands.
     expect(getCurrentUser).toHaveBeenCalledWith({ revocation: 'live' });
@@ -113,11 +122,11 @@ describe('PATCH /api/v1/cards/{id}', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ id: 'c1', visibility: 'public' });
     expect(tryReachResonance).not.toHaveBeenCalled();
-    expect(ringAfter).toHaveBeenCalledWith({}, expect.any(Function));
+    expect(ringAfter).toHaveBeenCalledWith(CTX, expect.any(Function));
     // What ringAfter runs after the response: the reach, whose bell it then pushes.
     const [, reach] = ringAfter.mock.calls[0] as [unknown, () => Promise<string | null>];
     expect(await reach()).toBe('resonance_alice_orig');
-    expect(tryReachResonance).toHaveBeenCalledWith({}, 'alice', 'c1');
+    expect(tryReachResonance).toHaveBeenCalledWith(CTX, 'alice', 'c1');
   });
 
   it('refuses a body off the contract, and a slug where an id belongs', async () => {
@@ -133,16 +142,16 @@ describe('DELETE /api/v1/cards/{id}', () => {
     deleteCard.mockResolvedValue({ stale: STALE });
     const res = await DELETE(new Request('http://localhost/api/v1/cards/c1', { method: 'DELETE' }), ctx('c1'));
     expect(res.status).toBe(204);
-    expect(deleteCard).toHaveBeenCalledWith({}, 'alice', 'c1', { onlyIfTrashed: false });
+    expect(deleteCard).toHaveBeenCalledWith(WITH_VECTORS, 'alice', 'c1', { onlyIfTrashed: false });
     expect(await settled()).toEqual(LOCALIZED);
   });
 
   it('passes onlyIfTrashed, which the trash\'s own delete sends, and refuses a value off the contract', async () => {
     deleteCard.mockResolvedValue({ stale: STALE, deleted: true });
     await DELETE(new Request('http://localhost/api/v1/cards/c1?onlyIfTrashed=true', { method: 'DELETE' }), ctx('c1'));
-    expect(deleteCard).toHaveBeenLastCalledWith({}, 'alice', 'c1', { onlyIfTrashed: true });
+    expect(deleteCard).toHaveBeenLastCalledWith(WITH_VECTORS, 'alice', 'c1', { onlyIfTrashed: true });
     await DELETE(new Request('http://localhost/api/v1/cards/c1?onlyIfTrashed=false', { method: 'DELETE' }), ctx('c1'));
-    expect(deleteCard).toHaveBeenLastCalledWith({}, 'alice', 'c1', { onlyIfTrashed: false });
+    expect(deleteCard).toHaveBeenLastCalledWith(WITH_VECTORS, 'alice', 'c1', { onlyIfTrashed: false });
     deleteCard.mockClear();
     expect((await DELETE(new Request('http://localhost/api/v1/cards/c1?onlyIfTrashed=yes', { method: 'DELETE' }), ctx('c1'))).status).toBe(400);
     expect(deleteCard).not.toHaveBeenCalled();
@@ -174,12 +183,12 @@ describe('POST /api/v1/cards/{id}/edits/apply', () => {
     const res = await apply();
     expect(await res.json()).toEqual({ id: 'c1', slug: 'a-walk', applied: true });
     expect(tryReachResonance).not.toHaveBeenCalled();
-    expect(ringAfter).toHaveBeenCalledWith({}, expect.any(Function));
+    expect(ringAfter).toHaveBeenCalledWith(CTX, expect.any(Function));
     const [, reach] = ringAfter.mock.calls[0] as [unknown, () => Promise<string | null>];
     await reach();
-    expect(tryReachResonance).toHaveBeenCalledWith({}, 'alice', 'c1');
+    expect(tryReachResonance).toHaveBeenCalledWith(CTX, 'alice', 'c1');
     expect(await settled()).toEqual(LOCALIZED);
-    expect(markIndexOwed).toHaveBeenCalledWith({}, 'c1');
+    expect(markIndexOwed).toHaveBeenCalledWith(CTX, 'c1');
     expect(indexCard).not.toHaveBeenCalled();
   });
 
@@ -195,7 +204,7 @@ describe('POST /api/v1/cards/{id}/edits/apply', () => {
     applyCardEdit.mockResolvedValue({ id: 'c1', slug: 'a-walk', applied: true, stale: STALE });
     await apply();
     await settled();
-    expect(unfurlCardLinks).toHaveBeenCalledWith({}, 'c1');
+    expect(unfurlCardLinks).toHaveBeenCalledWith(CTX, 'c1');
     expect(order.indexOf('unfurl')).toBeLessThan(order.indexOf('revalidate'));
     // The owed mark never waits for the previews.
     expect(order[0]).toBe('index');
@@ -237,7 +246,7 @@ describe('POST /api/v1/cards/{id}/publish', () => {
     const res = await post();
     expect(await res.json()).toEqual({ id: 'c1', slug: null, firstPublish: true });
     expect(await settled()).toEqual(['/en/card/c1', '/zh-TW/card/c1', '/en/card/a-walk', '/zh-TW/card/a-walk']);
-    expect(unfurlCardLinks).toHaveBeenCalledWith({}, 'c1');
+    expect(unfurlCardLinks).toHaveBeenCalledWith(CTX, 'c1');
     expect(indexCard).toHaveBeenCalledWith('c1');
   });
 
@@ -248,13 +257,13 @@ describe('POST /api/v1/cards/{id}/publish', () => {
     await post();
     await settled();
     expect(announceNewCard).toHaveBeenCalledTimes(1);
-    expect(announceNewCard).toHaveBeenCalledWith({}, 'c1', pendingSlug);
+    expect(announceNewCard).toHaveBeenCalledWith(CTX, 'c1', pendingSlug);
 
     announceNewCard.mockClear();
     publishCard.mockResolvedValue({ id: 'c1', slug: 'a-walk', firstPublish: true, notificationId: null, pendingSlug: null });
     await post();
     await settled();
-    expect(announceNewCard).toHaveBeenCalledWith({}, 'c1', 'a-walk');
+    expect(announceNewCard).toHaveBeenCalledWith(CTX, 'c1', 'a-walk');
 
     announceNewCard.mockClear();
     publishCard.mockResolvedValue({ id: 'c1', slug: 'a-walk', firstPublish: false, notificationId: null, pendingSlug: null });

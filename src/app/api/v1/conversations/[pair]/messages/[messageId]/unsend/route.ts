@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
 import { parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { unsendMessage } from '@/lib/api/v1/messageActions';
-import { afterMessageUnsent } from '@/lib/api/v1/afterMessage';
 import { ConversationIdParam, MessageIdParam } from '@/lib/api/v1/schemas';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { spend } from '@/lib/api/rateLimit';
+import { serverCtx } from '@/server/ctx';
+import { unsendMessageIn } from '@/server/app/messages';
+import { afterMessageUnsentIn } from '@/server/app/pushAfter';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,9 +16,9 @@ export const dynamic = 'force-dynamic';
 export const POST = withUser(async (user, _req, ctx: RouteContext<'pair' | 'messageId'>) => {
   const pair = parse(ConversationIdParam, await routeParam(ctx, 'pair'));
   const messageId = parse(MessageIdParam, await routeParam(ctx, 'messageId'));
-  const db = getAdminDb();
-  await spend(db, user.id, 'unsend');
-  const { push } = await unsendMessage(db, user.id, pair, messageId);
-  afterMessageUnsent(db, push);
+  const server = serverCtx();
+  await server.limits.spend(user.id, 'unsend');
+  const { push } = await unsendMessageIn(server, user.id, pair, messageId);
+  afterMessageUnsentIn(server, push);
   return new NextResponse(null, { status: 204 });
 });

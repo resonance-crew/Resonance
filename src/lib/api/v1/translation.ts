@@ -4,6 +4,7 @@ import { modelsOffline, type TranslationTarget } from '@/lib/text/translation';
 import * as app from '@/server/app/translation';
 import type { AdminDb } from '@/server/infra/firestore/db';
 import { ctxFor } from '@/server/infra/firestore/ctx';
+import type { ServerCtx } from '@/server/ctx';
 import { translationHash } from './translationHash';
 import type { TranslationResponseBody } from './schemas';
 
@@ -44,7 +45,18 @@ export function translateCard(
   to: TranslationTarget,
   deps: TranslationDeps = {},
 ): Promise<TranslationResponseBody> {
-  return app.translateCard(ctxFor(db), viewerId, key, to, {
+  return translateCardIn(ctxFor(db), viewerId, key, to, deps);
+}
+
+/** translateCard on a ServerCtx (the route's serverCtx()), with the model handed in as above. */
+export function translateCardIn(
+  ctx: ServerCtx,
+  viewerId: string,
+  key: string,
+  to: TranslationTarget,
+  deps: TranslationDeps = {},
+): Promise<TranslationResponseBody> {
+  return app.translateCard(ctx, viewerId, key, to, {
     // Against the emulators no model is asked: only the seed's kept translations answer (scripts/seed-emulator.ts).
     translate: deps.translate ?? (modelsOffline() ? null : translateStory),
     model: mirrorModel,

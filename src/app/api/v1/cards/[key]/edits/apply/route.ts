@@ -1,17 +1,15 @@
-import { NextResponse, after } from 'next/server';
+import { NextResponse } from 'next/server';
 import { parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { applyCardEdit } from '@/lib/api/v1/edits';
-import { tryReachResonance } from '@/lib/api/v1/resonate';
 import { CardIdParam } from '@/lib/api/v1/schemas';
-import { revalidateLocalized } from '@/lib/api/revalidate';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { markIndexOwed } from '@/lib/recommend/indexOwed';
-import { makeSummaryTranslations } from '@/lib/api/v1/summaryTranslationsMake';
-import { unfurlCardLinks } from '@/lib/links/cardLinks';
-import { ringAfter } from '@/lib/push/ring';
+import { makeSummaryTranslationsIn } from '@/lib/api/v1/summaryTranslationsMake';
 import { ApiFailure } from '@/lib/api/v1/http';
-import { spend } from '@/lib/api/rateLimit';
 import { getVectorStore } from '@/lib/recommend/vectorStore';
+import { serverCtx, type ServerCtx } from '@/server/ctx';
+import { applyCardEditIn } from '@/server/app/edits';
+import { unfurlCardLinksIn } from '@/server/app/links';
+import { ringAfterIn } from '@/server/app/pushAfter';
+import { markIndexOwedIn } from '@/server/app/recommendIndex';
+import { tryReachResonanceIn } from '@/server/app/resonate';
 
 export const dynamic = 'force-dynamic';
 // The title's and excerpt's translations after the response (one small call); the card's reading is the daily
@@ -26,9 +24,9 @@ export const maxDuration = 120;
  */
 export const POST = withUser(async (user, _req, ctx: RouteContext<'key'>) => {
   const id = parse(CardIdParam, await routeParam(ctx, 'key'));
-  const db = getAdminDb();
-  const { stale, reaches, movedTo, ...result } = await applyCardEdit(db, user.id, id);
-  if (reaches) ringAfter(db, () => tryReachResonance(db, user.id, id));
+  const server = serverCtx();
+  const { stale, reaches, movedTo, ...result } = await applyCardEditIn(server, user.id, id);
+  if (reaches) ringAfterIn(server, () => tryReachResonanceIn(server, user.id, id));
   if (movedTo) {
     // Its vectors' visibility is what keeps a private card out of everyone
     // else's recommendations (their prompts and picks): moved before the
@@ -38,30 +36,32 @@ export const POST = withUser(async (user, _req, ctx: RouteContext<'key'>) => {
       .catch((e) => console.error('[api/v1] vectors', id, e));
   }
   if (result.applied) {
-    after(() =>
+    server.later.later(
+      () =>
       // After "save changes", side by side as publishing does: the story's link previews (new links fetched,
       // removed ones dropped) and then the cached pages; and the card's reading marked owed (round 26 §A1.8, D6:
       // reading the whole story again on every save would be a reasoning model's call each time) — the daily
       // cron reads it again, and asks no model when what the reading reads is unchanged.
       Promise.all([
         (async () => {
-          await unfurlCardLinks(getAdminDb(), id).catch((e) => console.error('[api/v1] unfurl', e));
-          revalidateLocalized(stale);
+          await unfurlCardLinksIn(server, id).catch((e) => console.error('[api/v1] unfurl', e));
+          server.pages.revalidate(stale);
         })(),
-        markIndexOwed(getAdminDb(), id).catch((e) => console.error('[api/v1] index owed', e)),
+        markIndexOwedIn(server, id).catch((e) => console.error('[api/v1] index owed', e)),
         // The title's and excerpt's translations, made again only when either changed (the same budget as the index).
-        makeSummaryTranslations(getAdminDb(), id, { mayCall: () => reindexAllowed(user.id) }).catch((e) =>
+        makeSummaryTranslationsIn(server, id, { mayCall: () => reindexAllowed(server, user.id) }).catch((e) =>
           console.error('[api/v1] summary translations', e),
         ),
       ]),
+      'edits/apply',
     );
   }
   return NextResponse.json(result);
 });
 
 /** Whether the author's reindex budget allows one more re-index (a refusal skips it, any other failure is logged and skips it too). */
-async function reindexAllowed(uid: string): Promise<boolean> {
-  return spend(getAdminDb(), uid, 'reindex').then(
+async function reindexAllowed(server: ServerCtx, uid: string): Promise<boolean> {
+  return server.limits.spend(uid, 'reindex').then(
     () => true,
     (e: unknown) => {
       if (!(e instanceof ApiFailure && e.code === 'rate_limited')) console.error('[api/v1] reindex budget', e);

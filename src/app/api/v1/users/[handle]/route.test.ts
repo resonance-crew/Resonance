@@ -6,11 +6,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
-vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
+const DB = {};
+vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => DB }));
 const getProfile = vi.fn(async () => ({ isSelf: false }));
-vi.mock('@/lib/api/v1/reads', () => ({ getProfile: (...a: unknown[]) => getProfile(...(a as [])) }));
+vi.mock('@/server/app/cardsRead', async (orig) => ({ ...(await orig<object>()), getProfile: (...a: unknown[]) => getProfile(...(a as [])) }));
 
 const { GET } = await import('./route');
+const { serverCtx } = await import('@/server/ctx');
+// The route's context: serverCtx() on the mocked database, built once per instance.
+const CTX = serverCtx();
 const get = (handle: string, query = '', headers: Record<string, string> = {}) =>
   GET(new Request(`http://localhost/api/v1/users/${handle}${query}`, { headers }), { params: Promise.resolve({ handle }) });
 
@@ -22,12 +26,12 @@ beforeEach(() => {
 describe('GET /api/v1/users/{handle}', () => {
   it('passes the lists asked for and the page size, by a pen name in any script', async () => {
     expect((await get(encodeURIComponent('小艾'), '?include=links,cards,friends&limit=5')).status).toBe(200);
-    expect(getProfile).toHaveBeenCalledWith({}, 'alice', '小艾', { include: new Set(['links', 'cards']), limit: 5, preLetterBuild: false });
+    expect(getProfile).toHaveBeenCalledWith(CTX, 'alice', '小艾', { include: new Set(['links', 'cards']), limit: 5, preLetterBuild: false });
   });
 
   it('asks for no lists by default, with the default page size', async () => {
     await get('bob');
-    expect(getProfile).toHaveBeenCalledWith({}, 'alice', 'bob', { include: new Set(), limit: 12, preLetterBuild: false });
+    expect(getProfile).toHaveBeenCalledWith(CTX, 'alice', 'bob', { include: new Set(), limit: 12, preLetterBuild: false });
   });
 
   // They are told a letter waiting for their answer is a connection (lib/api/v1/preLetter; apiV1PreLetter.emulator.test.ts).
@@ -42,7 +46,7 @@ describe('GET /api/v1/users/{handle}', () => {
     ] as const) {
       getProfile.mockClear();
       await get('bob', '?include=cards', { 'User-Agent': agent });
-      expect(getProfile).toHaveBeenCalledWith({}, 'alice', 'bob', { include: new Set(['cards']), limit: 12, preLetterBuild: old });
+      expect(getProfile).toHaveBeenCalledWith(CTX, 'alice', 'bob', { include: new Set(['cards']), limit: 12, preLetterBuild: old });
     }
   });
 

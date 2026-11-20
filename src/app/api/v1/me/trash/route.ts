@@ -1,10 +1,9 @@
-import { NextResponse, after } from 'next/server';
+import { NextResponse } from 'next/server';
 import { parse, withUser } from '@/lib/api/v1/http';
-import { emptyTrash } from '@/lib/api/v1/trash';
+import { legacyVectors } from '@/lib/api/v1/cards';
 import { EmptyTrashQuery } from '@/lib/api/v1/schemas';
-import { revalidateLocalized } from '@/lib/api/revalidate';
-import { spend } from '@/lib/api/rateLimit';
-import { getAdminDb } from '@/lib/db/firestore/admin';
+import { serverCtx } from '@/server/ctx';
+import { emptyTrashIn } from '@/server/app/trash';
 
 export const dynamic = 'force-dynamic';
 // A page of up to 50 cards, each deleted with its notes, edit and vectors.
@@ -18,9 +17,10 @@ export const maxDuration = 60;
  */
 export const DELETE = withUser(async (user, req) => {
   const { before } = parse(EmptyTrashQuery, Object.fromEntries(new URL(req.url).searchParams));
-  const db = getAdminDb();
-  await spend(db, user.id, 'trash');
-  const { stale, ...result } = await emptyTrash(db, user.id, { before: before ? new Date(before) : null });
-  if (stale.length) after(() => void revalidateLocalized(stale));
+  const server = serverCtx();
+  await server.limits.spend(user.id, 'trash');
+  // The vectors as the legacy emptyTrash reached them (lib/api/v1/cards legacyVectors: the configured store).
+  const { stale, ...result } = await emptyTrashIn(serverCtx({ vectors: legacyVectors() }), user.id, { before: before ? new Date(before) : null });
+  if (stale.length) server.later.later(() => void server.pages.revalidate(stale), 'revalidate');
   return NextResponse.json(result);
 });

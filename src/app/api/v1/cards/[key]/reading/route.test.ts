@@ -7,16 +7,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
-vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
+const DB = {};
+vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => DB }));
 let afterWork: Promise<unknown>[] = [];
 vi.mock('next/server', async (orig) => ({
   ...(await orig<typeof import('next/server')>()),
   after: (fn: () => unknown) => void afterWork.push(Promise.resolve().then(fn)),
 }));
 const reportReading = vi.fn();
-vi.mock('@/lib/api/v1/reading', () => ({ reportReading: (...a: unknown[]) => reportReading(...a) }));
+vi.mock('@/server/app/reading', () => ({ reportReadingIn: (...a: unknown[]) => reportReading(...a) }));
 
 const { POST } = await import('./route');
+const { serverCtx } = await import('@/server/ctx');
+// The route's context: serverCtx() on the mocked database, built once per instance.
+const CTX = serverCtx();
 const REPORT = { session: 'view-0001-abcd', activeSeconds: 42.5, progress: 0.8, reachedEnd: true };
 const post = (key: string, body: unknown, headers: Record<string, string> = { 'content-type': 'application/json' }) =>
   POST(new Request(`http://localhost/api/v1/cards/${key}/reading`, { method: 'POST', headers, body: typeof body === 'string' ? body : JSON.stringify(body) }), {
@@ -36,7 +40,7 @@ describe('POST /api/v1/cards/{id}/reading', () => {
     expect(res.status).toBe(204);
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     await Promise.all(afterWork);
-    expect(reportReading).toHaveBeenCalledWith({}, 'bob', 'c1', REPORT);
+    expect(reportReading).toHaveBeenCalledWith(CTX, 'bob', 'c1', REPORT);
     expect(getCurrentUser).toHaveBeenCalledWith({ revocation: 'cached' });
   });
 

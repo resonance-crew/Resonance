@@ -9,9 +9,17 @@ import { describe, expect, it } from 'vitest';
 // change. Phase 1 ends at 0.
 const MAX = 0;
 
+// The /api/v1 routes reach the database through serverCtx() and the app
+// services, never getAdminDb() (Phase 1, the v1 routes lane): every non-test
+// file under src/app/api/v1 that imports '@/lib/db/firestore/admin' or calls
+// getAdminDb( is counted. The number only ever falls.
+const V1_ADMIN_DB_MAX = 0;
+
 const ROOT = join(__dirname, '..');
 const INFRA = join('server', 'infra') + sep;
 const ADMIN_IMPORT = /from\s+['"]firebase-admin|import\(\s*['"]firebase-admin/;
+const V1 = join(ROOT, 'app', 'api', 'v1');
+const ADMIN_DB = /['"]@\/lib\/db\/firestore\/admin['"]|getAdminDb\(/;
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -51,6 +59,15 @@ describe('the firebase-admin ratchet', () => {
     const found = importers();
     expect(found.length, `firebase-admin is imported outside src/server/infra by:\n${found.join('\n')}`).toBeLessThanOrEqual(MAX);
     expect(found.length, `only ${found.length} files import firebase-admin now: lower MAX in src/server/ratchet.test.ts to ${found.length}`).toBe(MAX);
+  });
+
+  it(`no more than ${V1_ADMIN_DB_MAX} files under src/app/api/v1 reach getAdminDb()`, () => {
+    const found = sources(V1)
+      .filter((path) => ADMIN_DB.test(readFileSync(path, 'utf8')))
+      .map((path) => relative(ROOT, path))
+      .sort();
+    expect(found.length, `getAdminDb() is reached under src/app/api/v1 by:\n${found.join('\n')}`).toBeLessThanOrEqual(V1_ADMIN_DB_MAX);
+    expect(found.length, `only ${found.length} files under src/app/api/v1 reach getAdminDb() now: lower V1_ADMIN_DB_MAX in src/server/ratchet.test.ts to ${found.length}`).toBe(V1_ADMIN_DB_MAX);
   });
 
   it('src/server outside infra imports none', () => {

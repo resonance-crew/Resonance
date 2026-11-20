@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import { parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { stopSharing } from '@/lib/api/v1/sharedCards';
 import { CardIdParam, ConversationIdParam } from '@/lib/api/v1/schemas';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { spend } from '@/lib/api/rateLimit';
+import { serverCtx } from '@/server/ctx';
+import { stopSharingIn } from '@/server/app/sharedCards';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,8 +14,8 @@ export const dynamic = 'force-dynamic';
 export const DELETE = withUser(async (user, _req, ctx: RouteContext<'pair' | 'cardId'>) => {
   const pair = parse(ConversationIdParam, await routeParam(ctx, 'pair'));
   const cardId = parse(CardIdParam, await routeParam(ctx, 'cardId'));
-  const db = getAdminDb();
-  await spend(db, user.id, 'stopShare');
-  await stopSharing(db, user.id, pair, cardId);
+  const server = serverCtx();
+  await server.limits.spend(user.id, 'stopShare');
+  await stopSharingIn(server, user.id, pair, cardId);
   return new NextResponse(null, { status: 204 });
 });

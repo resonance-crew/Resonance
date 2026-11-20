@@ -1,9 +1,8 @@
-import { NextResponse, after } from 'next/server';
+import { NextResponse } from 'next/server';
 import { parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { unresonate } from '@/lib/api/v1/resonate';
 import { CardIdParam } from '@/lib/api/v1/schemas';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { revalidateLocalized } from '@/lib/api/revalidate';
+import { serverCtx } from '@/server/ctx';
+import { unresonateIn } from '@/server/app/resonate';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +15,8 @@ export const dynamic = 'force-dynamic';
 export const DELETE = withUser(async (user, _req, ctx: RouteContext<'key' | 'cardId'>) => {
   const target = parse(CardIdParam, await routeParam(ctx, 'key'));
   const cardId = parse(CardIdParam, await routeParam(ctx, 'cardId'));
-  const { stale } = await unresonate(getAdminDb(), user.id, target, cardId);
-  if (stale.length) after(() => void revalidateLocalized(stale));
+  const server = serverCtx();
+  const { stale } = await unresonateIn(server, user.id, target, cardId);
+  if (stale.length) server.later.later(() => void server.pages.revalidate(stale), 'revalidate');
   return new NextResponse(null, { status: 204 });
 });

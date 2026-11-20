@@ -1,7 +1,7 @@
-import { streamChatImage } from '@/lib/api/v1/chatImages';
 import { apiError, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { getAdminDb } from '@/lib/db/firestore/admin';
 import { getChatImageStore } from '@/lib/storage/chatImages';
+import { serverCtx } from '@/server/ctx';
+import { streamChatImageIn } from '@/server/app/chatImages';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ export const GET = withUser(async (user, req, ctx: RouteContext<'id'>) => {
   const size = new URL(req.url).searchParams.get('size') === 'thumb' ? 'thumb' : 'full';
   const store = getChatImageStore();
   // Handed on as it arrives from the store (B14), never held whole in the function.
-  const body = store ? await streamChatImage(getAdminDb(), store, user.id, id, size) : null;
+  const body = store ? await streamChatImageIn(serverCtx({ chatObjects: store }), user.id, id, size) : null;
   if (!body) return apiError('not_found', 'No such picture.');
   return new Response(body instanceof ReadableStream ? body : new Blob([new Uint8Array(body)], { type: 'image/webp' }), {
     headers: {

@@ -1,17 +1,16 @@
-import { NextResponse, after } from 'next/server';
+import { NextResponse } from 'next/server';
 import { parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { refusalForPreLetterBuild } from '@/lib/api/v1/preLetter';
-import { publishCard } from '@/lib/api/v1/publish';
+import { titleToSlugBase } from '@/lib/ai/tasks';
 import { CardIdParam } from '@/lib/api/v1/schemas';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { ringAfter } from '@/lib/push/ring';
-import { announceNewCard } from '@/lib/push/connectionCards';
-import { spend } from '@/lib/api/rateLimit';
-import { budgetFirst } from '@/lib/api/v1/conversations';
 import { indexCard } from '@/lib/recommend/indexCard';
-import { makeSummaryTranslations } from '@/lib/api/v1/summaryTranslationsMake';
-import { cardPagePaths, revalidateLocalized } from '@/lib/api/revalidate';
-import { unfurlCardLinks } from '@/lib/links/cardLinks';
+import { makeSummaryTranslationsIn } from '@/lib/api/v1/summaryTranslationsMake';
+import { cardPagePaths } from '@/lib/api/revalidate';
+import { serverCtx } from '@/server/ctx';
+import { budgetFirst } from '@/server/app/conversations';
+import { unfurlCardLinksIn } from '@/server/app/links';
+import { refusalForPreLetterBuildIn } from '@/server/app/preLetter';
+import { publishCardIn } from '@/server/app/publish';
+import { announceNewCardIn, ringAfterIn } from '@/server/app/pushAfter';
 
 export const dynamic = 'force-dynamic';
 // The slug's LLM call is waited for 8 s at most (SLUG_WAIT_MS), then finished
@@ -26,32 +25,37 @@ export const maxDuration = 120;
 /** POST /api/v1/cards/{id}/publish — publish your card (see publishCard). */
 export const POST = withUser(async (user, req, ctx: RouteContext<'key'>) => {
   const id = parse(CardIdParam, await routeParam(ctx, 'key'));
-  const db = getAdminDb();
+  const server = serverCtx();
   // The budget is spent beside the publish's reads, not before them (B7), and still answers first (budgetFirst).
-  const spent = spend(db, user.id, 'publish');
-  const { notificationId, pendingSlug, ...result } = await budgetFirst(spent, () => publishCard(db, user.id, id, undefined, { spent })).catch(async (e: unknown) => {
-    // A build before letters shows the refusal's words as they are: in its own language (lib/api/v1/preLetter).
-    throw await refusalForPreLetterBuild(db, user.id, req, e);
-  });
-  ringAfter(db, notificationId);
+  const spent = server.limits.spend(user.id, 'publish');
+  // The slug is the model's translation of the title (lib/ai/tasks), which is why this route is pinned to hnd1.
+  const { notificationId, pendingSlug, ...result } = await budgetFirst(spent, () => publishCardIn(server, user.id, id, titleToSlugBase, { spent })).catch(
+    async (e: unknown) => {
+      // A build before letters shows the refusal's words as they are: in its own language (lib/api/v1/preLetter).
+      throw await refusalForPreLetterBuildIn(server, user.id, req, e);
+    },
+  );
+  ringAfterIn(server, notificationId);
   // Same grace notes as the web editor: never awaited by the writer, never failing the publish.
-  after(() =>
+  server.later.later(
+    () =>
     Promise.all([
       (async () => {
         const [slug] = await Promise.all([
           // A slug that came late (the answer said null) is written once this resolves.
           result.slug ?? (pendingSlug ? pendingSlug : null),
-          unfurlCardLinks(db, id).catch((e) => console.error('[api/v1] unfurl', e)),
+          unfurlCardLinksIn(server, id).catch((e) => console.error('[api/v1] unfurl', e)),
         ]);
         // After both, so the cached page is rendered with its slug and its link previews.
-        revalidateLocalized(cardPagePaths({ id, slug }));
+        server.pages.revalidate(cardPagePaths({ id, slug }));
       })(),
       indexCard(id).catch((e) => console.error('[api/v1] index', e)),
       // Its title and excerpt in the other interface language, for readers who turned auto-translate on (one small call).
-      makeSummaryTranslations(db, id).catch((e) => console.error('[api/v1] summary translations', e)),
+      makeSummaryTranslationsIn(server, id).catch((e) => console.error('[api/v1] summary translations', e)),
       // The first time only: the author's connections who asked hear of it, once its slug is settled.
-      result.firstPublish ? announceNewCard(db, id, result.slug ?? pendingSlug) : null,
+      result.firstPublish ? announceNewCardIn(server, id, result.slug ?? pendingSlug) : null,
     ]),
+    'publish',
   );
   return NextResponse.json(result);
 });

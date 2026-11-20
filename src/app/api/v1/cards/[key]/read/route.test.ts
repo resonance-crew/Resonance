@@ -6,16 +6,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
-vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
+const DB = {};
+vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => DB }));
 let afterWork: Promise<unknown>[] = [];
 vi.mock('next/server', async (orig) => ({
   ...(await orig<typeof import('next/server')>()),
   after: (fn: () => unknown) => void afterWork.push(Promise.resolve().then(fn)),
 }));
 const countCardRead = vi.fn();
-vi.mock('@/lib/api/v1/cardReads', () => ({ countCardRead: (...a: unknown[]) => countCardRead(...a) }));
+vi.mock('@/server/app/cardReads', () => ({ countCardReadIn: (...a: unknown[]) => countCardRead(...a) }));
 
 const { POST } = await import('./route');
+const { serverCtx } = await import('@/server/ctx');
+// The route's context: serverCtx() on the mocked database, built once per instance.
+const CTX = serverCtx();
 const post = (key: string) => POST(new Request(`http://localhost/api/v1/cards/${key}/read`, { method: 'POST' }), { params: Promise.resolve({ key }) });
 
 beforeEach(() => {
@@ -31,7 +35,7 @@ describe('POST /api/v1/cards/{id}/read', () => {
     expect(res.status).toBe(204);
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     await Promise.all(afterWork);
-    expect(countCardRead).toHaveBeenCalledWith({}, 'bob', 'c1');
+    expect(countCardRead).toHaveBeenCalledWith(CTX, 'bob', 'c1');
     expect(getCurrentUser).toHaveBeenCalledWith({ revocation: 'cached' });
   });
 
