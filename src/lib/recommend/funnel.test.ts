@@ -6,11 +6,11 @@ import type { VectorChannel, VectorRecord } from './vectorStore/types';
 
 const mocks = vi.hoisted(() => ({ db: null as Firestore | null }));
 vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => mocks.db }));
-vi.mock('./profile', () => ({ buildUserProfile: vi.fn() }));
-vi.mock('./signals', () => ({ getEngagedAuthorIds: vi.fn(), namedCardIds: vi.fn() }));
+// The funnel lives in src/server/app/recommendFeed.ts; ./funnel's recommendFeed is its facade (the app's db, getVectorStore()).
+vi.mock('@/server/app/recommendProfile', () => ({ buildUserProfileIn: vi.fn() }));
+vi.mock('@/server/app/recommendSignals', () => ({ engagedAuthorIdsIn: vi.fn(), namedCardIdsIn: vi.fn() }));
 vi.mock('./vectorStore', () => ({ getVectorStore: vi.fn() }));
-vi.mock('./indexCard', () => ({ currentEmbedModel: () => 'embed-now' }));
-vi.mock('./poolStats', async (original) => ({ ...(await original<typeof import('./poolStats')>()), readPoolStats: vi.fn(async () => null) }));
+vi.mock('./indexHash', () => ({ currentEmbedModel: () => 'embed-now' }));
 vi.mock('@/lib/ai/openai', () => ({
   chatJSON: vi.fn(),
   rerankModel: () => 'cheap-model',
@@ -18,8 +18,8 @@ vi.mock('@/lib/ai/openai', () => ({
 }));
 
 import { LLM_FINAL, RERANK_TIMEOUT_MS, SELECT_TIMEOUT_MS, recommendFeed } from './funnel';
-import { buildUserProfile } from './profile';
-import { getEngagedAuthorIds, namedCardIds } from './signals';
+import { buildUserProfileIn as buildUserProfile } from '@/server/app/recommendProfile';
+import { engagedAuthorIdsIn as getEngagedAuthorIds, namedCardIdsIn as namedCardIds } from '@/server/app/recommendSignals';
 import { getVectorStore } from './vectorStore';
 import { chatJSON } from '@/lib/ai/openai';
 import { normalize } from './math';
@@ -97,7 +97,7 @@ beforeEach(() => {
   store.listByCards.mockImplementation(async (cardIds: string[]) => TASTE.filter((r) => cardIds.includes(r.cardId)));
   vi.mocked(getEngagedAuthorIds).mockResolvedValue(new Set());
   // Every card named unless a test says otherwise.
-  vi.mocked(namedCardIds).mockImplementation(async (cardIds: string[]) => new Set(cardIds.filter((id) => !id.startsWith('anon'))));
+  vi.mocked(namedCardIds).mockImplementation(async (_ctx, cardIds: string[]) => new Set(cardIds.filter((id) => !id.startsWith('anon'))));
 });
 afterEach(() => {
   vi.restoreAllMocks();

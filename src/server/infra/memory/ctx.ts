@@ -1,12 +1,10 @@
 import type { ServerCtx } from '@/server/ctx';
 import type { IdentityAdmin } from '@/server/ports/identity';
-import type { LeaseStore } from '@/server/ports/lease';
 import type { LlmProvider } from '@/server/ports/llm';
 import type { MediaUrlResolver } from '@/server/ports/media';
 import type { ObjectStore, PrivateObjectStore } from '@/server/ports/objects';
 import type { PushGateway } from '@/server/ports/push';
 import type { RateLimiter } from '@/server/ports/rateLimit';
-import type { VectorStore } from '@/server/ports/vectors';
 import { notWired } from '../wiring';
 import {
   memoryAfter,
@@ -21,9 +19,11 @@ import {
   type MemoryPageCache,
   type MemoryRealtime,
 } from './adapters';
+import { memoryLeaseStore } from './lease';
 import { buildMemoryDataRepos } from './repos';
 import { MemoryState } from './state';
 import { memoryUow } from './uow';
+import { memoryVectors } from './vectors';
 
 /**
  * A context with no I/O at all, for unit tests of application services: the
@@ -54,8 +54,8 @@ export function memoryCtx(overrides: Partial<ServerCtx> & { state?: MemoryState 
     chatObjects: notWired<PrivateObjectStore>('chatObjects'),
     push: notWired<PushGateway>('push'),
     limits: notWired<RateLimiter>('limits'),
-    leases: notWired<LeaseStore>('leases'),
-    vectors: notWired<VectorStore>('vectors'),
+    leases: memoryLeaseStore(state),
+    vectors: memoryVectors(),
     llm: notWired<LlmProvider>('llm'),
     realtime: memoryRealtime(),
     pages: memoryPages(),

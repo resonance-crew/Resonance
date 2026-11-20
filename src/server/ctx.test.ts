@@ -9,25 +9,15 @@ const mocks = vi.hoisted(() => ({
   db: { name: 'db-1' } as object,
   spend: vi.fn(async () => {}),
   revalidateLocalized: vi.fn((paths: Iterable<string>) => [...paths].map((p) => `/en${p}`)),
-  vectorStore: vi.fn(),
 }));
 vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => mocks.db }));
 vi.mock('@/lib/api/rateLimit', () => ({ spend: mocks.spend, spendAll: vi.fn(), limited: vi.fn() }));
 vi.mock('@/lib/api/revalidate', () => ({ revalidateLocalized: mocks.revalidateLocalized }));
-vi.mock('@/lib/recommend/vectorStore/firestore', () => ({
-  FirestoreVectorStore: class {
-    constructor(db: unknown) {
-      mocks.vectorStore(db);
-    }
-    async deleteByCard(id: string) {
-      return `deleted ${id}`;
-    }
-  },
-}));
 
 const { serverCtx } = await import('./ctx');
 const { ctxFor } = await import('./infra/firestore/ctx');
 const { NotWiredError, lazyAsync } = await import('./infra/wiring');
+const { FirestoreVectorStore } = await import('./infra/firestore/vectors');
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -58,9 +48,9 @@ describe('ctxFor', () => {
     const ctx = ctxFor(db);
     await ctx.limits.spend('u1', 'note', 2, 1000);
     expect(mocks.spend).toHaveBeenCalledWith(db, 'u1', 'note', 2, 1000);
-    expect(mocks.vectorStore).not.toHaveBeenCalled(); // nothing loaded until used
-    expect(await ctx.vectors.deleteByCard('c1')).toBe('deleted c1');
-    expect(mocks.vectorStore).toHaveBeenCalledWith(db);
+    // The vector index on this database, built without a read.
+    expect(ctx.vectors).toBeInstanceOf(FirestoreVectorStore);
+    expect((ctx.vectors as unknown as { firestore: unknown }).firestore).toBe(db);
   });
 
   it('drops pages through revalidateLocalized', () => {
@@ -77,7 +67,10 @@ describe('ctxFor', () => {
   it('a port no lane has wired throws NotWiredError on use, never on build', () => {
     const ctx = ctxFor(db);
     expect(() => ctx.push.send(['t'], { data: {} })).toThrow(NotWiredError);
-    expect(() => ctx.leases.release('k')).toThrow(/ServerCtx\.leases is not wired/);
+  });
+
+  it('wires leases on the database (infra/firestore/lease.ts): a key is a document path', async () => {
+    await expect(ctxFor(db).leases.release('k')).rejects.toThrow(/document path/);
   });
 });
 
