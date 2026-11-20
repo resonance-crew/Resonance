@@ -413,9 +413,11 @@ fun MapNodesLayer(store: ThoughtMapStore) {
     val dragging = store.dragNodeId
     val target by remember(store) { derivedStateOf { store.linkTarget } }
     val linking by remember(store) { derivedStateOf { store.linkDraft != null } }
+    // Only the cards within reach of the viewport are composed (A8): their pictures aren't asked for until then.
+    val shown by remember(store) { derivedStateOf { store.shownNodes() } }
     MapCameraLayer(store) {
-        for (gid in store.groupOrder) key(gid) { RegionCards(store, gid, selection, dragging, target, linking) }
-        for (id in store.freeOrder) key(id) { NodeItem(store, id, null, selection, dragging, target, linking) }
+        for (gid in store.groupOrder) key(gid) { RegionCards(store, gid, selection, dragging, target, linking, shown) }
+        for (id in store.freeOrder) if (shown?.contains(id) != false) key(id) { NodeItem(store, id, null, selection, dragging, target, linking) }
     }
 }
 
@@ -428,9 +430,10 @@ private fun RegionCards(
     dragging: String?,
     target: String?,
     linking: Boolean,
+    shown: Set<String>?,
 ) {
     val g = store.groups[gid] ?: return
-    val members = store.nodeOrder.filter { store.nodes[it]?.groupId == gid }
+    val members = store.membersByGroup[gid].orEmpty()
     Box(
         Modifier
             .layout { measurable, _ ->
@@ -447,7 +450,7 @@ private fun RegionCards(
                 shape = RegionClip
             },
     ) {
-        for (id in members) key(id) { NodeItem(store, id, g, selection, dragging, target, linking) }
+        for (id in members) if (shown?.contains(id) != false) key(id) { NodeItem(store, id, g, selection, dragging, target, linking) }
     }
 }
 

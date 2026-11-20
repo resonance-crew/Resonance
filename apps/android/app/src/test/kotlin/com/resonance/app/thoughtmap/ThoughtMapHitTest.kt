@@ -209,4 +209,18 @@ class ThoughtMapHitTest {
         store.camera = MapCamera(-(gx + gw - 5) + 16, 0.0, 1.0)
         assertTrue(leftCovers(gy + gh - 5))
     }
+
+    /** A8: only the cards within reach of the viewport are drawn; each region's members are indexed once. */
+    @Test
+    fun theCardsOutOfReachAreNotDrawn() {
+        val store = store()
+        assertEquals(setOf("a", "f"), store.shownNodes())
+        // Panned far away: none is within reach — but the one selected stays.
+        store.camera = MapCamera(-100_000.0, -100_000.0, 1.0)
+        assertEquals(emptySet<String>(), store.shownNodes())
+        store.selection = Selection.Node("a")
+        assertEquals(setOf("a"), store.shownNodes())
+        val filed = store.nodeOrder.filter { store.nodes[it]?.groupId == "g" }
+        assertEquals(filed, store.membersByGroup["g"].orEmpty())
+    }
 }

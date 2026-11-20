@@ -4,6 +4,8 @@ import android.graphics.Paint
 import android.util.Log
 import android.util.LruCache
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -552,10 +554,47 @@ class ThoughtMapStore(private val reading: ReadingApi) {
     }
 
     /** What the map shows changed size (laid out first, the pane easing open, the divider let go, a turn): still [framing], everything framed in it. */
+    /**
+     * Each region's filed cards in the map's order, kept until a card moves in or out of one, or the
+     * order changes (A8) — the layer asked every region of every card on each composition, O(N×G).
+     */
+    val membersByGroup: Map<String, List<String>> by derivedStateOf {
+        val by = HashMap<String, MutableList<String>>()
+        for (id in nodeOrder) nodes[id]?.groupId?.let { by.getOrPut(it) { ArrayList() }.add(id) }
+        by
+    }
+
+    /** The viewport as state, so the cards in view ([shownNodes]) follow a resize too. */
+    private var viewportEpoch by mutableIntStateOf(0)
+
+    /**
+     * The cards near enough the viewport to draw (A8): those whose box meets the viewport grown by half
+     * of it on every side — and the one selected, dragged or being linked, wherever it is. Null before
+     * the viewport is known: all of them. Read in a derivedStateOf, the set changes only as cards come
+     * into reach or leave it, not on every frame of a pan.
+     */
+    fun shownNodes(): Set<String>? {
+        viewportEpoch
+        val vw = viewportW
+        val vh = viewportH
+        if (vw <= 0 || vh <= 0) return null
+        val cam = camera
+        val a = screenToWorld(cam, -vw / 2, -vh / 2)
+        val b = screenToWorld(cam, vw * 1.5, vh * 1.5)
+        val keep = setOfNotNull((selection as? Selection.Node)?.id, dragNodeId, linkTarget)
+        val shown = HashSet<String>()
+        for ((id, n) in nodes) {
+            if (id in keep || shownIn(mapNodeRect(n.x, n.y), a, b)) shown += id
+        }
+        linkDraft?.let { shown += it.sourceId }
+        return shown
+    }
+
     fun setViewport(w: Double, h: Double) {
         if (w == viewportW && h == viewportH) return
         viewportW = w
         viewportH = h
+        viewportEpoch++
         if (!resizing) frameIfFraming()
     }
 
@@ -1227,3 +1266,7 @@ object MapText {
         return paint.measureText(text) / k
     }
 }
+
+/** Whether [r] meets the world box from [a] (top left) to [b] (bottom right). */
+internal fun shownIn(r: Rect, a: Pt, b: Pt): Boolean =
+    r.x + r.w >= a.x && r.x <= b.x && r.y + r.h >= a.y && r.y <= b.y
