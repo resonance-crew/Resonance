@@ -491,6 +491,8 @@ internal class MascotIsland(context: Context) {
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
                 gone = true
                 ready = false
+                // Nothing stands where the puppets did: a tap there is the card's again.
+                hits = emptyList()
                 pending.clear()
                 pendingRuns.clear()
                 (view.parent as? ViewGroup)?.removeView(view)
@@ -562,7 +564,7 @@ internal class MascotIsland(context: Context) {
     }
 
     /** The island point (the web view's dp) a tap at [p] reaches a puppet at, or null when none is there. */
-    fun hitAt(p: Offset): Offset? = if (hits.any { it.contains(p) }) p else null
+    fun hitAt(p: Offset): Offset? = if (!gone && hits.any { it.contains(p) }) p else null
 
     fun tap(point: Offset) {
         call("mascots.tap(${num(point.x)}, ${num(point.y)})")
@@ -577,7 +579,7 @@ internal class MascotIsland(context: Context) {
 
     private fun heard(message: MascotMessage) {
         when (message) {
-            is MascotMessage.Hits -> hits = message.rects
+            is MascotMessage.Hits -> if (!gone) hits = message.rects
             is MascotMessage.Scrolled -> reached(message.y)
         }
     }
