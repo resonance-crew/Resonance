@@ -32,7 +32,8 @@ describe('POST /api/cards/insight', () => {
     mirrorInsight.mockResolvedValueOnce('A morning can be yours');
     const res = await post({ thoughtCore: 'Mine', story: STORY });
     expect(await res.json()).toEqual({ coreInsight: 'A morning can be yours' });
-    expect(mirrorInsight).toHaveBeenCalledWith({ title: 'Mine', story: STORY });
+    expect(mirrorInsight).toHaveBeenCalledWith({ title: 'Mine', story: STORY }, { signal: expect.any(AbortSignal) });
+    expect(getCurrentUser).toHaveBeenCalledWith({ revocation: 'cached' });
     expect(limited).toHaveBeenCalledWith(expect.anything(), 'alice', 'insight');
   });
 

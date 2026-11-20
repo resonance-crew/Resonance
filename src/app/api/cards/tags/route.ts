@@ -28,7 +28,8 @@ export async function POST(req: Request) {
   // A write with the session cookie from another origin (a same-site subdomain too) is never the caller's own page.
   if (crossOriginCookieWrite(req)) return NextResponse.json({ error: 'This request did not come from the site' }, { status: 403 });
   // Signed out (or a revoked session) is a 401 — what makes a client renew its token — not a crash.
-  const user = await getCurrentUser();
+  // Nothing is written for anyone else: the instance's short-lived revocation answer is enough (B15, as /read).
+  const user = await getCurrentUser({ revocation: 'cached' });
   if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
 
   const body = (await req.json().catch(() => null)) as {
