@@ -18,6 +18,9 @@ export interface CardMedia {
    * The cover's ≤ 960 px copy (lib/images/coverThumb, what lists draw): the
    * upload's `thumbUrl`, when the writer saved it. Absent on older covers and
    * those saved by builds before — the copy's URL follows from `url` anyway.
+   * Only for lists and small pictures (a feed card, a mini card, a map node);
+   * a card's own page and its share image keep `url`. Fall back to `url` when
+   * absent or when it fails. The v1 FeedCard's `imageThumbUrl`.
    */
   thumbUrl?: string;
   label?: string;
@@ -28,12 +31,6 @@ export interface CardMedia {
    * picture clears it.
    */
   frame?: { cx: number; cy: number; zoom: number; ar: number };
-  /**
-   * The cover made smaller for lists (≤ 960 px on its longer edge, WebP), kept beside it at upload (B2) — absent on
-   * older covers. Only for lists and small pictures (a feed card, a mini card, a map node); a card's own page and
-   * its share image keep `url`. Fall back to `url` when absent or when it fails. The v1 FeedCard's `imageThumbUrl`.
-   */
-  thumbUrl?: string;
 }
 
 /** A feed card's title and excerpt translated by AI (lib/api/v1/summaryTranslations), keyed by interface language. */
