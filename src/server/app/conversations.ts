@@ -17,6 +17,8 @@ import {
   type MessageImage,
 } from '@/server/domain/conversations';
 import type { ChatImageRecord, ReplyQuote, StoredMessage, StoredNote } from '@/server/ports/repos/conversations';
+import { messageSent, noteSent, threadChanged, type NoteOutcome } from '@/server/domain/realtimeInbox';
+import { signal } from './inbox';
 
 // Notes, messages and conversations as application services: what each
 // answer checks, in which order, and what it writes. Why: the module comment
@@ -94,10 +96,14 @@ export interface NoteInput {
 
 /** See src/lib/api/v1/conversations.ts `sendNote`. */
 export async function sendNoteIn(ctx: ServerCtx, uid: string, input: NoteInput, spent: Promise<void> = Promise.resolve()): Promise<SentNote> {
-  return budgetFirst(spent, () => leaveNote(ctx, uid, input, spent));
+  const out: { outcome: NoteOutcome } = { outcome: { kind: 'none' } };
+  const sent = await budgetFirst(spent, () => leaveNote(ctx, uid, input, spent, out));
+  // After the commit: whose lists changed (an anonymous card's note, its author's bell alone — realtimeInbox).
+  if (!sent.duplicate) await signal(ctx, noteSent(out.outcome));
+  return sent;
 }
 
-async function leaveNote(ctx: ServerCtx, uid: string, input: NoteInput, spent: Promise<void>): Promise<SentNote> {
+async function leaveNote(ctx: ServerCtx, uid: string, input: NoteInput, spent: Promise<void>, out: { outcome: NoteOutcome }): Promise<SentNote> {
   // Firestore's own ids (`__name__`, see isReservedId): a `clientId` is the document's id.
   if (input.clientId && isReservedId(input.clientId)) throw new ApiFailure('invalid_request', 'Not a valid client id.');
   const repo = ctx.data.conversations;
@@ -116,6 +122,8 @@ async function leaveNote(ctx: ServerCtx, uid: string, input: NoteInput, spent: P
 
   return ctx.uow.run(
     async ({ conversations: tx }) => {
+      // A transaction may run again: only its last run's outcome stands.
+      out.outcome = { kind: 'none' };
       const [current, me, blockOut, blockIn, connected, convo, left0, origins, existing, inThread] = await Promise.all([
         tx.getCard(card.id, NOTE_CARD_FIELDS),
         tx.getSpeaker(uid),
@@ -182,7 +190,10 @@ async function leaveNote(ctx: ServerCtx, uid: string, input: NoteInput, spent: P
         },
         at,
       );
-      if (!threaded) return { id: note, notificationId: bell, push: null, duplicate: false };
+      if (!threaded) {
+        out.outcome = { kind: 'anonymous', author };
+        return { id: note, notificationId: bell, push: null, duplicate: false };
+      }
 
       if (writing) {
         // Their letter answered: the two connected by it. Else this one waits.
@@ -210,6 +221,7 @@ async function leaveNote(ctx: ServerCtx, uid: string, input: NoteInput, spent: P
         },
         at,
       );
+      out.outcome = { kind: 'threaded', pair, writer: uid, author };
       return { id: note, notificationId: bell, push: { conversationId: pair, messageId: note, from: uid, to: author }, duplicate: false };
     },
     { label: 'sendNote' },
@@ -267,10 +279,14 @@ export function replyQuote(original: StoredMessage): ReplyQuote {
 
 /** See src/lib/api/v1/conversations.ts `sendMessage`. */
 export async function sendMessageIn(ctx: ServerCtx, uid: string, input: SendMessageInput, spent: Promise<void> = Promise.resolve()): Promise<SentMessage> {
-  return budgetFirst(spent, () => writeMessage(ctx, uid, input, spent));
+  const out = { rang: false };
+  const sent = await budgetFirst(spent, () => writeMessage(ctx, uid, input, spent, out));
+  // After the commit: both people's list and thread, and the recipient's bell when its first message rang it.
+  if (!sent.duplicate) await signal(ctx, messageSent(sent.conversationId, uid, input.to, out.rang));
+  return sent;
 }
 
-async function writeMessage(ctx: ServerCtx, uid: string, input: SendMessageInput, spent: Promise<void>): Promise<SentMessage> {
+async function writeMessage(ctx: ServerCtx, uid: string, input: SendMessageInput, spent: Promise<void>, out: { rang: boolean }): Promise<SentMessage> {
   const other = input.to;
   if (other === uid) throw new ApiFailure('invalid_request', 'You cannot message yourself.');
   const sticker = input.sticker ? { pack: input.sticker.pack, id: input.sticker.id } : null;
@@ -428,6 +444,7 @@ async function writeMessage(ctx: ServerCtx, uid: string, input: SendMessageInput
         },
         at,
       );
+      out.rang = first;
       if (first) {
         // The bell lists a new conversation, but the push for it is the chat push's (pushedAt marks it done).
         tx.putBell(ctx.ids.id(), { userId: other, type: 'message', payload: { fromUserId: uid, fromHandle: me.handle }, pushed: true }, at);
@@ -456,4 +473,6 @@ export async function deleteConversationIn(ctx: ServerCtx, uid: string, pair: st
   const convo = await repo.getConversation(pair);
   if (convo && !convo.participants?.includes(uid)) throw new ApiFailure('not_found', 'No such conversation.');
   await repo.deleteConversation(pair);
+  // One already gone (a retry) changed no one's list.
+  if (convo) await signal(ctx, threadChanged(pair, uid, other));
 }

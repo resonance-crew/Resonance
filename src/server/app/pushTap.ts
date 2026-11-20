@@ -5,6 +5,8 @@ import { groupByLocale } from '@/server/domain/push/devices';
 import { BELL_TAP_CAPABILITY, TAP_BELL, TAP_NOTE_WINDOW_MS, tapBellId, tapCollapseKey, withTapper, withoutTapper } from '@/server/domain/push/tap';
 import { ANDROID_CHANNEL, tapText } from '@/server/domain/push/text';
 import type { BellRow, BellTxRepo } from '@/server/ports/repos/bell';
+import { bellChanged } from '@/server/domain/realtimeInbox';
+import { signal } from './inbox';
 import { appsDrawIn } from './pushDevices';
 import { sendAndForget, type PushGroup, type PushResult } from './pushSend';
 import { wantsTapPushes } from './pushSettings';
@@ -34,7 +36,7 @@ export async function ringTapIn(ctx: ServerCtx, uid: string, cardId: string, now
   // Read beside the transaction: which builds the author's installs are only decides whether a row is written.
   const writesRow = await appsDrawIn(ctx, to, BELL_TAP_CAPABILITY);
   const bellId = tapBellId(cardId, now);
-  return ctx.uow.run(
+  const ring = await ctx.uow.run(
     async (tx) => {
       const [tap, current, me, out, inn, linked, row] = await Promise.all([
         tx.pushState.getTap(cardId, uid),
@@ -71,6 +73,9 @@ export async function ringTapIn(ctx: ServerCtx, uid: string, cardId: string, now
     },
     { label: 'ring tap' },
   );
+  // After the commit: the author's bell, when its row was written or moved (a row of another type stays as it was).
+  if (ring?.notificationId) await signal(ctx, bellChanged(ring.to));
+  return ring;
 }
 
 /** Take `uid` out of a `resonance_tap` row in this transaction, deleting a row left with no one. */
@@ -86,18 +91,22 @@ export function removeReader(bell: BellTxRepo, row: BellRow, uid: string): void 
  * A tap taken back: its reader leaves the bell row their ring wrote (the UTC
  * day of `rangAt`), and a row left with no one goes. Nothing else.
  */
-export function untapBellIn(ctx: ServerCtx, uid: string, cardId: string): Promise<void> {
-  return ctx.uow.run(
+export async function untapBellIn(ctx: ServerCtx, uid: string, cardId: string): Promise<void> {
+  const changed = await ctx.uow.run(
     async (tx) => {
       const tap = await tx.pushState.getTap(cardId, uid);
       // Tapped again since: they stay where their ring put them.
-      if (!tap || tap.on || tap.rangAtMs === null) return;
+      if (!tap || tap.on || tap.rangAtMs === null) return null;
       const row = await tx.bell.getRow(tapBellId(cardId, tap.rangAtMs));
-      if (!row || row.type !== TAP_BELL) return;
+      if (!row || row.type !== TAP_BELL) return null;
+      const named = Array.isArray(row.payload.fromUserIds) && row.payload.fromUserIds.includes(uid);
       removeReader(tx.bell, row, uid);
+      return named ? row.userId : null;
     },
     { label: 'untap bell' },
   );
+  // After the commit: the author's bell, which lost a reader (or the row).
+  if (changed) await signal(ctx, bellChanged(changed));
 }
 
 /** Whether `from` left a note on `cardId` since `since` (ms): their note's line then stays on the lock screen. */

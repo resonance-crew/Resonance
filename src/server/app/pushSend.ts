@@ -4,6 +4,8 @@ import { groupByLocale } from '@/server/domain/push/devices';
 import { ANDROID_CHANNEL, OPENS_THREAD, TEXT_KEY, cutText, onAnonymousCard, pushRoute, pushText } from '@/server/domain/push/text';
 import type { PushMessage } from '@/server/ports/push';
 import type { PushDevice } from '@/server/ports/repos/pushState';
+import { bellChanged } from '@/server/domain/realtimeInbox';
+import { signal } from './inbox';
 import { wantsMessagePushes } from './pushSettings';
 import { noteRidesTap } from './pushTapCollapse';
 
@@ -80,6 +82,8 @@ export async function pushNotificationIn(ctx: ServerCtx, id: string): Promise<Pu
   if (!claimed) return null;
 
   const to = str(claimed.userId);
+  // The row is in its recipient's bell now, rung or not (a block below silences only the phone).
+  if (to) await signal(ctx, bellChanged(to));
   const type = str(claimed.type);
   let payload: Payload = claimed.payload;
   const from = str(payload.fromUserId);

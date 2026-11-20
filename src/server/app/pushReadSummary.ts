@@ -1,6 +1,8 @@
 import { runPool } from '@/lib/push/pool';
 import type { ServerCtx } from '@/server/ctx';
 import { BELL_READ_SUMMARY_CAPABILITY, READ_SUMMARY, READ_SUMMARY_MIN, WEEK_MS, readSummaryId, weekTally, type WeekRead } from '@/server/domain/push/readSummary';
+import { bellChanged } from '@/server/domain/realtimeInbox';
+import { signal } from './inbox';
 import { appsDrawIn } from './pushDevices';
 
 /** The weekly read summary's bell rows (`/api/cron/read-summary`; lib/push/readSummary tells the story). */
@@ -64,7 +66,10 @@ export async function runReadSummaryIn(ctx: ServerCtx, opts: { now?: number; dea
           // A bell row only: nothing pushes it.
           atMs: now,
         });
-        if (written === 'inserted') run.rows++;
+        if (written === 'inserted') {
+          run.rows++;
+          await signal(ctx, bellChanged(author));
+        }
       },
       { tag: '[read-summary]' },
     );
