@@ -17,7 +17,7 @@
  *     Android phone turned sideways (the field's two-line cap in a short window), and in the dark wherever the
  *     release set has it light only (the tablets, the web's desktop, the Mac). The iPhone app stands upright only
  *     (Info.plist) and the web's capturer has no device states yet, so neither turns a phone sideways
- *   - two composer states as screens of their own (`set: 'extended'` in screens.ts): the attach panel with its
+ *   - three composer states as screens of their own (`set: 'extended'` in screens.ts): the note on three lines (`card-note-lines`), the attach panel with its
  *     gallery's ask, and the Android soft keyboard on screen (the AVDs' hardware keyboard never shows one)
  *
  * A state of a device (a font scale, an orientation, a window) is a device of its own in the run: its captures

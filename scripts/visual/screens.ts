@@ -85,6 +85,16 @@ const filmAt = (t: number) => ({ query: `rest=1&t=${t}` });
  * message (his note on her letter) with her newest published card riding — what the apps' `visualRide
  * replyCard` sets up. Kept as of the run (a draft older than 30 days is none).
  */
+/**
+ * The note's three lines on bob's first coffee, as alice keeps them in this browser (lib/data/noteDrafts): a kept draft
+ * opens the field with the page. The apps' `-visualNote lines` / `cardEnd lines` open on the same words and keep
+ * nothing. Kept as of the run (a draft older than 30 days is none).
+ */
+export const NOTE_LINES = '讀到早晨屬於自己的那段，\n想起我第一次一個人搬出來住，\n也是這樣手忙腳亂地沖咖啡。';
+export const NOTE_LINES_DRAFT: Record<string, string> = {
+  'resonance:note-drafts:alice': JSON.stringify({ 'first-coffee': { text: NOTE_LINES, at: Date.now() } }),
+};
+
 export const REPLY_CARD_DRAFT: Record<string, string> = {
   'resonance:draft:alice:alice_bob': JSON.stringify({
     text: '',
@@ -145,6 +155,12 @@ export const SCREENS: Screen[] = [
     web: { click: '[data-end-row] button[data-segment="note"]', scrollTo: '[data-end-row]' },
     app: { ios: ['-visualEnd', 'YES', '-visualNote', 'wait'], android: ['--es', 'cardEnd', 'note'] },
     expect: "carol's 陌生人的一句話 read by dora, whose three notes to carol wait for an answer: 寄小紙條 opened the one muted line 你留的紙條對方還沒回覆，先等等對方吧 where the field would be — no field, no dialog" },
+  // The owner, 2026-11-20: Android's note kept 寄出 the capsule's full height at any number of lines, where the
+  // messages' composer makes it the block on the last row. No click: the kept draft opens the field with the page.
+  { id: 'card-note-lines', route: '/card/first-coffee', as: 'alice', set: 'extended',
+    web: { storage: NOTE_LINES_DRAFT, scrollTo: '[data-end-row]' },
+    app: { ios: ['-visualEnd', 'YES', '-visualNote', 'lines'], android: ['--es', 'cardEnd', 'lines'] },
+    expect: "The note in place under the end row, its field holding alice's three lines (讀到早晨屬於自己的那段，… 也是這樣手忙腳亂地沖咖啡。): the capsule grown to three lines, the envelope and 寄出 on the last line — 寄出 the 52 × 48 block at the bottom right in the verb's solid face, its wavy seam turning round its top-left corner, never a strip the capsule's full height; the text keeps the whole width left of 寄出's column" },
   { id: 'card-own-taps', route: '/card/rich-story', as: 'alice', web: { scrollTo: '[data-tap-author]' },
     app: { ios: ['-visualEnd', 'YES'], android: ['--es', 'cardEnd', 'end'] },
     expect: "alice's own rich story at its end: no capsule — one line, the muted wave glyph and the three newest faces of who resonated (gus, hana, bob) with a blank disc for more (carol), no number, no words; on the desktop the card's share and ⋯ at that line's end" },

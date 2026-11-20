@@ -35,6 +35,8 @@ struct CardEndRow: View {
     @State private var noteOpen = false
     /// The field opened by the reader takes the focus; opened by a draft with the page, it doesn't.
     @State private var noteFocusOnOpen = true
+    /// The screenshots' words in the note's field (`-visualNote lines`), kept nowhere.
+    @State private var noteShownText: String?
     @State private var noteFocus = 0
     @State private var noteHasWords = false
     /// Why the last send failed, for the field opened again on its words.
@@ -130,7 +132,8 @@ struct CardEndRow: View {
     #if DEBUG
     /// The release screenshots' states of the story's end (round 26; scripts/visual/screens.ts, with `-visualEnd YES` on
     /// the page): `-visualTap on` shows the reader's tap on (here only — nothing is sent), `-visualNote open` the note
-    /// field open (unfocused: no keyboard in the picture), `-visualNote wait` the line in its
+    /// field open (unfocused: no keyboard in the picture), `-visualNote lines` open on three lines of words
+    /// (``NoteInPlace/visualLines``: 寄出 the block on the last row), `-visualNote wait` the line in its
     /// place while three notes wait, `-visualTaps list` the faces' list open.
     private func visualState() async {
         let defaults = UserDefaults.standard
@@ -144,6 +147,10 @@ struct CardEndRow: View {
         }
         switch defaults.string(forKey: "visualNote") {
         case "open":
+            noteFocusOnOpen = false
+            noteOpen = true
+        case "lines":
+            noteShownText = NoteInPlace.visualLines
             noteFocusOnOpen = false
             noteOpen = true
         case "wait":
@@ -266,7 +273,7 @@ struct CardEndRow: View {
     @ViewBuilder private var noteBlock: some View {
         Group {
             if tap.mayNote {
-                NoteField(cardId: cardId, focusOnAppear: noteFocusOnOpen, focusRequest: noteFocus, why: noteWhy,
+                NoteField(cardId: cardId, focusOnAppear: noteFocusOnOpen, focusRequest: noteFocus, why: noteWhy, shownText: noteShownText,
                           hasWords: $noteHasWords, onClose: { noteOpen = false; noteWhy = nil }, onUpgrade: { words in
                     noteOpen = false
                     // The note's words become the card's story (the web drops them; the apps keep them).

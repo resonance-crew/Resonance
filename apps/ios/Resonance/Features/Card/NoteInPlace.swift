@@ -66,6 +66,9 @@ nonisolated enum NoteInPlace {
         !(draft ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// The words `-visualNote lines` opens the field on: three lines, as the web's and Android's `card-note-lines`.
+    static let visualLines = "讀到早晨屬於自己的那段，\n想起我第一次一個人搬出來住，\n也是這樣手忙腳亂地沖咖啡。"
+
     /// Lines before it scrolls inside: a phone 3 (2 in a short window — a phone on its side), wider 5. No ⤢.
     static func maxLines(compact: Bool, shortWindow: Bool) -> Int {
         guard compact else { return 5 }
@@ -111,6 +114,9 @@ struct NoteField: View {
     var focusRequest = 0
     /// Why the last send failed, when the field opened again on its words.
     var why: String?
+    /// The release screenshots' words (`-visualNote lines`): the field opens on them and keeps nothing — no draft read,
+    /// none written, so the next capture's field is as it was.
+    var shownText: String?
     /// Whether the field holds words (the segment and Escape close an empty field, only focus a written one).
     @Binding var hasWords: Bool
     let onClose: () -> Void
@@ -176,7 +182,7 @@ struct NoteField: View {
             }
         }
         .onAppear {
-            restoreDraft()
+            if let shownText { text = shownText } else { restoreDraft() }
             if focusOnAppear { focusSoon() }
         }
         .onDisappear(perform: keepDraft)

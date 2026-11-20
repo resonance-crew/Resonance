@@ -147,11 +147,13 @@ fun CardViewerActions(
 
     // The note in place.
     val note = remember(cardId) { NoteFieldState(session.noteDrafts?.text(cardId).orEmpty(), mayNote) }
-    // Kept a moment after typing stops, as the app leaves the screen, and as the page goes.
-    val typed by rememberUpdatedState(note.draft)
+    // Kept a moment after typing stops, as the app leaves the screen, and as the page goes — never the screenshots'
+    // words (`cardEnd lines`), which would open the next capture's field on them.
+    val keeps = remember(cardId) { DebugLaunch.CardEnd.Lines !in launch }
+    val typed by rememberUpdatedState(note.draft?.takeIf { keeps })
     LaunchedEffect(note.draft) {
         delay(NOTE_DRAFT_DELAY_MS)
-        note.draft?.let { keepDraft(session, cardId, it) }
+        if (keeps) note.draft?.let { keepDraft(session, cardId, it) }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { typed?.let { keepDraft(session, cardId, it) } }
     DisposableEffect(cardId) { onDispose { typed?.let { keepDraft(session, cardId, it) } } }
@@ -167,11 +169,15 @@ fun CardViewerActions(
         sends.took(cardId)
         note.failed(session.noteDrafts?.text(cardId).orEmpty(), ask.error)
     }
-    // The screenshots' states (`--es cardEnd tap,note,taps`), as the page took them.
+    // The screenshots' states (`--es cardEnd tap,note,lines,taps`), as the page took them.
     var openList by remember(cardId) { mutableStateOf(false) }
     LaunchedEffect(cardId, launch) {
         if (DebugLaunch.CardEnd.Tap in launch && !switch.on) switch.flip()
         if (DebugLaunch.CardEnd.Note in launch && !note.open) note.segment(mayNote)
+        if (DebugLaunch.CardEnd.Lines in launch) {
+            if (!note.open) note.segment(mayNote)
+            note.edit(VISUAL_NOTE_LINES)
+        }
         if (DebugLaunch.CardEnd.Taps in launch) openList = true
     }
 
@@ -320,6 +326,9 @@ internal fun EndRowTwo(modifier: Modifier, faces: @Composable () -> Unit, end: @
         end()
     }
 }
+
+/** The words `--es cardEnd lines` opens the note on: three lines, as the web's and iOS's `card-note-lines` (screens.ts). */
+internal const val VISUAL_NOTE_LINES = "讀到早晨屬於自己的那段，\n想起我第一次一個人搬出來住，\n也是這樣手忙腳亂地沖咖啡。"
 
 /** How long after the last keystroke a note's draft is written down. */
 private const val NOTE_DRAFT_DELAY_MS = 400L

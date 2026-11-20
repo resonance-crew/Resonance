@@ -300,6 +300,8 @@ private fun NoteCapsule(
     val density = LocalDensity.current
     var capsule by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var fieldHeight by remember { mutableIntStateOf(0) }
+    // The words' lines as laid out: from the second, 寄出 is the composer's block on the last row, never the full height.
+    var lines by remember { mutableIntStateOf(1) }
     val canSend = state.canSend(mayNote = true)
     val placeholder = notePlaceholder()
     val line = lineHeightOf(ComposerText)
@@ -361,8 +363,8 @@ private fun NoteCapsule(
             .onGloballyPositioned { capsule = it }
             .onSizeChanged { fieldHeight = it.height },
         seed = 23.0,
-        // From the second line Send is the block on the last row, as the composer's.
-        block = false,
+        // From the second line Send is the block on the last row, as the composer's (never grown, nothing riding).
+        block = composerTools(state.text, lines, expanded = false).block,
         leading = { NoteLeadGlyph() },
     ) { vertical ->
         val scroll = rememberScrollState()
@@ -386,6 +388,7 @@ private fun NoteCapsule(
                 textStyle = ComposerText,
                 cursorBrush = SolidColor(Tokens.Text),
                 minLines = 1,
+                onTextLayout = { lines = it.lineCount },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = vertical)

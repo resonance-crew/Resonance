@@ -50,8 +50,13 @@ describe('the variant sets', () => {
     expect(keys('android', 'phone', 'extended')).toEqual(expect.arrayContaining(['thread-attach@light-zh-TW.png', 'thread-keyboard@light-zh-TW.png']));
     // The extended screens are light zh-TW only, even on a phone.
     expect(keys('android', 'phone', 'extended').filter((k) => k.startsWith('thread-keyboard'))).toEqual(['thread-keyboard@light-zh-TW.png']);
-    // 50, and round 26's note in place: 2 large fonts + the phone sideways + 5 in the dark
-    expect(estimate('extended').captures - estimate('release').captures).toBe(58);
+    // 50, and round 26's note in place: 2 large fonts + the phone sideways + 5 in the dark, and its three lines on
+    // each of the 8 release devices (the owner, 2026-11-20: Android's 寄出 filled the capsule's end)
+    expect(estimate('extended').captures - estimate('release').captures).toBe(66);
+    for (const [platform, device] of [['web', 'phone'], ['web', 'desktop'], ['ios', 'iphone'], ['android', 'phone'], ['mac', 'mac']] as const) {
+      expect(keys(platform, device, 'extended'), `${platform}/${device}`).toContain('card-note-lines@light-zh-TW.png');
+      expect(keys(platform, device, 'release'), `${platform}/${device}`).not.toContain('card-note-lines@light-zh-TW.png');
+    }
   });
 
   it('takes the note written in place in large text, on a phone turned sideways, and in the dark wider than a phone (round 26 SETTLED 9)', () => {

@@ -146,4 +146,17 @@ class NoteInPlaceTest {
         // A phone on its side is a Medium window, and short: 2 lines over the keyboard, whatever its width.
         assertEquals(2, noteMaxLines(phone = false, shortWindow = true))
     }
+
+    /**
+     * The owner, 2026-11-20: the note's 寄出 filled the capsule's whole end at any number of lines, where the messages'
+     * composer makes it the 52 × 48 block on the last row from the second. The note takes the composer's rule (never
+     * grown, nothing riding) from the lines its field lays out — never a fixed strip.
+     */
+    @Test fun itsSendIsTheComposersBlockFromTheSecondLine() {
+        assertFalse(composerTools("一行", lines = 1, expanded = false).block)
+        assertTrue(composerTools("兩行\n第二行", lines = 2, expanded = false).block)
+        val source = File("src/main/kotlin/com/resonance/app/ui/NoteInPlace.kt").readText()
+        assertTrue(source.contains("onTextLayout = { lines = it.lineCount }"))
+        assertTrue(source.contains("block = composerTools(state.text, lines, expanded = false).block"))
+    }
 }

@@ -593,7 +593,8 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                     delay(LAUNCH_END_SETTLE_MS)
                     // The note's field open, the keyboard up: the field has brought itself over the keyboard (and asked
                     // the bar aside where it must) — centring the row now would push it back under the keyboard.
-                    if (DebugLaunch.CardEnd.Note in launchEnd && imeInsets.getBottom(density) > 0) return@LaunchedEffect
+                    val noteOpen = DebugLaunch.CardEnd.Note in launchEnd || DebugLaunch.CardEnd.Lines in launchEnd
+                    if (noteOpen && imeInsets.getBottom(density) > 0) return@LaunchedEffect
                     val row = endRowCoords?.takeIf { it.isAttached } ?: return@LaunchedEffect
                     val frame = listCoords?.takeIf { it.isAttached } ?: return@LaunchedEffect
                     val y = frame.localPositionOf(row, Offset.Zero).y
