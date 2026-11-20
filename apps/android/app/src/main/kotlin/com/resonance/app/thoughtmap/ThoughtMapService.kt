@@ -325,6 +325,20 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
          * arrows leave the map while it is there, and come back to their places with a restore (the
          * map keeps them: [ThoughtMapStore] parks the node).
          */
+        /**
+         * The small copy of [media]'s cover when it is this cover's (`thumbUrl` is `url` with its last
+         * extension made `-w960.webp`), else the cover itself: a draft's save merges `media`, so a cover
+         * changed there can keep the old cover's `thumbUrl`.
+         */
+        fun coverThumb(media: Map<*, *>): String? {
+            val url = media["url"] as? String ?: return null
+            val thumb = media["thumbUrl"] as? String ?: return url
+            val name = url.lastIndexOf('/')
+            val dot = url.lastIndexOf('.')
+            val stem = if (dot > name) url.substring(0, dot) else url
+            return if (thumb == "$stem-w960.webp") thumb else url
+        }
+
         fun mapCardOf(id: String, data: Map<String, Any?>): MapCard? {
             if (data["trashedAt"] != null) return null
             val media = data["media"] as? Map<*, *>
@@ -338,7 +352,7 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
                 visibility = data["visibility"] as? String ?: "public",
                 publishedAt = (data["publishedAt"] as? Timestamp)?.toDate()?.time,
                 // A node's picture is small: the list's cover (`media.thumbUrl`, B2), else the cover itself.
-                mediaUrl = if (media?.get("type") == "image") (media["thumbUrl"] as? String ?: media["url"] as? String) else null,
+                mediaUrl = if (media?.get("type") == "image") coverThumb(media) else null,
                 mediaFallbackUrl = if (media?.get("type") == "image") media["url"] as? String else null,
                 accentHue = (data["accentHue"] as? Number)?.toDouble(),
                 mediaFrame = if (media?.get("type") == "image") CoverFraming.of(media["frame"] as? Map<*, *>) else null,

@@ -24,11 +24,27 @@ class MapReferencesThumbsTest {
 
     @Test
     fun aNodeDrawsTheSmallCoverAndFallsBackToTheCover() {
-        val media = mapOf("type" to "image", "url" to "https://img.example/a.webp", "thumbUrl" to "https://img.example/a-960.webp")
+        val media = mapOf("type" to "image", "url" to "https://img.example/a.webp", "thumbUrl" to "https://img.example/a-w960.webp")
         val card = mapCardOf("c1", mapOf("media" to media))!!
-        assertEquals("https://img.example/a-960.webp", card.mediaUrl)
+        assertEquals("https://img.example/a-w960.webp", card.mediaUrl)
         assertEquals("https://img.example/a.webp", card.mediaFallbackUrl)
         val older = mapCardOf("c2", mapOf("media" to media - "thumbUrl"))!!
         assertEquals("https://img.example/a.webp", older.mediaUrl)
+    }
+
+    @Test
+    fun aThumbLeftFromAnEarlierCoverIsNotDrawn() {
+        // A draft's save merges `media`: the cover changed, its old small copy stayed.
+        val changed = mapOf(
+            "type" to "image",
+            "url" to "https://img.example/image/2026-11/B.webp",
+            "thumbUrl" to "https://img.example/image/2026-11/A-w960.webp",
+        )
+        assertEquals("https://img.example/image/2026-11/B.webp", mapCardOf("c3", mapOf("media" to changed))!!.mediaUrl)
+        val own = changed + ("thumbUrl" to "https://img.example/image/2026-11/B-w960.webp")
+        assertEquals("https://img.example/image/2026-11/B-w960.webp", mapCardOf("c4", mapOf("media" to own))!!.mediaUrl)
+        // Any extension is replaced, only the last one.
+        val jpeg = mapOf("type" to "image", "url" to "https://img.example/x.y/B.v1.jpg", "thumbUrl" to "https://img.example/x.y/B.v1-w960.webp")
+        assertEquals("https://img.example/x.y/B.v1-w960.webp", mapCardOf("c5", mapOf("media" to jpeg))!!.mediaUrl)
     }
 }
