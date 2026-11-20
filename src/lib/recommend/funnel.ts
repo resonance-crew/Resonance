@@ -13,7 +13,6 @@ import {
   matchCards,
   mmr,
   partKey,
-  poolStats,
   relevance,
   csls,
   type Candidate,
@@ -21,7 +20,7 @@ import {
   type PoolStats,
   type TasteVote,
 } from './match';
-import { publicPool, readPoolStats, recordModel } from './poolStats';
+import { cachedPoolStats, cachedPublicPool, readPoolStats, recordModel } from './poolStats';
 import { buildUserProfile, type UserProfile } from './profile';
 import { buildRerankMessages, parseRerankScores, type RerankCandidate } from './rerank';
 import { buildSelectMessages, parseSelection, type SelectCandidate, type Selection } from './select';
@@ -133,9 +132,11 @@ async function tasteRecords(profile: UserProfile, embedModel: string): Promise<V
 async function poolFor(db: Firestore, embedModel: string, taste: VectorRecord[], now: number): Promise<{ records: VectorRecord[]; stats: PoolStats }> {
   const kept = await readPoolStats(embedModel, db).catch(() => null);
   if (!kept || kept.cards <= EXACT_POOL_MAX || !taste.length) {
-    const records = await publicPool(getVectorStore(), embedModel);
+    // This instance's read of the pool for a few minutes (B1): the same public records for every reader.
+    const store = getVectorStore();
+    const records = await cachedPublicPool(store, embedModel);
     // Today's kept numbers spare the build working them out (a part they don't know gets its r(x) against the pool).
-    return { records, stats: kept && now - kept.at < POOL_STATS_FRESH_MS ? kept : poolStats(records) };
+    return { records, stats: kept && now - kept.at < POOL_STATS_FRESH_MS ? kept : cachedPoolStats(store, embedModel, records) };
   }
   const store = getVectorStore();
   const hits = await Promise.all(
