@@ -1,7 +1,11 @@
-import type { DocumentData, Firestore } from 'firebase-admin/firestore';
 import type { Card } from '@/lib/db/types';
 import { linkPreviewsOf } from '@/lib/links/previewShape';
-import { purgeAtOf, restorableVisibility, trashExpired } from '@/lib/cards/trash';
+import { purgeAtOf, restorableVisibility } from '@/lib/cards/trash';
+import { AUTHOR_FIELDS, authorsOf, canView as canViewBy, visibleTo as visibleAmong } from '@/server/app/viewer';
+import { blockHides, CARD_VISIBILITY_FIELDS, cardVisible, trashedAtOf } from '@/server/domain/visibility';
+import type { AdminDb } from '@/server/infra/firestore/db';
+import { ctxFor } from '@/server/infra/firestore/ctx';
+import type { PersonRow } from '@/server/ports/repos/users';
 import { coverFrameOf } from '@/lib/images/coverFrame';
 import { coverThumbKey, coverThumbUrl } from '@/lib/images/coverThumb';
 import { publicBases, storageKeyOf } from '@/lib/storage/publicUrl';
@@ -10,9 +14,14 @@ import { summaryOf, type ListCard } from './summary';
 import { presentSummaryTranslations } from './summaryTranslations';
 
 /**
- * Turning Firestore documents into the contract's shapes. Old or hand-edited
- * documents may lack fields; nothing here may throw on one, or a single bad
- * card would fail a whole page (and the clients' strict decoders).
+ * Turning stored cards and people into the contract's shapes — the one place
+ * a card or a person leaves the server (an anonymous card's author never
+ * does: toFeedCard drops the byline, and no service puts an `authorId` in an
+ * answer itself — src/server/app/presenter.test.ts). Presenters take the
+ * repositories' plain rows (Card, ListCard, PersonRow), never a store's
+ * document type. Old or hand-edited documents may lack fields; nothing here
+ * may throw on one, or a single bad card would fail a whole page (and the
+ * clients' strict decoders).
  */
 
 function str(v: unknown): string | null {
@@ -47,9 +56,10 @@ export function presentLinkPreviews(stored: unknown): LinkPreviewBody[] {
 }
 
 /** What toAuthor reads of a profile: the field mask of every profile a list reads (loadAuthors). */
-export const AUTHOR_FIELDS = ['handle', 'initials', 'accentColor', 'avatarUrl', 'avatarSeed', 'verified', 'region'] as const;
+export { AUTHOR_FIELDS };
 
-export function toAuthor(id: string, u: DocumentData): AuthorBody {
+/** A person as the contract shows them — from their stored profile (a PersonRow: never a store's document type). */
+export function toAuthor(id: string, u: PersonRow): AuthorBody {
   return {
     id,
     handle: String(u.handle ?? ''),
@@ -89,12 +99,6 @@ function editedAtOf(c: ListCard): string | null {
   return at instanceof Date && !Number.isNaN(at.getTime()) ? at.toISOString() : null;
 }
 
-/** When a card went into the trash, as a valid date; null for a card that isn't there. */
-export function trashedAtOf(c: Pick<Card, 'trashedAt'>): Date | null {
-  const at = c.trashedAt;
-  return at instanceof Date && !Number.isNaN(at.getTime()) ? at : null;
-}
-
 /** The trash's own fields on a FeedCard (FeedCardOptions.own). */
 function trashFields(c: ListCard): Pick<FeedCardBody, 'trashedAt' | 'purgeAt' | 'restoresTo'> {
   const at = trashedAtOf(c);
@@ -107,7 +111,7 @@ function trashFields(c: ListCard): Pick<FeedCardBody, 'trashedAt' | 'purgeAt' | 
  * its story (LIST_FIELDS) must have been through withStories() first: its
  * excerpt and read time come from the stored summary or the story read then.
  */
-export function toFeedCard(c: ListCard, author: DocumentData | undefined, opts: FeedCardOptions = {}): FeedCardBody {
+export function toFeedCard(c: ListCard, author: PersonRow | undefined, opts: FeedCardOptions = {}): FeedCardBody {
   const published = c.publishedAt && !Number.isNaN(c.publishedAt.getTime()) ? c.publishedAt : null;
   const anonymous = c.anonymous === true;
   const summary = summaryOf(c);
@@ -155,73 +159,28 @@ export function coverThumbOf(media: Card['media'], bases: readonly string[] = pu
   return coverThumbUrl(url, bases);
 }
 
-/** A document id that can safely be put in a path (hand-edited data could hold anything). */
-const docIdOk = (id: unknown): id is string => typeof id === 'string' && id.length > 0 && !id.includes('/');
+/* ───────────── who may see what: through the repositories (src/server/app/viewer.ts) ───────────── */
 
-/** Profiles of the given (non-anonymous) authors, by id — one batched read. */
-export async function loadAuthors(db: Firestore, cards: Card[]): Promise<Map<string, DocumentData>> {
-  const ids = [...new Set(cards.filter((c) => !c.anonymous).map((c) => c.authorId))].filter(docIdOk);
-  if (!ids.length) return new Map();
-  // Only what a byline draws (toAuthor), not the whole profile (B17).
-  const snaps = await db.getAll(...ids.map((id) => db.doc(`users/${id}`)), { fieldMask: [...AUTHOR_FIELDS] });
-  return new Map(snaps.filter((s) => s.exists).map((s) => [s.id, s.data()!]));
+// The pure rules, at this path for their importers.
+export { blockHides, CARD_VISIBILITY_FIELDS, cardVisible, trashedAtOf };
+
+/** Profiles of the given (non-anonymous) authors, by id — one batched read (B17: only what a byline draws). */
+export function loadAuthors(db: AdminDb, cards: Card[]): Promise<Map<string, PersonRow>> {
+  return authorsOf(ctxFor(db).data.users, cards);
 }
 
 /** Everyone the viewer blocked: their named cards drop out of every list (blockHides). */
-export async function blockedByViewer(db: Firestore, uid: string): Promise<Set<string>> {
-  const snap = await db.collection(`users/${uid}/blocks`).get();
-  return new Set(snap.docs.map((d) => d.id));
+export function blockedByViewer(db: AdminDb, uid: string): Promise<Set<string>> {
+  return ctxFor(db).data.users.blockedBy(uid);
 }
 
-/**
- * Whether the viewer's blocks (`blocked`, blockedByViewer) keep a card from
- * them: one under the name of someone they blocked. Never an anonymous card —
- * the viewer writes their own block list, so a card that vanished when they
- * blocked someone would tell them who wrote it. A block hides people and
- * their named cards; an anonymous card is there for everyone who may read it.
- */
-export function blockHides(card: Pick<Card, 'authorId' | 'anonymous'>, blocked: ReadonlySet<string>): boolean {
-  return card.anonymous !== true && blocked.has(card.authorId);
+export function connected(db: AdminDb, a: string, b: string): Promise<boolean> {
+  return ctxFor(db).data.users.connected(a, b);
 }
-
-export async function connected(db: Firestore, a: string, b: string): Promise<boolean> {
-  if (a === b) return false;
-  const pair = a < b ? `${a}_${b}` : `${b}_${a}`;
-  return (await db.doc(`connections/${pair}`).get()).exists;
-}
-
-/** What cardVisible (and canView) decide a card's readers by: a card read for that alone needs only these. */
-export const CARD_VISIBILITY_FIELDS = ['authorId', 'publishedAt', 'visibility', 'anonymous', 'trashedAt'] as const;
-
-/**
- * firestore.rules `cardOpen` once the viewer's connection to the author is
- * known — `isConnected` is only asked for a published, named connections
- * card. A transaction that read the connection itself asks this (canView
- * reads it). An anonymous card for connections only (none is made any more:
- * an anonymous card is public or private) is its author's alone: whether a
- * reader could open it would turn on being connected to its author.
- */
-export function cardVisible(card: Card, viewerId: string, isConnected: (authorId: string) => boolean): boolean {
-  const trashed = trashedAtOf(card);
-  // A card in the trash is its author's alone — and theirs only until its
-  // purge date, even before the daily cron reaches it (lib/cards/trash).
-  // Private while there (the trash makes it so), it would be absent to
-  // everyone else anyway: this backs that up.
-  if (card.authorId === viewerId) return !trashed || !trashExpired(trashed);
-  if (trashed || card.trashedAt != null) return false;
-  // A draft is its author's alone, whatever visibility it will be published with.
-  if (!card.publishedAt) return false;
-  if (card.visibility === 'public') return true;
-  return card.visibility === 'connections' && card.anonymous !== true && isConnected(card.authorId);
-}
-
-const needsConnection = (card: Card, viewerId: string) =>
-  card.authorId !== viewerId && !!card.publishedAt && card.visibility === 'connections' && card.anonymous !== true;
 
 /** firestore.rules `cardVisible`, for the Admin SDK (which bypasses rules). */
-export async function canView(db: Firestore, card: Card, viewerId: string): Promise<boolean> {
-  const isConnected = needsConnection(card, viewerId) && (await connected(db, viewerId, card.authorId));
-  return cardVisible(card, viewerId, () => isConnected);
+export function canView(db: AdminDb, card: Card, viewerId: string): Promise<boolean> {
+  return canViewBy(ctxFor(db).data.users, card, viewerId);
 }
 
 /**
@@ -229,13 +188,6 @@ export async function canView(db: Firestore, card: Card, viewerId: string): Prom
  * viewer is connected to each connections-only author is read once per
  * author, in one batch.
  */
-export async function visibleTo(db: Firestore, viewerId: string, cards: Card[]): Promise<Card[]> {
-  const authors = [...new Set(cards.filter((c) => needsConnection(c, viewerId)).map((c) => c.authorId))].filter(docIdOk);
-  const linked = new Set<string>();
-  if (authors.length) {
-    const byPair = new Map(authors.map((a) => [viewerId < a ? `${viewerId}_${a}` : `${a}_${viewerId}`, a]));
-    const snaps = await db.getAll(...[...byPair.keys()].map((pair) => db.doc(`connections/${pair}`)));
-    for (const s of snaps) if (s.exists) linked.add(byPair.get(s.id)!);
-  }
-  return cards.filter((c) => cardVisible(c, viewerId, (a) => linked.has(a)));
+export function visibleTo(db: AdminDb, viewerId: string, cards: Card[]): Promise<Card[]> {
+  return visibleAmong(ctxFor(db).data.users, viewerId, cards);
 }

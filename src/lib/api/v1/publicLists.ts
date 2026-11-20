@@ -1,4 +1,3 @@
-import type { Firestore } from 'firebase-admin/firestore';
 import { createMemo, type Memo } from '@/lib/links/memo';
 
 /**
@@ -25,15 +24,19 @@ export function setPublicListMs(ms: number) {
   keepMs = ms;
 }
 
-const memos = new WeakMap<Firestore, Memo<unknown>>();
+const memos = new WeakMap<object, Memo<unknown>>();
 
-/** `make()`'s answer for `key` against `db`, shared by every reader for a while; a failure is never kept. */
-export function publicList<T>(db: Firestore, key: string, make: () => Promise<T>): Promise<T> {
+/**
+ * `make()`'s answer for `key` against `scope` — the database behind the
+ * cards repository (`ctx.data.cards.scope`), so every context on one database
+ * shares it — kept for every reader for a while; a failure is never kept.
+ */
+export function publicList<T>(scope: object, key: string, make: () => Promise<T>): Promise<T> {
   if (keepMs <= 0) return make();
-  let memo = memos.get(db);
+  let memo = memos.get(scope);
   if (!memo) {
     memo = createMemo<unknown>({ max: 64, keep: (outcome) => (outcome.ok ? keepMs : 0) });
-    memos.set(db, memo);
+    memos.set(scope, memo);
   }
   return memo.get(key, make) as Promise<T>;
 }
