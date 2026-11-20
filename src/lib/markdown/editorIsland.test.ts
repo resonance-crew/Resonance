@@ -214,6 +214,30 @@ describe('the editor island', () => {
     });
   });
 
+  describe('reset, for an island reused for another card (audit X1)', () => {
+    it('empties the story, its undo history, its title and previews, and tells no change', async () => {
+      vi.useFakeTimers();
+      const island = await open('layout=canvas&locale=zh-TW');
+      island.open({ title: 'The first morning', markdown: 'An English story, written for the very first time today.' });
+      island.focus();
+      await vi.advanceTimersByTimeAsync(20);
+      island.exec('insertCard', { href: '/card/a', title: 'A' });
+      island.setLinkPreviews([{ url: 'https://example.com/rain', title: '下雨天的散步' }]);
+      island.reset();
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(island.getMarkdown()).toBe('');
+      expect(island.exec('undo')).toBe(false);
+      expect(island.getMarkdown()).toBe('');
+      expect(posted.filter((m) => m.type === 'change')).toEqual([]);
+      expect(root()).toHaveAttribute('data-script', 'cjk');
+      expect(last('state')).toMatchObject({ canUndo: false });
+      // No preview of the last card's left behind, and it still writes.
+      island.exec('link', { href: 'https://example.com/rain', display: 'card' });
+      expect(root().querySelector('.link-card-title')).toHaveTextContent('example.com');
+      expect(island.getMarkdown()).toBe('<https://example.com/rain>');
+    });
+  });
+
   describe('its height (audit X3)', () => {
     it('tells the page’s height with how much is written, only when either changed', async () => {
       // The body's observer, held so the test can say when the body resized.

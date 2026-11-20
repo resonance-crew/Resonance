@@ -47,6 +47,7 @@
 import { Editor } from '@tiptap/core';
 import Blockquote from '@tiptap/extension-blockquote';
 import Placeholder from '@tiptap/extension-placeholder';
+import { EditorState } from '@tiptap/pm/state';
 import { wavyVertical } from '../../../src/lib/design/wavyPath';
 import { storyPictureShape } from '../../../src/lib/design/storyPicture';
 import { INK_STRONG } from '../../../src/lib/design/strokes';
@@ -106,6 +107,7 @@ declare global {
     ResonanceBridge?: { postMessage(json: string): void };
     ResonanceEditor: {
       open(card?: { title?: string; markdown?: string; previews?: HostLinkPreview[] }): true;
+      reset(): void;
       setMarkdown(md: string): string;
       getMarkdown(): string;
       roundtrip(md: string): string;
@@ -428,7 +430,8 @@ const extensions = [
 // pauses — never per keystroke. Installed hosts pass neither ?locale nor a
 // title: their stories start as CJK, as the island always set them.
 const forcedParam = params.get('script');
-let forced: StoryScript | null = forcedParam === 'cjk' || forcedParam === 'latin' ? forcedParam : null;
+const queryScript: StoryScript | null = forcedParam === 'cjk' || forcedParam === 'latin' ? forcedParam : null;
+let forced: StoryScript | null = queryScript;
 let forcedLang: string | null = null;
 const startScript: StoryScript = localeScript(params.get('locale') ?? 'zh-TW');
 let title = '';
@@ -648,6 +651,21 @@ window.ResonanceEditor = {
     clearTimeout(typeTimer);
     setType(readType(startScript), true);
     return true;
+  },
+  // A pre-warmed island taken for another card: a fresh state — an empty story whose undo history is
+  // gone too (setMarkdown('') would leave the last card's to undo back into) — no title, no previews,
+  // the type as the page's query set it. Nothing is told but the toolbar's state and the type.
+  reset() {
+    dropChange();
+    clearTimeout(typeTimer);
+    title = '';
+    linkPreviews.clear();
+    forced = queryScript;
+    forcedLang = null;
+    const doc = editor.schema.topNodeType.createAndFill()!;
+    editor.view.updateState(EditorState.create({ doc, plugins: editor.state.plugins }));
+    setType(readType(startScript));
+    sendState();
   },
   getMarkdown: () => storyMarkdown(),
   /** Parse and re-serialize without touching the visible document (corpus checks). */
