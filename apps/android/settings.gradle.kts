@@ -16,7 +16,7 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "resonance"
-include(":app", ":core:kit", ":core:design")
+include(":app", ":core:kit", ":core:design", ":baselineprofile")
 
 // The Kotlin port of src/lib/design, verified against native/fixtures/geometry.json.
 includeBuild("../../native/geometry/kotlin")

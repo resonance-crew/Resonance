@@ -1,0 +1,57 @@
+# A hand-written starter Baseline Profile (A2, 2026-11-20), until :baselineprofile records the real one on a
+# device (./gradlew :app:generateReleaseBaselineProfile — see baselineprofile/build.gradle.kts). It names the
+# app's own hot paths: the launch and the session, the shell and its tabs, the feed and its cards, the card page
+# and its story, the thread, the writer and its island bridge, the thought map, and what they all draw with
+# (the design system and the shared geometry). Libraries (Compose, Coil, Firebase) ship their own profiles.
+
+# Launch, the session, the HTTP and reading layers
+HSPLcom/resonance/app/ResonanceApp;->**(**)**
+HSPLcom/resonance/app/MainActivity;->**(**)**
+HSPLcom/resonance/app/Launch**;->**(**)**
+HSPLcom/resonance/app/Session**;->**(**)**
+HSPLcom/resonance/app/AppFirebase;->**(**)**
+HSPLcom/resonance/app/AppConfig;->**(**)**
+HSPLcom/resonance/app/Appearance**;->**(**)**
+HSPLcom/resonance/app/ConversationsStore**;->**(**)**
+HSPLcom/resonance/app/Notifications**;->**(**)**
+HSPLcom/resonance/kit/api/**;->**(**)**
+HSPLcom/resonance/kit/reading/**;->**(**)**
+HSPLcom/resonance/kit/l10n/**;->**(**)**
+HSPLcom/resonance/kit/story/**;->**(**)**
+HSPLcom/resonance/kit/text/**;->**(**)**
+HSPLcom/resonance/api/models/FeedCard**;->**(**)**
+HSPLcom/resonance/api/models/CardDetail**;->**(**)**
+
+# The shell, the feed and its cards
+HSPLcom/resonance/app/ui/NavigationKt**;->**(**)**
+HSPLcom/resonance/app/ui/TabBarAutoHide;->**(**)**
+HSPLcom/resonance/app/ui/FeedScreenKt**;->**(**)**
+HSPLcom/resonance/app/ui/FeedLoader**;->**(**)**
+HSPLcom/resonance/app/ui/SharedKt**;->**(**)**
+HSPLcom/resonance/app/ui/ResonanceRootKt**;->**(**)**
+
+# The card page and its story
+HSPLcom/resonance/app/ui/CardScreenKt**;->**(**)**
+HSPLcom/resonance/app/ui/CardPageLoader**;->**(**)**
+HSPLcom/resonance/app/ui/CardCache**;->**(**)**
+
+# The thread and the conversations
+HSPLcom/resonance/app/ui/ThreadScreenKt**;->**(**)**
+HSPLcom/resonance/app/ui/ThreadListKt**;->**(**)**
+HSPLcom/resonance/app/ui/ThreadModel**;->**(**)**
+HSPLcom/resonance/app/ui/ConversationsScreenKt**;->**(**)**
+
+# The writer and its island
+HSPLcom/resonance/app/ui/WriteScreenKt**;->**(**)**
+HSPLcom/resonance/app/ui/WriteModel**;->**(**)**
+HSPLcom/resonance/app/ui/StoryEditorBridge**;->**(**)**
+HSPLcom/resonance/app/ui/StoryEditorKt**;->**(**)**
+HSPLcom/resonance/app/ui/IslandMessage**;->**(**)**
+HSPLcom/resonance/app/ui/StoryWebView;->**(**)**
+
+# The thought map
+HSPLcom/resonance/app/thoughtmap/**;->**(**)**
+
+# What every screen draws with
+HSPLcom/resonance/design/**;->**(**)**
+HSPLcom/resonance/geometry/**;->**(**)**
