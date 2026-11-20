@@ -1,15 +1,11 @@
 import type { AttestationVerifier } from '@/server/ports/attestation';
-
-const appCheck = () => import('@/lib/appCheck/server');
+import { checkAppCheck, mintWebToken } from './appCheck';
 
 /**
- * App Check, by delegating to src/lib/appCheck/server (loaded on first use).
- * Not in ServerCtx: the transport (lib/api/v1/http) asks it, after the
- * response. The attestation lane moves the code here.
+ * App Check (./appCheck.ts, which loads the Admin SDK's App Check when first
+ * asked). Not in ServerCtx: the transport (lib/api/v1/http) asks it, after
+ * the response.
  */
 export function appCheckVerifier(): AttestationVerifier {
-  return {
-    verify: async (req) => (await appCheck()).checkAppCheck(req),
-    mintWebToken: async () => (await appCheck()).mintWebToken(),
-  };
+  return { verify: checkAppCheck, mintWebToken };
 }
