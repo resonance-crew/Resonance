@@ -16,7 +16,7 @@ paths:
 `src/lib/storage/` is an abstraction over Cloudflare R2 (S3-compatible API via `@aws-sdk/client-s3`).
 Keys are `{kind}/{yyyy-mm}/{uuid}.{ext}` (no uid); `storeOwned()` records the owner in server-only `uploads/{uuid}`.
 Once `config/storage` names the host, the rules take covers and avatars from it only.
-Images are compressed client-side (`src/lib/images/compress.ts`), uploaded through `/api/upload` or `/api/generate-image`, converted to AVIF with sharp (`src/lib/storage/image.ts`), and served from `R2_PUBLIC_BASE` with `Cache-Control: public, max-age=31536000, immutable` (keys are UUIDs, never rewritten).
+Images are compressed client-side (`src/lib/images/compress.ts`), uploaded through `/api/upload` or `/api/generate-image`, re-encoded as WebP with sharp (`normalizeUpload` / `normalizeUploadWithThumb` in `src/lib/storage/image.ts`: upright, scaled to fit, no metadata, an animation kept animated — and, for a cover or story picture, its ≤ 960 px copy beside it; `convertToAvif` in the same file is on no upload path, only its own test), and served from `R2_PUBLIC_BASE` with `Cache-Control: public, max-age=31536000, immutable` (keys are UUIDs, never rewritten).
 R2 CORS config is in `infra/r2-cors.json`.
 
 Against the emulators (`npm run dev:emulator`, which blanks R2) covers, avatars and story pictures go to a folder on this machine instead (`lib/storage/local`: `EMULATOR_STORAGE_DIR`, else the temp dir) and the dev server serves them at `http://localhost:<its port>/api/emulator-storage/<key>` — `dev-emulator.mjs` sets `R2_PUBLIC_BASE` to that, so `publicBases()`/`storageKeyOf()` hold as in production; the route is a 404 anywhere else.

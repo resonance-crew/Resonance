@@ -1,4 +1,5 @@
-import { createHmac, hkdfSync } from 'node:crypto';
+import { createHmac } from 'node:crypto';
+import { isProductionProcess, linkPreviewKeys } from '@/lib/links/previewSecret';
 
 /**
  * A short tag for what a share image shows (FNV-1a, twice): the image's URL
@@ -19,32 +20,31 @@ export function imageVersion(text: string): string {
 
 /** Used only where there is no secret at all: tests, the emulators, `next dev`. */
 const DEV_KEY = Buffer.from('resonance share-image development key (not a secret)');
-const INFO = 'resonance share-image v1';
-
-let derived: { from: string; key: Buffer } | null = null;
 let warned = false;
 
 /**
- * The key a drawn card's version is made with: HKDF-SHA256 (info "resonance
- * share-image v1") of `LINK_PREVIEW_SECRET` when it is set, else of the
- * Firebase service account's private key, which every deployment has and
- * never sends — so it is neither the key that signs link-preview pictures nor
- * anything else's. Without either, outside production, a fixed key. In
- * production without either it is null: the version is then left unkeyed (and
- * that is logged once) rather than failing the card page that names it.
- * Changing the secret changes every drawn card's URL: the old ones are sent on
- * to the new.
+ * The key a drawn card's version is made with: `linkPreviewKeys().share`
+ * (../links/previewSecret — HKDF-SHA256, info "resonance share-image v1", of
+ * `LINK_PREVIEW_SECRET` when it is set, else of the Firebase service account's
+ * private key — so it is neither the key that signs link-preview pictures nor
+ * anything else's). Without either, outside production, a fixed key. In
+ * production without either — or with a malformed `derived-v1:` setting — it
+ * is null: the version is then left unkeyed (and that is logged once) rather
+ * than failing the card page that names it. Changing the secret changes every
+ * drawn card's URL: the old ones are sent on to the new.
  */
 export function shareVersionKey(env: Record<string, string | undefined> = process.env): Buffer | null {
-  const secret = env.LINK_PREVIEW_SECRET?.trim() || env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n').trim();
-  if (secret) {
-    if (derived?.from !== secret) derived = { from: secret, key: Buffer.from(hkdfSync('sha256', secret, 'resonance', INFO, 32)) };
-    return derived.key;
+  let reason = 'no LINK_PREVIEW_SECRET or FIREBASE_PRIVATE_KEY';
+  try {
+    const keys = linkPreviewKeys(env);
+    if (keys) return keys.share;
+  } catch (e) {
+    reason = (e as Error).message;
   }
-  if (env.FIRESTORE_EMULATOR_HOST || env.NODE_ENV !== 'production') return DEV_KEY;
+  if (!isProductionProcess(env)) return DEV_KEY;
   if (!warned) {
     warned = true;
-    console.warn('[og] no LINK_PREVIEW_SECRET or FIREBASE_PRIVATE_KEY: drawn cards are versioned unkeyed');
+    console.warn(`[og] ${reason}: drawn cards are versioned unkeyed`);
   }
   return null;
 }

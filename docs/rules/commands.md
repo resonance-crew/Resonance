@@ -43,6 +43,7 @@ npm run release:preflight [-- --rev <commit>]   # before a store release: one PA
 npm run release:bump -- <x.y.z|patch|minor|major> [--ios-build N] [--android-code N] [--write]   # both apps' versions; a dry run printing the diff and the `build: 🔖` subject unless --write
 npm run release:export -- [--commit <rev>] [--dest <dir>] [--no-keys] [--dry-run]   # the clean export store builds come from (git archive, links, islands, xcodegen); builds nothing
 npm run ops:daily [-- --data skip|emulator|production] [--since 24h] [--out <file>]   # the read-only daily report: CI on main, Vercel production and its error logs, store review states, moderation and integrity counts (docs/ops/daily-check.md)
+npx tsx scripts/ops/link-preview-secret.ts [--from <env file>] [--check '<stored /api/link-image?u=…&s=… path>']   # prints the `derived-v1:…` LINK_PREVIEW_SECRET that signs exactly as the key derived from FIREBASE_PRIVATE_KEY (local env only, never calls Vercel); --check verifies a stored picture's signature with it (exit 1 if not) — docs/release/owed.md
 npm run test:release   # the release and ops scripts' tests; `npm test` runs them too
 ```
 

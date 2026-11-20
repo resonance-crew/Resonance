@@ -144,7 +144,7 @@ Web (Next.js + React)      iOS app (SwiftUI)      Android app (Compose)
 | `firebase/` | Firestore rules and indexes |
 | `apps/` | the iOS and Android apps ([apps/README.md](apps/README.md)) |
 | `test/` | shared test setup; tests live next to their code |
-| `docs/` | product principles, policies, store listings, [architecture in Chinese](docs/ARCHITECTURE.zh-TW.md) |
+| `docs/` | product principles, policies, store listings, [architecture in Chinese](docs/ARCHITECTURE.zh-TW.md), [architecture decision records](docs/adr/README.md), [backups](docs/ops/backup.md) |
 
 [CLAUDE.md](CLAUDE.md) is the detailed, current architecture guide (written for AI coding agents
 and humans alike).

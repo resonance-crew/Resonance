@@ -58,6 +58,7 @@ npx tsx scripts/ci/claudeMdCoverage.ts        # old CLAUDE.md at 343c6f21 agains
 | the build draws a conversation's notification itself) and | Round 26: `PUT /me/devices` capabilities add `bell-tap` and `bell-read-summary` (`.claude/rules/api.md`, the row kept with them added) |
 | the push switches `{ picks, connectionCards, messages }` — the opt-in two | Round 26: the switches add `resonanceTaps` (有人共振), on until turned off like `messages` (`.claude/rules/api.md`, the row kept with it added) |
 | respond to others by authoring a *resonance* (a response card with a | Round 26 (2026-11-19, §Q1, M1): 共振 became the tap, the reply card is 用卡片回應 (still a resonance in the code), and the note the third way to answer; `CLAUDE.md`'s Architecture says the three |
+| converted to AVIF with sharp | 任務 #3 Phase 0 (2026-11-21): it was never so — uploads are re-encoded as WebP (`normalizeUpload` in `src/lib/storage/image.ts`; `convertToAvif` there is on no upload path). `.claude/rules/storage.md` says WebP; the rest of the sentence is unchanged |
 
 ## Where each old line went
 

@@ -3,6 +3,8 @@ import sharp from 'sharp';
 /**
  * Compresses/converts an image buffer to AVIF format.
  * Defaults to quality 80 for a great balance between quality and file size.
+ * Not what uploads are stored as: `/api/upload` and `/api/generate-image`
+ * re-encode as WebP (`normalizeUpload` below); nothing calls this but its test.
  */
 export async function convertToAvif(buffer: Uint8Array | Buffer): Promise<Buffer> {
   return sharp(buffer)

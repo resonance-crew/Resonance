@@ -74,6 +74,7 @@
 - 本機開發（Firebase 模擬器、種子資料、`npm run dev:emulator`、兩個 App）：見英文 README 的 [Getting started](README.md#getting-started)
 - 參與貢獻的方式（分支與 worktree、必須附測試、中英文字串、設計系統規則、PR 檢查清單）：見 [CONTRIBUTING.md](CONTRIBUTING.md)
 - 較早的中文架構說明：[docs/ARCHITECTURE.zh-TW.md](docs/ARCHITECTURE.zh-TW.md)
+- 架構決策紀錄（ADR，英文）：[docs/adr/README.md](docs/adr/README.md)
 
 ## 資安問題
 
