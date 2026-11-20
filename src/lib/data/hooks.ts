@@ -704,7 +704,17 @@ export function useMyThoughtMap() {
     const found = new Map<string, Card>();
     if (wanted.length) for (const c of (await fetchCardSummaries(wanted).catch(() => EMPTY)).cards) if (!c.trashedAt) found.set(c.id, c);
     const resonated = refIds.flatMap((id) => found.get(id) ?? []);
-    const older = missing.flatMap((id) => found.get(id) ?? []);
+    // ?keys= answers an anonymous card without its author, the viewer's own too: one of theirs older than the
+    // shelves would read as someone else's (and open read-only). Those are read through the rules, which let
+    // only the author read an anonymous card, and kept as theirs only when they are.
+    const older = await Promise.all(
+      missing.flatMap((id) => {
+        const c = found.get(id);
+        if (!c) return [];
+        if (!c.anonymous || c.authorId) return [Promise.resolve(c)];
+        return [Promise.resolve().then(() => getCardById(id)).then((whole) => (whole && whole.id === id && whole.authorId === uid && !whole.trashedAt ? { ...c, authorId: uid } : c), () => c)];
+      }),
+    );
     const cards: Record<string, Card> = {};
     // Resonated originals first so an own card by the same id (self-reference)
     // keeps its own-card entry.

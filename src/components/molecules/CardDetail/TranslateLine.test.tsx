@@ -136,6 +136,19 @@ describe('the line’s states (§F2)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  // Post-merge review: an edit of the same length is a new story, asked for again.
+  it('asks again for a card whose words changed and kept their length', async () => {
+    answer(200, EN_TRANSLATION);
+    const first = draw();
+    fireEvent.click(screen.getByRole('button', { name: 'Translate to English' }));
+    await waitFor(() => expect(screen.getByTestId('title')).toHaveTextContent('A walk in the rain'));
+    first.unmount();
+    answer(200, EN_TRANSLATION);
+    draw({ card: { ...ZH, story: ZH.story.replace('河邊', '橋邊') } });
+    fireEvent.click(screen.getByRole('button', { name: 'Translate to English' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
+
   it('a failure offers to try again; a spent budget says so and offers nothing', async () => {
     answer(503, { error: { code: 'internal' } });
     draw();

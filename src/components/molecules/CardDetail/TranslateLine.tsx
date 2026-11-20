@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { ButtonLoader } from '@/components/atoms/ButtonLoader/ButtonLoader';
 import { Icon } from '@/components/atoms/Icon/Icon';
@@ -47,8 +47,16 @@ export interface Translation {
 
 /** The cards kept original for the rest of this visit (顯示原文 under the auto-translate switch). */
 const keptOriginal = new Set<string>();
+/** A cheap hash of the words a translation was made from (FNV-1a), so an edit of the same length isn't taken for none. */
+function wordsHash(title: string, story: string): string {
+  let h = 0x811c9dc5;
+  const words = `${title}\u0000${story}`;
+  for (let i = 0; i < words.length; i++) h = Math.imul(h ^ words.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(36);
+}
+
 /**
- * The translations this visit was given, by the line's `ident` (the card, the language, the words' lengths)
+ * The translations this visit was given, by the line's `ident` and a hash of its words
  * (W21): coming back to a card shows its translation again without asking the server (a POST, through hnd1)
  * for it once more. The newest few are kept.
  */
@@ -157,6 +165,9 @@ export function useStoryTranslation({
 
   // a new card (or language): start again
   const ident = `${card?.id ?? ''}|${to ?? ''}|${card?.thoughtCore.length ?? 0}:${card?.story.length ?? 0}`;
+  const title = card?.thoughtCore ?? '';
+  const story = card?.story ?? '';
+  const wordsKey = useMemo(() => `${ident}|${wordsHash(title, story)}`, [ident, title, story]);
   const [seen, setSeen] = useState(ident);
   if (seen !== ident) {
     setSeen(ident);
@@ -179,11 +190,11 @@ export function useStoryTranslation({
   const translate = useCallback(
     async (byItself: boolean) => {
       if (!card || !to) return;
-      const kept = answered.get(ident);
+      const kept = answered.get(wordsKey);
       if (!kept) setState('working');
       const answer: Asked = kept ? { ok: true, translation: kept } : await askTranslation(key, to);
       if (!kept && asked.current !== ident) return; // the page moved on to another card
-      if (answer.ok) remember(ident, answer.translation);
+      if (answer.ok) remember(wordsKey, answer.translation);
       if (!answer.ok) {
         if (answer.why === 'signin') onSignIn();
         setState(answer.why === 'spent' ? 'spent' : answer.why === 'signin' ? 'can' : 'failed');
@@ -200,7 +211,7 @@ export function useStoryTranslation({
       setState('original');
       toast.show({ message: t('ready'), action: { label: t('show'), ariaLabel: `${t('ready')} · ${t('show')}`, icon: 'globe', onAction: () => swapIn(true, true) } });
     },
-    [card, to, key, ident, onSignIn, swapIn, t, toast],
+    [card, to, key, ident, wordsKey, onSignIn, swapIn, t, toast],
   );
 
   // 自動翻譯: ask as the page opens (once per card), unless 顯示原文 kept this card original for the visit

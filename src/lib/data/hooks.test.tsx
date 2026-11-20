@@ -894,6 +894,23 @@ describe('useMyThoughtMap', () => {
     expect(result.current.data!.nodes.map((n) => n.cardId)).toEqual(['unsigned']);
     expect(result.current.data!.cards.unsigned).toMatchObject({ authorId: '', anonymous: true });
   });
+
+  // Post-merge review: ?keys= leaves the author off every anonymous card, the viewer's own too.
+  it("keeps the viewer's own older anonymous card theirs, read through the rules, so it opens in the writer", async () => {
+    api({
+      '/api/v1/me/cardbox?shelves=': {},
+      '/api/v1/cards?keys=': { cards: [summary('mine-anon', null), summary('their-anon', null)] },
+    });
+    vi.mocked(getCardById).mockImplementation(async (id: string) =>
+      id === 'mine-anon' ? ({ id, authorId: 'me', anonymous: true } as Awaited<ReturnType<typeof getCardById>>) : null,
+    );
+    vi.mocked(loadMyThoughtMap).mockResolvedValue({ nodes: [node('mine-anon'), node('their-anon')], edges: [], groups: [] });
+
+    const { result } = renderHook(() => useMyThoughtMap(), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data!.cards['mine-anon']).toMatchObject({ authorId: 'me', anonymous: true });
+    expect(result.current.data!.cards['their-anon']).toMatchObject({ authorId: '', anonymous: true });
+  });
 });
 
 // The profile page reads three things once the handle names someone — the
