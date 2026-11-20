@@ -257,8 +257,6 @@ data class StoryCardContent(
     val tags: List<String>,
     val imageUrl: String?,
     val imageLabel: String,
-    /** The cover at most 960 on its longer edge (`imageThumbUrl`), what a list draws; null: [imageUrl]. */
-    val imageThumbUrl: String? = null,
     val accentHue: Double?,
     /** Why the feed picked it — Resonance's handwritten margin note. */
     val reason: String? = null,
@@ -269,6 +267,8 @@ data class StoryCardContent(
      * and marked with the globe at the foot's end. Null: as written.
      */
     val translatedLang: String? = null,
+    /** The cover at most 960 on its longer edge (`imageThumbUrl`, B2), what a list draws; null: [imageUrl]. */
+    val imageThumbUrl: String? = null,
 )
 
 /** CSS `margin-top` (negative too): shifts the child and takes the same amount off the space it claims. */
