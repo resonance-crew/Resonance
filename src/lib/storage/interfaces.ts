@@ -1,34 +1,11 @@
-import type { PresignedUpload, StoredObject, UploadIntent } from './types';
+import type { ObjectStore } from '@/server/ports/objects';
 
-export interface IStorageProvider {
-  createPresignedUpload(intent: UploadIntent): Promise<PresignedUpload>;
-  /**
-   * Server-side upload: the route reads the file bytes and we PUT them to the
-   * bucket directly, so the browser never has to reach the storage host. This
-   * is the path that sidesteps the production TLS failure browsers hit talking
-   * to *.r2.cloudflarestorage.com.
-   */
-  uploadObject(intent: UploadIntent, body: Uint8Array): Promise<StoredObject>;
-  /**
-   * Server-side upload under a key the caller made (a cover's copy beside the
-   * cover: lib/images/coverThumb), served as immutable as uploadObject's.
-   */
-  putObject(key: string, contentType: string, body: Uint8Array): Promise<StoredObject>;
+/**
+ * The public bucket as src/lib knows it: the middle layer's ObjectStore
+ * (src/server/ports/objects.ts, where each method is described) and the
+ * public URL of a key on the current base. Adapters: src/server/infra/s3
+ * (R2, and the emulators' folder).
+ */
+export interface IStorageProvider extends ObjectStore {
   getPublicUrl(key: string): string;
-  /**
-   * An object's bytes, read through the storage API (not its public URL);
-   * null when there is no such object. Throws past `maxBytes`.
-   */
-  getObject(key: string, maxBytes: number): Promise<Uint8Array | null>;
-  deleteObject(key: string): Promise<void>;
-  /**
-   * Delete these objects, as many at a time as the store takes (R2: a
-   * thousand a request); a key that isn't there is nothing. Throws when any
-   * of them could not be deleted.
-   */
-  deleteObjects(keys: string[]): Promise<void>;
-  /** Copy an object to a new key, its type and caching with it (scripts/backfills/rekeyImages). */
-  copyObject(fromKey: string, toKey: string): Promise<void>;
-  /** Delete every object under `prefix` (e.g. `image/{uid}/`); returns how many. */
-  deletePrefix(prefix: string): Promise<number>;
 }

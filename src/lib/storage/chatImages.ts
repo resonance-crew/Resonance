@@ -1,9 +1,5 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { dirname, join, resolve, sep } from 'node:path';
-import { DeleteObjectCommand, DeleteObjectsCommand, GetObjectCommand, PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
-import { againstEmulators } from './local';
-import { r2Client } from './r2';
+import { chatImageStoreFromEnv } from '@/server/infra/s3/fromEnv';
+import type { PrivateObjectStore } from '@/server/ports/objects';
 
 /**
  * Where pictures sent in chat are kept. Unlike covers and avatars — public
@@ -16,21 +12,13 @@ import { r2Client } from './r2';
  *
  * Against the emulators nothing real is touched: pictures go to a folder on
  * this machine (EMULATOR_CHAT_IMAGES_DIR, else one in the temp dir).
+ *
+ * The middle layer's PrivateObjectStore (src/server/ports/objects.ts);
+ * adapters in src/server/infra/s3 (R2ChatImages, LocalChatImages).
  */
-export interface ChatImageStore {
-  put(key: string, body: Uint8Array, contentType: string): Promise<void>;
-  /** The object's bytes; null when there is no such object. */
-  get(key: string): Promise<Uint8Array | null>;
-  /**
-   * The object's bytes as they arrive (B14: GET /chat-images/{id} hands them on without holding the whole
-   * picture); null when there is no such object. Whoever opens it and doesn't read it cancels it.
-   */
-  stream?(key: string): Promise<ReadableStream<Uint8Array> | null>;
-  /** Removes it (one already gone is no error). */
-  delete(key: string): Promise<void>;
-  /** Removes all of them, as few requests as the store allows (an account's pictures). */
-  deleteMany(keys: string[]): Promise<void>;
-}
+export type ChatImageStore = PrivateObjectStore;
+
+export { LocalChatImages } from '@/server/infra/s3/local';
 
 /** `chat/{yyyy-mm}/{uuid}.webp` and its `-thumb` — a fresh name that says nothing of who sent it, or to whom. */
 export function chatImageKeys(now = new Date()): { key: string; thumbKey: string } {
@@ -39,112 +27,10 @@ export function chatImageKeys(now = new Date()): { key: string; thumbKey: string
   return { key: `${name}.webp`, thumbKey: `${name}-thumb.webp` };
 }
 
-class R2ChatImages implements ChatImageStore {
-  constructor(
-    private readonly client: S3Client,
-    private readonly bucket: string,
-  ) {}
-
-  async put(key: string, body: Uint8Array, contentType: string): Promise<void> {
-    await this.client.send(
-      new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType, ContentLength: body.byteLength }),
-    );
-  }
-
-  async get(key: string): Promise<Uint8Array | null> {
-    try {
-      const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
-      return res.Body ? await res.Body.transformToByteArray() : null;
-    } catch (e) {
-      const status = (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
-      if ((e as { name?: string }).name === 'NoSuchKey' || status === 404) return null;
-      throw e;
-    }
-  }
-
-  async stream(key: string): Promise<ReadableStream<Uint8Array> | null> {
-    try {
-      const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
-      return res.Body ? (res.Body.transformToWebStream() as ReadableStream<Uint8Array>) : null;
-    } catch (e) {
-      const status = (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
-      if ((e as { name?: string }).name === 'NoSuchKey' || status === 404) return null;
-      throw e;
-    }
-  }
-
-  async delete(key: string): Promise<void> {
-    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
-  }
-
-  async deleteMany(keys: string[]): Promise<void> {
-    // R2 takes a thousand keys a request.
-    for (let i = 0; i < keys.length; i += 1000) {
-      const Objects = keys.slice(i, i + 1000).map((Key) => ({ Key }));
-      await this.client.send(new DeleteObjectsCommand({ Bucket: this.bucket, Delete: { Objects, Quiet: true } }));
-    }
-  }
-}
-
-/** A folder standing in for the bucket (emulator builds, tests): `chat/…` keys become paths inside it. */
-export class LocalChatImages implements ChatImageStore {
-  constructor(private readonly root: string) {}
-
-  private path(key: string): string {
-    const path = resolve(this.root, key);
-    // A key is ours (chatImageKeys), but nothing outside the folder is ever touched whatever it says.
-    if (!path.startsWith(resolve(this.root) + sep)) throw new Error(`Not a chat image key: ${key}`);
-    return path;
-  }
-
-  async put(key: string, body: Uint8Array): Promise<void> {
-    const path = this.path(key);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, body);
-  }
-
-  async get(key: string): Promise<Uint8Array | null> {
-    try {
-      return new Uint8Array(await readFile(this.path(key)));
-    } catch (e) {
-      if ((e as { code?: string }).code === 'ENOENT') return null;
-      throw e;
-    }
-  }
-
-  async stream(key: string): Promise<ReadableStream<Uint8Array> | null> {
-    const bytes = await this.get(key);
-    if (!bytes) return null;
-    return new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(bytes);
-        controller.close();
-      },
-    });
-  }
-
-  async delete(key: string): Promise<void> {
-    await rm(this.path(key), { force: true });
-  }
-
-  async deleteMany(keys: string[]): Promise<void> {
-    for (const key of keys) await this.delete(key);
-  }
-}
-
 /**
  * The store pictures go to, or null when none is set up (production without
  * R2_CHAT_BUCKET: pictures can't be sent, and the routes say so).
  */
 export function getChatImageStore(): ChatImageStore | null {
-  const bucket = process.env.R2_CHAT_BUCKET;
-  if (bucket && process.env.R2_ENDPOINT) {
-    const id = process.env.R2_CHAT_ACCESS_KEY_ID;
-    const secret = process.env.R2_CHAT_SECRET_ACCESS_KEY;
-    return new R2ChatImages(r2Client(id && secret ? { accessKeyId: id, secretAccessKey: secret } : undefined), bucket);
-  }
-  if (againstEmulators()) {
-    return new LocalChatImages(process.env.EMULATOR_CHAT_IMAGES_DIR || join(tmpdir(), 'resonance-emulator-chat-images'));
-  }
-  return null;
+  return chatImageStoreFromEnv();
 }
