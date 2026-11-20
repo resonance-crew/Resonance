@@ -1,4 +1,7 @@
-import type { Firestore, QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { appsDrawIn } from '@/server/app/pushDevices';
+import { everyCapable } from '@/server/domain/push/devices';
+import { ctxFor } from '@/server/infra/firestore/ctx';
+import type { AdminDb } from '@/server/infra/firestore/db';
 
 /**
  * A bell type older app builds don't know is drawn there as its raw string
@@ -10,15 +13,17 @@ import type { Firestore, QueryDocumentSnapshot } from 'firebase-admin/firestore'
  * (`bell-tap`, ./tapBell) and the weekly read summary's (`bell-read-summary`,
  * ./readSummary).
  */
-export function everyAppDraws(devices: Pick<QueryDocumentSnapshot, 'get'>[], capability: string): boolean {
-  return devices.every((d) => {
-    const caps = d.get('capabilities');
-    return Array.isArray(caps) && caps.includes(capability);
-  });
+export function everyAppDraws(devices: { get(field: string): unknown }[], capability: string): boolean {
+  return everyCapable(
+    devices.map((d) => {
+      const caps = d.get('capabilities');
+      return Array.isArray(caps) ? caps : null;
+    }),
+    capability,
+  );
 }
 
 /** Whether `uid`'s app installs all draw `capability`'s row (see everyAppDraws). */
-export async function appsDraw(db: Firestore, uid: string, capability: string): Promise<boolean> {
-  const devices = await db.collection('devices').where('userId', '==', uid).select('capabilities').get();
-  return everyAppDraws(devices.docs, capability);
+export function appsDraw(db: AdminDb, uid: string, capability: string): Promise<boolean> {
+  return appsDrawIn(ctxFor(db), uid, capability);
 }

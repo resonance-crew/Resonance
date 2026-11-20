@@ -1,5 +1,13 @@
-import { createHash } from 'node:crypto';
-import { FieldPath, FieldValue, type DocumentData, type Firestore } from 'firebase-admin/firestore';
+import {
+  getNotificationSettingsIn,
+  optedInIn,
+  updateNotificationSettingsIn,
+  wantsMessagePushes as wantsMessagePushesIn,
+  wantsTapPushes as wantsTapPushesIn,
+} from '@/server/app/pushSettings';
+import type { NotificationSettings, NotificationSettingsPatch } from '@/server/domain/push/settings';
+import { ctxFor } from '@/server/infra/firestore/ctx';
+import type { AdminDb } from '@/server/infra/firestore/db';
 
 /**
  * `notificationSettings/{uid}`: which pushes the person wants. Two go beyond
@@ -17,75 +25,32 @@ import { FieldPath, FieldValue, type DocumentData, type Firestore } from 'fireba
  * through GET/PATCH /api/v1/me/notifications, read by the senders
  * (lib/push/picks, lib/push/connectionCards, lib/push/chat and a note's bell
  * in lib/push/send). Purged with the account.
+ *
+ * The services are src/server/app/pushSettings (the record through the
+ * pushState repos); these keep the old signatures.
  */
-export const NOTIFICATION_SETTINGS = 'notificationSettings';
+export { NOTIFICATION_SETTINGS } from '@/server/infra/firestore/repos/pushState';
+export {
+  NOTIFICATION_SWITCHES,
+  dailyWalkStart,
+  readNotificationSettings,
+  type NotificationSettings,
+  type NotificationSettingsPatch,
+  type NotificationSwitch,
+} from '@/server/domain/push/settings';
 
-export interface NotificationSettings {
-  /** "Tonight's card": up to three evenings a week, one of their picks (lib/push/picks). */
-  picks: boolean;
-  /** A new public, named card from someone they're connected with (lib/push/connectionCards). */
-  connectionCards: boolean;
-  /** Messages and notes sent to them (lib/push/chat, a note's bell): on until turned off. */
-  messages: boolean;
-  /** Someone resonated with one of their cards (共振, the tap; lib/push/tapBell): on until turned off. */
-  resonanceTaps: boolean;
+/** Whether `uid` wants messages and notes pushed to them (a missing document, or a failed read, says yes). */
+export function wantsMessagePushes(db: AdminDb, uid: string): Promise<boolean> {
+  return wantsMessagePushesIn(ctxFor(db), uid);
 }
 
-export type NotificationSwitch = keyof NotificationSettings;
-export const NOTIFICATION_SWITCHES: readonly NotificationSwitch[] = ['picks', 'connectionCards', 'messages', 'resonanceTaps'];
-
-/** The switches sent; null or absent leaves one as it is (Kotlin clients send null). */
-export type NotificationSettingsPatch = { [K in NotificationSwitch]?: boolean | null };
-
-/** The opt-in switches, whose turning on is consent given (`messages` and `resonanceTaps` are on from the start: they record none). */
-const CONSENT_AT: Partial<Record<NotificationSwitch, string>> = {
-  picks: 'picksConsentAt',
-  connectionCards: 'connectionCardsConsentAt',
-};
-
-/**
- * A stored document as the switches it holds: the opt-in ones are on only as
- * `true`, `messages` and `resonanceTaps` are off only as `false` (a missing
- * document is the two opt-in ones off and the other two on).
- */
-export function readNotificationSettings(data: DocumentData | undefined): NotificationSettings {
-  return {
-    picks: data?.picks === true,
-    connectionCards: data?.connectionCards === true,
-    messages: data?.messages !== false,
-    resonanceTaps: data?.resonanceTaps !== false,
-  };
+/** Whether `uid` wants a push when someone resonates with their card (a missing document, or a failed read, says yes). */
+export function wantsTapPushes(db: AdminDb, uid: string): Promise<boolean> {
+  return wantsTapPushesIn(ctxFor(db), uid);
 }
 
-/**
- * Whether `uid` wants messages and notes pushed to them (a missing document
- * says yes). A failed read says yes too: the push it guards answers someone
- * who wrote to them, and staying silent on a hiccup would lose it.
- */
-export async function wantsMessagePushes(db: Firestore, uid: string): Promise<boolean> {
-  try {
-    return (await db.doc(`${NOTIFICATION_SETTINGS}/${uid}`).get()).get('messages') !== false;
-  } catch (e) {
-    console.error('[push] notification settings', uid, e);
-    return true;
-  }
-}
-
-/**
- * Whether `uid` wants a push when someone resonates with their card (a missing
- * document says yes; a failed read too, as for messages).
- */
-export async function wantsTapPushes(db: Firestore, uid: string): Promise<boolean> {
-  try {
-    return (await db.doc(`${NOTIFICATION_SETTINGS}/${uid}`).get()).get('resonanceTaps') !== false;
-  } catch (e) {
-    console.error('[push] notification settings', uid, e);
-    return true;
-  }
-}
-
-export async function getNotificationSettings(db: Firestore, uid: string): Promise<NotificationSettings> {
-  return readNotificationSettings((await db.doc(`${NOTIFICATION_SETTINGS}/${uid}`).get()).data());
+export function getNotificationSettings(db: AdminDb, uid: string): Promise<NotificationSettings> {
+  return getNotificationSettingsIn(ctxFor(db), uid);
 }
 
 /**
@@ -93,55 +58,8 @@ export async function getNotificationSettings(db: Firestore, uid: string): Promi
  * stamps its consent time; one sent as it already is changes nothing (and
  * nothing at all is written then). Answers the settings as they are now.
  */
-export async function updateNotificationSettings(db: Firestore, uid: string, patch: NotificationSettingsPatch): Promise<NotificationSettings> {
-  const ref = db.doc(`${NOTIFICATION_SETTINGS}/${uid}`);
-  return db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const before = readNotificationSettings(snap.data());
-    const after = { ...before };
-    const write: Record<string, unknown> = {};
-    for (const key of NOTIFICATION_SWITCHES) {
-      const want = patch[key];
-      if (typeof want !== 'boolean' || want === before[key]) continue;
-      after[key] = want;
-      const consent = CONSENT_AT[key];
-      if (want && consent) write[consent] = FieldValue.serverTimestamp();
-    }
-    // Nothing to change (a missing document already reads as the defaults): nothing written.
-    if (!NOTIFICATION_SWITCHES.some((k) => after[k] !== before[k])) return after;
-    tx.set(
-      ref,
-      {
-        ...after,
-        // A new document says "never consented" out loud rather than by absence.
-        ...(snap.exists ? {} : { picksConsentAt: null, connectionCardsConsentAt: null }),
-        ...write,
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-    return after;
-  });
-}
-
-/** Readers fetched per page when a cron walks everyone who turned a switch on. */
-const OPTED_IN_PAGE = 500;
-
-/** The characters of a Firebase uid, in the byte order Firestore sorts document ids by. */
-const UID_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-
-/**
- * Where a cron's walk over the opted-in readers starts on the UTC day of
- * `now`: a point among the user ids that moves from day to day (a hash of
- * the day), so a run that runs out of time leaves a different stretch of
- * readers each day rather than the same last ones every day. Both of the
- * evening's crons start at the same point, so the readers the warm-up
- * reaches first are the ones the push reaches first.
- */
-export function dailyWalkStart(now: number): string {
-  const day = new Date(now).toISOString().slice(0, 10);
-  const digest = createHash('sha256').update(`opted-in walk ${day}`).digest();
-  return Array.from(digest.subarray(0, 8), (b) => UID_CHARS[b % UID_CHARS.length]).join('');
+export function updateNotificationSettings(db: AdminDb, uid: string, patch: NotificationSettingsPatch): Promise<NotificationSettings> {
+  return updateNotificationSettingsIn(ctxFor(db), uid, patch);
 }
 
 /**
@@ -150,26 +68,6 @@ export function dailyWalkStart(now: number): string {
  * just after `from` to the end, then from the start up to it, so each reader
  * comes once wherever the walk starts.
  */
-export async function* optedIn(
-  db: Firestore,
-  key: 'picks' | 'connectionCards',
-  opts: { from?: string; pageSize?: number } = {},
-): AsyncGenerator<string[]> {
-  const pageSize = opts.pageSize ?? OPTED_IN_PAGE;
-  const base = db.collection(NOTIFICATION_SETTINGS).where(key, '==', true).orderBy(FieldPath.documentId()).select();
-  const legs: { after: string | null; upTo: string | null }[] =
-    opts.from === undefined ? [{ after: null, upTo: null }] : [{ after: opts.from, upTo: null }, { after: null, upTo: opts.from }];
-  for (const leg of legs) {
-    let after = leg.after;
-    for (;;) {
-      let q = base.limit(pageSize);
-      if (after !== null) q = q.startAfter(after);
-      if (leg.upTo !== null) q = q.endAt(leg.upTo);
-      const snap = await q.get();
-      if (snap.empty) break;
-      yield snap.docs.map((d) => d.id);
-      if (snap.size < pageSize) break;
-      after = snap.docs[snap.size - 1].id;
-    }
-  }
+export function optedIn(db: AdminDb, key: 'picks' | 'connectionCards', opts: { from?: string; pageSize?: number } = {}): AsyncGenerator<string[]> {
+  return optedInIn(ctxFor(db), key, opts);
 }
