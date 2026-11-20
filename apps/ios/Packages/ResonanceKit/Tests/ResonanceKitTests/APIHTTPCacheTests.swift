@@ -142,6 +142,23 @@ import Testing
         #expect(server.requests(to: "/api/v1/feed?limit=12").count == 1)
     }
 
+    /// Reading someone's card counts the read, reports the reading and may ask for a translation: none of
+    /// them changes what the viewer reads, so the feed is still reused after them (audit I5).
+    @Test func readingACardLeavesTheCacheTrusted() async throws {
+        _ = try await reading.feed()
+        try await reading.countRead("c1")
+        try await reading.reportReading("c1", ReadingReportBody(session: "s1", activeSeconds: 12, progress: 0.5,
+                                                                reachedEnd: false, shared: nil))
+        // The stub answers 204, which the contract doesn't name: the call throws, the write still succeeded.
+        _ = try? await reading.translate("c1", to: .en)
+        _ = try await reading.feed()
+
+        #expect(server.requests(to: "/api/v1/cards/c1/read").count == 1)
+        #expect(server.requests(to: "/api/v1/cards/c1/reading").count == 1)
+        #expect(server.requests(to: "/api/v1/cards/c1/translation").count == 1)
+        #expect(server.requests(to: "/api/v1/feed?limit=12").count == 1)
+    }
+
     @Test func anotherAccountNeverGetsTheFirstOnesAnswers() async throws {
         let alice = try await ProfileAPI(client: client).me()
         #expect(alice?.id == "alice")
