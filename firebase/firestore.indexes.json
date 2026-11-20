@@ -479,6 +479,41 @@
           "queryScope": "COLLECTION_GROUP"
         }
       ]
+    },
+    {
+      "collectionGroup": "cards",
+      "fieldPath": "linkPreviews",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "cards",
+      "fieldPath": "summaryTranslations",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "cards",
+      "fieldPath": "excerpt",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "userProfiles",
+      "fieldPath": "taste",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "userProfiles",
+      "fieldPath": "against",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "cardVectors",
+      "fieldPath": "span",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "pickPushes",
+      "fieldPath": "recent",
+      "indexes": []
     }
   ]
 }
