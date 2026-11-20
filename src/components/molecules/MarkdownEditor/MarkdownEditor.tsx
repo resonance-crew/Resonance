@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
+import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type MutableRefObject, type ReactNode, type Ref } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { useToast } from '@/components/providers/ToastProvider';
-import { useEditor, EditorContent, useEditorState } from '@tiptap/react';
+import { useEditor, EditorContent, useEditorState, type Editor, type EditorOptions } from '@tiptap/react';
 import Placeholder from '@tiptap/extension-placeholder';
 import { HandDrawnDashedSurface } from '@/components/atoms/HandDrawnDashedBorder/HandDrawnDashedBorder';
 import { Divider } from '@/components/atoms/Divider/Divider';
@@ -63,6 +63,12 @@ const CARET_CLEARANCE = 16;
 /** The keyboard bar's row. */
 const BAR_ROW_H = 44;
 
+/**
+ * How long after typing pauses a deferred story change is read (W5): the whole
+ * story is serialized to Markdown then, not on every key.
+ */
+export const STORY_CHANGE_MS = 250;
+
 function imageFiles(list: FileList | undefined | null): File[] {
   return Array.from(list ?? []).filter((f) => f.type.startsWith('image/'));
 }
@@ -112,6 +118,17 @@ export interface MarkdownEditorProps {
    * card in the story shows its page's title and picture when it has one.
    */
   linkPreviews?: readonly LinkPreview[];
+  /**
+   * Given, `onChange` is deferred (W5): the story is serialized to Markdown
+   * {@link STORY_CHANGE_MS} after typing pauses, or at once when the field
+   * loses the focus — never on every key, which on a long story is the cost of
+   * each keystroke. The editor puts a function here that reports a change not
+   * yet reported, at once (a no-op when there is none): the host calls it
+   * before it reads the story to save, go on or leave. It stays callable
+   * through the host's unmount (the editor itself is destroyed a moment later).
+   * Absent, every change is reported as it happens.
+   */
+  flushRef?: MutableRefObject<(() => void) | null>;
 }
 
 /**
@@ -124,7 +141,7 @@ export interface MarkdownEditorProps {
  * wobbly dashed surface under a HackMD-style fixed toolbar; as the writer's
  * canvas it is the page itself (see `variant`).
  */
-export function MarkdownEditor({
+function MarkdownEditorImpl({
   value,
   onChange,
   placeholder,
@@ -137,6 +154,7 @@ export function MarkdownEditor({
   onUploadingChange,
   onFocusChange,
   linkPreviews,
+  flushRef,
 }: MarkdownEditorProps) {
   const t = useTranslations('write.editor');
   const tCard = useTranslations('card');
@@ -165,7 +183,7 @@ export function MarkdownEditor({
   const fine = useMediaQuery(FINE_POINTER);
   const touchBar = canvas && fine === false;
   const kbInset = useKeyboardInset(touchBar && focus);
-  // The links' pen wave in the page's wave ink (editorProps are re-read on every render).
+  // The links' pen wave in the page's wave ink (a new ink makes new editorProps, which useEditor applies).
   const waveInk = useLinkWaveInk();
 
   // editorProps handlers are captured once at editor creation, so they reach
@@ -178,26 +196,35 @@ export function MarkdownEditor({
   // ⌘K / Ctrl+K reaches the latest opener through a ref (editorProps are captured once); only the canvas has one.
   const openLinkRef = useRef<(() => void) | null>(null);
 
-  const editor = useEditor({
-    immediatelyRender: false,
-    // The schema and its Markdown come from editorSchema (shared with the
-    // native apps' editor island); only the node views are the web's own.
-    extensions: [
+  // The options useEditor compares on every render (W5): the same objects until what they hold changes, so a
+  // render of the writer (one per key, once) doesn't make Tiptap set its options and update its view again.
+  // The schema and its Markdown come from editorSchema (shared with the native apps' editor island); only the
+  // node views are the web's own.
+  const tableLabel = tCard('table');
+  const extensions = useMemo(
+    () => [
       ...storyExtensions({
         blockquote: CurvedBlockquoteNode,
         image: OrganicImageNode,
         cardEmbed: CardEmbedNode,
         linkCard: LinkCardNode,
         // A table's source wears 表格 / Table, so it reads as a table the reader will draw, not code.
-        markdownTable: MarkdownTable.configure({ label: tCard('table') }),
+        markdownTable: MarkdownTable.configure({ label: tableLabel }),
       }),
       LatinMarks,
       HeldSelection,
       Placeholder.configure({ placeholder: placeholder ?? '' }),
     ],
-    content: value,
-    editorProps: {
-      // Re-read on every render (useEditor applies changed options), so a new script re-sets the story at once.
+    [tableLabel, placeholder],
+  );
+  // `value` seeds the editor once; from then on the editor owns its content (see MarkdownEditorProps).
+  const [content] = useState(value);
+  const scrollBottom = touchBar ? kbInset + BAR_ROW_H + CARET_CLEARANCE : null;
+  const editorProps = useMemo<EditorOptions['editorProps']>(
+    () => ({
+      // A new script (or language, wave ink, keyboard inset…) makes new editorProps, which useEditor applies
+      // (setOptions → view.setProps): a new script re-sets the story at once, as it did when they were new on
+      // every render.
       attributes: {
         class: [styles.content, canvas && styles.canvasContent, 'story-prose'].filter(Boolean).join(' '),
         ...(script ? { 'data-script': script } : {}),
@@ -209,7 +236,7 @@ export function MarkdownEditor({
         ...(ariaLabel ? { 'aria-label': ariaLabel } : {}),
       },
       // On a touch screen the caret keeps clear of the keyboard and the bar docked on it.
-      ...(touchBar ? { scrollMargin: { top: 16, right: 0, left: 0, bottom: kbInset + BAR_ROW_H + CARET_CLEARANCE } } : {}),
+      ...(scrollBottom != null ? { scrollMargin: { top: 16, right: 0, left: 0, bottom: scrollBottom } } : {}),
       // Pasted screenshots / copied images land at the cursor.
       handlePaste: (_view, event) => {
         const files = imageFiles(event.clipboardData?.files);
@@ -244,13 +271,43 @@ export function MarkdownEditor({
         first.focus();
         return true;
       },
+    }),
+    [canvas, script, lang, waveInk, ariaLabel, scrollBottom],
+  );
+
+  // A deferred change (flushRef): the editor whose story changed and isn't reported yet, and its timer.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const deferChange = flushRef != null;
+  const pending = useRef<{ editor: Editor; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const flushChange = useCallback(() => {
+    const p = pending.current;
+    if (!p) return;
+    pending.current = null;
+    clearTimeout(p.timer);
+    if (!p.editor.isDestroyed) onChangeRef.current(getMarkdown(p.editor));
+  }, []);
+  if (flushRef) flushRef.current = flushChange;
+
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions,
+    content,
+    editorProps,
+    onUpdate: ({ editor }) => {
+      if (!deferChange) {
+        onChange(getMarkdown(editor));
+        return;
+      }
+      if (pending.current) clearTimeout(pending.current.timer);
+      pending.current = { editor, timer: setTimeout(flushChange, STORY_CHANGE_MS) };
     },
-    onUpdate: ({ editor }) => onChange(getMarkdown(editor)),
     onFocus: () => {
       setFocus(true);
       onFocusChangeRef.current?.(true);
     },
     onBlur: () => {
+      flushChange();
       setFocus(false);
       onFocusChangeRef.current?.(false);
     },
@@ -555,3 +612,6 @@ export function MarkdownEditor({
     </HandDrawnDashedSurface>
   );
 }
+
+/** The story field (MarkdownEditorImpl), drawn again only when its props change: not with every render of its host. */
+export const MarkdownEditor = memo(MarkdownEditorImpl);
