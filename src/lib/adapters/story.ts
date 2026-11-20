@@ -99,8 +99,19 @@ export function cardToStory(
     readTime: `${minutes} min`,
     tags: card.tags,
     imageUrl: card.media?.url,
+    ...(card.media?.url && coverThumbUrl(card) ? { imageThumbUrl: coverThumbUrl(card) } : {}),
     ...(card.media?.url && card.media.frame ? { imageFrame: card.media.frame } : {}),
     imageLabel: card.media?.label ?? card.thoughtCore.slice(0, 24),
     accentHue: card.accentHue,
   };
+}
+
+/**
+ * A card's smaller cover for a list (`media.thumbUrl`: ≤ 960 px on its longer edge, stored beside the cover at upload —
+ * the v1 FeedCard's `imageThumbUrl`), when it has one; a list falls back to the cover itself. Its page, the cover
+ * editor and the og image keep the cover.
+ */
+export function coverThumbUrl(card: Pick<Card, 'media'>): string | undefined {
+  const thumb = (card.media as { thumbUrl?: unknown } | undefined)?.thumbUrl;
+  return typeof thumb === 'string' && thumb ? thumb : undefined;
 }

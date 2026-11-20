@@ -88,6 +88,34 @@ describe('a framed cover', () => {
   });
 });
 
+// The perf audit's W6: a list's cover offers its smaller copy beside the cover, so a card a third of the screen wide
+// decodes a 960 px picture, not the 2048 px one; the one more try after a failure asks for the cover alone.
+describe('a list cover with a smaller copy', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+  const SRC = 'https://img.example.com/image/cover.webp';
+  const THUMB = 'https://img.example.com/image/cover-960.webp';
+
+  it('offers both by width, then the cover alone if that fails', () => {
+    const { container } = render(<OrganicImage src={SRC} thumbSrc={THUMB} />);
+    const img = container.querySelector('img')!;
+    expect(img.getAttribute('src')).toBe(SRC);
+    expect(img.getAttribute('srcset')).toBe(`${THUMB} 960w, ${SRC} 2048w`);
+    expect(img.getAttribute('sizes')).toContain('33vw');
+    fireEvent.error(img);
+    act(() => vi.advanceTimersByTime(IMAGE_RETRY_MS));
+    const retry = container.querySelector('img')!;
+    expect(retry).not.toBe(img);
+    expect(retry.getAttribute('srcset')).toBeNull();
+    expect(retry.getAttribute('src')).toBe(SRC);
+  });
+
+  it('without one, is the cover alone', () => {
+    const { container } = render(<OrganicImage src={SRC} />);
+    expect(container.querySelector('img')!.getAttribute('srcset')).toBeNull();
+  });
+});
+
 // A cover's grain waits for its picture (the perf audit's W2): while the place shimmers nothing a mask or filter
 // draws lies over the shimmer, so its sweep never has the grain drawn again.
 describe('a cover grain', () => {

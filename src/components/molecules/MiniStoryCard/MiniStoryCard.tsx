@@ -25,6 +25,8 @@ export interface MiniStoryCardProps {
   authorSeed?: number;
   authorAvatarUrl?: string;
   imageUrl?: string;
+  /** The cover's smaller copy for a list (`media.thumbUrl`): offered beside it (W6). */
+  imageThumbUrl?: string;
   imageLabel?: string;
   /** Where the cover is looked at (`media.frame`, round 25 §G1). */
   imageFrame?: CoverFrame;
@@ -51,6 +53,7 @@ export function MiniStoryCard({
   authorSeed,
   authorAvatarUrl,
   imageUrl,
+  imageThumbUrl,
   imageLabel,
   imageFrame,
   accentHue,
@@ -174,6 +177,7 @@ export function MiniStoryCard({
       <div className={styles.content}>
         <OrganicImage
           src={imageUrl}
+          thumbSrc={imageThumbUrl}
           alt={imageLabel ?? title}
           seed={seed + 5}
           ratio={0.56}

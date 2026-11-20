@@ -108,6 +108,13 @@ describe('cardToStory', () => {
     expect(noLabel.imageLabel).toBe('A very long thought core'); // first 24 chars
   });
 
+  // W6: a list's card offers its cover's smaller copy (`media.thumbUrl`) — absent on older covers, then none.
+  it('carries the cover’s list copy when the card has one', () => {
+    const media = { type: 'image' as const, url: 'https://cdn/x.webp', thumbUrl: 'https://cdn/x-960.webp' };
+    expect(cardToStory(makeCard({ media }), author).imageThumbUrl).toBe('https://cdn/x-960.webp');
+    expect(cardToStory(makeCard({ media: { type: 'image', url: 'https://cdn/x.webp' } }), author)).not.toHaveProperty('imageThumbUrl');
+  });
+
   it('leaves imageUrl undefined when the card has no media', () => {
     expect(cardToStory(makeCard({ media: undefined }), author).imageUrl).toBeUndefined();
   });

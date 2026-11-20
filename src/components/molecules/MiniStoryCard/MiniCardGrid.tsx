@@ -5,7 +5,7 @@ import { MiniStoryCard } from './MiniStoryCard';
 import { CARD_CHALK_SEEDS } from '@/components/molecules/StoryCard/StoryCard';
 import { ChalkFilters } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import type { Card, User } from '@/lib/db/types';
-import { anonymousByline } from '@/lib/adapters/story';
+import { anonymousByline, coverThumbUrl } from '@/lib/adapters/story';
 import { Link } from '@/i18n/navigation';
 import styles from './MiniCardGrid.module.css';
 
@@ -48,6 +48,7 @@ export function MiniCardGrid({ cards, authors }: MiniCardGridProps) {
                 authorSeed={byline.avatarSeed != null ? Number(byline.avatarSeed) : undefined}
                 authorAvatarUrl={byline.avatarUrl}
                 imageUrl={card.media?.url}
+                imageThumbUrl={coverThumbUrl(card)}
                 imageFrame={card.media?.frame}
                 imageLabel={card.media?.label ?? card.thoughtCore.slice(0, 24)}
                 accentHue={card.accentHue}

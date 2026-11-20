@@ -35,6 +35,8 @@ export interface Story {
   readTime: string;
   tags: string[];
   imageUrl?: string;
+  /** The cover's smaller copy for a list (`media.thumbUrl`, v1 `imageThumbUrl`): offered beside it (W6). */
+  imageThumbUrl?: string;
   imageLabel?: string;
   /** Where the cover is looked at (`media.frame`, round 25 §G1). */
   imageFrame?: CoverFrame;
@@ -59,11 +61,13 @@ function StoryImage({
   label,
   family,
   imageUrl,
+  thumbUrl,
   frame,
   seed,
   slot,
   grain = true,
 }: {
+  thumbUrl?: string;
   frame?: CoverFrame;
   label: string;
   family: number;
@@ -76,6 +80,7 @@ function StoryImage({
   return (
     <OrganicImage
       src={imageUrl}
+      thumbSrc={thumbUrl}
       alt={label}
       seed={seed}
       ratio={0.62}
@@ -400,6 +405,7 @@ export const StoryCard = memo(function StoryCard({
             label={story!.imageLabel || 'story illustration'}
             family={paletteIdx}
             imageUrl={story!.imageUrl}
+            thumbUrl={story!.imageThumbUrl}
             frame={story!.imageFrame}
             seed={seed + 5}
             slot={coverSlot}
