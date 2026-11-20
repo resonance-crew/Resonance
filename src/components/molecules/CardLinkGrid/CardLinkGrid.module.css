@@ -26,6 +26,32 @@
   /* mobile: cards stack flush, no gap */
 }
 
+/* A feed grows by 顯示更多 and never lets go (the perf audit's W8): a card far off screen skips its layout and paint
+   (content-visibility: auto), holding the height it last had (auto 480px before it was ever drawn). That brings paint
+   containment, which clips to the item's box — so the item reaches as far as the card draws: a phone's band bleeds
+   past the column (--story-bleed, the card's own clamp) with its rules and the first band's reach under the bar
+   (14) above and below, a wider card's wobble a little past its frame. Padding there, taken back by as much margin,
+   keeps every card where it was; the reach takes no pointer (the card under a neighbour's reach keeps its taps). A
+   card with an open menu drops it, so the menu lies over the cards after it as before. */
+.lazy {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 480px;
+  padding: 16px clamp(24px, 5vw, 80px);
+  margin: -16px calc(-1 * clamp(24px, 5vw, 80px));
+  pointer-events: none;
+}
+.lazy > * {
+  pointer-events: auto;
+}
+.lazy:has([aria-expanded='true']) {
+  content-visibility: visible;
+}
+/* the ⋯ keeps its place over the card's corner, inside the reach */
+.lazy > .actions {
+  top: calc(14px + 16px);
+  right: calc(14px + clamp(24px, 5vw, 80px));
+}
+
 /* Brought in by 顯示更多: each card rises a little into place and its ink
    comes up, a beat after the one before it (--enter-delay). It plays as the
    card mounts, so a card already on screen never moves again. Reduced motion:
@@ -90,6 +116,15 @@
 
   .item {
     margin-bottom: 24px;
+  }
+
+  /* the card's wobble swings a few px past its frame: 16 of reach all round, the gap's 24 below kept */
+  .lazy {
+    padding: 16px;
+    margin: -16px -16px 8px;
+  }
+  .lazy > .actions {
+    right: calc(14px + 16px);
   }
 }
 

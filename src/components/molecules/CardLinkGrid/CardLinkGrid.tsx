@@ -122,7 +122,7 @@ export function CardLinkGrid({ cards, authors, cardHref, renderActions, renderCa
         key={card.id}
         data-card-id={card.id}
         data-entering={entering || undefined}
-        className={styles.item}
+        className={`${styles.item} ${styles.lazy}`}
         style={{
           position: 'relative',
           ...(entering ? { '--enter-delay': `${Math.min((i - enterFrom) * ENTER_STAGGER_MS, ENTER_MAX_DELAY_MS)}ms` } : null),

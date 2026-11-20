@@ -19,13 +19,32 @@ export const READING_MARKS = {
   card_item: ['card-edge', 'card-foot'],
 } as const;
 
+/** Whether the browser is skipping `el`'s content (a `content-visibility: auto` ancestor off screen): style alone. */
+function skipped(el: Element): boolean {
+  const check = (el as Element & { checkVisibility?: (o?: { contentVisibilityAuto?: boolean }) => boolean }).checkVisibility;
+  return typeof check === 'function' && !check.call(el, { contentVisibilityAuto: true });
+}
+
 /** The cards under `root`, as the scene takes them: id, drawn box and top, pen, author row, title words. */
 function cardsIn(root: ParentNode, page: Page): SceneCard[] {
   return Array.from(root.querySelectorAll(CARD_ITEM))
     .map((item): SceneCard | null => {
       const article = item.querySelector('article');
+      if (!article) return null;
+      // A card the feed skips while it is far off screen (content-visibility: auto, the perf audit's W8) is read by
+      // its box alone: reading its outline, foot or title would lay out what the browser skipped. Its box's top
+      // line stands in for its drawn top (the scene's default), its key keeps its places named.
+      if (skipped(article)) {
+        // the item's own box (not skipped), less the reach its padding gives the card
+        const outer = page.rect(item);
+        if (!outer) return null;
+        const cs = (item.ownerDocument.defaultView as Window).getComputedStyle(item);
+        const [t, r, b, l] = [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].map((v) => parseFloat(v) || 0);
+        const box = { x: outer.x + l, y: outer.y + t, w: Math.max(0, outer.w - l - r), h: Math.max(0, outer.h - t - b) };
+        return { key: item.getAttribute('data-card-id') || undefined, box, radius: 18 };
+      }
       const frame = page.rect(article);
-      if (!article || !frame) return null;
+      if (!frame) return null;
       const chrome = visible(article, '[data-mascot="card-edge"]', page)[0];
       const strokes = chrome
         ? Array.from(chrome.querySelectorAll<SVGGeometryElement>('path[stroke]'))
