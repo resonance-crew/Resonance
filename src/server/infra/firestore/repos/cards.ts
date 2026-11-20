@@ -720,5 +720,24 @@ export function cardsData(db: AdminDb): CardsData {
         if (page.size < pageSize) return;
       }
     },
+
+    // --- routes lane
+
+    async authorTagHistory(uid, limit) {
+      // Single-field index on authorId suffices — no orderBy, so no composite
+      // index to deploy. `select('tags')` keeps the payload to a few bytes per card.
+      const snap = await db.collection('cards').where('authorId', '==', uid).select('tags').limit(limit).get();
+      return snap.docs.map((d) => {
+        const tags = d.data().tags as unknown;
+        return Array.isArray(tags) ? tags.filter((t): t is string => typeof t === 'string') : [];
+      });
+    },
+    async anonymousCardsToHold(uid) {
+      const cards = await db.collection('cards').where('authorId', '==', uid).where('anonymous', '==', true).select('publishedAt', 'trashedAt').get();
+      return cards.docs.filter((d) => d.get('publishedAt') != null && d.get('trashedAt') == null).map((d) => d.id);
+    },
+    async cardsHeldForDeletion(uid) {
+      return (await db.collection('cards').where('authorId', '==', uid).where('trashedFor', '==', 'deletion').select().get()).docs.map((d) => d.id);
+    },
   };
 }

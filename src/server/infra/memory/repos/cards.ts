@@ -539,5 +539,22 @@ export function cardsData(state: MemoryState): CardsData {
         if (page.length < pageSize) return;
       }
     },
+
+    // --- routes lane
+
+    async authorTagHistory(uid, limit) {
+      return state
+        .rows<Row>('cards', (r) => r.authorId === uid)
+        .slice(0, limit)
+        .map(({ row }) => (Array.isArray(row.tags) ? row.tags.filter((t): t is string => typeof t === 'string') : []));
+    },
+    async anonymousCardsToHold(uid) {
+      return state
+        .rows<Row>('cards', (r) => r.authorId === uid && r.anonymous === true && r.publishedAt != null && r.trashedAt == null)
+        .map((r) => r.id);
+    },
+    async cardsHeldForDeletion(uid) {
+      return state.rows<Row>('cards', (r) => r.authorId === uid && r.trashedFor === 'deletion').map((r) => r.id);
+    },
   };
 }
