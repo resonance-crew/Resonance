@@ -90,6 +90,26 @@ import Testing
         #expect(fixed["status"] as? String == "fresh")
     }
 
+    /// The look at the bytes lets an answer through unparsed only when every table field it holds is a known
+    /// string or no string at all; a name inside a story's words, or as a value, is not a key (audit I9).
+    @Test func theByteLookPassesOnlyWhatHoldsNothingUnknown() {
+        func maybe(_ json: String) -> Bool { OpenEnums.mayHoldUnknown(Data(json.utf8)) }
+        #expect(!maybe(#"{"cards":[\#(Self.card("c1"))],"status":"fresh"}"#))
+        #expect(!maybe(#"{"kind":"followers","visibility":null,"code":7,"status":["warming"]}"#))
+        #expect(!maybe(#"{"story":"she wrote \"visibility\": \"followers\"","field":"visibility"}"#))
+        #expect(!maybe(#"{ "visibility" :  "public" }"#))
+        #expect(maybe(#"{"a":{"b":[1,{"visibility":"followers"}]}}"#))
+        #expect(maybe(#"[[{"code":"suspended"}]]"#))
+        #expect(maybe(#"{"primaryLocale" : "ja"}"#))
+        // An escape in the value: told apart only by parsing.
+        let backslash = "\\"
+        #expect(maybe(#"{"visibility":"pub"# + backslash + #"u006cic"}"#))
+        #expect(maybe(#"{"visibility":"publ"#))
+        // An unknown value the bytes flag is still normalized as before.
+        let unknown = Data(#"{"cards":[{"visibility":"followers","title":"t"}]}"#.utf8)
+        #expect(OpenEnums.normalize(unknown) != unknown)
+    }
+
     /// Every enum the contract's answers carry is in the table, by a property
     /// name no other answer field uses, with the values this build knows — so
     /// a new enum in an answer fails here until it is covered.
