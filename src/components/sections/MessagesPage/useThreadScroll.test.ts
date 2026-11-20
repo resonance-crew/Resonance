@@ -94,6 +94,42 @@ describe('where the browser doesn’t anchor scrolling by itself (Safari)', () =
     return { scroller, heights, top: () => top };
   }
 
+  // W18: the rows a browser without scroll anchoring follows are the rows drawn, not every row it ever drew.
+  it('lets go of a row gone from the thread', async () => {
+    const watching = new Set<Element>();
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe(el: Element) {
+          watching.add(el);
+        }
+        unobserve(el: Element) {
+          watching.delete(el);
+        }
+        disconnect() {}
+      },
+    );
+    vi.stubGlobal('CSS', { supports: () => false });
+    const t = rows();
+    document.body.appendChild(t.scroller);
+    try {
+      renderHook(() => useThreadScroll({ current: t.scroller }, { firstKey: 'm0', lastKey: 'm5', lastIsOwn: false }));
+      const first = t.scroller.firstElementChild!;
+      expect(watching.has(first)).toBe(true);
+      // The window moves on: the oldest row leaves, a newer one comes.
+      first.remove();
+      const next = document.createElement('div');
+      next.dataset.messageKey = 'm6';
+      t.scroller.appendChild(next);
+      await act(async () => void (await Promise.resolve()));
+      expect(watching.has(next)).toBe(true);
+      expect(watching.has(first)).toBe(false);
+    } finally {
+      t.scroller.remove();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('keeps the row the reader is at in place when one above it changes height', () => {
     const observed: ResizeObserverCallback[] = [];
     vi.stubGlobal(

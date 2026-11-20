@@ -272,6 +272,13 @@ export function useThreadScroll(ref: RefObject<HTMLElement | null>, opts: Thread
     const watched = new Set<Element>();
     const watchRows = () => {
       if (!rowsResized) return;
+      // A row gone from the thread (scrolled out of its window, a message unsent) is let go (W18): the set and
+      // the observer hold only the rows drawn.
+      for (const row of watched) {
+        if (row.isConnected) continue;
+        rowsResized.unobserve(row);
+        watched.delete(row);
+      }
       for (const row of scroller.querySelectorAll('[data-message-key]')) {
         if (watched.has(row)) continue;
         watched.add(row);
