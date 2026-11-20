@@ -15,6 +15,10 @@
 }
 .bg[data-scrolled] {
   opacity: 1;
+  /* once solid (92% cream at full opacity) the blur barely shows, and it was paid on every scrolled frame (the
+     perf audit's W20): only the see-through header at rest keeps it */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .waveStroke {

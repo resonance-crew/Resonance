@@ -10,9 +10,9 @@
 .bg {
   position: absolute;
   inset: 0;
+  /* no blur (the perf audit's W20): the paper shows only once scrolled, solid then, where a blur under 92% cream
+     barely showed and was paid on every scrolled frame */
   background: color-mix(in oklch, var(--color-cream) 92%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   transition: opacity 300ms ease;
   -webkit-mask-size: 100% 100%;
   mask-size: 100% 100%;
@@ -26,8 +26,6 @@
 @media (max-width: 720px) {
   .bg {
     background: var(--color-cream);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
   }
 }
 
