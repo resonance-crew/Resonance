@@ -8,18 +8,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
-vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
-vi.mock('@/lib/storage/chatImages', () => ({ getChatImageStore: () => ({}) }));
+const DB = {};
+vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => DB }));
+const STORE = { fake: 'chat pictures' };
+vi.mock('@/lib/storage/chatImages', () => ({ getChatImageStore: () => STORE }));
 const keptChatImage = vi.fn();
 const uploadChatImage = vi.fn();
-vi.mock('@/lib/api/v1/chatImageUpload', () => ({
-  keptChatImage: (...a: unknown[]) => keptChatImage(...a),
-  uploadChatImage: (...a: unknown[]) => uploadChatImage(...a),
+vi.mock('@/server/app/chatImageUpload', () => ({
+  keptChatImageIn: (...a: unknown[]) => keptChatImage(...a),
+  uploadChatImageIn: (...a: unknown[]) => uploadChatImage(...a),
 }));
+const spend = vi.fn();
 const spendAll = vi.fn();
-vi.mock('@/lib/api/rateLimit', () => ({ spendAll: (...a: unknown[]) => spendAll(...a) }));
+vi.mock('@/server/infra/firestore/rateLimit', () => ({
+  firestoreRateLimiter: () => ({ spend: (...a: unknown[]) => spend(...a), spendAll: (...a: unknown[]) => spendAll(...a), limited: async () => null }),
+}));
 
 const { POST } = await import('./route');
+const { serverCtx } = await import('@/server/ctx');
+// The route's context: serverCtx() on the mocked database, built once per instance.
+const CTX = serverCtx();
 
 const post = (clientId?: string) => {
   const body = new FormData();
@@ -34,7 +42,7 @@ beforeEach(() => {
   getCurrentUser.mockResolvedValue({ id: 'alice' });
   keptChatImage.mockResolvedValue(null);
   spendAll.mockResolvedValue(undefined);
-  uploadChatImage.mockImplementation(async (_db, _store, _uid, _input, opts: { spent: Promise<void> }) => {
+  uploadChatImage.mockImplementation(async (_ctx, _uid, _input, opts: { spent: Promise<void> }) => {
     await opts.spent;
     return { id: 'p1', width: 10, height: 10 };
   });
@@ -46,8 +54,10 @@ describe('POST /api/v1/chat-images', () => {
     spendAll.mockReturnValue(new Promise<void>((resolve) => (settle = resolve)));
     const res = post('client-0123456789abcdef');
     await vi.waitFor(() => expect(uploadChatImage).toHaveBeenCalledTimes(1));
-    expect(spendAll).toHaveBeenCalledWith({}, 'alice', [['chatImage'], ['chatImageBytes', 1234]]);
-    expect(uploadChatImage.mock.calls[0][4]).toEqual({ spent: spendAll.mock.results[0].value, resendAsked: true });
+    expect(spendAll).toHaveBeenCalledWith('alice', [['chatImage'], ['chatImageBytes', 1234]]);
+    // On the route's context with the chat pictures' store handed in.
+    expect(uploadChatImage.mock.calls[0][0]).toEqual(expect.objectContaining({ uow: CTX.uow, data: CTX.data, chatObjects: STORE }));
+    expect(uploadChatImage.mock.calls[0][3]).toEqual({ spent: spendAll.mock.results[0].value, resendAsked: true });
     settle();
     expect((await res).status).toBe(201);
   });

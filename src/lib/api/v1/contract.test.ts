@@ -7,17 +7,24 @@ import { HANDLE_FORBIDDEN } from '@/lib/db/firestore/client/profile';
 const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
 const sendMessage = vi.fn();
-vi.mock('@/lib/api/v1/conversations', async (orig) => ({ ...(await orig()), sendMessage: (...a: unknown[]) => sendMessage(...a) }));
+vi.mock('@/server/app/conversations', async (orig) => ({ ...(await orig<object>()), sendMessageIn: (...a: unknown[]) => sendMessage(...a) }));
 const afterMessageSent = vi.fn();
-vi.mock('@/lib/api/v1/afterMessage', () => ({ afterMessageSent: (...a: unknown[]) => afterMessageSent(...a) }));
-vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
+vi.mock('@/server/app/pushAfter', () => ({ afterMessageSentIn: (...a: unknown[]) => afterMessageSent(...a) }));
+const DB = {};
+vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => DB }));
 const spend = vi.fn();
-vi.mock('@/lib/api/rateLimit', () => ({ spend: (...a: unknown[]) => spend(...a) }));
+const spendAll = vi.fn();
+vi.mock('@/server/infra/firestore/rateLimit', () => ({
+  firestoreRateLimiter: () => ({ spend: (...a: unknown[]) => spend(...a), spendAll: (...a: unknown[]) => spendAll(...a), limited: async () => null }),
+}));
 
 const { buildOpenApi } = await import('./openapi');
 const { POST } = await import('@/app/api/v1/messages/route');
 const { GET: getFeedRoute } = await import('@/app/api/v1/feed/route');
 const { ApiFailure } = await import('./http');
+const { serverCtx } = await import('@/server/ctx');
+// The route's context: serverCtx() on the mocked database, built once per instance.
+const CTX = serverCtx();
 const { AuthUnavailableError } = await import('@/lib/auth/firebase/server');
 
 // The v1 contract as the native apps see it: the committed OpenAPI file is
@@ -48,7 +55,7 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
   beforeEach(() => {
     getCurrentUser.mockReset().mockResolvedValue({ id: 'alice' });
     // As the service does: the budget it is handed answers before anything else (apiV1Conversations pins the order).
-    sendMessage.mockReset().mockImplementation(async (_db: unknown, _uid: unknown, _input: unknown, spent: Promise<void>) => {
+    sendMessage.mockReset().mockImplementation(async (_ctx: unknown, _uid: unknown, _input: unknown, spent: Promise<void>) => {
       await spent;
       return SENT;
     });
@@ -77,7 +84,7 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
     const res = await post({ to: 'bob', text: 'hi' });
     expect(res.status).toBe(429);
     expect((await res.json()).error.code).toBe('rate_limited');
-    expect(spend).toHaveBeenCalledWith({}, 'alice', 'message');
+    expect(spend).toHaveBeenCalledWith('alice', 'message');
     expect(sendMessage.mock.calls[0][3]).toBe(spend.mock.results[0].value);
     expect(afterMessageSent).not.toHaveBeenCalled();
   });
@@ -125,15 +132,15 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
     const res = await post({ to: 'bob', text: '  hi  ', extra: 'ignored' });
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ conversationId: 'alice_bob', id: 'm1' });
-    expect(sendMessage).toHaveBeenCalledWith({}, 'alice', { to: 'bob', text: 'hi' }, expect.any(Promise));
+    expect(sendMessage).toHaveBeenCalledWith(CTX, 'alice', { to: 'bob', text: 'hi' }, expect.any(Promise));
     // The words sent go along: without a link, nothing is unfurled.
-    expect(afterMessageSent).toHaveBeenCalledWith({}, SENT, 'hi');
+    expect(afterMessageSent).toHaveBeenCalledWith(CTX, SENT, 'hi');
   });
 
   it('passes the message it answers and the sender\'s own id on to the service', async () => {
     const res = await post({ to: 'bob', text: 'hi', replyTo: 'm0', clientId: 'client-0123456789abcdef' });
     expect(res.status).toBe(201);
-    expect(sendMessage).toHaveBeenCalledWith({}, 'alice', { to: 'bob', text: 'hi', replyTo: 'm0', clientId: 'client-0123456789abcdef' }, expect.any(Promise));
+    expect(sendMessage).toHaveBeenCalledWith(CTX, 'alice', { to: 'bob', text: 'hi', replyTo: 'm0', clientId: 'client-0123456789abcdef' }, expect.any(Promise));
   });
 
   it('answers a message sent again exactly as the first time, and leaves the after-work to the service\'s own flag', async () => {
@@ -142,7 +149,7 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
     const res = await post({ to: 'bob', text: 'hi', clientId: 'client-0123456789abcdef' });
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ conversationId: 'alice_bob', id: 'm1' });
-    expect(afterMessageSent).toHaveBeenCalledWith({}, duplicate, 'hi');
+    expect(afterMessageSent).toHaveBeenCalledWith(CTX, duplicate, 'hi');
   });
 
   it('refuses a reply or client id that is not well-formed, before sending anything', async () => {
@@ -167,10 +174,10 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
 
   it('passes a sticker and an album place on to the service (round 22), refusing ones not well-formed before sending anything', async () => {
     expect((await post({ to: 'bob', text: '', sticker: { pack: 'twine', id: 'thanks' } })).status).toBe(201);
-    expect(sendMessage).toHaveBeenLastCalledWith({}, 'alice', { to: 'bob', text: '', sticker: { pack: 'twine', id: 'thanks' } }, expect.any(Promise));
+    expect(sendMessage).toHaveBeenLastCalledWith(CTX, 'alice', { to: 'bob', text: '', sticker: { pack: 'twine', id: 'thanks' } }, expect.any(Promise));
     const album = { id: 'album-0123456789abcdef', index: 1, count: 3 };
     expect((await post({ to: 'bob', text: '', image: 'pic1', album })).status).toBe(201);
-    expect(sendMessage).toHaveBeenLastCalledWith({}, 'alice', { to: 'bob', text: '', image: 'pic1', album }, expect.any(Promise));
+    expect(sendMessage).toHaveBeenLastCalledWith(CTX, 'alice', { to: 'bob', text: '', image: 'pic1', album }, expect.any(Promise));
     sendMessage.mockClear();
 
     const malformed = [

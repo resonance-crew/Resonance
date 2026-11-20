@@ -8,20 +8,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
-vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
+const DB = {};
+vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => DB }));
 const sendNote = vi.fn();
-vi.mock('@/lib/api/v1/conversations', () => ({ sendNote: (...a: unknown[]) => sendNote(...a) }));
+vi.mock('@/server/app/conversations', async (orig) => ({ ...(await orig<object>()), sendNoteIn: (...a: unknown[]) => sendNote(...a) }));
 const refusalForPreLetterBuild = vi.fn();
-vi.mock('@/lib/api/v1/preLetter', () => ({ refusalForPreLetterBuild: (...a: unknown[]) => refusalForPreLetterBuild(...a) }));
+vi.mock('@/server/app/preLetter', () => ({ refusalForPreLetterBuildIn: (...a: unknown[]) => refusalForPreLetterBuild(...a) }));
 const afterNoteSent = vi.fn();
-vi.mock('@/lib/api/v1/afterMessage', () => ({ afterNoteSent: (...a: unknown[]) => afterNoteSent(...a) }));
+vi.mock('@/server/app/pushAfter', () => ({ ringAfterIn: (...a: unknown[]) => ringAfter(...a), afterNoteSentIn: (...a: unknown[]) => afterNoteSent(...a) }));
 const ringAfter = vi.fn();
-vi.mock('@/lib/push/ring', () => ({ ringAfter: (...a: unknown[]) => ringAfter(...a) }));
 const spend = vi.fn();
-vi.mock('@/lib/api/rateLimit', () => ({ spend: (...a: unknown[]) => spend(...a) }));
+const spendAll = vi.fn();
+vi.mock('@/server/infra/firestore/rateLimit', () => ({
+  firestoreRateLimiter: () => ({ spend: (...a: unknown[]) => spend(...a), spendAll: (...a: unknown[]) => spendAll(...a), limited: async () => null }),
+}));
 
 const { POST } = await import('./route');
 const { ApiFailure } = await import('@/lib/api/v1/http');
+const { serverCtx } = await import('@/server/ctx');
+// The route's context: serverCtx() on the mocked database, built once per instance.
+const CTX = serverCtx();
 const post = (body: unknown, headers: Record<string, string> = {}) =>
   POST(new Request('http://localhost/api/v1/notes', { method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json', ...headers } }));
 
@@ -45,9 +51,9 @@ describe('POST /api/v1/notes', () => {
     const res = await post({ cardId: 'walk', text: '  謝謝你  ' });
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ id: 'n1' });
-    expect(spend).toHaveBeenCalledWith({}, 'alice', 'note');
-    expect(sendNote).toHaveBeenCalledWith({}, 'alice', { cardId: 'walk', text: '謝謝你' }, expect.any(Promise));
-    expect(afterNoteSent).toHaveBeenCalledWith({}, push);
+    expect(spend).toHaveBeenCalledWith('alice', 'note');
+    expect(sendNote).toHaveBeenCalledWith(CTX, 'alice', { cardId: 'walk', text: '謝謝你' }, expect.any(Promise));
+    expect(afterNoteSent).toHaveBeenCalledWith(CTX, push);
     // Its bell row is already marked pushed: never two buzzes.
     expect(ringAfter).not.toHaveBeenCalled();
   });
@@ -57,7 +63,7 @@ describe('POST /api/v1/notes', () => {
     const res = await post({ cardId: 'masked', text: 'hi' });
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ id: 'n2' });
-    expect(ringAfter).toHaveBeenCalledWith({}, 'bell2');
+    expect(ringAfter).toHaveBeenCalledWith(CTX, 'bell2');
     expect(afterNoteSent).not.toHaveBeenCalled();
   });
 
@@ -68,7 +74,7 @@ describe('POST /api/v1/notes', () => {
     const res = await post({ cardId: 'walk', text: 'hi', clientId });
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ id: clientId });
-    expect(sendNote).toHaveBeenCalledWith({}, 'alice', { cardId: 'walk', text: 'hi', clientId }, expect.any(Promise));
+    expect(sendNote).toHaveBeenCalledWith(CTX, 'alice', { cardId: 'walk', text: 'hi', clientId }, expect.any(Promise));
     expect(afterNoteSent).not.toHaveBeenCalled();
     expect(ringAfter).not.toHaveBeenCalled();
   });
@@ -115,7 +121,7 @@ describe('POST /api/v1/notes', () => {
     refusalForPreLetterBuild.mockResolvedValueOnce(new ApiFailure('forbidden', '你留的紙條對方還沒回覆，先等等對方吧'));
     const res = await post({ cardId: 'walk', text: 'hi' }, { 'User-Agent': 'Resonance/2.0.0 (Android 15; build 7)' });
     expect([res.status, await res.json()]).toEqual([403, { error: { code: 'forbidden', message: '你留的紙條對方還沒回覆，先等等對方吧' } }]);
-    expect(refusalForPreLetterBuild).toHaveBeenCalledWith({}, 'alice', expect.any(Request), limit);
+    expect(refusalForPreLetterBuild).toHaveBeenCalledWith(CTX, 'alice', expect.any(Request), limit);
     expect(refusalForPreLetterBuild.mock.calls[0][2].headers.get('user-agent')).toBe('Resonance/2.0.0 (Android 15; build 7)');
     // As it is otherwise.
     expect((await post({ cardId: 'walk', text: 'hi' })).status).toBe(409);

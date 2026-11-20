@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
 import { ApiFailure, parse, withUser } from '@/lib/api/v1/http';
-import { sendNote } from '@/lib/api/v1/conversations';
-import { refusalForPreLetterBuild } from '@/lib/api/v1/preLetter';
-import { afterNoteSent } from '@/lib/api/v1/afterMessage';
 import { SendNoteRequest } from '@/lib/api/v1/schemas';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { ringAfter } from '@/lib/push/ring';
-import { spend } from '@/lib/api/rateLimit';
+import { serverCtx } from '@/server/ctx';
+import { sendNoteIn } from '@/server/app/conversations';
+import { refusalForPreLetterBuildIn } from '@/server/app/preLetter';
+import { afterNoteSentIn, ringAfterIn } from '@/server/app/pushAfter';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,17 +22,17 @@ export const POST = withUser(async (user, req) => {
     throw new ApiFailure('invalid_request', 'The body must be JSON.');
   });
   const input = parse(SendNoteRequest, body);
-  const db = getAdminDb();
+  const server = serverCtx();
   // Spent beside the send's reads, and still before any refusal or write (sendNote awaits it).
-  const spent = spend(db, user.id, 'note');
+  const spent = server.limits.spend(user.id, 'note');
   spent.catch(() => {});
-  const { id, notificationId, push, duplicate } = await sendNote(db, user.id, input, spent).catch(async (e: unknown) => {
+  const { id, notificationId, push, duplicate } = await sendNoteIn(server, user.id, input, spent).catch(async (e: unknown) => {
     // A build before letters knows no 409 here: it is told the same with a 403, whose words it shows.
-    throw await refusalForPreLetterBuild(db, user.id, req, e);
+    throw await refusalForPreLetterBuildIn(server, user.id, req, e);
   });
   if (!duplicate) {
-    if (push) afterNoteSent(db, push);
-    else ringAfter(db, notificationId);
+    if (push) afterNoteSentIn(server, push);
+    else ringAfterIn(server, notificationId);
   }
   return NextResponse.json({ id }, { status: 201 });
 });
