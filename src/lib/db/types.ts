@@ -517,3 +517,6 @@ export type NewCard = Omit<Card, 'id' | 'publishedAt' | 'readCount' | 'resonance
   publishedAt?: Date | null;
   translations?: Card['translations'];
 };
+
+/** A shelf of someone's card box, as the web's client reads it (lib/db/firestore/client/reads). */
+export type CardBoxTab = 'published' | 'private' | 'draft' | 'resonated';

@@ -2,10 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { User } from '@/lib/db/types';
 
 const findByHandle = vi.fn<(handle: string) => Promise<User | null>>();
-vi.mock('@/lib/db/firestore/user', () => ({
-  FirestoreUserRepository: class {
-    findByHandle = findByHandle;
-  },
+vi.mock('@/server/ctx', () => ({
+  serverCtx: () => ({ data: { users: { findByHandle } } }),
 }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string, v?: { handle: string }) => `${key}:${v?.handle ?? ''}`,

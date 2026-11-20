@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
-import { FirestoreUserRepository } from '@/lib/db/firestore/user';
 import type { Locale } from '@/lib/db/types';
 import { smartAppBanner } from '@/lib/appStores';
 import { buildProfileMetadata, metaAppId } from '@/lib/og';
 import { siteUrl } from '@/lib/site';
 import { publicBases } from '@/lib/storage/publicUrl';
+import { serverCtx } from '@/server/ctx';
 
 export const runtime = 'nodejs';
 
@@ -46,7 +46,7 @@ export async function generateMetadata({
   // Safari offers the app on a profile, and opens it on this profile.
   const base = siteUrl();
   const itunes = smartAppBanner(`${base}/${locale}/u/${encodeURIComponent(handle)}`);
-  const user = await new FirestoreUserRepository().findByHandle(handle);
+  const user = await serverCtx().data.users.findByHandle(handle);
   if (!user) return { itunes };
 
   const t = await getTranslations({ locale, namespace: 'profile' });

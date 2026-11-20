@@ -24,7 +24,7 @@ vi.mock('firebase-admin/messaging', () => {
   return { getMessaging: () => ({ kind: 'messaging' }) };
 });
 
-const { getAdminDb, getAdminMessaging, prefersRest } = await import('./admin');
+const { getAdminDb, getAdminMessaging, prefersRest } = await import('./db');
 
 beforeEach(() => {
   vi.clearAllMocks();
