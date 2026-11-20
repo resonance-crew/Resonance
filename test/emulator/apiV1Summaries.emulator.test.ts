@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { FieldValue, getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { updateCard } from '@/lib/api/v1/cards';
@@ -15,7 +15,7 @@ import {
   getResonances,
 } from '@/lib/api/v1/reads';
 import { getFeed } from '@/lib/api/v1/service';
-import { storedSummary, summarize } from '@/lib/api/v1/summary';
+import { listCard, storedSummary, summarize, summaryKeepsSettled, withStories } from '@/lib/api/v1/summary';
 import { backfillCardSummaries } from '@/lib/api/v1/summaryBackfill';
 
 // Lists read their cards without the story: publishing (and every server
@@ -54,6 +54,44 @@ beforeEach(async () => {
 const data = async (id: string) => (await db.doc(`cards/${id}`).get()).data()!;
 
 describe('the stored summary', () => {
+  it('is kept again by the list that had to read the story (an autosaved draft), unless the card changed in between (B6)', async () => {
+    // An app's autosave: the story and updatedAt written straight to the card, past the stored summary.
+    await db.doc('cards/d1').set({
+      authorId: 'alice', thoughtCore: 'draft', story: 'old words', visibility: 'private', publishedAt: null,
+      excerpt: 'old words', readMinutes: 1, excerptAt: minutesAgo(10),
+    });
+    await db.doc('cards/d1').set({ story: STORY, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    const before = await data('d1');
+    expect(storedSummary(before)).toBeNull();
+
+    const [listed] = await withStories(db, [listCard('d1', before)].map((c) => ({ ...c, story: undefined as unknown as string })));
+    expect(listed.story).toBe(STORY);
+    await summaryKeepsSettled();
+    const after = await data('d1');
+    expect(storedSummary(after)).toEqual(summarize(STORY));
+    // Nothing but the summary: updatedAt (the draft shelf's order) is the autosave's.
+    expect((after.updatedAt as Timestamp).isEqual(before.updatedAt as Timestamp)).toBe(true);
+
+    // The next autosave leaves it behind again, as any client write would.
+    await db.doc('cards/d1').set({ story: 'newer words', updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    expect(storedSummary(await data('d1'))).toBeNull();
+
+    // A save between the story's read and the write: the write is refused, the newer story wins.
+    const stale = await db.doc('cards/d1').get();
+    await db.doc('cards/d1').set({ story: 'newest words', updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    const update = vi.spyOn(db, 'getAll').mockResolvedValueOnce([stale]);
+    try {
+      await withStories(db, [{ ...listCard('d1', stale.data()!), story: undefined as unknown as string }]);
+    } finally {
+      update.mockRestore();
+    }
+    await summaryKeepsSettled();
+    const last = await data('d1');
+    expect(last.story).toBe('newest words');
+    expect(storedSummary(last)).toBeNull();
+    expect(last.excerpt).toBe(summarize(STORY).excerpt);
+  });
+
   it('is written when a card is published, stamped with the same server time as updatedAt', async () => {
     await db.doc('cards/c1').set({ authorId: 'alice', thoughtCore: '安靜的夜晚', story: STORY, visibility: 'public', publishedAt: null });
     await publishCard(db, 'alice', 'c1', slugBase);
