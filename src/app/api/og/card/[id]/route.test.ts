@@ -242,7 +242,8 @@ describe('GET /api/og/card/{id} for a card without a cover', () => {
     await expectJpeg(res, 1200, 630);
     expect(res.headers.get('cache-control')).toBe('public, max-age=300, s-maxage=300');
     // The card and its author's byline, nothing else; the photo from our storage by its key.
-    expect(fake.reads).toEqual(['cards/bare1', 'users/uid-author']);
+    // The card without its story, then its story (only a drawn card reads it, B17) beside its author.
+    expect([...fake.reads].sort()).toEqual(['cards/bare1', 'cards/bare1', 'users/uid-author']);
     expect(getObject).toHaveBeenCalledWith(storageKey(AVATAR));
   }, 30_000);
 
@@ -292,7 +293,7 @@ describe('GET /api/og/card/{id} for a card without a cover', () => {
     await expectJpeg(res, 1200, 630);
     // It names no one: kept a day, as a cover is.
     expect(res.headers.get('cache-control')).toBe('public, max-age=86400, s-maxage=86400');
-    expect(fake.reads).toEqual(['cards/anonbare1']);
+    expect(fake.reads).toEqual(['cards/anonbare1', 'cards/anonbare1']);
     expect(getObject).not.toHaveBeenCalled();
     // Its version is the one an image without any author would have.
     const data = { ...fake.docs['cards/anonbare1'], publishedAt: new Date('2026-09-01T00:00:00Z') };

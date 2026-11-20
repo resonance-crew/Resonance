@@ -4,9 +4,9 @@ import { getCurrentUser } from '@/lib/auth';
 import { limited } from '@/lib/api/rateLimit';
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import { getStorageProvider } from '@/lib/storage';
-import { storeOwned } from '@/lib/storage/uploads';
+import { storeOwnedWithThumb } from '@/lib/storage/uploads';
 import { generateStoryImageStream } from '@/lib/ai/tasks';
-import { convertToAvif } from '@/lib/storage/image';
+import { normalizeUploadWithThumb } from '@/lib/storage/image';
 
 export const runtime = 'nodejs';
 // Image generation can take up to ~2 minutes for complex prompts.
@@ -15,7 +15,7 @@ export const maxDuration = 120;
 /** One line of the NDJSON progress stream this route responds with. */
 export type GenerateImageEvent =
   | { type: 'partial'; index: number; b64: string }
-  | { type: 'done'; publicUrl: string; key: string }
+  | { type: 'done'; publicUrl: string; key: string; thumbUrl?: string }
   | { type: 'error' };
 
 /**
@@ -56,21 +56,24 @@ export async function POST(req: Request) {
         const bytes = await generateStoryImageStream(story, (b64, index) => {
           send({ type: 'partial', index, b64 });
         });
-        const avifBuffer = await convertToAvif(bytes);
+        // Kept as an upload is (B17): scaled to fit 2048 px and WebP at effort 4 — the model's full-size
+        // picture encoded as AVIF at the default effort cost seconds of CPU — with its ≤ 960 px copy (B2).
+        const { full, thumb } = await normalizeUploadWithThumb(bytes);
         // The key names no one (an anonymous card's cover is public); whose it is goes on record.
-        const stored = await storeOwned(
+        const stored = await storeOwnedWithThumb(
           getAdminDb(),
           getStorageProvider(),
           {
-            filename: 'generated.avif',
-            contentType: 'image/avif',
-            size: avifBuffer.byteLength,
+            filename: `generated.${full.extension}`,
+            contentType: full.contentType,
+            size: full.data.byteLength,
             ownerId: user.id,
             kind: 'image',
           },
-          avifBuffer,
+          full.data,
+          { contentType: thumb.contentType, body: thumb.data },
         );
-        send({ type: 'done', publicUrl: stored.publicUrl, key: stored.key });
+        send({ type: 'done', publicUrl: stored.publicUrl, key: stored.key, thumbUrl: stored.thumbUrl });
       } catch (err) {
         console.error('Image generation failed:', err);
         send({ type: 'error' });

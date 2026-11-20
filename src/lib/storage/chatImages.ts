@@ -21,6 +21,11 @@ export interface ChatImageStore {
   put(key: string, body: Uint8Array, contentType: string): Promise<void>;
   /** The object's bytes; null when there is no such object. */
   get(key: string): Promise<Uint8Array | null>;
+  /**
+   * The object's bytes as they arrive (B14: GET /chat-images/{id} hands them on without holding the whole
+   * picture); null when there is no such object. Whoever opens it and doesn't read it cancels it.
+   */
+  stream?(key: string): Promise<ReadableStream<Uint8Array> | null>;
   /** Removes it (one already gone is no error). */
   delete(key: string): Promise<void>;
   /** Removes all of them, as few requests as the store allows (an account's pictures). */
@@ -50,6 +55,17 @@ class R2ChatImages implements ChatImageStore {
     try {
       const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
       return res.Body ? await res.Body.transformToByteArray() : null;
+    } catch (e) {
+      const status = (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+      if ((e as { name?: string }).name === 'NoSuchKey' || status === 404) return null;
+      throw e;
+    }
+  }
+
+  async stream(key: string): Promise<ReadableStream<Uint8Array> | null> {
+    try {
+      const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+      return res.Body ? (res.Body.transformToWebStream() as ReadableStream<Uint8Array>) : null;
     } catch (e) {
       const status = (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
       if ((e as { name?: string }).name === 'NoSuchKey' || status === 404) return null;
@@ -94,6 +110,17 @@ export class LocalChatImages implements ChatImageStore {
       if ((e as { code?: string }).code === 'ENOENT') return null;
       throw e;
     }
+  }
+
+  async stream(key: string): Promise<ReadableStream<Uint8Array> | null> {
+    const bytes = await this.get(key);
+    if (!bytes) return null;
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      },
+    });
   }
 
   async delete(key: string): Promise<void> {

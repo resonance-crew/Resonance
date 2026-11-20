@@ -19,7 +19,9 @@ export const runtime = 'nodejs';
 const DOC_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
 /** What the image needs of a card — its gate, its cover, and what the drawing shows — and nothing more. */
-const CARD_FIELDS = ['visibility', 'publishedAt', 'media', 'anonymous', 'authorId', 'thoughtCore', 'story', 'accentHue'];
+// Without its story (B17): a card with a cover is shared as the cover, and only a card drawn reads it (STORY_FIELD).
+const CARD_FIELDS = ['visibility', 'publishedAt', 'media', 'anonymous', 'authorId', 'thoughtCore', 'accentHue'];
+const STORY_FIELD = ['story'];
 /** What the byline shows of a named card's author. */
 const AUTHOR_FIELDS = ['handle', 'initials', 'avatarSeed', 'avatarUrl'];
 
@@ -53,13 +55,17 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     return shareImageResponse(req, path, media.url, { version: (url) => coverVersion(url, frame), crop: { ...LINK_IMAGE_SIZE, frame } });
   }
 
-  const card = mapCard(id, data);
+  // Drawn from its words: the story (up to 30k characters) is read now, beside the author.
+  const storyP = db.getAll(db.doc(`cards/${id}`), { fieldMask: STORY_FIELD }).then(([s]) => s?.get('story'));
+  storyP.catch(() => {});
   const authorId = typeof data.authorId === 'string' ? data.authorId : '';
   let author = null;
-  if (!card.anonymous && DOC_ID.test(authorId) && !isReservedId(authorId)) {
+  if (data.anonymous !== true && DOC_ID.test(authorId) && !isReservedId(authorId)) {
     const [user] = await db.getAll(db.doc(`users/${authorId}`), { fieldMask: AUTHOR_FIELDS });
     if (user?.exists) author = mapUser(user.id, user.data() ?? {});
   }
+  const story = await storyP;
+  const card = mapCard(id, { ...data, story: typeof story === 'string' ? story : '' });
   const drawn = drawnCard(card, author);
   const version = drawnCardVersion(drawn);
   const redirect = shareImageRedirect(req, path, version);

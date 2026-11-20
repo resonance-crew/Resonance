@@ -315,9 +315,11 @@ service cloud.firestore {
 
       function validMedia(m) {
         return m is map
-          && m.keys().hasOnly(["type", "url", "label", "frame"])
+          && m.keys().hasOnly(["type", "url", "thumbUrl", "label", "frame"])
           && m.type in ["image", "video"]
           && storedFile(m.url)
+          // The cover's ≤ 960 px copy (lib/images/coverThumb) the upload answered: the same storage, the copy of this cover.
+          && (!("thumbUrl" in m) || (storedFile(m.thumbUrl) && m.thumbUrl.matches(".*-w960[.]webp")))
           && (!("label" in m) || (m.label is string && m.label.size() <= 200))
           && (!("frame" in m) || validFrame(m.frame));
       }

@@ -18,6 +18,22 @@ export function slugify(input: string): string {
     .slice(0, 60);
 }
 
+/** Letters, digits, spaces and the punctuation a Latin-script title is written with (accents too: slugify strips them). */
+const LATIN_TITLE = /^[\p{Script=Latin}\p{N}\s\p{P}\p{S}\u0300-\u036f]+$/u;
+
+/**
+ * A Latin-script title's slug base made here, with no model (B10): the
+ * title's own words (slugify; its first six). Null for a title in any other
+ * script — or with no letter at all —, which the model still turns into
+ * English words.
+ */
+export function latinSlugBase(title: string): string | null {
+  const clean = title.trim();
+  if (!clean || !LATIN_TITLE.test(clean) || !/\p{Script=Latin}/u.test(clean)) return null;
+  const base = slugify(clean).split('-').filter(Boolean).slice(0, 6).join('-');
+  return /[a-z]/.test(base) ? base : null;
+}
+
 /**
  * Resolve a collision-free slug from a base.
  *

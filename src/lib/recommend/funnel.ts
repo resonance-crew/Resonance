@@ -13,7 +13,6 @@ import {
   matchCards,
   mmr,
   partKey,
-  poolStats,
   relevance,
   csls,
   type Candidate,
@@ -21,7 +20,7 @@ import {
   type PoolStats,
   type TasteVote,
 } from './match';
-import { publicPool, readPoolStats, recordModel } from './poolStats';
+import { cachedPoolStats, cachedPublicPool, readPoolStats, recordModel } from './poolStats';
 import { buildUserProfile, type UserProfile } from './profile';
 import { buildRerankMessages, parseRerankScores, type RerankCandidate } from './rerank';
 import { buildSelectMessages, parseSelection, type SelectCandidate, type Selection } from './select';
@@ -133,9 +132,11 @@ async function tasteRecords(profile: UserProfile, embedModel: string): Promise<V
 async function poolFor(db: Firestore, embedModel: string, taste: VectorRecord[], now: number): Promise<{ records: VectorRecord[]; stats: PoolStats }> {
   const kept = await readPoolStats(embedModel, db).catch(() => null);
   if (!kept || kept.cards <= EXACT_POOL_MAX || !taste.length) {
-    const records = await publicPool(getVectorStore(), embedModel);
+    // This instance's read of the pool for a few minutes (B1): the same public records for every reader.
+    const store = getVectorStore();
+    const records = await cachedPublicPool(store, embedModel);
     // Today's kept numbers spare the build working them out (a part they don't know gets its r(x) against the pool).
-    return { records, stats: kept && now - kept.at < POOL_STATS_FRESH_MS ? kept : poolStats(records) };
+    return { records, stats: kept && now - kept.at < POOL_STATS_FRESH_MS ? kept : cachedPoolStats(store, embedModel, records) };
   }
   const store = getVectorStore();
   const hits = await Promise.all(
@@ -345,7 +346,10 @@ export async function recommendFeed(uid: string, opts: FunnelOptions = {}): Prom
     const domainOf = (cardId: string) => byCard.get(cardId)?.lifeDomain ?? '';
     const explore = everyScore.find((c) => !items.some((i) => i.cardId === c.card.cardId) && domainOf(c.card.cardId) !== '' && !domains.has(domainOf(c.card.cardId)));
     if (explore) {
-      const exploreNamed = await namedCardIds([explore.card.cardId], db).catch(() => new Set<string>());
+      // Already read when it was among the reranked ones (B9): one read of the anonymous flags a build.
+      const exploreNamed = top.some((c) => c.card.cardId === explore.card.cardId)
+        ? named
+        : await namedCardIds([explore.card.cardId], db).catch(() => new Set<string>());
       const author = authorKey({ cardId: explore.card.cardId, authorId: authorOf(explore.card.cardId), anonymous: !exploreNamed.has(explore.card.cardId) });
       if ((perAuthor.get(author) ?? 0) < AUTHOR_MAX) {
         perAuthor.set(author, (perAuthor.get(author) ?? 0) + 1);

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { reportReading } from '@/lib/api/v1/reading';
@@ -56,6 +56,18 @@ describe('runReadSummary', () => {
     expect(JSON.stringify(rows[0].data())).not.toMatch(/bob|carol|dora/);
     // Once a run's day.
     expect((await runReadSummary(db, { now: MONDAY + 3600_000 })).rows).toBe(0);
+  });
+
+  it('asks once per author whether their apps draw the row, however many of their cards are due (B17)', async () => {
+    await Promise.all([card('a1'), card('a2'), card('a3')]);
+    for (const id of ['a1', 'a2', 'a3']) for (const uid of ['bob', 'carol', 'dora']) await readToEnd(uid, id, MONDAY - DAY);
+    const collection = vi.spyOn(db, 'collection');
+    try {
+      expect(await runReadSummary(db, { now: MONDAY })).toMatchObject({ rows: 3, held: 0 });
+      expect(collection.mock.calls.filter(([path]) => path === 'devices')).toHaveLength(1);
+    } finally {
+      collection.mockRestore();
+    }
   });
 
   it('marks an anonymous card\'s row so, and holds it from an author whose app build would draw its type raw', async () => {

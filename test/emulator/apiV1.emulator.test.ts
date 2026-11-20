@@ -5,6 +5,8 @@ import { cancelAccountDeletion, scheduleAccountDeletion } from '@/lib/account/de
 import { ApiFailure } from '@/lib/api/v1/http';
 import { Me } from '@/lib/api/v1/schemas';
 import { getFeed, getMe } from '@/lib/api/v1/service';
+import { setPublicListMs } from '@/lib/api/v1/publicLists';
+import { loadAuthors } from '@/lib/api/v1/present';
 
 // The v1 API's business logic against the real Firestore emulator. The web
 // client gets these guarantees from firestore.rules; the API runs on the
@@ -88,6 +90,38 @@ describe('getMe', () => {
 });
 
 describe('getFeed', () => {
+  it('reads of each author only what a byline draws (B17)', async () => {
+    await db.doc('users/zed').set({ handle: 'zed', initials: 'ZE', accentColor: 'x', region: 'Taipei', bio: 'b'.repeat(500), notificationSettings: { picks: true } });
+    const authors = await loadAuthors(db, [{ id: 'c', authorId: 'zed', anonymous: false } as Parameters<typeof loadAuthors>[1][number]]);
+    expect(authors.get('zed')).toEqual({ handle: 'zed', initials: 'ZE', accentColor: 'x', region: 'Taipei' });
+  });
+
+  it('keeps a page a few seconds for every reader, each one\'s blocks applied after it — never an anonymous card (B3)', async () => {
+    await Promise.all([
+      card('c1', 'carol', 1),
+      card('c2', 'carol', 2, { anonymous: true }),
+      card('c3', 'bob', 3),
+      db.doc('users/alice/blocks/carol').set({ blockedUid: 'carol', createdAt: minutesAgo(10) }),
+    ]);
+    setPublicListMs(30_000);
+    try {
+      expect((await getFeed(db, 'alice', 10)).cards.map((c) => c.id)).toEqual(['c2', 'c3']);
+      // A card published since isn't read again for the next reader within the window…
+      await card('c0', 'bob', 0);
+      const bob = await getFeed(db, 'bob', 10);
+      expect(bob.cards.map((c) => c.id)).toEqual(['c1', 'c2', 'c3']);
+      // …but their blocks are always their own, read at each ask, and an anonymous card keeps no byline.
+      expect(bob.cards.find((c) => c.id === 'c2')!.author).toBeNull();
+      expect(bob.cards.find((c) => c.id === 'c1')!.author).toMatchObject({ handle: 'carol' });
+      await db.doc('users/bob/blocks/carol').set({ blockedUid: 'carol', createdAt: minutesAgo(0) });
+      expect((await getFeed(db, 'bob', 10)).cards.map((c) => c.id)).toEqual(['c2', 'c3']);
+      expect((await getFeed(db, null, 10)).cards.map((c) => c.id)).toEqual(['c1', 'c2', 'c3']);
+    } finally {
+      setPublicListMs(0);
+    }
+    expect((await getFeed(db, 'bob', 10)).cards.map((c) => c.id)).toEqual(['c0', 'c2', 'c3']);
+  });
+
   it('serves a page around a malformed card, and cuts excerpts between code points', async () => {
     await Promise.all([
       card('ok', 'bob', 1, { story: `${'字'.repeat(95)}🌧️ after the rain` }),

@@ -18,6 +18,7 @@ import { backfillAnonymousBells } from '../../scripts/backfills/anonymousBells';
 import { backfillAvatarColors } from '../../scripts/backfills/avatarColors';
 import { backfillCardTombstones } from '../../scripts/backfills/cardTombstones';
 import { backfillRecommendIndex } from '../../scripts/backfills/recommendIndex';
+import { backfillCoverThumbs } from '../../scripts/backfills/coverThumbs';
 import { avatarColorFor, LEGACY_AVATAR_COLOR } from '@/lib/design/avatarColors';
 import type { PreviewFetch } from '@/lib/links/preview';
 
@@ -876,5 +877,48 @@ describe('recommend-index', () => {
     expect(picks).toMatchObject({ askedOn: '2026-11-19', shown: { old: { n: 2, lastDay: '2026-11-19' } } });
     await backfillRecommendIndex(db, { apply: true, all: true, log: () => {}, index, pauseMs: 0 });
     expect(index.mock.calls.slice(1).map(([id]) => id).sort()).toEqual(['new', 'old']);
+  });
+});
+
+describe('cover-thumbs (B2)', () => {
+  const BASE = 'https://img.resonance.test';
+  it('makes each of our covers its ≤ 960 px copy on record as its owner’s and names it on the card; a dry run changes nothing; a second run finds nothing left', async () => {
+    const big = new Uint8Array(await sharp({ create: { width: 2000, height: 1000, channels: 3, background: '#c44' } }).webp().toBuffer());
+    const files = new Map<string, Uint8Array>([[`${BASE}/image/2026-10/a.webp`, big], [`${BASE}/image/2026-10/done.webp`, big], [`${BASE}/image/2026-10/done-w960.webp`, big]]);
+    const read = async (url: string) => files.get(url) ?? null;
+    const exists = async (url: string) => files.has(url);
+    const put: { key: string; body: Uint8Array }[] = [];
+    const storage = {
+      putObject: async (key: string, _type: string, body: Uint8Array) => {
+        put.push({ key, body });
+        files.set(`${BASE}/${key}`, body);
+        return { key, publicUrl: `${BASE}/${key}` };
+      },
+    };
+    await db.doc('cards/a').set({ authorId: 'alice', updatedAt: joined('2026-10-01'), media: { type: 'image', url: `${BASE}/image/2026-10/a.webp`, label: 'a' } });
+    await db.doc('uploads/a').set({ ownerId: 'alice', key: 'image/2026-10/a.webp', kind: 'image' });
+    await db.doc('cards/done').set({ authorId: 'bob', media: { type: 'image', url: `${BASE}/image/2026-10/done.webp` } });
+    await db.doc('cards/elsewhere').set({ authorId: 'carol', media: { type: 'image', url: 'https://images.example/x.jpg' } });
+    await db.doc('cards/gone').set({ authorId: 'dave', media: { type: 'image', url: `${BASE}/image/2026-10/gone.webp` } });
+    await db.doc('cards/none').set({ authorId: 'erin' });
+
+    const before = await data('cards/a');
+    expect(await backfillCoverThumbs(db, null, { apply: false, publicBases: [BASE], read, exists, log: quiet })).toMatchObject({
+      covers: 4, notOurs: 1, made: 1, present: 1, unreadable: 1, named: 2,
+    });
+    expect(await data('cards/a')).toEqual(before);
+    expect(put).toHaveLength(0);
+
+    expect(await backfillCoverThumbs(db, storage, { apply: true, publicBases: [BASE], read, exists, log: quiet })).toMatchObject({ made: 1, named: 2, notWritten: 0 });
+    expect(put.map((p) => p.key)).toEqual(['image/2026-10/a-w960.webp']);
+    const meta = await sharp(put[0].body).metadata();
+    expect([meta.format, meta.width, meta.height]).toEqual(['webp', 960, 480]);
+    // The card's media gains its copy's name; nothing else on it changes (no updatedAt, no summary).
+    expect(await data('cards/a')).toEqual({ ...before, media: { ...before!.media, thumbUrl: `${BASE}/image/2026-10/a-w960.webp` } });
+    expect((await data('cards/done'))!.media.thumbUrl).toBe(`${BASE}/image/2026-10/done-w960.webp`);
+    expect(await data('uploads/a-w960')).toMatchObject({ ownerId: 'alice', key: 'image/2026-10/a-w960.webp', kind: 'image' });
+
+    expect(await backfillCoverThumbs(db, storage, { apply: true, publicBases: [BASE], read, exists, log: quiet })).toMatchObject({ made: 0, present: 2, named: 0 });
+    expect(put).toHaveLength(1);
   });
 });

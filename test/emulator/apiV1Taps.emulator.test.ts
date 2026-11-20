@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { ApiFailure } from '@/lib/api/v1/http';
@@ -97,6 +97,16 @@ describe('setTap and the ring', () => {
   });
 });
 
+describe('the budget spent beside the tap (B7)', () => {
+  it('writes nothing when the budget refuses, though the tap’s reads ran beside it', async () => {
+    const refused = Promise.reject(new ApiFailure('rate_limited', 'Too many requests.'));
+    refused.catch(() => {});
+    expect(await code(setTap(db, 'alice', 'walk', true, Date.now(), refused))).toBe('rate_limited');
+    expect((await db.doc('resonanceTaps/walk_alice').get()).exists).toBe(false);
+    expect((await setTap(db, 'alice', 'walk', true, Date.now(), Promise.resolve())).changed).toBe(true);
+  });
+});
+
 describe('CardDetail.tap', () => {
   beforeEach(async () => {
     for (const [uid, m] of [['gus', 1], ['dora', 2], ['carol', 3]] as const) {
@@ -114,6 +124,32 @@ describe('CardDetail.tap', () => {
     const author = (await getCardDetail(db, 'bob', 'walk')).tap!;
     expect([author.mine, author.faces.map((f) => f.handle), author.more, author.mayNote]).toEqual([false, ['alice', 'gus', 'dora'], true, false]);
     expect(JSON.stringify(author)).not.toMatch(/count/i);
+  });
+
+  it('finds a reader’s connections’ taps by query, 30 at a time, never reading each connection’s possible tap; the author’s blocks once (B4, B5)', async () => {
+    // 40 more connections (two `in` chunks), every third one's tap on, one off.
+    for (let i = 0; i < 40; i++) {
+      const uid = `k${String(i).padStart(2, '0')}`;
+      await Promise.all([profile(uid), set(`connections/${['alice', uid].sort().join('_')}`, { userIds: ['alice', uid] })]);
+      if (i % 3 === 0) await set(`resonanceTaps/walk_${uid}`, { cardId: 'walk', userId: uid, on: i !== 39, at: minutesAgo(100 + i), rangAt: null });
+    }
+    const getAll = vi.spyOn(db, 'getAll');
+    const collection = vi.spyOn(db, 'collection');
+    try {
+      const people = (await listTaps(db, 'alice', 'walk')).people.map((p) => p.author.handle);
+      expect(people).toEqual(['dora', 'carol', ...Array.from({ length: 13 }, (_, n) => `k${String(n * 3).padStart(2, '0')}`)]);
+      const paths = getAll.mock.calls.flat().map((ref) => (ref as { path?: string }).path ?? '');
+      // Only the reader's own tap is read by its path.
+      expect(paths.filter((p) => p.startsWith('resonanceTaps/'))).toEqual(['resonanceTaps/walk_alice']);
+      getAll.mockClear();
+      collection.mockClear();
+      await getCardDetail(db, 'bob', 'walk', new Set(['resonances']));
+      // The author's blocks: one read, shared by the lists and the tap's pages.
+      expect(collection.mock.calls.filter(([path]) => path === 'users/bob/blocks')).toHaveLength(1);
+    } finally {
+      getAll.mockRestore();
+      collection.mockRestore();
+    }
   });
 
   it(`pages the author's list ${TAP_PAGE} at a time, newest first, through its index`, async () => {

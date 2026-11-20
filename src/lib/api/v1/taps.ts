@@ -46,6 +46,8 @@ import { TAP_FACES_MAX, type AuthorBody, type CardTapBody, type TapListBody, typ
  * the routes read it by id (visibleCardById), without the pass.
  */
 export const TAPS = 'resonanceTaps';
+/** How many uids one `in` filter takes. */
+const TAP_IN_CHUNK = 30;
 
 export const tapRef = (db: Firestore, cardId: string, uid: string): DocumentReference => db.doc(`${TAPS}/${cardId}_${uid}`);
 
@@ -86,7 +88,15 @@ function tappable(card: Card | null, uid: string): card is Card {
  * one hidden or trashed meanwhile is not_found). Whatever reaches the author —
  * the ring, the bell — is the caller's to start after the response.
  */
-export async function setTap(db: Firestore, uid: string, cardId: string, on: boolean, now = Date.now()): Promise<TapOutcome> {
+export async function setTap(
+  db: Firestore,
+  uid: string,
+  cardId: string,
+  on: boolean,
+  now = Date.now(),
+  /** The tapper's budget, spent beside this (budgetFirst, B7): awaited before anything is written. */
+  spent?: Promise<void>,
+): Promise<TapOutcome> {
   const card = await visibleCardById(db, uid, cardId, TAP_CARD_FIELDS);
   if (!card.publishedAt || trashedAtOf(card) != null || card.trashedAt != null) throw notFound();
   if (card.authorId === uid) throw new ApiFailure('invalid_request', 'You cannot resonate with your own card.');
@@ -102,6 +112,8 @@ export async function setTap(db: Firestore, uid: string, cardId: string, on: boo
   const connection = db.doc(`connections/${pairOf(uid, author)}`);
   return db.runTransaction(async (tx) => {
     const [snap, [current], linked] = await Promise.all([tx.get(ref), tx.getAll(cardRef, { fieldMask: [...TAP_CARD_FIELDS] }), tx.get(connection)]);
+    // The budget answers before anything is written.
+    await spent;
     const fresh = current.exists ? mapCard(current.id, current.data()!) : null;
     if (!tappable(fresh, uid) || fresh.authorId !== author || !cardVisible(fresh, uid, () => linked.exists)) throw notFound();
     const wasOn = snap.exists && snap.get('on') === true;
@@ -185,11 +197,13 @@ async function authorPeople(
   db: Firestore,
   card: Card,
   limit: number,
-  after?: { at: Timestamp; id: string },
+  after: { at: Timestamp; id: string } | undefined,
+  blocked: ReadonlySet<string>,
 ): Promise<{ people: Tapper[]; last: QueryDocumentSnapshot | null; full: boolean }> {
   let q = tapsOnQuery(db, card.id).orderBy(FieldPath.documentId(), 'desc').limit(limit);
   if (after) q = q.startAfter(after.at, after.id);
-  const [page, blocked] = await Promise.all([q.get(), blockedByViewer(db, card.authorId)]);
+  // The author's blocks are read once by the caller (B5), not again for every page.
+  const page = await q.get();
   const tappers = page.docs.map(tapperOf).filter((t): t is Tapper => !!t && t.uid !== card.authorId && !blocked.has(t.uid));
   const blockers = await blockersOf(db, tappers.map((t) => t.uid), card.authorId);
   return { people: tappers.filter((t) => !blockers.has(t.uid)), last: page.docs.at(-1) ?? null, full: page.size === limit };
@@ -204,7 +218,12 @@ async function authorPeople(
  * on an anonymous card nothing here turns on a block (a block ends a
  * connection anyway).
  */
-async function readerPeople(db: Firestore, viewerId: string, card: Card): Promise<{ mine: boolean; people: Tapper[] }> {
+async function readerPeople(
+  db: Firestore,
+  viewerId: string,
+  card: Card,
+  viewerBlocks?: Promise<ReadonlySet<string>>,
+): Promise<{ mine: boolean; people: Tapper[] }> {
   const [own, links] = await Promise.all([
     tapRef(db, card.id, viewerId).get(),
     db.collection('connections').where('userIds', 'array-contains', viewerId).select('userIds').get(),
@@ -217,18 +236,18 @@ async function readerPeople(db: Firestore, viewerId: string, card: Card): Promis
       }),
     ),
   ];
-  const taps: Tapper[] = [];
-  for (let i = 0; i < others.length; i += 100) {
-    const snaps = await db.getAll(...others.slice(i, i + 100).map((uid) => tapRef(db, card.id, uid)));
-    for (const s of snaps) {
-      const t = s.exists && s.get('on') === true ? tapperOf(s) : null;
-      if (t) taps.push(t);
-    }
-  }
+  // Only the connections' taps that are on (B4): a query per 30 of them, side by side — billed by what it finds,
+  // not a read of every connection's possible tap, one batch after another.
+  const chunks: string[][] = [];
+  for (let i = 0; i < others.length; i += TAP_IN_CHUNK) chunks.push(others.slice(i, i + TAP_IN_CHUNK));
+  const pages = await Promise.all(
+    chunks.map((uids) => db.collection(TAPS).where('cardId', '==', card.id).where('on', '==', true).where('userId', 'in', uids).get()),
+  );
+  const taps = pages.flatMap((page) => page.docs.map(tapperOf).filter((t): t is Tapper => !!t));
   taps.sort((a, b) => b.at - a.at || (a.uid < b.uid ? -1 : 1));
   let people = taps;
   if (card.anonymous !== true && taps.length) {
-    const [blocked, blockers] = await Promise.all([blockedByViewer(db, viewerId), blockersOf(db, taps.map((t) => t.uid), viewerId)]);
+    const [blocked, blockers] = await Promise.all([viewerBlocks ?? blockedByViewer(db, viewerId), blockersOf(db, taps.map((t) => t.uid), viewerId)]);
     people = taps.filter((t) => !blocked.has(t.uid) && !blockers.has(t.uid));
   }
   const mine = own.exists && own.get('on') === true;
@@ -240,18 +259,25 @@ async function readerPeople(db: Firestore, viewerId: string, card: Card): Promis
  * far as the letters go (a pen name is asked for by the client first): on a
  * named card, connected, or answering a letter of the author's that waits, or
  * with fewer than NOTE_REQUEST_MAX of their own still unanswered. An anonymous
- * card always takes one (a cap there would tell whose card it is).
+ * card always takes one (a cap there would tell whose card it is), and is
+ * never asked this.
+ *
+ * On a named card, in one read (B4), beside it: whether a block stands
+ * between the reader and the author, either way (then there is no tap at
+ * all) — the two blocks, the connection, the letters and the conversation
+ * together.
  */
-async function mayNoteOn(db: Firestore, viewerId: string, card: Card): Promise<boolean> {
-  if (card.anonymous === true) return true;
+async function readerStanding(db: Firestore, viewerId: string, card: Card): Promise<{ blocked: boolean; mayNote: boolean }> {
   const pair = pairOf(viewerId, card.authorId);
-  const [connection, letter, convo] = await db.getAll(
+  const [ab, ba, connection, letter, convo] = await db.getAll(
+    db.doc(`users/${viewerId}/blocks/${card.authorId}`),
+    db.doc(`users/${card.authorId}/blocks/${viewerId}`),
     db.doc(`connections/${pair}`),
     letterRef(db, viewerId, card.authorId),
     db.doc(`conversations/${pair}`),
   );
-  if (connection.exists || openRequest(convo)?.from === card.authorId) return true;
-  return lettersLeft(letter) < NOTE_REQUEST_MAX;
+  const mayNote = connection.exists || openRequest(convo)?.from === card.authorId || lettersLeft(letter) < NOTE_REQUEST_MAX;
+  return { blocked: ab.exists || ba.exists, mayNote };
 }
 
 /** Whether a block stands between the two, either way. */
@@ -283,16 +309,21 @@ async function firstFaces(db: Firestore, people: Tapper[], n: number): Promise<{
  * author (their published card, out of the trash) or a reader who may tap
  * it — and never for a card read through a shared-card pass (`pass`).
  */
-export async function cardTap(db: Firestore, viewerId: string, card: Card, opts: { pass: boolean }): Promise<CardTapBody | null> {
+export async function cardTap(
+  db: Firestore,
+  viewerId: string,
+  card: Card,
+  opts: { pass: boolean; blocked?: Promise<ReadonlySet<string>> },
+): Promise<CardTapBody | null> {
   if (opts.pass) return null;
-  const view = await tapViewOf(db, viewerId, card);
-  if (!view) return null;
-  if (view === 'author') {
+  if (!card.publishedAt || trashedAtOf(card) != null || card.trashedAt != null) return null;
+  if (card.authorId === viewerId) {
     // One more than the faces, past the blocks: enough to say whether there are others.
+    const blocked = await (opts.blocked ?? blockedByViewer(db, card.authorId));
     let people: Tapper[] = [];
     let after: { at: Timestamp; id: string } | undefined;
     for (let pages = 0; pages < 5 && people.length <= TAP_FACES_MAX; pages++) {
-      const page = await authorPeople(db, card, 10, after);
+      const page = await authorPeople(db, card, 10, after, blocked);
       people = [...people, ...page.people];
       const at = page.last?.get('at');
       if (!page.full || !page.last || !(at instanceof Timestamp)) break;
@@ -301,7 +332,14 @@ export async function cardTap(db: Firestore, viewerId: string, card: Card, opts:
     const { faces, more } = await firstFaces(db, people, TAP_FACES_MAX);
     return { mine: false, faces, more, mayNote: false };
   }
-  const [{ mine, people }, mayNote] = await Promise.all([readerPeople(db, viewerId, card), mayNoteOn(db, viewerId, card)]);
+  // A reader: on a named card, the blocks either way and whether a note would be taken in one read, beside their people.
+  const named = card.anonymous !== true;
+  const [standing, { mine, people }] = await Promise.all([
+    named ? readerStanding(db, viewerId, card) : { blocked: false, mayNote: true },
+    readerPeople(db, viewerId, card, opts.blocked),
+  ]);
+  if (standing.blocked) return null;
+  const mayNote = standing.mayNote;
   const { faces, more } = await firstFaces(db, people, TAP_FACES_MAX);
   return { mine, faces, more, mayNote };
 }
@@ -361,7 +399,7 @@ export async function listTaps(db: Firestore, viewerId: string, cardId: string, 
     return { people: people.filter((p) => found.has(p.uid)).map((p) => ({ author: found.get(p.uid)!, note: null })), nextPageToken: null };
   }
   const after = pageToken ? decodePageToken(pageToken) : undefined;
-  const page = await authorPeople(db, card, TAP_PAGE, after);
+  const page = await authorPeople(db, card, TAP_PAGE, after, await blockedByViewer(db, card.authorId));
   const uids = page.people.map((p) => p.uid);
   const [found, notes] = await Promise.all([
     authorsOf(db, uids),

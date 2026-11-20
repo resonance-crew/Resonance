@@ -82,6 +82,41 @@ export async function readChatImage(
   id: string,
   size: 'full' | 'thumb',
 ): Promise<Uint8Array | null> {
+  return readChecked(db, uid, id, size, (key) => store.get(key), () => {});
+}
+
+/**
+ * readChatImage's picture as a stream (B14), for the route to hand on as it
+ * arrives — the same checks, the stream opened beside them and cancelled when
+ * they refuse. A store that can't stream answers its bytes.
+ */
+export async function streamChatImage(
+  db: Firestore,
+  store: ChatImageStore,
+  uid: string,
+  id: string,
+  size: 'full' | 'thumb',
+): Promise<ReadableStream<Uint8Array> | Uint8Array | null> {
+  return readChecked<ReadableStream<Uint8Array> | Uint8Array>(
+    db,
+    uid,
+    id,
+    size,
+    (key) => (store.stream ? store.stream(key) : store.get(key)),
+    (body) => {
+      if (body instanceof ReadableStream) body.cancel().catch(() => {});
+    },
+  );
+}
+
+async function readChecked<T>(
+  db: Firestore,
+  uid: string,
+  id: string,
+  size: 'full' | 'thumb',
+  open: (key: string) => Promise<T | null>,
+  discard: (body: T) => void,
+): Promise<T | null> {
   if (!PICTURE_ID.test(id) || isReservedId(id)) return null;
   const picture = await chatImageRef(db, id).get();
   const pair = picture.get('pair');
@@ -92,18 +127,23 @@ export async function readChatImage(
   // The file is fetched beside the checks below and handed out only once they pass (a refused request costs a
   // read of the store, nothing more).
   const key = picture.get(size === 'thumb' ? 'thumbKey' : 'key');
-  const bytes = typeof key === 'string' ? store.get(key) : null;
+  const bytes = typeof key === 'string' ? open(key) : null;
   bytes?.catch(() => {});
+  // Refused: whatever was opened is let go unread.
+  const refuse = () => {
+    bytes?.then((b) => b && discard(b), () => {});
+    return null;
+  };
   const [convo, message] = await Promise.all([
     db.doc(`conversations/${pair}`).get(),
     db.doc(`conversations/${pair}/messages/${messageId}`).get(),
   ]);
   const participants = convo.get('participants');
-  if (!convo.exists || !Array.isArray(participants) || !participants.includes(uid)) return null;
-  if (!message.exists || messageImageOf(message.get('image'))?.id !== id) return null;
+  if (!convo.exists || !Array.isArray(participants) || !participants.includes(uid)) return refuse();
+  if (!message.exists || messageImageOf(message.get('image'))?.id !== id) return refuse();
   const sentAt = message.get('sentAt');
   const since = convo.get('createdAt');
-  if (sentAt instanceof Timestamp && since instanceof Timestamp && sentAt.toMillis() < since.toMillis()) return null;
+  if (sentAt instanceof Timestamp && since instanceof Timestamp && sentAt.toMillis() < since.toMillis()) return refuse();
   return bytes;
 }
 

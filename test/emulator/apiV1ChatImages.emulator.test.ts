@@ -26,7 +26,7 @@ const { LocalChatImages } = await import('@/lib/storage/chatImages');
 const { ApiFailure } = await import('@/lib/api/v1/http');
 const { sendMessage } = await import('@/lib/api/v1/conversations');
 const { uploadChatImage } = await import('@/lib/api/v1/chatImageUpload');
-const { purgeUnsentChatImages, readChatImage, UNSENT_KEEP_MS } = await import('@/lib/api/v1/chatImages');
+const { purgeUnsentChatImages, readChatImage, streamChatImage, UNSENT_KEEP_MS } = await import('@/lib/api/v1/chatImages');
 const { purgeAccount } = await import('@/lib/account/deletion');
 const { createReport } = await import('@/lib/api/v1/safety');
 const uploadRoute = await import('@/app/api/v1/chat-images/route');
@@ -216,6 +216,31 @@ describe('reading it', () => {
     // A conversation deleted (the client deletes its messages, then it): its pictures with it.
     await db.doc(`conversations/alice_bob/messages/${id}`).delete();
     expect(await readChatImage(db, store, 'bob', picture.id, 'full')).toBeNull();
+  });
+
+  it('is handed on as a stream, opened beside the checks and let go unread when they refuse (B14)', async () => {
+    const picture = await upload();
+    await sendMessage(db, 'alice', { to: 'bob', text: '', image: picture.id });
+    const cancelled: string[] = [];
+    const streaming = {
+      ...store,
+      get: (key: string) => store.get(key),
+      stream: async (key: string) => {
+        const bytes = await store.get(key);
+        return new ReadableStream<Uint8Array>({
+          start: (c) => {
+            c.enqueue(bytes!);
+            c.close();
+          },
+          cancel: () => void cancelled.push(key),
+        });
+      },
+    };
+    const body = await streamChatImage(db, streaming as typeof store, 'bob', picture.id, 'thumb');
+    expect(body).toBeInstanceOf(ReadableStream);
+    expect((await sharp(Buffer.from(await new Response(body as ReadableStream).arrayBuffer())).metadata()).height).toBe(960);
+    expect(await streamChatImage(db, streaming as typeof store, 'carol', picture.id, 'full')).toBeNull();
+    await vi.waitFor(() => expect(cancelled).toHaveLength(1));
   });
 });
 

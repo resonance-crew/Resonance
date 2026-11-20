@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// PUT / DELETE /api/v1/cards/{id}/tap (共振): the budget spent first, the
+// PUT / DELETE /api/v1/cards/{id}/tap (共振): the budget spent beside the tap, answering first, the
 // answer `{ on, changed }` alone, and everything that reaches the author —
 // the ring, the bell row, the push — after the response, only for a tap that
 // turned on and never rang; taking back after the response leaves the bell.
@@ -51,7 +51,7 @@ describe('PUT /api/v1/cards/{id}/tap', () => {
     expect(await res.json()).toEqual({ on: true, changed: true });
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     expect(spend).toHaveBeenCalledWith(DB, 'alice', 'tap');
-    expect(setTap).toHaveBeenCalledWith(DB, 'alice', 'walk', true);
+    expect(setTap).toHaveBeenCalledWith(DB, 'alice', 'walk', true, expect.any(Number), expect.any(Promise));
     expect(getCurrentUser).toHaveBeenCalledWith({ revocation: 'live' });
     await Promise.all(afterWork);
     expect(ringTap).toHaveBeenCalledWith(DB, 'alice', 'walk');
@@ -82,7 +82,7 @@ describe('PUT /api/v1/cards/{id}/tap', () => {
     errors.mockRestore();
   });
 
-  it("answers the service's refusals with their codes, and 429 past the budget before anything is read", async () => {
+  it("answers the service's refusals with their codes, and 429 past the budget whatever else the tap would answer", async () => {
     setTap.mockRejectedValueOnce(new ApiFailure('blocked', 'You cannot resonate with this card.'));
     const blocked = await call('PUT', 'walk');
     expect(blocked.status).toBe(403);
@@ -92,7 +92,8 @@ describe('PUT /api/v1/cards/{id}/tap', () => {
     spend.mockRejectedValue(new ApiFailure('rate_limited', 'Too many requests. Please try again later.'));
     setTap.mockClear();
     expect((await call('PUT', 'walk')).status).toBe(429);
-    expect(setTap).not.toHaveBeenCalled();
+    // Spent beside the tap's reads (B7): the 429 still wins, and setTap awaits the budget before it writes.
+    expect(setTap.mock.calls[0][5]).toBeInstanceOf(Promise);
   });
 
   it('refuses a malformed id, and an id Firestore keeps for itself, before spending anything; needs someone signed in', async () => {
@@ -111,7 +112,7 @@ describe('DELETE /api/v1/cards/{id}/tap', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ on: false, changed: true });
     expect(spend).toHaveBeenCalledWith(DB, 'alice', 'tap');
-    expect(setTap).toHaveBeenCalledWith(DB, 'alice', 'walk', false);
+    expect(setTap).toHaveBeenCalledWith(DB, 'alice', 'walk', false, expect.any(Number), expect.any(Promise));
     await Promise.all(afterWork);
     expect(untapBell).toHaveBeenCalledWith(DB, 'alice', 'walk');
     expect(ringTap).not.toHaveBeenCalled();

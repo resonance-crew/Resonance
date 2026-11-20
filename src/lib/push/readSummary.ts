@@ -1,3 +1,4 @@
+import { runPool } from './pool';
 import { Timestamp, type Firestore, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { READER_SIGNALS } from '@/lib/api/v1/reading';
 import { appsDraw } from './bellCapability';
@@ -123,6 +124,12 @@ export async function runReadSummary(db: Firestore, opts: { now?: number; deadli
   const byCard = new Map<string, WeekRead[]>();
   for (const r of reads) byCard.set(r.cardId, [...(byCard.get(r.cardId) ?? []), r]);
   const due = [...tally].filter(([id, t]) => t.readers >= READ_SUMMARY_MIN && !id.includes('/')).map(([id]) => id);
+  // Whether an author's apps draw the row, asked once per author (B17), not once per card of theirs.
+  const draws = new Map<string, Promise<boolean>>();
+  const drawsFor = (author: string) => {
+    if (!draws.has(author)) draws.set(author, appsDraw(db, author, BELL_READ_SUMMARY_CAPABILITY));
+    return draws.get(author)!;
+  };
   for (let i = 0; i < due.length; i += 100) {
     if (opts.deadline !== undefined && clock() >= opts.deadline) {
       run.late += due.length - i;
@@ -132,18 +139,19 @@ export async function runReadSummary(db: Firestore, opts: { now?: number; deadli
     const cards = await db.getAll(...chunk.map((id) => db.doc(`cards/${id}`)), {
       fieldMask: ['authorId', 'publishedAt', 'trashedAt', 'anonymous', 'visibility'],
     });
-    for (const [j, card] of cards.entries()) {
+    // A chunk's rows written side by side, a few at a time (B17), not one after another.
+    await runPool([...cards.entries()], 8, async ([j, card]) => {
       const cardId = chunk[j];
       const author = card.exists ? str(card.get('authorId')) : '';
-      if (!author || author.includes('/') || card.get('publishedAt') == null || card.get('trashedAt') != null) continue;
+      if (!author || author.includes('/') || card.get('publishedAt') == null || card.get('trashedAt') != null) return;
       // Public cards only (see above): a connections card's readers are a few people its author knows.
-      if (card.get('visibility') !== 'public') continue;
+      if (card.get('visibility') !== 'public') return;
       // Its author's own reads were never kept; counted again without them all the same.
       const week = weekTally((byCard.get(cardId) ?? []).filter((r) => r.userId !== author), now).get(cardId);
-      if (!week || week.readers < READ_SUMMARY_MIN) continue;
-      if (!(await appsDraw(db, author, BELL_READ_SUMMARY_CAPABILITY))) {
+      if (!week || week.readers < READ_SUMMARY_MIN) return;
+      if (!(await drawsFor(author))) {
         run.held++;
-        continue;
+        return;
       }
       const at = Timestamp.fromMillis(now);
       const written = await db
@@ -166,7 +174,7 @@ export async function runReadSummary(db: Firestore, opts: { now?: number; deadli
           },
         );
       if (written) run.rows++;
-    }
+    }, { tag: '[read-summary]' });
   }
   return run;
 }

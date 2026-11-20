@@ -67,13 +67,16 @@ export async function publishCard(
   uid: string,
   id: string,
   slugBase?: (title: string) => Promise<string>,
-  opts: { slugWaitMs?: number } = {},
+  /** `spent`: the author's budget, spent beside this (budgetFirst, B7) — awaited before anything is written. */
+  opts: { slugWaitMs?: number; spent?: Promise<void> } = {},
 ): Promise<PublishResult> {
   // Someone else's card is as absent as a missing one; so is an id Firestore keeps for itself.
   if (isReservedId(id)) throw new ApiFailure('not_found', 'No such card.');
   const ref = db.doc(`cards/${id}`);
   const card = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
+    // The budget answers before anything is written (budgetFirst).
+    await opts.spent;
     // Someone else's card is as absent as a missing one.
     if (!snap.exists || snap.get('authorId') !== uid) throw new ApiFailure('not_found', 'No such card.');
     // Restored first: published from the trash it would go out private, answering nothing.

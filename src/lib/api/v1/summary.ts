@@ -1,4 +1,5 @@
-import { FieldValue, Timestamp, type DocumentData, type Firestore } from 'firebase-admin/firestore';
+import { after } from 'next/server';
+import { FieldValue, Timestamp, type DocumentData, type DocumentSnapshot, type Firestore } from 'firebase-admin/firestore';
 import { mapCard } from '@/lib/db/firestore/mapper';
 import type { Card } from '@/lib/db/types';
 import { excerpt, plainText } from '@/lib/markdown/plainText';
@@ -156,5 +157,49 @@ export async function withStories<T extends ListCard>(db: Firestore, cards: T[])
     const story = stories.get(c.id);
     c.story = typeof story === 'string' ? story : '';
   }
+  keepSummaries(snaps);
   return cards;
+}
+
+const pendingKeeps = new Set<Promise<unknown>>();
+
+/** For tests: every summary write withStories started has settled. */
+export async function summaryKeepsSettled(): Promise<void> {
+  while (pendingKeeps.size) await Promise.allSettled([...pendingKeeps]);
+}
+
+/**
+ * The summaries withStories just worked out from the stories, kept on their
+ * cards after the answer (B6) — `{excerpt, readMinutes, excerptAt}`, as
+ * publishing stores them — so the next list reads them rather than the story
+ * again: an app's autosaved draft or private card moves `updatedAt` at every
+ * save, and its card box would otherwise read every such story at every
+ * open. Each write holds only if the card is unchanged since its story was
+ * read here (`lastUpdateTime`): a save in between is newer than what was
+ * summarised, and that card waits for the next list. Never `updatedAt`, nor
+ * anything a client writes; a write that fails changes nothing.
+ */
+function keepSummaries(snaps: DocumentSnapshot[]) {
+  const due = snaps.filter((s) => s.exists && s.updateTime);
+  if (!due.length) return;
+  const write = async () =>
+    Promise.all(
+      due.map((s) =>
+        s.ref
+          .update({ ...summarize(s.get('story')), excerptAt: FieldValue.serverTimestamp() }, { lastUpdateTime: s.updateTime! })
+          .catch(() => {}),
+      ),
+    );
+  const run = () => {
+    const p = write().finally(() => pendingKeeps.delete(p));
+    pendingKeeps.add(p);
+    return p;
+  };
+  try {
+    // After the response: the reader never waits for it.
+    after(run);
+  } catch {
+    // Outside a request (a script, a test): now, unawaited.
+    void run();
+  }
 }

@@ -1,4 +1,5 @@
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
+import { coverThumbKey } from '@/lib/images/coverThumb';
 import type { IStorageProvider } from './interfaces';
 import type { StoredObject, UploadIntent } from './types';
 
@@ -52,4 +53,39 @@ export async function storeOwned(
     throw e;
   }
   return stored;
+}
+
+/**
+ * A cover-sized picture and its smaller copy (B2, lib/images/coverThumb): the
+ * picture stored as storeOwned stores it, the copy under the key made from the
+ * picture's, each on record as the owner's (the account purge finds both by
+ * their records). Should either fail, both are removed again — every `image`
+ * upload has its copy, which is what lets a list derive the copy's URL from the
+ * cover's alone.
+ */
+export async function storeOwnedWithThumb(
+  db: Firestore,
+  storage: Pick<IStorageProvider, 'uploadObject' | 'putObject' | 'deleteObject'>,
+  intent: UploadIntent,
+  body: Uint8Array,
+  thumb: { contentType: string; body: Uint8Array },
+): Promise<StoredObject & { thumbUrl: string }> {
+  const stored = await storage.uploadObject(intent, body);
+  const thumbKey = coverThumbKey(stored.key);
+  let thumbStored: StoredObject | null = null;
+  try {
+    if (!thumbKey) throw new Error(`No copy key for ${stored.key}`);
+    thumbStored = await storage.putObject(thumbKey, thumb.contentType, thumb.body);
+    await Promise.all([
+      recordUpload(db, intent.ownerId, stored, intent.kind),
+      recordUpload(db, intent.ownerId, thumbStored, intent.kind),
+    ]);
+  } catch (e) {
+    await Promise.all([
+      storage.deleteObject(stored.key).catch(() => {}),
+      thumbKey ? storage.deleteObject(thumbKey).catch(() => {}) : undefined,
+    ]);
+    throw e;
+  }
+  return { ...stored, thumbUrl: thumbStored.publicUrl };
 }

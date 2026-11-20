@@ -7,6 +7,7 @@ import { getAdminDb } from '@/lib/db/firestore/admin';
 import { ringAfter } from '@/lib/push/ring';
 import { announceNewCard } from '@/lib/push/connectionCards';
 import { spend } from '@/lib/api/rateLimit';
+import { budgetFirst } from '@/lib/api/v1/conversations';
 import { indexCard } from '@/lib/recommend/indexCard';
 import { makeSummaryTranslations } from '@/lib/api/v1/summaryTranslationsMake';
 import { cardPagePaths, revalidateLocalized } from '@/lib/api/revalidate';
@@ -26,8 +27,9 @@ export const maxDuration = 120;
 export const POST = withUser(async (user, req, ctx: RouteContext<'key'>) => {
   const id = parse(CardIdParam, await routeParam(ctx, 'key'));
   const db = getAdminDb();
-  await spend(db, user.id, 'publish');
-  const { notificationId, pendingSlug, ...result } = await publishCard(db, user.id, id).catch(async (e: unknown) => {
+  // The budget is spent beside the publish's reads, not before them (B7), and still answers first (budgetFirst).
+  const spent = spend(db, user.id, 'publish');
+  const { notificationId, pendingSlug, ...result } = await budgetFirst(spent, () => publishCard(db, user.id, id, undefined, { spent })).catch(async (e: unknown) => {
     // A build before letters shows the refusal's words as they are: in its own language (lib/api/v1/preLetter).
     throw await refusalForPreLetterBuild(db, user.id, req, e);
   });

@@ -127,7 +127,7 @@ export const noPenName = () => new ApiFailure('forbidden', 'Choose a pen name fi
  * after its reads), so over budget the answer is the 429 whatever else is
  * wrong with the request — exactly as when the budget was spent first.
  */
-async function budgetFirst<T>(spent: Promise<void>, send: () => Promise<T>): Promise<T> {
+export async function budgetFirst<T>(spent: Promise<void>, send: () => Promise<T>): Promise<T> {
   // Handled from the start: refused while the send's reads run, it is awaited below all the same.
   spent.catch(() => {});
   let result: T;

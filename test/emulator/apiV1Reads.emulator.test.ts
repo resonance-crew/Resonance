@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
-import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestore';
+import { getFirestore, Query, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { ApiFailure } from '@/lib/api/v1/http';
 import {
   getCardBox,
@@ -252,6 +252,20 @@ describe('connections-only cards in a list', () => {
     expect((await getRecommendedFeed(db, 'alice', load)).cards.map((c) => c.id)).toEqual(['b1', 'a1', 'b2', 'e1']);
     expect((await getRecommendedFeed(db, 'dana', load)).cards.map((c) => c.id)).toEqual(['d1', 'e1']);
   });
+
+  it('are checked once for a thread’s ?keys=, not again when presented (B13)', async () => {
+    await card('b1', 'bob', 1, { visibility: 'connections' });
+    await card('d1', 'dana', 2, { visibility: 'connections' });
+    await card('e1', 'erin', 5);
+    const getAll = vi.spyOn(db, 'getAll');
+    try {
+      expect((await getCardsByKeys(db, 'alice', ['b1', 'd1', 'e1'])).cards.map((c) => c.id)).toEqual(['b1', 'e1']);
+      const connectionReads = getAll.mock.calls.filter((refs) => refs.some((r) => (r as { path?: string }).path?.startsWith('connections/')));
+      expect(connectionReads).toHaveLength(1);
+    } finally {
+      getAll.mockRestore();
+    }
+  });
 });
 
 describe('profiles', () => {
@@ -318,6 +332,28 @@ describe('profiles', () => {
     }
     expect((await getProfile(db, 'alice', 'bob')).cardCount).toBe(named.length);
     expect((await getProfile(db, 'bob', 'bob')).cardCount).toBe(named.length);
+  });
+
+  it('counts a profile’s cards by aggregation, reading only the page’s documents; a far-future or string stamp counts for nothing (B11)', async () => {
+    for (let i = 0; i < 5; i++) await card(`n${i}`, 'bob', i + 1);
+    await db.doc('cards/future').set({ authorId: 'bob', thoughtCore: 'f', story: 's', tags: [], visibility: 'public', anonymous: false, publishedAt: Timestamp.fromDate(new Date('2099-01-01')) });
+    await db.doc('cards/stringy').set({ authorId: 'bob', thoughtCore: 's', story: 's', tags: [], visibility: 'public', anonymous: false, publishedAt: '2099-01-01' });
+    const get = vi.spyOn(Query.prototype, 'get');
+    try {
+      const bare = await getProfile(db, 'alice', 'bob');
+      expect(bare.cardCount).toBe(5);
+      // No card document is read for a profile without its cards: the count is an aggregation.
+      expect(get.mock.contexts.filter((q) => (q as Query & { _queryOptions?: { collectionId?: string } })._queryOptions?.collectionId === 'cards')).toHaveLength(0);
+      const withCards = await getProfile(db, 'alice', 'bob', { include: new Set(['cards']), limit: 2 });
+      expect(withCards.cardCount).toBe(5);
+      expect(withCards.cards?.cards.map((c) => c.id)).toEqual(['n0', 'n1']);
+      // The page is the one query of cards read as documents, of its own length.
+      const cardQueries = get.mock.contexts.filter((q) => (q as Query & { _queryOptions?: { collectionId?: string } })._queryOptions?.collectionId === 'cards');
+      expect(cardQueries).toHaveLength(1);
+      expect((cardQueries[0] as Query & { _queryOptions: { limit?: number } })._queryOptions.limit).toBe(2);
+    } finally {
+      get.mockRestore();
+    }
   });
 
   it("lists others' cards that link to theirs", async () => {
@@ -477,6 +513,24 @@ describe('the card box in one request (GET /me/cardbox?shelves=)', () => {
         for (const s of pair) expect(some[s], `${viewer} ${s}`).toEqual(each[s]);
       }
     }
+  });
+
+  it('finds a reply past an author’s 60th card, and the newest drafts of many through their index (B12)', async () => {
+    // erin: 70 cards that answer nothing, written before her one reply (doc ids sort the reply last).
+    for (let i = 0; i < 70; i++) await card(`erin-a${String(i).padStart(2, '0')}`, 'erin', 30 + i);
+    await card('erin-z-reply', 'erin', 5, { referenceCardId: 'bob-pub' });
+    const erin = await getCardBoxShelves(db, 'erin', new Set(['resonated', 'draft'] as const));
+    expect(erin.resonated!.cards.map((c) => c.id)).toEqual(['bob-pub']);
+
+    // 65 drafts edited one after another and one older without updatedAt: the 40 newest, newest first.
+    for (let i = 0; i < 65; i++) await card(`fay-d${String(i).padStart(2, '0')}`, 'fay', 0, { publishedAt: null, updatedAt: minutesAgo(100 - i) });
+    await db.doc('cards/fay-undated').set({ authorId: 'fay', thoughtCore: 'u', story: 's', tags: [], visibility: 'private', publishedAt: null });
+    const fay = await getCardBoxShelves(db, 'fay', new Set(['draft'] as const));
+    expect(fay.draft!.cards.map((c) => c.id)).toEqual(Array.from({ length: 40 }, (_, n) => `fay-d${String(64 - n).padStart(2, '0')}`));
+    // A short shelf still lists the draft with no stamp (it is scanned), last.
+    await card('gil-d', 'gil', 0, { publishedAt: null, updatedAt: minutesAgo(1) });
+    await db.doc('cards/gil-undated').set({ authorId: 'gil', thoughtCore: 'u', story: 's', tags: [], visibility: 'private', publishedAt: null });
+    expect((await getCardBoxShelves(db, 'gil', new Set(['draft'] as const))).draft!.cards.map((c) => c.id)).toEqual(['gil-d', 'gil-undated']);
   });
 
   it('fills the shelves as the card box shows them: own bylines kept, others filtered by visibility, blocks and anonymity', async () => {

@@ -1,3 +1,4 @@
+import { runPool } from '@/lib/push/pool';
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { embedModel, signatureModel } from '@/lib/ai/openai';
 import { costOf } from '@/lib/ai/prices';
@@ -18,6 +19,8 @@ import { CARD_SIGNATURES, indexCard, type IndexResult } from './indexCard';
 export const INDEX_OWED_LIMIT = 20;
 /** Owed cards a run looks at (an unchanged one is settled without a call). */
 const EXAMINED_MAX = 200;
+/** How many cards are read at once. */
+export const INDEX_OWED_CONCURRENCY = 3;
 
 /** The results that asked no model. */
 const NO_CALL = new Set<IndexResult['reason']>(['unchanged', 'blank', 'thin', 'not-published', 'not-found', 'over-budget']);
@@ -45,36 +48,44 @@ export async function indexOwed(db: Firestore, opts: { limit?: number; deadline?
     ...templated.docs.filter((d) => d.get('rewritten') !== true).map((d) => ({ id: d.id, rewrite: true })),
   ].filter((x, i, all) => all.findIndex((y) => y.id === x.id) === i);
   const run: IndexOwedRun = { examined: 0, read: 0, outcomes: {}, left: 0, tokens: { input: 0, output: 0, reasoning: 0, embed: 0 }, cost: 0 };
-  for (const [i, card] of owed.entries()) {
-    if (run.read >= limit || (opts.deadline !== undefined && now() >= opts.deadline)) {
-      run.left = owed.length - i;
-      break;
-    }
-    run.examined++;
-    try {
-      const result = await indexCard(card.id, {
-        // A templated reading's text is unchanged: asked again all the same, once.
-        force: card.rewrite,
-        rewrite: true,
-        onUsage: (u) => {
-          run.tokens.input += u.input;
-          run.tokens.output += u.output;
-          run.tokens.reasoning += u.reasoning;
-          run.tokens.embed += u.embed;
-        },
-      });
-      const outcome = result.reason ?? 'indexed';
-      run.outcomes[outcome] = (run.outcomes[outcome] ?? 0) + 1;
-      if (!NO_CALL.has(result.reason)) run.read++;
-    } catch (e) {
-      run.read++;
-      run.outcomes.error = (run.outcomes.error ?? 0) + 1;
-      console.error('[index-cards]', card.id, e);
-    }
-  }
-  const reading = costOf(signatureModel(), run.tokens);
+  // Three at a time (B16): each reading takes 20–60 s, and one after another twenty overran the cron's 300 s.
+  // None is started past the deadline, nor once those read and still reading could reach the limit.
+  let reading = 0;
+  const { notStarted } = await runPool(
+    owed,
+    INDEX_OWED_CONCURRENCY,
+    async (card) => {
+      run.examined++;
+      reading++;
+      try {
+        const result = await indexCard(card.id, {
+          // A templated reading's text is unchanged: asked again all the same, once.
+          force: card.rewrite,
+          rewrite: true,
+          onUsage: (u) => {
+            run.tokens.input += u.input;
+            run.tokens.output += u.output;
+            run.tokens.reasoning += u.reasoning;
+            run.tokens.embed += u.embed;
+          },
+        });
+        const outcome = result.reason ?? 'indexed';
+        run.outcomes[outcome] = (run.outcomes[outcome] ?? 0) + 1;
+        if (!NO_CALL.has(result.reason)) run.read++;
+      } catch (e) {
+        run.read++;
+        run.outcomes.error = (run.outcomes.error ?? 0) + 1;
+        console.error('[index-cards]', card.id, e);
+      } finally {
+        reading--;
+      }
+    },
+    { tag: '[index-cards]', stop: () => run.read + reading >= limit || (opts.deadline !== undefined && now() >= opts.deadline) },
+  );
+  run.left = notStarted;
+  const readCost = costOf(signatureModel(), run.tokens);
   const embedding = costOf(embedModel(), { input: run.tokens.embed, output: 0 });
-  run.cost = reading === null || embedding === null ? null : reading + embedding;
+  run.cost = readCost === null || embedding === null ? null : readCost + embedding;
   return run;
 }
 

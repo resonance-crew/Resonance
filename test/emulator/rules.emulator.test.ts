@@ -791,6 +791,30 @@ describe('cards: what the author may write', () => {
     await assertSucceeds(setDoc(ref, { story: '測試測試', updatedAt: serverTimestamp() }, { merge: true }));
   });
 
+  it('keeps taking an autosave after a list kept the summary on the draft (B6: excerpt, readMinutes, excerptAt are the server’s)', async () => {
+    const ID = 'ssssssssssssssssssss';
+    await seed(async (db) => {
+      await setDoc(doc(db, 'cards', ID), { ...draft('alice'), updatedAt: new Date('2026-11-01'), excerpt: 'words', readMinutes: 1, excerptAt: new Date('2026-11-02') });
+    });
+    const db = as('alice');
+    const ref = doc(db, 'cards', ID);
+    // The apps' and the web's autosave: a merge of the story and the stamp.
+    await assertSucceeds(setDoc(ref, { story: 'more words', thoughtCore: 't', updatedAt: serverTimestamp() }, { merge: true }));
+    await assertSucceeds(setDoc(ref, { story: 'even more', updatedAt: serverTimestamp() }, { merge: true }));
+    // The summary itself stays the server's to write.
+    await assertFails(setDoc(ref, { excerpt: 'forged', updatedAt: serverTimestamp() }, { merge: true }));
+    await assertFails(setDoc(ref, { excerptAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true }));
+  });
+
+  it("takes a cover's ≤ 960 px copy the upload answered (media.thumbUrl, B2): stored, and a copy's name — nothing else", async () => {
+    const db = as('alice');
+    const cover = (thumbUrl: unknown) => ({ type: 'image', url: 'https://img.example/image/2026-11/c.webp', thumbUrl });
+    await assertSucceeds(setDoc(doc(collection(db, 'cards')), draft('alice', { media: cover('https://img.example/image/2026-11/c-w960.webp') })));
+    for (const bad of ['javascript:alert(1)', 'https://img.example/image/2026-11/other.webp', 42, 'https://img.example/' + 'x'.repeat(2048) + '-w960.webp']) {
+      await assertFails(setDoc(doc(collection(db, 'cards')), draft('alice', { media: cover(bad) })));
+    }
+  });
+
   it("takes a cover's frame of exactly four numbers in their ranges, on a draft, the card and its pending edit (round 25)", async () => {
     const ID = 'ffffffffffffffffffff';
     await seed(async (db) => {

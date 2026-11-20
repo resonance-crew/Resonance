@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { crossOriginCookieWrite } from '@/lib/api/sameOrigin';
 import { getCurrentUser } from '@/lib/auth';
 import { getStorageProvider } from '@/lib/storage';
-import { storeOwned } from '@/lib/storage/uploads';
-import { normalizeUpload, UnsupportedImage, type UploadPurpose } from '@/lib/storage/image';
+import { storeOwned, storeOwnedWithThumb } from '@/lib/storage/uploads';
+import { normalizeUpload, normalizeUploadWithThumb, UnsupportedImage, type NormalizedImage, type UploadPurpose } from '@/lib/storage/image';
 import { UPLOAD_MAX_BYTES, UPLOAD_MAX_FILE_BYTES } from '@/lib/images/limits';
 import { limited } from '@/lib/api/rateLimit';
 import { getAdminDb } from '@/lib/db/firestore/admin';
@@ -25,7 +25,8 @@ const tooLarge = () => NextResponse.json({ error: 'Image is too large' }, { stat
  * Nothing the client says about the file is trusted: the bytes are decoded
  * and re-encoded (normalizeUpload: upright, scaled to fit — a profile photo
  * to 256 px — metadata such as GPS stripped, WebP), and the stored object's
- * type and extension are the encoder's. Clients still compress first
+ * type and extension are the encoder's. A cover or story picture also
+ * answers `thumbUrl`, its ≤ 960 px copy stored beside it (lib/images/coverThumb). Clients still compress first
  * (src/lib/images/compress.ts), which keeps the request small.
  */
 export async function POST(req: Request) {
@@ -51,27 +52,30 @@ export async function POST(req: Request) {
   const refused = await limited(db, user.id, [['upload'], ['uploadBytes', file.size]]);
   if (refused) return refused;
 
-  let image;
+  let image: NormalizedImage;
+  // A cover or story picture is kept with its smaller copy (≤ 960 px, what lists draw: FeedCard.imageThumbUrl).
+  let thumb: NormalizedImage | null = null;
   try {
-    image = await normalizeUpload(new Uint8Array(await file.arrayBuffer()), purpose);
+    if (purpose === 'image') ({ full: image, thumb } = await normalizeUploadWithThumb(new Uint8Array(await file.arrayBuffer())));
+    else image = await normalizeUpload(new Uint8Array(await file.arrayBuffer()), purpose);
   } catch (e) {
     if (e instanceof UnsupportedImage) return NextResponse.json({ error: 'Unsupported image type' }, { status: 400 });
     throw e;
   }
 
   // The key names no one (an anonymous card's cover is public); whose it is goes on record.
-  const stored = await storeOwned(
-    db,
-    getStorageProvider(),
-    {
-      filename: `upload.${image.extension}`,
-      contentType: image.contentType,
-      size: image.data.byteLength,
-      ownerId: user.id,
-      kind: 'image',
-    },
-    image.data,
-  );
+  const intent = {
+    filename: `upload.${image.extension}`,
+    contentType: image.contentType,
+    size: image.data.byteLength,
+    ownerId: user.id,
+    kind: 'image' as const,
+  };
+  if (thumb) {
+    const stored = await storeOwnedWithThumb(db, getStorageProvider(), intent, image.data, { contentType: thumb.contentType, body: thumb.data });
+    return NextResponse.json({ publicUrl: stored.publicUrl, key: stored.key, thumbUrl: stored.thumbUrl });
+  }
+  const stored = await storeOwned(db, getStorageProvider(), intent, image.data);
 
   return NextResponse.json({ publicUrl: stored.publicUrl, key: stored.key });
 }
