@@ -259,7 +259,7 @@ describe('ThoughtMapCanvas panning', () => {
 
   // Dragging one card moves that card: the others keep their drawing. (The
   // card is clear of the region, so the drag doesn't file it into one.)
-  it('redraws no card while one is dragged', () => {
+  it('redraws no card while one is dragged', async () => {
     const { node, viewport } = board('d');
     const left = node.style.left;
     vi.mocked(wobRect).mockClear();
@@ -267,12 +267,24 @@ describe('ThoughtMapCanvas panning', () => {
     fireEvent.pointerDown(node, { button: 0, pointerId: 1, clientX: 100, clientY: 100 });
     fireEvent.pointerMove(viewport, { pointerId: 1, clientX: 140, clientY: 130 });
     fireEvent.pointerMove(viewport, { pointerId: 1, clientX: 180, clientY: 150 });
+    // W12: the moves of one frame land together, on the frame
+    expect(node.style.left).toBe(left);
+    await act(() => new Promise<void>((done) => requestAnimationFrame(() => done())));
 
     // A hand-drawn card outline is keyed on its size and seed, which a move
     // leaves alone: nothing is redrawn at all.
     expect(wobRect).not.toHaveBeenCalled();
     expect(node.style.left).not.toBe(left);
     fireEvent.pointerUp(viewport, { pointerId: 1, clientX: 180, clientY: 150 });
+  });
+
+  it('lands the last move when the pointer lifts before its frame', () => {
+    const { node, viewport } = board('d');
+    const left = node.style.left;
+    fireEvent.pointerDown(node, { button: 0, pointerId: 1, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(viewport, { pointerId: 1, clientX: 180, clientY: 150 });
+    fireEvent.pointerUp(viewport, { pointerId: 1, clientX: 180, clientY: 150 });
+    expect(node.style.left).not.toBe(left);
   });
 });
 
