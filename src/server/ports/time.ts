@@ -8,8 +8,11 @@
  * compare as strings. Times nothing is ordered by stay `Date`.
  *
  * A `PageCursor` is opaque to clients. New ones are `c1.` + base64url JSON of
- * `{ t: Instant, id }`. The older `[seconds, nanos, id]` tokens
- * (src/lib/api/v1/paging.ts) are decoded by the cards-read lane, beside these.
+ * `{ t: Instant, id }`. The older `[seconds, nanos, id]` tokens are read
+ * beside these, forever (clients hold them as opaque strings):
+ * src/lib/api/v1/paging.ts `readPageToken` / `pageTokenPosition`, which the v1
+ * lists still issue in the older format (a suite reads a token's id out of
+ * it) — see that file.
  */
 
 export type Instant = string;

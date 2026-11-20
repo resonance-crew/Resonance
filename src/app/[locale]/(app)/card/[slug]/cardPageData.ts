@@ -1,41 +1,20 @@
 import { cache } from 'react';
-import type { Firestore } from 'firebase-admin/firestore';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { cardByKeyForAnyone } from '@/lib/db/firestore/cardKey';
-import { mapCard, mapUser } from '@/lib/db/firestore/mapper';
 import { toCardSeed, type CardSeed } from '@/lib/data/cardSeed';
-import type { Card, User } from '@/lib/db/types';
+import { readCardForPage as readCardForPageIn, type LoadedCard } from '@/server/app/cardsRead';
+import { serverCtx } from '@/server/ctx';
+import type { AdminDb } from '@/server/infra/firestore/db';
+import { ctxFor } from '@/server/infra/firestore/ctx';
 
-/** A card page's server read. */
-export interface LoadedCard {
-  /**
-   * The document the URL segment names (any visibility), or null — null for
-   * a card in its author's trash too, which is gone to everyone else
-   * (cardByKeyForAnyone).
-   */
-  id: string | null;
-  /** The card, only when a signed-out reader may read it (public and published). */
-  card: Card | null;
-  /** Its author's profile — never read for an anonymous card. */
-  author: User | null;
-}
+export type { LoadedCard };
 
 /**
- * The card a URL segment names, as the world sees it. There is no viewer
- * here: the result becomes cached HTML served to everyone, so only what a
- * signed-out reader may read comes back — firestore.rules' `cardVisible` for
- * no one: published, and public — and what depends on the viewer (their
- * blocks, their own or connections-only cards) is left to the browser.
+ * The card a URL segment names, as the world sees it (src/server/app/cardsRead.ts
+ * readCardForPage): only what a signed-out reader may read — published and
+ * public — since the result becomes cached HTML served to everyone. Kept with
+ * this signature for its importers (the emulator suites, /api/cards/view).
  */
-export async function readCardForPage(db: Firestore, key: string): Promise<LoadedCard> {
-  const snap = await cardByKeyForAnyone(db, key);
-  if (!snap) return { id: null, card: null, author: null };
-  const data = snap.data() ?? {};
-  const card = mapCard(snap.id, data);
-  if (card.visibility !== 'public' || data.publishedAt == null) return { id: snap.id, card: null, author: null };
-  if (card.anonymous || !card.authorId || card.authorId.includes('/')) return { id: snap.id, card, author: null };
-  const author = await db.doc(`users/${card.authorId}`).get();
-  return { id: snap.id, card, author: author.exists ? mapUser(author.id, author.data() ?? {}) : null };
+export function readCardForPage(db: AdminDb, key: string): Promise<LoadedCard> {
+  return readCardForPageIn(ctxFor(db), key);
 }
 
 /**
@@ -45,7 +24,7 @@ export async function readCardForPage(db: Firestore, key: string): Promise<Loade
  */
 export const loadCard = cache(async (key: string): Promise<LoadedCard | null> => {
   try {
-    return await readCardForPage(getAdminDb(), key);
+    return await readCardForPageIn(serverCtx(), key);
   } catch (e) {
     console.error('card page: server read failed', e);
     return null;

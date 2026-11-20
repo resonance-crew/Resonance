@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { cardByKeyForAnyone } from '@/lib/db/firestore/cardKey';
+import { serverCtx } from '@/server/ctx';
 
 export const runtime = 'nodejs';
 
@@ -30,7 +29,7 @@ const RESOLVE_MISS_CACHE = 'no-store';
  */
 export async function GET(req: Request) {
   const key = new URL(req.url).searchParams.get('key')?.trim();
-  const card = key ? await cardByKeyForAnyone(getAdminDb(), key) : null;
+  const card = key ? await serverCtx().data.cards.findForAnyone(key) : null;
   return NextResponse.json(
     { id: card?.id ?? null },
     { headers: { 'Cache-Control': card ? RESOLVE_HIT_CACHE : RESOLVE_MISS_CACHE } },
