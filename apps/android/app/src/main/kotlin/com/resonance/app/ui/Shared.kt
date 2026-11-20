@@ -148,6 +148,7 @@ fun FeedCard.story(translated: SummaryTranslation? = null, translatedLang: Strin
         readTime = L10n.App.readMinutes(readMinutes),
         tags = tags,
         imageUrl = imageUrl,
+        imageThumbUrl = imageThumbUrl,
         imageLabel = imageLabel ?: title.take(24),
         accentHue = accentHue,
         reason = null,

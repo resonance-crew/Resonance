@@ -1096,7 +1096,7 @@ private fun SharedMediaContent(model: ThreadModel, opener: LinkOpener, onClose: 
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         val cover = Tokens.hue(HueRole.Accent, card.accentHue ?: 55.0)
-                        OrganicImage(card.imageUrl, 7.0, Modifier.size(40.dp)) { Box(Modifier.fillMaxSize().background(cover)) }
+                        OrganicImage(card.imageThumbUrl ?: card.imageUrl, 7.0, Modifier.size(40.dp), fallbackUrl = card.imageUrl) { Box(Modifier.fillMaxSize().background(cover)) }
                         BasicText(
                             card.title, maxLines = 2, overflow = TextOverflow.Ellipsis,
                             style = AppFonts.body(14f, 600, lineHeight = 1.3f), modifier = Modifier.weight(1f),

@@ -1,0 +1,34 @@
+package com.resonance.app.thoughtmap
+
+import com.resonance.app.thoughtmap.ThoughtMapService.Companion.mapCardOf
+import com.resonance.app.thoughtmap.ThoughtMapService.Companion.referenceIds
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+/**
+ * A6: the originals I answered come from my own cards already read (published and drafts), not from
+ * a third read of 60 of them in no order — which missed every original answered past a person's
+ * first 60 cards by id. B2: a node's picture is the small cover when the card has one.
+ */
+class MapReferencesThumbsTest {
+    @Test
+    fun theOriginalsAreTheReferencesOfMyCardsRead() {
+        val published = List(70) { i -> mapOf<String, Any?>("authorId" to "me", "referenceCardId" to if (i == 69) "orig-late" else null) }
+        val drafts = listOf(
+            mapOf<String, Any?>("referenceCardId" to "orig-draft"),
+            mapOf<String, Any?>("referenceCardId" to "orig-late"),
+            mapOf<String, Any?>("referenceCardId" to ""),
+        )
+        assertEquals(listOf("orig-late", "orig-draft"), referenceIds(published + drafts))
+    }
+
+    @Test
+    fun aNodeDrawsTheSmallCoverAndFallsBackToTheCover() {
+        val media = mapOf("type" to "image", "url" to "https://img.example/a.webp", "thumbUrl" to "https://img.example/a-960.webp")
+        val card = mapCardOf("c1", mapOf("media" to media))!!
+        assertEquals("https://img.example/a-960.webp", card.mediaUrl)
+        assertEquals("https://img.example/a.webp", card.mediaFallbackUrl)
+        val older = mapCardOf("c2", mapOf("media" to media - "thumbUrl"))!!
+        assertEquals("https://img.example/a.webp", older.mediaUrl)
+    }
+}

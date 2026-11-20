@@ -43,6 +43,8 @@ data class MapCard(
     val accentHue: Double?,
     /** Where its cover is looked at (round 25 §G1); null: centred — the square thumb cut on it. */
     val mediaFrame: CoverFraming? = null,
+    /** The cover itself, asked for when [mediaUrl] (the list's small one, B2) fails; null: none. */
+    val mediaFallbackUrl: String? = null,
 ) {
     /** A 私人卡 (round 9 §1): one only its author sees — never published, or published and kept private. */
     val isPrivateCard: Boolean get() = publishedAt == null || visibility == "private"
@@ -174,8 +176,10 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
     /**
      * My own cards (getCardsByAuthor: the newest 40 published, and my drafts
      * read apart — the 40 last edited, newest first) and the originals I
-     * resonated with (my latest 60 cards' references: see [cards] by id — one
-     * I can no longer read just isn't there).
+     * resonated with (the references of those same cards, [referenceIds]: see
+     * [cards] by id — one I can no longer read just isn't there). A third read
+     * of my cards for their references (60 in no order, which missed originals
+     * past a person's first 60 cards by id, story text and all) is gone (A6).
      */
     suspend fun cards(): CardSet = coroutineScope {
         val cardsCol = db.collection("cards")
@@ -184,14 +188,13 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
         // cards, every draft fell off the tray. Read them on their own (equality filters only, so
         // no composite index) and keep the most recently edited, as the web and /api/v1 do.
         val drafts = async { cardsCol.whereEqualTo("authorId", uid).whereEqualTo("publishedAt", null).limit(DRAFT_SCAN.toLong()).get().await() }
-        val replies = async { cardsCol.whereEqualTo("authorId", uid).limit(60).get().await() }
-        val refs = replies.await().documents.mapNotNull { it.getString("referenceCardId") }.distinct()
-        val originals = cards(refs)
-        val published = own.await().documents.mapNotNull { d -> card(d)?.takeIf { it.publishedAt != null } }
-        val recentDrafts = drafts.await().documents
+        val ownDocs = own.await().documents
+        val draftDocs = drafts.await().documents
             .sortedByDescending { it.getTimestamp("updatedAt")?.toDate()?.time ?: 0L }
             .take(OWN_LIMIT)
-            .mapNotNull(::card)
+        val originals = cards(referenceIds((ownDocs + draftDocs).map { it.data.orEmpty() }))
+        val published = ownDocs.mapNotNull { d -> card(d)?.takeIf { it.publishedAt != null } }
+        val recentDrafts = draftDocs.mapNotNull(::card)
         cardSet(uid, originals, published, recentDrafts)
     }
 
@@ -229,6 +232,10 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
 
     companion object {
         fun edgeId(source: String, target: String) = "${source}_$target"
+
+        /** The cards [docs] (my own cards' documents) answer — each once, in the order first met. */
+        fun referenceIds(docs: List<Map<String, Any?>>): List<String> =
+            docs.mapNotNull { (it["referenceCardId"] as? String)?.takeIf(String::isNotEmpty) }.distinct()
 
         /**
          * The cards the map can hold, by id: the originals I resonated with first, so my own card
@@ -306,7 +313,9 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
             tags = c.tags,
             visibility = c.visibility.value,
             publishedAt = c.publishedAt?.let { runCatching { OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull() },
-            mediaUrl = c.imageUrl,
+            // A node's picture is small: the list's cover (B2), the cover itself where there is none.
+            mediaUrl = c.imageThumbUrl ?: c.imageUrl,
+            mediaFallbackUrl = c.imageUrl,
             accentHue = c.accentHue,
             mediaFrame = c.framing,
         )
@@ -328,7 +337,9 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
                 tags = (data["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
                 visibility = data["visibility"] as? String ?: "public",
                 publishedAt = (data["publishedAt"] as? Timestamp)?.toDate()?.time,
-                mediaUrl = if (media?.get("type") == "image") media["url"] as? String else null,
+                // A node's picture is small: the list's cover (`media.thumbUrl`, B2), else the cover itself.
+                mediaUrl = if (media?.get("type") == "image") (media["thumbUrl"] as? String ?: media["url"] as? String) else null,
+                mediaFallbackUrl = if (media?.get("type") == "image") media["url"] as? String else null,
                 accentHue = (data["accentHue"] as? Number)?.toDouble(),
                 mediaFrame = if (media?.get("type") == "image") CoverFraming.of(media["frame"] as? Map<*, *>) else null,
             )
