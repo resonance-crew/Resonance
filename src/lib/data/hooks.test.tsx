@@ -1461,3 +1461,50 @@ describe('useMyProfile', () => {
     expect(getCurrentUserProfile).toHaveBeenCalledTimes(2);
   }, 10_000);
 });
+
+// W10: a browser holding a live session cookie reads the signed-in v1 answers at once, with the cookie, under the
+// uid it was minted for — not after Firebase Auth has loaded and restored its user.
+describe('reads before Auth restores', () => {
+  const mark = (uid: string, expiresAt = Date.now() + 86_400_000) =>
+    window.localStorage.setItem('resonance:session', JSON.stringify({ uid, expiresAt }));
+  afterEach(() => window.localStorage.clear());
+
+  it('asks /api/v1/feed with the cookie while Auth is still restoring, and keeps the answer once it has', async () => {
+    mark('me');
+    mockUseAuth.mockReturnValue({ user: null, loading: true });
+    api({ '/api/v1/feed': { cards: [summary('c1', 'a1')], nextCursor: null } satisfies FeedPageBody });
+    const { result, rerender } = renderHook(() => useFeed(), { wrapper });
+    await waitFor(() => expect(result.current.data?.cards.map((c) => c.id)).toEqual(['c1']));
+    expect(callApi).toHaveBeenCalledWith('/api/v1/feed?limit=12');
+
+    // Restored as the same person: what was read stands, nothing is read again.
+    mockUseAuth.mockReturnValue({ user: { id: 'me' }, loading: false });
+    rerender();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(result.current.data?.cards.map((c) => c.id)).toEqual(['c1']);
+    expect(callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads again under the restored user when Auth restores someone else', async () => {
+    mark('before');
+    mockUseAuth.mockReturnValue({ user: null, loading: true });
+    api({ '/api/v1/feed': { cards: [summary('c1', 'a1')], nextCursor: null } satisfies FeedPageBody });
+    const { result, rerender } = renderHook(() => useFeed(), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    api({ '/api/v1/feed': { cards: [summary('c2', 'a1')], nextCursor: null } satisfies FeedPageBody });
+    mockUseAuth.mockReturnValue({ user: { id: 'after' }, loading: false });
+    rerender();
+    await waitFor(() => expect(result.current.data?.cards.map((c) => c.id)).toEqual(['c2']));
+    expect(callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits for Auth when the cookie has run out', async () => {
+    mark('me', Date.now() - 1000);
+    mockUseAuth.mockReturnValue({ user: null, loading: true });
+    const { result } = renderHook(() => useFeed(), { wrapper });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(result.current.isLoading).toBe(true);
+    expect(callApi).not.toHaveBeenCalled();
+    expect(getPublicFeedPage).not.toHaveBeenCalled();
+  });
+});

@@ -29,7 +29,7 @@ import { listenConversations } from '@/lib/db/firestore/client/messages';
 import { listenNotifications } from '@/lib/db/firestore/client/notifications';
 import { getMyBlockedIds } from '@/lib/db/firestore/client/blocks';
 import { ApiError, callApi } from '@/lib/db/firestore/client/api';
-import { hasSessionMark } from '@/lib/auth/firebase/client';
+import { getFirebaseClientAuth, hasSessionMark, sessionMarkUid } from '@/lib/auth/firebase/client';
 import { linkPreviewsOf } from '@/lib/links/previewShape';
 import { trashExpired } from '@/lib/cards/trash';
 import type {
@@ -74,15 +74,49 @@ export interface CardsWithAuthors {
 export type ReadPath = 'v1' | 'public' | null;
 
 export function useReadPath(): ReadPath {
+  return useReadViewer().path;
+}
+
+/**
+ * {@link useReadPath} and whose reads they are. While Auth restores in a
+ * browser holding a live session cookie (its mark: `sessionMarkUid`), `v1`
+ * at once under the uid the cookie was minted for (W10): `callApi` has no ID
+ * token yet, so the request goes with the cookie, which /api/v1 GETs take —
+ * the first screen no longer waits for the SDK to load and restore (and
+ * refresh an expired token). Once Auth has restored, its user keys the reads:
+ * the same uid keeps what was read, another one reads again under its own key.
+ * A mark whose cookie has run out is no reason to read: `null` until Auth
+ * says.
+ */
+export function useReadViewer(): { path: ReadPath; uid?: string } {
   const { user, loading } = useAuth();
-  if (!loading) return user ? 'v1' : 'public';
-  return hasSessionMark() ? null : 'public';
+  if (!loading) return user ? { path: 'v1', uid: user.id } : { path: 'public' };
+  const marked = sessionMarkUid();
+  if (marked) return { path: 'v1', uid: marked };
+  return hasSessionMark() ? { path: null } : { path: 'public' };
+}
+
+/**
+ * A v1 GET for the signed-in viewer. One sent with the cookie alone (Auth
+ * still restoring, W10) that the server refuses (401: the cookie revoked or
+ * gone) is sent again once Auth has restored a user, with their ID token.
+ */
+async function v1Get<T>(path: string): Promise<T> {
+  try {
+    return await callApi<T>(path);
+  } catch (e) {
+    if (!(e instanceof ApiError && e.status === 401)) throw e;
+    const auth = getFirebaseClientAuth();
+    if (!auth.currentUser) await auth.authStateReady();
+    if (!auth.currentUser) throw e;
+    return callApi<T>(path);
+  }
 }
 
 /** A v1 GET for the signed-in viewer, or null when the server says there is no such thing (404): never retried. */
 async function getOrNull<T>(path: string): Promise<T | null> {
   try {
-    return await callApi<T>(path);
+    return await v1Get<T>(path);
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) return null;
     throw e;
@@ -183,9 +217,8 @@ export interface FeedState {
  * /api/cards/latest, the same for everyone (and kept by the CDN).
  */
 export function useFeed(): FeedState {
-  const { user } = useAuth();
-  const path = useReadPath();
-  const viewer = path === 'v1' ? user!.id : 'anon';
+  const { path, uid } = useReadViewer();
+  const viewer = path === 'v1' ? uid! : 'anon';
   const { data, isLoading, size, setSize } = useSWRInfinite<FeedPage>(
     (index, prev: FeedPage | null) => {
       // Until it's known who is reading (auth restoring in a signed-in browser).
@@ -198,7 +231,7 @@ export function useFeed(): FeedState {
       const page =
         who === 'anon'
           ? await getPublicFeedPage(FEED_PAGE_SIZE, cursor ?? undefined)
-          : await callApi<FeedPageBody>(
+          : await v1Get<FeedPageBody>(
               `/api/v1/feed?limit=${FEED_PAGE_SIZE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
             );
       return { ...summaryList(page.cards), next: page.nextCursor };
@@ -856,9 +889,8 @@ async function fetchCardPageLists(id: string, uid: string): Promise<LoadedCardPa
  * with (the public path reads it; the server finds it on its own).
  */
 export function useCardPageLists(id: string | undefined, referenceCardId: string | undefined): CardPageLists {
-  const { user } = useAuth();
-  const path = useReadPath();
-  const signedIn = useSWR(path === 'v1' && id ? cardPageKey(id, user!.id) : null, () => fetchCardPageLists(id!, user!.id));
+  const { path, uid } = useReadViewer();
+  const signedIn = useSWR(path === 'v1' && id ? cardPageKey(id, uid!) : null, () => fetchCardPageLists(id!, uid!));
   const pub = path === 'public';
   const related = useRelated(pub ? id : undefined);
   const incoming = useResonanceCards(pub ? id : undefined);
@@ -1250,7 +1282,7 @@ async function fetchProfilePage(handle: string): Promise<Required<Omit<ProfilePa
   const page = body.cards ?? { cards: [], nextCursor: null };
   let cards = page.cards;
   if (page.nextCursor && !body.isBlocked) {
-    const rest = await callApi<FeedPageBody>(
+    const rest = await v1Get<FeedPageBody>(
       `${path}/cards?limit=${PROFILE_CARDS - PROFILE_PAGE_MAX}&cursor=${encodeURIComponent(page.nextCursor)}`,
     );
     cards = [...cards, ...rest.cards];
@@ -1270,13 +1302,12 @@ async function fetchProfilePage(handle: string): Promise<Required<Omit<ProfilePa
  * by side — the person and their cards without waiting for auth.
  */
 export function useProfilePage(handle: string | undefined): ProfilePage {
-  const { user: viewer } = useAuth();
-  const path = useReadPath();
+  const { path, uid } = useReadViewer();
   const publicHandle = path === 'public' ? handle : undefined;
   const head = useProfileByHandle(publicHandle);
   const cards = useProfileCards(publicHandle);
   const links = useProfileLinks(publicHandle);
-  const signedIn = useSWR(path === 'v1' && handle ? `profilePage:${handle}:${viewer!.id}` : null, () => fetchProfilePage(handle!));
+  const signedIn = useSWR(path === 'v1' && handle ? `profilePage:${handle}:${uid!}` : null, () => fetchProfilePage(handle!));
 
   if (path === 'v1') {
     const d = signedIn.data;
