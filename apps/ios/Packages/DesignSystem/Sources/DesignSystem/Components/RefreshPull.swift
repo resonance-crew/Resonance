@@ -170,7 +170,7 @@ private struct OverscrollPaper: ViewModifier {
     func body(content: Content) -> some View {
         let follows = paper != nil
         content
-            .onScrollGeometryChange(for: CGFloat.self) { follows ? -($0.contentOffset.y + $0.contentInsets.top) : 0 } action: { _, now in
+            .onScrollGeometryChange(for: CGFloat.self) { follows ? max(0, -($0.contentOffset.y + $0.contentInsets.top)) : 0 } action: { _, now in
                 gap = now
             }
             .overlay(alignment: .top) {
@@ -352,11 +352,14 @@ private struct SketchRefresh: ViewModifier {
             }
             .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: {
                 top = $0
-                run.atTop = -(offset + top) > -1
+                markAtTop()
             }
-            .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, y in
+            // Clamped in the transform (audit I1): below the top, where nothing here reads the offset but
+            // "not at the top", every frame of a scroll gives the same value, so SwiftUI neither calls the
+            // action nor redraws the loader. The cap keeps the gap ≥ -1 with the refresh's room open too.
+            .onScrollGeometryChange(for: CGFloat.self) { [cap = -top + room + 1] in min($0.contentOffset.y, cap) } action: { _, y in
                 offset = y
-                run.atTop = -(offset + top) > -1
+                markAtTop()
                 settle()
             }
             .onScrollPhaseChange { _, phase in
@@ -381,8 +384,14 @@ private struct SketchRefresh: ViewModifier {
     /// Let go of and back at rest (or scrolled into): the pull, and a finished refresh, are over.
     private func settle() {
         guard !holding, -(offset + top) <= 0.5 else { return }
-        pulling = false
-        ending = false
+        if pulling { pulling = false }
+        if ending { ending = false }
+    }
+
+    /// `run.atTop`, written only when it crosses.
+    private func markAtTop() {
+        let now = -(offset + top) > -1
+        if run.atTop != now { run.atTop = now }
     }
 }
 
