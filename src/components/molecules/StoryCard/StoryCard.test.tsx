@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { fireEvent, render, screen } from '@/../test/render';
+import { act, fireEvent, render, screen } from '@/../test/render';
+import { renderToString } from 'react-dom/server';
+import { hydrateRoot } from 'react-dom/client';
 import { mockElementSize } from '@/../test/organic';
 import { StoryCard, type Story } from './StoryCard';
 import { paletteFor, type PaletteToken } from '@/lib/design/palette';
@@ -104,10 +106,31 @@ describe('StoryCard over a moving stage', () => {
     // one chrome only: the hand-drawn card's (its band's grain and wavy rules are never drawn)
     expect(card.querySelectorAll('[data-mascot="card-edge"]')).toHaveLength(1);
     expect(card.querySelector('[data-mascot="card-edge"] path[stroke="var(--card-border-0)"]')).toBeTruthy();
-    // the feed's card keeps both, CSS showing one
+    // the feed's card: both in the server's HTML, CSS showing one (W19: once hydrated, only the shown one stays)
+    const server = document.createElement('div');
+    server.innerHTML = renderToString(<StoryCard story={story} />);
+    expect(server.querySelector('article')).not.toHaveAttribute('data-framed');
+    expect(server.querySelectorAll('[data-mascot="card-edge"]')).toHaveLength(2);
+  });
+
+  // The perf audit's W19: after hydration a card keeps only the chrome its screen shows (jsdom's matchMedia matches
+  // nothing: a wide screen) — the hidden band's grain and rules are taken down — and the server's paint, hydrated,
+  // has both until then.
+  it('keeps only the chrome the screen shows once hydrated', async () => {
     const feed = render(<StoryCard story={story} />).container.querySelector('article')!;
-    expect(feed).not.toHaveAttribute('data-framed');
-    expect(feed.querySelectorAll('[data-mascot="card-edge"]')).toHaveLength(2);
+    const edges = feed.querySelectorAll('[data-mascot="card-edge"]');
+    expect(edges).toHaveLength(1);
+    expect(edges[0].className).toContain('res-shape-stand-in');
+
+    const host = document.createElement('div');
+    host.innerHTML = renderToString(<StoryCard story={story} />);
+    document.body.appendChild(host);
+    expect(host.querySelectorAll('[data-mascot="card-edge"]')).toHaveLength(2);
+    await act(async () => {
+      hydrateRoot(host, <StoryCard story={story} />);
+    });
+    expect(host.querySelectorAll('[data-mascot="card-edge"]')).toHaveLength(1);
+    host.remove();
   });
 
   it('wears a still grain cut to its outline, and no live noise filter anywhere', () => {

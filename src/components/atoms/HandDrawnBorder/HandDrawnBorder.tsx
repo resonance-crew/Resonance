@@ -26,6 +26,11 @@ export interface HandDrawnBorderProps {
   curve?: number;
   cornerJitter?: number;
   cornerOffset?: number;
+  /**
+   * The outline already drawn by the host (its own `wobRect` of the same numbers, for a wash or a clip): used as it
+   * is, so a card's shape is computed once, not once per layer (the perf audit's W19).
+   */
+  d?: string;
 }
 
 export function HandDrawnBorder({
@@ -44,6 +49,7 @@ export function HandDrawnBorder({
   curve,
   cornerJitter = 1,
   cornerOffset = 0,
+  d,
 }: HandDrawnBorderProps) {
   const m = mag != null ? mag : autoMag(w, h);
   const c = curve != null ? curve : autoCurve(w, h);
@@ -53,6 +59,7 @@ export function HandDrawnBorder({
   const segV = segKey(segmentsV != null ? segmentsV : autoSegments(h));
   const path = useMemo(
     () =>
+      d ||
       wobRect(w, h, R, seed, m, {
         segmentsH: segValue(segH),
         segmentsV: segValue(segV),
@@ -60,7 +67,7 @@ export function HandDrawnBorder({
         cornerJitter,
         cornerOffset,
       }),
-    [w, h, R, seed, m, segH, segV, c, cornerJitter, cornerOffset]
+    [d, w, h, R, seed, m, segH, segV, c, cornerJitter, cornerOffset]
   );
   if (!w || !h) return null;
   const chalkId = chalkSeed != null ? chalkFilterId(chalkSeed) : null;

@@ -1,6 +1,6 @@
 'use client';
 
-import { CSSProperties, MouseEvent, ReactNode, memo, useMemo, useRef, useState } from 'react';
+import { CSSProperties, MouseEvent, ReactNode, memo, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 
 /**
@@ -56,6 +56,33 @@ export { CARD_FILLS, CARD_BORDERS };
 // Canonical hue list lives in lib/design/dominantHue (shared with the
 // cover-image dominant-colour extraction); re-exported for existing consumers.
 export { CARD_HUES };
+
+/**
+ * Whether the card is drawn as a phone's band (the module CSS's `max-width: 640px`), once the page has hydrated:
+ * `null` in the server's HTML and while hydrating — both chromes are there, CSS showing one, so the first paint is
+ * already right — then the one the screen shows, the other taken down (the perf audit's W19: every card kept both
+ * in the DOM, the hidden one's SVG and grain included). One media query for every card on the page.
+ */
+const BAND_QUERY = '(max-width: 640px)';
+let bandQuery: { of: typeof window.matchMedia; list: MediaQueryList } | null = null;
+function bandList(): MediaQueryList | null {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return null;
+  // kept while the window's matchMedia is the same one (a test may stand another in)
+  if (bandQuery?.of !== window.matchMedia) bandQuery = { of: window.matchMedia, list: window.matchMedia(BAND_QUERY) };
+  return bandQuery.list;
+}
+function subscribeBand(onChange: () => void) {
+  const mq = bandList();
+  mq?.addEventListener?.('change', onChange);
+  return () => mq?.removeEventListener?.('change', onChange);
+}
+function useBandChrome(): boolean | null {
+  return useSyncExternalStore(
+    subscribeBand,
+    () => bandList()?.matches ?? null,
+    () => null
+  );
+}
 
 function StoryImage({
   label,
@@ -257,6 +284,10 @@ export const StoryCard = memo(function StoryCard({
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const cardRef = useRef<HTMLElement>(null);
   const { w, h } = useElementSize(cardRef, 340, 480);
+  const band = useBandChrome();
+  // a framed card has no band at any width; otherwise null (the server's paint) keeps both
+  const showBand = !framed && band !== false;
+  const showFrame = framed || band !== true;
 
   const recordPointer = (e: MouseEvent<HTMLElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -317,79 +348,85 @@ export const StoryCard = memo(function StoryCard({
       } as CSSProperties}
     >
       {loading ? (
-        // Both chromes render; the module CSS shows exactly one per viewport,
-        // so even the pre-hydration SSR paint matches the loaded design.
+        // Both chromes in the server's paint, the module CSS showing one per
+        // viewport; once hydrated only the shown one stays (useBandChrome).
         <>
-          <div className={styles.skeletonChrome} aria-hidden style={{ background: cardInterior }} />
-          <div className={styles.skeletonMobileChrome} aria-hidden>
-            <GrainOverlay still opacity={STORY_GRAIN.band} />
-            <MobileDividers d={dividerPath} stroke={bc1} isLast={isLast} isFirst={isFirst} />
-          </div>
+          {showFrame && <div className={styles.skeletonChrome} aria-hidden style={{ background: cardInterior }} />}
+          {showBand && (
+            <div className={styles.skeletonMobileChrome} aria-hidden>
+              <GrainOverlay still opacity={STORY_GRAIN.band} />
+              <MobileDividers d={dividerPath} stroke={bc1} isLast={isLast} isFirst={isFirst} />
+            </div>
+          )}
         </>
       ) : (
-        // Both chromes render; the module CSS (640px) shows one, so the
-        // server's paint is already the right one for the screen.
+        // Both chromes in the server's paint, the module CSS (640px) showing
+        // one; once hydrated only the shown one stays (W19, useBandChrome).
         <>
           {/* a framed card has no band to show */}
-          {!framed && (
+          {showBand && (
             <div className={styles.mobileChrome} aria-hidden data-mascot="card-edge">
               <GrainOverlay still opacity={STORY_GRAIN.band} />
               <MobileDividers d={dividerPath} stroke={bc1} isLast={isLast} isFirst={isFirst} />
             </div>
           )}
-          <div
-            className={`${styles.desktopChrome} res-shape-stand-in`}
-            aria-hidden
-            data-mascot="card-edge"
-            // A plain card of the same paper and pen until measured.
-            data-shape-pending={w > 0 && h > 0 ? undefined : ''}
-            style={
-              {
-                '--shape-fill': cardInterior,
-                '--shape-ink': bc1,
-                '--shape-ink-width': `${INK}px`,
-                '--shape-radius': `${R}px`,
-              } as CSSProperties
-            }
-          >
-            <HandDrawnBorder
-              w={w} h={h} R={R} seed={seed} mag={mag}
-              fillColor={cardInterior}
-              strokeColor="transparent"
-              strokeWidth={0}
-              chalkSeed={stillGrain ? null : index % CARD_CHALK_SEEDS.length}
-              sharedChalk={sharedChalk}
-              segmentsH={[3, 4]} segmentsV={[5, 6]}
-              curve={0.55} cornerJitter={0.7} cornerOffset={4}
-            />
-            <BrushWash
-              w={w} h={h} d={borderPath} color={cardHovered}
-              x={pos.x} y={pos.y} on={hovered} duration={460}
-            />
-            {/* The paper's grain: a still tile cut to the outline (the perf audit's W1 — a live
-                ShapeGrain per card was drawn again on every tile a scroll rastered). */}
-            {borderPath && (
-              <span
-                aria-hidden="true"
-                data-grain="paper"
-                className={stillGrain ? `${styles.stillGrain} ${styles.ownGrain}` : styles.stillGrain}
-                style={
-                  {
-                    clipPath: `path('${borderPath}')`,
-                    ...(stillGrain ? { '--still-grain': `url('${stillGrain}')` } : null),
-                    opacity: `calc(${STORY_GRAIN.paper} * var(--grain-scale, 1))`,
-                  } as CSSProperties
-                }
+          {showFrame && (
+            <div
+              className={`${styles.desktopChrome} res-shape-stand-in`}
+              aria-hidden
+              data-mascot="card-edge"
+              // A plain card of the same paper and pen until measured.
+              data-shape-pending={w > 0 && h > 0 ? undefined : ''}
+              style={
+                {
+                  '--shape-fill': cardInterior,
+                  '--shape-ink': bc1,
+                  '--shape-ink-width': `${INK}px`,
+                  '--shape-radius': `${R}px`,
+                } as CSSProperties
+              }
+            >
+              <HandDrawnBorder
+                w={w} h={h} R={R} seed={seed} mag={mag}
+                fillColor={cardInterior}
+                strokeColor="transparent"
+                strokeWidth={0}
+                chalkSeed={stillGrain ? null : index % CARD_CHALK_SEEDS.length}
+                sharedChalk={sharedChalk}
+                segmentsH={[3, 4]} segmentsV={[5, 6]}
+                curve={0.55} cornerJitter={0.7} cornerOffset={4}
+                d={borderPath}
               />
-            )}
-            <HandDrawnBorder
-              w={w} h={h} R={R} seed={seed} mag={mag}
-              strokeColor={bc1}
-              strokeWidth={INK}
-              segmentsH={[3, 4]} segmentsV={[5, 6]}
-              curve={0.55} cornerJitter={0.7} cornerOffset={4}
-            />
-          </div>
+              <BrushWash
+                w={w} h={h} d={borderPath} color={cardHovered}
+                x={pos.x} y={pos.y} on={hovered} duration={460}
+              />
+              {/* The paper's grain: a still tile cut to the outline (the perf audit's W1 — a live
+                  ShapeGrain per card was drawn again on every tile a scroll rastered). */}
+              {borderPath && (
+                <span
+                  aria-hidden="true"
+                  data-grain="paper"
+                  className={stillGrain ? `${styles.stillGrain} ${styles.ownGrain}` : styles.stillGrain}
+                  style={
+                    {
+                      clipPath: `path('${borderPath}')`,
+                      ...(stillGrain ? { '--still-grain': `url('${stillGrain}')` } : null),
+                      opacity: `calc(${STORY_GRAIN.paper} * var(--grain-scale, 1))`,
+                    } as CSSProperties
+                  }
+                />
+              )}
+              <HandDrawnBorder
+                w={w} h={h} R={R} seed={seed} mag={mag}
+                strokeColor={bc1}
+                strokeWidth={INK}
+                segmentsH={[3, 4]} segmentsV={[5, 6]}
+                curve={0.55} cornerJitter={0.7} cornerOffset={4}
+                d={borderPath}
+              />
+            </div>
+          )}
         </>
       )}
 
