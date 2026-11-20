@@ -953,3 +953,246 @@ export type EmptiedTrashBody = z.infer<typeof EmptiedTrash>;
 export type CardListBody = z.infer<typeof CardList>;
 export type CardInclude = (typeof CARD_INCLUDES)[number];
 export type ProfileInclude = (typeof PROFILE_INCLUDES)[number];
+
+// --- Phase 2 inbox (2a-inbox)
+// The conversation list, a thread's messages and the bell, read through the
+// server instead of the clients' Firestore listeners (phase2-spec, 2a-inbox):
+// the same rows, ordered as those listeners ordered them, each field as it is
+// stored today. A client refetches one of these when its `signals/{uid}`
+// topic moves (`inbox`, `threads.{pair}`, `bell`), with If-None-Match.
+// Times are ISO 8601 UTC strings to the microsecond
+// (`2026-11-20T03:04:05.123456Z`): plain strings, never decoded as dates by
+// the contract, so nothing between two messages sent in one millisecond is
+// lost. Cursors are opaque (`c1.`…): pass them back as they came.
+
+/** Conversations a page (the clients' listener's limit). */
+export const CONVERSATIONS_PAGE = 50;
+/** A thread's newest window (the clients' listener's), and the most one page answers. */
+export const THREAD_PAGE = 50;
+export const THREAD_PAGE_MAX = 100;
+/** Bell rows a page (the web's listener's), and the most one page answers (the apps listened to 50). */
+export const BELL_PAGE = 20;
+export const BELL_PAGE_MAX = 50;
+/** Bell rows one POST /notifications/read may name; how many of the newest rows up to `before` one call reads. */
+export const BELL_READ_IDS_MAX = 50;
+export const BELL_READ_BEFORE_SCAN = 100;
+
+const MicroTime = z.string().describe('ISO 8601 UTC to the microsecond (2026-11-20T03:04:05.123456Z).');
+
+export const ConversationLastMessage = named(
+  z.object({
+    /** The preview's words (a sticker's fallback words, a card's title when the message had none); '' when none. */
+    text: z.string(),
+    senderId: z.string(),
+    sentAt: MicroTime.nullable(),
+    /** A picture: drawn as 「傳送了圖片」 (or `albumCount` of them). */
+    image: z.boolean(),
+    sticker: z.boolean(),
+    /** How many pictures were sent together (2–10), else null. */
+    albumCount: z.number().int().nullable(),
+    /** The last message was unsent (only when nothing else is said beside it: the words win). */
+    unsent: z.boolean(),
+  }),
+  'ConversationLastMessage',
+  "The conversation list's preview of the last message.",
+);
+
+export const ConversationLetter = named(
+  z.object({
+    /** Who left the notes (a uid): the other person waits for your answer when it isn't you. */
+    from: z.string(),
+    cardId: z.string().nullable(),
+    count: z.number().int(),
+  }),
+  'ConversationLetter',
+  'The letter a conversation holds: notes left by someone not connected, waiting for an answer.',
+);
+
+export const Conversation = named(
+  z.object({
+    /** Its two participants' uids, sorted, joined by `_`. */
+    id: z.string(),
+    participants: z.array(z.string()),
+    /** The other participant's uid. */
+    otherId: z.string(),
+    /**
+     * The other participant as their profile is now; null when the account is gone (or never chose a pen name),
+     * drawn as today's clients draw a missing profile. A block changes nothing here: the list is yours to filter
+     * by your blocks, as before.
+     */
+    other: Author.nullable(),
+    /** Your unread messages in it. */
+    unread: z.number().int(),
+    lastMessage: ConversationLastMessage.nullable(),
+    request: ConversationLetter.nullable(),
+    createdAt: MicroTime.nullable(),
+    updatedAt: MicroTime.nullable(),
+    originCardId: z.string().nullable(),
+  }),
+  'Conversation',
+  'One of your conversations, as the list shows it.',
+);
+
+export const ConversationList = named(
+  z.object({
+    /** The most recently active first. */
+    conversations: z.array(Conversation),
+    /** Pass back as `pageToken` for the next page; null at the end. */
+    nextPageToken: z.string().nullable(),
+  }),
+  'ConversationList',
+  'Your conversations, the most recently active first, 50 a page.',
+);
+
+export const MessageQuote = named(
+  z.object({
+    id: z.string(),
+    senderId: z.string(),
+    /** '' for an unsent one. */
+    text: z.string(),
+    cardRef: z.string().optional(),
+    image: z.boolean().optional(),
+    sticker: StickerRef.optional(),
+    /** The quoted message was unsent since: only who sent it is kept. */
+    unsent: z.boolean().optional(),
+  }),
+  'MessageQuote',
+  "A reply's snapshot of the message it answers.",
+);
+
+export const MessagePicture = named(
+  z.object({
+    /** GET /chat-images/{id}. */
+    id: z.string(),
+    /** 0 when the server kept no size (drawn square). */
+    width: z.number(),
+    height: z.number(),
+  }),
+  'MessagePicture',
+);
+
+export const ThreadMessage = named(
+  z.object({
+    id: z.string(),
+    /** This message's place in the thread: pass it as `before` (older ones) or `after` (newer ones). */
+    cursor: z.string(),
+    senderId: z.string(),
+    /** '' for an unsent message. */
+    text: z.string(),
+    sentAt: MicroTime,
+    /** `note` for a 小紙條 in the thread; a kind this build doesn't know is a plain message. Absent: a plain one. */
+    kind: z.string().optional(),
+    cardRef: z.string().optional(),
+    noteRef: z.object({ cardId: z.string(), noteId: z.string() }).optional(),
+    replyTo: MessageQuote.optional(),
+    image: MessagePicture.optional(),
+    /** Only beside `image`. */
+    album: z.object({ id: z.string(), index: z.number().int(), count: z.number().int() }).optional(),
+    sticker: StickerRef.optional(),
+    /** Reactions by uid (a reaction this build doesn't know is drawn as nothing). Absent when none. */
+    reactions: z.record(z.string(), z.string()).optional(),
+    /** Unsent: then only `senderId`, `sentAt` and this are said. */
+    unsentAt: MicroTime.optional(),
+    /** A pass to the sender's 私人卡 `cardRef`, until 停止分享. */
+    privateShare: z.boolean().optional(),
+    preview: LinkPreview.optional(),
+  }),
+  'ThreadMessage',
+  'A message as the thread shows it, its fields as stored.',
+);
+
+export const MessagePage = named(
+  z.object({
+    /** Newest first. */
+    messages: z.array(ThreadMessage),
+    /** Pass as `before` for the page older than this one; null when there is none (and on an `after` page). */
+    olderCursor: z.string().nullable(),
+    /** The newest message's cursor here (or the `after` sent, when nothing came after it): the next `after`. */
+    newerCursor: z.string().nullable(),
+    /** An `after` page that came back full: ask again with `newerCursor` right away. */
+    hasNewer: z.boolean(),
+  }),
+  'MessagePage',
+  "A page of a thread's messages.",
+);
+
+export const BellPayload = named(
+  z.object({
+    fromUserId: z.string().optional(),
+    fromHandle: z.string().optional(),
+    /** `resonance_tap`: the day's readers, newest first. */
+    fromUserIds: z.array(z.string()).optional(),
+    cardId: z.string().optional(),
+    noteId: z.string().optional(),
+    /** A note's first words. */
+    preview: z.string().optional(),
+    count: z.number().optional(),
+    /** `read_summary`: how many read the card to its end this week, and whether some read it again. */
+    readers: z.number().optional(),
+    reread: z.boolean().optional(),
+    /** On one of your anonymous cards: open the card, never a thread. */
+    anonymous: z.boolean().optional(),
+    inviteId: z.string().optional(),
+  }),
+  'BellPayload',
+  'What a bell row says, as the server wrote it (the fields the clients draw).',
+);
+
+export const BellItem = named(
+  z.object({
+    id: z.string(),
+    /** `note`, `message`, `resonance`, `resonance_tap`, `read_summary`, `invite_accepted`, …: one a build doesn't know is drawn as before. */
+    type: z.string(),
+    payload: BellPayload,
+    readAt: MicroTime.nullable(),
+    createdAt: MicroTime,
+  }),
+  'BellItem',
+);
+
+export const BellPage = named(
+  z.object({
+    /** Newest first. */
+    items: z.array(BellItem),
+    /** The people these rows name (`fromUserId`, `fromUserIds`) whose profiles are there; a gone one is absent. */
+    people: z.array(Author),
+    /** Pass back as `pageToken` for the next page; null at the end. */
+    nextPageToken: z.string().nullable(),
+  }),
+  'BellPage',
+  'Your bell, newest first.',
+);
+
+export const MarkNotificationsReadRequest = named(
+  z
+    .object({
+      /** These rows of yours, read now (anyone else's, and unknown ids, are ignored). */
+      ids: z.array(DocId).min(1).max(BELL_READ_IDS_MAX).nullish(),
+      /** Or the rows of yours made at this time or earlier (ISO 8601), of the newest 100 such, read now. */
+      before: z.iso.datetime({ offset: true }).nullish(),
+    })
+    .refine((r) => (r.ids ? 1 : 0) + (r.before ? 1 : 0) === 1, { message: 'Send `ids` or `before`.', path: ['ids'] }),
+  'MarkNotificationsReadRequest',
+  'Mark bell rows read: by id, or everything up to a time.',
+);
+
+export const PageTokenQuery = z.object({ pageToken: z.string().min(1).max(512).nullish() });
+export const BellQuery = z.object({
+  pageToken: z.string().min(1).max(512).nullish(),
+  limit: z.coerce.number().int().min(1).max(BELL_PAGE_MAX).default(BELL_PAGE),
+});
+export const MessagesQuery = z
+  .object({
+    before: z.string().min(1).max(512).nullish(),
+    after: z.string().min(1).max(512).nullish(),
+    limit: z.coerce.number().int().min(1).max(THREAD_PAGE_MAX).default(THREAD_PAGE),
+  })
+  .refine((q) => !(q.before && q.after), { message: 'Send `before` or `after`, not both.', path: ['after'] });
+
+export type ConversationBody = z.infer<typeof Conversation>;
+export type ConversationListBody = z.infer<typeof ConversationList>;
+export type ThreadMessageBody = z.infer<typeof ThreadMessage>;
+export type MessagePageBody = z.infer<typeof MessagePage>;
+export type BellItemBody = z.infer<typeof BellItem>;
+export type BellPageBody = z.infer<typeof BellPage>;
+export type MarkNotificationsReadInput = z.infer<typeof MarkNotificationsReadRequest>;

@@ -27,6 +27,7 @@ import type {
   StoredMessage,
   UnsentCopy,
 } from '@/server/ports/repos/conversations';
+import { conversationRowOf } from '@/server/domain/inboxRows';
 import { compareInstants, decodeCursor, encodeCursor, instantMillis, isInstant, toInstant, type Instant } from '@/server/ports/time';
 import type { MemoryState, Row } from '../state';
 import type { MemoryTx } from '../uow';
@@ -105,7 +106,17 @@ function messageOf(id: string, m: Row): StoredMessage {
     ...(isMap(m.replyTo) ? { replyTo: m.replyTo } : {}),
     reactions: isMap(m.reactions) ? m.reactions : {},
     unsent: m.unsentAt != null,
+    ...(anyInstant(m.unsentAt) ? { unsentAt: anyInstant(m.unsentAt)! } : {}),
+    ...(m.preview !== undefined ? { preview: m.preview } : {}),
   };
+}
+
+/** A stored time as an Instant: rows the services wrote hold Instants; seeded ones may hold a Date or epoch ms. */
+function anyInstant(v: unknown): Instant | null {
+  if (isInstant(v)) return v;
+  if (v instanceof Date && Number.isFinite(v.getTime())) return toInstant(v);
+  if (typeof v === 'number' && Number.isFinite(v)) return toInstant(v);
+  return null;
 }
 
 function chatImageOf(id: string, row: Row | null): ChatImageRecord | null {
@@ -432,6 +443,42 @@ export function conversationsData(state: MemoryState): ConversationsData {
         .slice(0, limit);
       const last = list[list.length - 1];
       return { messages: list, next: list.length === limit && last ? encodeCursor({ t: last.sentAt, id: last.id }) : null };
+    },
+    async listMessagesAfter(pair, limit, after) {
+      const at = decodeCursor(after);
+      if (!at) throw new ApiFailure('invalid_request', 'The request does not match the contract.', [{ path: 'after', message: 'Not a valid cursor.' }]);
+      const oldestFirst = newestFirst(inPair(pair))
+        .reverse()
+        .filter((m) => byPosition({ t: m.sentAt, id: m.id }, at) > 0)
+        .slice(0, limit);
+      const newest = oldestFirst[oldestFirst.length - 1];
+      return { messages: oldestFirst.reverse(), next: oldestFirst.length === limit && newest ? encodeCursor({ t: newest.sentAt, id: newest.id }) : null };
+    },
+    async listConversations(uid, limit, before) {
+      let at: { t: Instant; id: string } | null = null;
+      if (before !== undefined) {
+        at = decodeCursor(before);
+        if (!at) throw new ApiFailure('invalid_request', 'The request does not match the contract.', [{ path: 'pageToken', message: 'Not a valid page token.' }]);
+      }
+      const from = at;
+      const list = rows('conversations', (row) => Array.isArray(row.participants) && row.participants.includes(uid))
+        .map(({ id, row }) => conversationRowOf(id, row, anyInstant))
+        .filter((c): c is typeof c & { updatedAt: Instant } => c.updatedAt !== null)
+        .sort((a, b) => -byPosition({ t: a.updatedAt, id: a.id }, { t: b.updatedAt, id: b.id }))
+        .filter((c) => !from || byPosition({ t: c.updatedAt, id: c.id }, from) < 0)
+        .slice(0, limit);
+      const last = list[list.length - 1];
+      return { conversations: list, next: list.length === limit && last ? encodeCursor({ t: last.updatedAt, id: last.id }) : null };
+    },
+    async getConversationRow(pair) {
+      const row = get('conversations', pair);
+      return row ? conversationRowOf(pair, row, anyInstant) : null;
+    },
+    async markRead(pair, uid) {
+      const row = get('conversations', pair);
+      if (!row) return 'gone';
+      state.merge('conversations', pair, { unread: { ...(isMap(row.unread) ? row.unread : {}), [uid]: 0 } });
+      return 'marked';
     },
     async messagesBefore(pair, sentAt, limit) {
       const all = sentAt ? newestFirst(inPair(pair)).filter((m) => compareInstants(m.sentAt, sentAt) < 0) : newestFirst(inPair(pair));

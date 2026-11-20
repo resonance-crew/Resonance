@@ -37,7 +37,9 @@ import type {
   StoredMessage,
   StoredNote,
   UnsentCopy,
+  ConversationRow,
 } from '@/server/ports/repos/conversations';
+import { conversationRowOf } from '@/server/domain/inboxRows';
 import { decodeCursor, encodeCursor, instantFromParts, instantParts, type CursorPosition, type Instant } from '@/server/ports/time';
 import type { AdminDb } from '../db';
 
@@ -125,7 +127,16 @@ function messageOf(id: string, m: Record<string, unknown>): StoredMessage {
     ...(isMap(m.replyTo) ? { replyTo: m.replyTo } : {}),
     reactions: isMap(m.reactions) ? m.reactions : {},
     unsent: m.unsentAt != null,
+    ...(instantOf(m.unsentAt) ? { unsentAt: instantOf(m.unsentAt)! } : {}),
+    ...(m.preview !== undefined ? { preview: m.preview } : {}),
   };
+}
+
+/** A conversation's document as the lists show it (lib/db/firestore/client/messages mapConversation, read on the server). */
+function rowOf(convo: DocumentSnapshot): ConversationRow | null {
+  if (!convo.exists) return null;
+  const d = convo.data() ?? {};
+  return conversationRowOf(convo.id, d, instantOf);
 }
 
 const snapMessage = (snap: DocumentSnapshot): StoredMessage | null => (snap.exists ? messageOf(snap.id, snap.data()!) : null);
@@ -354,6 +365,7 @@ export function conversationsTx(db: AdminDb, tx: Transaction): ConversationsTxRe
 
 /** Firestore's answer to `create()` on a document that is there. */
 const ALREADY_EXISTS = 6;
+const NOT_FOUND = 5;
 const run: Run = (query) => query.get();
 
 /** `conversations` outside a transaction. */
@@ -402,6 +414,52 @@ export function conversationsData(db: AdminDb): ConversationsData {
       const list = snap.docs.map((d) => messageOf(d.id, d.data()));
       const last = list[list.length - 1];
       return { messages: list, next: list.length === limit && last?.sentAt ? encodeCursor({ t: last.sentAt, id: last.id }) : null };
+    },
+    async listMessagesAfter(pair, limit, after) {
+      const at = decodeCursor(after);
+      if (!at) throw new ApiFailure('invalid_request', 'The request does not match the contract.', [{ path: 'after', message: 'Not a valid cursor.' }]);
+      const snap = await messages(pair)
+        .orderBy('sentAt', 'asc')
+        .orderBy(FieldPath.documentId(), 'asc')
+        .startAfter(timestampOf(at.t), at.id)
+        .limit(limit)
+        .get();
+      const list = snap.docs.map((d) => messageOf(d.id, d.data()));
+      const newest = list[list.length - 1];
+      return { messages: list.reverse(), next: list.length === limit && newest?.sentAt ? encodeCursor({ t: newest.sentAt, id: newest.id }) : null };
+    },
+    async listConversations(uid, limit, before) {
+      let at: CursorPosition | null = null;
+      if (before !== undefined) {
+        at = decodeCursor(before);
+        if (!at) throw new ApiFailure('invalid_request', 'The request does not match the contract.', [{ path: 'pageToken', message: 'Not a valid page token.' }]);
+      }
+      // The clients' own listener's query (participants array-contains, updatedAt desc), its index's
+      // implicit __name__ breaking ties.
+      let page = db
+        .collection('conversations')
+        .where('participants', 'array-contains', uid)
+        .orderBy('updatedAt', 'desc')
+        .orderBy(FieldPath.documentId(), 'desc')
+        .limit(limit);
+      if (at) page = page.startAfter(timestampOf(at.t), at.id);
+      const snap = await page.get();
+      const list = snap.docs.map((d) => rowOf(d)!);
+      const last = list[list.length - 1];
+      return { conversations: list, next: list.length === limit && last?.updatedAt ? encodeCursor({ t: last.updatedAt, id: last.id }) : null };
+    },
+    async getConversationRow(pair) {
+      return rowOf(await conversation(pair).get());
+    },
+    async markRead(pair, uid) {
+      try {
+        // update(), not set(): a conversation deleted meanwhile is not made again with only a count in it.
+        await conversation(pair).update(new FieldPath('unread', uid), 0);
+        return 'marked';
+      } catch (e) {
+        if ((e as { code?: unknown }).code === NOT_FOUND) return 'gone';
+        throw e;
+      }
     },
     async messagesBefore(pair, sentAt, limit) {
       const query = sentAt

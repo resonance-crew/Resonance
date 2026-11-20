@@ -1,7 +1,9 @@
-import { FieldValue, Timestamp, type DocumentSnapshot, type QueryDocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue, Timestamp, type DocumentSnapshot, type QueryDocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
+import { ApiFailure } from '@/lib/api/v1/http';
 import { READER_SIGNALS } from '@/lib/api/v1/reading';
 import type { WeekRead } from '@/server/domain/push/readSummary';
-import type { BellData, BellRow, BellTxRepo, PushedRow } from '@/server/ports/repos/bell';
+import type { BellData, BellRow, BellTxRepo, ListedBellRow, PushedRow } from '@/server/ports/repos/bell';
+import { decodeCursor, encodeCursor, instantFromParts, instantParts, type Instant } from '@/server/ports/time';
 import type { AdminDb } from '../db';
 
 // The bell rows' Firestore code of src/lib/push (send, tapBell, readSummary), moved.
@@ -23,6 +25,36 @@ function rowOf(snap: DocumentSnapshot): BellRow | null {
     pushed: snap.get('pushedAt') != null,
     read: snap.get('readAt') != null,
   };
+}
+
+const instantOf = (v: unknown): Instant | null => (v instanceof Timestamp ? instantFromParts(v.seconds, v.nanoseconds) : null);
+const timestampOf = (t: Instant) => {
+  const { seconds, nanos } = instantParts(t);
+  return new Timestamp(seconds, nanos);
+};
+
+/** A row as the bell lists it; null for one without a time to order it by. */
+function listedOf(snap: DocumentSnapshot): ListedBellRow | null {
+  const createdAt = instantOf(snap.get('createdAt'));
+  if (!createdAt) return null;
+  const payload: unknown = snap.get('payload');
+  return {
+    id: snap.id,
+    type: str(snap.get('type')),
+    payload: payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Record<string, unknown>) : {},
+    createdAt,
+    readAt: instantOf(snap.get('readAt')),
+  };
+}
+
+/** Each row unread among these gets `readAt` = the server's time, in one batch (the rule's `readAt == request.time`). */
+async function readNow(db: AdminDb, snaps: DocumentSnapshot[], uid: string): Promise<number> {
+  const unread = snaps.filter((s) => s.exists && s.get('userId') === uid && s.get('readAt') == null);
+  if (!unread.length) return 0;
+  const batch = db.batch();
+  for (const s of unread) batch.update(s.ref, { readAt: FieldValue.serverTimestamp() });
+  await batch.commit();
+  return unread.length;
 }
 
 /** A row written already pushed: unread, made and pushed at `atMs`. */
@@ -100,6 +132,36 @@ export function bellData(db: AdminDb): BellData {
         if (page.size < PAGE) return out;
         last = page.docs[page.size - 1];
       }
+    },
+    async listRows(uid, limit, before) {
+      let at: { t: Instant; id: string } | null = null;
+      if (before !== undefined) {
+        at = decodeCursor(before);
+        if (!at) throw new ApiFailure('invalid_request', 'The request does not match the contract.', [{ path: 'pageToken', message: 'Not a valid page token.' }]);
+      }
+      // The clients' own listener's query (userId ==, createdAt desc), its index's implicit __name__ breaking ties.
+      let q = db.collection(NOTIFICATIONS).where('userId', '==', uid).orderBy('createdAt', 'desc').orderBy(FieldPath.documentId(), 'desc').limit(limit);
+      if (at) q = q.startAfter(timestampOf(at.t), at.id);
+      const snap = await q.get();
+      const rows = snap.docs.map(listedOf).filter((r): r is ListedBellRow => r !== null);
+      const last = snap.docs[snap.docs.length - 1];
+      const lastAt = last ? instantOf(last.get('createdAt')) : null;
+      return { rows, next: snap.size === limit && last && lastAt ? encodeCursor({ t: lastAt, id: last.id }) : null };
+    },
+    async markRead(uid, ids) {
+      if (!ids.length) return 0;
+      const snaps = await db.getAll(...ids.map((id) => db.doc(`${NOTIFICATIONS}/${id}`)), { fieldMask: ['userId', 'readAt'] });
+      return readNow(db, snaps, uid);
+    },
+    async markReadBefore(uid, before, scan) {
+      const snap = await db
+        .collection(NOTIFICATIONS)
+        .where('userId', '==', uid)
+        .where('createdAt', '<=', timestampOf(before))
+        .orderBy('createdAt', 'desc')
+        .limit(scan)
+        .get();
+      return readNow(db, snap.docs, uid);
     },
     async getSummaryCards(ids) {
       if (!ids.length) return [];

@@ -57,6 +57,10 @@ export interface StoredMessage {
   reactions: Record<string, unknown>;
   replyTo?: Record<string, unknown>;
   unsent: boolean;
+  /** When it was unsent (absent while it stands, or when the store kept no time). */
+  unsentAt?: Instant;
+  /** The link preview the server wrote after it, as stored (presenters check its shape). */
+  preview?: unknown;
 }
 
 /** A reply's snapshot of the message it answers. */
@@ -206,6 +210,45 @@ export interface MessagePage {
   next: PageCursor | null;
 }
 
+// --- Phase 2 inbox (2a-inbox): what the clients' lists show, read through /api/v1
+
+/** The last message as a conversation's list shows it (`lastMessage`), parsed. */
+export interface ConversationPreview {
+  text: string;
+  senderId: string;
+  sentAt: Instant | null;
+  image: boolean;
+  sticker: boolean;
+  /** How many pictures were sent together (2–10), else null. */
+  albumCount: number | null;
+  /** Stored `unsent: true`. */
+  unsent: boolean;
+  /** Whether it names a card (`cardRef`), which an unsent one never does. */
+  cardRef: boolean;
+}
+
+/** A conversation's document as the lists show it. */
+export interface ConversationRow {
+  id: string;
+  /** The uids it holds (strings only). */
+  participants: string[];
+  /** `unread.{uid}` as stored (numbers only). */
+  unread: Record<string, number>;
+  lastMessage: ConversationPreview | null;
+  /** The letter it holds: who wrote it, on which card, how many notes (0 when the count is odd). */
+  request: { from: string; cardId: string | null; count: number } | null;
+  createdAt: Instant | null;
+  updatedAt: Instant | null;
+  originCardId: string | null;
+}
+
+/** A page of someone's conversations, the most recently active first. */
+export interface ConversationPage {
+  conversations: ConversationRow[];
+  /** Resumes after the page's last conversation; null when the page wasn't full. */
+  next: PageCursor | null;
+}
+
 /** A report and what it was about, filed together. */
 export interface NewReport {
   reporterId: string;
@@ -302,6 +345,18 @@ export interface ConversationsData extends ConversationsReads {
   clearUnread(pair: string, uid: string): Promise<void>;
   /** A page of the conversation's messages, newest first, `(sentAt, id)` descending, after `before` (invalid_request when it isn't a cursor). */
   listMessages(pair: string, limit: number, before?: PageCursor): Promise<MessagePage>;
+  /**
+   * The `limit` messages sent right after `after` — `(sentAt, id)` ascending from it, so none sent in the same
+   * microsecond is skipped — answered newest first (invalid_request when it isn't a cursor). `next` is the
+   * newest one's cursor when the page was full (more may follow), else null.
+   */
+  listMessagesAfter(pair: string, limit: number, after: PageCursor): Promise<MessagePage>;
+  /** `uid`'s conversations (`participants` holding them), `(updatedAt, id)` descending, after `before` (invalid_request when it isn't a cursor). */
+  listConversations(uid: string, limit: number, before?: PageCursor): Promise<ConversationPage>;
+  /** The conversation as the lists show it; null when there is none. */
+  getConversationRow(pair: string): Promise<ConversationRow | null>;
+  /** `uid`'s unread count 0 on a conversation that exists (`gone` when it doesn't: nothing written). */
+  markRead(pair: string, uid: string): Promise<'marked' | 'gone'>;
   /** The `limit` messages sent before `sentAt` (or the latest, null), newest first (a report's context). */
   messagesBefore(pair: string, sentAt: Instant | null, limit: number): Promise<StoredMessage[]>;
   /** The conversation and everything under it, the messages first. */

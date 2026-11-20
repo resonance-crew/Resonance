@@ -94,6 +94,11 @@ export const LIMITS = {
    * at most once ever per reader and card, so it is no way to reach anyone.
    */
   restore: { max: 200, windowMs: DAY },
+  /**
+   * Phase 2 inbox (2a-inbox): marking a conversation read (POST …/read) and bell rows read (POST
+   * /notifications/read) — the viewer's own counters, written each time a thread or the bell is opened.
+   */
+  markRead: { max: 3000, windowMs: DAY },
 } as const satisfies Record<string, { max: number; windowMs: number }>;
 
 export type Bucket = keyof typeof LIMITS;
