@@ -554,4 +554,21 @@ describe('the daily re-reading of owed cards', () => {
     const run = await indexOwed(db, { limit: 2 });
     expect(run).toMatchObject({ read: 2, left: 1 });
   });
+
+  it('reads three cards at once, not one after another (B16)', async () => {
+    for (const id of ['c1', 'c2', 'c3', 'c4']) {
+      await db.doc(`cards/${id}`).set({ authorId: 'alice', thoughtCore: `Card ${id}`, story: `A story for ${id}, long enough to be read.`, visibility: 'public', publishedAt: published });
+      await markIndexOwed(db, id);
+    }
+    let inFlight = 0;
+    let most = 0;
+    mocks.whileEmbedding = async () => {
+      most = Math.max(most, ++inFlight);
+      await new Promise((r) => setTimeout(r, 80));
+      inFlight--;
+    };
+    const run = await indexOwed(db);
+    expect(run).toMatchObject({ examined: 4, read: 4, left: 0 });
+    expect(most).toBe(3);
+  });
 });
