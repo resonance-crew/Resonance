@@ -3469,6 +3469,10 @@
             "nullable": true,
             "type": "string"
           },
+          "imageThumbUrl": {
+            "nullable": true,
+            "type": "string"
+          },
           "imageLabel": {
             "nullable": true,
             "type": "string"

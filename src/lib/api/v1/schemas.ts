@@ -148,6 +148,12 @@ export const FeedCard = named(
     anonymous: z.boolean(),
     visibility: z.enum(['public', 'connections', 'private']),
     imageUrl: z.string().nullable(),
+    /**
+     * The cover made smaller for lists (≤ 960 px on its longer edge, WebP), when the server kept one beside it;
+     * null when it didn't (an older cover, a generated one) — then draw `imageUrl`. Only for lists and small
+     * pictures: a card's own page and its share image keep `imageUrl`. Absent only from servers older than the field.
+     */
+    imageThumbUrl: z.string().nullable().optional(),
     imageLabel: z.string().nullable(),
     /**
      * Where the cover is looked at (CoverFrame); null for the centre, or
