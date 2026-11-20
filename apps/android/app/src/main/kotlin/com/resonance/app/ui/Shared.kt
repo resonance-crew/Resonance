@@ -607,3 +607,14 @@ internal fun Modifier.fadingEdges(scroll: androidx.compose.foundation.ScrollStat
             size = androidx.compose.ui.geometry.Size(w, size.height), blendMode = androidx.compose.ui.graphics.BlendMode.DstOut,
         )
     }
+
+/**
+ * A [java.time.format.DateTimeFormatter] for [pattern] in [locale], made once per pair (A13): a
+ * thread's rows and the lists' dates asked for one, and compiled the pattern again, on every row.
+ */
+internal fun cachedFormatter(pattern: String, locale: java.util.Locale): java.time.format.DateTimeFormatter =
+    Formatters.byPattern.getOrPut(pattern to locale) { java.time.format.DateTimeFormatter.ofPattern(pattern, locale) }
+
+private object Formatters {
+    val byPattern = java.util.concurrent.ConcurrentHashMap<Pair<String, java.util.Locale>, java.time.format.DateTimeFormatter>()
+}

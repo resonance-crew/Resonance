@@ -198,7 +198,7 @@ internal fun rowTime(date: Date, today: LocalDate = LocalDate.now()): String {
     val zoned = date.toInstant().atZone(ZoneId.systemDefault())
     val locale = Strings.language.locale
     val pattern = if (zoned.toLocalDate() == today) chatTimePattern() else "M/d"
-    return zoned.format(DateTimeFormatter.ofPattern(pattern, locale))
+    return zoned.format(cachedFormatter(pattern, locale))
 }
 
 /**

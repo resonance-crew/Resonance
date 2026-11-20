@@ -1039,7 +1039,7 @@ private fun RowScope.PersonPlaceholder(handle: String) {
 /** The day label: 9月29日 / September 29. */
 internal fun dayLabel(date: Date): String {
     val pattern = if (Strings.language == Strings.Language.ZhTW) "M月d日" else "MMMM d"
-    return date.toInstant().atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern(pattern, Strings.language.locale))
+    return date.toInstant().atZone(ZoneId.systemDefault()).format(cachedFormatter(pattern, Strings.language.locale))
 }
 
 /**
@@ -1051,12 +1051,12 @@ internal fun chatTimePattern(): String = if (Strings.language == Strings.Languag
 
 /** The time label inside a day: 下午3:04 / 3:04 PM ([chatTimePattern]). */
 internal fun timeLabel(date: Date): String =
-    date.toInstant().atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern(chatTimePattern(), Strings.language.locale))
+    date.toInstant().atZone(ZoneId.systemDefault()).format(cachedFormatter(chatTimePattern(), Strings.language.locale))
 
 /** The full time a long-press shows (the web's hover title): 9月29日 下午3:04 / September 29 at 3:04 PM. */
 internal fun fullTime(date: Date): String {
     val pattern = if (Strings.language == Strings.Language.ZhTW) "M月d日 ${chatTimePattern()}" else "MMMM d 'at' ${chatTimePattern()}"
-    return date.toInstant().atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern(pattern, Strings.language.locale))
+    return date.toInstant().atZone(ZoneId.systemDefault()).format(cachedFormatter(pattern, Strings.language.locale))
 }
 
 // Cards & links

@@ -637,10 +637,12 @@ private fun BlockColumn(blocks: List<StoryBlock>, style: ProseStyle, story: Stor
     val grown = grown(story.type)
     // The story's own blocks (not a quote's or a list's) are the island's paragraphs (round 19).
     val marks = if (nested) null else LocalMascotMarks.current
+    // Their marks' keys made once per story (A7), not formatted again for every block on every composition.
+    val keys = remember(blocks, marks != null) { if (marks == null) null else Array(blocks.size) { i -> "block:" + i.toString().padStart(4, '0') } }
     Column(Modifier.fillMaxWidth()) {
         blocks.forEachIndexed { i, block ->
             if (gaps[i] > 0) Spacer(Modifier.height((gaps[i] * grown).dp))
-            if (marks != null && block != StoryBlock.Blank) Box(Modifier.mascotMark("block:${"%04d".format(i)}")) { Block(block, style, story) }
+            if (keys != null && block != StoryBlock.Blank) Box(Modifier.mascotMark(keys[i])) { Block(block, style, story) }
             else Block(block, style, story)
         }
     }

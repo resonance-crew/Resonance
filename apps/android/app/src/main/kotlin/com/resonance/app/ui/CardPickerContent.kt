@@ -334,7 +334,7 @@ internal fun pickDate(iso: String?, today: LocalDate = LocalDate.now()): String?
             day.year == today.year -> if (zh) "M月d日" else "MMM d"
             else -> if (zh) "y年M月d日" else "MMM d, y"
         }
-        day.format(DateTimeFormatter.ofPattern(pattern, Strings.language.locale))
+        day.format(cachedFormatter(pattern, Strings.language.locale))
     }.getOrNull()
 }
 
