@@ -9,6 +9,11 @@ export interface IStorageProvider {
    * to *.r2.cloudflarestorage.com.
    */
   uploadObject(intent: UploadIntent, body: Uint8Array): Promise<StoredObject>;
+  /**
+   * Server-side upload under a key the caller made (a cover's copy beside the
+   * cover: lib/images/coverThumb), served as immutable as uploadObject's.
+   */
+  putObject(key: string, contentType: string, body: Uint8Array): Promise<StoredObject>;
   getPublicUrl(key: string): string;
   /**
    * An object's bytes, read through the storage API (not its public URL);

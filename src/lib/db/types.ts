@@ -14,6 +14,12 @@ export interface CardTranslation {
 export interface CardMedia {
   type: 'image' | 'video';
   url: string;
+  /**
+   * The cover's ≤ 960 px copy (lib/images/coverThumb, what lists draw): the
+   * upload's `thumbUrl`, when the writer saved it. Absent on older covers and
+   * those saved by builds before — the copy's URL follows from `url` anyway.
+   */
+  thumbUrl?: string;
   label?: string;
   /**
    * Where the cover is looked at (round 25, lib/images/coverFrame): every

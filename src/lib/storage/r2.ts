@@ -67,13 +67,16 @@ export class R2StorageProvider implements IStorageProvider {
   private publicBase = env('R2_PUBLIC_BASE').replace(/\/$/, '');
 
   async uploadObject(intent: UploadIntent, body: Uint8Array): Promise<StoredObject> {
-    const key = objectKey(intent);
+    return this.putObject(objectKey(intent), intent.contentType, body);
+  }
+
+  async putObject(key: string, contentType: string, body: Uint8Array): Promise<StoredObject> {
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: key,
         Body: body,
-        ContentType: intent.contentType,
+        ContentType: contentType,
         ContentLength: body.byteLength,
         // Every key is a fresh UUID and an object is never rewritten: browsers
         // and the CDN may keep it for good.

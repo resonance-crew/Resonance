@@ -3,6 +3,8 @@ import type { Card } from '@/lib/db/types';
 import { linkPreviewsOf } from '@/lib/links/previewShape';
 import { purgeAtOf, restorableVisibility, trashExpired } from '@/lib/cards/trash';
 import { coverFrameOf } from '@/lib/images/coverFrame';
+import { coverThumbUrl } from '@/lib/images/coverThumb';
+import { publicBases, storageKeyOf } from '@/lib/storage/publicUrl';
 import type { AuthorBody, FeedCardBody, LinkPreviewBody } from './schemas';
 import { summaryOf, type ListCard } from './summary';
 import { presentSummaryTranslations } from './summaryTranslations';
@@ -120,6 +122,7 @@ export function toFeedCard(c: ListCard, author: DocumentData | undefined, opts: 
     anonymous,
     visibility: visibilityOf(c.visibility),
     imageUrl: str(c.media?.url),
+    imageThumbUrl: coverThumbOf(c.media),
     imageLabel: str(c.media?.label) ?? (title ? Array.from(title).slice(0, 24).join('') : null),
     // Only beside a picture: a frame left on a cover that is gone frames nothing.
     imageFrame: str(c.media?.url) ? coverFrameOf(c.media?.frame) : null,
@@ -131,6 +134,21 @@ export function toFeedCard(c: ListCard, author: DocumentData | undefined, opts: 
     ...(opts.own ? trashFields(c) : {}),
     ...(opts.edited ? { editedAt: editedAtOf(c) } : {}),
   };
+}
+
+/**
+ * A cover's ≤ 960 px copy for lists (B2): the one written on the card
+ * (`media.thumbUrl`, when it is on our storage), else the copy every one of our
+ * covers has beside it (lib/images/coverThumb) — so a card saved by a build
+ * that never heard of copies has one too. Null for a cover hosted elsewhere,
+ * or none: the client draws `imageUrl`.
+ */
+export function coverThumbOf(media: Card['media'], bases: readonly string[] = publicBases()): string | null {
+  const url = str(media?.url);
+  if (!url || media?.type === 'video') return null;
+  const kept = str(media?.thumbUrl);
+  if (kept && storageKeyOf(kept, bases)) return kept;
+  return coverThumbUrl(url, bases);
 }
 
 /** A document id that can safely be put in a path (hand-edited data could hold anything). */

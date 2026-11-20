@@ -27,6 +27,13 @@
  *       the old files stay. A dry run lists each picture, its size, what would replace it and every
  *       document naming it (reads the pictures by their public URLs; --apply needs R2 credentials;
  *       on the emulator the pictures are the emulators' own folder, never R2)
+ *   npx tsx scripts/backfill.ts cover-thumbs  [--apply] [--emulator]
+ *       covers stored before every upload kept a ≤ 960 px copy (B2, lib/images/coverThumb) get one: read by
+ *       their public URLs, encoded as an upload's copy is, stored under the key made from the cover's, on record
+ *       as the cover's owner's, and named on the card as `media.thumbUrl` (no updatedAt or summary change). A copy
+ *       already there is kept. Lists derive the copy's URL from the cover's, so run it before the web that serves
+ *       FeedCard.imageThumbUrl, and once more after (docs/release/owed.md); --apply needs R2 credentials (on the
+ *       emulator the pictures are the emulators' own folder, never R2)
  *   npx tsx scripts/backfill.ts avatar-colors [--apply] [--emulator]
  *       profiles still wearing the one avatar colour every profile was given (or none) → their own,
  *       picked by uid from lib/design/avatarColors as a new profile's is; any other colour stays
@@ -186,6 +193,35 @@ async function main() {
       await reencodeLegacy(db, storage, { apply, publicBases: bases, read });
       return;
     }
+    case 'cover-thumbs': {
+      const { backfillCoverThumbs } = await import('./backfills/coverThumbs');
+      if (!publicBase) throw new Error('R2_PUBLIC_BASE is not set');
+      const bases = [publicBase, ...formerBases];
+      const MAX_BYTES = 20 * 1024 * 1024;
+      if (useEmulator) {
+        // The emulators' pictures are a folder on this machine (lib/storage/local), read and written by key.
+        const { LocalStorageProvider } = await import('../src/lib/storage/local');
+        const { storageKeyOf } = await import('../src/lib/storage/publicUrl');
+        const local = new LocalStorageProvider(undefined, publicBase);
+        const read = async (url: string) => {
+          const key = storageKeyOf(url, bases);
+          return key ? local.getObject(key, MAX_BYTES) : null;
+        };
+        const exists = async (url: string) => (await read(url)) !== null;
+        await backfillCoverThumbs(db, apply ? local : null, { apply, publicBases: bases, read, exists });
+        return;
+      }
+      const storage = apply ? new (await import('../src/lib/storage/r2')).R2StorageProvider() : null;
+      const read = async (url: string) => {
+        const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+        if (!res.ok) return null;
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        return bytes.byteLength > MAX_BYTES ? null : bytes;
+      };
+      const exists = async (url: string) => (await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(15_000) })).ok;
+      await backfillCoverThumbs(db, storage, { apply, publicBases: bases, read, exists });
+      return;
+    }
     case 'avatar-colors': {
       const { backfillAvatarColors } = await import('./backfills/avatarColors');
       await backfillAvatarColors(db, { apply });
@@ -245,7 +281,7 @@ async function main() {
       return;
     }
     default:
-      throw new Error(`Unknown task "${task ?? ''}" (anonymous | handles | edits | storage-host | rekey-images | rehost-images | square-avatars | reencode-legacy | avatar-colors | notes | anonymous-bells | orphan-notes | card-tombstones | link-previews | summary-translations | story-translations | recommend-index)`);
+      throw new Error(`Unknown task "${task ?? ''}" (anonymous | handles | edits | storage-host | rekey-images | rehost-images | square-avatars | reencode-legacy | cover-thumbs | avatar-colors | notes | anonymous-bells | orphan-notes | card-tombstones | link-previews | summary-translations | story-translations | recommend-index)`);
   }
 }
 

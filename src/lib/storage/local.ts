@@ -55,7 +55,10 @@ export class LocalStorageProvider implements IStorageProvider {
   }
 
   async uploadObject(intent: UploadIntent, body: Uint8Array): Promise<StoredObject> {
-    const key = objectKey(intent);
+    return this.putObject(objectKey(intent), intent.contentType, body);
+  }
+
+  async putObject(key: string, _contentType: string, body: Uint8Array): Promise<StoredObject> {
     const path = this.path(key);
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, body);

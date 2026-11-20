@@ -17,13 +17,23 @@ vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => admin.db }));
 const limited = vi.fn(async (..._a: unknown[]) => null as Response | null);
 vi.mock('@/lib/api/rateLimit', () => ({ limited: (...a: unknown[]) => limited(...a) }));
 const stored: { intent: UploadIntent; body: Uint8Array }[] = [];
+const thumbs: { key: string; contentType: string; body: Uint8Array }[] = [];
+const deleted: string[] = [];
+let thumbFails = false;
 vi.mock('@/lib/storage', () => ({
   getStorageProvider: () => ({
+    putObject: async (key: string, contentType: string, body: Uint8Array) => {
+      if (thumbFails) throw new Error('R2 is down');
+      thumbs.push({ key, contentType, body });
+      return { key, publicUrl: `https://img.example/${key}` };
+    },
     uploadObject: async (intent: UploadIntent, body: Uint8Array) => {
       stored.push({ intent, body });
       return { key: `image/2026-10/k.${intent.filename.split('.').pop()}`, publicUrl: 'https://img.example/k' };
     },
-    deleteObject: async () => {},
+    deleteObject: async (key: string) => {
+      deleted.push(key);
+    },
   }),
 }));
 
@@ -32,6 +42,9 @@ const { POST } = await import('./route');
 beforeEach(() => {
   viewer = { id: 'alice' };
   stored.length = 0;
+  thumbs.length = 0;
+  deleted.length = 0;
+  thumbFails = false;
   for (const path of Object.keys(admin.docs)) delete admin.docs[path];
   vi.clearAllMocks();
 });
@@ -56,6 +69,30 @@ async function storedImage() {
 }
 
 describe('POST /api/upload', () => {
+  it('keeps a cover with its ≤ 960 px copy beside it, both on record as the uploader’s; a profile photo has none (B2)', async () => {
+    const res = await upload(await solid(3000, 1500).jpeg().toBuffer());
+    expect(res.status).toBe(200);
+    expect(thumbs).toHaveLength(1);
+    expect(thumbs[0]).toMatchObject({ key: 'image/2026-10/k-w960.webp', contentType: 'image/webp' });
+    const full = await sharp(stored[0].body).metadata();
+    const small = await sharp(thumbs[0].body).metadata();
+    expect([full.format, full.width, full.height]).toEqual(['webp', 2048, 1024]);
+    expect([small.format, small.width, small.height]).toEqual(['webp', 960, 480]);
+    expect(admin.docs['uploads/k-w960']).toMatchObject({ ownerId: 'alice', key: 'image/2026-10/k-w960.webp', kind: 'image' });
+
+    thumbs.length = 0;
+    const avatar = await upload(await solid(300, 300).jpeg().toBuffer(), { purpose: 'avatar' });
+    expect(await avatar.json()).not.toHaveProperty('thumbUrl');
+    expect(thumbs).toHaveLength(0);
+  });
+
+  it('removes the cover again when its copy could not be stored: no cover is ever kept without one', async () => {
+    thumbFails = true;
+    await expect(upload(await solid(40, 20).jpeg().toBuffer())).rejects.toThrow('R2 is down');
+    expect(deleted).toContain('image/2026-10/k.webp');
+    expect(admin.docs['uploads/k']).toBeUndefined();
+  });
+
   it('stores a photo upright as WebP, without its EXIF or GPS, typed and named by the encoder', async () => {
     // 40×20 pixels, EXIF orientation 6 (shown rotated a quarter turn), with a camera and a location.
     const photo = await solid(40, 20)
@@ -71,7 +108,11 @@ describe('POST /api/upload', () => {
     // The client calls it a PNG named .html: neither reaches storage.
     const res = await upload(photo, { name: 'page.html', type: 'image/png' });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ publicUrl: 'https://img.example/k', key: 'image/2026-10/k.webp' });
+    expect(await res.json()).toEqual({
+      publicUrl: 'https://img.example/k',
+      key: 'image/2026-10/k.webp',
+      thumbUrl: 'https://img.example/image/2026-10/k-w960.webp',
+    });
     expect(admin.docs['uploads/k']).toMatchObject({ ownerId: 'alice', key: 'image/2026-10/k.webp', kind: 'image' });
 
     const { intent, meta } = await storedImage();

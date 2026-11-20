@@ -24,7 +24,7 @@ export interface CardContent {
   story: string;
   tags: string[];
   /** `frame`: where the cover is looked at (lib/images/coverFrame), absent = the centre. */
-  media?: { type: string; url: string; label?: string; frame?: CoverFrame } | null;
+  media?: { type: string; url: string; thumbUrl?: string; label?: string; frame?: CoverFrame } | null;
   accentHue?: number | null;
 }
 
@@ -51,6 +51,8 @@ export function cardContentProblem(
     if (!(/^https:\/\/\S+$/.test(m.url) || storageKeyOf(m.url, bases)) || m.url.length > CARD_LIMITS.url) return 'media';
     // Our own storage only, where the server knows it (the rules hold the same once config/storage is set: its host or a former one).
     if (bases.length && m.url !== opts.keptMediaUrl && !storageKeyOf(m.url, bases)) return 'media';
+    // Its copy (lib/images/coverThumb) only ever on our own storage, as the rules' validMedia.
+    if (m.thumbUrl != null && (typeof m.thumbUrl !== 'string' || m.thumbUrl.length > CARD_LIMITS.url || !storageKeyOf(m.thumbUrl, bases))) return 'media';
     if (m.label != null && (typeof m.label !== 'string' || m.label.length > CARD_LIMITS.mediaLabel)) return 'media';
     // The rules' validMedia: four numbers, each in its range.
     if ('frame' in m && m.frame !== undefined && !isCoverFrame(m.frame)) return 'media';
