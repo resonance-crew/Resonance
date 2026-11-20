@@ -29,6 +29,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -213,7 +215,7 @@ fun SkeletonTag(width: Dp, size: TagSize = TagSize.Md) {
 @Composable
 private fun shimmerPhase(): State<Float>? {
     val context = LocalContext.current
-    val still = remember(context) { context.prefersReducedMotion() }
+    val still = rememberMotionBudget().reducedMotion
     return if (still) null else rememberInfiniteTransition(label = "skeleton").animateFloat(
         0f, 1f, infiniteRepeatable(tween(1500, easing = Ease)), label = "shimmer",
     )
@@ -244,17 +246,16 @@ private fun Modifier.shimmer(): Modifier {
     val shared = LocalShimmerClock.current
     val t = if (shared != null) shared.phase else shimmerPhase()
     return clearAndSetSemantics { }
-        .drawBehind {
-            val p = t?.value ?: return@drawBehind drawRect(base)
+        .drawWithCache {
             val w = size.width
-            // background-position 100% → −100% moves the 4w-wide band's left edge from −3w to 3w.
-            val left = -3f * w * (1f - 2f * p)
-            drawRect(
-                Brush.horizontalGradient(
-                    0.25f to base, 0.37f to highlight, 0.63f to base,
-                    startX = left, endX = left + 4f * w,
-                ),
-            )
+            // One 4w-wide band per size (A9), moved under the block each frame rather than made again.
+            val band = Brush.horizontalGradient(0.25f to base, 0.37f to highlight, 0.63f to base, startX = 0f, endX = 4f * w)
+            onDrawBehind {
+                val p = t?.value ?: return@onDrawBehind drawRect(base)
+                // background-position 100% → −100% moves the band's left edge from −3w to 3w.
+                val left = -3f * w * (1f - 2f * p)
+                translate(left = left) { drawRect(band, topLeft = Offset(-left, 0f), size = size) }
+            }
         }
 }
 

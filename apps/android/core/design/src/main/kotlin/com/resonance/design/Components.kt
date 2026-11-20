@@ -65,6 +65,8 @@ import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.runtime.State
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -598,29 +600,44 @@ val ButtonLoaderSmall = 14.dp
 @Composable
 fun ButtonLoader(color: Color, size: Dp = ButtonLoaderSize, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val still = remember(context) { context.prefersReducedMotion() }
+    val still = rememberMotionBudget().reducedMotion
     val t = if (still) null else rememberInfiniteTransition(label = "buttonLoop").animateFloat(
         0f, 1f, infiniteRepeatable(tween(BUTTON_LOOP_MILLIS, easing = LinearEasing)), label = "t",
     )
-    Canvas(modifier.size(size).clearAndSetSemantics { }) {
-        val box = size.value.toDouble()
-        val c = box / 2
+    Spacer(modifier.size(size).clearAndSetSemantics { }.drawWithCacheOf(ButtonLoopDrawing(color, size.value, t)))
+}
+
+/**
+ * ButtonLoader's drawing (A9): the loop, its measure, the links' paths and pens made once per size,
+ * density and colour; each frame only cuts the links again ([t] read as it draws).
+ */
+private data class ButtonLoopDrawing(val color: Color, val box: Float, val t: State<Float>?) : (CacheDrawScope) -> DrawResult {
+    override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
+        val c = box / 2.0
         val path = wobCircle(c, c, 0.36 * box, 29.0, WobCircleOptions(segments = 6, mag = 0.035 * box, cpJitter = 0.6)).toPath(density)
         val pen = Tokens.Ink.toPx()
-        if (t == null) {
-            drawPath(path, color.copy(alpha = color.alpha * 0.75f), style = Stroke(pen, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            return@Canvas
+        val phase = t
+        if (phase == null) {
+            val rest = Stroke(pen, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            val ink = color.copy(alpha = color.alpha * 0.75f)
+            return@with onDrawBehind { drawPath(path, ink, style = rest) }
         }
         val measure = PathMeasure().apply { setPath(path, false) }
         val length = measure.length
-        ButtonLoopLinks.forEachIndexed { k, alpha ->
-            val head = (t.value + k * BUTTON_LINK) % 1f
-            val end = head + BUTTON_LINK
-            val seg = Path()
-            measure.getSegment(head * length, minOf(end, 1f) * length, seg, true)
-            if (end > 1f) measure.getSegment(0f, (end - 1f) * length, seg, true)
-            val cap = if (k == ButtonLoopLinks.lastIndex) StrokeCap.Round else StrokeCap.Butt
-            drawPath(seg, color.copy(alpha = color.alpha * alpha), style = Stroke(pen, cap = cap, join = StrokeJoin.Round))
+        val segs = Array(ButtonLoopLinks.size) { Path() }
+        val strokes = Array(ButtonLoopLinks.size) { k -> Stroke(pen, cap = if (k == ButtonLoopLinks.lastIndex) StrokeCap.Round else StrokeCap.Butt, join = StrokeJoin.Round) }
+        val inks = Array(ButtonLoopLinks.size) { k -> color.copy(alpha = color.alpha * ButtonLoopLinks[k]) }
+        onDrawBehind {
+            val now = phase.value
+            for (k in segs.indices) {
+                val head = (now + k * BUTTON_LINK) % 1f
+                val end = head + BUTTON_LINK
+                val seg = segs[k]
+                seg.rewind()
+                measure.getSegment(head * length, minOf(end, 1f) * length, seg, true)
+                if (end > 1f) measure.getSegment(0f, (end - 1f) * length, seg, true)
+                drawPath(seg, inks[k], style = strokes[k])
+            }
         }
     }
 }
@@ -885,27 +902,46 @@ object OnDarkDisc {
 @Composable
 fun SketchLoader(size: Dp = 56.dp, color: Color = Tokens.Terracotta) {
     val context = LocalContext.current
-    val still = remember(context) { context.prefersReducedMotion() }
-    val links = listOf(0.12f, 0.19f, 0.28f, 0.4f, 0.55f, 0.95f)
+    val still = rememberMotionBudget().reducedMotion
     val t = if (still) null else rememberInfiniteTransition(label = "loader").animateFloat(
         0f, 1f, infiniteRepeatable(tween(2600, easing = LinearEasing)), label = "t",
     )
-    Canvas(Modifier.size(size).semantics { contentDescription = L10n.Home.moreLoading }) {
-        val path = loaderLoop(size, density)
-        val pen = loaderPen(size)
-        if (t == null) {
-            drawPath(path, color.copy(alpha = LOOP_AT_REST), style = Stroke(pen, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            return@Canvas
+    Spacer(Modifier.size(size).semantics { contentDescription = L10n.Home.moreLoading }.drawWithCacheOf(SketchLoaderDrawing(color, size, t)))
+}
+
+/** SketchLoader's dashes back to front (their alphas). */
+private val SketchLinks = floatArrayOf(0.12f, 0.19f, 0.28f, 0.4f, 0.55f, 0.95f)
+
+/**
+ * SketchLoader's drawing (A9): its loop, measure, dash paths and pens made once per size, density
+ * and colour; a frame only cuts the six dashes again ([t] read as it draws).
+ */
+private data class SketchLoaderDrawing(val color: Color, val box: Dp, val t: State<Float>?) : (CacheDrawScope) -> DrawResult {
+    override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
+        val path = loaderLoop(box, density)
+        val pen = box.toPx() * 0.036f
+        val phase = t
+        if (phase == null) {
+            val rest = Stroke(pen, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            val ink = color.copy(alpha = LOOP_AT_REST)
+            return@with onDrawBehind { drawPath(path, ink, style = rest) }
         }
         val measure = PathMeasure().apply { setPath(path, false) }
         val length = measure.length
-        links.forEachIndexed { k, alpha ->
-            val head = (t.value + k * 0.12f) % 1f
-            val seg = androidx.compose.ui.graphics.Path()
-            val end = head + 0.12f
-            measure.getSegment(head * length, minOf(end, 1f) * length, seg, true)
-            if (end > 1f) measure.getSegment(0f, (end - 1f) * length, seg, true)
-            drawPath(seg, color.copy(alpha = alpha), style = Stroke(pen, cap = if (k == links.lastIndex) StrokeCap.Round else StrokeCap.Butt))
+        val segs = Array(SketchLinks.size) { Path() }
+        val strokes = Array(SketchLinks.size) { k -> Stroke(pen, cap = if (k == SketchLinks.lastIndex) StrokeCap.Round else StrokeCap.Butt) }
+        val inks = Array(SketchLinks.size) { k -> color.copy(alpha = SketchLinks[k]) }
+        onDrawBehind {
+            val now = phase.value
+            for (k in segs.indices) {
+                val head = (now + k * 0.12f) % 1f
+                val end = head + 0.12f
+                val seg = segs[k]
+                seg.rewind()
+                measure.getSegment(head * length, minOf(end, 1f) * length, seg, true)
+                if (end > 1f) measure.getSegment(0f, (end - 1f) * length, seg, true)
+                drawPath(seg, inks[k], style = strokes[k])
+            }
         }
     }
 }

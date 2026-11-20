@@ -175,7 +175,7 @@ fun ReactionTray(
 ) {
     val palette = LocalResonanceColors.current
     val context = LocalContext.current
-    val still = remember(context) { context.prefersReducedMotion() }
+    val still = rememberMotionBudget().reducedMotion
     val disc = PaletteMixes.of(palette).reactionChosen
     val choose by rememberUpdatedState(onChoose)
     // The sticker under the finger now, while a finger is on the tray.
@@ -369,7 +369,7 @@ fun ReactionChips(
     onTap: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val still = remember(context) { context.prefersReducedMotion() }
+    val still = rememberMotionBudget().reducedMotion
     Box(if (onTap == null && label != null) modifier.semantics { contentDescription = label } else modifier) {
         // The farthest drawn first, so the nearest lies over it.
         items.withIndex().reversed().forEach { (i, item) ->

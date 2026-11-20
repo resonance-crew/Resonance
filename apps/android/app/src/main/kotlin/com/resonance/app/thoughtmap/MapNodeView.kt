@@ -64,6 +64,7 @@ import com.resonance.design.WobRectShape
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.prefersReducedMotion
+import com.resonance.design.rememberMotionBudget
 import com.resonance.design.toPath
 import com.resonance.geometry.SegValue
 import com.resonance.geometry.WobRectOptions
@@ -197,7 +198,7 @@ fun MapNodeView(
         NodeTextLayout.make(card.title.replace(Spaces, " ").trim(), plainExcerpt(card.story, if (thumb == null) 100 else 80), thumb != null, density)
     }
     // The web remounts the outline's svg whenever the card is (un)selected or dragged, and each new one fades in (280ms ease-out; not with animations off).
-    val still = remember(context) { context.prefersReducedMotion() }
+    val still = rememberMotionBudget().reducedMotion
     // A fresh Animatable per outline (it starts at 0 in the very frame the new outline first draws, not a frame later).
     val fade = remember(tabbed) { Animatable(if (still) 1f else 0f) }
     LaunchedEffect(fade) {

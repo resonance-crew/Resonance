@@ -27,6 +27,7 @@ import com.resonance.api.models.FeedCard
 import com.resonance.app.Stickers
 import com.resonance.design.ComposerHeight
 import com.resonance.design.prefersReducedMotion
+import com.resonance.design.rememberMotionBudget
 import com.resonance.kit.chat.ChatAlbum
 import com.resonance.kit.chat.ComposerPanel
 import com.resonance.kit.chat.KeyboardHeights
@@ -241,7 +242,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     // Which panel's content is drawn: kept while a closing panel slides away.
     var shownPanel by remember { mutableStateOf(ComposerPanel.None) }
     var attachTab by rememberSaveable { mutableStateOf(AttachTab.Pictures) }
-    val still = remember(context) { context.prefersReducedMotion() }
+    val still = rememberMotionBudget().reducedMotion
     val panelRoom = remember { PanelRoom(scope, still) }
     val stickerCatalog by Stickers.catalog.collectAsStateWithLifecycle()
     // The field grown to the thread (round 22 §4.3, option C): what it leaves over itself under the bar (px) —

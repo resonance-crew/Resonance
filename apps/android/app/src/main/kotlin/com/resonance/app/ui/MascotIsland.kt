@@ -64,7 +64,7 @@ import com.resonance.design.MascotMarks
 import com.resonance.design.borderedCardOutline
 import com.resonance.design.generated.LocalResonanceColors
 import com.resonance.design.generated.Tokens
-import com.resonance.design.prefersReducedMotion
+import com.resonance.design.rememberMotionBudget
 import com.resonance.design.toPath
 import com.resonance.geometry.PathCommand
 import com.resonance.geometry.wavyLine
@@ -240,7 +240,8 @@ private fun Modifier.screenAround(): Modifier = layout { measurable, constraints
 private fun MascotLook(island: MascotIsland) {
     val context = LocalContext.current
     val dark = LocalResonanceColors.current.dark
-    val reduced = context.prefersReducedMotion()
+    // Held still with animations removed, and under Battery Saver too (A10), followed live.
+    val reduced = rememberMotionBudget().calm
     LaunchedEffect(dark) { island.call("mascots.theme('${if (dark) "dark" else "light"}')") }
     LaunchedEffect(reduced) { island.call("mascots.reducedMotion($reduced)") }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
