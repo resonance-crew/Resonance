@@ -13,8 +13,15 @@
  *   an empty story starts in (default zh-TW); ?script=cjk|latin sets the story
  *   in that type for good (the host decides); ?placeholder=, ?fonts=. A table's
  *   source is labelled in ?locale='s language (card.table: 表格 / Table).
- * Bridge (native → island): window.ResonanceEditor.{setMarkdown, getMarkdown, roundtrip, focus, blur, exec,
- *   setTitle, setScript, setLinkPreviews}
+ * Bridge (native → island): window.ResonanceEditor.{open, reset, setMarkdown, getMarkdown, roundtrip, focus, blur,
+ *   exec, setTitle, setScript, setLinkPreviews}
+ *   open({title?, markdown?, previews?}) → true opens a card in one call after 'ready': the title, the link
+ *   previews, the story (out of undo history, no 'change'), then its type read once and told in one 'script'
+ *   message — in place of setTitle + setMarkdown + setLinkPreviews (which all still work).
+ *   reset() a fresh state for an island reused for another card: an empty story, its undo history gone, no
+ *   title, no previews, the type as ?script= set it; no 'change'.
+ *   setMarkdown(md) puts a story in the same way (it still answers the Markdown, for older hosts: don't ask
+ *   for it). getMarkdown() the story now — both from one serialization per document, kept until it changes.
  *   exec(command, args?) runs a toolbar command (the web MarkdownEditor's set:
  *   bold, italic, h2, h3, bulletList, orderedList, blockquote, insertCard,
  *   insertImage, undo, redo, link, unlink); it returns false when the command can't run.
@@ -29,12 +36,16 @@
  *   setTitle(title) tells the island the card's title, which it reads with the
  *   story to set them (lib/text/script writerScript, as the web writer does);
  *   setScript(script | null, lang?) sets the type by hand (null: by the text again).
- * Bridge (island → native): {type: 'ready' | 'change' | 'height' | 'state' | 'focus' | 'script' | 'caret', ...}
- *   'height' {px, content}: the page's scrollHeight and the foot of the story's last block (CSS px, zoom
- *   included), sent only when either changed;
- *   posted to
+ * Bridge (island → native): {type: 'ready' | 'change' | 'height' | 'state' | 'focus' | 'script' | 'caret' |
+ *   'linkTap' | 'pasteImage', ...} posted to
  *   iOS  window.webkit.messageHandlers.editor
  *   Android window.ResonanceBridge.postMessage(json)
+ *   'change' {markdown}: the story, after writing paused 450 ms — at once on blur, a hidden page and pagehide;
+ *   'height' {px, content}: the page's scrollHeight and the foot of the story's last block (CSS px, zoom
+ *   included, as iOS's measureContent() measured it), sent only when either changed;
+ *   'pasteImage' {}: a paste of an image file with no words to keep, cancelled — the host reads the picture
+ *   from the system's clipboard, uploads it and calls exec('insertImage', {src}); a dropped picture file is
+ *   left out, and no blob:/data: picture is ever kept (exec('insertImage') refuses one);
  *   'script' {script, lang}: how the story is set now (the host sets its title field the same way);
  *   'caret' {top, bottom}: the caret's line in the page's px (zoom included), while the story has the
  *   focus — the host keeps it above its keyboard bar;
