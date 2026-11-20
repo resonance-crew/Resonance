@@ -496,7 +496,7 @@ private struct BellThumbView: View {
                 .accessibilityHidden(true)
         case let .card(card):
             let family = PublishStep.previewPalette(accentHue: card.accentHue, cardId: card.id)
-            let cover = card.imageUrl.flatMap { $0.isEmpty ? nil : URL(string: $0) }
+            let cover = card.listCoverURL
             let face = size + BellThumb.bleed * 2
             ZStack {
                 (cover == nil ? family.fill : family.skeleton)

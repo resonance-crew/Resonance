@@ -53,7 +53,7 @@ extension MapCard {
     nonisolated init(summary c: FeedCard) {
         self.init(id: c.id, authorId: c.author?.value1.id ?? "", slug: c.slug, title: c.title, story: c.excerpt,
                   tags: c.tags, visibility: c.visibility.rawValue, publishedAt: c.publishedAt.flatMap(ISO8601.date),
-                  mediaURL: c.imageUrl.flatMap(URL.init(string:)), accentHue: c.accentHue, coverFrame: c.coverFraming)
+                  mediaURL: c.listCoverURL, accentHue: c.accentHue, coverFrame: c.coverFraming)
     }
 }
 
@@ -243,9 +243,32 @@ struct ThoughtMapService {
 
     private func read(_ ids: [String]) async -> [MapCard] {
         let cardsCol = db.collection("cards")
-        return await Self.read(ids, underRules: { id in try? await Self.card(cardsCol.document(id).getDocument()) },
-                               server: summaries)
+        // My own cards first, 30 to a query (audit I12) instead of one read each: scoped `authorId == me`,
+        // which the rules' list allows; someone else's card in a chunk is simply not in its answer. A
+        // chunk that fails, and every card not mine, is read one at a time as before.
+        var own: [String: MapCard] = [:]
+        // Answered by a query: mine (one in the trash is not drawn, and isn't asked for again).
+        var answered = Set<String>()
+        let unique = Array(NSOrderedSet(array: ids)) as? [String] ?? ids
+        for start in stride(from: 0, to: unique.count, by: Self.idsPerQuery) {
+            let chunk = Array(unique[start..<min(unique.count, start + Self.idsPerQuery)])
+            guard let snap = try? await cardsCol.whereField("authorId", isEqualTo: uid)
+                .whereField(FieldPath.documentID(), in: chunk).getDocuments() else { continue }
+            for d in snap.documents {
+                answered.insert(d.documentID)
+                if let card = Self.card(d) { own[card.id] = card }
+            }
+        }
+        let rest = ids.filter { !answered.contains($0) }
+        let others = rest.isEmpty ? [] : await Self.read(rest, underRules: { id in try? await Self.card(cardsCol.document(id).getDocument()) },
+                                                         server: summaries)
+        var byId = own
+        for card in others where byId[card.id] == nil { byId[card.id] = card }
+        return ids.compactMap { byId[$0] }
     }
+
+    /// The most ids one Firestore `in` filter takes.
+    static let idsPerQuery = 30
 
     /// Cards by id, in the order asked: each read under the rules, and those the
     /// rules won't read here (someone else's anonymous card) asked of the server
@@ -288,7 +311,7 @@ struct ThoughtMapService {
             tags: d["tags"] as? [String] ?? [],
             visibility: d["visibility"] as? String ?? "public",
             publishedAt: (d["publishedAt"] as? Timestamp)?.dateValue(),
-            mediaURL: (media?["type"] as? String) == "image" ? (media?["url"] as? String).flatMap(URL.init(string:)) : nil,
+            mediaURL: (media?["type"] as? String) == "image" ? ((media?["thumbUrl"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? media?["url"] as? String).flatMap(URL.init(string:)) : nil,
             accentHue: num(d["accentHue"]), coverFrame: CoverFrames.of(media: media))
     }
 

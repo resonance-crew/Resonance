@@ -168,7 +168,7 @@ public struct HandDrawnAvatar: View {
                     .clipped()
                     .clipShape(shape)
             } else if let imageURL {
-                OrganicAvatarPhoto(url: imageURL).clipShape(shape)
+                OrganicAvatarPhoto(url: imageURL, side: size).clipShape(shape)
             }
         }
         .frame(width: size, height: size)
@@ -206,7 +206,7 @@ public struct HandDrawnThumb: View {
         let shape = Self.shape(size: size, seed: seed)
         ZStack {
             shape.fill(fill)
-            if let url { OrganicAvatarPhoto(url: url).clipShape(shape) }
+            if let url { OrganicAvatarPhoto(url: url, side: size).clipShape(shape) }
             if chosen {
                 ZStack {
                     shape.fill(Tokens.terracotta.opacity(0.82))
