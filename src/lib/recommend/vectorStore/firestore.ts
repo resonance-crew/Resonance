@@ -121,16 +121,13 @@ export class FirestoreVectorStore implements IVectorStore {
 
   async listByCards(cardIds: string[]): Promise<VectorRecord[]> {
     const ids = [...new Set(cardIds.filter((id) => id && !id.includes('/')))];
-    const out: VectorRecord[] = [];
-    for (let i = 0; i < ids.length; i += IN_CHUNK) {
-      const snap = await this.db()
-        .collection(COLLECTION)
-        .where('cardId', 'in', ids.slice(i, i + IN_CHUNK))
-        .select(...RECORD_FIELDS, 'vector')
-        .get();
-      for (const d of snap.docs) out.push(toRecord(d.data(), true));
-    }
-    return out.filter((r) => r.vector.length > 0);
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += IN_CHUNK) chunks.push(ids.slice(i, i + IN_CHUNK));
+    // Side by side (B9): a taste of hundreds of cards was ten or more reads one after another.
+    const snaps = await Promise.all(
+      chunks.map((chunk) => this.db().collection(COLLECTION).where('cardId', 'in', chunk).select(...RECORD_FIELDS, 'vector').get()),
+    );
+    return snaps.flatMap((snap) => snap.docs.map((d) => toRecord(d.data(), true))).filter((r) => r.vector.length > 0);
   }
 
   async nearest(query: VectorQuery): Promise<NearestHit[]> {

@@ -346,7 +346,10 @@ export async function recommendFeed(uid: string, opts: FunnelOptions = {}): Prom
     const domainOf = (cardId: string) => byCard.get(cardId)?.lifeDomain ?? '';
     const explore = everyScore.find((c) => !items.some((i) => i.cardId === c.card.cardId) && domainOf(c.card.cardId) !== '' && !domains.has(domainOf(c.card.cardId)));
     if (explore) {
-      const exploreNamed = await namedCardIds([explore.card.cardId], db).catch(() => new Set<string>());
+      // Already read when it was among the reranked ones (B9): one read of the anonymous flags a build.
+      const exploreNamed = top.some((c) => c.card.cardId === explore.card.cardId)
+        ? named
+        : await namedCardIds([explore.card.cardId], db).catch(() => new Set<string>());
       const author = authorKey({ cardId: explore.card.cardId, authorId: authorOf(explore.card.cardId), anonymous: !exploreNamed.has(explore.card.cardId) });
       if ((perAuthor.get(author) ?? 0) < AUTHOR_MAX) {
         perAuthor.set(author, (perAuthor.get(author) ?? 0) + 1);
