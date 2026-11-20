@@ -112,6 +112,9 @@ export function cardToStory(
  * editor and the og image keep the cover.
  */
 export function coverThumbUrl(card: Pick<Card, 'media'>): string | undefined {
-  const thumb = (card.media as { thumbUrl?: unknown } | undefined)?.thumbUrl;
-  return typeof thumb === 'string' && thumb ? thumb : undefined;
+  const thumb = card.media?.thumbUrl;
+  const url = card.media?.url;
+  if (typeof thumb !== 'string' || !thumb || typeof url !== 'string') return undefined;
+  // Only this cover's own copy: draft saves merge `media`, so a new cover can keep the old one's thumbUrl.
+  return thumb === url.replace(/\.[A-Za-z0-9]+$/, '-w960.webp') ? thumb : undefined;
 }

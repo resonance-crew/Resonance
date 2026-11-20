@@ -3,7 +3,7 @@ import type { Card } from '@/lib/db/types';
 import { linkPreviewsOf } from '@/lib/links/previewShape';
 import { purgeAtOf, restorableVisibility, trashExpired } from '@/lib/cards/trash';
 import { coverFrameOf } from '@/lib/images/coverFrame';
-import { coverThumbUrl } from '@/lib/images/coverThumb';
+import { coverThumbKey, coverThumbUrl } from '@/lib/images/coverThumb';
 import { publicBases, storageKeyOf } from '@/lib/storage/publicUrl';
 import type { AuthorBody, FeedCardBody, LinkPreviewBody } from './schemas';
 import { summaryOf, type ListCard } from './summary';
@@ -150,7 +150,8 @@ export function coverThumbOf(media: Card['media'], bases: readonly string[] = pu
   const url = str(media?.url);
   if (!url || media?.type === 'video') return null;
   const kept = str(media?.thumbUrl);
-  if (kept && storageKeyOf(kept, bases)) return kept;
+  // Only the copy of this cover: draft saves merge `media`, so a new cover can sit beside the old one's copy.
+  if (kept && storageKeyOf(kept, bases) === coverThumbKey(storageKeyOf(url, bases))) return kept;
   return coverThumbUrl(url, bases);
 }
 

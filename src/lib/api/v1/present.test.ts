@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Card } from '@/lib/db/types';
-import { cardVisible, toFeedCard } from './present';
+import { cardVisible, coverThumbOf, toFeedCard } from './present';
 
 // Who may read a card, as the server decides for the Admin SDK (which skips
 // the rules) — and what a card in the trash says, and to whom.
@@ -83,5 +83,18 @@ describe('toFeedCard', () => {
     expect(toFeedCard(card(), undefined, { own: true })).not.toHaveProperty('trashedAt');
     const odd = card({ trashedAt: new Date('2026-10-01T08:00:00Z'), trashedFrom: { visibility: 'everyone' as 'public', referenceCardId: null } });
     expect(toFeedCard(odd, undefined, { own: true }).restoresTo).toBe('private');
+  });
+});
+
+describe('coverThumbOf (B2): the copy lists draw', () => {
+  const base = 'https://img.example/';
+  it("is the cover's own copy, kept or worked out from the cover", () => {
+    expect(coverThumbOf({ type: 'image', url: `${base}image/2026-11/A.webp` }, [base])).toBe(`${base}image/2026-11/A-w960.webp`);
+    const kept = { type: 'image' as const, url: `${base}image/2026-11/A.webp`, thumbUrl: `${base}image/2026-11/A-w960.webp` };
+    expect(coverThumbOf(kept, [base])).toBe(`${base}image/2026-11/A-w960.webp`);
+  });
+  it("never an older cover's copy a draft's merge save left beside a new cover", () => {
+    const media = { type: 'image' as const, url: `${base}image/2026-11/B.webp`, thumbUrl: `${base}image/2026-11/A-w960.webp` };
+    expect(coverThumbOf(media, [base])).toBe(`${base}image/2026-11/B-w960.webp`);
   });
 });
