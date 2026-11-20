@@ -5,11 +5,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
-vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
+const DB = {};
+vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => DB }));
 const getCardBoxShelves = vi.fn();
-vi.mock('@/lib/api/v1/reads', () => ({ getCardBoxShelves: (...a: unknown[]) => getCardBoxShelves(...a) }));
+vi.mock('@/server/app/cardsRead', async (orig) => ({ ...(await orig<object>()), getCardBoxShelves: (...a: unknown[]) => getCardBoxShelves(...a) }));
 
 const { GET } = await import('./route');
+const { serverCtx } = await import('@/server/ctx');
+// The route's context: serverCtx() on the mocked database, built once per instance.
+const CTX = serverCtx();
 const get = (query: string) => GET(new Request(`http://localhost/api/v1/me/cardbox${query}`));
 
 beforeEach(() => {
@@ -23,7 +27,7 @@ describe('GET /api/v1/me/cardbox', () => {
     const res = await get('?shelves=published,%20draft,drafts,likes,');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ published: { cards: [] } });
-    expect(getCardBoxShelves).toHaveBeenCalledWith({}, 'alice', new Set(['published', 'draft']));
+    expect(getCardBoxShelves).toHaveBeenCalledWith(CTX, 'alice', new Set(['published', 'draft']));
     // The viewer's own things: kept, but checked on every use.
     expect(res.headers.get('Cache-Control')).toBe('private, no-cache');
   });

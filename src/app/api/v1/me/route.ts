@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server';
 import { parse, withUser } from '@/lib/api/v1/http';
-import { createProfile, updateProfile } from '@/lib/api/v1/profile';
 import { CreateProfileRequest, UpdateProfileRequest } from '@/lib/api/v1/schemas';
-import { getMe } from '@/lib/api/v1/service';
-import { profilePagePaths, revalidateLocalized } from '@/lib/api/revalidate';
-import { getAdminDb } from '@/lib/db/firestore/admin';
+import { profilePagePaths } from '@/lib/api/revalidate';
 import { OWN, cachedJson } from '@/lib/api/v1/cache';
+import { serverCtx } from '@/server/ctx';
+import { getMe } from '@/server/app/cardsRead';
+import { createProfileIn, updateProfileIn } from '@/server/app/profile';
 
 export const dynamic = 'force-dynamic';
 
 /** GET /api/v1/me — the signed-in account (see openapi/v1/openapi.json). */
-export const GET = withUser(async (user, req) => cachedJson(req, await getMe(getAdminDb(), user.id), OWN));
+export const GET = withUser(async (user, req) => cachedJson(req, await getMe(serverCtx(), user.id), OWN));
 
 /**
  * POST /api/v1/me — onboarding: create the profile (201), or return the
@@ -18,7 +18,7 @@ export const GET = withUser(async (user, req) => cachedJson(req, await getMe(get
  */
 export const POST = withUser(async (user, req) => {
   const input = parse(CreateProfileRequest, await req.json().catch(() => null));
-  const { me, created, named } = await createProfile(getAdminDb(), user, input);
+  const { me, created, named } = await createProfileIn(serverCtx(), user, input);
   if (named) revalidateProfile(me.handle);
   return NextResponse.json(me, { status: created ? 201 : 200 });
 });
@@ -26,12 +26,12 @@ export const POST = withUser(async (user, req) => {
 /** PATCH /api/v1/me — change the profile fields sent. */
 export const PATCH = withUser(async (user, req) => {
   const input = parse(UpdateProfileRequest, await req.json().catch(() => null));
-  const { me, previousHandle } = await updateProfile(getAdminDb(), user.id, input);
+  const { me, previousHandle } = await updateProfileIn(serverCtx(), user.id, input);
   // The public page is cached under the pen name — and under the old one after a rename.
   revalidateProfile(me.handle, previousHandle);
   return NextResponse.json(me);
 });
 
 function revalidateProfile(...handles: (string | null)[]) {
-  revalidateLocalized(handles.flatMap(profilePagePaths));
+  serverCtx().pages.revalidate(handles.flatMap(profilePagePaths));
 }

@@ -1,8 +1,9 @@
-import { after } from 'next/server';
 import { withUser } from '@/lib/api/v1/http';
-import { getRecommendedFeed } from '@/lib/api/v1/reads';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { dailyRecommendations } from '@/lib/recommend/daily';
+import { recommendFeed } from '@/lib/recommend/funnel';
+import { getVectorStore } from '@/lib/recommend/vectorStore';
+import { serverCtx } from '@/server/ctx';
+import { getRecommendedFeed } from '@/server/app/cardsRead';
+import { dailyRecommendationsIn } from '@/server/app/recommendDaily';
 import { NEVER, cachedJson, secondsUntilUtcMidnight } from '@/lib/api/v1/cache';
 
 export const dynamic = 'force-dynamic';
@@ -16,11 +17,13 @@ export const maxDuration = 60;
  * still being prepared (`stale`) are never kept — the client asks again.
  */
 export const GET = withUser(async (user, req) => {
-  const feed = await getRecommendedFeed(getAdminDb(), user.id, async (db, uid) => {
-    const daily = await dailyRecommendations(db, uid);
-    if (daily.refresh) after(daily.refresh);
+  const server = serverCtx();
+  const feed = await getRecommendedFeed(server, user.id, async () => {
+    // On the configured vector store, built by the funnel (lib/recommend/daily, as its legacy facade does).
+    const daily = await dailyRecommendationsIn(serverCtx({ vectors: getVectorStore() }), user.id, { build: recommendFeed });
+    if (daily.refresh) server.later.later(daily.refresh, 'recommend: refresh');
     // The reader opened their picks today: the evening's pick push leaves them be.
-    if (daily.asked) after(daily.asked);
+    if (daily.asked) server.later.later(daily.asked, 'recommend: asked');
     return daily;
   });
   return cachedJson(req, feed, feed.status === 'stale' ? NEVER : { kind: 'fresh', maxAge: secondsUntilUtcMidnight() });
