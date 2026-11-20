@@ -1,12 +1,16 @@
 import { encodePageToken, pageTokenPosition } from '@/lib/api/v1/paging';
 import type { ListCard } from '@/lib/api/v1/summary';
-import { blankCard, unlistedCard, wordless } from '@/lib/cards/blank';
+import { blankCard, thinCard, unlistedCard, wordless } from '@/lib/cards/blank';
 import type { Card, User } from '@/lib/db/types';
 import { docIdOk, properlyPublished } from '@/server/domain/cards';
-import type { CardPage, CardsData, CardsTxRepo, FilmWindowRow, PageStart } from '@/server/ports/repos/cards';
+import type { CardPage, CardsData, CardsTxRepo, FilmWindowRow, PageStart, ReachPlan, TakeBackPlan } from '@/server/ports/repos/cards';
+import { summarize } from '@/lib/api/v1/summary';
+import { TRANSLATION_TARGETS } from '@/lib/text/translation';
+import { cardOf, hasPenNameRow, pathId, reachable } from '@/server/domain/cardsWrite';
+import { cardVisible } from '@/server/domain/visibility';
 import { compareInstants, instantParts, toInstant } from '@/server/ports/time';
 import type { MemoryState } from '../state';
-import type { MemoryTx } from '../uow';
+import { MemoryTx, TxTracker } from '../uow';
 
 /**
  * Tables, named after the collections: `cards` (Card rows by id — times as
@@ -18,8 +22,185 @@ import type { MemoryTx } from '../uow';
  * (`landingFilm`: the film's pin). Reads answer what the Firestore repository
  * answers for the same rows; the summary/story and sort rules are the same.
  */
-export function cardsTx(_tx: MemoryTx): CardsTxRepo {
-  return {};
+export function cardsTx(tx: MemoryTx): CardsTxRepo {
+  return cardsWriteTx(tx);
+}
+
+/* ───────────── write side (cardsWrite lane) ───────────── */
+
+// More tables the writes reach, named after the collections: `cards/{id}/edits` (`current`, a pending
+// edit), `cards/{id}/translations`, `privateShares`, `cardSignatures`, `cardTombstones` / `retiredSlugs`
+// (what deleting leaves), `notes` (`{ cardId }`), `connections` / `connectionOrigins` (by `a_b`,
+// `{ userIds, reasons, resonanceCards }`), `notifications` (bells), `users/{uid}/blocks`. The resonance
+// parts (take-back, reach) are src/lib/api/v1/{origins,resonate}.ts's, over these rows.
+
+const pairOf = (a: string, b: string) => (a < b ? `${a}_${b}` : `${b}_${a}`);
+const isMap = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const EDITS = (id: string) => `cards/${id}/edits`;
+const resonanceKey = (by: string, cardId: string) => `resonance_${by}_${cardId}`;
+const bellId = (uid: string, targetId: string) => `resonance_${uid}_${targetId}`;
+
+type MemoryTakeBack = TakeBackPlan & { plans: { pair: string; ends: boolean; reasons: Record<string, unknown>; cards: unknown[] }[] };
+type MemoryReach = ReachPlan & {
+  from: string;
+  originalId: string;
+  original: Card | null;
+  me: Record<string, unknown> | null;
+  rang: boolean;
+  blockOut: boolean;
+  blockIn: boolean;
+  connected: boolean;
+  origins: Record<string, unknown> | null;
+};
+
+/** Summary stamps as a server write leaves them: `excerptAt` equal to `updatedAt` (summary.ts summaryFields). */
+const summaryAt = (story: unknown, at: Date) => ({ ...summarize(story), excerptAt: at });
+/** listingFields: `thin` when its words are too few, else the field removed. */
+const listingOf = (card: { thoughtCore?: unknown; story?: unknown }) => ({ thin: thinCard(card) ? true : undefined });
+
+function cardsWriteTx(tx: MemoryTx): CardsTxRepo {
+  return {
+    async getCardRow(id) {
+      return tx.get('cards', id);
+    },
+    async getEditRow(id) {
+      return tx.get(EDITS(id), 'current');
+    },
+    async getAuthorRow(uid) {
+      return docIdOk(uid) ? tx.get('users', uid) : null;
+    },
+    async readTakeBack(uid, cardId) {
+      const key = resonanceKey(uid, cardId);
+      const found = tx
+        .rows<Record<string, unknown>>('connectionOrigins', (r) => Array.isArray(r.resonanceCards) && r.resonanceCards.includes(cardId))
+        .slice(0, 10)
+        .filter(({ row }) => isMap(row.reasons) && row.reasons[key] !== undefined && Array.isArray(row.userIds) && row.userIds.includes(uid));
+      const plans = found.map(({ id, row }) => {
+        const reasons = { ...(row.reasons as Record<string, unknown>) };
+        delete reasons[key];
+        const connection = tx.get('connections', id);
+        return { pair: id, ends: !!connection && !Object.keys(reasons).length, reasons, cards: (row.resonanceCards as unknown[]).filter((c) => c !== cardId) };
+      });
+      const plan: MemoryTakeBack = { __takeBack: true, plans };
+      return plan;
+    },
+    async answersTo(uid, originalId, limit) {
+      return tx.rows('cards', (r) => r.authorId === uid && r.referenceCardId === originalId).slice(0, limit).map((r) => r.id);
+    },
+    async readReach(from, originalId) {
+      const found = tx.get('cards', originalId);
+      const original = found ? cardOf(originalId, found) : null;
+      const me = tx.get('users', from);
+      const bell = tx.get('notifications', bellId(from, originalId));
+      const plan: MemoryReach = {
+        __reach: true,
+        originalAnswers: original?.referenceCardId,
+        from,
+        originalId,
+        original,
+        me,
+        rang: !!bell,
+        blockOut: false,
+        blockIn: false,
+        connected: false,
+        origins: null,
+      };
+      const other = original?.authorId;
+      if (!pathId(other) || other === from) return plan;
+      const legacy = bell
+        ? []
+        : tx.rows<Record<string, unknown>>('notifications', (r) => {
+            const p = isMap(r.payload) ? r.payload : {};
+            return r.userId === other && r.type === 'resonance' && p.fromUserId === from && p.cardId === originalId;
+          });
+      const reach: MemoryReach = {
+        ...plan,
+        rang: !!bell || legacy.length > 0,
+        blockOut: !!tx.get(`users/${from}/blocks`, other),
+        blockIn: !!tx.get(`users/${other}/blocks`, from),
+        connected: !!tx.get('connections', pairOf(from, other)),
+        origins: tx.get('connectionOrigins', pairOf(from, other)),
+      };
+      return reach;
+    },
+
+    takeBack(plan) {
+      for (const p of (plan as MemoryTakeBack).plans) {
+        if (p.ends) {
+          tx.delete('connections', p.pair);
+          tx.delete('connectionOrigins', p.pair);
+        } else tx.merge('connectionOrigins', p.pair, { reasons: p.reasons, resonanceCards: p.cards });
+      }
+    },
+    reachOriginal(cardId, card, plan) {
+      const r = plan as MemoryReach;
+      const o = r.original;
+      if (!reachable(card) || card.authorId !== r.from || card.referenceCardId !== r.originalId || !properlyPublished(card.publishedAt)) return null;
+      if (!o || !pathId(o.authorId) || o.authorId === r.from || !cardVisible(o, r.from, () => r.connected)) return null;
+      if (r.blockOut || r.blockIn || !hasPenNameRow(r.me)) return null;
+      const now = new Date();
+      const named = o.anonymous !== true;
+      const pair = pairOf(r.from, o.authorId);
+      const userIds = [r.from, o.authorId].sort();
+      const reason = { kind: 'resonance', by: r.from, cardId, originalId: r.originalId, at: now };
+      if (named && r.connected) {
+        const kept = r.origins && isMap(r.origins.reasons) ? r.origins.reasons : { legacy: { kind: 'legacy', at: now } };
+        const cards = Array.isArray(r.origins?.resonanceCards) ? (r.origins.resonanceCards as unknown[]) : [];
+        tx.merge('connectionOrigins', pair, { userIds, reasons: { ...kept, [resonanceKey(r.from, cardId)]: reason }, resonanceCards: [...new Set([...cards, cardId])] });
+      } else if (named && !r.rang) {
+        tx.put('connections', pair, { userIds, establishedAt: now });
+        tx.put('connectionOrigins', pair, { userIds, reasons: { [resonanceKey(r.from, cardId)]: reason }, resonanceCards: [cardId] });
+      }
+      if (r.rang) return null;
+      const id = bellId(r.from, r.originalId);
+      tx.put('notifications', id, {
+        userId: o.authorId,
+        type: 'resonance',
+        payload: { fromUserId: r.from, fromHandle: String(r.me?.handle), cardId: r.originalId, ...(named ? {} : { anonymous: true }) },
+        readAt: null,
+        createdAt: now,
+      });
+      return id;
+    },
+    setAudience(id, patch, restate) {
+      const at = new Date();
+      tx.merge('cards', id, { ...patch, updatedAt: at, ...(restate ? summaryAt(restate.story, at) : {}) });
+    },
+    patchEdit(id, patch) {
+      tx.merge(EDITS(id), 'current', { ...patch });
+    },
+    publish(id, row, firstPublish) {
+      const at = new Date();
+      tx.merge('cards', id, {
+        ...(firstPublish ? { publishedAt: at } : {}),
+        anonymous: row.anonymous === true,
+        updatedAt: at,
+        ...summaryAt(row.story, at),
+        ...listingOf(row),
+      });
+    },
+    applyEdit(id, content, audience) {
+      const at = new Date();
+      tx.merge('cards', id, { ...content, ...summaryAt(content.story, at), ...listingOf(content), ...audience, media: content.media ?? undefined, updatedAt: at });
+      tx.delete(EDITS(id), 'current');
+    },
+    moveToTrash(id, at, from, forDeletion) {
+      tx.merge('cards', id, { trashedAt: new Date(at.getTime()), trashedFrom: from, visibility: 'private', referenceCardId: undefined, ...(forDeletion ? { trashedFor: 'deletion' } : {}) });
+    },
+    restore(id, visibility, referenceCardId) {
+      tx.merge('cards', id, { visibility, trashedAt: undefined, trashedFrom: undefined, trashedFor: undefined, ...(referenceCardId ? { referenceCardId } : {}) });
+    },
+    deleteForGood(id, slug) {
+      tx.delete('cards', id);
+      tx.delete(EDITS(id), 'current');
+      for (const to of TRANSLATION_TARGETS) tx.delete(`cards/${id}/translations`, to);
+      tx.delete('privateShares', id);
+      tx.delete('cardSignatures', id);
+      tx.put('cardTombstones', id, { deletedAt: new Date() });
+      // tombstones retirable: a slug as slugify makes one.
+      if (typeof slug === 'string' && /^[a-z0-9][a-z0-9-]{0,199}$/.test(slug)) tx.put('retiredSlugs', slug, { retiredAt: new Date() });
+    },
+  };
 }
 
 type Row = Card & Record<string, unknown>;
@@ -90,6 +271,11 @@ export function cardsData(state: MemoryState): CardsData {
     const row = card(key);
     return row ? whole(key, row) : null;
   };
+
+  const trashedBy = (uid: string, cutoff: Date) =>
+    state
+      .rows<Row>('cards', (r) => r.authorId === uid && isDate(r.trashedAt) && r.trashedAt.getTime() <= cutoff.getTime())
+      .sort((a, b) => (b.row.trashedAt as Date).getTime() - (a.row.trashedAt as Date).getTime() || (a.id < b.id ? -1 : 1));
 
   const publicPublished = (r: Row) => r.visibility === 'public' && r.publishedAt != null;
   const authorCards = (authorId: string) => (r: Row) =>
@@ -307,6 +493,51 @@ export function cardsData(state: MemoryState): CardsData {
         const row = card(id);
         return !!row && row.visibility === 'public' && row.publishedAt != null && row.trashedAt == null;
       }));
+    },
+
+    // --- write side (cardsWrite lane)
+
+    async deleteNotesOn(cardId) {
+      for (const { id } of state.rows('notes', (row) => row.cardId === cardId)) state.delete('notes', id);
+    },
+    async reachResonance(uid, cardId) {
+      // In a transaction of its own, as resonate reachResonance: the card read as it is now.
+      try {
+        const tx = new MemoryTx(state, new TxTracker('reachResonance'));
+        const repo = cardsWriteTx(tx);
+        const row = await repo.getCardRow(cardId);
+        if (!row || row.authorId !== uid || !reachable(row) || !pathId(row.referenceCardId)) return null;
+        const bell = repo.reachOriginal(cardId, row, await repo.readReach(uid, row.referenceCardId));
+        tx.commit();
+        return bell;
+      } catch (e) {
+        console.error('[api/v1] resonance', cardId, e);
+        return null;
+      }
+    },
+    async trashedIds(uid, cutoff, limit) {
+      return trashedBy(uid, cutoff)
+        .slice(0, limit)
+        .map((r) => r.id);
+    },
+    async countTrashed(uid, cutoff) {
+      return trashedBy(uid, cutoff).length;
+    },
+    async *expiredTrash(cutoff, pageSize) {
+      let last: { at: number; id: string } | null = null;
+      for (;;) {
+        const after: { at: number; id: string } | null = last;
+        const page: { id: string; authorId: unknown; at: number }[] = state
+          .rows<Row>('cards', (r) => isDate(r.trashedAt) && r.trashedAt.getTime() <= cutoff.getTime())
+          .map((r) => ({ id: r.id, authorId: r.row.authorId, at: (r.row.trashedAt as Date).getTime() }))
+          .sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : 1))
+          .filter((r) => !after || r.at > after.at || (r.at === after.at && r.id > after.id))
+          .slice(0, pageSize);
+        if (!page.length) return;
+        last = page[page.length - 1];
+        yield page.map(({ id, authorId }) => ({ id, authorId }));
+        if (page.length < pageSize) return;
+      }
     },
   };
 }

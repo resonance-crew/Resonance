@@ -11,10 +11,92 @@
 import type { ListCard } from '@/lib/api/v1/summary';
 import type { CardTapBody } from '@/lib/api/v1/schemas';
 import type { Card, User } from '@/lib/db/types';
+import type { TrashedFrom } from '@/lib/cards/trash';
+import type { CoverFrame } from '@/lib/images/coverFrame';
+import type { PersonRow } from './users';
 
 /** Inside `uow.run`: every read before any write (ports/uow.ts). */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface CardsTxRepo {}
+export interface CardsTxRepo {
+  // --- write side (cardsWrite lane)
+
+  /** The card as stored (CardRow), or null when there is none. */
+  getCardRow(id: string): Promise<CardRow | null>;
+  /** The card's pending edit (`edits/current`) as stored, or null. */
+  getEditRow(id: string): Promise<CardRow | null>;
+  /** `uid`'s profile as stored, or null (the byline a card box shows). */
+  getAuthorRow(uid: string): Promise<PersonRow | null>;
+  /** What taking back `uid`'s resonance `cardId` means (src/lib/api/v1/origins.ts readTakeBack). */
+  readTakeBack(uid: string, cardId: string): Promise<TakeBackPlan>;
+  /** Ids of `uid`'s cards answering `originalId` (`authorId ==`, `referenceCardId ==`), at most `limit`. */
+  answersTo(uid: string, originalId: string, limit: number): Promise<string[]>;
+  /** All a resonance from `uid` to `originalId` depends on (src/lib/api/v1/resonate.ts readReach). */
+  readReach(uid: string, originalId: string): Promise<ReachPlan>;
+
+  /** Write what readTakeBack read (origins takeBack); an empty plan writes nothing. */
+  takeBack(plan: TakeBackPlan): void;
+  /** Reach the original's author with `card` as this transaction leaves it (resonate reachOriginal): the bell's id, or null. */
+  reachOriginal(cardId: string, card: CardRow, plan: ReachPlan): string | null;
+  /** Change the card's visibility / byline, stamping `updatedAt` — and, given `restate`, its list summary of that story. */
+  setAudience(id: string, patch: AudiencePatch, restate?: { story: unknown }): void;
+  /** Update the pending edit's visibility / byline. */
+  patchEdit(id: string, patch: AudiencePatch): void;
+  /**
+   * Publish the card as read (`row`): `publishedAt` stamped the first time
+   * only, `anonymous` made a boolean, `updatedAt` stamped, its list summary
+   * and listing judged on its story — one merge.
+   */
+  publish(id: string, row: CardRow, firstPublish: boolean): void;
+  /** The pending edit becomes the live fields (a cover left null is removed), summary and listing judged anew, `updatedAt` stamped; the edit is deleted. */
+  applyEdit(id: string, content: EditedContent, audience: { visibility: unknown; anonymous: boolean }): void;
+  /** Into the trash at `at` (never `updatedAt`): flagged, private, its `referenceCardId` parked in `from`. */
+  moveToTrash(id: string, at: Date, from: TrashedFrom, forDeletion: boolean): void;
+  /** Out of the trash: `visibility` back, the trash's fields removed, `referenceCardId` set again when given. */
+  restore(id: string, visibility: string, referenceCardId: string | null): void;
+  /**
+   * Delete the card for good with what lives under it and beside it (its
+   * pending edit, translations, private-share marker, reading signature),
+   * leaving a tombstone — and retiring its slug when it can be retired.
+   */
+  deleteForGood(id: string, slug: unknown): void;
+}
+
+// --- write side (cardsWrite lane)
+
+/** A card's (or its pending edit's) stored fields as they are: times as `Date`, every other value as stored. */
+export type CardRow = Record<string, unknown>;
+
+/** A card's audience change: only the fields that change. */
+export interface AudiencePatch {
+  visibility?: unknown;
+  anonymous?: boolean;
+}
+
+/** A pending edit's content as applying it copies it (src/lib/api/v1/edits.ts). `media: null` removes the cover. */
+export interface EditedContent {
+  thoughtCore: string;
+  story: string;
+  tags: string[];
+  accentHue: number | null;
+  media: { type: string; url: string; label?: string; frame?: CoverFrame } | null;
+}
+
+/** What taking a resonance back writes, read first (opaque to services: the repository's own plan). */
+export interface TakeBackPlan {
+  readonly __takeBack: true;
+}
+
+/** What a resonance's reach depends on, read first (opaque but for what restoring asks of the original). */
+export interface ReachPlan {
+  readonly __reach: true;
+  /** The card the original itself answers (its `referenceCardId`), when the original is there. */
+  readonly originalAnswers: unknown;
+}
+
+/** A card in the trash as the daily purge pages through them. */
+export interface TrashedRow {
+  id: string;
+  authorId: unknown;
+}
 
 // --- read side (cardsRead lane)
 
@@ -145,4 +227,17 @@ export interface CardsData {
   landingCards(ids: string[]): Promise<Card[]>;
   /** Of these card ids, those still public, published and out of the trash. */
   stillPublic(ids: string[]): Promise<Set<string>>;
+
+  // --- write side (cardsWrite lane)
+
+  /** Every note left on the card, delivered or withheld, a batch at a time. */
+  deleteNotesOn(cardId: string): Promise<void>;
+  /** Reach the original `uid`'s card answers, in a transaction of its own — best effort: a failure is logged and answers null (resonate tryReachResonance). */
+  reachResonance(uid: string, cardId: string): Promise<string | null>;
+  /** Ids of `uid`'s cards moved to the trash at or before `cutoff`, the latest in first, at most `limit`. */
+  trashedIds(uid: string, cutoff: Date, limit: number): Promise<string[]>;
+  /** How many of those there are. */
+  countTrashed(uid: string, cutoff: Date): Promise<number>;
+  /** Every card moved to the trash at or before `cutoff`, the longest there first, a page of `pageSize` at a time. */
+  expiredTrash(cutoff: Date, pageSize: number): AsyncIterable<TrashedRow[]>;
 }
