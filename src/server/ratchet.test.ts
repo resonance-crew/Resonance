@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 // src/server/infra that imports it, statically or with import(). The number
 // only ever falls — a lane that empties a file of it lowers MAX in the same
 // change. Phase 1 ends at 0.
-const MAX = 8;
+const MAX = 0;
 
 const ROOT = join(__dirname, '..');
 const INFRA = join('server', 'infra') + sep;
