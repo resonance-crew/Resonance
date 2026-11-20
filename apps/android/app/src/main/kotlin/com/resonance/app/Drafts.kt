@@ -159,6 +159,8 @@ class DraftService(private val uid: String) : DraftStore {
         val liveAnonymous: Boolean = values.anonymous,
         /** Who it was for before the trash made it private (`trashedFrom.visibility`), while it is there. */
         val trashedFromVisibility: String? = null,
+        /** The story's link previews the server keeps on the card (`linkPreviews`, raw): the writer's link cards show them. */
+        val linkPreviews: Any? = null,
     ) {
         /** Where it lives once published: the slug, or the id. */
         val routeKey: String get() = slug ?: id
@@ -212,6 +214,7 @@ class DraftService(private val uid: String) : DraftStore {
                 liveVisibility = live.visibility,
                 liveAnonymous = live.anonymous,
                 trashedFromVisibility = if (trashedAt == null) null else (data["trashedFrom"] as? Map<*, *>)?.get("visibility") as? String,
+                linkPreviews = data["linkPreviews"],
             )
         }
 

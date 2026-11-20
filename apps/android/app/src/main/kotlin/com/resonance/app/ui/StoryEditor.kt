@@ -21,6 +21,8 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.RenderProcessGoneDetail
+import android.view.ViewGroup
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -92,6 +94,7 @@ import com.resonance.geometry.wavyPoints
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.story.StoryScript
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -188,13 +191,31 @@ class StoryEditorBridge(
      */
     var lastTouchDown = -1L
         private set
-    private var pendingMarkdown: String? = null
-    private var pendingTitle: String? = null
+    /**
+     * What the island holds (the title and story last set, each `change` since, the link previews): a
+     * new island after the browser's renderer went ([onRenderProcessGone]) opens with it. The twin of
+     * iOS's heldTitle / heldMarkdown / heldPreviews.
+     */
+    private val held = IslandContent()
+    /** What the next island to be ready opens with ([IslandContent.openScript]). */
+    private var pending = IslandContent()
     /** What the island was last told of its colours ([islandAppearance]), said again once it is ready. */
     private var appearance: String? = null
     private var minHeight: Int? = null
+    private var textZoom: Int? = null
+    private val appContext = context
+    private val placeholder = placeholder
+    private val locale = locale
 
-    val webView: StoryWebView = StoryWebView(context).apply {
+    /**
+     * The island's WebView. A new one when the browser's renderer went (the system took it back while
+     * the photo picker was up, or it crashed): a dead renderer's view can't be used again, and a client
+     * that doesn't say it handled the loss takes the whole app down with it (A3).
+     */
+    var webView: StoryWebView by mutableStateOf(makeWebView())
+        private set
+
+    private fun makeWebView(): StoryWebView = StoryWebView(appContext).apply {
         settings.javaScriptEnabled = true
         // Assets are readable from file:///android_asset regardless of allowFileAccess (the fonts
         // sit at the asset root, apps/shared/fonts): nothing else on the device is.
@@ -212,7 +233,8 @@ class StoryEditorBridge(
             @Suppress("DEPRECATION")
             settings.forceDark = WebSettings.FORCE_DARK_OFF
         }
-        webViewClient = EditorClient()
+        webViewClient = EditorClient(::renderProcessGone)
+        textZoom?.let { settings.textZoom = it }
         setBackgroundColor(AndroidColor.TRANSPARENT)
         // The writing screen scrolls; the island only grows.
         isVerticalScrollBarEnabled = false
@@ -241,6 +263,7 @@ class StoryEditorBridge(
      */
     fun setTextScale(scale: Float) {
         val zoom = (scale * 100).roundToInt()
+        textZoom = zoom
         if (webView.settings.textZoom != zoom) webView.settings.textZoom = zoom
     }
 
@@ -258,8 +281,9 @@ class StoryEditorBridge(
     }
 
     override fun setMarkdown(markdown: String) {
+        held.markdown = markdown
         if (!ready) {
-            pendingMarkdown = markdown
+            pending.markdown = markdown
             return
         }
         webView.evaluateJavascript("ResonanceEditor.setMarkdown(${JsonPrimitive(markdown)})", null)
@@ -271,11 +295,25 @@ class StoryEditorBridge(
     }
 
     override fun setTitle(title: String) {
+        held.title = title
         if (!ready) {
-            pendingTitle = title
+            pending.title = title
             return
         }
         webView.evaluateJavascript("ResonanceEditor.setTitle(${JsonPrimitive(title)})", null)
+    }
+
+    /**
+     * A live card's stored link previews (its `linkPreviews`), for the link cards the story shows: their
+     * titles, and pictures from the API's own link-image route only (made absolute against its origin).
+     */
+    fun setLinkPreviews(previews: List<HostLinkPreview>) {
+        held.previews = previews
+        if (!ready) {
+            pending.previews = previews
+            return
+        }
+        webView.evaluateJavascript("ResonanceEditor.setLinkPreviews&&ResonanceEditor.setLinkPreviews(${IslandContent.previewsJson(previews)})", null)
     }
 
     /**
@@ -394,8 +432,38 @@ class StoryEditorBridge(
         webView.destroy()
     }
 
-    /** Keeps the WebView on the island: its own page loads, an http(s) link the writer taps opens in the browser, nothing else. */
-    private class EditorClient : WebViewClient() {
+    /**
+     * The browser's renderer went with [dead] in it: that view goes (out of the page, destroyed) and a new
+     * island takes its place, opening with what the old one held — its colours, its least height, the
+     * title, the story as its last `change` said it, the link previews. Left to the browser, the app
+     * itself would have been killed with the renderer.
+     */
+    private fun renderProcessGone(dead: WebView) {
+        if (dead !== webView) return
+        ready = false
+        focused = false
+        caret = null
+        active = Active()
+        link = null
+        canCard = false
+        pending = held.copy()
+        (dead.parent as? ViewGroup)?.removeView(dead)
+        dead.removeJavascriptInterface("ResonanceBridge")
+        dead.destroy()
+        webView = makeWebView()
+    }
+
+    /**
+     * Keeps the WebView on the island: its own page loads, an http(s) link the writer taps opens in the
+     * browser, nothing else; and when the browser's renderer goes, [onGone] replaces the view and the
+     * loss is handled (true), so the app lives on.
+     */
+    private class EditorClient(private val onGone: (WebView) -> Unit) : WebViewClient() {
+        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+            onGone(view)
+            return true
+        }
+
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url
             if (isEditor(url)) return false
@@ -415,20 +483,23 @@ class StoryEditorBridge(
         }
     }
 
-    private fun handle(m: IslandMessage) {
+    @androidx.annotation.VisibleForTesting
+    internal fun handle(m: IslandMessage) {
         when (m) {
             IslandMessage.Ready -> {
                 ready = true
                 // Its colours before its words, so the story never shows in the other scheme's ink.
                 appearance?.let { webView.evaluateJavascript(it, null) }
-                // The title first, so the story it opens with is read with it.
-                pendingTitle?.let(::setTitle)
-                pendingTitle = null
-                pendingMarkdown?.let(::setMarkdown)
-                pendingMarkdown = null
+                // The title, the story and its link previews in one call (ResonanceEditor.open, X5), the
+                // title first in the older island's calls, so the story it opens with is read with it.
+                pending.openScript()?.let { webView.evaluateJavascript(it, null) }
+                pending = IslandContent()
                 minHeight?.let(::applyMinHeight)
             }
-            is IslandMessage.Change -> onChange(m.markdown)
+            is IslandMessage.Change -> {
+                held.markdown = m.markdown
+                onChange(m.markdown)
+            }
             is IslandMessage.Height -> height = maxOf(if (canvas) 0 else FIELD_MIN_HEIGHT, m.px)
             is IslandMessage.State -> {
                 active = m.active
@@ -603,6 +674,68 @@ internal fun focusedSpan(line: IntRange?, touchY: Int?, above: Int, below: Int, 
     return (known.first - above)..(known.last + below)
 }
 
+/** One stored preview of a story link, as the island takes it (`setLinkPreviews`, `open`'s `previews`). */
+data class HostLinkPreview(val url: String, val title: String, val image: String? = null)
+
+/**
+ * What an island holds, or is to open with: the card's title, its story, its link previews (null:
+ * not said). [StoryEditorBridge] keeps one of what its island holds now and one of what the next
+ * ready island is to be told.
+ */
+internal data class IslandContent(
+    var title: String? = null,
+    var markdown: String? = null,
+    var previews: List<HostLinkPreview>? = null,
+) {
+    /**
+     * The script that opens an island with this: `ResonanceEditor.open({title, markdown, previews})` — the
+     * title, the story (out of undo history) and the previews in one call, the type read once (X5) —
+     * or, on an island without `open`, its setTitle, setMarkdown and setLinkPreviews in that order.
+     * Null when there is nothing to say.
+     */
+    fun openScript(): String? {
+        if (title == null && markdown == null && previews == null) return null
+        val o = buildMap {
+            title?.let { put("title", JsonPrimitive(it)) }
+            markdown?.let { put("markdown", JsonPrimitive(it)) }
+            previews?.let { put("previews", previewsJson(it)) }
+        }
+        return "(function(o){var E=ResonanceEditor;if(E.open){E.open(o);return;}" +
+            "if(o.title!=null)E.setTitle(o.title);if(o.markdown!=null)E.setMarkdown(o.markdown);" +
+            "if(o.previews&&E.setLinkPreviews)E.setLinkPreviews(o.previews);})(${JsonObject(o)})"
+    }
+
+    companion object {
+        /**
+         * A card's stored `linkPreviews` (`[{ url, title, image? }]`) as the writer hands them over: each
+         * with an address and a title, its picture only from the API's own link-image route, made
+         * absolute against [origin] (the island fetches no other).
+         */
+        fun linkPreviews(value: Any?, origin: String): List<HostLinkPreview> =
+            (value as? List<*>).orEmpty().mapNotNull { item ->
+                val e = item as? Map<*, *> ?: return@mapNotNull null
+                val url = (e["url"] as? String)?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                val title = (e["title"] as? String)?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                val image = (e["image"] as? String)
+                    ?.takeIf { it.startsWith(LINK_IMAGE_PATH) && it.length <= 4096 && it.none(Char::isWhitespace) }
+                    ?.let { origin.trimEnd('/') + it }
+                HostLinkPreview(url, title, image)
+            }
+
+        private const val LINK_IMAGE_PATH = "/api/link-image?"
+
+        fun previewsJson(previews: List<HostLinkPreview>): JsonArray = JsonArray(
+            previews.map { p ->
+                JsonObject(buildMap {
+                    put("url", JsonPrimitive(p.url))
+                    put("title", JsonPrimitive(p.title))
+                    p.image?.let { put("image", JsonPrimitive(it)) }
+                })
+            },
+        )
+    }
+}
+
 /** How a link shows (round 16 §6): its page's card, alone on its line, or words that link. */
 enum class LinkDisplay(val key: String) { Card("card"), Text("text") }
 
@@ -683,15 +816,19 @@ fun StoryCanvas(bridge: StoryEditorBridge, minHeight: Dp, modifier: Modifier = M
     SideEffect { bridge.setMinHeight(minHeight.value.roundToInt()) }
     val palette = LocalResonanceColors.current
     SideEffect { bridge.setPalette(palette) }
-    AndroidView(
-        factory = { bridge.webView },
-        modifier = modifier
-            .fillMaxWidth()
-            .height(bridge.height.dp)
-            .semantics { contentDescription = L10n.Write.storyLabel }
-            // Ahead of the AndroidView's own bring-into-view: what the story asks to be shown, it is shown as (requestedSpan).
-            .then(StoryBringIntoViewElement(bridge.webView)),
-    )
+    // A new island after the renderer went is a new view: the AndroidView is made again around it.
+    val web = bridge.webView
+    androidx.compose.runtime.key(web) {
+        AndroidView(
+            factory = { web },
+            modifier = modifier
+                .fillMaxWidth()
+                .height(bridge.height.dp)
+                .semantics { contentDescription = L10n.Write.storyLabel }
+                // Ahead of the AndroidView's own bring-into-view: what the story asks to be shown, it is shown as (requestedSpan).
+                .then(StoryBringIntoViewElement(web)),
+        )
+    }
 }
 
 /**

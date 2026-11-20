@@ -360,7 +360,10 @@ private fun WriteForm(
             context, L10n.Write.storyPlaceholder, canvas = true, locale = tag,
             script = StoryScripts.writerScript(StoryScripts.localeScript(tag), title, text),
             lang = StoryScripts.storyLang(title, text),
-        )
+        ).apply {
+            // A live card's link cards show their stored previews (its title, our own picture), as on iOS.
+            IslandContent.linkPreviews(opened?.linkPreviews, session.config.origin).takeIf { it.isNotEmpty() }?.let(::setLinkPreviews)
+        }
     }
     // The step, kept across a restored process (a new card always starts writing).
     var savedStep by rememberSaveable { mutableStateOf(WriterStep.Write) }
