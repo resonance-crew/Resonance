@@ -46,6 +46,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.offset
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.dp
 import com.resonance.design.generated.IconName
 import kotlinx.coroutines.delay
@@ -169,7 +171,16 @@ val LocalToasts = staticCompositionLocalOf { Toasts() }
  * click label is the verb.
  */
 @Composable
-fun ToastHost(toasts: Toasts, modifier: Modifier = Modifier, bottom: Dp = 16.dp) {
+fun ToastHost(
+    toasts: Toasts,
+    modifier: Modifier = Modifier,
+    bottom: Dp = 16.dp,
+    /**
+     * [bottom] as it moves (the shell's, with the tab bar sliding): read while the toast is laid out, so
+     * a frame of it moves the toast without composing anything again (A5). Null: [bottom].
+     */
+    bottomOf: (() -> Dp)? = null,
+) {
     val toast = toasts.current
     val accessibility = LocalAccessibilityManager.current
     val source = remember { MutableInteractionSource() }
@@ -210,7 +221,12 @@ fun ToastHost(toasts: Toasts, modifier: Modifier = Modifier, bottom: Dp = 16.dp)
             .fillMaxWidth()
             // Over the navigation bar, and over the keyboard when one is up (a toast behind it would say nothing).
             .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
-            .padding(start = 16.dp, end = 16.dp, bottom = bottom),
+            .padding(start = 16.dp, end = 16.dp)
+            .layout { measurable, constraints ->
+                val room = (bottomOf?.invoke() ?: bottom).roundToPx().coerceAtLeast(0)
+                val placeable = measurable.measure(constraints.offset(vertical = -room))
+                layout(placeable.width, (placeable.height + room).coerceAtMost(constraints.maxHeight)) { placeable.place(0, 0) }
+            },
         contentAlignment = Alignment.BottomCenter,
     ) {
         Box(
