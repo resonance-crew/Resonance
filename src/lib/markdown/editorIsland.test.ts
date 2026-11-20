@@ -238,6 +238,61 @@ describe('the editor island', () => {
     });
   });
 
+  describe('pictures from the clipboard or a drop (audit X6)', () => {
+    /** A clipboard (or a drop) as WebKit hands one over: these files, these strings. */
+    const transfer = (files: File[], strings: Record<string, string> = {}) =>
+      ({ files, items: [], types: Object.keys(strings), getData: (t: string) => strings[t] ?? '', dropEffect: 'copy' }) as unknown as DataTransfer;
+    const png = () => new File(['x'], 'photo.png', { type: 'image/png' });
+    function paste(data: DataTransfer) {
+      const event = new Event('paste', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'clipboardData', { value: data });
+      root().dispatchEvent(event);
+      return event;
+    }
+    const pictures = () => root().querySelectorAll('img').length;
+
+    it('hands a pasted picture to the host, putting nothing in itself', async () => {
+      const island = await open('layout=canvas');
+      island.setMarkdown('一句話');
+      island.focus();
+      const event = paste(transfer([png()], { 'text/html': '<img src="blob:resonance-editor://x/1">' }));
+      expect(event.defaultPrevented).toBe(true);
+      expect(last('pasteImage')).toEqual({ type: 'pasteImage' });
+      expect(pictures()).toBe(0);
+      expect(island.getMarkdown()).toBe('一句話');
+    });
+
+    it('keeps the words of a paste that has some, never its page-only pictures', async () => {
+      const island = await open('layout=canvas');
+      island.setMarkdown('');
+      island.focus();
+      paste(transfer([png()], { 'text/html': '<p>雨後的操場</p><img src="blob:resonance-editor://x/2"><img src="data:image/png;base64,AAAA">', 'text/plain': '雨後的操場' }));
+      expect(last('pasteImage')).toBeUndefined();
+      expect(island.getMarkdown()).toBe('雨後的操場');
+      expect(island.getMarkdown()).not.toMatch(/blob:|data:/);
+      // Markdown pasted as text, a page-only picture in it: gone too.
+      paste(transfer([], { 'text/plain': '## 標題\n\n![](blob:resonance-editor://x/3)' }));
+      expect(island.getMarkdown()).not.toMatch(/blob:/);
+      expect(pictures()).toBe(0);
+    });
+
+    it('leaves a dropped picture file out, and never inserts a page-only address', async () => {
+      const island = await open('layout=canvas');
+      island.setMarkdown('一句話');
+      island.focus();
+      const drop = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperties(drop, { dataTransfer: { value: transfer([png()]) }, clientX: { value: 0 }, clientY: { value: 0 } });
+      root().dispatchEvent(drop);
+      expect(drop.defaultPrevented).toBe(true);
+      expect(island.exec('insertImage', { src: 'blob:resonance-editor://x/4' })).toBe(false);
+      expect(island.exec('insertImage', { src: 'data:image/png;base64,AAAA' })).toBe(false);
+      expect(island.getMarkdown()).toBe('一句話');
+      // The host's uploaded picture still goes in.
+      expect(island.exec('insertImage', { src: 'https://cdn.resonance.channel/p.webp' })).toBe(true);
+      expect(island.getMarkdown()).toContain('![](https://cdn.resonance.channel/p.webp)');
+    });
+  });
+
   describe('its height (audit X3)', () => {
     it('tells the page’s height with how much is written, only when either changed', async () => {
       // The body's observer, held so the test can say when the body resized.

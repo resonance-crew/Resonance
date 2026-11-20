@@ -44,10 +44,10 @@
  *   'linkTap' {href}: a link card was tapped (it is picked now) — the host opens its link sheet with 卡片
  *   chosen. Hosts ignore a type they don't know.
  */
-import { Editor } from '@tiptap/core';
+import { Editor, Extension } from '@tiptap/core';
 import Blockquote from '@tiptap/extension-blockquote';
 import Placeholder from '@tiptap/extension-placeholder';
-import { EditorState } from '@tiptap/pm/state';
+import { EditorState, Plugin, PluginKey } from '@tiptap/pm/state';
 import { wavyVertical } from '../../../src/lib/design/wavyPath';
 import { storyPictureShape } from '../../../src/lib/design/storyPicture';
 import { INK_STRONG } from '../../../src/lib/design/strokes';
@@ -99,7 +99,8 @@ type Message =
   | { type: 'focus'; focused: boolean }
   | { type: 'script'; script: StoryScript; lang: string | null }
   | { type: 'caret'; top: number; bottom: number }
-  | { type: 'linkTap'; href: string };
+  | { type: 'linkTap'; href: string }
+  | { type: 'pasteImage' };
 
 declare global {
   interface Window {
@@ -375,6 +376,51 @@ const IslandLinkCard = LinkCard.extend({
   },
 });
 
+// ── Pictures from the clipboard or a drop ──
+// A story's pictures are uploaded by the host and stand at their public URL. A pasted picture would come in
+// as a `blob:` or `data:` address that only this page can read, stored as `![](blob:…)` and drawn by no reader
+// (audit X6): the island never keeps one.
+const localPicture = (src: unknown) => /^\s*(blob|data):/i.test(String(src ?? ''));
+/** Whether a clipboard or a drop carries an image file. */
+function holdsImageFile(data: DataTransfer | null | undefined): boolean {
+  if (!data) return false;
+  if (Array.from(data.files ?? []).some((f) => f.type.startsWith('image/'))) return true;
+  return Array.from(data.items ?? []).some((i) => i.kind === 'file' && i.type.startsWith('image/'));
+}
+/** Whether a paste brings words to keep beside its picture: plain text, or HTML with text in it. */
+function holdsWords(data: DataTransfer): boolean {
+  if (data.getData('text/plain').trim()) return true;
+  const html = data.getData('text/html');
+  if (!html) return false;
+  return Boolean(new DOMParser().parseFromString(html, 'text/html').body.textContent?.trim());
+}
+/**
+ * Whatever a paste or a drop brought in — the browser's HTML, Markdown pasted as text — leaves no picture at a
+ * page-only address behind: such a picture is taken out in the same step.
+ */
+const NoLocalPictures = Extension.create({
+  name: 'noLocalPictures',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('noLocalPictures'),
+        appendTransaction(transactions, _old, state) {
+          const brought = transactions.some((tr) => tr.docChanged && (tr.getMeta('uiEvent') === 'paste' || tr.getMeta('uiEvent') === 'drop'));
+          if (!brought) return null;
+          const doomed: { from: number; to: number }[] = [];
+          state.doc.descendants((node, pos) => {
+            if (node.type.name === 'image' && localPicture(node.attrs.src)) doomed.push({ from: pos, to: pos + node.nodeSize });
+          });
+          if (!doomed.length) return null;
+          const tr = state.tr;
+          for (const { from, to } of doomed.reverse()) tr.delete(from, to);
+          return tr;
+        },
+      }),
+    ];
+  },
+});
+
 const params = new URLSearchParams(location.search);
 // ?scale=1.3: every px of the page's stylesheet drawn this much larger — the Mac app, the iPad's layout at 77 %,
 // where a story still reads at its own size (TextScale.macReadingBoost). The page lays out at those sizes, never
@@ -420,6 +466,7 @@ const extensions = [
   }),
   // The apostrophes inside Latin words, set in the Latin face (a decoration: the stored story is untouched).
   LatinMarks,
+  NoLocalPictures,
   Placeholder.configure({ placeholder: params.get('placeholder') ?? '寫下你的故事…' }),
 ];
 
@@ -481,7 +528,24 @@ const editor = new Editor({
   extensions,
   content: '',
   // A story's type is the web's src/styles/story.css, keyed on this class (island.css).
-  editorProps: { attributes: rootAttributes() },
+  editorProps: {
+    attributes: rootAttributes(),
+    // A picture on the clipboard, with no words to keep: the host reads it from the system's clipboard,
+    // uploads it as its photo picker does and puts it in (exec('insertImage', {src})).
+    handlePaste: (_view, event) => {
+      const data = event.clipboardData;
+      if (!data || !holdsImageFile(data) || holdsWords(data)) return false;
+      event.preventDefault();
+      send({ type: 'pasteImage' });
+      return true;
+    },
+    // A picture file dropped in is left out (a drop between the apps has no upload of its own).
+    handleDrop: (_view, event, _slice, moved) => {
+      if (moved || !holdsImageFile(event.dataTransfer)) return false;
+      event.preventDefault();
+      return true;
+    },
+  },
   onUpdate: () => {
     changePending = true;
     clearTimeout(timer);
@@ -693,7 +757,7 @@ window.ResonanceEditor = {
         return chain.insertContent({ type: 'cardEmbed', attrs: { href: args.href, title: args.title ?? '' } }).run();
       // The host uploads the photo (/api/upload) and hands over its public URL.
       case 'insertImage':
-        if (!args.src) return false;
+        if (!args.src || localPicture(args.src)) return false;
         return chain.insertContent({ type: 'image', attrs: { src: args.src, alt: args.alt ?? '' } }).run();
       case 'undo': return chain.undo().run();
       case 'redo': return chain.redo().run();
