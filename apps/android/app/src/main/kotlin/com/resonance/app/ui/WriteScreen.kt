@@ -245,6 +245,15 @@ fun WriteScreen(
         WriteForm(session, referenceCardId, story, null, close, onFinished, onCreated, pane, bar, paneBack = paneBack)
         return
     }
+    // The story's island starts loading with the card's read, not after it (X1): the card's words go in
+    // as soon as both are there (the bridge keeps them until its island is ready).
+    val earlyContext = LocalContext.current
+    val early = remember(id) {
+        val tag = Strings.language.tag
+        StoryEditorBridge(earlyContext, L10n.Write.storyPlaceholder, canvas = true, locale = tag, script = StoryScripts.localeScript(tag))
+    }
+    // Let go with the screen (the writer's own leave lets go of it too: either is enough).
+    DisposableEffect(early) { onDispose { early.destroy() } }
     // The card loads straight from Firestore, painting a loader meanwhile; restored from the trash, it is read again.
     var attempt by remember(id) { mutableIntStateOf(0) }
     var loaded by remember(id) { mutableStateOf(false) }
@@ -274,7 +283,7 @@ fun WriteScreen(
             }
         }
         card.isTrashed -> TrashedWriter(session, card, bar, close) { attempt++ }
-        else -> androidx.compose.runtime.key(card) { WriteForm(session, referenceCardId, null, card, close, onFinished, pane = pane, bar = bar, paneBack = paneBack, beganNew = beganNew, publishing = publishing) }
+        else -> androidx.compose.runtime.key(card) { WriteForm(session, referenceCardId, null, card, close, onFinished, pane = pane, bar = bar, paneBack = paneBack, beganNew = beganNew, publishing = publishing, prepared = early) }
     }
 }
 
@@ -343,6 +352,8 @@ private fun WriteForm(
     paneBack: (() -> Unit)? = null,
     beganNew: Boolean = false,
     publishing: Boolean = false,
+    /** The island already loading for this card (X1), or null: one is made here. */
+    prepared: StoryEditorBridge? = null,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -356,11 +367,14 @@ private fun WriteForm(
         val tag = Strings.language.tag
         val title = opened?.values?.title ?: ""
         val text = opened?.values?.story ?: story ?: ""
-        StoryEditorBridge(
-            context, L10n.Write.storyPlaceholder, canvas = true, locale = tag,
-            script = StoryScripts.writerScript(StoryScripts.localeScript(tag), title, text),
-            lang = StoryScripts.storyLang(title, text),
-        )
+        val script = StoryScripts.writerScript(StoryScripts.localeScript(tag), title, text)
+        val lang = StoryScripts.storyLang(title, text)
+        (prepared?.takeUnless { it.destroyed }?.also { it.presume(script, lang) } ?: StoryEditorBridge(
+            context, L10n.Write.storyPlaceholder, canvas = true, locale = tag, script = script, lang = lang,
+        )).apply {
+            // A live card's link cards show their stored previews (its title, our own picture), as on iOS.
+            IslandContent.linkPreviews(opened?.linkPreviews, session.config.origin).takeIf { it.isNotEmpty() }?.let(::setLinkPreviews)
+        }
     }
     // The step, kept across a restored process (a new card always starts writing).
     var savedStep by rememberSaveable { mutableStateOf(WriterStep.Write) }
@@ -392,6 +406,8 @@ private fun WriteForm(
             }
         }
     }
+    // A picture pasted into the story (X6): the island cancels it, the clipboard's picture goes in as the photo picker's do.
+    SideEffect { bridge.onPasteImage = { clipboardPicture(context)?.let { model.insertImage(context, it) } } }
     val step = model.step
     LaunchedEffect(step) { savedStep = step }
     LaunchedEffect(model) { if (publishing) offered = true }
@@ -1782,4 +1798,19 @@ class WriterHandle {
         keyboard = {}
         ask = null
     }
+}
+
+/**
+ * The picture on the clipboard, as a content address the app may read now (a pasted clip grants it),
+ * or null: the first of its items whose type is an image's (X6).
+ */
+internal fun clipboardPicture(context: android.content.Context): android.net.Uri? {
+    val clip = runCatching { context.getSystemService(android.content.ClipboardManager::class.java)?.primaryClip }.getOrNull() ?: return null
+    val described = (0 until clip.description.mimeTypeCount).map(clip.description::getMimeType)
+    for (i in 0 until clip.itemCount) {
+        val uri = clip.getItemAt(i).uri ?: continue
+        val type = runCatching { context.contentResolver.getType(uri) }.getOrNull() ?: described.firstOrNull { it.startsWith("image/") }
+        if (type?.startsWith("image/") == true) return uri
+    }
+    return null
 }

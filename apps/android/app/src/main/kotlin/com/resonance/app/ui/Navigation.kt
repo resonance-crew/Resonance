@@ -510,12 +510,7 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
         onPauseOrDispose { }
     }
     val reducedMotion = LocalContext.current.prefersReducedMotion()
-    // It moves with the tab bar as a page is pushed over a tab's root or popped back to it — and as the bar slides away for reading.
-    val toastBottom by animateDpAsState(
-        toastClearance(cls, tabBarShown = !topTabs && stack.size == 1 && !autoHide.hidden, barLift = currentTabBarLift()),
-        if (autoHide.hidden) tween(TAB_BAR_HIDE_MILLIS, easing = EaseIn) else tween(TAB_BAR_SHOW_MILLIS, easing = EaseOut),
-        label = "toastBottom",
-    )
+    val barLift = currentTabBarLift()
 
     CompositionLocalProvider(
         LocalWindowLayout provides WindowLayout(windowWidth), LocalRootTaps provides rootTaps, LocalToasts provides toasts, LocalTrash provides trash,
@@ -547,11 +542,11 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
             }
             // The deletion's undo: a modal over every screen.
             deletionDate?.let { date -> AccountDeletionNotice(session, date) }
-            if (!topTabs) TabBarSlot(stack.size == 1, Modifier.align(Alignment.BottomCenter), readingHides = autoHide.hidden, reduced = reducedMotion) {
+            if (!topTabs) TabBarSlot(stack.size == 1, Modifier.align(Alignment.BottomCenter), readingHides = { autoHide.hidden }, reduced = reducedMotion) {
                 OrganicTabBar(tabItems, selection = tab, onSelect = select)
             }
             // Over every page and the bars, under any dialog (a window of its own).
-            ToastHost(toasts, Modifier.align(Alignment.BottomCenter), bottom = toastBottom)
+            ShellToast(toasts, Modifier.align(Alignment.BottomCenter), cls, onRoot = !topTabs && stack.size == 1, barLift = barLift, autoHide = autoHide)
             // A restored resonance that came back on its own says so here, whatever restored it.
             RestoredAloneNotice(trash)
             // After reaching someone: our ask for notifications, once the composer or the writer has gone (notification-asks §2).
@@ -631,7 +626,9 @@ object KeyShortcuts {
  * building it.
  */
 @Composable
-private fun TabBarSlot(shown: Boolean, modifier: Modifier, readingHides: Boolean = false, reduced: Boolean = false, bar: @Composable () -> Unit) {
+private fun TabBarSlot(shown: Boolean, modifier: Modifier, readingHides: () -> Boolean = { false }, reduced: Boolean = false, bar: @Composable () -> Unit) {
+    // Read here, not in the shell: the bar sliding away for reading composes this slot again, not every tab (A5).
+    val readingHides = readingHides()
     // How visible it is, and how far below its place (of its height).
     val alpha = remember { Animatable(if (shown) 1f else 0f) }
     val drop = remember { Animatable(if (shown) 0f else 1f) }
@@ -727,4 +724,20 @@ private fun Page(session: Session, tab: Tab, route: Route, stack: NavBackStack<R
         Route.ThoughtMap -> Workspace(session, writer = null, open = push, leave = pop)
         is Route.SettingsSection -> SettingsSectionScreen(session, route.section, pop)
     }
+}
+
+/**
+ * The shell's toast, moving with the tab bar as a page is pushed over a tab's root or popped back to
+ * it — and as the bar slides away for reading. The bar's reading state and the animation are read
+ * here and in the toast's layout, so a frame of the bar's slide composes nothing above it (A5).
+ */
+@Composable
+private fun ShellToast(toasts: Toasts, modifier: Modifier, cls: LayoutClass, onRoot: Boolean, barLift: Dp, autoHide: TabBarAutoHide) {
+    val hidden = autoHide.hidden
+    val bottom = animateDpAsState(
+        toastClearance(cls, tabBarShown = onRoot && !hidden, barLift = barLift),
+        if (hidden) tween(TAB_BAR_HIDE_MILLIS, easing = EaseIn) else tween(TAB_BAR_SHOW_MILLIS, easing = EaseOut),
+        label = "toastBottom",
+    )
+    ToastHost(toasts, modifier, bottomOf = { bottom.value })
 }

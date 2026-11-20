@@ -19,6 +19,11 @@ import com.resonance.kit.l10n.Strings
 import com.resonance.kit.reading.ApiCache
 import com.resonance.app.ui.share.ShareFiles
 import okhttp3.Cache
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Request
+import okhttp3.Response
+import java.io.IOException
 import okhttp3.OkHttpClient
 import java.io.File
 
@@ -57,11 +62,28 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
         it.start { it.loadMe() }
     }
 
+    /**
+     * A light, unauthenticated HEAD to the API's host on the app's one client (A1 c): its DNS, TLS and
+     * HTTP/2 connection are made while the first screen waits for the account's tokens, and the API
+     * calls after it find the connection open. Nothing is read from it, nothing is cached.
+     */
+    fun warmConnection(origin: String) {
+        val request = runCatching { Request.Builder().url(origin.trimEnd('/') + "/api/v1/openapi.json").head().build() }.getOrNull() ?: return
+        http.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) = Unit
+            override fun onResponse(call: Call, response: Response) = response.close()
+        })
+    }
+
     override fun newImageLoader(context: PlatformContext): ImageLoader = imageLoader(context, http)
 
     override fun onCreate() {
         super.onCreate()
         AppFonts.init(this)
+        // Production's Firebase and App Check provider in every process the app starts (A1 a): a push
+        // can wake one no activity ever runs in, which then warms the tokens (ResonancePushService).
+        // Builds that may point at the local stack choose in MainActivity (its launch extras).
+        if (!BuildConfig.LOCAL_STACK) AppFirebase.configure(this, AppConfig(usesEmulator = false))
         // 外觀 before any screen: its mode is also the app's night mode on Android 12+.
         AppearanceStore.init(this)
         Grain.init(this)

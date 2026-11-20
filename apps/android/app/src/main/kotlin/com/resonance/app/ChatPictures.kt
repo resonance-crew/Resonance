@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import coil3.ImageLoader
 import coil3.annotation.ExperimentalCoilApi
 import coil3.disk.DiskCache
+import coil3.memory.MemoryCache
 import coil3.disk.directory
 import coil3.network.CacheStrategy
 import coil3.network.NetworkRequest
@@ -90,7 +91,13 @@ class ChatPictures(val loader: ImageLoader) {
         fun loader(context: Context, directory: File, client: OkHttpClient): ImageLoader = ImageLoader.Builder(context)
             .components { add(OkHttpNetworkFetcherFactory(callFactory = { client }, cacheStrategy = { PicturesOnly })) }
             .diskCache { DiskCache.Builder().directory(directory).maxSizeBytes(DISK_BYTES).build() }
+            // Its own memory cache, a tenth of what the app may hold (A11): Coil's default (~a quarter)
+            // beside the main loader's own let the two take near half of it between them.
+            .memoryCache { MemoryCache.Builder().maxSizePercent(context, MEMORY_PERCENT).build() }
             .build()
+
+        /** The share of the app's memory the thread's pictures may keep decoded. */
+        private const val MEMORY_PERCENT = 0.1
 
         /**
          * A picture picked to send, made ready on the device (off the main thread): upright, at most

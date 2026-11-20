@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -119,14 +120,16 @@ fun NotificationsScreen(session: Session, open: (Route) -> Unit) {
             )
         }
     }
-    // The rows' times and parts follow the clock while the screen is open.
-    var now by remember { mutableStateOf(Instant.now()) }
+    // The rows' times and parts follow the clock while the screen is open: the minute is read only by
+    // each row's time, and by the parts, which change only when a row crosses into another (A13).
+    val clock = remember { mutableStateOf(Instant.now()) }
     LaunchedEffect(Unit) {
         while (true) {
             delay(60_000)
-            now = Instant.now()
+            clock.value = Instant.now()
         }
     }
+    val parts by remember { derivedStateOf { bellBands(bellParts(items, clock.value)) } }
     val list = rememberLazyListState()
     TabScreen(L10n.App.Nav.notifications, titleInBar = true, list = list) {
         when {
@@ -142,7 +145,7 @@ fun NotificationsScreen(session: Session, open: (Route) -> Unit) {
                     fill = true, modifier = Modifier.fillParentMaxHeight(),
                 )
             }
-            else -> bellBands(bellParts(items, now)).forEachIndexed { part, (group, rows) ->
+            else -> parts.forEachIndexed { part, (group, rows) ->
                 item(key = bellPartKey(group), contentType = "bellPart") {
                     BasicText(
                         group.title,
@@ -155,6 +158,7 @@ fun NotificationsScreen(session: Session, open: (Route) -> Unit) {
                     )
                 }
                 items(rows, key = { it.item.id }, contentType = { "notification" }) { (item, below) ->
+                    val now = clock.value
                     NotificationRow(
                         item, extras, BellTime.words(item.createdAt?.toInstant() ?: now, now, Strings.language.locale, L10n.App.Notifications.justNow),
                         below = below, scrolling = { list.isScrollInProgress },

@@ -524,7 +524,9 @@ private const val CORNER_STEPS = 8
  * outside the scroller, so the mask stays on its viewport.
  */
 fun Modifier.edgeFades(top: () -> Boolean, bottom: () -> Boolean, edge: Dp = EdgeFade): Modifier =
-    graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
+    // Its own offscreen layer only while an edge fades (A13): with nothing beyond either edge the list
+    // draws straight into the page, and a sticker's frame doesn't make the whole grid composite again.
+    graphicsLayer { compositingStrategy = if (top() || bottom()) CompositingStrategy.Offscreen else CompositingStrategy.Auto }.drawWithContent {
         drawContent()
         val up = top()
         val down = bottom()

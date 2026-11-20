@@ -6,6 +6,8 @@ plugins {
     // The back stacks' routes are saved with the activity (rotation, process death).
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.gms.google-services")
+    // Ships src/main/baseline-prof.txt (and what :baselineprofile records into it) with the app (A2).
+    id("androidx.baselineprofile")
 }
 
 android {
@@ -219,6 +221,9 @@ dependencies {
     implementation("androidx.credentials:credentials:1.6.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.2.1")
+    // Installs the Baseline Profile on devices whose store didn't (sideloads, older Play installs).
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+    baselineProfile(project(":baselineprofile"))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
     // Screens composed under Robolectric (the publish step's blank tap), as :core:design's tests are.

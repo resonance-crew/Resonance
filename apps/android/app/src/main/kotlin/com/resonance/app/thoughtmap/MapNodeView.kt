@@ -28,6 +28,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +64,7 @@ import com.resonance.design.WobRectShape
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.prefersReducedMotion
+import com.resonance.design.rememberMotionBudget
 import com.resonance.design.toPath
 import com.resonance.geometry.SegValue
 import com.resonance.geometry.WobRectOptions
@@ -194,7 +198,7 @@ fun MapNodeView(
         NodeTextLayout.make(card.title.replace(Spaces, " ").trim(), plainExcerpt(card.story, if (thumb == null) 100 else 80), thumb != null, density)
     }
     // The web remounts the outline's svg whenever the card is (un)selected or dragged, and each new one fades in (280ms ease-out; not with animations off).
-    val still = remember(context) { context.prefersReducedMotion() }
+    val still = rememberMotionBudget().reducedMotion
     // A fresh Animatable per outline (it starts at 0 in the very frame the new outline first draws, not a frame later).
     val fade = remember(tabbed) { Animatable(if (still) 1f else 0f) }
     LaunchedEffect(fade) {
@@ -250,7 +254,7 @@ fun MapNodeView(
                 }
             },
     ) {
-        if (thumb != null) MapThumb(thumb, hue, seed, Modifier.offset((16 + NodeTextLayout.width - 56).dp, (14 + 2).dp), card.mediaFrame.takeIf { card.mediaUrl != null })
+        if (thumb != null) MapThumb(thumb, hue, seed, Modifier.offset((16 + NodeTextLayout.width - 56).dp, (14 + 2).dp), card.mediaFrame.takeIf { card.mediaUrl != null }, card.mediaFallbackUrl.takeIf { card.mediaUrl == thumb })
         // The meta row: the visibility glyph (the lock for every 私人卡, published or not: round 9 C4) and the tags,
         // 8 apart, under the body's 126 and the 8 gap — stopping 8 short of 移除 while it shows (`padding-right: 22px`).
         Row(
@@ -278,7 +282,7 @@ fun MapNodeView(
 
 /** NodeThumb: 56×56 in a wobbly clip, the picture overscanned 4px each side and decoded for the largest zoom, not the full file. */
 @Composable
-private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier, frame: CoverFraming? = null) {
+private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier, frame: CoverFraming? = null, fallbackUrl: String? = null) {
     val context = LocalContext.current
     val density = LocalDensity.current.density
     val clip = remember(seed) {
@@ -288,7 +292,9 @@ private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier,
         )
     }
     val px = (64 * density * 2).roundToInt()
-    val request = remember(url, px) { ImageRequest.Builder(context).data(url).size(Size(px, px)).crossfade(false).build() }
+    // The small cover first; the cover itself should that one not be there (B2).
+    var shown by remember(url, fallbackUrl) { mutableStateOf(url) }
+    val request = remember(shown, px) { ImageRequest.Builder(context).data(shown).size(Size(px, px)).crossfade(false).build() }
     val rimInk = MapInk.current.thumbRim(hue)
     Box(
         modifier
@@ -310,6 +316,7 @@ private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier,
                 contentScale = CoverFit.scale(frame),
                 alignment = CoverFit.alignment(frame),
                 modifier = Modifier.requiredSize(64.dp).offset((-4).dp, (-4).dp),
+                onError = { if (fallbackUrl != null && shown != fallbackUrl) shown = fallbackUrl },
             )
         }
     }

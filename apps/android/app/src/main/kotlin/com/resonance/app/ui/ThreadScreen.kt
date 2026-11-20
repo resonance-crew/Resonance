@@ -27,6 +27,7 @@ import com.resonance.api.models.FeedCard
 import com.resonance.app.Stickers
 import com.resonance.design.ComposerHeight
 import com.resonance.design.prefersReducedMotion
+import com.resonance.design.rememberMotionBudget
 import com.resonance.kit.chat.ChatAlbum
 import com.resonance.kit.chat.ComposerPanel
 import com.resonance.kit.chat.KeyboardHeights
@@ -241,7 +242,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     // Which panel's content is drawn: kept while a closing panel slides away.
     var shownPanel by remember { mutableStateOf(ComposerPanel.None) }
     var attachTab by rememberSaveable { mutableStateOf(AttachTab.Pictures) }
-    val still = remember(context) { context.prefersReducedMotion() }
+    val still = rememberMotionBudget().reducedMotion
     val panelRoom = remember { PanelRoom(scope, still) }
     val stickerCatalog by Stickers.catalog.collectAsStateWithLifecycle()
     // The field grown to the thread (round 22 §4.3, option C): what it leaves over itself under the bar (px) —
@@ -1038,7 +1039,7 @@ private fun RowScope.PersonPlaceholder(handle: String) {
 /** The day label: 9月29日 / September 29. */
 internal fun dayLabel(date: Date): String {
     val pattern = if (Strings.language == Strings.Language.ZhTW) "M月d日" else "MMMM d"
-    return date.toInstant().atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern(pattern, Strings.language.locale))
+    return date.toInstant().atZone(ZoneId.systemDefault()).format(cachedFormatter(pattern, Strings.language.locale))
 }
 
 /**
@@ -1050,12 +1051,12 @@ internal fun chatTimePattern(): String = if (Strings.language == Strings.Languag
 
 /** The time label inside a day: 下午3:04 / 3:04 PM ([chatTimePattern]). */
 internal fun timeLabel(date: Date): String =
-    date.toInstant().atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern(chatTimePattern(), Strings.language.locale))
+    date.toInstant().atZone(ZoneId.systemDefault()).format(cachedFormatter(chatTimePattern(), Strings.language.locale))
 
 /** The full time a long-press shows (the web's hover title): 9月29日 下午3:04 / September 29 at 3:04 PM. */
 internal fun fullTime(date: Date): String {
     val pattern = if (Strings.language == Strings.Language.ZhTW) "M月d日 ${chatTimePattern()}" else "MMMM d 'at' ${chatTimePattern()}"
-    return date.toInstant().atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern(pattern, Strings.language.locale))
+    return date.toInstant().atZone(ZoneId.systemDefault()).format(cachedFormatter(pattern, Strings.language.locale))
 }
 
 // Cards & links
@@ -1096,7 +1097,7 @@ private fun SharedMediaContent(model: ThreadModel, opener: LinkOpener, onClose: 
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         val cover = Tokens.hue(HueRole.Accent, card.accentHue ?: 55.0)
-                        OrganicImage(card.imageUrl, 7.0, Modifier.size(40.dp)) { Box(Modifier.fillMaxSize().background(cover)) }
+                        OrganicImage(card.imageThumbUrl ?: card.imageUrl, 7.0, Modifier.size(40.dp), fallbackUrl = card.imageUrl) { Box(Modifier.fillMaxSize().background(cover)) }
                         BasicText(
                             card.title, maxLines = 2, overflow = TextOverflow.Ellipsis,
                             style = AppFonts.body(14f, 600, lineHeight = 1.3f), modifier = Modifier.weight(1f),

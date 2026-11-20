@@ -235,7 +235,7 @@ internal fun CardPickRow(card: FeedCard, index: Int, choosing: Boolean, chosen: 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        PickThumb(card.imageUrl, card.accentHue ?: 55.0, (index * 7 + 3).toDouble(), chosen)
+        PickThumb(card.imageThumbUrl ?: card.imageUrl, card.imageUrl, card.accentHue ?: 55.0, (index * 7 + 3).toDouble(), chosen)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             BasicText(
                 card.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -256,7 +256,7 @@ internal fun CardPickRow(card: FeedCard, index: Int, choosing: Boolean, chosen: 
  * cream tick, all inside the same outline.
  */
 @Composable
-private fun PickThumb(url: String?, hue: Double, seed: Double, chosen: Boolean) {
+private fun PickThumb(url: String?, fallbackUrl: String?, hue: Double, seed: Double, chosen: Boolean) {
     val shape = remember(seed) { pickThumbShape(seed) }
     val cover = Tokens.hue(HueRole.Accent, hue)
     val rimInk = Tokens.AvatarStroke
@@ -275,7 +275,14 @@ private fun PickThumb(url: String?, hue: Double, seed: Double, chosen: Boolean) 
                 }
             },
     ) {
-        if (url != null) AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(shape))
+        // The list's small cover (imageThumbUrl), the cover itself when that one isn't there.
+        var shown by remember(url, fallbackUrl) { mutableStateOf(url) }
+        shown?.let { picture ->
+            AsyncImage(
+                model = picture, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(shape),
+                onError = { if (fallbackUrl != null && picture != fallbackUrl) shown = fallbackUrl },
+            )
+        }
         // The chosen row's mark, fading in and out over the cover.
         AnimatedVisibility(chosen, enter = fadeIn(tween(180)), exit = fadeOut(tween(120))) {
             Box(
@@ -327,7 +334,7 @@ internal fun pickDate(iso: String?, today: LocalDate = LocalDate.now()): String?
             day.year == today.year -> if (zh) "M月d日" else "MMM d"
             else -> if (zh) "y年M月d日" else "MMM d, y"
         }
-        day.format(DateTimeFormatter.ofPattern(pattern, Strings.language.locale))
+        day.format(cachedFormatter(pattern, Strings.language.locale))
     }.getOrNull()
 }
 

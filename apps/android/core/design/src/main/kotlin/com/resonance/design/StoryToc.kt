@@ -191,7 +191,7 @@ fun StoryToc(
     val scroll = rememberScrollState()
     val toc = remember(headings) { TocLayout(headings.size) }
     val context = LocalContext.current
-    val still = remember(context) { context.prefersReducedMotion() }
+    val still = rememberMotionBudget().reducedMotion
     val listHeld by scroll.interactionSource.collectIsDraggedAsState()
     LaunchedEffect(active, toc) {
         val i = headings.indexOfFirst { it === active }
@@ -263,7 +263,7 @@ private val TocGrabSlack = 12.dp
 private fun TocRule(scroll: ScrollState, toc: TocLayout, modifier: Modifier, content: @Composable () -> Unit) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val still = remember(context) { context.prefersReducedMotion() }
+    val still = rememberMotionBudget().reducedMotion
     // A wheel's notch as the platform's views take it.
     val wheelStep = remember(context) { android.view.ViewConfiguration.get(context).scaledVerticalScrollFactor }
     // A list that scrolls keeps its drags (the web's overscroll-behavior: contain); one with room to

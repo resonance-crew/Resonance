@@ -1,5 +1,7 @@
 package com.resonance.app
 
+import com.google.firebase.FirebaseApp
+import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -39,6 +41,7 @@ class ResonancePushService : FirebaseMessagingService() {
             return
         }
         val title = message.notification?.title ?: return
+        warmTokens()
         PushCenter.show(
             this, title, message.notification?.body,
             route = message.data[PushCenter.EXTRA_ROUTE].orEmpty(),
@@ -47,5 +50,20 @@ class ResonancePushService : FirebaseMessagingService() {
             // Tonight's card and a connection's new card go where the system would have put them (the "picks" channel).
             placement = PushPlacement.of(message.data),
         )
+    }
+
+    /**
+     * A pick, a note, a tap (A1 b): the person may open it in a moment, and an hour after the last use
+     * both tokens have run out — the card page would then wait for App Check's Play Integrity round
+     * trips and the ID token's refresh (~10 s). Both are asked for now, in the background (each is the
+     * SDK's cached one while still good); production only, where ResonanceApp installed the provider.
+     */
+    private fun warmTokens() {
+        if (BuildConfig.LOCAL_STACK) return
+        runCatching {
+            val app = FirebaseApp.getInstance()
+            FirebaseAppCheck.getInstance(app).getAppCheckToken(false)
+            FirebaseAuth.getInstance(app).currentUser?.getIdToken(false)
+        }
     }
 }

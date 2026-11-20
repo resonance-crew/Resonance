@@ -140,6 +140,11 @@ fun OrganicImage(
     overlay: (@Composable () -> Unit)? = null,
     /** Where a cover is looked at (round 25 §G1, [CoverFit]); null: centred, as every picture was. */
     frame: CoverFraming? = null,
+    /**
+     * Asked for when [url] fails (a list's small cover, `imageThumbUrl`, that isn't there: the cover
+     * itself, `imageUrl`); null: none.
+     */
+    fallbackUrl: String? = null,
     placeholder: @Composable () -> Unit,
 ) {
     // The bleed follows the box offered (what BoxWithConstraints read, now read while measuring, with
@@ -148,14 +153,22 @@ fun OrganicImage(
     Layout(
         content = {
             Box(if (grain > 0f) Modifier.grainOverlay(grain) else Modifier) {
-                var loading by remember(url) { mutableStateOf(url != null) }
+                var shown by remember(url, fallbackUrl) { mutableStateOf(url ?: fallbackUrl) }
+                var loading by remember(url, fallbackUrl) { mutableStateOf(shown != null) }
                 if (loading) SkeletonCover() else placeholder()
-                if (url != null) AsyncImage(
-                    model = url, contentDescription = contentDescription, modifier = Modifier.fillMaxSize(),
+                val picture = shown
+                if (picture != null) AsyncImage(
+                    model = picture, contentDescription = contentDescription, modifier = Modifier.fillMaxSize(),
                     contentScale = CoverFit.scale(frame), alignment = CoverFit.alignment(frame),
                     onLoading = { loading = true },
                     onSuccess = { loading = false },
-                    onError = { loading = false; onError?.invoke() },
+                    onError = {
+                        if (fallbackUrl != null && picture != fallbackUrl) shown = fallbackUrl
+                        else {
+                            loading = false
+                            onError?.invoke()
+                        }
+                    },
                 )
                 overlay?.invoke()
             }
@@ -254,6 +267,8 @@ data class StoryCardContent(
      * and marked with the globe at the foot's end. Null: as written.
      */
     val translatedLang: String? = null,
+    /** The cover at most 960 on its longer edge (`imageThumbUrl`, B2), what a list draws; null: [imageUrl]. */
+    val imageThumbUrl: String? = null,
 )
 
 /** CSS `margin-top` (negative too): shifts the child and takes the same amount off the space it claims. */
@@ -419,7 +434,7 @@ private fun ColumnScope.StoryCardBody(
 ) {
     if (cover != null) {
         Box(Modifier.fillMaxWidth().aspectRatio(1 / 0.62f)) { cover(CoverFrame(seed + 5, palette.fill, palette.stripe, content.imageLabel)) }
-    } else OrganicImage(content.imageUrl, seed + 5, Modifier.fillMaxWidth().aspectRatio(1 / 0.62f), grain = StoryGrain.Cover, frame = content.imageFrame) {
+    } else OrganicImage(content.imageThumbUrl ?: content.imageUrl, seed + 5, Modifier.fillMaxWidth().aspectRatio(1 / 0.62f), grain = StoryGrain.Cover, frame = content.imageFrame, fallbackUrl = content.imageUrl) {
         StoryImagePlaceholder(palette.fill, palette.stripe, content.imageLabel)
     }
     // The web renders the tag row even when empty (its 8px margin still counts).
@@ -623,7 +638,7 @@ fun MiniStoryCard(content: StoryCardContent, position: Int, isLast: Boolean = fa
     val accent = palette.accent
     WithSkeletonHue(palette.hue) {
         StoryBand(palette, seed + 17, isLast, 28.dp, 12.dp, modifier, inset = inset) {
-            OrganicImage(content.imageUrl, seed + 5, Modifier.fillMaxWidth().aspectRatio(1 / 0.56f), grain = StoryGrain.Cover, frame = content.imageFrame) {
+            OrganicImage(content.imageThumbUrl ?: content.imageUrl, seed + 5, Modifier.fillMaxWidth().aspectRatio(1 / 0.56f), grain = StoryGrain.Cover, frame = content.imageFrame, fallbackUrl = content.imageUrl) {
                 if (content.imageUrl == null) Box(Modifier.fillMaxSize().background(accent))
             }
             CssText(content.title, AppFonts.Family.Heading, 17f, 700, lineHeight = 1.3f, modifier = Modifier.fillMaxWidth())

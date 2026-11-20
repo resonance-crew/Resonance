@@ -12,6 +12,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.RenderProcessGoneDetail
+import android.view.ViewGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -62,7 +64,7 @@ import com.resonance.design.MascotMarks
 import com.resonance.design.borderedCardOutline
 import com.resonance.design.generated.LocalResonanceColors
 import com.resonance.design.generated.Tokens
-import com.resonance.design.prefersReducedMotion
+import com.resonance.design.rememberMotionBudget
 import com.resonance.design.toPath
 import com.resonance.geometry.PathCommand
 import com.resonance.geometry.wavyLine
@@ -238,7 +240,8 @@ private fun Modifier.screenAround(): Modifier = layout { measurable, constraints
 private fun MascotLook(island: MascotIsland) {
     val context = LocalContext.current
     val dark = LocalResonanceColors.current.dark
-    val reduced = context.prefersReducedMotion()
+    // Held still with animations removed, and under Battery Saver too (A10), followed live.
+    val reduced = rememberMotionBudget().calm
     LaunchedEffect(dark) { island.call("mascots.theme('${if (dark) "dark" else "light"}')") }
     LaunchedEffect(reduced) { island.call("mascots.reducedMotion($reduced)") }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -450,6 +453,8 @@ internal class MascotIsland(context: Context) {
     var hits: List<Rect> = emptyList()
         private set
     private var ready = false
+    /** The browser's renderer went with this island's page: it draws nothing more. */
+    private var gone = false
     private val pending = ArrayList<Pair<String, ((String) -> Unit)?>>()
     /** Scrolls handed to the island and not yet drawn: the island's scroll, and the anchor read for it. */
     private val sent = ArrayDeque<Pair<Double, ScrollTracker.Anchor>>()
@@ -480,6 +485,19 @@ internal class MascotIsland(context: Context) {
         webViewClient = object : WebViewClient() {
             // The island loads nothing but itself.
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = true
+            // The browser's renderer went (taken back by the system, or crashed): the island goes quietly
+            // (its view out of the page and destroyed) and the app lives on — a client that doesn't say it
+            // handled the loss takes the whole app down with the renderer, the writer's island too (A3).
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                gone = true
+                ready = false
+                pending.clear()
+                pendingRuns.clear()
+                (view.parent as? ViewGroup)?.removeView(view)
+                view.removeJavascriptInterface("MascotsBridge")
+                view.destroy()
+                return true
+            }
             override fun onPageFinished(view: WebView, url: String?) {
                 ready = true
                 pending.forEach { (js, then) -> view.evaluateJavascript(js) { then?.invoke(it) } }
@@ -493,6 +511,7 @@ internal class MascotIsland(context: Context) {
     }
 
     fun call(js: String, then: ((String) -> Unit)? = null) {
+        if (gone) return
         if (ready) webView.evaluateJavascript(js) { then?.invoke(it) } else pending += js to then
     }
 
@@ -508,6 +527,7 @@ internal class MascotIsland(context: Context) {
                 override fun onComplete(requestId: Long) = drawn()
             })
         }
+        if (gone) return
         if (ready) run() else pendingRuns += run
     }
     private var visualToken = 0L
@@ -549,6 +569,7 @@ internal class MascotIsland(context: Context) {
     }
 
     fun destroy() {
+        if (gone) return
         runCatching { webView.evaluateJavascript("mascots.stop()", null) }
         webView.removeJavascriptInterface("MascotsBridge")
         webView.destroy()

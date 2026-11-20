@@ -236,7 +236,7 @@ fun <T> OrganicTabBar(items: List<OrganicTabItem<T>>, selection: T, onSelect: (T
 @Composable
 private fun <T> TabFace(item: OrganicTabItem<T>, selected: Boolean, pressed: Boolean, modifier: Modifier) {
     val context = LocalContext.current
-    val still = remember(context) { context.prefersReducedMotion() }
+    val still = rememberMotionBudget().reducedMotion
     val solid by animateFloatAsState(if (selected) 1f else 0f, if (still) snap() else tween(TAB_SWAP_MILLIS), label = "tabSolid")
     val pop = remember { androidx.compose.animation.core.Animatable(1f) }
     LaunchedEffect(selected) {

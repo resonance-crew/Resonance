@@ -112,7 +112,17 @@ class ConversationsStore {
 
     private var uid: String? = null
     private val listeners = LiveListeners()
-    private var rawConversations: List<QueryDocumentSnapshot> = emptyList()
+    private var rawConversations: List<RawConversation> = emptyList()
+
+    /**
+     * A conversation's document as the list reads it, taken out of its snapshot off the main thread
+     * (A12: the listener's results are read on [parsing], then handed to the main thread).
+     */
+    private class RawConversation(val id: String, val participants: List<*>?, val last: Map<String, Any?>?, val unread: Map<*, *>?)
+
+    /** Where the conversations listener's snapshots are read (one thread, in order). */
+    private val parsing = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
     private var connectionUids: List<String> = emptyList()
     private val blocked: Set<String> get() = _blocked.value.orEmpty()
     private val people = HashMap<String, Person>()
@@ -160,11 +170,28 @@ class ConversationsStore {
         listen("conversations") {
             AppFirebase.db.collection("conversations").whereArrayContains("participants", uid)
                 .orderBy("updatedAt", Query.Direction.DESCENDING)
-                .addSnapshotListener { snap, _ ->
-                    snap ?: return@addSnapshotListener failed("conversations")
-                    rawConversations = snap.documents.filterIsInstance<QueryDocumentSnapshot>()
-                    _ids.value = rawConversations.map { it.id }.toSet()
-                    arrived("conversations")
+                .addSnapshotListener(parsing) { snap, _ ->
+                    if (snap == null) {
+                        main.post { if (this.uid == uid) failed("conversations") }
+                        return@addSnapshotListener
+                    }
+                    val raw = snap.documents.filterIsInstance<QueryDocumentSnapshot>().map { doc ->
+                        @Suppress("UNCHECKED_CAST")
+                        RawConversation(
+                            doc.id,
+                            doc.get("participants") as? List<*>,
+                            doc.get("lastMessage", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE) as? Map<String, Any?>,
+                            doc.get("unread") as? Map<*, *>,
+                        )
+                    }
+                    val ids = raw.map { it.id }.toSet()
+                    main.post {
+                        // Stopped (signed out) or started for another account since: not this list's any more.
+                        if (this.uid != uid) return@post
+                        rawConversations = raw
+                        _ids.value = ids
+                        arrived("conversations")
+                    }
                 }
         }
         listen("connections") {
@@ -264,9 +291,8 @@ class ConversationsStore {
             val otherId = other(doc, uid)
             val person = otherId?.let { people[it] }
             if (otherId == null || otherId in blocked || person == null) return@mapNotNull null
-            @Suppress("UNCHECKED_CAST")
-            val last = doc.get("lastMessage", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE) as? Map<String, Any?>
-            val unread = ((doc.get("unread") as? Map<*, *>)?.get(uid) as? Number)?.toInt() ?: 0
+            val last = doc.last
+            val unread = (doc.unread?.get(uid) as? Number)?.toInt() ?: 0
             Conversation(
                 id = doc.id,
                 other = person,
@@ -288,8 +314,8 @@ class ConversationsStore {
     /** Someone this list has read (with their pen name as it is now), if it has. */
     fun person(id: String): Person? = people[id]
 
-    private fun other(doc: QueryDocumentSnapshot, me: String): String? =
-        (doc.get("participants") as? List<*>)?.firstOrNull { it != me } as? String
+    private fun other(doc: RawConversation, me: String): String? =
+        doc.participants?.firstOrNull { it != me } as? String
 
     private companion object {
         val SOURCES = setOf("conversations", "connections", "blocks")
