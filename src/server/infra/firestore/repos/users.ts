@@ -127,9 +127,68 @@ export function reserveHandle(db: Firestore, tx: Transaction, uid: string, handl
 
 /* ───────────── the repositories ───────────── */
 
-/** `users` inside a Firestore transaction: filled by the lane that owns ports/repos/users.ts. */
-export function usersTx(_db: AdminDb, _tx: Transaction): UsersTxRepo {
-  return {};
+/** `users` inside a Firestore transaction — the write side: profile.ts's transactions, moved as they were. */
+export function usersTx(db: AdminDb, tx: Transaction): UsersTxRepo {
+  const userRef = (uid: string) => db.doc(`users/${uid}`);
+  return {
+    async getProfile(uid) {
+      const snap = await tx.get(userRef(uid));
+      return snap.exists ? sanitize<PersonRow>(snap.data()!) : null;
+    },
+    handleTakenByOther: (uid, handle) => handleTakenByOther(db, uid, handle, tx),
+    async ownsReleasableReservation(uid, current, next) {
+      const oldKey = handleKey(current);
+      if (!(oldKey && reservable(oldKey) && oldKey !== handleKey(next))) return false;
+      const reservation = await tx.get(handleRef(db, current));
+      return reservation.exists && reservation.get('uid') === uid;
+    },
+
+    createProfile(uid, p) {
+      tx.set(userRef(uid), {
+        handle: p.handle,
+        handleLower: handleKey(p.handle),
+        bio: p.bio,
+        region: p.region,
+        primaryLocale: p.primaryLocale,
+        autoTranslateTo: p.autoTranslateTo,
+        verified: p.verified,
+        phoneHash: p.phoneHash,
+        avatarSeed: p.avatarSeed,
+        initials: p.initials,
+        accentColor: p.accentColor,
+        joinedAt: FieldValue.serverTimestamp(),
+        handleChangedAt: FieldValue.serverTimestamp(),
+      });
+    },
+    nameProfile(uid, n) {
+      tx.update(userRef(uid), {
+        handle: n.handle,
+        handleLower: handleKey(n.handle),
+        handleChangedAt: FieldValue.serverTimestamp(),
+        region: n.region,
+        primaryLocale: n.primaryLocale,
+        ...(n.initials !== undefined ? { initials: n.initials } : {}),
+      });
+    },
+    patchProfile(uid, p) {
+      const patch: Record<string, unknown> = {};
+      if (p.handle != null) {
+        patch.handle = p.handle;
+        patch.handleLower = handleKey(p.handle);
+        patch.handleChangedAt = FieldValue.serverTimestamp();
+      }
+      if (p.bio != null) patch.bio = p.bio;
+      if (p.region != null) patch.region = p.region;
+      if (p.primaryLocale != null) patch.primaryLocale = p.primaryLocale;
+      if (Object.keys(patch).length) tx.update(userRef(uid), patch);
+    },
+    reserveHandle: (uid, handle) => reserveHandle(db, tx, uid, handle),
+    releaseHandle(uid, handle) {
+      // Only ever this account's own reservation (ownsReleasableReservation), into a hold for it (holdHandle).
+      tx.delete(handleRef(db, handle));
+      holdHandle(db, handle, uid, tx);
+    },
+  };
 }
 
 /** The person who goes by a pen name, through its reservation (`handles/{lower}`), as src/lib/db/firestore/user.ts did. */
@@ -205,6 +264,13 @@ export function usersData(db: AdminDb): UsersData {
       const [{ pairOf }, { letterReadsAsConnection }] = await Promise.all([conversationsModule(), preLetterModule()]);
       const conversation = await db.doc(`conversations/${pairOf(viewerId, writerId)}`).get();
       return letterReadsAsConnection(db, viewerId, writerId, conversation);
+    },
+
+    // --- write side (cardsWrite lane: profile.ts)
+
+    async handleAvailable(uid, handle) {
+      if (!reservable(handleKey(handle))) return false;
+      return !(await handleTakenByOther(db, uid, handle));
     },
   };
 }

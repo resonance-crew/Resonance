@@ -1,19 +1,162 @@
-import { FieldValue, Timestamp, type Firestore, type Query, type QueryDocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
-import { LIST_FIELDS, LISTING_FIELDS, SUMMARY_FIELDS, blankBySummary, listCard, storedSummary, withStories, type ListCard } from '@/lib/api/v1/summary';
+import { FieldValue, Timestamp, type DocumentData, type Firestore, type Query, type QueryDocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
+import { readTakeBack, takeBack, type TakeBack } from '@/lib/api/v1/origins';
+import { reachOriginal, readReach, tryReachResonance, type ReachReads } from '@/lib/api/v1/resonate';
+import { privateShareRef } from '@/lib/api/v1/sharedCards';
+import { TRANSLATION_TARGETS } from '@/lib/text/translation';
+import { LIST_FIELDS, LISTING_FIELDS, SUMMARY_FIELDS, blankBySummary, listCard, listingFields, storedSummary, summaryFields, withStories, type ListCard } from '@/lib/api/v1/summary';
 import { blankCard, unlistedCard } from '@/lib/cards/blank';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import type { Card, User } from '@/lib/db/types';
 import { CARD_SIGNATURES, unlistedForStrangers } from '@/lib/recommend/collections';
 import { anonymousBySlugCard, docIdOk, properlyPublished } from '@/server/domain/cards';
-import type { CardPage, CardsData, CardsTxRepo, FilmWindowRow, PageStart } from '@/server/ports/repos/cards';
+import type { CardPage, CardsData, CardsTxRepo, FilmWindowRow, PageStart, ReachPlan, TakeBackPlan } from '@/server/ports/repos/cards';
 import type { AdminDb } from '../db';
 import { mapCard, mapUser, sanitize } from '../mapper';
 import { pageEnd, pageQuery } from '../paging';
 
-/** `cards` inside a Firestore transaction: filled by the lane that owns ports/repos/cards.ts. */
-export function cardsTx(_db: AdminDb, _tx: Transaction): CardsTxRepo {
-  return {};
+/* ───────────── write side (cardsWrite lane): today's transactions of src/lib/api/v1/{cards,publish,edits,trash}.ts, moved ───────────── */
+
+/** A stored document as a row: times as Date (mapper sanitize), every other value as stored. */
+const rowOf = (data: DocumentData | undefined): Record<string, unknown> | null => (data ? sanitize<Record<string, unknown>>(data) : null);
+
+/** The repository's own plans behind the ports' opaque ones. */
+type FirestoreTakeBack = TakeBackPlan & { plans: TakeBack[] };
+type FirestoreReach = ReachPlan & { reads: ReachReads };
+
+/** `cards` inside a Firestore transaction. */
+export function cardsTx(db: AdminDb, tx: Transaction): CardsTxRepo {
+  // Built from `db.doc(path)` each time, as the services did: a suite may hand a database whose doc() it watches.
+  const cardRef = (id: string) => db.doc(`cards/${id}`);
+  const editRef = (id: string) => db.doc(`cards/${id}/edits/current`);
+  return {
+    async getCardRow(id) {
+      return rowOf((await tx.get(cardRef(id))).data());
+    },
+    async getEditRow(id) {
+      return rowOf((await tx.get(editRef(id))).data());
+    },
+    async getAuthorRow(uid) {
+      return rowOf((await tx.get(db.doc(`users/${uid}`))).data());
+    },
+    async readTakeBack(uid, cardId) {
+      const plan: FirestoreTakeBack = { __takeBack: true, plans: await readTakeBack(tx, db, uid, cardId) };
+      return plan;
+    },
+    async answersTo(uid, originalId, limit) {
+      const found = await tx.get(db.collection('cards').where('authorId', '==', uid).where('referenceCardId', '==', originalId).limit(limit));
+      return found.docs.map((d) => d.id);
+    },
+    async readReach(uid, originalId) {
+      const reads = await readReach(tx, db, uid, originalId);
+      const plan: FirestoreReach = { __reach: true, originalAnswers: reads.original?.referenceCardId, reads };
+      return plan;
+    },
+
+    takeBack(plan) {
+      takeBack(tx, (plan as FirestoreTakeBack).plans);
+    },
+    reachOriginal(cardId, card, plan) {
+      return reachOriginal(tx, db, cardId, card, (plan as FirestoreReach).reads);
+    },
+    setAudience(id, patch, restate) {
+      // A published card's story is as read: its list summary is restated with the new updatedAt (summary.ts).
+      tx.update(cardRef(id), { ...patch, updatedAt: FieldValue.serverTimestamp(), ...(restate ? summaryFields(restate.story) : {}) });
+    },
+    patchEdit(id, patch) {
+      tx.update(editRef(id), { ...patch });
+    },
+    publish(id, row, firstPublish) {
+      tx.set(
+        cardRef(id),
+        {
+          ...(firstPublish ? { publishedAt: FieldValue.serverTimestamp() } : {}),
+          // Always a boolean once public: lists that may show a card to anyone
+          // filter on `anonymous == false` (an absent field would drop it).
+          anonymous: row.anonymous === true,
+          updatedAt: FieldValue.serverTimestamp(),
+          // What lists show of it, so they needn't read its story (summary.ts).
+          ...summaryFields(row.story),
+          // Whether lists may show it (lib/cards/blank: thin), judged here, as it is saved.
+          ...listingFields(row),
+        },
+        { merge: true },
+      );
+    },
+    applyEdit(id, content, audience) {
+      const fields: Record<string, unknown> = {
+        ...content,
+        // What lists show of the new story, so they needn't read it (summary.ts).
+        ...summaryFields(content.story),
+        // Whether lists may show it (lib/cards/blank: thin), judged on the new words as they are saved.
+        ...listingFields(content),
+        ...audience,
+        media: content.media ?? FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      tx.set(cardRef(id), fields, { merge: true });
+      tx.delete(editRef(id));
+    },
+    moveToTrash(id, at, from, forDeletion) {
+      // Never updatedAt nor excerptAt: a draft keeps its place in edit order, a list its stored summary.
+      tx.update(cardRef(id), {
+        trashedAt: Timestamp.fromMillis(at.getTime()),
+        trashedFrom: from,
+        visibility: 'private',
+        referenceCardId: FieldValue.delete(),
+        // Held while its author's account waits to be deleted (lib/account/deletion): cancelling brings back these alone.
+        ...(forDeletion ? { trashedFor: 'deletion' } : {}),
+      });
+    },
+    restore(id, visibility, referenceCardId) {
+      tx.update(cardRef(id), {
+        visibility,
+        trashedAt: FieldValue.delete(),
+        trashedFrom: FieldValue.delete(),
+        trashedFor: FieldValue.delete(),
+        ...(referenceCardId ? { referenceCardId } : {}),
+      });
+    },
+    deleteForGood(id, slug) {
+      tx.delete(cardRef(id));
+      // What is under the card goes with it: its pending edit (the rules let a client write edits/current alone)
+      // and the translations the server kept of its story, one per interface language (POST …/translation). Deleting
+      // a missing one is nothing; once the card is gone the rules take no new edit, and the server translates no card
+      // that isn't there.
+      tx.delete(editRef(id));
+      for (const to of TRANSLATION_TARGETS) tx.delete(db.doc(`cards/${id}/translations/${to}`));
+      // Whether it was ever shared privately is about this card alone (sharedCards PRIVATE_SHARES).
+      tx.delete(privateShareRef(db, id));
+      // Its reading (lib/recommend/indexCard): about this card alone, gone with it.
+      tx.delete(db.collection(CARD_SIGNATURES).doc(id));
+      tx.set(tombstoneRef(db, id), TOMBSTONE);
+      if (retirable(slug)) tx.set(retiredSlugRef(db, slug), RETIRED_SLUG);
+    },
+  };
 }
+
+/** A batch's limit on writes. */
+const BATCH_MAX = 500;
+
+/** Every note left on the card `id`, delivered or withheld, a batch at a time (was src/lib/api/v1/cards.ts deleteNotesOn). */
+export async function deleteNotesOn(db: Firestore, id: string): Promise<void> {
+  const notes = db.collection('notes').where('cardId', '==', id).select().limit(BATCH_MAX);
+  for (;;) {
+    const page = await notes.get();
+    if (page.empty) return;
+    const batch = db.batch();
+    page.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    if (page.size < BATCH_MAX) return;
+  }
+}
+
+/**
+ * `uid`'s cards in the trash from at or before `cutoff`, ordered as the
+ * (authorId, trashedAt desc) index is, the count too: unordered, a range on
+ * trashedAt orders it ascending, which asks for an index no one made.
+ */
+const inTrashBy = (db: Firestore, uid: string, cutoff: Date) =>
+  db.collection('cards').where('authorId', '==', uid).where('trashedAt', '<=', Timestamp.fromMillis(cutoff.getTime())).orderBy('trashedAt', 'desc');
 
 /* ───────────── which card a key names (was src/lib/db/firestore/cardKey.ts, which re-exports these) ───────────── */
 
@@ -552,6 +695,30 @@ export function cardsData(db: AdminDb): CardsData {
       if (!asked.length) return new Set();
       const snaps = await db.getAll(...asked.map((id) => db.doc(`cards/${id}`)), { fieldMask: ['visibility', 'publishedAt', 'trashedAt'] });
       return new Set(snaps.filter((s) => s.exists && s.get('visibility') === 'public' && s.get('publishedAt') != null && s.get('trashedAt') == null).map((s) => s.id));
+    },
+
+    // --- write side (cardsWrite lane)
+
+    deleteNotesOn: (cardId) => deleteNotesOn(db, cardId),
+    reachResonance: (uid, cardId) => tryReachResonance(db, uid, cardId),
+    async trashedIds(uid, cutoff, limit) {
+      return (await inTrashBy(db, uid, cutoff).select().limit(limit).get()).docs.map((d) => d.id);
+    },
+    async countTrashed(uid, cutoff) {
+      return (await inTrashBy(db, uid, cutoff).count().get()).data().count;
+    },
+    async *expiredTrash(cutoff, pageSize) {
+      // Paged with startAfter, so a card whose delete keeps failing never holds back the rest.
+      let last: QueryDocumentSnapshot | null = null;
+      for (;;) {
+        let q = db.collection('cards').where('trashedAt', '<=', Timestamp.fromMillis(cutoff.getTime())).orderBy('trashedAt', 'asc').select('authorId', 'trashedAt').limit(pageSize);
+        if (last) q = q.startAfter(last);
+        const page = await q.get();
+        if (page.empty) return;
+        last = page.docs[page.size - 1];
+        yield page.docs.map((d) => ({ id: d.id, authorId: d.get('authorId') }));
+        if (page.size < pageSize) return;
+      }
     },
   };
 }
