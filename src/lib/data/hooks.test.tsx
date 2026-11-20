@@ -109,7 +109,6 @@ import {
   useRecommendedFeed,
   useRelated,
   resetSharedCardDetails,
-  useResonators,
   useUnreadMessages,
   type CardBoxShelf,
 } from './hooks';
@@ -1011,34 +1010,6 @@ describe('profile hooks', () => {
   });
 });
 
-describe('useResonators', () => {
-  it('fetches resonators for the given card, including incoming cards and parent cards', async () => {
-    vi.mocked(getResonanceCards).mockResolvedValue([
-      card('c2', 'a2'),
-      card('c3', 'a3'),
-    ]);
-    vi.mocked(getUsersByIds).mockResolvedValue({
-      a2: user('a2'),
-      a3: user('a3'),
-    });
-
-    vi.mocked(getCardById).mockImplementation(async (id) => {
-      if (id === 'c0') return card('c0', 'a0');
-      return null;
-    });
-    vi.mocked(getUserById).mockImplementation(async (id) => {
-      if (id === 'a0') return user('a0');
-      return null;
-    });
-
-    const { result } = renderHook(() => useResonators('c1', 'c0'), { wrapper });
-    await waitFor(() => expect(result.current.data).toBeDefined());
-
-    const list = result.current.data!;
-    expect(list.map((u) => u.id)).toEqual(['a0', 'a2', 'a3']);
-  });
-});
-
 // The app-wide SWR defaults (SWRProvider): coming back to the tab doesn't
 // re-run every fetcher on the page — only what must stay live does.
 describe('revalidation on tab focus', () => {
@@ -1065,7 +1036,8 @@ describe('revalidation on tab focus', () => {
     expect(callApi).toHaveBeenCalledTimes(1);
   });
 
-  it("still refreshes the viewer's connections and block list (the conversations themselves are live)", async () => {
+  // W21: the connections are mutated by what changes them here, and a new one comes as a conversation.
+  it("still refreshes the block list, but neither the connections nor the conversations (live)", async () => {
     vi.mocked(listenConversations).mockImplementation((_uid, emit) => {
       emit([]);
       return () => {};
@@ -1080,8 +1052,8 @@ describe('revalidation on tab focus', () => {
     vi.mocked(getMyBlockedIds).mockClear();
 
     await focusTab();
-    await waitFor(() => expect(listMyConnectionUids).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(getMyBlockedIds).toHaveBeenCalled());
+    expect(listMyConnectionUids).not.toHaveBeenCalled();
     expect(listenConversations).toHaveBeenCalledTimes(1);
   });
 });
@@ -1412,6 +1384,19 @@ describe('useBellExtras', () => {
     // Gone: no card; a deleted account: no person — the rows fall back, nothing throws.
     expect(result.current!.cards.gone).toBeUndefined();
     expect(result.current!.people.u2).toBeUndefined();
+  });
+
+  // W21: a new notification asks for its own card, not the twenty already shown.
+  it('asks only for the cards a new row brings', async () => {
+    vi.mocked(getUsersByIds).mockResolvedValue({});
+    api({ '/api/v1/cards?keys=': (path: string) => ({ cards: new URL(path, 'http://x').searchParams.get('keys')!.split(',').map((k) => summary(k, 'me')) }) });
+    const first = [bell('n1', { cardId: 'c1' }), bell('n2', { cardId: 'c2' })];
+    const { result, rerender } = renderHook(({ items }) => useBellExtras(items), { wrapper, initialProps: { items: first } });
+    await waitFor(() => expect(result.current?.cards.c2).toBeDefined());
+    rerender({ items: [bell('n3', { cardId: 'c3' }), ...first] });
+    await waitFor(() => expect(result.current?.cards.c3).toBeDefined());
+    expect(Object.keys(result.current!.cards).sort()).toEqual(['c1', 'c2', 'c3']);
+    expect(vi.mocked(callApi).mock.calls.map(([p]) => p)).toEqual(['/api/v1/cards?keys=c1,c2', '/api/v1/cards?keys=c3']);
   });
 
   it('keeps the people when the cards fail, and asks nothing with nothing to show', async () => {

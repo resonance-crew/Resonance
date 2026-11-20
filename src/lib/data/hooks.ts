@@ -749,43 +749,6 @@ export function useMyResonance(cardId: string | undefined) {
 }
 
 /**
- * The people who resonated with a card, newest first — derived from the public
- * resonance cards. Author-only surface, so the caller gates this on
- * `viewer.id === authorId` by passing `undefined` otherwise.
- */
-export function useResonators(cardId: string | undefined, referenceCardId?: string) {
-  return useSWR<User[]>(cardId ? `resonators:${cardId}:${referenceCardId ?? 'none'}` : null, async () => {
-    const cards = await getResonanceCards(cardId!);
-    const authors = await getUsersByIds(bylineAuthorIds(cards, undefined));
-    // One avatar per unique resonator, in card (newest-first) order.
-    const seen = new Set<string>();
-    const out: User[] = [];
-
-    // If there is a referenced card, add its author first (parent card is older/source)
-    if (referenceCardId) {
-      const refCard = await getCardById(referenceCardId);
-      if (refCard && !refCard.anonymous) {
-        const refAuthor = await getUserById(refCard.authorId);
-        if (refAuthor) {
-          seen.add(refAuthor.id);
-          out.push(refAuthor);
-        }
-      }
-    }
-
-    for (const c of cards) {
-      // An anonymous resonance card must not put a face in the avatar row.
-      if (c.anonymous) continue;
-      if (seen.has(c.authorId)) continue;
-      seen.add(c.authorId);
-      const u = authors[c.authorId];
-      if (u) out.push(u);
-    }
-    return out;
-  });
-}
-
-/**
  * Cards a page already has for the embeds it draws (see useCardEmbed):
  * `loading` while they are on their way.
  */
@@ -1098,9 +1061,8 @@ export function useUnreadMessages(): number {
 /**
  * The signed-in viewer's conversation list plus connected people they haven't
  * talked to yet: the live list (shared with the header's badge), the people in
- * it from the page-wide profile cache, and the viewer's connections — read
- * again when they come back to the tab (`conversations:{uid}`; mutate it after
- * a block or a delete).
+ * it from the page-wide profile cache, and the viewer's connections
+ * (`conversations:{uid}`; mutate it after a block or a delete).
  */
 export function useConversations(): { data: ConversationsData | undefined; error: unknown } {
   useLeavingConversations();
@@ -1108,7 +1070,10 @@ export function useConversations(): { data: ConversationsData | undefined; error
   const uid = user && !loading ? user.id : null;
   const live = useLiveConversations();
   const { data: blocked } = useMyBlockedIds();
-  const connections = useSWR<string[]>(uid ? `conversations:${uid}` : null, () => listMyConnectionUids(), LIVE_ON_FOCUS);
+  // Not read again on coming back to the tab (W21): what changes them here — a block, a resonance taken back,
+  // a delete — mutates this key (dependsOnConnections), and a new connection is a new conversation in the live
+  // list, which this joins.
+  const connections = useSWR<string[]>(uid ? `conversations:${uid}` : null, () => listMyConnectionUids());
   const conversations = visibleConversations(live.data, blocked);
   const otherUids = conversations?.map((c) => c.participants.find((p) => p !== uid) ?? '');
   const ids =
@@ -1170,14 +1135,29 @@ export function useBellExtras(items: Notification[] | undefined): BellExtras | u
   const from = idsOf((n) => n.payload.fromUserId ?? (Array.isArray(n.payload.fromUserIds) ? n.payload.fromUserIds[0] : undefined));
   const cardIds = idsOf((n) => n.payload.cardId);
   const key = uid && (from.length || cardIds.length) ? `bell-extras:${uid}:${from.join(',')}|${cardIds.join(',')}` : null;
+  // The cards already answered for, by id (null: the viewer can't read it): a new row asks only for its own
+  // card (W21), not the twenty again. For this viewer, for as long as the bell is drawn.
+  const knownCards = useRef<{ uid: string | null; cards: Map<string, Card | null> }>({ uid, cards: new Map() });
+  if (knownCards.current.uid !== uid) knownCards.current = { uid, cards: new Map() };
   const { data } = useSWR<BellExtras>(
     key,
     async () => {
-      const [people, cards] = await Promise.all([
+      const known = knownCards.current.cards;
+      const newIds = cardIds.filter((id) => !known.has(id));
+      const [people, read] = await Promise.all([
         from.length ? getUsersByIds(from).catch(() => ({})) : {},
-        cardIds.length ? fetchCardSummaries(cardIds).catch(() => EMPTY) : EMPTY,
+        newIds.length ? fetchCardSummaries(newIds).catch(() => null) : EMPTY,
       ]);
-      return { people, cards: Object.fromEntries(cards.cards.map((c) => [c.id, c])) };
+      if (read) {
+        for (const id of newIds) known.set(id, null);
+        for (const c of read.cards) known.set(c.id, c);
+      }
+      const cards: Record<string, Card> = {};
+      for (const id of cardIds) {
+        const c = known.get(id);
+        if (c) cards[c.id] = c;
+      }
+      return { people, cards };
     },
     { keepPreviousData: true },
   );
