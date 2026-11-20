@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getAdminDb } from '@/lib/db/firestore/admin';
 import { FeedQuery } from '@/lib/api/v1/schemas';
-import { getFeed } from '@/lib/api/v1/service';
+import { getFeed } from '@/server/app/cardsRead';
+import { serverCtx } from '@/server/ctx';
 
 export const runtime = 'nodejs';
 
@@ -19,5 +19,5 @@ export async function GET(req: Request) {
   const parsed = FeedQuery.safeParse(Object.fromEntries(new URL(req.url).searchParams));
   if (!parsed.success) return NextResponse.json({ error: 'Bad request' }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
   const { limit, cursor } = parsed.data;
-  return NextResponse.json(await getFeed(getAdminDb(), null, limit, { cursor }), { headers: { 'Cache-Control': LATEST_CACHE } });
+  return NextResponse.json(await getFeed(serverCtx(), null, limit, { cursor }), { headers: { 'Cache-Control': LATEST_CACHE } });
 }

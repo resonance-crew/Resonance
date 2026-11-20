@@ -1,6 +1,6 @@
-import { getAdminDb } from '@/lib/db/firestore/admin';
 import { refreshPoolStatsIn } from '@/server/app/recommendPool';
 import type { AdminDb } from '@/server/infra/firestore/db';
+import { serverCtx } from '@/server/ctx';
 import { ctxFor } from '@/server/infra/firestore/ctx';
 import { recommendData } from '@/server/infra/firestore/repos/recommend';
 import type { StoredPoolStats } from '@/server/ports/repos/recommend';
@@ -19,10 +19,11 @@ export type { StoredPoolStats } from '@/server/ports/repos/recommend';
 
 /** Work the pool's numbers out and keep them (the warm-up cron, daily). */
 export function refreshPoolStats(embedModel: string, opts: { db?: AdminDb; store?: IVectorStore } = {}): Promise<{ cards: number; parts: number }> {
-  return refreshPoolStatsIn(ctxFor(opts.db ?? getAdminDb(), { vectors: opts.store ?? getVectorStore() }), embedModel);
+  const vectors = opts.store ?? getVectorStore();
+  return refreshPoolStatsIn(opts.db ? ctxFor(opts.db, { vectors }) : serverCtx({ vectors }), embedModel);
 }
 
 /** The kept numbers, or null (none yet, another model's, or unreadable). */
-export function readPoolStats(embedModel: string, db: AdminDb = getAdminDb()): Promise<StoredPoolStats | null> {
+export function readPoolStats(embedModel: string, db: AdminDb): Promise<StoredPoolStats | null> {
   return recommendData(db).getPoolStats(embedModel);
 }

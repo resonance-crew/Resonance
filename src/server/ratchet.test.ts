@@ -29,6 +29,23 @@ function importers(): string[] {
     .sort();
 }
 
+// The routes and server code reach the database through serverCtx() (or a
+// legacy facade's ctxFor(db)), never getAdminDb() of their own: every
+// non-test file under src/ outside src/server, src/lib/db/firestore (where
+// it is defined and re-exported) and src/app/api/v1 (its own count) that
+// calls it. Only falls; Phase 1's routes lane left it at 0.
+const MAX_ADMIN_DB_CALLERS = 0;
+const ADMIN_DB_CALL = /\bgetAdminDb\(/;
+const ADMIN_DB_EXEMPT = [join('server') + sep, join('lib', 'db', 'firestore') + sep, join('app', 'api', 'v1') + sep];
+
+function adminDbCallers(): string[] {
+  return sources(ROOT)
+    .map((path) => relative(ROOT, path))
+    .filter((path) => !ADMIN_DB_EXEMPT.some((dir) => path.startsWith(dir)))
+    .filter((path) => ADMIN_DB_CALL.test(readFileSync(join(ROOT, path), 'utf8')))
+    .sort();
+}
+
 describe('the firebase-admin ratchet', () => {
   it(`no more than ${MAX} files outside src/server/infra import firebase-admin`, () => {
     const found = importers();
@@ -38,5 +55,11 @@ describe('the firebase-admin ratchet', () => {
 
   it('src/server outside infra imports none', () => {
     expect(importers().filter((path) => path.startsWith(`server${sep}`))).toEqual([]);
+  });
+
+  it(`no more than ${MAX_ADMIN_DB_CALLERS} files outside src/server, src/lib/db/firestore and src/app/api/v1 call getAdminDb()`, () => {
+    const found = adminDbCallers();
+    expect(found.length, `getAdminDb() is called (use serverCtx()) by:\n${found.join('\n')}`).toBeLessThanOrEqual(MAX_ADMIN_DB_CALLERS);
+    expect(found.length, `only ${found.length} files call getAdminDb() now: lower MAX_ADMIN_DB_CALLERS in src/server/ratchet.test.ts to ${found.length}`).toBe(MAX_ADMIN_DB_CALLERS);
   });
 });

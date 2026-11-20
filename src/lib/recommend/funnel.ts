@@ -1,6 +1,6 @@
-import { getAdminDb } from '@/lib/db/firestore/admin';
 import { recommendFeedIn, type FunnelOptions as AppFunnelOptions, type FunnelResult } from '@/server/app/recommendFeed';
 import type { AdminDb } from '@/server/infra/firestore/db';
+import { serverCtx } from '@/server/ctx';
 import { ctxFor } from '@/server/infra/firestore/ctx';
 import { getVectorStore } from './vectorStore';
 
@@ -19,5 +19,6 @@ export interface FunnelOptions extends AppFunnelOptions {
 
 export function recommendFeed(uid: string, opts: FunnelOptions = {}): Promise<FunnelResult> {
   const { db, ...rest } = opts;
-  return recommendFeedIn(ctxFor(db ?? getAdminDb(), { vectors: getVectorStore() }), uid, rest);
+  const vectors = getVectorStore();
+  return recommendFeedIn(db ? ctxFor(db, { vectors }) : serverCtx({ vectors }), uid, rest);
 }

@@ -8,9 +8,9 @@ const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
 vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
 const limited = vi.fn();
-vi.mock('@/lib/api/rateLimit', () => ({ limited: (...a: unknown[]) => limited(...a) }));
+vi.mock('@/server/infra/firestore/rateLimit', () => ({ firestoreRateLimiter: () => ({ limited: (...a: unknown[]) => limited(...a) }) }));
 let pieces: () => AsyncGenerator<string> = async function* () {};
-vi.mock('@/lib/account/export', () => ({ exportAccountJson: () => pieces() }));
+vi.mock('@/server/app/accountExport', () => ({ exportAccountJsonIn: () => pieces() }));
 
 const { GET } = await import('./route');
 
@@ -32,7 +32,7 @@ describe('GET /api/account/export', () => {
     expect(res.headers.get('content-disposition')).toMatch(/^attachment; filename="resonance-backup-\d{4}-\d{2}-\d{2}\.json"$/);
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(JSON.parse(await res.text())).toEqual({ profile: { handle: 'alice' }, cards: [{ id: 'c1' }] });
-    expect(limited).toHaveBeenCalledWith({}, 'alice', 'export');
+    expect(limited).toHaveBeenCalledWith('alice', 'export');
   });
 
   it('fails as a whole when the backup cannot start, rather than sending a broken file', async () => {

@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { crossOriginCookieWrite } from '@/lib/api/sameOrigin';
 import { getCurrentUser } from '@/lib/auth';
-import { limited } from '@/lib/api/rateLimit';
-import { getAdminDb } from '@/lib/db/firestore/admin';
+import { serverCtx } from '@/server/ctx';
 import { draftUnits, MIN_DRAFT_UNITS, mirrorDraft } from '@/lib/ai/mirror';
 import { mirrorInsight } from '@/lib/ai/tasks';
 import { CARD_LIMITS } from '@/lib/db/firestore/cardContent';
@@ -39,7 +38,7 @@ export async function POST(req: Request) {
   if (draftUnits(thoughtCore, story) < MIN_DRAFT_UNITS) {
     return NextResponse.json({ coreInsight: null });
   }
-  const refused = await limited(getAdminDb(), user.id, 'insight');
+  const refused = await serverCtx().limits.limited(user.id, 'insight');
   if (refused) return refused;
 
   try {

@@ -1,17 +1,10 @@
-import { NextResponse, after } from 'next/server';
-import { revalidateLocalized } from '@/lib/api/revalidate';
+import { NextResponse } from 'next/server';
 import { crossOriginCookieWrite } from '@/lib/api/sameOrigin';
 import { getCurrentUser } from '@/lib/auth';
-import { revokeSessions } from '@/lib/auth/firebase/server';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import {
-  cancelAccountDeletion,
-  getAccountDeletion,
-  holdAnonymousCards,
-  releaseHeldCards,
-  scheduleAccountDeletion,
-  type AccountDeletion,
-} from '@/lib/account/deletion';
+import { DELETION_GRACE_DAYS } from '@/lib/account/constants';
+import { holdAnonymousCardsIn, releaseHeldCardsIn, scheduleAccountDeletionIn } from '@/server/app/account';
+import { serverCtx } from '@/server/ctx';
+import type { AccountDeletion } from '@/server/ports/repos/account';
 
 function unauthorized() {
   return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
@@ -29,7 +22,7 @@ function body(deletion: AccountDeletion | null) {
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return unauthorized();
-  return NextResponse.json(body(await getAccountDeletion(getAdminDb(), user.id)));
+  return NextResponse.json(body(await serverCtx().data.account.getDeletion(user.id)));
 }
 
 /**
@@ -50,12 +43,12 @@ export async function POST(req: Request) {
 
   const user = await getCurrentUser();
   if (!user) return unauthorized();
-  const db = getAdminDb();
-  const deletion = await scheduleAccountDeletion(db, user.id);
+  const ctx = serverCtx();
+  const deletion = await scheduleAccountDeletionIn(ctx, user.id, DELETION_GRACE_DAYS);
   // Its anonymous cards go out of sight now, not beside the profile at the purge (holdAnonymousCards).
-  const stale = await holdAnonymousCards(db, user.id);
-  await revokeSessions(user.id);
-  if (stale.length) after(() => revalidateLocalized(stale));
+  const stale = await holdAnonymousCardsIn(ctx, user.id);
+  await ctx.identity.revokeSessions(user.id);
+  if (stale.length) ctx.later.later(() => ctx.pages.revalidate(stale), 'account/deletion');
   return NextResponse.json(body(deletion));
 }
 
@@ -66,9 +59,9 @@ export async function DELETE(req: Request) {
 
   const user = await getCurrentUser();
   if (!user) return unauthorized();
-  const db = getAdminDb();
-  await cancelAccountDeletion(db, user.id);
-  const stale = await releaseHeldCards(db, user.id);
-  if (stale.length) after(() => revalidateLocalized(stale));
+  const ctx = serverCtx();
+  await ctx.data.account.deleteDeletion(user.id);
+  const stale = await releaseHeldCardsIn(ctx, user.id);
+  if (stale.length) ctx.later.later(() => ctx.pages.revalidate(stale), 'account/deletion');
   return NextResponse.json(body(null));
 }

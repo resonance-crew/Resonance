@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getAdminDb } from '@/lib/db/firestore/admin';
 import { cronAuthorized } from '@/lib/api/cronAuth';
-import { indexOwed } from '@/lib/recommend/indexOwed';
+import { indexOwedIn } from '@/server/app/recommendIndex';
+import { serverCtx } from '@/server/ctx';
 
 export const dynamic = 'force-dynamic';
 // Pinned to hnd1 in vercel.json: the readings call OpenAI, which refuses Hong Kong.
@@ -20,7 +20,7 @@ const START_BUDGET_MS = (maxDuration - 110) * 1000;
 export async function GET(req: Request) {
   if (!cronAuthorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const started = Date.now();
-  const run = await indexOwed(getAdminDb(), { deadline: started + START_BUDGET_MS });
+  const run = await indexOwedIn(serverCtx(), { deadline: started + START_BUDGET_MS });
   console.log('[index-cards]', JSON.stringify(run));
   return NextResponse.json(run);
 }

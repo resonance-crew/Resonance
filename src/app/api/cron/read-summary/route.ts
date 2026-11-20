@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { runReadSummary } from '@/lib/push/readSummary';
+import { runReadSummaryIn } from '@/server/app/pushReadSummary';
+import { serverCtx } from '@/server/ctx';
 import { cronAuthorized } from '@/lib/api/cronAuth';
 
 export const dynamic = 'force-dynamic';
@@ -26,7 +26,7 @@ const HOUR_MS = 3_600_000;
 export async function GET(req: Request) {
   if (!cronAuthorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const started = Date.now();
-  const run = await runReadSummary(getAdminDb(), { now: Math.floor(started / HOUR_MS) * HOUR_MS, deadline: started + SUMMARY_BUDGET_MS });
+  const run = await runReadSummaryIn(serverCtx(), { now: Math.floor(started / HOUR_MS) * HOUR_MS, deadline: started + SUMMARY_BUDGET_MS, clock: Date.now });
   console.log('[read-summary]', JSON.stringify(run));
   return NextResponse.json(run);
 }

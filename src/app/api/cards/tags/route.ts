@@ -1,18 +1,17 @@
 import { NextResponse } from 'next/server';
 import { crossOriginCookieWrite } from '@/lib/api/sameOrigin';
 import { getCurrentUser } from '@/lib/auth';
-import { getAdminDb } from '@/lib/db/firestore/admin';
 import { suggestStoryTags } from '@/lib/ai/tasks';
 import { cardSizedTags, topTags } from '@/lib/ai/tags';
-import { limited } from '@/lib/api/rateLimit';
+import { serverCtx } from '@/server/ctx';
 import { CARD_LIMITS } from '@/lib/db/firestore/cardContent';
 
 export const runtime = 'nodejs';
 
 // How many of the author's cards to sample for tag history, and how many
-// top-frequency tags from them reach the model. Firestore has no server-side
+// top-frequency tags from them reach the model. The store has no server-side
 // aggregation over array fields, so we pull the (projected) tags arrays and
-// rank them here — `select('tags')` keeps the payload to a few bytes per card.
+// rank them here (data.cards.authorTagHistory).
 const HISTORY_CARDS_LIMIT = 200;
 const HISTORY_TAGS_LIMIT = 20;
 /** More of the story than the model is shown (suggestStoryTags cuts it again). */
@@ -45,24 +44,12 @@ export async function POST(req: Request) {
   if (!title.trim() && !story.trim()) {
     return NextResponse.json({ error: 'Nothing to tag' }, { status: 400 });
   }
-  const refused = await limited(getAdminDb(), user.id, 'tags');
+  const ctx = serverCtx();
+  const refused = await ctx.limits.limited(user.id, 'tags');
   if (refused) return refused;
 
-  // Single-field index on authorId suffices — no orderBy, so no composite
-  // index to deploy. Frequency ranking replaces recency ordering.
-  const snap = await getAdminDb()
-    .collection('cards')
-    .where('authorId', '==', user.id)
-    .select('tags')
-    .limit(HISTORY_CARDS_LIMIT)
-    .get();
-  const historyTags = topTags(
-    snap.docs.map((d) => {
-      const tags = d.data().tags as unknown;
-      return Array.isArray(tags) ? tags.filter((t): t is string => typeof t === 'string') : [];
-    }),
-    HISTORY_TAGS_LIMIT,
-  );
+  // Frequency ranking replaces recency ordering.
+  const historyTags = topTags(await ctx.data.cards.authorTagHistory(user.id, HISTORY_CARDS_LIMIT), HISTORY_TAGS_LIMIT);
 
   const tags = await suggestStoryTags({ title, story, existingTags, historyTags });
   return NextResponse.json({ tags });
