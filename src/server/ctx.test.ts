@@ -81,7 +81,8 @@ describe('ctxFor', () => {
 
   it('a port no lane has wired throws NotWiredError on use, never on build', () => {
     const ctx = ctxFor(db);
-    expect(() => ctx.push.send(['t'], { data: {} })).toThrow(NotWiredError);
+    // (push is wired since the push lane: FCM, loaded on the first send — infra/fcm/push.test.ts.)
+    expect(() => ctx.leases.release('k')).toThrow(NotWiredError);
     expect(() => ctx.leases.release('k')).toThrow(/ServerCtx\.leases is not wired/);
   });
 });
