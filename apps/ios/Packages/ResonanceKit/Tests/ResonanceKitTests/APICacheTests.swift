@@ -133,6 +133,24 @@ import Testing
         #expect((try? FileManager.default.contentsOfDirectory(atPath: root.path)) == [APICache.folder("bob")])
     }
 
+    /// The card box's shelf is read off the main thread (audit I7): the same answer, the same rules —
+    /// another account's, or one past its day, is nothing — and a save asked for before it is read first.
+    @Test func aLoadOffTheMainThreadKeepsTheSameRules() async throws {
+        let cache = makeCache()
+        cache.retainOnly("alice")
+        cache.save([try card("p")], as: .published, uid: "alice")
+        #expect(await cache.load(.published, uid: "alice")?.map(\.id) == ["p"])
+        #expect(await cache.load(.published, uid: "bob") == nil)
+        cache.save([try card("q")], as: .published, uid: "alice")
+        #expect(await cache.load(.published, uid: "alice")?.map(\.id) == ["q"])
+        // A broken file is nothing, and is dropped.
+        let file = root.appending(path: APICache.folder("alice")).appending(path: "published.json")
+        try Data("{}".utf8).write(to: file)
+        #expect(await cache.load(.published, uid: "alice") == nil)
+        cache.retainOnly("alice")
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+    }
+
     @Test func aFileThatIsNotAKeptAnswerIsIgnored() throws {
         let cache = makeCache()
         cache.retainOnly("alice")

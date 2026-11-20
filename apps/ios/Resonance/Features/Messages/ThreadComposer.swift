@@ -172,7 +172,7 @@ struct ThreadComposer: View {
                 ComposerRow(label: CardScreen.isPrivate(card) ? L10n.Messages.privateCard : L10n.Messages.attachCardShort,
                             detail: card.title, removeLabel: L10n.Messages.removeCard,
                             onRemove: { model.pendingCard = nil }, onTap: { composing = true }, short: short) {
-                    ComposerRowTile(card.imageUrl.flatMap(URL.init(string:)).map { .cover($0) } ?? .glyph(.cards), side: mark)
+                    ComposerRowTile(card.listCoverURL.map { .cover($0) } ?? .glyph(.cards), side: mark)
                 }
             }
         case .picture:
@@ -234,7 +234,7 @@ private struct ReplyMedia: View {
                     guard !Task.isCancelled, let picture else { return }
                     loaded = ReplyPicture(id: image.id, image: picture)
                 }
-        } else if let cover = model.quotedCard(quote)?.imageUrl.flatMap(URL.init(string:)) {
+        } else if let cover = model.quotedCard(quote)?.listCoverURL {
             ComposerRowTile(.cover(cover), side: side)
         }
     }

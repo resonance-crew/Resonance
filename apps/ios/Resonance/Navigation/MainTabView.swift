@@ -177,6 +177,8 @@ enum TabTap: Equatable {
 struct MainTabView: View {
     @Environment(SessionStore.self) private var session
     @State private var tab: AppTab = .feed
+    /// The tabs chosen so far: their screens are made and kept.
+    @State private var visited: Set<AppTab> = []
     @State private var paths: [AppTab: [Route]] = [:]
     @State private var writer = WriteLauncher()
     /// The window as measured here (never the screen: an iPad window can be any width).
@@ -279,6 +281,7 @@ struct MainTabView: View {
         .environment(barHiding)
         // Another tab, the app back in front, a page over the root and back: the bar is there again.
         .onChange(of: tab) { barHiding.show() }
+        .onChange(of: tab, initial: true) { _, now in visited.insert(now) }
         .onChange(of: bottomBar) { barHiding.show() }
         .onChange(of: scenePhase) { _, phase in if phase == .active { barHiding.show() } }
         #if targetEnvironment(macCatalyst)
@@ -331,7 +334,9 @@ struct MainTabView: View {
 
     private var stacks: some View {
         ZStack(alignment: .bottom) {
-            ForEach(tabs, id: \.self) { t in
+            // A tab's screen is made the first time it is chosen, then kept (audit I3): at launch only the
+            // feed asks the server and shimmers; the others wait for their first visit, and never go.
+            ForEach(tabs.filter { $0 == tab || visited.contains($0) }, id: \.self) { t in
                 NavigationStack(path: path(t)) {
                     root(t)
                         .toolbar(.hidden, for: .navigationBar)
@@ -359,6 +364,7 @@ struct MainTabView: View {
                     }
                 ))
                 .environment(\.isSelectedTab, t == tab)
+                .environment(\.skeletonPaused, t != tab)
                 .environment(\.scrollToTop, toTop[t] ?? 0)
                 // Held to the top of the window, never to the foot the tab bar keeps to: a stack laid out taller
                 // than the room left (a keyboard's band coming and going while another tab had the focus) ran

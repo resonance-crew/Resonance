@@ -168,7 +168,7 @@ public struct HandDrawnAvatar: View {
                     .clipped()
                     .clipShape(shape)
             } else if let imageURL {
-                OrganicAvatarPhoto(url: imageURL).clipShape(shape)
+                OrganicAvatarPhoto(url: imageURL, side: size).clipShape(shape)
             }
         }
         .frame(width: size, height: size)
@@ -206,7 +206,7 @@ public struct HandDrawnThumb: View {
         let shape = Self.shape(size: size, seed: seed)
         ZStack {
             shape.fill(fill)
-            if let url { OrganicAvatarPhoto(url: url).clipShape(shape) }
+            if let url { OrganicAvatarPhoto(url: url, side: size).clipShape(shape) }
             if chosen {
                 ZStack {
                     shape.fill(Tokens.terracotta.opacity(0.82))
@@ -487,7 +487,8 @@ public struct SketchLoader: View {
                 // two-lap loop drawn once as a calm double ring.
                 path.stroke(color.opacity(0.7), style: StrokeStyle(lineWidth: size * 0.036, lineCap: .round, lineJoin: .round))
             } else {
-                TimelineView(.animation) { timeline in
+                // 60 frames a second (audit I4): a pen's slow lap, not worth ProMotion's 120.
+                TimelineView(.animation(minimumInterval: 1.0 / 60)) { timeline in
                     let t = timeline.date.timeIntervalSinceReferenceDate / loopSeconds
                     ZStack {
                         ForEach(links.indices, id: \.self) { k in
@@ -556,7 +557,8 @@ public struct ButtonLoader: View {
                         withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) { breathing = true }
                     }
             } else {
-                TimelineView(.animation) { timeline in
+                // 60 frames a second (audit I4): a pen's slow lap, not worth ProMotion's 120.
+                TimelineView(.animation(minimumInterval: 1.0 / 60)) { timeline in
                     let t = timeline.date.timeIntervalSinceReferenceDate / Self.trip
                     ZStack {
                         ForEach(Self.links.indices, id: \.self) { k in

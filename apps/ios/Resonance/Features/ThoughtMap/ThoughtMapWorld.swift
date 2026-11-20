@@ -103,26 +103,26 @@ struct MapUnderLayer: View {
         let edges = store.edgeOrder.compactMap { store.edges[$0] }
         let selection = store.selection
         let hot = store.dragNodeId.flatMap { store.nodes[$0]?.groupId }
-        let geometries = edges.map { ($0, store.edgeGeometry($0)) }
+        // Finished paths from the store (audit I6): a camera frame strokes them, nothing more.
+        let arrows = edges.map { ($0, store.edgePaths($0)) }
+        let regions = groups.map { store.regionPath($0, make: regionPath) }
+        let plain = Palette.mix(.textMuted, 0.75, .text)
         Canvas { ctx, _ in
             ctx.concatenate(worldTransform(cam))
-            for g in groups {
-                let path = regionPath(g)
+            for (g, path) in zip(groups, regions) {
                 let isHot = hot == g.id
                 let strong = isHot || selection == .group(g.id)
                 ctx.fill(path, with: .color(Palette.hue(.group, g.hue, alpha: isHot ? 0.92 : 0.78)))
                 ctx.stroke(path, with: .color(strong ? Palette.hue(.groupPenHot, g.hue) : Palette.hue(.groupPen, g.hue)),
                            style: StrokeStyle(lineWidth: strong ? Tokens.inkStrong : Tokens.inkLight, lineJoin: .round))
             }
-            for (edge, geo) in geometries {
-                guard let geo else { continue }
+            for (edge, paths) in arrows {
+                guard let paths else { continue }
                 let selected = selection == .edge(edge.id)
-                let color = selected ? Tokens.text : Palette.mix(.textMuted, 0.75, .text)
+                let color = selected ? Tokens.text : plain
                 let style = StrokeStyle(lineWidth: selected ? Tokens.inkStrong : Tokens.ink, lineCap: .round)
-                ctx.stroke(cgPath(geo.path), with: .color(color), style: style)
-                let seed = Double(seedFromString(edge.id)) + 7
-                ctx.stroke(cgPath(arrowHeadPath(tip: (geo.end.x, geo.end.y), angle: geo.endAngle, size: 13, seed: seed)),
-                           with: .color(color), style: style)
+                ctx.stroke(paths.line, with: .color(color), style: style)
+                ctx.stroke(paths.head, with: .color(color), style: style)
             }
         }
     }
@@ -146,6 +146,7 @@ struct MapOverLayer: View {
             store.nodeOrder.filter { $0 != d.sourceId }.compactMap(store.nodeRect).filter { rectContains(inflateRect($0, 90), (d.wx, d.wy)) }
         } ?? []
         let targetRect = target.flatMap(store.nodeRect)
+        let regions = groups.map { store.regionPath($0, make: regionPath) }
         Canvas { ctx, _ in
             ctx.concatenate(worldTransform(cam))
             if let draft, let source {
@@ -167,9 +168,9 @@ struct MapOverLayer: View {
                     }
                 }
             }
-            for g in groups {
+            for (g, path) in zip(groups, regions) {
                 let strong = hot == g.id || selection == .group(g.id)
-                ctx.stroke(regionPath(g), with: .color(strong ? Palette.hue(.groupPenHot, g.hue) : Palette.hue(.groupPen, g.hue)),
+                ctx.stroke(path, with: .color(strong ? Palette.hue(.groupPenHot, g.hue) : Palette.hue(.groupPen, g.hue)),
                            style: StrokeStyle(lineWidth: strong ? Tokens.inkStrong : Tokens.inkLight, lineJoin: .round))
             }
         }

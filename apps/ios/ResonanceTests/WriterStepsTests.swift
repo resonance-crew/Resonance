@@ -1014,6 +1014,29 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(told.count == 2)
     }
 
+    /// A picture pasted into the story (audit X6): the island says so and lets it go; the pasteboard's picture is
+    /// uploaded as a picked photo is, with the same toast when there is none to read.
+    @Test func aPastedPictureIsUploadedAsAPickedOneIs() async {
+        let model = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card())
+        var told: [String] = []
+        var uploaded: [String] = []
+        model.tell = { told.append($0) }
+        model.upload = { _, name in
+            uploaded.append(name)
+            return URL(string: "https://img.example.test/p.webp")!
+        }
+        let photo = photo
+        model.pasteboardImage = { photo }
+        model.editor.handle("pasteImage", ["type": "pasteImage"])
+        #expect(await eventually { uploaded == ["pasted.jpg"] })
+        #expect(told.isEmpty)
+        // Nothing on the pasteboard to read: said, nothing uploaded.
+        model.pasteboardImage = { nil }
+        await model.pasteImage()
+        #expect(told == [L10n.Write.Editor.imageUnsupported])
+        #expect(uploaded == ["pasted.jpg"])
+    }
+
     @Test func aCoversTroubleStaysOnThePictureUntilTheNextCoverAction() async {
         let model = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card())
         var told: [String] = []

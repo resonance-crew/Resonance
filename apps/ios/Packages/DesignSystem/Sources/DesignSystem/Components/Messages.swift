@@ -354,7 +354,8 @@ private struct BubblePicture: View {
             .aspectRatio(1.91, contentMode: .fit)
             .background(Tokens.text.opacity(0.06))
             .overlay {
-                LazyImage(url: url) { state in
+                // At most a bubble's 520 pt across at 3× (audit I2): never the whole picture's bitmap.
+                LazyImage(request: ImageSizeBuckets.request(url, box: CGSize(width: 1560, height: 1560 / 1.91))) { state in
                     if let image = state.image {
                         // A shared card's cover on its frame (round 25 §G1); a link's picture has none.
                         FramedCover(image, pictureSize: state.imageContainer?.image.size)
@@ -1494,7 +1495,7 @@ public struct ComposerRowTile: View {
                 }
             case let .cover(url):
                 Self.tonal.overlay {
-                    LazyImage(url: url) { state in
+                    LazyImage(request: ImageSizeBuckets.request(url, square: side)) { state in
                         if let image = state.image { image.resizable().scaledToFill() }
                     }
                 }

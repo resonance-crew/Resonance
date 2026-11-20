@@ -881,7 +881,7 @@ extension SharedCardSection {
         self.init(
             byline: .of(card),
             readTime: L10n.App.readMinutes(count: card.readMinutes),
-            title: card.title, excerpt: card.excerpt, imageURL: card.imageUrl.flatMap(URL.init(string:)),
+            title: card.title, excerpt: card.excerpt, imageURL: card.listCoverURL,
             accentHue: card.accentHue, source: Self.source(card), onOpen: onOpen)
         coverFrame = card.coverFraming
     }

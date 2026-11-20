@@ -126,13 +126,18 @@ public final class APIFreshness: Sendable {
 
 /// Sends `Cache-Control: no-cache` on a GET that `APIFreshness` says must go
 /// to the server, and marks every URL stale after a write that succeeded —
-/// except the push registration, which changes nothing anyone reads. A chat
+/// except the push registration and a reader's own traces (a read counted, a
+/// reading report, a translation asked for), which change nothing the viewer
+/// reads: one card opened no longer makes the feed, the box and the profile
+/// ask again (audit I5). A chat
 /// picture is never asked for again: its bytes never change (and the account's
 /// cache keeps it a year), so the viewer's writes leave it as it is.
 public struct FreshnessMiddleware: ClientMiddleware {
     let freshness: APIFreshness
     /// Writes that leave every read as it was.
-    static let unchanging: Set<String> = ["registerDevice", "unregisterDevice"]
+    static let unchanging: Set<String> = [
+        "registerDevice", "unregisterDevice", "countCardRead", "reportCardReading", "translateCard",
+    ]
     /// Reads whose answer never changes: no write makes them stale.
     static let immutable: Set<String> = ["getChatImage"]
     /// The header that opts in to the server's `max-age` (src/lib/api/v1/cache.ts).

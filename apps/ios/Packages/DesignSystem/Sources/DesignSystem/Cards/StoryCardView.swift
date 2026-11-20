@@ -14,6 +14,8 @@ public struct StoryCardContent: Sendable, Identifiable {
     public var readTime: String
     public var tags: [String]
     public var imageURL: URL?
+    /// Asked for when `imageURL` (a list's smaller cover) fails: the cover itself.
+    public var imageFallbackURL: URL? = nil
     public var imageLabel: String
     public var accentHue: Double?
     /// The recommender's margin note (「因為…」), if any.
@@ -113,7 +115,7 @@ public struct StoryCardView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             ZStack {
-                OrganicImage(url: content.imageURL, seed: seed + 5, grain: StoryGrain.cover) {
+                OrganicImage(url: content.imageURL, fallback: content.imageFallbackURL, seed: seed + 5, grain: StoryGrain.cover) {
                     StoryImagePlaceholder(fill: palette.fill, stripe: palette.stripe, label: content.imageLabel)
                 }
                 .accessibilityHidden(true)
@@ -378,6 +380,8 @@ public struct MiniStoryCardContent: Sendable, Identifiable {
     public var authorImageURL: URL?
     public var avatarSeed: Double
     public var imageURL: URL?
+    /// Asked for when `imageURL` (a list's smaller cover) fails: the cover itself.
+    public var imageFallbackURL: URL? = nil
     public var accentHue: Double?
 
     public init(id: String, title: String, authorName: String, authorInitials: String, authorImageURL: URL?,
@@ -416,7 +420,7 @@ public struct MiniStoryCardView: View {
         // another person's colour fought it (the owner, 2026-10-29). The profile and the thread keep theirs.
         let accent = palette.accent
         VStack(alignment: .leading, spacing: 12) {
-            OrganicImage(url: content.imageURL, seed: seed + 5, grain: StoryGrain.cover, fill: accent)
+            OrganicImage(url: content.imageURL, fallback: content.imageFallbackURL, seed: seed + 5, grain: StoryGrain.cover, fill: accent)
                 .aspectRatio(1 / 0.56, contentMode: .fit)
                 .accessibilityHidden(true)
             CSSText(content.title, font: AppFonts.scaledUIFont(.heading, size: 17, weight: .bold), lineHeight: 1.3)

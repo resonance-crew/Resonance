@@ -48,17 +48,39 @@ public final class APICache: Sendable {
 
     /// What was kept for `uid`, if it's still good: the same account, the
     /// same format, not past `maxAge` and, for a daily key, today in UTC.
+    ///
+    /// At once, on the caller's thread — for what a first frame draws (the feed's kept page, the account,
+    /// the block list), where waiting a hop would show a skeleton for a moment. Only the bytes are read
+    /// in turn with the saves; the decode runs outside, so a reader holds no one else up while it decodes
+    /// (audit I7). Anything not drawn on the first frame asks with `load`.
     public func value<Value>(_ key: Key<Value>, uid: String) -> Value? {
-        queue.sync {
-            let file = self.file(key.name, uid: uid)
-            guard let data = try? Data(contentsOf: file) else { return nil }
-            guard let kept = try? JSONDecoder().decode(Envelope<Value>.self, from: data), kept.format == Self.format,
-                  kept.uid == uid, isGood(kept, daily: key.daily) else {
-                try? FileManager.default.removeItem(at: file)
-                return nil
-            }
-            return kept.value
+        let file = self.file(key.name, uid: uid)
+        guard let data = queue.sync(execute: { try? Data(contentsOf: file) }) else { return nil }
+        return decode(data, key, uid: uid, file: file)
+    }
+
+    /// The same, read and decoded off the caller's thread: for a screen that isn't the first frame (the
+    /// card box's shelf), which shouldn't spend the main thread on it.
+    public func load<Value>(_ key: Key<Value>, uid: String) async -> Value? {
+        let file = self.file(key.name, uid: uid)
+        let data: Data? = await withCheckedContinuation { done in
+            queue.async { done.resume(returning: try? Data(contentsOf: file)) }
         }
+        guard let data else { return nil }
+        return await Task.detached(priority: .userInitiated) { self.decode(data, key, uid: uid, file: file) }.value
+    }
+
+    private func decode<Value>(_ data: Data, _ key: Key<Value>, uid: String, file: URL) -> Value? {
+        guard let kept = try? JSONDecoder().decode(Envelope<Value>.self, from: data), kept.format == Self.format,
+              kept.uid == uid, isGood(kept, daily: key.daily) else {
+            // Dropped in turn with the saves — unless one has written it again since it was read.
+            queue.async {
+                guard (try? Data(contentsOf: file)) == data else { return }
+                try? FileManager.default.removeItem(at: file)
+            }
+            return nil
+        }
+        return kept.value
     }
 
     /// Keeps `value` for `uid` — unless `uid` is no longer the account being

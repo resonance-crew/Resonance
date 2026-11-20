@@ -15,11 +15,18 @@ public struct OrganicImage<Placeholder: View>: View {
     let radius: Double
     let grain: Double
     let placeholder: Placeholder
+    /// Asked for when `url` fails: a list's smaller cover (`imageThumbUrl`) falls back to the cover itself.
+    let fallback: URL?
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.coverFraming) private var framing
+    @State private var failed: URL?
 
     /// `grain` is the web's GrainOverlay opacity laid over the picture (the
     /// story cards' paper texture, StoryGrain.cover); 0 draws none.
-    public init(url: URL?, seed: Double, radius: Double = 18, grain: Double = 0, @ViewBuilder placeholder: () -> Placeholder) {
+    public init(url: URL?, fallback: URL? = nil, seed: Double, radius: Double = 18, grain: Double = 0,
+                @ViewBuilder placeholder: () -> Placeholder) {
         self.url = url
+        self.fallback = fallback
         self.seed = seed
         self.radius = radius
         self.grain = grain
@@ -30,9 +37,11 @@ public struct OrganicImage<Placeholder: View>: View {
         GeometryReader { geo in
             let w = geo.size.width, h = geo.size.height
             let bleed = organicImageBleed(w, h)
+            let shown = failed != nil && failed == url && fallback != url ? fallback : url
             ZStack {
-                if let url {
-                    LazyImage(url: url) { state in
+                if let shown {
+                    let box = CGSize(width: (w + bleed * 2) * displayScale, height: (h + bleed * 2) * displayScale)
+                    LazyImage(request: ImageSizeBuckets.request(shown, box: box, zoom: framing?.zoom ?? 1)) { state in
                         if let image = state.image {
                             ZStack {
                                 placeholder
@@ -40,7 +49,11 @@ public struct OrganicImage<Placeholder: View>: View {
                                 FramedCover(image, pictureSize: state.imageContainer?.image.size)
                             }
                         } else if state.error != nil {
-                            placeholder
+                            if shown == url, let fallback, fallback != url {
+                                SkeletonBlock(height: nil, radius: 0).onAppear { failed = url }
+                            } else {
+                                placeholder
+                            }
                         } else {
                             SkeletonBlock(height: nil, radius: 0)
                         }
@@ -57,6 +70,41 @@ public struct OrganicImage<Placeholder: View>: View {
             .clipShape(OrganicImageShape(seed: seed, radius: radius, bleed: bleed))
             .offset(x: -bleed, y: -bleed)
         }
+    }
+}
+
+/// The few longer sides (pixels) a list's pictures are decoded at: the next one up from what is shown.
+public nonisolated enum ImageSizeBuckets {
+    static let sides: [CGFloat] = [128, 256, 384, 512, 768, 1024, 1280, 1600, 2048, 2560]
+
+    public static func bucket(_ side: CGFloat) -> CGFloat {
+        sides.first { $0 >= side } ?? (side / 512).rounded(.up) * 512
+    }
+
+    /// The picture at `url` decoded as an ImageIO thumbnail just large enough to fill `box` (pixels; ×
+    /// a cover frame's `zoom`, which shows a smaller part of it) — never the whole 2048 px bitmap for a
+    /// card a third as wide, nor a cover for a 40 pt thumb (audit I2). The longer side is rounded up to
+    /// one of `sides`, so a feed's pictures share a handful of memory-cache keys; the URL, and so the
+    /// disk cache the prefetch fills, stays the same. Nothing laid out yet (an empty box): as it is.
+    public static func request(_ url: URL, box: CGSize, zoom: Double = 1) -> ImageRequest {
+        var request = ImageRequest(url: url)
+        guard let size = decodeSize(box: box, zoom: zoom) else { return request }
+        request.thumbnail = ImageRequest.ThumbnailOptions(size: size, unit: .pixels, contentMode: .aspectFill)
+        return request
+    }
+
+    /// The box (pixels) a picture shown in `box` is decoded to fill: its longer side the bucket above
+    /// what is shown (× the frame's zoom). Nil for a box not laid out yet.
+    public static func decodeSize(box: CGSize, zoom: Double = 1) -> CGSize? {
+        let longer = max(box.width, box.height)
+        guard box.width > 0, box.height > 0, longer.isFinite else { return nil }
+        let factor = bucket(longer * max(1, min(zoom, 2))) / longer
+        return CGSize(width: (box.width * factor).rounded(.up), height: (box.height * factor).rounded(.up))
+    }
+
+    /// The same for a square `side` points across, at 3× (an avatar, a 40 pt thumb).
+    public static func request(_ url: URL, square side: CGFloat) -> ImageRequest {
+        request(url, box: CGSize(width: side * 3, height: side * 3))
     }
 }
 
@@ -93,8 +141,8 @@ public nonisolated struct OrganicImageShape: Shape {
 }
 
 extension OrganicImage where Placeholder == Color {
-    public init(url: URL?, seed: Double, radius: Double = 18, grain: Double = 0, fill: Color) {
-        self.init(url: url, seed: seed, radius: radius, grain: grain) { fill }
+    public init(url: URL?, fallback: URL? = nil, seed: Double, radius: Double = 18, grain: Double = 0, fill: Color) {
+        self.init(url: url, fallback: fallback, seed: seed, radius: radius, grain: grain) { fill }
     }
 }
 
@@ -125,7 +173,8 @@ public struct RemoteImage: View {
     }
 
     public var body: some View {
-        LazyImage(request: ImageRequest(url: url, processors: [.resize(size: pixelSize, unit: .pixels, contentMode: .aspectFill)])) { state in
+        // An ImageIO thumbnail (audit I2): the whole cover is never decoded first, then shrunk.
+        LazyImage(request: ImageSizeBuckets.request(url, box: pixelSize)) { state in
             // On the cover's frame when it has one (round 25 §G1): the decoded thumbnail keeps the picture's proportions.
             if let image = state.image { FramedCover(image, pictureSize: state.imageContainer?.image.size) }
         }

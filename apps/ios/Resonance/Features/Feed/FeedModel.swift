@@ -32,16 +32,16 @@ final class FeedModel {
 
     private(set) var phase: Phase = .idle
     /// Today's picks on screen, heading the feed.
-    private(set) var recommended: [FeedCard] = []
-    private(set) var latest: [FeedCard] = []
-    private(set) var showLatest = false
+    private(set) var recommended: [FeedCard] = [] { didSet { revision &+= 1 } }
+    private(set) var latest: [FeedCard] = [] { didSet { revision &+= 1 } }
+    private(set) var showLatest = false { didSet { revision &+= 1 } }
     /// 「顯示更多」 was tapped before the page it shows was here: the button's pen loader, taps ignored,
     /// until the page comes (and shows at once) or its fetch fails.
     private(set) var isLoadingMore = false
     /// The picks heading the feed came after the latest cards were showing, and were put on top of
     /// them: a grid keeps them in rows of their own (`leadingPicks` of `cards`), so the cards already
     /// there keep their columns.
-    private(set) var picksOnTop = false
+    private(set) var picksOnTop = false { didSet { revision &+= 1 } }
     /// How many times picks came once the latest cards were showing and went on top of them with
     /// something new to read there (round 7 §2): a reader scrolled down hears of them (今天的推薦來了 ·
     /// 往上看), since the screen keeps their place and the picks land out of sight above it.
@@ -104,12 +104,27 @@ final class FeedModel {
     /// first) push their twins out of the latest cards; picks put on top of the latest cards leave
     /// those as they are and drop the ones already among them, so nothing the reader has in front of
     /// them moves or goes.
+    ///
+    /// Worked out once for each change of what it is made of and of the block list (audit I12): the
+    /// screen asks for it several times a body.
     var cards: [FeedCard] {
-        if picksOnTop { return visible(shownPicks + latest) }
-        let picks = Set(recommended.map(\.id))
-        let rest = latest.filter { !picks.contains($0.id) }
-        return visible(latestVisible ? recommended + rest : recommended)
+        let blocked = blocked()
+        if let memo = cardsMemo, memo.revision == revision, memo.blocked == blocked { return memo.cards }
+        let cards: [FeedCard]
+        if picksOnTop {
+            cards = visible(shownPicks + latest, blocked: blocked)
+        } else {
+            let picks = Set(recommended.map(\.id))
+            let rest = latest.filter { !picks.contains($0.id) }
+            cards = visible(latestVisible ? recommended + rest : recommended, blocked: blocked)
+        }
+        cardsMemo = (revision, blocked, cards)
+        return cards
     }
+
+    /// Bumped by every change to what `cards` is made of (observed, so a view reading `cards` is told).
+    private var revision = 0
+    @ObservationIgnored private var cardsMemo: (revision: Int, blocked: Set<String>, cards: [FeedCard])?
 
     /// With no picks there is nothing to hold back: the latest cards show at once.
     var latestVisible: Bool { recommended.isEmpty || showLatest }
@@ -512,7 +527,10 @@ final class FeedModel {
 
     /// Cards by people the reader has blocked never show, whenever they were kept.
     private func visible(_ cards: [FeedCard]) -> [FeedCard] {
-        let blocked = blocked()
+        visible(cards, blocked: blocked())
+    }
+
+    private func visible(_ cards: [FeedCard], blocked: Set<String>) -> [FeedCard] {
         guard !blocked.isEmpty else { return cards }
         return cards.filter { card in card.author.map { !blocked.contains($0.value1.id) } ?? true }
     }

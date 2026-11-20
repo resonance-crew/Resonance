@@ -13,6 +13,7 @@ struct NotificationsScreen: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.openRoute) private var openRoute
     @Environment(\.window) private var window
+    @Environment(\.isSelectedTab) private var onSelectedTab
 
     var body: some View {
         let store = session.notifications
@@ -31,7 +32,8 @@ struct NotificationsScreen: View {
             } else {
                 let extras = store.extras(reading: session.reading)
                 // The times move on by themselves (剛剛 → 1 分鐘前), and a row passes from 今天 to 這週 at midnight.
-                TimelineView(.everyMinute) { timeline in
+                // Only while the tab is shown (audit I12): a tab out of sight moves on when it is chosen again.
+                TimelineView(MinutesWhileShown(shown: onSelectedTab)) { timeline in
                     list(store.items, extras: extras, now: timeline.date)
                 }
                 // Who they are and the cards they are about: asked for once each time the screen shows, for
@@ -179,6 +181,16 @@ struct NotificationsScreen: View {
 /// The bell's parts and its rows' times (the web's bellTime.ts): newest first, the viewer's today, the
 /// six calendar days before it, and everything older — by the viewer's own calendar days, so yesterday
 /// 23:59 is a day before today 00:01.
+/// Every minute on the minute while `shown`; otherwise the one moment it was asked from, and no more.
+nonisolated struct MinutesWhileShown: TimelineSchedule {
+    let shown: Bool
+
+    func entries(from startDate: Date, mode: TimelineScheduleMode) -> AnyIterator<Date> {
+        guard shown else { return AnyIterator([startDate].makeIterator()) }
+        return AnyIterator(EveryMinuteTimelineSchedule().entries(from: startDate, mode: mode))
+    }
+}
+
 nonisolated enum BellTime {
     enum Group: Equatable, Hashable {
         case today, thisWeek, earlier
@@ -242,11 +254,14 @@ nonisolated enum BellTime {
     static func when(_ at: Date, now: Date, locale: Locale = Strings.shared.locale, justNow: String = L10n.App.Notifications.justNow,
                      calendar: Calendar = .current) -> String {
         let days = calendarDays(at, now: now, calendar: calendar)
-        let relative = RelativeDateTimeFormatter()
-        relative.locale = locale
-        relative.calendar = calendar
-        relative.unitsStyle = .short
-        relative.dateTimeStyle = .named
+        let relative: RelativeDateTimeFormatter = formatter("relative", locale, calendar) {
+            let relative = RelativeDateTimeFormatter()
+            relative.locale = locale
+            relative.calendar = calendar
+            relative.unitsStyle = .short
+            relative.dateTimeStyle = .named
+            return relative
+        }
         if days <= 0 {
             let minutes = max(0, Int(now.timeIntervalSince(at) / 60))
             if minutes < 1 { return justNow }
@@ -255,13 +270,33 @@ nonisolated enum BellTime {
         }
         if days < 7 { return relative.localizedString(from: DateComponents(day: -days)) }
         let sameYear = calendar.component(.year, from: at) == calendar.component(.year, from: now)
-        let format = DateFormatter()
-        format.locale = locale
-        format.calendar = calendar
-        format.timeZone = calendar.timeZone
-        format.setLocalizedDateFormatFromTemplate(sameYear ? "Md" : "yMd")
+        let template = sameYear ? "Md" : "yMd"
+        let format: DateFormatter = formatter(template, locale, calendar) {
+            let format = DateFormatter()
+            format.locale = locale
+            format.calendar = calendar
+            format.timeZone = calendar.timeZone
+            format.setLocalizedDateFormatFromTemplate(template)
+            return format
+        }
         return format.string(from: at)
     }
+
+    /// A formatter for each kind, language, calendar and time zone, made once (audit I12): every row made
+    /// two each minute, a pattern compiled each time. Formatting from several threads is safe; the table is
+    /// locked.
+    private static func formatter<F: Formatter>(_ kind: String, _ locale: Locale, _ calendar: Calendar, make: () -> F) -> F {
+        let key = "\(kind)|\(locale.identifier)|\(calendar.identifier)|\(calendar.timeZone.identifier)"
+        formattersLock.lock()
+        defer { formattersLock.unlock() }
+        if let kept = formatters[key] as? F { return kept }
+        let made = make()
+        formatters[key] = made
+        return made
+    }
+
+    private static let formattersLock = NSLock()
+    nonisolated(unsafe) private static var formatters: [String: Formatter] = [:]
 }
 
 // MARK: - The sentence
@@ -496,7 +531,7 @@ private struct BellThumbView: View {
                 .accessibilityHidden(true)
         case let .card(card):
             let family = PublishStep.previewPalette(accentHue: card.accentHue, cardId: card.id)
-            let cover = card.imageUrl.flatMap { $0.isEmpty ? nil : URL(string: $0) }
+            let cover = card.listCoverURL
             let face = size + BellThumb.bleed * 2
             ZStack {
                 (cover == nil ? family.fill : family.skeleton)

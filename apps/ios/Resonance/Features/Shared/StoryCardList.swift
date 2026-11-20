@@ -88,7 +88,7 @@ struct StoryCardList: View {
     /// The covers of the few cards after card `i`, which the reader comes to next.
     static func coversAhead(of i: Int, in cards: [FeedCard]) -> [URL] {
         guard i + 1 < cards.count else { return [] }
-        return cards[(i + 1)..<min(cards.count, i + 1 + coversAhead)].compactMap { $0.imageUrl.flatMap(URL.init(string:)) }
+        return cards[(i + 1)..<min(cards.count, i + 1 + coversAhead)].compactMap(\.listCoverURL)
     }
 
     /// The cards' identities (a card twice in a list keeps both): the scroll's anchors on the feed, and

@@ -182,7 +182,9 @@ private struct LinkPicture: View {
     var body: some View {
         GeometryReader { geo in
             let bleed = StoryLinkCard.Look.bleed
-            LazyImage(url: url) { state in
+            // Decoded at the size it is drawn (audit I2).
+            LazyImage(request: ImageSizeBuckets.request(url, box: CGSize(width: (geo.size.width + bleed * 2) * 3,
+                                                                          height: (geo.size.height + bleed * 2) * 3))) { state in
                 if let image = state.image {
                     image.resizable().scaledToFill()
                 } else if state.error != nil {

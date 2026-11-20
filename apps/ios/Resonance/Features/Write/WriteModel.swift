@@ -255,6 +255,7 @@ final class WriteModel {
             editor.setMarkdown(opened.values.story)
         }
         editor.onChange = { [weak self] markdown in self?.values.story = markdown }
+        editor.onPasteImage = { [weak self] in Task { await self?.pasteImage() } }
     }
 
     /// The card's page: slug, or id (a draft or a card without one).
@@ -926,6 +927,15 @@ final class WriteModel {
             tell(L10n.Write.Editor.imageUploadError)
         }
     }
+
+    /// A picture pasted into the story (audit X6): the island lets it go — it never keeps a `blob:` or `data:`
+    /// picture — and the pasteboard's is uploaded and put in as a picked photo is, with the same toasts.
+    func pasteImage() async {
+        await insertImage(pasteboardImage(), filename: "pasted.jpg")
+    }
+
+    /// The system pasteboard's picture (a test's stand-in).
+    @ObservationIgnored var pasteboardImage: () -> UIImage? = { UIPasteboard.general.image }
 
     /// Uploads a picture (/api/upload) and answers its address: the writing API's, or a test's stand-in.
     @ObservationIgnored var upload: (Data, String) async throws -> URL

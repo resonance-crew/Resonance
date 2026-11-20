@@ -543,8 +543,21 @@ final class StickerPlayerView: UIView {
                     stop.pointee = true
                     self.finish(mine)
                 case .draw:
-                    // A frame that can't be copied is skipped: the one before it (or the still) stays.
-                    if let own = Self.ownFrame(image, maxPixels: pixels) { self.imageView.image = UIImage(cgImage: own) }
+                    // Copied off the main thread (audit I10), one at a time: a frame that comes while the last is
+                    // still being copied is skipped, as one that can't be copied is — the one before it (or the
+                    // still) stays. One copied after its play is over is never drawn.
+                    guard !self.copying else { return }
+                    self.copying = true
+                    Self.frameQueue.async { [weak self] in
+                        let own = Self.ownFrame(image, maxPixels: pixels)
+                        DispatchQueue.main.async {
+                            MainActor.assumeIsolated {
+                                guard let self else { return }
+                                self.copying = false
+                                if let own, self.run == mine { self.imageView.image = UIImage(cgImage: own) }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -557,6 +570,11 @@ final class StickerPlayerView: UIView {
             self?.finish(mine)
         }
     }
+
+    /// A frame of a play is being copied on `frameQueue`.
+    private var copying = false
+    /// Where every sticker's frames are copied: one serial queue, off the main thread.
+    nonisolated private static let frameQueue = DispatchQueue(label: "resonance.sticker-frames", qos: .userInteractive)
 
     /// Stops playing now, the still back in its place.
     func stop() {

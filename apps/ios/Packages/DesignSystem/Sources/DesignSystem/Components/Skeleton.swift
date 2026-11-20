@@ -29,6 +29,7 @@ public struct SkeletonBlock: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The shimmer's place in its pass, from the one timeline of a skeleton screen (``SkeletonTimeline``).
     @Environment(\.skeletonPhase) private var sharedPhase
+    @Environment(\.skeletonPaused) private var paused
 
     public var body: some View {
         if circle {
@@ -56,12 +57,16 @@ public struct SkeletonBlock: View {
                 .accessibilityHidden(true)
         } else {
             let highlight = Self.highlight(hue)
-            TimelineView(.animation) { timeline in
+            // A faint band 1.5 s a pass: 30 frames a second are enough (audit I4), and none on a tab not shown.
+            TimelineView(.animation(minimumInterval: SkeletonBlock.frameInterval, paused: paused)) { timeline in
                 Self.shimmer(phase: Self.phase(at: timeline.date), highlight: highlight)
             }
             .accessibilityHidden(true)
         }
     }
+
+    /// How often a shimmer is redrawn: 30 a second, never the display's 120.
+    static let frameInterval: Double = 1.0 / 30
 
     /// Where the shimmer is in its 1.5 s pass at `date`, eased: every block on screen shares it.
     static func phase(at date: Date) -> Double {
@@ -148,16 +153,20 @@ extension EnvironmentValues {
     /// The shimmer's eased place in its pass, from a ``SkeletonTimeline`` around the blocks; nil, each
     /// block keeps a timeline of its own.
     @Entry var skeletonPhase: Double? = nil
+    /// The skeletons under it stand still: a tab that isn't the one shown (audit I3) keeps its screen,
+    /// but nothing on it runs a timeline.
+    @Entry public var skeletonPaused = false
 }
 
 /// One timeline for every ``SkeletonBlock`` inside: a skeleton screen's blocks (a loading feed has
 /// some sixty) take their shimmer's phase from it rather than each running a display-rate timeline
 /// of its own. The phase is the same — every block's comes from the frame's time — so the shimmer
 /// looks exactly as before. Inside another one, it leaves the outer timeline to do it. Paused under
-/// Reduce Motion, where the blocks are plain sand.
+/// Reduce Motion, where the blocks are plain sand, and on a tab not shown (`skeletonPaused`).
 public struct SkeletonTimeline<Content: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.skeletonPhase) private var outer
+    @Environment(\.skeletonPaused) private var paused
     let content: Content
 
     public init(@ViewBuilder content: () -> Content) {
@@ -168,7 +177,7 @@ public struct SkeletonTimeline<Content: View>: View {
         if outer != nil {
             content
         } else {
-            TimelineView(.animation(minimumInterval: nil, paused: reduceMotion)) { timeline in
+            TimelineView(.animation(minimumInterval: SkeletonBlock.frameInterval, paused: reduceMotion || paused)) { timeline in
                 content.environment(\.skeletonPhase, SkeletonBlock.phase(at: timeline.date))
             }
         }

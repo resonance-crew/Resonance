@@ -1303,7 +1303,7 @@ private struct SharedMediaContent: View {
                                 if i > 0 { WavyDivider(seed: Double(53 + i * 7)) }
                                 Button { openRoute(.card(card.routeKey)) } label: {
                                     HStack(spacing: 12) {
-                                        OrganicImage(url: card.imageUrl.flatMap(URL.init(string:)), seed: 7,
+                                        OrganicImage(url: card.listCoverURL, seed: 7,
                                                      fill: Palette.hue(.accent, card.accentHue ?? 55))
                                             .environment(\.skeletonHue, card.accentHue)
                                             .coverFraming(card.coverFraming)

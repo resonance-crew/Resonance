@@ -50,6 +50,9 @@ public enum OpenEnums {
 
     /// The answer with every unknown enum value replaced; untouched when there is none (or it isn't JSON).
     static func normalize(_ data: Data) -> Data {
+        // A look at the bytes first (audit I9): an answer whose table fields all hold a value this build
+        // knows goes on without being parsed twice (once here, once by the generated client).
+        guard mayHoldUnknown(data) else { return data }
         guard let root = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else { return data }
         // Looked through first, as it was read (nothing copied): almost every answer holds no unknown
         // value, and goes on as it came.
@@ -58,6 +61,56 @@ public enum OpenEnums {
         let fixed = normalize(root, changed: &changed)
         guard changed, let out = try? JSONSerialization.data(withJSONObject: fixed, options: [.fragmentsAllowed]) else { return data }
         return out
+    }
+
+    /// The table's names as the bytes a key is written in: `"name"`.
+    private static let keys: [(name: [UInt8], field: String)] = fields.keys.map { (Array("\"\($0)\"".utf8), $0) }
+
+    /// Whether the answer's bytes may hold an unknown value: false only when every key of the table's
+    /// names (`"visibility"` then `:` — a quote inside a JSON string is always escaped, so these bytes are
+    /// a key or a string value, never a story's words) holds no string, or a plain string this build
+    /// knows. Anything it can't tell at a glance (an escape in the value, bytes cut short) says maybe, and
+    /// the answer is looked through as JSON.
+    static func mayHoldUnknown(_ data: Data) -> Bool {
+        data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Bool in
+            let bytes = raw.bindMemory(to: UInt8.self)
+            let n = bytes.count
+            let quote = UInt8(ascii: "\""), colon = UInt8(ascii: ":"), backslash = UInt8(ascii: "\\")
+            func skipSpace(_ i: inout Int) {
+                while i < n, bytes[i] == 0x20 || bytes[i] == 0x0A || bytes[i] == 0x0D || bytes[i] == 0x09 { i += 1 }
+            }
+            var i = 0
+            while i < n {
+                guard bytes[i] == quote else { i += 1; continue }
+                var matched: (end: Int, field: String)?
+                for key in keys where i + key.name.count <= n {
+                    var same = true
+                    for (k, b) in key.name.enumerated() where bytes[i + k] != b { same = false; break }
+                    if same { matched = (i + key.name.count, key.field); break }
+                }
+                guard let (end, field) = matched else { i += 1; continue }
+                var j = end
+                skipSpace(&j)
+                // A string value that happens to be one of the names: not a key.
+                guard j < n, bytes[j] == colon else { i = end; continue }
+                j += 1
+                skipSpace(&j)
+                guard j < n else { return true }
+                // No string (null, a number, an object or a list): nothing `normalize` would change here.
+                guard bytes[j] == quote else { i = j; continue }
+                let start = j + 1
+                var k = start
+                while k < n, bytes[k] != quote {
+                    if bytes[k] == backslash { return true }
+                    k += 1
+                }
+                guard k < n else { return true }
+                let value = String(decoding: UnsafeBufferPointer(rebasing: bytes[start..<k]), as: UTF8.self)
+                if fields[field]?.known.contains(value) != true { return true }
+                i = k + 1
+            }
+            return false
+        }
     }
 
     /// Whether `value` holds an enum value this build doesn't know, anywhere in it: the fields

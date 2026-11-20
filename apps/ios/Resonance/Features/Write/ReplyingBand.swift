@@ -58,7 +58,7 @@ struct ReplyingBandRow: View {
     var body: some View {
         if let card, let title = ReplyingBand.title(of: card) {
             Button(action: open) {
-                ReplyingBandLabel(title: title, cover: card.imageUrl.flatMap(URL.init(string:)), hue: card.accentHue, seed: seed)
+                ReplyingBandLabel(title: title, cover: card.listCoverURL, hue: card.accentHue, seed: seed)
             }
             .buttonStyle(OrganicPressStyle(inset: -4))
             .accessibilityLabel(ReplyingBand.label(title: title))
