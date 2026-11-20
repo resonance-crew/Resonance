@@ -46,6 +46,9 @@ export function presentLinkPreviews(stored: unknown): LinkPreviewBody[] {
   }));
 }
 
+/** What toAuthor reads of a profile: the field mask of every profile a list reads (loadAuthors). */
+export const AUTHOR_FIELDS = ['handle', 'initials', 'accentColor', 'avatarUrl', 'avatarSeed', 'verified', 'region'] as const;
+
 export function toAuthor(id: string, u: DocumentData): AuthorBody {
   return {
     id,
@@ -158,7 +161,8 @@ const docIdOk = (id: unknown): id is string => typeof id === 'string' && id.leng
 export async function loadAuthors(db: Firestore, cards: Card[]): Promise<Map<string, DocumentData>> {
   const ids = [...new Set(cards.filter((c) => !c.anonymous).map((c) => c.authorId))].filter(docIdOk);
   if (!ids.length) return new Map();
-  const snaps = await db.getAll(...ids.map((id) => db.doc(`users/${id}`)));
+  // Only what a byline draws (toAuthor), not the whole profile (B17).
+  const snaps = await db.getAll(...ids.map((id) => db.doc(`users/${id}`)), { fieldMask: [...AUTHOR_FIELDS] });
   return new Map(snaps.filter((s) => s.exists).map((s) => [s.id, s.data()!]));
 }
 

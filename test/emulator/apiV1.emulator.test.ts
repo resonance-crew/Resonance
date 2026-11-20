@@ -6,6 +6,7 @@ import { ApiFailure } from '@/lib/api/v1/http';
 import { Me } from '@/lib/api/v1/schemas';
 import { getFeed, getMe } from '@/lib/api/v1/service';
 import { setPublicListMs } from '@/lib/api/v1/publicLists';
+import { loadAuthors } from '@/lib/api/v1/present';
 
 // The v1 API's business logic against the real Firestore emulator. The web
 // client gets these guarantees from firestore.rules; the API runs on the
@@ -89,6 +90,12 @@ describe('getMe', () => {
 });
 
 describe('getFeed', () => {
+  it('reads of each author only what a byline draws (B17)', async () => {
+    await db.doc('users/zed').set({ handle: 'zed', initials: 'ZE', accentColor: 'x', region: 'Taipei', bio: 'b'.repeat(500), notificationSettings: { picks: true } });
+    const authors = await loadAuthors(db, [{ id: 'c', authorId: 'zed', anonymous: false } as Parameters<typeof loadAuthors>[1][number]]);
+    expect(authors.get('zed')).toEqual({ handle: 'zed', initials: 'ZE', accentColor: 'x', region: 'Taipei' });
+  });
+
   it('keeps a page a few seconds for every reader, each one\'s blocks applied after it — never an anonymous card (B3)', async () => {
     await Promise.all([
       card('c1', 'carol', 1),

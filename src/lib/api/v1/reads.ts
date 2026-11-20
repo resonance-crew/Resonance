@@ -645,10 +645,15 @@ async function ownShelf(db: Firestore, viewerId: string, shelf: OwnShelf, now: n
       .sort((a, b) => edited(b) - edited(a))
       .slice(0, BOX_LIMIT)
       .map((d) => {
-        // A draft shows a summary of its story as it is: a stored one only while it is current (storedSummary —
-        // the one a list kept after reading the draft, B6), else getCardBoxShelves reads the shown drafts'
-        // stories in its one batch (withStories).
-        return listCard(d.id, d.data());
+        // A draft shows a summary of its story as it is (the summary stored at publish is no draft's): only one a
+        // list kept after reading the draft itself (B6: stamped after the draft's last change, never with it)
+        // stands in; else getCardBoxShelves reads the shown drafts' stories in its one batch (withStories).
+        const card = listCard(d.id, d.data());
+        const keptAt = d.get('excerptAt');
+        const editedAt = d.get('updatedAt');
+        const keptSince = keptAt instanceof Timestamp && editedAt instanceof Timestamp && keptAt.toMillis() > editedAt.toMillis();
+        if (!keptSince) delete card.listing;
+        return card;
       });
   }
   const isPrivate = shelf === 'private';
