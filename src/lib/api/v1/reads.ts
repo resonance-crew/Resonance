@@ -302,16 +302,18 @@ export async function getCardDetail(
   // one by someone they blocked is the client's to hide (its page knows the
   // byline), and an anonymous one is there for everyone (blockHides). The
   // viewer's blocks only thin the lists around it.
+  // One read of the viewer's blocks for the lists and the tap's people (B4).
+  const blockedP = card.referenceCardId || include.size ? blockedByViewer(db, viewerId) : null;
   const [authorSnap, reference, blocked, resonances, recent, linking, embedded, tap] = await Promise.all([
     card.anonymous ? null : db.doc(`users/${card.authorId}`).get(),
     card.referenceCardId ? cardsByIds(db, [card.referenceCardId]) : [],
-    card.referenceCardId || include.size ? blockedByViewer(db, viewerId) : new Set<string>(),
+    blockedP ?? new Set<string>(),
     lists.has('resonances') ? resonancesOf(db, card.id).get().then(toCards) : [],
     lists.has('related') ? recentListed(db) : [],
     ownerLinks ? cardsLinkingTo(db, card.id) : [],
     embedKeys.length ? cardsByKeys(db, embedKeys).then((cards) => askedByKey(cards, embedKeys, viewerId)) : [],
     // The resonance tap (./taps): who resonated as the viewer may see them — none through a shared-card pass.
-    cardTap(db, viewerId, card, { pass }),
+    cardTap(db, viewerId, card, { pass, ...(blockedP ? { blocked: blockedP } : {}) }),
   ]);
   const [referenceCard, resonanceCards, relatedCards, linkCards, embedCards] = await presentAll(
     db,
