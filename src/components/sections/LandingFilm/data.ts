@@ -11,17 +11,15 @@
  * Read-only against Firestore. `loadFilm` memoizes the answer per Taipei day (10 minutes) and falls back to the
  * landing grid's read when the picks fail. What leaves here is `toModel`'s FilmModel: never a Card, never a score.
  */
-import type { DocumentData, Firestore } from 'firebase-admin/firestore';
-import { Timestamp } from 'firebase-admin/firestore';
 import { blankCard, unlistedCard } from '@/lib/cards/blank';
-import { LIST_FIELDS, blankBySummary, storedSummary } from '@/lib/api/v1/summary';
-import { LANDING_CARD_FIELDS, latestForLanding } from '@/lib/db/firestore/landing';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { CARD_SIGNATURES } from '@/lib/recommend/collections';
+import { blankBySummary, storedSummary } from '@/lib/api/v1/summary';
 import { maxSim } from '@/lib/recommend/match';
 import { INSIGHTS_MAX } from '@/lib/recommend/signature';
-import { mapCard, mapUser } from '@/lib/db/firestore/mapper';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
+import { serverCtx } from '@/server/ctx';
+import { storedMillis } from '@/server/domain/cards';
+import type { FilmWindowRow } from '@/server/ports/repos/cards';
+import type { DataRepos } from '@/server/ports/uow';
 import { publicBases } from '@/lib/storage/publicUrl';
 import type { Card, User } from '@/lib/db/types';
 import { PICKS, type FilmModel } from './model';
@@ -65,8 +63,6 @@ export const PICK_ANONYMOUS = 2;
 /** Candidates read whole: a few more than the list shows, to stand in for one that changed meanwhile or has no byline. */
 export const PICKS_READ = 10;
 
-/** A pin (server-only `config/landingFilm`: the rules deny every client read and write of config/*). */
-interface Pin { written?: string; answer?: string; until?: Timestamp }
 
 export type FilmRelation = 'resonance' | 'kin' | 'alone';
 export interface FilmCards {
@@ -95,9 +91,9 @@ function leadable(r: Row, bases: readonly string[]): boolean {
   return (
     listed(r) &&
     d.anonymous !== true && // the two leads connect; an anonymous card connects no one (and its author is never read here)
-    d.media?.type === 'image' && OUR_COVER(d.media.url, bases) &&
+    (d.media as { type?: unknown } | undefined)?.type === 'image' && OUR_COVER((d.media as { url?: unknown }).url, bases) &&
     glen(d.thoughtCore) >= 2 && glen(d.thoughtCore) <= LEAD_TITLE_MAX &&
-    glen(storedSummary(d)?.excerpt ?? '') >= LEAD_EXCERPT_MIN &&
+    glen(summaryOf(r)?.excerpt ?? '') >= LEAD_EXCERPT_MIN &&
     typeof r.reading?.insightScore === 'number' && r.reading.insightScore >= LEAD_MIN_INSIGHT
   );
 }
@@ -106,16 +102,19 @@ function leadable(r: Row, bases: readonly string[]): boolean {
  * A window card and what its reading says of it (`cardSignatures`, round 26): the insight score, and whether it is for
  * strangers — absent for a card not read yet (it counts 0 and isn't held back).
  */
-export type Row = { id: string; d: DocumentData; reading?: { insightScore: number | null; listed: boolean } };
+export type Row = FilmWindowRow;
+
+/** A row's stored summary: the one its repository read beside it, else read off its stored fields. */
+const summaryOf = (r: Row) => (r.summary !== undefined ? r.summary : storedSummary(r.d));
 
 /**
  * May a list that picks cards for readers show this one (lib/cards/blank), to strangers (its reading)? Stored fields
  * only, never who reads.
  */
 const listed = (r: Row) =>
-  r.d.visibility === 'public' && r.d.publishedAt != null && r.d.trashedAt == null && !unlistedCard(r.d) && !blankBySummary(r.d) &&
+  r.d.visibility === 'public' && r.d.publishedAt != null && r.d.trashedAt == null && !unlistedCard(r.d) && !(r.blank ?? blankBySummary(r.d)) &&
   r.reading?.listed !== false;
-const millis = (v: unknown) => (v instanceof Timestamp ? v.toMillis() : v instanceof Date ? v.getTime() : 0);
+const millis = (v: unknown) => storedMillis(v) ?? 0;
 
 /**
  * The stories recommended to anyone (the end's list), best first, as card ids — from the window's rows, no read of its
@@ -164,8 +163,6 @@ const partsDistance = (x: number[][] | undefined, y: number[][] | undefined) => 
   const best = x?.length && y?.length ? maxSim(x, y) : null;
   return best === null ? null : 1 - best;
 };
-/** The ids a card's parts on a channel may have (lib/recommend/signature: three insights at most). */
-const partIds = (id: string, channel: 'insight' | 'situation') => Array.from({ length: INSIGHTS_MAX }, (_, i) => `cardVectors/${id}__${channel}__${i}`);
 
 /** What the page may hold of a card: latestForLanding's own strip. */
 const forPage = (c: Card): Card => {
@@ -173,30 +170,20 @@ const forPage = (c: Card): Card => {
   return card.anonymous ? { ...card, authorId: '' } : card;
 };
 
-export async function filmCards(db: Firestore, opts: { storageBases: readonly string[]; now?: Date }): Promise<FilmCards | null> {
+export async function filmCards(data: Pick<DataRepos, 'cards' | 'users'>, opts: { storageBases: readonly string[]; now?: Date }): Promise<FilmCards | null> {
   const now = opts.now ?? new Date();
   const day = taipeiDayIndex(now);
   const bases = opts.storageBases;
 
-  const [windowSnap, pinSnap] = await Promise.all([
-    db.collection('cards').where('visibility', '==', 'public').where('publishedAt', '!=', null).orderBy('publishedAt', 'desc')
-      .select(...LIST_FIELDS).limit(FILM_WINDOW).get(),
-    db.doc('config/landingFilm').get(),
-  ]);
-  // The window's readings, by id: the score and the strangers' switch only.
-  const readings = windowSnap.empty ? [] : await db.getAll(...windowSnap.docs.map((s) => db.doc(`${CARD_SIGNATURES}/${s.id}`)), { fieldMask: ['insightScore', 'listedForStrangers'] });
-  const readingOf = new Map(readings.filter((r) => r.exists).map((r) => {
-    const score = r.get('insightScore');
-    return [r.id, { insightScore: typeof score === 'number' && Number.isFinite(score) ? score : null, listed: r.get('listedForStrangers') !== false }];
-  }));
-  const rows: Row[] = windowSnap.docs.map((s) => ({ id: s.id, d: s.data(), reading: readingOf.get(s.id) }));
+  // The window, each card with its reading (the score and the strangers' switch only), and the owner's pin.
+  const [rows, pin] = await Promise.all([data.cards.filmWindow(FILM_WINDOW), data.cards.filmPin()]);
   const pickIds = recommendedIds(rows, day);
   const leads = rows.filter((r) => leadable(r, bases));
   const byId = new Map(leads.map((r) => [r.id, r]));
   // Pen names: a lead's author must have one (only named leads get here).
   const authorIds = [...new Set(leads.map((r) => String(r.d.authorId)))].filter((id) => id && !id.includes('/') && !isReservedId(id));
-  const profiles = authorIds.length ? await db.getAll(...authorIds.map((id) => db.doc(`users/${id}`)), { fieldMask: ['handle'] }) : [];
-  const named = new Set(profiles.filter((p) => p.exists && String(p.get('handle') ?? '').trim()).map((p) => p.id));
+  const profiles = authorIds.length ? await data.users.rowsOf(authorIds, ['handle']) : new Map();
+  const named = new Set([...profiles].filter(([, p]) => String(p.handle ?? '').trim()).map(([id]) => id));
   const ok = leads.filter((r) => named.has(String(r.d.authorId)));
   const score = (r: Row) => Number(r.reading?.insightScore ?? 0);
   const okIds = new Set(ok.map((r) => r.id));
@@ -204,8 +191,7 @@ export async function filmCards(db: Firestore, opts: { storageBases: readonly st
   let pair: { w: string; a: string | null; relation: FilmRelation; pinned: boolean } | null = null;
 
   // 0. The owner's pin, while it lasts — a preference, never a pass: both cards must still be leadable now.
-  const pin = (pinSnap.exists ? pinSnap.data() : undefined) as Pin | undefined;
-  if (pin?.written && okIds.has(pin.written) && (!pin.until || pin.until.toMillis() > now.getTime())) {
+  if (pin?.written && okIds.has(pin.written) && (!pin.until || pin.until.getTime() > now.getTime())) {
     const a = pin.answer && okIds.has(pin.answer) && byId.get(pin.answer)!.d.authorId !== byId.get(pin.written)!.d.authorId ? pin.answer : null;
     const real = a != null && byId.get(a)!.d.referenceCardId === pin.written;
     pair = { w: pin.written, a, relation: a ? (real ? 'resonance' : 'kin') : 'alone', pinned: true };
@@ -215,7 +201,7 @@ export async function filmCards(db: Firestore, opts: { storageBases: readonly st
   if (!pair) {
     const real = ok
       .filter((r) => typeof r.d.referenceCardId === 'string' && okIds.has(r.d.referenceCardId) && byId.get(r.d.referenceCardId)!.d.authorId !== r.d.authorId)
-      .map((r) => ({ w: r.d.referenceCardId as string, a: r.id, key: Math.min(score(r), score(byId.get(r.d.referenceCardId)!)) }))
+      .map((r) => ({ w: r.d.referenceCardId as string, a: r.id, key: Math.min(score(r), score(byId.get(r.d.referenceCardId as string)!)) }))
       .sort((x, y) => y.key - x.key || x.a.localeCompare(y.a))
       .slice(0, FILM_ROTATION);
     if (real.length) { const p = real[day % real.length]; pair = { w: p.w, a: p.a, relation: 'resonance', pinned: false }; }
@@ -230,18 +216,8 @@ export async function filmCards(db: Firestore, opts: { storageBases: readonly st
   if (!pair && pool.length && ok.length >= 2) {
     const kinRows = [...ok].sort((x, y) => score(y) - score(x) || x.id.localeCompare(y.id)).slice(0, KIN_CANDIDATES);
     for (const w of pool) if (!kinRows.includes(w)) kinRows.push(w);
-    const partsOf = async (channel: 'insight' | 'situation', ids: string[]) => {
-      const snaps = ids.length ? await db.getAll(...ids.flatMap((id) => partIds(id, channel)).map((p) => db.doc(p)), { fieldMask: ['vector'] }) : [];
-      const out = new Map<string, number[][]>();
-      for (const v of snaps) {
-        if (!v.exists) continue;
-        const vec = (v.get('vector')?.toArray?.() ?? []) as number[]; // never the signature fields the records carry
-        if (!vec.length) continue;
-        const id = v.id.slice(0, v.id.indexOf(`__${channel}__`));
-        out.set(id, [...(out.get(id) ?? []), vec]);
-      }
-      return out;
-    };
+    // The parts' vectors by id (lib/recommend/signature: three insights at most); never the signature fields the records carry.
+    const partsOf = (channel: 'insight' | 'situation', ids: string[]) => data.cards.partVectors(ids, channel, INSIGHTS_MAX);
     const insight = await partsOf('insight', kinRows.map((r) => r.id));
     const found = pool
       .map((w) => {
@@ -274,8 +250,7 @@ export async function filmCards(db: Firestore, opts: { storageBases: readonly st
   // and, in the same read, the end's candidates.
   const ids = [pair.w, ...(pair.a ? [pair.a] : [])];
   const wanted = [...new Set([...ids, ...pickIds])];
-  const full = await db.getAll(...wanted.map((id) => db.doc(`cards/${id}`)), { fieldMask: [...LANDING_CARD_FIELDS] });
-  const cards = full.filter((s) => s.exists).map((s) => mapCard(s.id, s.data()!)).filter((c) => !blankCard(c));
+  const cards = (await data.cards.landingCards(wanted)).filter((c) => !blankCard(c));
   // A candidate is asked again as it is now: a card hidden, trashed or emptied since the window was read is left out.
   const pickCards = pickIds
     .map((id) => cards.find((c) => c.id === id))
@@ -285,17 +260,17 @@ export async function filmCards(db: Firestore, opts: { storageBases: readonly st
   const answer = pair.a ? cards.find((c) => c.id === pair!.a) ?? null : null;
 
   // The sky: the landing grid's own read (anonymous cards too, authorless), minus the two.
-  const latest = await latestForLanding(db, SKY_MAX + 2);
+  const latest = await data.cards.latestForLanding(SKY_MAX + 2);
   const sky = latest.cards.filter((c) => !ids.includes(c.id)).slice(0, SKY_MAX);
 
   const leadAuthors = [written, answer].filter((c): c is Card => !!c).map((c) => c.authorId);
   // The named candidates' bylines ride in the leads' read; an anonymous card's author is never asked for.
   const pickAuthors = pickCards.filter((c) => c.anonymous !== true).map((c) => String(c.authorId ?? '')).filter((id) => id && !id.includes('/') && !isReservedId(id));
   const missing = [...new Set([...leadAuthors, ...pickAuthors])].filter((id) => !latest.authors[id]);
-  const extra = missing.length ? await db.getAll(...missing.map((id) => db.doc(`users/${id}`)), { fieldMask: ['handle', 'initials', 'avatarUrl', 'avatarSeed', 'accentColor', 'primaryLocale', 'verified'] }) : [];
+  const extra = missing.length ? await data.users.rowsOf(missing, ['handle', 'initials', 'avatarUrl', 'avatarSeed', 'accentColor', 'primaryLocale', 'verified']) : new Map();
   const authors = { ...latest.authors };
-  // latestForLanding's byline() (export it) — here only the fields it keeps.
-  for (const p of extra) if (p.exists) { const u = mapUser(p.id, p.data()!); authors[p.id] = { ...u, region: '', autoTranslateTo: [], phoneHash: '', joinedAt: new Date(0), handleChangedAt: new Date(0) }; }
+  // latestForLanding's byline() — here only the fields it keeps.
+  for (const [id, p] of extra) authors[id] = { ...p, id, region: '', autoTranslateTo: [], phoneHash: '', joinedAt: new Date(0), handleChangedAt: new Date(0) } as User;
 
   // A named card goes under its author's pen name or not at all (without one it would read as an anonymous card).
   const picks = pickCards
@@ -330,8 +305,8 @@ const store = globalThis as typeof globalThis & { [MEMO_KEY]?: Memo };
  * The fallback (the picks failed): the landing grid's newest 13 — A the first named card with a cover, alone; the
  * end's list the landing grid's own, its newest six.
  */
-export async function fallbackModel(db: Firestore): Promise<FilmModel> {
-  const latest = await latestForLanding(db, 13);
+export async function fallbackModel(data: Pick<DataRepos, 'cards'>): Promise<FilmModel> {
+  const latest = await data.cards.latestForLanding(13);
   const written = latest.cards.find((c) => !c.anonymous && c.media?.type === 'image' && c.media.url && latest.authors[c.authorId]) ?? null;
   const sky = latest.cards.filter((c) => c.id !== written?.id).slice(0, SKY_MAX);
   const picks = latest.cards.filter((c) => c.trashedAt == null && (c.anonymous === true || latest.authors[c.authorId])).slice(0, PICKS);
@@ -347,18 +322,18 @@ export async function loadFilm(_locale: string, now: Date = new Date()): Promise
   const day = taipeiDayIndex(now);
   const memo = store[MEMO_KEY];
   if (memo && memo.day === day && now.getTime() - memo.at < memo.ttl) return memo.model;
-  const db = getAdminDb();
+  const { data } = serverCtx();
   let model: FilmModel;
   let ttl = MEMO_MS;
   try {
-    const f = await filmCards(db, { storageBases: filmBases(), now });
+    const f = await filmCards(data, { storageBases: filmBases(), now });
     if (!f) throw new Error('no picks');
     model = toModel({ written: f.written, answer: f.answer, relation: f.relation, sky: f.sky, picks: f.picks, authors: f.authors });
   } catch (error) {
     console.warn('[film] picks failed', error instanceof Error ? error.message : error);
     ttl = FALLBACK_MS;
     try {
-      model = await fallbackModel(db);
+      model = await fallbackModel(data);
     } catch (e) {
       console.warn('[film] fallback failed', e instanceof Error ? e.message : e);
       model = { a: null, b: null, relation: 'alone', sky: [], picks: [] };
