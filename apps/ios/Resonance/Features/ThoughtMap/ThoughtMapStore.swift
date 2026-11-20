@@ -3,6 +3,7 @@ import DesignSystem
 import Foundation
 import Observation
 import ResonanceKit
+import SwiftUI
 import UIKit
 
 /// The thought map's state and its gestures — ThoughtMapCanvas.tsx without
@@ -588,6 +589,39 @@ final class ThoughtMapStore {
     /// Each arrow's geometry with the cards' rects it was drawn between (`edgeGeometry`): the same rects
     /// and arrow (its id seeds it) make the same geometry.
     @ObservationIgnored private var edgeMemo: [String: (source: Rect, target: Rect, geometry: EdgeGeometry)] = [:]
+
+    /// An arrow as the layers stroke it — its line and its head, finished paths — kept with the cards' rects it
+    /// was drawn between (audit I6): a camera frame only strokes them, never builds them again.
+    func edgePaths(_ edge: MapEdge) -> (line: Path, head: Path)? {
+        guard let s = nodeRect(edge.sourceCardId), let t = nodeRect(edge.targetCardId) else { return nil }
+        if let kept = edgePathMemo[edge.id], kept.source == s, kept.target == t { return (kept.line, kept.head) }
+        guard let geo = edgeGeometry(edge) else { return nil }
+        let line = geo.path.path()
+        let head = arrowHeadPath(tip: (geo.end.x, geo.end.y), angle: geo.endAngle, size: 13,
+                                 seed: Double(seedFromString(edge.id)) + 7).path()
+        if edgePathMemo.count > edges.count * 2 + 64 { edgePathMemo.removeAll(keepingCapacity: true) }
+        edgePathMemo[edge.id] = (s, t, line, head)
+        return (line, head)
+    }
+
+    @ObservationIgnored private var edgePathMemo: [String: (source: Rect, target: Rect, line: Path, head: Path)] = [:]
+
+    /// A region's outline where it stands, kept by its place and size (audit I6).
+    func regionPath(_ g: MapGroup, make: (MapGroup) -> Path) -> Path {
+        let key = RegionKey(id: g.id, x: g.x, y: g.y, w: g.w, h: g.h)
+        if let kept = regionMemo[g.id], kept.key == key { return kept.path }
+        let path = make(g)
+        if regionMemo.count > groups.count * 2 + 32 { regionMemo.removeAll(keepingCapacity: true) }
+        regionMemo[g.id] = (key, path)
+        return path
+    }
+
+    private struct RegionKey: Equatable {
+        let id: String
+        let x, y, w, h: Double
+    }
+
+    @ObservationIgnored private var regionMemo: [String: (key: RegionKey, path: Path)] = [:]
 
     /// The selected card's link handle under `w` (world), if any: within `radius` of a handle's centre and
     /// no deeper than 14 inside the card's edge on that side (depth along the side's inward normal, negative
