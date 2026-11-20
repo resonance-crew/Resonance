@@ -1,14 +1,11 @@
-import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
-import { clearLetters, hasPenName, holdsRequest, noPenName, pairOf } from './conversations';
-import { ApiFailure } from './http';
-import { addReason, connect, inviteReason, originsRef } from './origins';
+import type { AdminDb } from '@/server/infra/firestore/db';
+import { ctxFor } from '@/server/infra/firestore/ctx';
+import { acceptInviteIn, type AcceptedInvite } from '@/server/app/invites';
 
-export interface AcceptedInvite {
-  /** connections/{id}: the two user ids, sorted, joined by "_". */
-  connectionId: string;
-  /** The sender's bell row, for its push (never returned to the client); null when nothing rang. */
-  notificationId: string | null;
-}
+export type { AcceptedInvite };
+
+// A legacy facade (src/server/README.md): today's export and signature, run
+// by the service of src/server/app/invites.ts on a context bound to `db`.
 
 /**
  * Accept a legacy invite (none are sent any more; the pending ones are still
@@ -34,56 +31,6 @@ export interface AcceptedInvite {
  * stops offering it; one without a date was never sent by a writer of ours
  * (the old rules let any client create one), and is treated the same.
  */
-export async function acceptInvite(db: Firestore, uid: string, inviteId: string): Promise<AcceptedInvite> {
-  const ref = db.doc(`invites/${inviteId}`);
-  const accepted = await db.runTransaction(async (tx): Promise<AcceptedInvite | 'expired'> => {
-    const snap = await tx.get(ref);
-    const other = snap.exists ? snap.get('fromUserId') : null;
-    if (!snap.exists || snap.get('toUserId') !== uid || typeof other !== 'string' || !other || other.includes('/') || other === uid) {
-      throw new ApiFailure('not_found', 'No such invite.');
-    }
-    const pair = pairOf(uid, other);
-    const status = snap.get('status');
-    if (status === 'accepted') return { connectionId: pair, notificationId: null };
-    if (status !== 'pending') throw new ApiFailure('conflict', 'This invite is no longer open.');
-    if (!open(snap.get('expiresAt'))) {
-      tx.update(ref, { status: 'expired' });
-      return 'expired';
-    }
-
-    const [me, blockOut, blockIn, existing, origins, conversation] = await Promise.all([
-      tx.get(db.doc(`users/${uid}`)),
-      tx.get(db.doc(`users/${uid}/blocks/${other}`)),
-      tx.get(db.doc(`users/${other}/blocks/${uid}`)),
-      tx.get(db.doc(`connections/${pair}`)),
-      tx.get(originsRef(db, uid, other)),
-      tx.get(db.doc(`conversations/${pair}`)),
-    ]);
-    // The pen name before the blocks, as on every path that reaches someone.
-    if (!hasPenName(me)) throw noPenName();
-    // One answer for both directions: the recipient must not learn they were blocked.
-    if (blockOut.exists || blockIn.exists) throw new ApiFailure('blocked', 'You cannot connect with this person.');
-
-    tx.update(ref, { status: 'accepted' });
-    if (existing.exists) addReason(tx, db, [uid, other], origins, inviteReason(inviteId));
-    else connect(tx, db, [uid, other], inviteReason(inviteId), { extra: { inviteId } });
-    if (holdsRequest(conversation)) tx.update(conversation.ref, { request: FieldValue.delete() });
-    clearLetters(tx, db, uid, other);
-    const bell = db.collection('notifications').doc();
-    tx.set(bell, {
-      userId: other,
-      type: 'invite_accepted',
-      payload: { inviteId, fromUserId: uid, fromHandle: String(me.get('handle') ?? '') },
-      readAt: null,
-      createdAt: FieldValue.serverTimestamp(),
-    });
-    return { connectionId: pair, notificationId: bell.id };
-  });
-  if (accepted === 'expired') throw new ApiFailure('conflict', 'This invite has expired.');
-  return accepted;
-}
-
-/** Whether an invite's `expiresAt` is still ahead (a missing or malformed one never is). */
-function open(expiresAt: unknown, now = Date.now()): boolean {
-  return expiresAt instanceof Timestamp && expiresAt.toMillis() > now;
+export function acceptInvite(db: AdminDb, uid: string, inviteId: string): Promise<AcceptedInvite> {
+  return acceptInviteIn(ctxFor(db), uid, inviteId);
 }
