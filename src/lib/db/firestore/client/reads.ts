@@ -13,7 +13,7 @@ import {
   Timestamp,
 } from './sdk';
 import type { Card, User } from '@/lib/db/types';
-import type { CardBoxTab } from '@/lib/db/interfaces';
+import type { CardBoxTab } from '@/lib/db/types';
 import type { CardSeed } from '@/lib/data/cardSeed';
 import type { CardListBody, FeedPageBody } from '@/lib/api/v1/schemas';
 import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
