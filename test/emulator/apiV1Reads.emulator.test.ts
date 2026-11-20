@@ -531,6 +531,13 @@ describe('the card box in one request (GET /me/cardbox?shelves=)', () => {
     await card('gil-d', 'gil', 0, { publishedAt: null, updatedAt: minutesAgo(1) });
     await db.doc('cards/gil-undated').set({ authorId: 'gil', thoughtCore: 'u', story: 's', tags: [], visibility: 'private', publishedAt: null });
     expect((await getCardBoxShelves(db, 'gil', new Set(['draft'] as const))).draft!.cards.map((c) => c.id)).toEqual(['gil-d', 'gil-undated']);
+    // A trash of newer drafts that leaves the ordered page short of a shelf scans the rest: 45 in use, 25 newer trashed.
+    for (let i = 0; i < 45; i++) await card(`hal-d${String(i).padStart(2, '0')}`, 'hal', 0, { publishedAt: null, updatedAt: minutesAgo(200 - i) });
+    for (let i = 0; i < 25; i++) {
+      await card(`hal-t${String(i).padStart(2, '0')}`, 'hal', 0, { publishedAt: null, updatedAt: minutesAgo(100 - i), trashedAt: minutesAgo(1) });
+    }
+    const hal = await getCardBoxShelves(db, 'hal', new Set(['draft'] as const));
+    expect(hal.draft!.cards.map((c) => c.id)).toEqual(Array.from({ length: 40 }, (_, n) => `hal-d${String(44 - n).padStart(2, '0')}`));
   });
 
   it('fills the shelves as the card box shows them: own bylines kept, others filtered by visibility, blocks and anonymity', async () => {

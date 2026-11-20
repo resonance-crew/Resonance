@@ -634,7 +634,9 @@ async function ownShelf(db: Firestore, viewerId: string, shelf: OwnShelf, now: n
     // more than the shelf shows. Only when that comes back short is the rest scanned: a draft with no
     // updatedAt (an older build's) is in no ordered query, and sorts last anyway, so a full page needs none.
     const ordered = await drafts.orderBy('updatedAt', 'desc').limit(DRAFT_PAGE).get();
-    const snap = ordered.size < DRAFT_PAGE ? await drafts.limit(DRAFT_SCAN).get() : ordered;
+    // Short too when the trash took enough of the page that fewer than a shelf's worth are left.
+    const short = ordered.size < DRAFT_PAGE || ordered.docs.filter(kept).length < BOX_LIMIT;
+    const snap = short ? await drafts.limit(DRAFT_SCAN).get() : ordered;
     const edited = (d: QueryDocumentSnapshot) => {
       const at = d.get('updatedAt');
       return at instanceof Timestamp ? at.toMillis() : 0;

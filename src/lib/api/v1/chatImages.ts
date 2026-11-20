@@ -137,7 +137,11 @@ async function readChecked<T>(
   const [convo, message] = await Promise.all([
     db.doc(`conversations/${pair}`).get(),
     db.doc(`conversations/${pair}/messages/${messageId}`).get(),
-  ]);
+  ]).catch((e: unknown) => {
+    // A failed read lets the opened file go too, or its connection is held until it times out.
+    refuse();
+    throw e;
+  });
   const participants = convo.get('participants');
   if (!convo.exists || !Array.isArray(participants) || !participants.includes(uid)) return refuse();
   if (!message.exists || messageImageOf(message.get('image'))?.id !== id) return refuse();
