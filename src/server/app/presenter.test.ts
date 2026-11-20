@@ -27,6 +27,16 @@ const PUTS_AUTHOR = [
   /\{\s*\.\.\.(card|c|row|data)\b/, // a card's own fields spread into a new object
 ];
 
+/**
+ * Services whose author ids never leave the server, each with why. This list only ever shrinks: an entry
+ * whose file no longer matches fails, so it is dropped when its code changes.
+ */
+const INTERNAL: Record<string, string> = {
+  'links.ts': "passes the card's author to the rate-limit budget (withinBudget), never into an answer",
+  'recommendFeed.ts': 'reranks by authorKey(), which keys an anonymous card by its card, not its author; the funnel answers card ids',
+  'recommendIndex.ts': 'writes the vector index rows (cardVectors.authorId, server-only); answers an IndexResult with no author',
+};
+
 describe('no service puts an author into an answer itself', () => {
   it('src/server/app has services to check', () => {
     expect(sources(APP).length).toBeGreaterThan(0);
@@ -35,6 +45,11 @@ describe('no service puts an author into an answer itself', () => {
   for (const file of sources(APP)) {
     it(relative(APP, file), () => {
       const text = code(readFileSync(file, 'utf8'));
+      const name = relative(APP, file);
+      if (INTERNAL[name]) {
+        expect(PUTS_AUTHOR.some((p) => p.test(text)), `${name} no longer names an author: drop it from INTERNAL`).toBe(true);
+        return;
+      }
       for (const pattern of PUTS_AUTHOR) {
         const line = text.split('\n').find((l) => pattern.test(l));
         expect(line, `${relative(APP, file)} builds an answer with an author's id (${pattern}): present it through toFeedCard / toAuthor`).toBeUndefined();
