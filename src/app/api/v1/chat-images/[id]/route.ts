@@ -1,4 +1,4 @@
-import { readChatImage } from '@/lib/api/v1/chatImages';
+import { streamChatImage } from '@/lib/api/v1/chatImages';
 import { apiError, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import { getChatImageStore } from '@/lib/storage/chatImages';
@@ -17,9 +17,10 @@ export const GET = withUser(async (user, req, ctx: RouteContext<'id'>) => {
   const id = await routeParam(ctx, 'id');
   const size = new URL(req.url).searchParams.get('size') === 'thumb' ? 'thumb' : 'full';
   const store = getChatImageStore();
-  const bytes = store ? await readChatImage(getAdminDb(), store, user.id, id, size) : null;
-  if (!bytes) return apiError('not_found', 'No such picture.');
-  return new Response(new Blob([new Uint8Array(bytes)], { type: 'image/webp' }), {
+  // Handed on as it arrives from the store (B14), never held whole in the function.
+  const body = store ? await streamChatImage(getAdminDb(), store, user.id, id, size) : null;
+  if (!body) return apiError('not_found', 'No such picture.');
+  return new Response(body instanceof ReadableStream ? body : new Blob([new Uint8Array(body)], { type: 'image/webp' }), {
     headers: {
       'Content-Type': 'image/webp',
       'Cache-Control': 'private, max-age=31536000, immutable',
