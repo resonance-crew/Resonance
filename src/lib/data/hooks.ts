@@ -247,6 +247,71 @@ export interface CardView {
 const serverCardIds = new Map<string, string>();
 
 /**
+ * Card URL segment → whose card the server render showed for it (`''`: an
+ * anonymous one, whose author it never names) — only for a public card it
+ * rendered whole. Someone else's card the signed-in reader's browser then
+ * takes from the card page's one v1 request ({@link sharedCardDetail}), not
+ * from a second read of the same story through the rules (W3); someone else's
+ * anonymous card, which the rules never read here, goes straight to the
+ * server (W4).
+ */
+const serverCardAuthors = new Map<string, { id: string; authorId: string }>();
+
+/** How long a settled GET /api/v1/cards/{id}?include=… answer may still serve the page's other reader of it. */
+const SHARED_DETAIL_MS = 3_000;
+
+interface SharedDetail {
+  promise: Promise<CardDetailBody | null>;
+  /** When it settled; undefined while in flight. */
+  settledAt?: number;
+  /** Who has had it: each reader takes one answer once, so its own next read asks again. */
+  takers: Set<'card' | 'lists'>;
+}
+
+/** By `{uid}:{key}` (the card's id, and its slug once answered). */
+const sharedDetails = new Map<string, SharedDetail>();
+
+/**
+ * The card page's one signed-in request, GET /api/v1/cards/{key}?include=…,
+ * shared by its two readers — the card ({@link useCard}) and the lists around
+ * it ({@link useCardPageLists}) — which start together: whichever asks
+ * second, while the request is in flight or for a moment after, takes the
+ * same answer instead of asking again. Each reader takes an answer once, so a
+ * later read of either (a revalidation after an edit) always asks the server.
+ */
+export function sharedCardDetail(key: string, uid: string, who: 'card' | 'lists'): Promise<CardDetailBody | null> {
+  const now = Date.now();
+  for (const [k, e] of sharedDetails) if (e.settledAt !== undefined && now - e.settledAt > SHARED_DETAIL_MS) sharedDetails.delete(k);
+  const hit = sharedDetails.get(`${uid}:${key}`);
+  if (hit && !hit.takers.has(who)) {
+    hit.takers.add(who);
+    return hit.promise;
+  }
+  const entry: SharedDetail = {
+    promise: getOrNull<CardDetailBody>(`/api/v1/cards/${encodeURIComponent(key)}?include=${CARD_PAGE_INCLUDE}`),
+    takers: new Set([who]),
+  };
+  sharedDetails.set(`${uid}:${key}`, entry);
+  entry.promise.then(
+    (body) => {
+      entry.settledAt = Date.now();
+      // The other reader may ask by the card's id or its slug (unless the entry was dropped meanwhile).
+      if (body && sharedDetails.get(`${uid}:${key}`) === entry) for (const alias of [body.card.id, body.card.slug]) if (alias && alias !== key) sharedDetails.set(`${uid}:${alias}`, entry);
+    },
+    () => {
+      // A failure is no one else's answer: the other reader asks for itself.
+      for (const [k, e] of sharedDetails) if (e === entry) sharedDetails.delete(k);
+    },
+  );
+  return entry.promise;
+}
+
+/** Forget the shared answers (tests). */
+export function resetSharedCardDetails() {
+  sharedDetails.clear();
+}
+
+/**
  * A card by URL segment (slug or legacy doc id), read through the rules, with
  * the byline this viewer is shown: someone else's anonymous card gets the
  * anonymous one, and the profile it is anonymous from is never downloaded.
@@ -271,6 +336,20 @@ export async function fetchCardView(
   viewerId: string | undefined,
   knownId: string | undefined = serverCardIds.get(key),
 ): Promise<CardView | null> {
+  const shown = serverCardAuthors.get(key);
+  if (shown && shown.authorId !== viewerId) {
+    // Someone else's card, as the server render showed it. Signed in: the
+    // page's one v1 request answers it (W3) — the lists beside it share it.
+    if (viewerId) {
+      // By the id the render found, as the lists ask (useCardPageLists).
+      const body = await sharedCardDetail(shown.id, viewerId, 'card');
+      if (body) return cardViewOfDetail(body, key, viewerId);
+      // Gone, or the id no longer the slug's: the server finds what the key names now.
+      return serverCardView(key, viewerId);
+    }
+    // Signed out, an anonymous card: the rules never read one here (W4).
+    if (shown.authorId === '') return serverCardView(key, undefined);
+  }
   let card: Card | null;
   if (knownId) {
     card = await getCardById(knownId);
@@ -298,6 +377,11 @@ async function serverCardView(key: string, viewerId: string | undefined): Promis
   }
   const body = await getOrNull<CardDetailBody>(`/api/v1/cards/${encodeURIComponent(key)}`);
   if (!body) return null;
+  return cardViewOfDetail(body, key, viewerId);
+}
+
+/** A v1 CardDetail as the card page's view: the viewer's own card read whole through the rules, anyone else's as answered. */
+async function cardViewOfDetail(body: CardDetailBody, key: string, viewerId: string): Promise<CardView | null> {
   if (body.isOwner) {
     // The viewer's own card, which the slug lookup didn't name: one in their
     // trash, gone to everyone else (/api/cards/resolve answers it as a miss).
@@ -414,6 +498,10 @@ export function useCard(slugOrId: string | undefined, seed?: CardSeed | null) {
   const fallback = useMemo(() => (view ? seedCardView(view) : undefined), [view]);
   // Recorded while rendering, before any hook's fetch can start (see serverCardIds).
   if (slugOrId && seed?.id && !serverCardIds.has(slugOrId)) serverCardIds.set(slugOrId, seed.id);
+  if (slugOrId && seed) {
+    if (view && seed.id === view.card.id) serverCardAuthors.set(slugOrId, { id: seed.id, authorId: view.card.authorId });
+    else serverCardAuthors.delete(slugOrId);
+  }
   const swr = useSWR<CardView | null>(key, () => fetchCardView(slugOrId!, user?.id), {
     ...OWN_CONTENT,
     fallbackData: fallback,
@@ -718,8 +806,8 @@ export interface LoadedCardPageLists {
 export const cardPageKey = (id: string, uid: string) => `cardPage:${id}:${uid}`;
 
 /** One GET /api/v1/cards/{id}?include=…, as the lists the page draws; null: the viewer can't read the card. */
-async function fetchCardPageLists(id: string): Promise<LoadedCardPageLists | null> {
-  const body = await getOrNull<CardDetailBody>(`/api/v1/cards/${encodeURIComponent(id)}?include=${CARD_PAGE_INCLUDE}`);
+async function fetchCardPageLists(id: string, uid: string): Promise<LoadedCardPageLists | null> {
+  const body = await sharedCardDetail(id, uid, 'lists');
   if (!body) return null;
   return {
     resonances: mergeLists(summaryList(body.referenceCard ? [body.referenceCard] : []), summaryList(body.resonances)),
@@ -749,7 +837,7 @@ async function fetchCardPageLists(id: string): Promise<LoadedCardPageLists | nul
 export function useCardPageLists(id: string | undefined, referenceCardId: string | undefined): CardPageLists {
   const { user } = useAuth();
   const path = useReadPath();
-  const signedIn = useSWR(path === 'v1' && id ? cardPageKey(id, user!.id) : null, () => fetchCardPageLists(id!));
+  const signedIn = useSWR(path === 'v1' && id ? cardPageKey(id, user!.id) : null, () => fetchCardPageLists(id!, user!.id));
   const pub = path === 'public';
   const related = useRelated(pub ? id : undefined);
   const incoming = useResonanceCards(pub ? id : undefined);

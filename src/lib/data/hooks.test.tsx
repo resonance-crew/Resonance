@@ -105,6 +105,7 @@ import {
   useNotifications,
   useRecommendedFeed,
   useRelated,
+  resetSharedCardDetails,
   useResonators,
   useUnreadMessages,
   type CardBoxShelf,
@@ -197,6 +198,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.clearAllMocks();
   resetLive();
+  resetSharedCardDetails();
 });
 
 // The latest feed comes from the server: an anonymous card's document names
@@ -560,7 +562,9 @@ describe('useCard with the server render', () => {
     expect(getCardById).not.toHaveBeenCalled();
   });
 
+  // Signed out, a named card is read through the rules (W9 keeps that read); signed in, the page's v1 request answers it.
   it('reads the card by the id the server found, skipping the slug lookup, and takes over', async () => {
+    mockUseAuth.mockReturnValue({ user: null, loading: false });
     vi.mocked(getCardById).mockResolvedValue(card('doc1', 'a1', { story: 'Fresh from the rules' }));
     vi.mocked(getUserById).mockResolvedValue(user('a1', 'writer'));
     const { result } = renderHook(() => useCard('a-slug', seed), { wrapper });
@@ -572,6 +576,7 @@ describe('useCard with the server render', () => {
   });
 
   it("lets another reader of the card's key (an embed of it beside the page) fetch by the server's id too", async () => {
+    mockUseAuth.mockReturnValue({ user: null, loading: false });
     vi.mocked(getCardById).mockResolvedValue(card('doc1', 'a1'));
     vi.mocked(getUserById).mockResolvedValue(user('a1', 'writer'));
     // Rendered together; the other reader holds no fallbackData, so SWR starts
@@ -586,8 +591,10 @@ describe('useCard with the server render', () => {
   });
 
   it('turns into not-found when the card no longer reads (gone private or deleted)', async () => {
+    mockUseAuth.mockReturnValue({ user: null, loading: false });
     vi.mocked(getCardById).mockResolvedValue(null);
     vi.mocked(resolveCardId).mockResolvedValue('doc1');
+    vi.mocked(getPublicCardView).mockResolvedValue(null);
     const { result } = renderHook(() => useCard('a-slug', seed), { wrapper });
     await waitFor(() => expect(result.current.data).toBeNull());
     // The slug still names the same id: it isn't read a second time.
@@ -614,6 +621,84 @@ describe('useCard with the server render', () => {
     const { result } = renderHook(() => useCard('a-slug', anon), { wrapper });
     expect(result.current.data!.author).toMatchObject({ id: '', handle: '', initials: '·' });
     expect(getUserById).not.toHaveBeenCalled();
+  });
+
+  // W3: the story came in the HTML; signed in, the page's one v1 request (the lists' too) brings it again — never a
+  // third copy through the rules.
+  it("signed in, takes someone else's card from the page's one v1 request, shared with the lists, never reading it through the rules", async () => {
+    const detail = {
+      card: summary('doc1', 'a1', { slug: 'a-slug' }),
+      story: 'From the v1 answer.',
+      visibility: 'public',
+      anonymous: false,
+      resonanceCount: 2,
+      coreInsight: null,
+      isOwner: false,
+      referenceCard: null,
+      resonances: { cards: [summary('r1', 'a2')] },
+      related: { cards: [] },
+      links: { cards: [] },
+      embeds: { cards: [] },
+    } satisfies CardDetailBody;
+    api({ '/api/v1/cards/doc1?include=': detail });
+    const { result } = renderHook(
+      () => {
+        const page = useCard('a-slug', seed);
+        const lists = useCardPageLists(page.data?.card.id ?? 'doc1', undefined);
+        return { page, lists };
+      },
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.page.fromServer).toBe(false));
+    await waitFor(() => expect(result.current.lists.resonances?.cards.map((c) => c.id)).toEqual(['r1']));
+    expect(result.current.page.data!.card).toMatchObject({ id: 'doc1', authorId: 'a1', story: 'From the v1 answer.', resonanceCount: 2 });
+    expect(result.current.page.data!.card.summary).toBeUndefined();
+    expect(result.current.page.data!.author!.handle).toBe('h-a1');
+    expect(getCardById).not.toHaveBeenCalled();
+    expect(getUserById).not.toHaveBeenCalled();
+    expect(callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('signed in, asks the server what the slug names now when the id the render found is gone', async () => {
+    api({
+      '/api/v1/cards/a-slug': {
+        card: summary('doc2', 'a1', { slug: 'a-slug' }),
+        story: 'Moved.',
+        visibility: 'public',
+        anonymous: false,
+        resonanceCount: 0,
+        coreInsight: null,
+        isOwner: false,
+        referenceCard: null,
+      },
+    });
+    const { result } = renderHook(() => useCard('a-slug', seed), { wrapper });
+    await waitFor(() => expect(result.current.fromServer).toBe(false));
+    expect(result.current.data!.card).toMatchObject({ id: 'doc2', story: 'Moved.' });
+    expect(getCardById).not.toHaveBeenCalled();
+  });
+
+  // W4: the rules never read someone else's anonymous card in the browser — not a first try that must fail.
+  it("signed out, goes straight to the server for an anonymous card the render showed", async () => {
+    mockUseAuth.mockReturnValue({ user: null, loading: false });
+    const anon: CardSeed = { id: 'doc1', view: { card: { ...seed.view!.card, authorId: '', anonymous: true }, author: null } };
+    vi.mocked(getPublicCardView).mockResolvedValue({ ...anon, view: { ...anon.view!, card: { ...anon.view!.card, story: 'Fresh, unsigned.' } } });
+    const { result } = renderHook(() => useCard('anon-slug', anon), { wrapper });
+    await waitFor(() => expect(result.current.fromServer).toBe(false));
+    expect(result.current.data!.card).toMatchObject({ authorId: '', story: 'Fresh, unsigned.' });
+    expect(getPublicCardView).toHaveBeenCalledWith('anon-slug');
+    expect(getCardById).not.toHaveBeenCalled();
+    expect(resolveCardId).not.toHaveBeenCalled();
+  });
+
+  it("still reads the viewer's own card through the rules, beside the lists' request", async () => {
+    const mine: CardSeed = { id: 'doc1', view: { ...seed.view!, card: { ...seed.view!.card, authorId: 'me' } } };
+    vi.mocked(getCardById).mockResolvedValue(card('doc1', 'me', { story: 'Mine, whole' }));
+    vi.mocked(getUserById).mockResolvedValue(user('me'));
+    const { result } = renderHook(() => useCard('mine-slug', mine), { wrapper });
+    await waitFor(() => expect(result.current.fromServer).toBe(false));
+    expect(result.current.data!.card.story).toBe('Mine, whole');
+    expect(getCardById).toHaveBeenCalledWith('doc1');
   });
 
   it('with only an id (a card the server may not show), reads it by that id with nothing shown first', async () => {
