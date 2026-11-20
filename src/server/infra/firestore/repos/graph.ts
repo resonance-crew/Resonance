@@ -51,7 +51,8 @@ export function resonanceCardOf(data: DocumentData): ResonanceCard {
     referenceCardId: data.referenceCardId,
     visibility: data.visibility,
     anonymous: data.anonymous,
-    publishedAt: data.publishedAt instanceof Timestamp ? data.publishedAt.toDate() : null,
+    // A stored card holds a Timestamp; a card row from another aggregate (cards' CardRow) already holds a Date.
+    publishedAt: data.publishedAt instanceof Timestamp ? data.publishedAt.toDate() : data.publishedAt instanceof Date ? data.publishedAt : null,
   };
 }
 
