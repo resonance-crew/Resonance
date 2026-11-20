@@ -30,6 +30,8 @@
  *   story to set them (lib/text/script writerScript, as the web writer does);
  *   setScript(script | null, lang?) sets the type by hand (null: by the text again).
  * Bridge (island → native): {type: 'ready' | 'change' | 'height' | 'state' | 'focus' | 'script' | 'caret', ...}
+ *   'height' {px, content}: the page's scrollHeight and the foot of the story's last block (CSS px, zoom
+ *   included), sent only when either changed;
  *   posted to
  *   iOS  window.webkit.messageHandlers.editor
  *   Android window.ResonanceBridge.postMessage(json)
@@ -91,7 +93,7 @@ type HostLinkPreview = { url: string; title: string; image?: string };
 type Message =
   | { type: 'ready'; ms: number }
   | { type: 'change'; markdown: string }
-  | { type: 'height'; px: number }
+  | { type: 'height'; px: number; content: number }
   | ({ type: 'state' } & ToolbarState)
   | { type: 'focus'; focused: boolean }
   | { type: 'script'; script: StoryScript; lang: string | null }
@@ -527,19 +529,48 @@ function sendCaret() {
   caretFrame = requestAnimationFrame(() => {
     if (!editor.isFocused) return;
     const rect = editor.view.coordsAtPos(editor.state.selection.head);
-    // In the page's px as laid out, zoom included (the 'height' message's): where the host's text scale is a
-    // CSS zoom on the body, an engine that measures inside it unzoomed (offsetHeight agrees with the rect)
-    // is scaled here; one that measures it as drawn already is not.
-    const zoom = parseFloat(document.body.style.zoom || '1') || 1;
-    const drawn = document.body.getBoundingClientRect().height;
-    const laidOut = document.body.offsetHeight;
-    const scale = zoom !== 1 && Math.abs(drawn - laidOut) < Math.abs(drawn - laidOut * zoom) ? zoom : 1;
+    const scale = zoomScale();
     send({
       type: 'caret',
       top: Math.round((rect.top + window.scrollY) * scale),
       bottom: Math.round((rect.bottom + window.scrollY) * scale),
     });
   });
+}
+
+/**
+ * In the page's px as laid out, zoom included (the 'height' message's): where the host's text scale is a
+ * CSS zoom on the body, an engine that measures inside it unzoomed (offsetHeight agrees with the rect)
+ * is scaled here; one that measures it as drawn already is not.
+ */
+function zoomScale(): number {
+  const zoom = parseFloat(document.body.style.zoom || '1') || 1;
+  const drawn = document.body.getBoundingClientRect().height;
+  const laidOut = document.body.offsetHeight;
+  return zoom !== 1 && Math.abs(drawn - laidOut) < Math.abs(drawn - laidOut * zoom) ? zoom : 1;
+}
+
+/**
+ * How tall what is written stands: its last block's foot (the root's own, with no padding and the block's
+ * margin collapsing past it), so a root that fills the page (the Mac's `fill`) still says how much is
+ * written — exactly as iOS's StoryEditor.measureContent() asked for it in a round trip of its own.
+ */
+function contentBottom(): number {
+  const root = editor.view.dom;
+  const el = root.lastElementChild || root;
+  return Math.ceil((el.getBoundingClientRect().bottom + window.scrollY) * zoomScale());
+}
+
+// The page's height and how much is written, told only when either changed (a body resized by the same
+// amount, a re-wrap that moved nothing, says nothing new).
+let lastHeight = '';
+function sendHeight() {
+  const px = document.documentElement.scrollHeight;
+  const content = contentBottom();
+  const key = `${px}:${content}`;
+  if (key === lastHeight) return;
+  lastHeight = key;
+  send({ type: 'height', px, content });
 }
 
 // The host draws the toolbar (in its story field, or docked on its keyboard in
@@ -573,7 +604,7 @@ function sendState() {
 }
 
 new ResizeObserver(() => {
-  send({ type: 'height', px: document.documentElement.scrollHeight });
+  sendHeight();
   // Its lines moved (a picture landed, the text re-wrapped): where the caret is now.
   if (editor.isFocused) sendCaret();
 }).observe(document.body);

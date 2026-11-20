@@ -182,6 +182,49 @@ describe('the editor island', () => {
     });
   });
 
+  describe('its height (audit X3)', () => {
+    it('tells the page’s height with how much is written, only when either changed', async () => {
+      // The body's observer, held so the test can say when the body resized.
+      let resized: (() => void) | undefined;
+      const Stub = window.ResizeObserver;
+      window.ResizeObserver = class {
+        constructor(private cb: () => void) {}
+        observe(target: Element) {
+          if (target === document.body) resized = this.cb;
+        }
+        unobserve() {}
+        disconnect() {}
+      } as unknown as typeof ResizeObserver;
+      try {
+        let page = 600;
+        Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, get: () => page });
+        const island = await open('layout=canvas');
+        island.setMarkdown('第一段\n\n第二段');
+        let foot = 120.2;
+        const lastBlock = () => root().lastElementChild as HTMLElement;
+        lastBlock().getBoundingClientRect = () => new DOMRect(0, foot - 24, 300, 24);
+        const heights = () => posted.filter((m) => m.type === 'height');
+
+        resized!();
+        expect(heights()).toEqual([{ type: 'height', px: 600, content: 121 }]);
+        resized!();
+        expect(heights()).toHaveLength(1);
+        // The page as tall as its view, the story longer: only `content` moved, and it is told.
+        foot = 180;
+        resized!();
+        expect(heights().at(-1)).toEqual({ type: 'height', px: 600, content: 180 });
+        page = 640;
+        resized!();
+        resized!();
+        expect(heights()).toHaveLength(3);
+        expect(heights().at(-1)).toEqual({ type: 'height', px: 640, content: 180 });
+      } finally {
+        window.ResizeObserver = Stub;
+        delete (document.documentElement as unknown as { scrollHeight?: number }).scrollHeight;
+      }
+    });
+  });
+
   describe('links (round 16 §6)', () => {
     it('says which link the selection is in, and whether 卡片 is offered', async () => {
       const island = await open('layout=canvas');
