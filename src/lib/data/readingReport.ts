@@ -216,9 +216,16 @@ export function useReadingReport({ cardId, enabled, expectedSeconds, storyRef, e
     const onActivity = () => {
       s.activity(Date.now());
     };
+    // The story measured once a frame while it scrolls (W21: each scroll event read its box), and at once
+    // before anything is sent (send()).
+    let frame = 0;
     const onScroll = () => {
       onActivity();
-      measure();
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        measure();
+      });
     };
     const tick = window.setInterval(() => s.tick(Date.now(), visible()), 1_000);
     const onVisibility = () => {
@@ -255,6 +262,7 @@ export function useReadingReport({ cardId, enabled, expectedSeconds, storyRef, e
       live = false;
       window.clearInterval(tick);
       window.clearTimeout(refresh);
+      if (frame) window.cancelAnimationFrame(frame);
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('keydown', onActivity);
       window.removeEventListener('pointerdown', onActivity);

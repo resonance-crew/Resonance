@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
@@ -189,6 +189,16 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
     onSignIn: () => router.push('/signin'),
   });
   const story = tr.shown?.story ?? data?.card?.story;
+  // What the page reads off the whole story — its reading time, whether it has contents, how its words are
+  // set — once per story, not on every render of the page (W21: four scans of it each time).
+  const cardStory = data?.card?.story ?? '';
+  const storyFacts = useMemo(
+    () => ({ seconds: readSeconds(cardStory), minutes: readMinutes(cardStory), contents: storyHasContents(cardStory) }),
+    [cardStory],
+  );
+  const shownTitleNow = tr.shown?.title ?? data?.card?.thoughtCore ?? '';
+  const shownStoryNow = story ?? '';
+  const shownType = useMemo(() => storyType(shownTitleNow, shownStoryNow), [shownTitleNow, shownStoryNow]);
 
   // The card's share · ⋯ come twice — under the title and at the story's end — only when the two can't be in
   // view at once (round 12 §5–6): at ≥ 1200 at the end of the response row, below it at the end of the tags.
@@ -200,7 +210,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   const readingReport = useReadingReport({
     cardId: shown?.id,
     enabled: reading && !!user,
-    expectedSeconds: readSeconds(shown?.story ?? ''),
+    expectedSeconds: storyFacts.seconds,
     storyRef,
     endEl: tagsEl,
   });
@@ -266,11 +276,11 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   // The title and story shown: the card's, or its translation (set in its own script's type and lang).
   const shownTitle = tr.shown?.title ?? card.thoughtCore;
   const shownStory = tr.shown?.story ?? card.story;
-  const type = storyType(shownTitle, shownStory);
+  const type = shownType;
   const swapClass = tr.swaps > 0 ? ` ${translateStyles.swapped}` : '';
   // Whether the story has a contents list beside it, read off its Markdown: the column is laid out once, in the
   // server's HTML too — centred alone, or beside the rail.
-  const contents = storyHasContents(card.story);
+  const contents = storyFacts.contents;
   // Only a published, public card can be opened by whoever gets its link; an
   // anonymous one as well (its link names no one). Never by the viewer, a
   // connection or a block: sharing must not tell anyone anything.
@@ -397,7 +407,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               className={styles.byline}
               author={author}
               anonymous={card.anonymous}
-              minutes={readMinutes(card.story)}
+              minutes={storyFacts.minutes}
               published={published}
               privateCard={privateCard || sharedPrivate}
               actions={cardActions}
