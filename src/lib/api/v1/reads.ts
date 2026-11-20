@@ -470,7 +470,9 @@ const profileCards = (db: Firestore, authorId: string, start?: PageStart) =>
       .where('authorId', '==', authorId)
       .where('visibility', '==', 'public')
       .where('anonymous', '==', false)
-      .where('publishedAt', '!=', null)
+      // A real stamp, not ahead of now by more than an hour (properlyPublished, as a range: B11) — a range on a
+      // timestamp matches timestamps only, so null and a string publishedAt stay out as `!= null` kept null out.
+      .where('publishedAt', '<=', Timestamp.fromMillis(Date.now() + 60 * 60 * 1000))
       .select(...LIST_FIELDS),
     start,
   );
@@ -497,7 +499,7 @@ export async function getProfile(
   const limit = Math.min(opts.limit ?? DEFAULT_PAGE, PROFILE_COUNT_LIMIT);
   const user = await userByHandle(db, handle);
   const isSelf = user.id === viewerId;
-  const [blocks, isConnected, published, linking, conversation] = await Promise.all([
+  const [blocks, isConnected, counted, published, linking, conversation] = await Promise.all([
     // The whole block list when the links need it (it answers isBlocked too), else the one document.
     include.has('links')
       ? blockedByViewer(db, viewerId)
@@ -505,17 +507,19 @@ export async function getProfile(
         ? null
         : db.doc(`users/${viewerId}/blocks/${user.id}`).get().then((s) => (s.exists ? new Set([user.id]) : null)),
     isSelf ? Promise.resolve(false) : connected(db, viewerId, user.id),
-    profileCards(db, user.id).limit(PROFILE_COUNT_LIMIT).get(),
+    // The count is an aggregation (B11: a read per thousand index entries, not 40 documents); the page reads its own.
+    profileCards(db, user.id).limit(PROFILE_COUNT_LIMIT).count().get(),
+    include.has('cards') ? profileCards(db, user.id).limit(limit).get() : null,
     include.has('links') ? cardsLinkingToAuthor(db, user.id, viewerId) : [],
     opts.preLetterBuild && !isSelf ? db.doc(`conversations/${pairOf(viewerId, user.id)}`).get() : null,
   ]);
   const blocked = !isSelf && !!blocks?.has(user.id);
   // Over the same query as the page: named cards only, so the count says nothing of anonymous ones.
-  const cardCount = published.docs.filter((d) => properlyPublished(d.get('publishedAt'))).length;
+  const cardCount = counted.data().count;
   const u = user.data();
   const joined = u.joinedAt instanceof Timestamp ? u.joinedAt.toDate() : new Date(0);
   const [cards, links, answerable] = await Promise.all([
-    include.has('cards') && !blocked ? profilePage(db, published.docs.slice(0, limit), u, limit) : EMPTY_PAGE,
+    include.has('cards') && !blocked && published ? profilePage(db, published.docs, u, limit) : EMPTY_PAGE,
     include.has('links') ? present(db, viewerId, linking, { blocked: blocks ?? new Set() }) : [],
     // A build before letters: a letter of theirs waiting for the viewer's answer reads as a connection.
     !isConnected && !blocked && conversation ? letterReadsAsConnection(db, viewerId, user.id, conversation) : false,

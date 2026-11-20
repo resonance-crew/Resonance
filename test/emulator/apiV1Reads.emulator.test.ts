@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
-import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestore';
+import { getFirestore, Query, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { ApiFailure } from '@/lib/api/v1/http';
 import {
   getCardBox,
@@ -318,6 +318,28 @@ describe('profiles', () => {
     }
     expect((await getProfile(db, 'alice', 'bob')).cardCount).toBe(named.length);
     expect((await getProfile(db, 'bob', 'bob')).cardCount).toBe(named.length);
+  });
+
+  it('counts a profile’s cards by aggregation, reading only the page’s documents; a far-future or string stamp counts for nothing (B11)', async () => {
+    for (let i = 0; i < 5; i++) await card(`n${i}`, 'bob', i + 1);
+    await db.doc('cards/future').set({ authorId: 'bob', thoughtCore: 'f', story: 's', tags: [], visibility: 'public', anonymous: false, publishedAt: Timestamp.fromDate(new Date('2099-01-01')) });
+    await db.doc('cards/stringy').set({ authorId: 'bob', thoughtCore: 's', story: 's', tags: [], visibility: 'public', anonymous: false, publishedAt: '2099-01-01' });
+    const get = vi.spyOn(Query.prototype, 'get');
+    try {
+      const bare = await getProfile(db, 'alice', 'bob');
+      expect(bare.cardCount).toBe(5);
+      // No card document is read for a profile without its cards: the count is an aggregation.
+      expect(get.mock.contexts.filter((q) => (q as Query & { _queryOptions?: { collectionId?: string } })._queryOptions?.collectionId === 'cards')).toHaveLength(0);
+      const withCards = await getProfile(db, 'alice', 'bob', { include: new Set(['cards']), limit: 2 });
+      expect(withCards.cardCount).toBe(5);
+      expect(withCards.cards?.cards.map((c) => c.id)).toEqual(['n0', 'n1']);
+      // The page is the one query of cards read as documents, of its own length.
+      const cardQueries = get.mock.contexts.filter((q) => (q as Query & { _queryOptions?: { collectionId?: string } })._queryOptions?.collectionId === 'cards');
+      expect(cardQueries).toHaveLength(1);
+      expect((cardQueries[0] as Query & { _queryOptions: { limit?: number } })._queryOptions.limit).toBe(2);
+    } finally {
+      get.mockRestore();
+    }
   });
 
   it("lists others' cards that link to theirs", async () => {
