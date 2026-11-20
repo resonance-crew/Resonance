@@ -394,6 +394,31 @@ export function ThoughtMapCanvas({
   const zoomRef = useRef<HTMLDivElement>(null);
   const cam = useRef<CameraPainter | null>(null);
   cam.current ??= cameraPainter(cameraRef, worldRef, dotsRef, percentRef, setCamera);
+
+  // A dragged card's latest place, set once a frame (W12); flushed at once when the pointer lifts.
+  const nodeMove = useRef<{ frame: number; pending: (() => void) | null }>({ frame: 0, pending: null });
+  const flushNodeMove = () => {
+    const m = nodeMove.current;
+    if (m.frame) cancelAnimationFrame(m.frame);
+    m.frame = 0;
+    const run = m.pending;
+    m.pending = null;
+    run?.();
+  };
+  useEffect(() => () => {
+    if (nodeMove.current.frame) cancelAnimationFrame(nodeMove.current.frame);
+  }, []);
+  // Each link's drawn curve, kept while its two cards stay where they are (W12): a drag redraws only the links of the
+  // card it moves, not every link on the map.
+  const edgeCache = useRef(new Map<string, { key: string; geo: ReturnType<typeof organicEdgePath> }>());
+  const edgeGeometry = (id: string, a: ReturnType<typeof nodeRect>, b: ReturnType<typeof nodeRect>) => {
+    const key = `${a.x},${a.y},${a.w},${a.h}|${b.x},${b.y},${b.w},${b.h}`;
+    const kept = edgeCache.current.get(id);
+    if (kept && kept.key === key) return kept.geo;
+    const geo = organicEdgePath(a, b, seedFromString(id));
+    edgeCache.current.set(id, { key, geo });
+    return geo;
+  };
   useEffect(() => () => cam.current!.dispose(), []);
 
   const [selection, setSelection] = useState<Selection>(null);
@@ -750,17 +775,23 @@ export function ThoughtMapCanvas({
         }
         cam.current!.move({ ...cameraRef.current, x: drag.camX + (px - drag.px), y: drag.camY + (py - drag.py) });
         break;
-      case 'node':
+      case 'node': {
         markMoved(drag, px, py);
-        setNodes((prev) => {
-          const cur = prev[drag.id];
-          const pos = { x: w.x - drag.dx, y: w.y - drag.dy };
-          // Majority rule: the card files into (and clips against) a region
-          // only while more than half of it sits inside — half out means out.
-          const groupId = majorityGroupId({ ...pos, w: NODE_W, h: NODE_H }, groupRects);
-          return { ...prev, [drag.id]: { ...cur, ...pos, groupId } };
-        });
+        const id = drag.id;
+        const pos = { x: w.x - drag.dx, y: w.y - drag.dy };
+        // One move a frame (W12): a pointer reports several between two frames, and each rebuilt the map's world.
+        nodeMove.current.pending = () =>
+          setNodes((prev) => {
+            const cur = prev[id];
+            if (!cur) return prev;
+            // Majority rule: the card files into (and clips against) a region
+            // only while more than half of it sits inside — half out means out.
+            const groupId = majorityGroupId({ ...pos, w: NODE_W, h: NODE_H }, groupRects);
+            return { ...prev, [id]: { ...cur, ...pos, groupId } };
+          });
+        nodeMove.current.frame ||= requestAnimationFrame(flushNodeMove);
         break;
+      }
       case 'group': {
         markMoved(drag, px, py);
         setGroups((prev) => ({
@@ -797,6 +828,8 @@ export function ThoughtMapCanvas({
   };
 
   const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    // the last move lands before the drop is read
+    flushNodeMove();
     if (e.pointerType === 'touch') {
       touchesRef.current.delete(e.pointerId);
       if (pinchRef.current) {
@@ -1291,8 +1324,8 @@ export function ThoughtMapCanvas({
             const s = nodes[edge.sourceCardId];
             const target = nodes[edge.targetCardId];
             if (!s || !target) return null;
+            const geo = edgeGeometry(edge.id, nodeRect(s), nodeRect(target));
             const seed = seedFromString(edge.id);
-            const geo = organicEdgePath(nodeRect(s), nodeRect(target), seed);
             const sel = selection?.kind === 'edge' && selection.id === edge.id;
             // Selection deepens the ink rather than jumping to the accent (in dark, brightens it).
             const color = sel ? EDGE_INK_CHOSEN : EDGE_INK;

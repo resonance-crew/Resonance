@@ -19,27 +19,42 @@
      colour the highlight meets are the palette's (--skeleton-base, the well with
      a touch of ink; --skeleton-glow, the paper): in dark the block is lifted off
      the night paper, where the well would sink into it. */
+  /* The block is the base; the highlight is a band laid over it (::after) and
+     moved across by transform alone — the compositor's work, never a repaint
+     per frame (an animated background-position repainted the block, and every
+     grain under it, sixty times a second: the perf audit's W2). */
+  position: relative;
+  overflow: hidden;
+  background: var(--skeleton-base);
+}
+
+.block::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
   background: linear-gradient(
     90deg,
-    var(--skeleton-base) 25%,
-    color-mix(in oklab, var(--skeleton-highlight, var(--color-terracotta-light)) 50%, var(--skeleton-glow)) 37%,
-    var(--skeleton-base) 63%
+    transparent 0%,
+    color-mix(in oklab, var(--skeleton-highlight, var(--color-terracotta-light)) 50%, var(--skeleton-glow)) 50%,
+    transparent 100%
   );
-  background-size: 400% 100%;
+  transform: translateX(-100%);
   animation: skeleton-shimmer 1.5s ease infinite;
 }
 
 @keyframes skeleton-shimmer {
   0% {
-    background-position: 100% 0;
+    transform: translateX(-100%);
   }
   100% {
-    background-position: -100% 0;
+    transform: translateX(100%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .block {
+  .block::after {
     animation: none;
+    display: none;
   }
 }

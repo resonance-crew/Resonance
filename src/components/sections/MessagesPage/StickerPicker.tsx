@@ -10,6 +10,7 @@ import { wobCircle } from '@/lib/design/wobCircle';
 import { wobRect } from '@/lib/design/wobRect';
 import { seedFromString } from '@/lib/design/prng';
 import { STICKER_PACKS, stickerName, stickerOf, stickerPackIconPath, stickerPath, type StickerRef } from '@/lib/stickers/catalog';
+import { onScrollPassive } from '@/lib/design/scrollFrame';
 import styles from './Thread.module.css';
 
 /** The recents' section, before the packs. */
@@ -164,8 +165,8 @@ export function StickerPicker({ recents, onPick, variant = 'panel', gridRef }: S
     const el = scroller.current;
     if (!el) return;
     follow();
-    el.addEventListener('scroll', follow, { passive: true });
-    return () => el.removeEventListener('scroll', follow);
+    // once a frame at most (the perf audit's W21): it reads every section's offsetTop
+    return onScrollPassive(follow, el);
   }, [follow]);
 
   const goTo = (id: string) => {

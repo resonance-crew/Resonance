@@ -103,15 +103,26 @@ describe('the landing page’s marks, on its real sections', () => {
     }
   });
 
-  it('gives every card of the feed its article, title, both chromes and author row', () => {
-    const { cards } = landing();
+  it('gives every card of the feed its article, title, its chrome and author row', () => {
+    // a phone (W19: once hydrated a card keeps only the chrome its screen shows; both are in the server's HTML)
+    const was = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(max-width: 640px)', media: query, onchange: null,
+      addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+    let cards: Card[];
+    try {
+      ({ cards } = landing());
+    } finally {
+      window.matchMedia = was;
+    }
     const items = document.querySelectorAll(`[data-mascot-zone="feed"] ${CARD_ITEM}`);
     expect(items).toHaveLength(cards.length);
     for (const item of items) {
       const article = item.querySelector('article');
       expect(article).not.toBeNull();
       expect(article?.querySelector('h3')).not.toBeNull();
-      expect(article?.querySelectorAll('[data-mascot="card-edge"]')).toHaveLength(2);   // a computer's outline, a phone's rule
+      expect(article?.querySelectorAll('[data-mascot="card-edge"]')).toHaveLength(1);   // the phone's rule
       expect(article?.querySelector('[data-mascot="card-foot"]')).not.toBeNull();
       // the phone's rule is drawn at once (a computer's outline once measured): a stroked path the stage can read
       const drawn = [...(article?.querySelectorAll('[data-mascot="card-edge"] path[stroke]') ?? [])]

@@ -1,5 +1,6 @@
 'use client';
 
+import { onScrollPassive } from '@/lib/design/scrollFrame';
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useLocale, useTranslations } from 'next-intl';
@@ -78,8 +79,10 @@ export function SiteHeader() {
   useEffect(() => {
     setMounted(true);
     const onScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', onScroll);
-    return () => window.removeEventListener('scroll', onScroll);
+    // passive, and read once a frame at most (the perf audit's W21): a scroll event can come many times a frame
+    const off = onScrollPassive(onScroll);
+    onScroll();
+    return off;
   }, []);
 
   useEffect(() => {

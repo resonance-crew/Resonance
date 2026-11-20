@@ -54,7 +54,7 @@
   }
 }
 
-/* The paper's grain as a still bitmap (`stillGrain`): grey specks through the
+/* The paper's grain as a still bitmap (every card since the perf audit's W1): grey specks through the
    tile, cut to the drawn outline (its clip-path) as ShapeGrain's are — drawn
    once, never a filter. Their grey is ShapeGrain's own: its noise is grey in
    linear light (an sRGB ~188, oklch 80%, in either scheme — it carries no
@@ -66,8 +66,9 @@
   pointer-events: none;
   /* colour-fixed: ShapeGrain's own noise grey, the same in either scheme (it carries no token) */
   background-color: oklch(80% 0 0);
-  -webkit-mask-image: var(--still-grain);
-  mask-image: var(--still-grain);
+  /* GrainOverlay's still tile (the landing film's) */
+  -webkit-mask-image: url('../../atoms/GrainOverlay/grain.png');
+  mask-image: url('../../atoms/GrainOverlay/grain.png');
   -webkit-mask-size: 128px 128px;
   mask-size: 128px 128px;
   -webkit-mask-repeat: repeat;
@@ -78,6 +79,12 @@
     -webkit-mask-size: 64px 64px;
     mask-size: 64px 64px;
   }
+}
+
+/* a card handed its own tile (`stillGrain`) */
+.ownGrain {
+  -webkit-mask-image: var(--still-grain);
+  mask-image: var(--still-grain);
 }
 
 /* The loaded card's two chromes, both in the HTML: the hand-drawn card on

@@ -1,10 +1,15 @@
 'use client';
 
-import { CSSProperties, MouseEvent, ReactNode, memo, useMemo, useRef, useState } from 'react';
+import { CSSProperties, MouseEvent, ReactNode, memo, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
+
+/**
+ * The chalk seeds a list of cards shares (the perf audit's W7): card i wears `i % 6`, its filter defined once by the
+ * list (`<ChalkFilters seeds={CARD_CHALK_SEEDS}>`, as the thought map does) rather than once per card.
+ */
+export const CARD_CHALK_SEEDS = [0, 1, 2, 3, 4, 5] as const;
 import { BrushWash } from '@/components/atoms/BrushWash/BrushWash';
 import { INK, INK_LIGHT } from '@/lib/design/strokes';
-import { ShapeGrain } from '@/components/atoms/ShapeGrain/ShapeGrain';
 import { GrainOverlay } from '@/components/atoms/GrainOverlay/GrainOverlay';
 import { STORY_GRAIN } from '@/lib/design/grain';
 import { TagPill } from '@/components/atoms/TagPill/TagPill';
@@ -30,6 +35,8 @@ export interface Story {
   readTime: string;
   tags: string[];
   imageUrl?: string;
+  /** The cover's smaller copy for a list (`media.thumbUrl`, v1 `imageThumbUrl`): offered beside it (W6). */
+  imageThumbUrl?: string;
   imageLabel?: string;
   /** Where the cover is looked at (`media.frame`, round 25 §G1). */
   imageFrame?: CoverFrame;
@@ -50,15 +57,44 @@ export { CARD_FILLS, CARD_BORDERS };
 // cover-image dominant-colour extraction); re-exported for existing consumers.
 export { CARD_HUES };
 
+/**
+ * Whether the card is drawn as a phone's band (the module CSS's `max-width: 640px`), once the page has hydrated:
+ * `null` in the server's HTML and while hydrating — both chromes are there, CSS showing one, so the first paint is
+ * already right — then the one the screen shows, the other taken down (the perf audit's W19: every card kept both
+ * in the DOM, the hidden one's SVG and grain included). One media query for every card on the page.
+ */
+const BAND_QUERY = '(max-width: 640px)';
+let bandQuery: { of: typeof window.matchMedia; list: MediaQueryList } | null = null;
+function bandList(): MediaQueryList | null {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return null;
+  // kept while the window's matchMedia is the same one (a test may stand another in)
+  if (bandQuery?.of !== window.matchMedia) bandQuery = { of: window.matchMedia, list: window.matchMedia(BAND_QUERY) };
+  return bandQuery.list;
+}
+function subscribeBand(onChange: () => void) {
+  const mq = bandList();
+  mq?.addEventListener?.('change', onChange);
+  return () => mq?.removeEventListener?.('change', onChange);
+}
+function useBandChrome(): boolean | null {
+  return useSyncExternalStore(
+    subscribeBand,
+    () => bandList()?.matches ?? null,
+    () => null
+  );
+}
+
 function StoryImage({
   label,
   family,
   imageUrl,
+  thumbUrl,
   frame,
   seed,
   slot,
   grain = true,
 }: {
+  thumbUrl?: string;
   frame?: CoverFrame;
   label: string;
   family: number;
@@ -71,12 +107,14 @@ function StoryImage({
   return (
     <OrganicImage
       src={imageUrl}
+      thumbSrc={thumbUrl}
       alt={label}
       seed={seed}
       ratio={0.62}
       frame={imageUrl ? frame : undefined}
       className={styles.imagePlaceholder}
       overlay={slot}
+      grain={grain ? <GrainOverlay still opacity={STORY_GRAIN.cover} /> : undefined}
     >
       {!imageUrl && (
         <svg
@@ -114,7 +152,6 @@ function StoryImage({
           )}
         </svg>
       )}
-      {grain && <GrainOverlay opacity={STORY_GRAIN.cover} />}
     </OrganicImage>
   );
 }
@@ -199,10 +236,10 @@ export interface StoryCardProps {
    */
   framed?: boolean;
   /**
-   * The paper's grain as a still bitmap (a tile's URL) instead of the live
-   * noise filters (the paper's chalk and grain, the cover's): for a card that
-   * moves on every frame, which a filter would be drawn again for in WebKit.
-   * Cut to the card's outline, as ShapeGrain is.
+   * For a card that moves on every frame (the landing film's stage), which a filter would be drawn again for in
+   * WebKit: no live filter at all — no chalk on the paper, no grain over the cover — and the paper's still grain
+   * through this tile (a URL). Every card's paper grain is a still tile since the perf audit's W1; this one also
+   * leaves the chalk and the cover's grain off.
    */
   stillGrain?: string;
   /**
@@ -211,6 +248,11 @@ export interface StoryCardProps {
    * carries its one action here.
    */
   foot?: ReactNode;
+  /**
+   * The list defines the chalk filters once (`<ChalkFilters seeds={CARD_CHALK_SEEDS}>`): this card only refers to
+   * its own (`index % 6`). Without it the card defines its filter itself.
+   */
+  sharedChalk?: boolean;
 }
 
 /**
@@ -235,12 +277,17 @@ export const StoryCard = memo(function StoryCard({
   framed = false,
   stillGrain,
   foot,
+  sharedChalk = false,
 }: StoryCardProps) {
   const [hoveredRaw, setHovered] = useState(false);
   const hovered = hoveredRaw && !preview;
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const cardRef = useRef<HTMLElement>(null);
   const { w, h } = useElementSize(cardRef, 340, 480);
+  const band = useBandChrome();
+  // a framed card has no band at any width; otherwise null (the server's paint) keeps both
+  const showBand = !framed && band !== false;
+  const showFrame = framed || band !== true;
 
   const recordPointer = (e: MouseEvent<HTMLElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -301,79 +348,85 @@ export const StoryCard = memo(function StoryCard({
       } as CSSProperties}
     >
       {loading ? (
-        // Both chromes render; the module CSS shows exactly one per viewport,
-        // so even the pre-hydration SSR paint matches the loaded design.
+        // Both chromes in the server's paint, the module CSS showing one per
+        // viewport; once hydrated only the shown one stays (useBandChrome).
         <>
-          <div className={styles.skeletonChrome} aria-hidden style={{ background: cardInterior }} />
-          <div className={styles.skeletonMobileChrome} aria-hidden>
-            <GrainOverlay opacity={STORY_GRAIN.band} />
-            <MobileDividers d={dividerPath} stroke={bc1} isLast={isLast} isFirst={isFirst} />
-          </div>
-        </>
-      ) : (
-        // Both chromes render; the module CSS (640px) shows one, so the
-        // server's paint is already the right one for the screen.
-        <>
-          {/* a framed card has no band to show */}
-          {!framed && (
-            <div className={styles.mobileChrome} aria-hidden data-mascot="card-edge">
-              <GrainOverlay opacity={STORY_GRAIN.band} />
+          {showFrame && <div className={styles.skeletonChrome} aria-hidden style={{ background: cardInterior }} />}
+          {showBand && (
+            <div className={styles.skeletonMobileChrome} aria-hidden>
+              <GrainOverlay still opacity={STORY_GRAIN.band} />
               <MobileDividers d={dividerPath} stroke={bc1} isLast={isLast} isFirst={isFirst} />
             </div>
           )}
-          <div
-            className={`${styles.desktopChrome} res-shape-stand-in`}
-            aria-hidden
-            data-mascot="card-edge"
-            // A plain card of the same paper and pen until measured.
-            data-shape-pending={w > 0 && h > 0 ? undefined : ''}
-            style={
-              {
-                '--shape-fill': cardInterior,
-                '--shape-ink': bc1,
-                '--shape-ink-width': `${INK}px`,
-                '--shape-radius': `${R}px`,
-              } as CSSProperties
-            }
-          >
-            <HandDrawnBorder
-              w={w} h={h} R={R} seed={seed} mag={mag}
-              fillColor={cardInterior}
-              strokeColor="transparent"
-              strokeWidth={0}
-              chalkSeed={stillGrain ? null : index}
-              segmentsH={[3, 4]} segmentsV={[5, 6]}
-              curve={0.55} cornerJitter={0.7} cornerOffset={4}
-            />
-            <BrushWash
-              w={w} h={h} d={borderPath} color={cardHovered}
-              x={pos.x} y={pos.y} on={hovered} duration={460}
-            />
-            {stillGrain ? (
-              borderPath && (
+        </>
+      ) : (
+        // Both chromes in the server's paint, the module CSS (640px) showing
+        // one; once hydrated only the shown one stays (W19, useBandChrome).
+        <>
+          {/* a framed card has no band to show */}
+          {showBand && (
+            <div className={styles.mobileChrome} aria-hidden data-mascot="card-edge">
+              <GrainOverlay still opacity={STORY_GRAIN.band} />
+              <MobileDividers d={dividerPath} stroke={bc1} isLast={isLast} isFirst={isFirst} />
+            </div>
+          )}
+          {showFrame && (
+            <div
+              className={`${styles.desktopChrome} res-shape-stand-in`}
+              aria-hidden
+              data-mascot="card-edge"
+              // A plain card of the same paper and pen until measured.
+              data-shape-pending={w > 0 && h > 0 ? undefined : ''}
+              style={
+                {
+                  '--shape-fill': cardInterior,
+                  '--shape-ink': bc1,
+                  '--shape-ink-width': `${INK}px`,
+                  '--shape-radius': `${R}px`,
+                } as CSSProperties
+              }
+            >
+              <HandDrawnBorder
+                w={w} h={h} R={R} seed={seed} mag={mag}
+                fillColor={cardInterior}
+                strokeColor="transparent"
+                strokeWidth={0}
+                chalkSeed={stillGrain ? null : index % CARD_CHALK_SEEDS.length}
+                sharedChalk={sharedChalk}
+                segmentsH={[3, 4]} segmentsV={[5, 6]}
+                curve={0.55} cornerJitter={0.7} cornerOffset={4}
+                d={borderPath}
+              />
+              <BrushWash
+                w={w} h={h} d={borderPath} color={cardHovered}
+                x={pos.x} y={pos.y} on={hovered} duration={460}
+              />
+              {/* The paper's grain: a still tile cut to the outline (the perf audit's W1 — a live
+                  ShapeGrain per card was drawn again on every tile a scroll rastered). */}
+              {borderPath && (
                 <span
                   aria-hidden="true"
-                  className={styles.stillGrain}
+                  data-grain="paper"
+                  className={stillGrain ? `${styles.stillGrain} ${styles.ownGrain}` : styles.stillGrain}
                   style={
                     {
                       clipPath: `path('${borderPath}')`,
-                      '--still-grain': `url('${stillGrain}')`,
+                      ...(stillGrain ? { '--still-grain': `url('${stillGrain}')` } : null),
                       opacity: `calc(${STORY_GRAIN.paper} * var(--grain-scale, 1))`,
                     } as CSSProperties
                   }
                 />
-              )
-            ) : (
-              <ShapeGrain w={w} h={h} d={borderPath} opacity={STORY_GRAIN.paper} frequency={0.85} seed={seed} />
-            )}
-            <HandDrawnBorder
-              w={w} h={h} R={R} seed={seed} mag={mag}
-              strokeColor={bc1}
-              strokeWidth={INK}
-              segmentsH={[3, 4]} segmentsV={[5, 6]}
-              curve={0.55} cornerJitter={0.7} cornerOffset={4}
-            />
-          </div>
+              )}
+              <HandDrawnBorder
+                w={w} h={h} R={R} seed={seed} mag={mag}
+                strokeColor={bc1}
+                strokeWidth={INK}
+                segmentsH={[3, 4]} segmentsV={[5, 6]}
+                curve={0.55} cornerJitter={0.7} cornerOffset={4}
+                d={borderPath}
+              />
+            </div>
+          )}
         </>
       )}
 
@@ -389,6 +442,7 @@ export const StoryCard = memo(function StoryCard({
             label={story!.imageLabel || 'story illustration'}
             family={paletteIdx}
             imageUrl={story!.imageUrl}
+            thumbUrl={story!.imageThumbUrl}
             frame={story!.imageFrame}
             seed={seed + 5}
             slot={coverSlot}

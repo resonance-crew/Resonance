@@ -187,3 +187,46 @@ describe.each([
     expect(readingScene(document, layer).scene.respond).toEqual({ x: bar[0], y: bar[1], w: bar[2], h: bar[3] });
   });
 });
+
+/**
+ * The perf audit's W8: the feed's far-off cards skip their layout (content-visibility: auto on the grid's item), and
+ * reading a skipped card's outline, foot or title would lay it all out again. Such a card is read by its item's box
+ * (less the item's padding, the card's reach) and keeps its key; nothing inside it is asked where it is.
+ */
+describe('a feed card the browser is skipping', () => {
+  it('is read by its item alone, the card on screen as it always was', () => {
+    document.body.innerHTML = `
+      <div id="layer"></div>
+      <div data-mascot-zone="home">
+        <div data-card-id="near"><article><h3>near</h3><div data-mascot="card-foot"><span>a</span></div></article></div>
+        <div data-card-id="far" style="padding: 16px"><article><h3>far</h3><div data-mascot="card-foot"><span>b</span></div></article></div>
+      </div>`;
+    const q = (s: string) => document.querySelector(s) as HTMLElement;
+    const layer = q('#layer');
+    BOXES.set(layer, [0, 0, 1200, 9000]);
+    BOXES.set(q('[data-mascot-zone="home"]'), [100, 0, 1000, 9000]);
+    BOXES.set(q('[data-card-id="near"]'), [100, 100, 340, 480]);
+    BOXES.set(q('[data-card-id="near"] article'), [100, 100, 340, 480]);
+    BOXES.set(q('[data-card-id="near"] h3'), [122, 400, 200, 30]);
+    BOXES.set(q('[data-card-id="far"]'), [84, 6984, 372, 532]);
+    const far = q('[data-card-id="far"] article');
+    const asked: Element[] = [];
+    const rect = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      if (far.contains(this)) asked.push(this);
+      return rect.call(this);
+    };
+    const skip = (el: Element) => !far.contains(el) && el !== far;
+    for (const el of Array.from(document.querySelectorAll('article'))) {
+      (el as Element & { checkVisibility: (o?: object) => boolean }).checkVisibility = function (this: Element) {
+        return skip(this);
+      };
+    }
+    Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 9000 });
+    const cards = readingScene(document, layer).scene.cards!;
+    expect(asked).toEqual([]);
+    expect(cards.map((c) => c.key)).toEqual(['near', 'far']);
+    expect(cards[1]).toEqual({ key: 'far', box: { x: 100, y: 7000, w: 340, h: 500 }, radius: 18 });
+    expect(cards[0].words?.length).toBe(1);
+  });
+});

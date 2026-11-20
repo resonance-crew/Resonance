@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import { renderWithIntl, act } from '@/../test/render';
+import { mockElementSize } from '@/../test/organic';
 import type { Card } from '@/lib/db/types';
 import { CARD_HUES } from '@/lib/design/dominantHue';
 import { cardPalettes } from '@/lib/design/cardColours';
@@ -138,5 +139,22 @@ describe('the profile-translated screen finds its card in the grid', () => {
     const en = document.createElement('a');
     en.setAttribute('href', '/en/card/bridge-rain');
     expect(en.matches(to!)).toBe(true);
+  });
+});
+
+// The perf audit's W7: a list's cards share six chalk filters, defined once beside the list, as the thought map's do —
+// not one filter per card (a feed of 60 cards defined 60).
+describe('the cards share their chalk', () => {
+  mockElementSize(320, 480);
+  it.each([
+    ['the feed', (cards: Card[]) => <CardLinkGrid cards={cards} authors={{}} />],
+    ['the mini cards', (cards: Card[]) => <MiniCardGrid cards={cards} authors={{}} />],
+  ])('%s: six filters for the list, each card naming its seed’s', (_, make) => {
+    const cards = Array.from({ length: 9 }, (_, i) => card(`c${i}`, CARD_HUES[i % CARD_HUES.length]));
+    const { container } = renderWithIntl(make(cards));
+    const ids = Array.from(container.querySelectorAll('filter[id^="chalk-hdb-"]')).map((f) => f.id);
+    expect(ids).toEqual([0, 1, 2, 3, 4, 5].map((s) => `chalk-hdb-${s}`));
+    const used = Array.from(container.querySelectorAll('article path[filter]')).map((p) => p.getAttribute('filter'));
+    expect(used).toEqual(cards.map((_, i) => `url(#chalk-hdb-${i % 6})`));
   });
 });

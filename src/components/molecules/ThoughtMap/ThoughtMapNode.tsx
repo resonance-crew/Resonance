@@ -125,6 +125,8 @@ export const ThoughtMapNode = memo(function ThoughtMapNode({
   // A 私人卡 (round 9 §1) — never published, or published and kept private — wears the lock either way.
   const privateCard = card.publishedAt == null || card.visibility === 'private';
   const thumb = cardThumb(card);
+  // the whole story read down to a line: once per story, not on every frame a drag moves the card (W12)
+  const excerpt = useMemo(() => plainExcerpt(card.story, thumb ? 80 : 100), [card.story, thumb]);
   const tabbed = selected && !dragging;
 
   // One outline for card + tab: stroke and fill are a single hand-drawn shape,
@@ -204,7 +206,7 @@ export const ThoughtMapNode = memo(function ThoughtMapNode({
         <div className={styles.nodeBody}>
           {thumb && <NodeThumb src={thumb} seed={seed} hue={hue} frame={card.media?.type === 'image' ? card.media.frame : undefined} />}
           <div className={styles.nodeTitle}>{card.thoughtCore}</div>
-          <p className={styles.nodeExcerpt}>{plainExcerpt(card.story, thumb ? 80 : 100)}</p>
+          <p className={styles.nodeExcerpt}>{excerpt}</p>
         </div>
         <div className={styles.nodeMeta}>
           <Icon name={privateCard ? 'lock' : VISIBILITY_ICON[card.visibility]} size={14} />

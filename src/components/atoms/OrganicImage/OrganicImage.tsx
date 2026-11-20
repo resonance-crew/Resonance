@@ -10,6 +10,12 @@ import { coverImageBox, type CoverFrame } from '@/lib/images/coverFrame';
 /** How long a picture that failed waits before its one more try. */
 export const IMAGE_RETRY_MS = 3000;
 
+/** A cover's longer edge (the upload's) and its list copy's, as the `srcSet` names them. */
+const COVER_W = 2048;
+const THUMB_W = 960;
+/** The card grid's columns: one on a phone, two from 640, three from 1024 (CardLinkGrid, MiniCardGrid). */
+const LIST_SIZES = '(max-width: 639px) 100vw, (max-width: 1023px) 50vw, 33vw';
+
 export interface OrganicImageProps {
   /** Image to render, cover-fitted inside the organic clip. */
   src?: string;
@@ -42,6 +48,19 @@ export interface OrganicImageProps {
    * `ratio` fills it. Absent: covered and centred.
    */
   frame?: CoverFrame | null;
+  /**
+   * A smaller copy of `src` for a list (a cover's `thumbUrl`, ≤ 960 px on its longer edge): offered beside it as a
+   * `srcSet`, so a card a third of the screen wide decodes about 960 px, not the 2048 px cover (the perf audit's W6).
+   * The one more try after a failure asks for `src` alone.
+   */
+  thumbSrc?: string;
+  /** The `sizes` the `srcSet` is chosen by (default: the card grid's columns — one, two from 640, three from 1024). */
+  sizes?: string;
+  /**
+   * Laid over the picture once it has landed (a cover's grain): never while its place shimmers, so the shimmer
+   * moves over nothing a filter or mask has to draw again (the perf audit's W2). With no picture, at once.
+   */
+  grain?: ReactNode;
 }
 
 /**
@@ -63,6 +82,9 @@ export function OrganicImage({
   overlay,
   priority = false,
   frame,
+  grain,
+  thumbSrc,
+  sizes = LIST_SIZES,
 }: OrganicImageProps) {
   const framed = coverImageBox(frame, ratio);
   const ref = useRef<HTMLDivElement>(null);
@@ -122,6 +144,9 @@ export function OrganicImage({
       key={retryOf === src ? 'retry' : 'first'}
       ref={imgRef}
       src={src}
+      {...(thumbSrc && thumbSrc !== src && retryOf !== src
+        ? { srcSet: `${thumbSrc} ${THUMB_W}w, ${src} ${COVER_W}w`, sizes }
+        : null)}
       onLoad={() => setSettled(src)}
       onError={() => failed(src)}
       alt={alt}
@@ -164,6 +189,7 @@ export function OrganicImage({
           picture
         )}
         {children}
+        {!shimmering && grain}
       </div>
       {overlay != null && <div style={{ position: 'absolute', inset: 0 }}>{overlay}</div>}
     </div>
