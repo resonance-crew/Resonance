@@ -1,3 +1,4 @@
+import { publicList } from './publicLists';
 import { Timestamp, type DocumentData, type Firestore, type QueryDocumentSnapshot, type QuerySnapshot } from 'firebase-admin/firestore';
 import { blankFeedCard, unlistedCard } from '@/lib/cards/blank';
 import { unlistedForStrangers } from '@/lib/recommend/collections';
@@ -306,7 +307,7 @@ export async function getCardDetail(
     card.referenceCardId ? cardsByIds(db, [card.referenceCardId]) : [],
     card.referenceCardId || include.size ? blockedByViewer(db, viewerId) : new Set<string>(),
     lists.has('resonances') ? resonancesOf(db, card.id).get().then(toCards) : [],
-    lists.has('related') ? recentPublic(db).get().then(toCards).then((cards) => listedOnly(db, cards)) : [],
+    lists.has('related') ? recentListed(db) : [],
     ownerLinks ? cardsLinkingTo(db, card.id) : [],
     embedKeys.length ? cardsByKeys(db, embedKeys).then((cards) => askedByKey(cards, embedKeys, viewerId)) : [],
     // The resonance tap (./taps): who resonated as the viewer may see them — none through a shared-card pass.
@@ -368,6 +369,15 @@ async function listedOnly(db: Firestore, cards: ListCard[]): Promise<ListCard[]>
   return cards.filter((c) => !hidden.has(c.id));
 }
 
+/**
+ * The recent public cards strangers may be shown (recentPublic, listedOnly),
+ * the same for every card page and every reader: kept a few seconds
+ * (./publicLists, B3). Each caller still drops the card itself, blank and
+ * trashed ones, and the viewer's blocks (present) after it.
+ */
+const recentListed = (db: Firestore): Promise<ListCard[]> =>
+  publicList(db, 'recent', () => recentPublic(db).get().then((snap) => listedOnly(db, toCards(snap))));
+
 /** Recent cards other than `base`, those sharing the most of its tags first. */
 function relatedPool(base: Card, recent: ListCard[]): ListCard[] {
   const tags = (base.tags ?? []).slice(0, 5);
@@ -394,7 +404,7 @@ export async function getResonances(db: Firestore, viewerId: string, id: string)
 export async function getRelated(db: Firestore, viewerId: string, id: string): Promise<CardListBody> {
   const [base, recent, blocked] = await Promise.all([
     visibleCardById(db, viewerId, id),
-    recentPublic(db).get().then((snap) => listedOnly(db, toCards(snap))),
+    recentListed(db),
     blockedByViewer(db, viewerId),
   ]);
   return { cards: relatedOf(await present(db, viewerId, relatedPool(base, recent), { blocked })) };
@@ -416,7 +426,7 @@ export async function getPublicRelated(db: Firestore, id: string): Promise<CardL
   if (!id || id.includes('/')) return null;
   const [base, recent] = await Promise.all([
     cardDoc(db, id, PUBLIC_BASE_FIELDS),
-    recentPublic(db).get().then((snap) => listedOnly(db, toCards(snap))),
+    recentListed(db),
   ]);
   if (!base || base.visibility !== 'public' || !base.publishedAt || base.trashedAt != null) return null;
   const pool = relatedPool(base, recent).filter((c) => !inTrash(c));

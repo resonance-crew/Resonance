@@ -1,3 +1,4 @@
+import { publicList } from './publicLists';
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { getAccountDeletion } from '@/lib/account/deletion';
 import { blankFeedCard, unlistedCard } from '@/lib/cards/blank';
@@ -59,21 +60,35 @@ export function properlyPublished(at: unknown, now = Date.now()): boolean {
  * Cards are read without their stories (LIST_FIELDS; see ./summary).
  */
 export async function getFeed(db: Firestore, viewerId: string | null, limit: number, start?: PageStart): Promise<FeedPageBody> {
-  const q = pageQuery(
+  // The page as anyone sees it, kept a few seconds for every reader (./publicLists, B3); the viewer's blocks after it.
+  const [page, blocked] = await Promise.all([
+    publicList(db, `feed|${limit}|${start?.pageToken ?? ''}|${start?.cursor ?? ''}`, () => publicFeedPage(db, limit, start)),
+    viewerId ? blockedByViewer(db, viewerId) : new Set<string>(),
+  ]);
+  return {
+    // A blank card (lib/cards/blank) is left out after the query, as a blocked author's is: the page may run short, never end early.
+    cards: page.cards
+      .filter((c) => !blockHides(c, blocked))
+      .map((c) => toFeedCard(c, page.authors.get(c.authorId)))
+      .filter((c) => !blankFeedCard(c)),
+    ...page.end,
+  };
+}
+
+/** A page of the latest public cards before anyone's blocks: listed ones only, their authors and summaries read. */
+async function publicFeedPage(db: Firestore, limit: number, start?: PageStart) {
+  const snap = await pageQuery(
     db.collection('cards').where('visibility', '==', 'public').where('publishedAt', '!=', null).select(...LIST_FIELDS),
     start,
-  ).limit(limit);
-  const [snap, blocked] = await Promise.all([q.get(), viewerId ? blockedByViewer(db, viewerId) : new Set<string>()]);
-
+  )
+    .limit(limit)
+    .get();
   const cards = snap.docs
     .filter((d) => properlyPublished(d.get('publishedAt')))
     .map((d) => listCard(d.id, d.data()))
     // A card the server marked as not for lists (lib/cards/blank: thin, a placeholder) goes as a blocked author's does.
-    .filter((c) => !blockHides(c, blocked) && !unlistedCard(c));
+    .filter((c) => !unlistedCard(c));
   const [authors] = await Promise.all([loadAuthors(db, cards), withStories(db, cards)]);
-  return {
-    // A blank card (lib/cards/blank) is left out after the query, as a blocked author's is: the page may run short, never end early.
-    cards: cards.map((c) => toFeedCard(c, authors.get(c.authorId))).filter((c) => !blankFeedCard(c)),
-    ...pageEnd(snap.docs, limit),
-  };
+  // Pages are cut on the *raw* query so a page of blocked authors doesn't end the feed early.
+  return { cards, authors, end: pageEnd(snap.docs, limit) };
 }
