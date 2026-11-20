@@ -182,6 +182,38 @@ describe('the editor island', () => {
     });
   });
 
+  describe('opening a card in one call (audit X5)', () => {
+    it('sets the title, the previews and the story, reads the type once and tells it in one message', async () => {
+      const island = await open('layout=canvas&locale=zh-TW');
+      posted = [];
+      serialized.count = 0;
+      expect(
+        island.open({
+          title: 'The first morning I woke up alone',
+          markdown: 'I made myself a cup of coffee for the very first time, and watched the rain.\n\n<https://example.com/rain>',
+          previews: [{ url: 'https://example.com/rain', title: '下雨天的散步' }],
+        }),
+      ).toBe(true);
+      expect(posted.filter((m) => m.type === 'script')).toEqual([{ type: 'script', script: 'latin', lang: 'en' }]);
+      expect(posted.filter((m) => m.type === 'change')).toEqual([]);
+      expect(serialized.count).toBe(1);
+      expect(root()).toHaveAttribute('data-script', 'latin');
+      expect(root().querySelector('.link-card-title')).toHaveTextContent('下雨天的散步');
+      // Opened is not an edit: nothing to undo.
+      expect(island.exec('undo')).toBe(false);
+      expect(island.getMarkdown()).toBe('I made myself a cup of coffee for the very first time, and watched the rain.\n\n<https://example.com/rain>');
+      expect(serialized.count).toBe(1);
+    });
+
+    it('tells the type even when it stays as it was', async () => {
+      const island = await open('layout=canvas&locale=zh-TW');
+      posted = [];
+      island.open({ markdown: '那天早上下著小雨。' });
+      island.open(null as never);
+      expect(posted.filter((m) => m.type === 'script')).toHaveLength(2);
+    });
+  });
+
   describe('its height (audit X3)', () => {
     it('tells the page’s height with how much is written, only when either changed', async () => {
       // The body's observer, held so the test can say when the body resized.

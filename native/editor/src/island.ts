@@ -105,6 +105,7 @@ declare global {
     webkit?: { messageHandlers?: { editor?: { postMessage(m: unknown): void } } };
     ResonanceBridge?: { postMessage(json: string): void };
     ResonanceEditor: {
+      open(card?: { title?: string; markdown?: string; previews?: HostLinkPreview[] }): true;
       setMarkdown(md: string): string;
       getMarkdown(): string;
       roundtrip(md: string): string;
@@ -501,11 +502,12 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('pagehide', flushChange);
 
-/** Sets the story's type on its root, and tells the host. */
-function setType(next: { script: StoryScript; lang: string | null }) {
-  if (next.script === type.script && next.lang === type.lang) return;
+/** Sets the story's type on its root, and tells the host — when it changed, or `always` (a card opened). */
+function setType(next: { script: StoryScript; lang: string | null }, always = false) {
+  const same = next.script === type.script && next.lang === type.lang;
+  if (same && !always) return;
   type = next;
-  editor.setOptions({ editorProps: { ...editor.options.editorProps, attributes: rootAttributes() } });
+  if (!same) editor.setOptions({ editorProps: { ...editor.options.editorProps, attributes: rootAttributes() } });
   send({ type: 'script', script: type.script, lang: type.lang });
 }
 
@@ -609,6 +611,14 @@ new ResizeObserver(() => {
   if (editor.isFocused) sendCaret();
 }).observe(document.body);
 
+/** Keeps the live card's link previews the host handed over (those it can use: an http(s) address, a title). */
+function storePreviews(previews: unknown) {
+  linkPreviews.clear();
+  for (const p of Array.isArray(previews) ? (previews as HostLinkPreview[]) : []) {
+    if (p && typeof p.url === 'string' && typeof p.title === 'string' && /^https?:\/\//i.test(p.url) && p.title) linkPreviews.set(p.url, p);
+  }
+}
+
 /** Puts a story in: out of undo history and emitting no update (loading a draft is not an edit). */
 function loadStory(md: string) {
   dropChange();
@@ -625,6 +635,19 @@ window.ResonanceEditor = {
     setType(readType(startScript));
     // Kept for older hosts; serialized once with the type read above (the cache).
     return storyMarkdown();
+  },
+  // A card opened in one call (after `ready`): its title, its link previews (so its link cards draw with
+  // them at once), its story (out of undo history, no update emitted), then its type read once and told
+  // in one `script` message — what setTitle + setMarkdown + setLinkPreviews did in three calls and two reads.
+  open(given) {
+    const card = given ?? {};
+    if (typeof card.title === 'string') title = card.title;
+    if (card.previews !== undefined) storePreviews(card.previews);
+    if (typeof card.markdown === 'string') loadStory(card.markdown);
+    else for (const draw of linkCardViews) draw();
+    clearTimeout(typeTimer);
+    setType(readType(startScript), true);
+    return true;
   },
   getMarkdown: () => storyMarkdown(),
   /** Parse and re-serialize without touching the visible document (corpus checks). */
@@ -679,10 +702,7 @@ window.ResonanceEditor = {
     setType(readType(script ?? startScript));
   },
   setLinkPreviews(previews) {
-    linkPreviews.clear();
-    for (const p of Array.isArray(previews) ? previews : []) {
-      if (p && typeof p.url === 'string' && typeof p.title === 'string' && /^https?:\/\//i.test(p.url) && p.title) linkPreviews.set(p.url, p);
-    }
+    storePreviews(previews);
     for (const draw of linkCardViews) draw();
   },
 };
