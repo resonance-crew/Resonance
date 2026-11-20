@@ -8,7 +8,7 @@ import { insightsFor, parseReading, readingFromLegacy } from '@/lib/recommend/si
 import { measure } from '@/lib/text/script';
 import { acceptInsight, draftScript, draftUnits, languageInstruction, MIN_DRAFT_UNITS, mirrorDraft } from './mirror';
 import { ChatIncomplete, chat, chatJSON, generateImage, generateImageStream, llmModel, mirrorModel, signatureModel, type TokenUsage } from './openai';
-import { slugify } from './slugify';
+import { slugify, latinSlugBase } from './slugify';
 import { parseTagList } from './tags';
 
 /**
@@ -44,6 +44,9 @@ export const CONCEPT_TIMEOUT_MS = 20_000;
 export async function titleToSlugBase(title: string): Promise<string> {
   const clean = title.trim();
   if (!clean) return '';
+  // A title already in Latin script is its own slug (B10): publishing waits on no model for it.
+  const local = latinSlugBase(clean);
+  if (local) return local;
   const out = await chat(
     [
       {

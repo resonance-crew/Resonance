@@ -59,6 +59,16 @@ describe('OpenAI calls', () => {
     expect(requests[0].body.max_completion_tokens).toBe(SLUG_MAX_TOKENS);
   });
 
+  it('ask nothing for a title already in Latin script: its own words are the slug (B10)', async () => {
+    expect(await titleToSlugBase('  A Quiet Night, After the Rain — Café ')).toBe('a-quiet-night-after-the-rain');
+    expect(await titleToSlugBase('Été 2026')).toBe('ete-2026');
+    expect(requests).toHaveLength(0);
+    // Any other script (or digits alone) still goes to the model.
+    expect(await titleToSlugBase('雨後 rain')).toBe('after-the-rain');
+    expect(await titleToSlugBase('2026')).toBe('after-the-rain');
+    expect(requests).toHaveLength(2);
+  });
+
   it('abandon tag suggestions past TAGS_TIMEOUT_MS', async () => {
     await suggestStoryTags({ title: 't', story: 's', existingTags: [], historyTags: [] });
     expect(timeout).toHaveBeenCalledWith(TAGS_TIMEOUT_MS);
