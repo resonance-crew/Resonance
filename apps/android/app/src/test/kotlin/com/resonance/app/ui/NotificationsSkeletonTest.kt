@@ -129,10 +129,12 @@ class NotificationsSkeletonTest {
     }
 
     @Test fun aRowBesideACardIsATwoLineRowsHeight() {
-        // 「不告訴你我是誰啦啦啦 與你的卡片共振了」: two lines beside the card at every size the app draws.
-        val resonance = item("resonance", "不告訴你我是誰啦啦啦", "c1")
+        // 「不告訴你我是誰啦啦啦 與你的卡片共振了」: two lines beside the card at every size the app draws. Since
+        // round 26 that is a tap's sentence (`resonance_tap`); a `resonance` row says 「…用一張卡片回應了你的文章」,
+        // which with a name this long takes a third line at the largest text.
+        val tap = item("resonance_tap", "不告訴你我是誰啦啦啦", "c1")
         assertSame("a row beside a card", { NotificationSkeletonRow(0.8f, card = true) }, {
-            NotificationRow(resonance, extras, "3 天前", "end", { false }) {}
+            NotificationRow(tap, extras, "3 天前", "end", { false }) {}
         })
     }
 }
