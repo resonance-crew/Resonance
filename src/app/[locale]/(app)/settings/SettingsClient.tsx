@@ -15,6 +15,7 @@ import { OrganicSlider } from '@/components/atoms/OrganicSlider/OrganicSlider';
 import { OrganicTabs } from '@/components/molecules/OrganicTabs/OrganicTabs';
 import { AvatarUpload } from '@/components/molecules/AvatarUpload/AvatarUpload';
 import { HANDLE_FORBIDDEN, isHandleTaken, updateProfile } from '@/lib/db/firestore/client/profile';
+import { useRefreshMyProfile } from '@/lib/data/hooks';
 import { requestRevalidate } from '@/lib/db/firestore/client/revalidate';
 import { SignOutConfirmModal } from '@/components/molecules/SignOutConfirmModal/SignOutConfirmModal';
 import { DeleteAccountSection } from './DeleteAccountSection';
@@ -192,6 +193,11 @@ export function SettingsClient({ initial }: SettingsClientProps) {
   // The last pen name the server refused, so later flushes don't resend it.
   const refusedHandleRef = useRef<string | null>(null);
 
+  // What the shell, the header and the rest show of the viewer is read again after each save (W14).
+  const refreshProfile = useRefreshMyProfile();
+  const refreshProfileRef = useRef(refreshProfile);
+  refreshProfileRef.current = refreshProfile;
+
   const flushProfile = useCallback(() => {
     const prev = savedProfileRef.current;
     const cur = profileRef.current;
@@ -204,6 +210,7 @@ export function SettingsClient({ initial }: SettingsClientProps) {
       void updateProfile(patch)
         .then(() => {
           savedProfileRef.current = { ...savedProfileRef.current, ...saved };
+          refreshProfileRef.current();
           void requestRevalidate(profilePaths(savedProfileRef.current.handle));
         })
         .catch((err) => console.error('Profile autosave failed:', err));
@@ -218,6 +225,7 @@ export function SettingsClient({ initial }: SettingsClientProps) {
       .then(() => {
         const old = savedProfileRef.current.handle;
         savedProfileRef.current = { ...savedProfileRef.current, handle: name };
+        refreshProfileRef.current();
         // Old handle too — that cached page must stop serving the profile
         // under its former name.
         void requestRevalidate(profilePaths(name, old));
@@ -261,6 +269,7 @@ export function SettingsClient({ initial }: SettingsClientProps) {
                   // then the public profile — under the last-saved handle — is refreshed.
                   await updateProfile({ avatarUrl: url });
                   setAvatarUrl(url);
+                  refreshProfileRef.current();
                   void requestRevalidate(profilePaths(savedProfileRef.current.handle));
                 }}
               />

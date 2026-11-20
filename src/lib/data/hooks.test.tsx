@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ReactNode } from 'react';
 import { SWRConfig } from 'swr';
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, render, renderHook, waitFor } from '@testing-library/react';
 import { SWR_DEFAULTS } from '@/components/providers/SWRProvider';
 import type { Card, User } from '@/lib/db/types';
 import type { CardSeed } from './cardSeed';
@@ -69,6 +69,7 @@ import {
   getCardBySlugOrId,
   getCardsByAuthor,
   getMyDrafts,
+  getCurrentUserProfile,
   getPublicCardsByAuthor,
   getPublicCardView,
   getPublicFeedPage,
@@ -96,6 +97,8 @@ import {
   useFeed,
   useMyBlockedIds,
   useMyCardBox,
+  useMyProfile,
+  useRefreshMyProfile,
   useMyThoughtMap,
   useProfileByHandle,
   useProfileCards,
@@ -1432,4 +1435,37 @@ describe('useBellExtras', () => {
     expect(getUsersByIds).not.toHaveBeenCalled();
     expect(callApi).not.toHaveBeenCalled();
   });
+});
+
+// W14: the viewer's own profile is held by many surfaces; a page change doesn't read it again, a save does.
+describe('useMyProfile', () => {
+  it('reads the profile once across page changes, and again after settings saved it', async () => {
+    vi.mocked(getCurrentUserProfile).mockResolvedValue(user('me'));
+    const seen: { handle?: string; refresh?: () => void } = {};
+    function Page() {
+      const { data } = useMyProfile();
+      seen.handle = data?.handle;
+      seen.refresh = useRefreshMyProfile();
+      return null;
+    }
+    // One app (one SWR cache); a page change mounts the surfaces holding the profile again.
+    const app = (page: number) => (
+      <SWRConfig value={{ ...SWR_DEFAULTS, provider: () => new Map() }}>
+        <Page key={page} />
+      </SWRConfig>
+    );
+    const { rerender } = render(app(1));
+    await waitFor(() => expect(seen.handle).toBe('me'));
+    // Another page, a moment later (past the 2 s the viewer's own content used to keep).
+    await new Promise((r) => setTimeout(r, 2_100));
+    rerender(app(2));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(seen.handle).toBe('me');
+    expect(getCurrentUserProfile).toHaveBeenCalledTimes(1);
+
+    vi.mocked(getCurrentUserProfile).mockResolvedValue(user('me', 'renamed'));
+    act(() => seen.refresh!());
+    await waitFor(() => expect(seen.handle).toBe('renamed'));
+    expect(getCurrentUserProfile).toHaveBeenCalledTimes(2);
+  }, 10_000);
 });

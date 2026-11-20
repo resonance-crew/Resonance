@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import useSWR from 'swr';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import useSWR, { useSWRConfig } from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import { useAuth } from '@/components/providers/AuthProvider';
 import type { Card, CardBoxTab, User } from '@/lib/db';
@@ -553,10 +553,27 @@ export function useMyBlockedIds() {
   });
 }
 
-/** The signed-in viewer's own profile. */
+const myProfileKey = (uid: string) => `profile:${uid}`;
+
+/**
+ * The signed-in viewer's own profile. Many surfaces hold it (the shell, the
+ * header, me, settings, the publish step, a card's page): with the app-wide
+ * dedupe (W14), not read again on every page change — settings, the one place
+ * it is changed, reads it again after each save ({@link useRefreshMyProfile}).
+ */
 export function useMyProfile() {
   const { user } = useAuth();
-  return useSWR(user ? `profile:${user.id}` : null, () => getCurrentUserProfile(), OWN_CONTENT);
+  return useSWR(user ? myProfileKey(user.id) : null, () => getCurrentUserProfile());
+}
+
+/** Reads the viewer's own profile again: after a write to it. */
+export function useRefreshMyProfile(): () => void {
+  const { user } = useAuth();
+  const { mutate } = useSWRConfig();
+  const uid = user?.id;
+  return useCallback(() => {
+    if (uid) void mutate(myProfileKey(uid));
+  }, [mutate, uid]);
 }
 
 /**
