@@ -65,6 +65,44 @@ describe('MarkdownEditor', () => {
     expect(story).toHaveAttribute('lang', 'zh-TW');
   });
 
+  // W5: a long story isn't serialized on every key, nor are the editor's options set again with each render.
+  it('given a flushRef, reports the story once typing pauses — or at once when asked or left — not on every key', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const onChange = vi.fn();
+      const flushRef: { current: (() => void) | null } = { current: null };
+      const view = renderWithIntl(<MarkdownEditor value="Once" onChange={onChange} ariaLabel="Story" flushRef={flushRef} />);
+      const story = await screen.findByRole('textbox', { name: 'Story' });
+      const editor = editorOf(story);
+      const setOptions = vi.spyOn(editor, 'setOptions');
+
+      act(() => {
+        editor.commands.focus('end');
+        editor.commands.insertContent(' upon');
+        editor.commands.insertContent(' a time');
+      });
+      expect(onChange).not.toHaveBeenCalled();
+      // The host asks before it saves: the words so far, once.
+      act(() => flushRef.current!());
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenLastCalledWith('Once upon a time');
+      act(() => flushRef.current!());
+      expect(onChange).toHaveBeenCalledTimes(1);
+
+      // Typing on, and pausing: reported once, after the pause.
+      act(() => void editor.commands.insertContent('.'));
+      await act(async () => void vi.advanceTimersByTime(300));
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(onChange).toHaveBeenLastCalledWith('Once upon a time.');
+
+      // The host drawn again with the same props: Tiptap's options stay as they are.
+      view.rerender(<MarkdownEditor value="Once upon a time." onChange={onChange} ariaLabel="Story" flushRef={flushRef} />);
+      expect(setOptions).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('is set as CJK, with no language of its own, until told otherwise', async () => {
     renderWithIntl(<MarkdownEditor value="" onChange={vi.fn()} ariaLabel="Story" />);
     const story = await screen.findByRole('textbox', { name: 'Story' });

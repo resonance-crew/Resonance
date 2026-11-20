@@ -1,7 +1,7 @@
 'use client';
 
 import { editTitleKey } from '@/components/molecules/CardEditor/writerTitle';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
 import { SketchLoader } from '@/components/atoms/SketchLoader/SketchLoader';
@@ -16,18 +16,9 @@ import { HeaderBar } from '@/components/sections/AppHeader/HeaderBar';
 import { WriteWorkspace } from '@/components/sections/WriteWorkspace/WriteWorkspace';
 import { useLeaveWriter } from '@/lib/hooks/useLeaveWriter';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { getCardById } from '@/lib/db/firestore/client/reads';
-import { getPendingCardEdit, type PendingCardEdit } from '@/lib/db/firestore/client/cardEdits';
+import { useWriterCard } from '@/lib/data/writerCard';
 import { Link } from '@/i18n/navigation';
-import type { Card, Locale } from '@/lib/db/types';
-
-interface Opened {
-  key: string;
-  card: Card | null;
-  pending: PendingCardEdit | null;
-  /** A read failed (offline…): nothing is known, so no editor — it would save over what it couldn't read. */
-  failed?: boolean;
-}
+import type { Locale } from '@/lib/db/types';
 
 // The draft loads client-direct from Firestore (rules already scope reads to
 // the owner) instead of blocking navigation on a server function — opening a
@@ -54,26 +45,8 @@ export default function EditCardPage() {
   // Wait for auth to settle: fetching during restoration would read as an
   // anonymous viewer and "not found" the owner's own draft.
   const key = id && user && !loading ? `${id}:${user.id}` : null;
-  const [opened, setOpened] = useState<Opened | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    if (!key) return;
-    let live = true;
-    void (async () => {
-      try {
-        const found = await getCardById(id!);
-        const pending = found?.publishedAt ? await getPendingCardEdit(found.id) : null;
-        if (live) setOpened({ key, card: found, pending });
-      } catch {
-        if (live) setOpened({ key, card: null, pending: null, failed: true });
-      }
-    })();
-    return () => {
-      live = false;
-    };
-  }, [key, id, attempt]);
-  // Only what was read for this card and this viewer, on this visit.
-  const data = opened && opened.key === key ? opened : undefined;
+  // The card and its pending edit side by side (W21), read as the thought map's pane reads them (useWriterCard).
+  const { data, failed, retry } = useWriterCard(key, id);
   const card = data?.card;
   const pending = data?.pending ?? null;
 
@@ -89,7 +62,7 @@ export default function EditCardPage() {
     />
   );
 
-  const settled = data !== undefined || (!loading && !user);
+  const settled = data !== undefined || failed || (!loading && !user);
   if (!settled) {
     return (
       <>
@@ -108,16 +81,13 @@ export default function EditCardPage() {
     );
   }
 
-  if (data?.failed) {
+  if (failed) {
     return (
       <>
         {bar}
         <LoadError
           style={{ padding: 'calc(var(--app-header-h) + var(--page-pad-top)) var(--page-pad-x) var(--page-pad-bottom)' }}
-          onRetry={() => {
-            setOpened(null);
-            setAttempt((n) => n + 1);
-          }}
+          onRetry={retry}
         />
       </>
     );
@@ -153,8 +123,7 @@ export default function EditCardPage() {
       try {
         const { droppedResonance } = await trash.restore({ id: card.id, slug: card.slug, referenceCardId: card.trashedFrom?.referenceCardId ?? undefined });
         if (droppedResonance) announceRestoredAlone();
-        setOpened(null);
-        setAttempt((n) => n + 1);
+        retry();
       } catch {
         toast.show({ message: tActions('undoFailed') });
       } finally {

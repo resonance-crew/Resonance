@@ -46,7 +46,10 @@ vi.mock('@/lib/data/hooks', () => ({
   useMyBlockedIds: () => ({ data: new Set<string>() }),
   useCardSummaries: (keys: string[]) => mockUseCardSummaries(keys),
   hideConversation: (pair: string) => mockHideConversation(pair),
+  personKey: (handle: string) => `person:${handle}`,
+  useLiveConversation: (pair: string | undefined) => mockLiveConversation(pair),
 }));
+const mockLiveConversation = vi.fn((_pair: string | undefined): unknown => undefined);
 const conversationShown = { putBack: vi.fn(), gone: vi.fn() };
 const mockHideConversation = vi.fn((_pair: string) => conversationShown);
 

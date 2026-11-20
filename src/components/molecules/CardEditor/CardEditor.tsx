@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  startTransition,
   useCallback,
   useEffect,
   useId,
@@ -99,11 +100,6 @@ export interface CardEditorProps {
    * response card). Forwarded to {@link createCardDraft}.
    */
   referenceCardId?: string;
-  /**
-   * Reports the story text as it is typed. Lets a wrapper offer exits that
-   * carry the draft along.
-   */
-  onStoryChange?: (story: string) => void;
   /**
    * Reports the save state as the bar says it (round 8 §2.1): 儲存中⋯ ·
    * 已儲存 · 修改已暫存 · 未儲存, with the last write's time for a tooltip —
@@ -246,7 +242,6 @@ export function CardEditor({
   seedStory,
   locale,
   referenceCardId,
-  onStoryChange,
   onSaveStatusChange,
   step: stepProp,
   onStepChange,
@@ -361,11 +356,6 @@ export function CardEditor({
     reportStepTitle.current?.(stepTitle);
   }, [stepTitle]);
 
-  useEffect(() => {
-    onStoryChange?.(story);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [story]);
-
   // ---- Autosave ---------------------------------------------------------
   // Work persists on its own shortly after editing pauses, so backing out of
   // the editor is always safe. *Where* it persists depends on the card:
@@ -380,8 +370,19 @@ export function CardEditor({
   // Before 匿名公開: was this card ever sent privately in a message? (asked once the step is shown; a warning only)
   const sharedPrivately = useSharedPrivately(cardId, publishLoaded);
   const values: DraftValues = { thoughtCore, story, tags, visibility, anonymous, media, accentHue };
+  // The story's latest words as the field reported them (takeStory), ahead of the `story` state a transition
+  // brings: a render meanwhile (a key in the title) must not put older words back into what a save reads.
+  const typedStory = useRef(story);
   const valuesRef = useRef(values);
-  valuesRef.current = values;
+  valuesRef.current = { ...values, story: typedStory.current };
+  // The story field reports its words a moment after typing pauses (W5, MarkdownEditor `flushRef`): this asks
+  // it for any it hasn't yet, before what is on screen is read to save, go on or leave.
+  const storyFlushRef = useRef<(() => void) | null>(null);
+  /** What is on screen now, the story's latest words included. */
+  function latest(): DraftValues {
+    storyFlushRef.current?.();
+    return valuesRef.current;
+  }
   const lastSavedRef = useRef(
     draftSnapshot({
       thoughtCore: initial?.thoughtCore ?? '',
@@ -417,7 +418,7 @@ export function CardEditor({
       draftIdRef.current != null &&
       !closedRef.current &&
       !trashedRef.current &&
-      isEmptyDraft(valuesRef.current)
+      isEmptyDraft(latest())
     );
   }
   /** Deletes the card this writer made and emptied (after any write still on its way), and closes the writer. */
@@ -494,7 +495,7 @@ export function CardEditor({
 
   /** One write of what is on screen: the draft's document, or a live card's buffer. */
   async function writeDraft(): Promise<Card | null> {
-    const v = valuesRef.current;
+    const v = latest();
     const payload = payloadFrom(v);
     if (isPublished && draftIdRef.current) {
       await savePendingCardEdit(draftIdRef.current, payload);
@@ -528,7 +529,7 @@ export function CardEditor({
 
   /** What is on screen differs from what was last written, and is worth writing (a blank new card isn't). */
   function needsSave(): boolean {
-    const v = valuesRef.current;
+    const v = latest();
     return draftSnapshot(v) !== lastSavedRef.current && !(!draftIdRef.current && isEmptyDraft(v));
   }
 
@@ -612,6 +613,16 @@ export function CardEditor({
   // ---- Step 1: the title, the story, 下一步 --------------------------------
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const storyRef = useRef<MarkdownEditorHandle>(null);
+  // The story field is memoized: its callbacks stay the same functions.
+  const takeStory = useCallback((md: string) => {
+    // Read at once by a save or 下一步 that asked for it (latest()); drawn when React gets to it.
+    typedStory.current = md;
+    valuesRef.current = { ...valuesRef.current, story: md };
+    startTransition(() => setStory(md));
+  }, []);
+  const storyFocusChange = useCallback((focused: boolean) => {
+    if (focused) lastField.current = 'story';
+  }, []);
   // Which field the writer was in: going back to writing puts them there again.
   const lastField = useRef<'title' | 'story' | null>(null);
   const titleErrorId = useId();
@@ -625,7 +636,7 @@ export function CardEditor({
 
   async function goNext() {
     if (nextBusy.current || pending || trashedRef.current) return;
-    if (!valuesRef.current.thoughtCore.trim()) {
+    if (!latest().thoughtCore.trim()) {
       askForTitle();
       return;
     }
@@ -713,12 +724,12 @@ export function CardEditor({
   async function submit() {
     if (pending) return;
     // The server refuses a card without a title; say so in the writer's words, where the title is.
-    if (!valuesRef.current.thoughtCore.trim()) {
+    if (!latest().thoughtCore.trim()) {
       askForTitle();
       return;
     }
     // 私人卡: kept as it is — nothing is published to anyone, not even to its author alone.
-    if (valuesRef.current.visibility === 'private') {
+    if (latest().visibility === 'private') {
       await keepDraft();
       return;
     }
@@ -764,7 +775,7 @@ export function CardEditor({
   async function applyUpdate() {
     const id = draftIdRef.current;
     if (pending || !id) return;
-    if (!valuesRef.current.thoughtCore.trim()) {
+    if (!latest().thoughtCore.trim()) {
       askForTitle();
       return;
     }
@@ -793,14 +804,14 @@ export function CardEditor({
       // To its page — kept as a 私人卡 (儲存, 轉為私人卡) in the place of the writer's own entry; shared, in the
       // step's, as publishing does.
       const href = `/card/${result.slug ?? initial?.slug ?? id}`;
-      if (valuesRef.current.visibility === 'private') showCard(href);
+      if (latest().visibility === 'private') showCard(href);
       else router.replace(href);
     } catch (err) {
       closedRef.current = false;
       if (await confirmTrashed(err)) return;
       console.error('Save changes failed:', err);
       // A 私人卡 made public was being published; anything else, saved.
-      const publishing = liveVisibility === 'private' && valuesRef.current.visibility !== 'private';
+      const publishing = liveVisibility === 'private' && latest().visibility !== 'private';
       setPublishError(failure(err, t(publishing ? 'publishPanel.failed' : 'publishPanel.saveFailed')));
     } finally {
       setPending(false);
@@ -877,7 +888,7 @@ export function CardEditor({
 
   useImperativeHandle(ref, () => ({
     hasWork() {
-      const v = valuesRef.current;
+      const v = latest();
       const unsaved = draftSnapshot(v) !== lastSavedRef.current;
       if (isPublished) return hasPendingEdit || unsaved;
       return !isEmptyDraft(v) && (draftIdRef.current != null || unsaved);
@@ -940,7 +951,7 @@ export function CardEditor({
                   // Enter goes on to the story (an input method's Enter only picks its word).
                   if (e.key !== 'Enter' || e.nativeEvent.isComposing || e.keyCode === 229) return;
                   e.preventDefault();
-                  storyRef.current?.focus(valuesRef.current.story.trim() ? 'end' : 'start');
+                  storyRef.current?.focus(latest().story.trim() ? 'end' : 'start');
                 }}
               />
             </div>
@@ -962,14 +973,15 @@ export function CardEditor({
             variant="canvas"
             editorRef={storyRef}
             value={story}
-            onChange={setStory}
+            onChange={takeStory}
+            flushRef={storyFlushRef}
             placeholder={t('storyPlaceholder')}
             ariaLabel={t('storyLabel')}
             seed={17}
             script={type.script}
             lang={type.lang}
             onUploadingChange={setStoryBusy}
-            onFocusChange={(focused) => focused && (lastField.current = 'story')}
+            onFocusChange={storyFocusChange}
             linkPreviews={initial?.linkPreviews}
           />
 

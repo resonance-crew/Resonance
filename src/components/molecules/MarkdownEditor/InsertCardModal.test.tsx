@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderWithIntl, screen, userEvent, waitFor } from '@/../test/render';
+import type { ReactElement } from 'react';
+import { SWRConfig } from 'swr';
+import { renderWithIntl as render, screen, userEvent, waitFor } from '@/../test/render';
 
 vi.mock('@/components/providers/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 'me' }, loading: false }),
 }));
-vi.mock('@/lib/db/firestore/client/reads', () => ({ getCardsByAuthor: vi.fn() }));
+vi.mock('@/lib/db/firestore/client/reads', () => ({ getCardsByAuthor: vi.fn(), getMyDrafts: vi.fn(), getUsersByIds: vi.fn(async () => ({})) }));
 
 import { getCardsByAuthor } from '@/lib/db/firestore/client/reads';
 import type { Card } from '@/lib/db/types';
@@ -15,6 +17,10 @@ const card = (id: string, title: string): Card =>
   ({ id, thoughtCore: title, visibility: 'public', publishedAt: new Date('2026-10-20T00:00:00Z') }) as unknown as Card;
 
 afterEach(() => vi.clearAllMocks());
+
+/** Each test its own SWR cache, retrying nothing by itself. */
+const renderWithIntl = (ui: ReactElement) =>
+  render(<SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, shouldRetryOnError: false }}>{ui}</SWRConfig>);
 
 describe('InsertCardModal', () => {
   // (The pick list itself needs real layout for its scrollbar; the picker's
@@ -66,5 +72,24 @@ describe('InsertCardModal', () => {
     expect(await screen.findByRole('button', { name: 'After the rain' })).toBeInTheDocument();
     expect(getCardsByAuthor).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  // W13: the card box's shelf (useMyCardBox), not a read of its own each time the picker opens.
+  it('opens again on the cards it read, with no skeleton, reading them once more behind them', async () => {
+    vi.mocked(getCardsByAuthor).mockResolvedValue([card('a', 'After the rain')]);
+    const cache = new Map();
+    const at = (open: boolean) => (
+      <SWRConfig value={{ provider: () => cache, dedupingInterval: 0 }}>
+        <InsertCardModal open={open} onClose={vi.fn()} onPick={vi.fn()} />
+      </SWRConfig>
+    );
+    const view = render(at(true));
+    expect(await screen.findByRole('button', { name: 'After the rain' })).toBeInTheDocument();
+    view.rerender(at(false));
+    vi.mocked(getCardsByAuthor).mockReturnValue(new Promise(() => {}));
+    view.rerender(at(true));
+    expect(await screen.findByRole('button', { name: 'After the rain' })).toBeInTheDocument();
+    expect(view.container.ownerDocument.querySelector('[data-skeleton]')).toBeNull();
+    expect(getCardsByAuthor).toHaveBeenCalledWith('me', 'published');
   });
 });

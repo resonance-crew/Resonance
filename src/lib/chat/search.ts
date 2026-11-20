@@ -31,6 +31,23 @@ export function foldForSearch(text: string): string {
   return out;
 }
 
+/**
+ * A message's text folded (foldForSearch), kept beside the message object it
+ * was folded for (W16): each key of a search, and each page a search reads
+ * in, folds only the messages it hasn't folded yet — not up to 5000 again.
+ * The text is kept with it, so a message object whose text changed (it never
+ * does: a change is a new object) is folded again.
+ */
+const folded = new WeakMap<Message, { text: string; folded: string }>();
+
+function foldedText(m: Message & { text: string }): string {
+  const known = folded.get(m);
+  if (known && known.text === m.text) return known.folded;
+  const f = foldForSearch(m.text);
+  folded.set(m, { text: m.text, folded: f });
+  return f;
+}
+
 /** Every non-overlapping match of the (folded) `needle` in the (folded) `haystack`. */
 function rangesOf(haystack: string, needle: string): TextRange[] {
   const out: TextRange[] = [];
@@ -59,7 +76,7 @@ export function searchMessages(messages: readonly Message[], query: string): Sea
     const m = messages[i];
     // A sticker's words are its fallback for older builds, not words anyone wrote.
     if (!m.text || m.sticker) continue;
-    const ranges = rangesOf(foldForSearch(m.text), needle);
+    const ranges = rangesOf(foldedText(m as Message & { text: string }), needle);
     if (ranges.length) hits.push({ messageId: m.id, ranges });
   }
   return hits;

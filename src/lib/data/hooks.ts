@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import useSWR from 'swr';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import useSWR, { useSWRConfig } from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import { useAuth } from '@/components/providers/AuthProvider';
 import type { Card, CardBoxTab, User } from '@/lib/db';
@@ -29,10 +29,11 @@ import { listenConversations } from '@/lib/db/firestore/client/messages';
 import { listenNotifications } from '@/lib/db/firestore/client/notifications';
 import { getMyBlockedIds } from '@/lib/db/firestore/client/blocks';
 import { ApiError, callApi } from '@/lib/db/firestore/client/api';
-import { hasSessionMark } from '@/lib/auth/firebase/client';
+import { getFirebaseClientAuth, hasSessionMark, sessionMarkUid } from '@/lib/auth/firebase/client';
 import { linkPreviewsOf } from '@/lib/links/previewShape';
 import { trashExpired } from '@/lib/cards/trash';
 import type {
+  CardBoxBody,
   CardBoxTabName,
   CardDetailBody,
   CardListBody,
@@ -73,15 +74,49 @@ export interface CardsWithAuthors {
 export type ReadPath = 'v1' | 'public' | null;
 
 export function useReadPath(): ReadPath {
+  return useReadViewer().path;
+}
+
+/**
+ * {@link useReadPath} and whose reads they are. While Auth restores in a
+ * browser holding a live session cookie (its mark: `sessionMarkUid`), `v1`
+ * at once under the uid the cookie was minted for (W10): `callApi` has no ID
+ * token yet, so the request goes with the cookie, which /api/v1 GETs take —
+ * the first screen no longer waits for the SDK to load and restore (and
+ * refresh an expired token). Once Auth has restored, its user keys the reads:
+ * the same uid keeps what was read, another one reads again under its own key.
+ * A mark whose cookie has run out is no reason to read: `null` until Auth
+ * says.
+ */
+export function useReadViewer(): { path: ReadPath; uid?: string } {
   const { user, loading } = useAuth();
-  if (!loading) return user ? 'v1' : 'public';
-  return hasSessionMark() ? null : 'public';
+  if (!loading) return user ? { path: 'v1', uid: user.id } : { path: 'public' };
+  const marked = sessionMarkUid();
+  if (marked) return { path: 'v1', uid: marked };
+  return hasSessionMark() ? { path: null } : { path: 'public' };
+}
+
+/**
+ * A v1 GET for the signed-in viewer. One sent with the cookie alone (Auth
+ * still restoring, W10) that the server refuses (401: the cookie revoked or
+ * gone) is sent again once Auth has restored a user, with their ID token.
+ */
+async function v1Get<T>(path: string): Promise<T> {
+  try {
+    return await callApi<T>(path);
+  } catch (e) {
+    if (!(e instanceof ApiError && e.status === 401)) throw e;
+    const auth = getFirebaseClientAuth();
+    if (!auth.currentUser) await auth.authStateReady();
+    if (!auth.currentUser) throw e;
+    return callApi<T>(path);
+  }
 }
 
 /** A v1 GET for the signed-in viewer, or null when the server says there is no such thing (404): never retried. */
 async function getOrNull<T>(path: string): Promise<T | null> {
   try {
-    return await callApi<T>(path);
+    return await v1Get<T>(path);
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) return null;
     throw e;
@@ -182,9 +217,8 @@ export interface FeedState {
  * /api/cards/latest, the same for everyone (and kept by the CDN).
  */
 export function useFeed(): FeedState {
-  const { user } = useAuth();
-  const path = useReadPath();
-  const viewer = path === 'v1' ? user!.id : 'anon';
+  const { path, uid } = useReadViewer();
+  const viewer = path === 'v1' ? uid! : 'anon';
   const { data, isLoading, size, setSize } = useSWRInfinite<FeedPage>(
     (index, prev: FeedPage | null) => {
       // Until it's known who is reading (auth restoring in a signed-in browser).
@@ -197,7 +231,7 @@ export function useFeed(): FeedState {
       const page =
         who === 'anon'
           ? await getPublicFeedPage(FEED_PAGE_SIZE, cursor ?? undefined)
-          : await callApi<FeedPageBody>(
+          : await v1Get<FeedPageBody>(
               `/api/v1/feed?limit=${FEED_PAGE_SIZE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
             );
       return { ...summaryList(page.cards), next: page.nextCursor };
@@ -247,6 +281,71 @@ export interface CardView {
 const serverCardIds = new Map<string, string>();
 
 /**
+ * Card URL segment → whose card the server render showed for it (`''`: an
+ * anonymous one, whose author it never names) — only for a public card it
+ * rendered whole. Someone else's card the signed-in reader's browser then
+ * takes from the card page's one v1 request ({@link sharedCardDetail}), not
+ * from a second read of the same story through the rules (W3); someone else's
+ * anonymous card, which the rules never read here, goes straight to the
+ * server (W4).
+ */
+const serverCardAuthors = new Map<string, { id: string; authorId: string }>();
+
+/** How long a settled GET /api/v1/cards/{id}?include=… answer may still serve the page's other reader of it. */
+const SHARED_DETAIL_MS = 3_000;
+
+interface SharedDetail {
+  promise: Promise<CardDetailBody | null>;
+  /** When it settled; undefined while in flight. */
+  settledAt?: number;
+  /** Who has had it: each reader takes one answer once, so its own next read asks again. */
+  takers: Set<'card' | 'lists'>;
+}
+
+/** By `{uid}:{key}` (the card's id, and its slug once answered). */
+const sharedDetails = new Map<string, SharedDetail>();
+
+/**
+ * The card page's one signed-in request, GET /api/v1/cards/{key}?include=…,
+ * shared by its two readers — the card ({@link useCard}) and the lists around
+ * it ({@link useCardPageLists}) — which start together: whichever asks
+ * second, while the request is in flight or for a moment after, takes the
+ * same answer instead of asking again. Each reader takes an answer once, so a
+ * later read of either (a revalidation after an edit) always asks the server.
+ */
+export function sharedCardDetail(key: string, uid: string, who: 'card' | 'lists'): Promise<CardDetailBody | null> {
+  const now = Date.now();
+  for (const [k, e] of sharedDetails) if (e.settledAt !== undefined && now - e.settledAt > SHARED_DETAIL_MS) sharedDetails.delete(k);
+  const hit = sharedDetails.get(`${uid}:${key}`);
+  if (hit && !hit.takers.has(who)) {
+    hit.takers.add(who);
+    return hit.promise;
+  }
+  const entry: SharedDetail = {
+    promise: getOrNull<CardDetailBody>(`/api/v1/cards/${encodeURIComponent(key)}?include=${CARD_PAGE_INCLUDE}`),
+    takers: new Set([who]),
+  };
+  sharedDetails.set(`${uid}:${key}`, entry);
+  entry.promise.then(
+    (body) => {
+      entry.settledAt = Date.now();
+      // The other reader may ask by the card's id or its slug (unless the entry was dropped meanwhile).
+      if (body && sharedDetails.get(`${uid}:${key}`) === entry) for (const alias of [body.card.id, body.card.slug]) if (alias && alias !== key) sharedDetails.set(`${uid}:${alias}`, entry);
+    },
+    () => {
+      // A failure is no one else's answer: the other reader asks for itself.
+      for (const [k, e] of sharedDetails) if (e === entry) sharedDetails.delete(k);
+    },
+  );
+  return entry.promise;
+}
+
+/** Forget the shared answers (tests). */
+export function resetSharedCardDetails() {
+  sharedDetails.clear();
+}
+
+/**
  * A card by URL segment (slug or legacy doc id), read through the rules, with
  * the byline this viewer is shown: someone else's anonymous card gets the
  * anonymous one, and the profile it is anonymous from is never downloaded.
@@ -271,6 +370,20 @@ export async function fetchCardView(
   viewerId: string | undefined,
   knownId: string | undefined = serverCardIds.get(key),
 ): Promise<CardView | null> {
+  const shown = serverCardAuthors.get(key);
+  if (shown && shown.authorId !== viewerId) {
+    // Someone else's card, as the server render showed it. Signed in: the
+    // page's one v1 request answers it (W3) — the lists beside it share it.
+    if (viewerId) {
+      // By the id the render found, as the lists ask (useCardPageLists).
+      const body = await sharedCardDetail(shown.id, viewerId, 'card');
+      if (body) return cardViewOfDetail(body, key, viewerId);
+      // Gone, or the id no longer the slug's: the server finds what the key names now.
+      return serverCardView(key, viewerId);
+    }
+    // Signed out, an anonymous card: the rules never read one here (W4).
+    if (shown.authorId === '') return serverCardView(key, undefined);
+  }
   let card: Card | null;
   if (knownId) {
     card = await getCardById(knownId);
@@ -298,6 +411,11 @@ async function serverCardView(key: string, viewerId: string | undefined): Promis
   }
   const body = await getOrNull<CardDetailBody>(`/api/v1/cards/${encodeURIComponent(key)}`);
   if (!body) return null;
+  return cardViewOfDetail(body, key, viewerId);
+}
+
+/** A v1 CardDetail as the card page's view: the viewer's own card read whole through the rules, anyone else's as answered. */
+async function cardViewOfDetail(body: CardDetailBody, key: string, viewerId: string): Promise<CardView | null> {
   if (body.isOwner) {
     // The viewer's own card, which the slug lookup didn't name: one in their
     // trash, gone to everyone else (/api/cards/resolve answers it as a miss).
@@ -414,6 +532,10 @@ export function useCard(slugOrId: string | undefined, seed?: CardSeed | null) {
   const fallback = useMemo(() => (view ? seedCardView(view) : undefined), [view]);
   // Recorded while rendering, before any hook's fetch can start (see serverCardIds).
   if (slugOrId && seed?.id && !serverCardIds.has(slugOrId)) serverCardIds.set(slugOrId, seed.id);
+  if (slugOrId && seed) {
+    if (view && seed.id === view.card.id) serverCardAuthors.set(slugOrId, { id: seed.id, authorId: view.card.authorId });
+    else serverCardAuthors.delete(slugOrId);
+  }
   const swr = useSWR<CardView | null>(key, () => fetchCardView(slugOrId!, user?.id), {
     ...OWN_CONTENT,
     fallbackData: fallback,
@@ -465,10 +587,27 @@ export function useMyBlockedIds() {
   });
 }
 
-/** The signed-in viewer's own profile. */
+const myProfileKey = (uid: string) => `profile:${uid}`;
+
+/**
+ * The signed-in viewer's own profile. Many surfaces hold it (the shell, the
+ * header, me, settings, the publish step, a card's page): with the app-wide
+ * dedupe (W14), not read again on every page change — settings, the one place
+ * it is changed, reads it again after each save ({@link useRefreshMyProfile}).
+ */
 export function useMyProfile() {
   const { user } = useAuth();
-  return useSWR(user ? `profile:${user.id}` : null, () => getCurrentUserProfile(), OWN_CONTENT);
+  return useSWR(user ? myProfileKey(user.id) : null, () => getCurrentUserProfile());
+}
+
+/** Reads the viewer's own profile again: after a write to it. */
+export function useRefreshMyProfile(): () => void {
+  const { user } = useAuth();
+  const { mutate } = useSWRConfig();
+  const uid = user?.id;
+  return useCallback(() => {
+    if (uid) void mutate(myProfileKey(uid));
+  }, [mutate, uid]);
 }
 
 /**
@@ -530,37 +669,40 @@ export interface MyThoughtMap extends ThoughtMapData {
   resonatedIds: string[];
 }
 
-/** The signed-in viewer's thought map plus their own + resonated cards. */
+/** The own shelves the thought map places and offers (GET /api/v1/me/cardbox). */
+const MAP_SHELVES = 'published,private,draft';
+
+/**
+ * The signed-in viewer's thought map plus their own + resonated cards — as
+ * list summaries (W11): the viewer's own shelves in one GET
+ * /api/v1/me/cardbox (the server reads them without their stories), the
+ * other cards it places in GET /api/v1/cards?keys= (30 a request), instead of
+ * some 320 whole stories through the rules and a read for each card beside
+ * them. A summary never stands for the card in an editor: a card opened from
+ * the map is read whole there (readWriterCard).
+ */
 export function useMyThoughtMap() {
   const { user } = useAuth();
   return useSWR<MyThoughtMap>(user ? `thoughtmap:${user.id}` : null, async () => {
     const uid = user!.id;
-    const [map, published, priv, draft] = await Promise.all([
-      loadMyThoughtMap(),
-      getCardsByAuthor(uid, 'published'),
-      getCardsByAuthor(uid, 'private'),
-      getCardsByAuthor(uid, 'draft'),
-    ]);
-    // (Cards in the trash are on none of these shelves: see getCardsByAuthor.)
-    const own = [...published, ...priv, ...draft].filter((c) => !c.trashedAt);
+    const [map, box] = await Promise.all([loadMyThoughtMap(), callApi<CardBoxBody>(`/api/v1/me/cardbox?shelves=${MAP_SHELVES}`)]);
+    // (Cards in the trash are on none of these shelves.)
+    const own = [box.published, box.private, box.draft].flatMap((shelf) => summaryList(shelf).cards).filter((c) => !c.trashedAt);
     const ownIds = new Set(own.map((c) => c.id));
     // The originals the viewer resonated with, named by their own resonance
     // cards just read — not a second scan of the same cards (the card box's
     // resonated shelf reads its own) — and, beside them, the cards placed on
-    // the map long ago, older than the newest 40 read above. The server
-    // answers for the ones the rules won't read here (someone else's
-    // anonymous card); should that fail, those cards are just not shown this
-    // time — the map keeps their places.
+    // the map long ago, older than the newest the shelves bring. The server
+    // answers them as this viewer may read them (someone else's anonymous
+    // card without its author; none in the trash, the viewer's own neither,
+    // whose node, arrows and group stay stored so a restore puts it back);
+    // should that fail, those cards are just not shown this time — the map
+    // keeps their places.
     const refIds = [...new Set(own.flatMap((c) => (c.referenceCardId ? [c.referenceCardId] : [])))];
     const missing = [...new Set(map.nodes.map((n) => n.cardId))].filter((id) => !ownIds.has(id) && !refIds.includes(id));
     const wanted = [...refIds, ...missing];
     const found = new Map<string, Card>();
-    // One of the viewer's own cards in the trash is read here (the rules let
-    // its author read it) but is not drawn: its node, arrows and group stay
-    // stored, so a restore puts it back where it was.
-    for (const c of await Promise.all(wanted.map((id) => getCardById(id)))) if (c && !c.trashedAt) found.set(c.id, c);
-    const unread = wanted.filter((id) => !found.has(id));
-    if (unread.length) for (const c of (await fetchCardSummaries(unread).catch(() => EMPTY)).cards) found.set(c.id, c);
+    if (wanted.length) for (const c of (await fetchCardSummaries(wanted).catch(() => EMPTY)).cards) if (!c.trashedAt) found.set(c.id, c);
     const resonated = refIds.flatMap((id) => found.get(id) ?? []);
     const older = missing.flatMap((id) => found.get(id) ?? []);
     const cards: Record<string, Card> = {};
@@ -604,43 +746,6 @@ export function useMyResonance(cardId: string | undefined) {
   const { user, loading } = useAuth();
   const key = cardId && user && !loading ? `myResonance:${cardId}:${user.id}` : null;
   return useSWR<Card | null>(key, () => getMyResonanceCard(cardId!), OWN_CONTENT);
-}
-
-/**
- * The people who resonated with a card, newest first — derived from the public
- * resonance cards. Author-only surface, so the caller gates this on
- * `viewer.id === authorId` by passing `undefined` otherwise.
- */
-export function useResonators(cardId: string | undefined, referenceCardId?: string) {
-  return useSWR<User[]>(cardId ? `resonators:${cardId}:${referenceCardId ?? 'none'}` : null, async () => {
-    const cards = await getResonanceCards(cardId!);
-    const authors = await getUsersByIds(bylineAuthorIds(cards, undefined));
-    // One avatar per unique resonator, in card (newest-first) order.
-    const seen = new Set<string>();
-    const out: User[] = [];
-
-    // If there is a referenced card, add its author first (parent card is older/source)
-    if (referenceCardId) {
-      const refCard = await getCardById(referenceCardId);
-      if (refCard && !refCard.anonymous) {
-        const refAuthor = await getUserById(refCard.authorId);
-        if (refAuthor) {
-          seen.add(refAuthor.id);
-          out.push(refAuthor);
-        }
-      }
-    }
-
-    for (const c of cards) {
-      // An anonymous resonance card must not put a face in the avatar row.
-      if (c.anonymous) continue;
-      if (seen.has(c.authorId)) continue;
-      seen.add(c.authorId);
-      const u = authors[c.authorId];
-      if (u) out.push(u);
-    }
-    return out;
-  });
 }
 
 /**
@@ -718,8 +823,8 @@ export interface LoadedCardPageLists {
 export const cardPageKey = (id: string, uid: string) => `cardPage:${id}:${uid}`;
 
 /** One GET /api/v1/cards/{id}?include=…, as the lists the page draws; null: the viewer can't read the card. */
-async function fetchCardPageLists(id: string): Promise<LoadedCardPageLists | null> {
-  const body = await getOrNull<CardDetailBody>(`/api/v1/cards/${encodeURIComponent(id)}?include=${CARD_PAGE_INCLUDE}`);
+async function fetchCardPageLists(id: string, uid: string): Promise<LoadedCardPageLists | null> {
+  const body = await sharedCardDetail(id, uid, 'lists');
   if (!body) return null;
   return {
     resonances: mergeLists(summaryList(body.referenceCard ? [body.referenceCard] : []), summaryList(body.resonances)),
@@ -747,9 +852,8 @@ async function fetchCardPageLists(id: string): Promise<LoadedCardPageLists | nul
  * with (the public path reads it; the server finds it on its own).
  */
 export function useCardPageLists(id: string | undefined, referenceCardId: string | undefined): CardPageLists {
-  const { user } = useAuth();
-  const path = useReadPath();
-  const signedIn = useSWR(path === 'v1' && id ? cardPageKey(id, user!.id) : null, () => fetchCardPageLists(id!));
+  const { path, uid } = useReadViewer();
+  const signedIn = useSWR(path === 'v1' && id ? cardPageKey(id, uid!) : null, () => fetchCardPageLists(id!, uid!));
   const pub = path === 'public';
   const related = useRelated(pub ? id : undefined);
   const incoming = useResonanceCards(pub ? id : undefined);
@@ -887,6 +991,16 @@ function useLiveConversations(): LiveState<Conversation[]> {
 }
 
 /**
+ * One conversation as the live list holds it (W15) — what a thread opened
+ * from the list starts on, before its own read of the conversation answers.
+ * Undefined while the list hasn't heard it (yet, or ever: an older one).
+ */
+export function useLiveConversation(pairId: string | undefined): Conversation | undefined {
+  const live = useLiveConversations();
+  return pairId ? live.data?.find((c) => c.id === pairId) : undefined;
+}
+
+/**
  * Conversations this browser is deleting (round 21): gone from the list and
  * the badge at once, before the server answers; `hideConversation` returns
  * what brings one back (a refusal). One the server deleted stays hidden a
@@ -947,9 +1061,8 @@ export function useUnreadMessages(): number {
 /**
  * The signed-in viewer's conversation list plus connected people they haven't
  * talked to yet: the live list (shared with the header's badge), the people in
- * it from the page-wide profile cache, and the viewer's connections — read
- * again when they come back to the tab (`conversations:{uid}`; mutate it after
- * a block or a delete).
+ * it from the page-wide profile cache, and the viewer's connections
+ * (`conversations:{uid}`; mutate it after a block or a delete).
  */
 export function useConversations(): { data: ConversationsData | undefined; error: unknown } {
   useLeavingConversations();
@@ -957,7 +1070,10 @@ export function useConversations(): { data: ConversationsData | undefined; error
   const uid = user && !loading ? user.id : null;
   const live = useLiveConversations();
   const { data: blocked } = useMyBlockedIds();
-  const connections = useSWR<string[]>(uid ? `conversations:${uid}` : null, () => listMyConnectionUids(), LIVE_ON_FOCUS);
+  // Not read again on coming back to the tab (W21): what changes them here — a block, a resonance taken back,
+  // a delete — mutates this key (dependsOnConnections), and a new connection is a new conversation in the live
+  // list, which this joins.
+  const connections = useSWR<string[]>(uid ? `conversations:${uid}` : null, () => listMyConnectionUids());
   const conversations = visibleConversations(live.data, blocked);
   const otherUids = conversations?.map((c) => c.participants.find((p) => p !== uid) ?? '');
   const ids =
@@ -1019,14 +1135,29 @@ export function useBellExtras(items: Notification[] | undefined): BellExtras | u
   const from = idsOf((n) => n.payload.fromUserId ?? (Array.isArray(n.payload.fromUserIds) ? n.payload.fromUserIds[0] : undefined));
   const cardIds = idsOf((n) => n.payload.cardId);
   const key = uid && (from.length || cardIds.length) ? `bell-extras:${uid}:${from.join(',')}|${cardIds.join(',')}` : null;
+  // The cards already answered for, by id (null: the viewer can't read it): a new row asks only for its own
+  // card (W21), not the twenty again. For this viewer, for as long as the bell is drawn.
+  const knownCards = useRef<{ uid: string | null; cards: Map<string, Card | null> }>({ uid, cards: new Map() });
+  if (knownCards.current.uid !== uid) knownCards.current = { uid, cards: new Map() };
   const { data } = useSWR<BellExtras>(
     key,
     async () => {
-      const [people, cards] = await Promise.all([
+      const known = knownCards.current.cards;
+      const newIds = cardIds.filter((id) => !known.has(id));
+      const [people, read] = await Promise.all([
         from.length ? getUsersByIds(from).catch(() => ({})) : {},
-        cardIds.length ? fetchCardSummaries(cardIds).catch(() => EMPTY) : EMPTY,
+        newIds.length ? fetchCardSummaries(newIds).catch(() => null) : EMPTY,
       ]);
-      return { people, cards: Object.fromEntries(cards.cards.map((c) => [c.id, c])) };
+      if (read) {
+        for (const id of newIds) known.set(id, null);
+        for (const c of read.cards) known.set(c.id, c);
+      }
+      const cards: Record<string, Card> = {};
+      for (const id of cardIds) {
+        const c = known.get(id);
+        if (c) cards[c.id] = c;
+      }
+      return { people, cards };
     },
     { keepPreviousData: true },
   );
@@ -1051,8 +1182,14 @@ const strangers = { isConnected: false, isBlocked: false };
  * doesn't wait for auth; the profile page's hooks share the one read.
  */
 function usePersonByHandle(handle: string | undefined) {
-  return useSWR<User | null>(handle ? `person:${handle}` : null, () => getUserByHandle(handle!));
+  return useSWR<User | null>(handle ? personKey(handle) : null, () => getUserByHandle(handle!));
 }
+
+/**
+ * The one SWR key of a person read by pen name (getUserByHandle) — the profile
+ * page's and a thread's alike (W21), so the two share one read.
+ */
+export const personKey = (handle: string) => `person:${handle}`;
 
 /**
  * A user's outward-facing, blog-style profile keyed by handle: the person, and
@@ -1141,7 +1278,7 @@ async function fetchProfilePage(handle: string): Promise<Required<Omit<ProfilePa
   const page = body.cards ?? { cards: [], nextCursor: null };
   let cards = page.cards;
   if (page.nextCursor && !body.isBlocked) {
-    const rest = await callApi<FeedPageBody>(
+    const rest = await v1Get<FeedPageBody>(
       `${path}/cards?limit=${PROFILE_CARDS - PROFILE_PAGE_MAX}&cursor=${encodeURIComponent(page.nextCursor)}`,
     );
     cards = [...cards, ...rest.cards];
@@ -1161,13 +1298,12 @@ async function fetchProfilePage(handle: string): Promise<Required<Omit<ProfilePa
  * by side — the person and their cards without waiting for auth.
  */
 export function useProfilePage(handle: string | undefined): ProfilePage {
-  const { user: viewer } = useAuth();
-  const path = useReadPath();
+  const { path, uid } = useReadViewer();
   const publicHandle = path === 'public' ? handle : undefined;
   const head = useProfileByHandle(publicHandle);
   const cards = useProfileCards(publicHandle);
   const links = useProfileLinks(publicHandle);
-  const signedIn = useSWR(path === 'v1' && handle ? `profilePage:${handle}:${viewer!.id}` : null, () => fetchProfilePage(handle!));
+  const signedIn = useSWR(path === 'v1' && handle ? `profilePage:${handle}:${uid!}` : null, () => fetchProfilePage(handle!));
 
   if (path === 'v1') {
     const d = signedIn.data;

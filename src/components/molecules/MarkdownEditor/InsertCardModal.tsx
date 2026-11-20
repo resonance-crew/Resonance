@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { Modal } from '@/components/molecules/Modal/Modal';
 import { CardPickList } from '@/components/molecules/CardPicker/CardPickList';
-import { useAuth } from '@/components/providers/AuthProvider';
-import { getCardsByAuthor, getMyDrafts } from '@/lib/db/firestore/client/reads';
+import { useMyCardBox } from '@/lib/data/hooks';
 import type { Card } from '@/lib/db/types';
 import styles from './InsertCardModal.module.css';
 
@@ -34,6 +33,8 @@ export interface InsertCardModalProps {
   selectedId?: string | null;
 }
 
+const EMPTY_SHELF = { cards: [] as Card[] };
+
 /** The author's cards as the picker holds them: being read, read, or a read that failed. */
 type Shelf = { status: 'loading' } | { status: 'ready'; cards: Card[] } | { status: 'failed' };
 
@@ -50,29 +51,24 @@ type Shelf = { status: 'loading' } | { status: 'ready'; cards: Card[] } | { stat
  */
 export function InsertCardModal({ open, onClose, onPick, title, subtitle, privateLabel, empty, selectedId }: InsertCardModalProps) {
   const t = useTranslations('write.editor.cardModal');
-  const { user } = useAuth();
-  const uid = user?.id;
-  const [shelf, setShelf] = useState<Shelf>({ status: 'loading' });
-  // Each 再試一次 reads again.
-  const [attempt, setAttempt] = useState(0);
-
-  useEffect(() => {
-    if (!open || !uid) return;
-    let alive = true;
-    setShelf((was) => (was.status === 'loading' ? was : { status: 'loading' }));
-    const withPrivate = !!privateLabel;
-    Promise.all([getCardsByAuthor(uid, 'published'), withPrivate ? getMyDrafts(uid) : Promise.resolve([])])
-      .then(([published, kept]) => {
-        if (!alive) return;
-        const shown = published.filter((c) => c.visibility === 'public');
-        const own = kept.filter((c) => !c.anonymous && c.thoughtCore.trim().length > 0 && !shown.some((p) => p.id === c.id));
-        setShelf({ status: 'ready', cards: [...shown, ...own] });
-      })
-      .catch(() => alive && setShelf({ status: 'failed' }));
-    return () => {
-      alive = false;
-    };
-  }, [open, uid, attempt, privateLabel]);
+  // The card box's own shelves (W13): what the box already read shows at once, and is read again behind it.
+  const published = useMyCardBox(open ? 'published' : null);
+  const kept = useMyCardBox(open && privateLabel ? 'draft' : null);
+  const keptData = privateLabel ? kept.data : EMPTY_SHELF;
+  const failed = !!(published.error || (privateLabel && kept.error));
+  const shelf = useMemo<Shelf>(() => {
+    if (published.data && keptData) {
+      const shown = published.data.cards.filter((c) => c.visibility === 'public');
+      const own = keptData.cards.filter((c) => !c.anonymous && c.thoughtCore.trim().length > 0 && !shown.some((p) => p.id === c.id));
+      return { status: 'ready', cards: [...shown, ...own] };
+    }
+    return failed ? { status: 'failed' } : { status: 'loading' };
+  }, [published.data, keptData, failed]);
+  // Each 再試一次 reads again (the shelf that failed).
+  const retry = () => {
+    if (published.error) void published.mutate();
+    if (privateLabel && kept.error) void kept.mutate();
+  };
 
   const heading = title ?? t('title');
 
@@ -102,7 +98,7 @@ export function InsertCardModal({ open, onClose, onPick, title, subtitle, privat
           shelf.status === 'failed' ? (
             <div className={styles.failed} role="alert">
               <span>{t('failed')}</span>
-              <OrganicButton variant="tonal" size="sm" onClick={() => setAttempt((n) => n + 1)}>
+              <OrganicButton variant="tonal" size="sm" onClick={retry}>
                 {t('retry')}
               </OrganicButton>
             </div>

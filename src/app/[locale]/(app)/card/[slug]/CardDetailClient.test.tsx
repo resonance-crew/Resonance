@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type * as React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { resetSharedCardDetails } from '@/lib/data/hooks';
 import type { ReactNode } from 'react';
 import { act } from 'react';
 import { renderToString } from 'react-dom/server';
@@ -198,7 +199,10 @@ beforeEach(() => {
   vi.mocked(getMyBlockedIds).mockResolvedValue(new Set());
   vi.mocked(getUserById).mockResolvedValue(author());
 });
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  resetSharedCardDetails();
+});
 
 describe('CardDetailClient (no server content)', () => {
   it('renders the fetched card body, author, and tags once loaded', async () => {
@@ -327,7 +331,8 @@ describe('taking over from the server render', () => {
   it('shows a signed-in reader the story once their block list is known and clear of the author', async () => {
     signIn();
     mockUseAuth.mockReturnValue({ user: { id: 'me' }, loading: false });
-    vi.mocked(getCardById).mockReturnValue(new Promise(() => {}));
+    // The browser's own read (the page's v1 request, W3) never comes back here.
+    vi.mocked(callApi).mockReturnValue(new Promise(() => {}));
     const blocks = deferred<Set<string>>();
     vi.mocked(getMyBlockedIds).mockReturnValue(blocks.promise);
 
@@ -347,7 +352,7 @@ describe('taking over from the server render', () => {
       vi.mocked(getCardById).mockResolvedValue(null);
       vi.mocked(resolveCardId).mockResolvedValue('pub1');
       vi.mocked(callApi).mockImplementation((async (path: string) => {
-        if (path === '/api/v1/cards/a-quiet-morning') {
+        if (path === '/api/v1/cards/a-quiet-morning' || path.startsWith('/api/v1/cards/pub1?include=')) {
           const body = await answer;
           if (!body) throw new ApiError(404, 'not_found', 'No such card.');
           return body;
@@ -363,7 +368,8 @@ describe('taking over from the server render', () => {
       serverAnswers(answer.promise);
 
       renderPage({ seed: seed({ anonymous: true }) });
-      await waitFor(() => expect(callApi).toHaveBeenCalledWith('/api/v1/cards/a-quiet-morning'));
+      // The card page's one v1 request (W3), by the id the server render found.
+      await waitFor(() => expect(callApi).toHaveBeenCalledWith('/api/v1/cards/pub1?include=resonances,related,links,embeds'));
       expect(storyVisible()).toBe(false);
 
       // The server knows the author, and that this reader blocked them.
@@ -515,8 +521,7 @@ describe('the lists around the card and its embedded cards', () => {
 
   it('signed in: come in one request, keyed by the id the server found, beside the read of the card itself', async () => {
     signedIn();
-    vi.mocked(getCardById).mockReturnValue(new Promise(() => {}));
-    vi.mocked(callApi).mockResolvedValue(detail());
+    vi.mocked(callApi).mockResolvedValue(detail({ story: EMBEDDING_STORY }));
 
     renderPage({ seed: seedWith(EMBEDDING_STORY) });
 
@@ -537,10 +542,11 @@ describe('the lists around the card and its embedded cards', () => {
     // One the viewer can't read (or that is gone) stays a plain link.
     expect(screen.getByRole('link', { name: 'Gone' })).toHaveAttribute('href', '/card/gone');
 
-    expect(callApi).toHaveBeenCalledTimes(1);
+    // One read (besides the read count's POST, now that the browser's own read has answered).
+    expect(vi.mocked(callApi).mock.calls.filter(([, init]) => !init)).toHaveLength(1);
     expect(callApi).toHaveBeenCalledWith('/api/v1/cards/pub1?include=resonances,related,links,embeds');
-    // While the browser's own read of the card is still out (it never comes back here).
-    expect(getCardById).toHaveBeenCalled();
+    // The card itself came in that answer too (W3): not read again through the rules.
+    expect(getCardById).not.toHaveBeenCalled();
     expect(getRelatedCards).not.toHaveBeenCalled();
     expect(getResonanceCards).not.toHaveBeenCalled();
     expect(getCardBySlugOrId).not.toHaveBeenCalled();

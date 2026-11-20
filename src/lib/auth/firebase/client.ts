@@ -112,6 +112,18 @@ export function hasSessionMark(): boolean {
   return typeof window !== 'undefined' && readSessionMark() !== null;
 }
 
+/**
+ * Whose session cookie this browser holds while it still has a while to live
+ * — the uid it was minted for — or null. Signed-in v1 GETs go out with the
+ * cookie under this uid before the SDK has restored its user (W10:
+ * lib/data/hooks useReadViewer); the restored user keys them from then on.
+ */
+export function sessionMarkUid(): string | null {
+  if (typeof window === 'undefined') return null;
+  const mark = readSessionMark();
+  return mark && mark.expiresAt - EXPIRY_SLACK_MS > Date.now() ? mark.uid : null;
+}
+
 function writeSessionMark(mark: SessionMark): void {
   try {
     window.localStorage.setItem(SESSION_MARK_KEY, JSON.stringify(mark));

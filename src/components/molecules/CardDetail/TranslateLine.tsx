@@ -47,9 +47,23 @@ export interface Translation {
 
 /** The cards kept original for the rest of this visit (顯示原文 under the auto-translate switch). */
 const keptOriginal = new Set<string>();
-/** Forgets this visit's 顯示原文s (tests). */
+/**
+ * The translations this visit was given, by the line's `ident` (the card, the language, the words' lengths)
+ * (W21): coming back to a card shows its translation again without asking the server (a POST, through hnd1)
+ * for it once more. The newest few are kept.
+ */
+const answered = new Map<string, Translation>();
+const ANSWERED_MAX = 16;
+function remember(ident: string, translation: Translation) {
+  answered.delete(ident);
+  answered.set(ident, translation);
+  while (answered.size > ANSWERED_MAX) answered.delete(answered.keys().next().value as string);
+}
+
+/** Forgets this visit's 顯示原文s and translations (tests). */
 export function forgetKeptOriginals(): void {
   keptOriginal.clear();
+  answered.clear();
 }
 
 /** What the server answered, as the line reads it. */
@@ -165,9 +179,11 @@ export function useStoryTranslation({
   const translate = useCallback(
     async (byItself: boolean) => {
       if (!card || !to) return;
-      setState('working');
-      const answer = await askTranslation(key, to);
-      if (asked.current !== ident) return; // the page moved on to another card
+      const kept = answered.get(ident);
+      if (!kept) setState('working');
+      const answer: Asked = kept ? { ok: true, translation: kept } : await askTranslation(key, to);
+      if (!kept && asked.current !== ident) return; // the page moved on to another card
+      if (answer.ok) remember(ident, answer.translation);
       if (!answer.ok) {
         if (answer.why === 'signin') onSignIn();
         setState(answer.why === 'spent' ? 'spent' : answer.why === 'signin' ? 'can' : 'failed');

@@ -28,7 +28,7 @@ vi.mock('@/components/providers/AuthProvider', () => ({
 vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 
 import { loadMyThoughtMap } from '@/lib/db/firestore/client/thoughtMap';
-import { getCardsByAuthor } from '@/lib/db/firestore/client/reads';
+import { callApi } from '@/lib/db/firestore/client/api';
 import { ThoughtMapBoard } from './ThoughtMapBoard';
 
 const myCard: Card = {
@@ -60,9 +60,21 @@ function renderBoard(cache: Cache) {
 describe('ThoughtMapBoard', () => {
   it('keeps a freshly placed card when the board is mounted again', async () => {
     vi.mocked(loadMyThoughtMap).mockResolvedValue({ nodes: [], edges: [], groups: [] });
-    vi.mocked(getCardsByAuthor).mockImplementation(async (_uid, tab) =>
-      tab === 'published' ? [myCard] : []
-    );
+    // The viewer's own shelves, as the card box answers them (W11: list summaries, one request).
+    vi.mocked(callApi).mockImplementation((async (path: string) =>
+      path.startsWith('/api/v1/me/cardbox')
+        ? {
+            published: {
+              cards: [
+                {
+                  id: myCard.id, slug: null, title: myCard.thoughtCore, excerpt: myCard.story, tags: [], publishedAt: '2026-01-01T00:00:00.000Z',
+                  author: { id: 'me', handle: 'me', initials: 'M', accentColor: 'c', avatarUrl: null, avatarSeed: '1', verified: false, region: null },
+                  anonymous: false, visibility: 'public', imageUrl: null, imageLabel: null, accentHue: null, readMinutes: 1, referenceCardId: null, reason: null,
+                },
+              ],
+            },
+          }
+        : { cards: [] }) as never);
 
     const cache: Cache = new Map();
     const first = renderBoard(cache);

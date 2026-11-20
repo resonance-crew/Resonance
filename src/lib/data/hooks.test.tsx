@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ReactNode } from 'react';
 import { SWRConfig } from 'swr';
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, render, renderHook, waitFor } from '@testing-library/react';
 import { SWR_DEFAULTS } from '@/components/providers/SWRProvider';
 import type { Card, User } from '@/lib/db/types';
 import type { CardSeed } from './cardSeed';
@@ -69,11 +69,11 @@ import {
   getCardBySlugOrId,
   getCardsByAuthor,
   getMyDrafts,
+  getCurrentUserProfile,
   getPublicCardsByAuthor,
   getPublicCardView,
   getPublicFeedPage,
   getRelatedCards,
-  getResonanceCards,
   getUserById,
   getUserByHandle,
   getUsersByIds,
@@ -96,6 +96,8 @@ import {
   useFeed,
   useMyBlockedIds,
   useMyCardBox,
+  useMyProfile,
+  useRefreshMyProfile,
   useMyThoughtMap,
   useProfileByHandle,
   useProfileCards,
@@ -105,7 +107,7 @@ import {
   useNotifications,
   useRecommendedFeed,
   useRelated,
-  useResonators,
+  resetSharedCardDetails,
   useUnreadMessages,
   type CardBoxShelf,
 } from './hooks';
@@ -197,6 +199,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.clearAllMocks();
   resetLive();
+  resetSharedCardDetails();
 });
 
 // The latest feed comes from the server: an anonymous card's document names
@@ -560,7 +563,9 @@ describe('useCard with the server render', () => {
     expect(getCardById).not.toHaveBeenCalled();
   });
 
+  // Signed out, a named card is read through the rules (W9 keeps that read); signed in, the page's v1 request answers it.
   it('reads the card by the id the server found, skipping the slug lookup, and takes over', async () => {
+    mockUseAuth.mockReturnValue({ user: null, loading: false });
     vi.mocked(getCardById).mockResolvedValue(card('doc1', 'a1', { story: 'Fresh from the rules' }));
     vi.mocked(getUserById).mockResolvedValue(user('a1', 'writer'));
     const { result } = renderHook(() => useCard('a-slug', seed), { wrapper });
@@ -572,6 +577,7 @@ describe('useCard with the server render', () => {
   });
 
   it("lets another reader of the card's key (an embed of it beside the page) fetch by the server's id too", async () => {
+    mockUseAuth.mockReturnValue({ user: null, loading: false });
     vi.mocked(getCardById).mockResolvedValue(card('doc1', 'a1'));
     vi.mocked(getUserById).mockResolvedValue(user('a1', 'writer'));
     // Rendered together; the other reader holds no fallbackData, so SWR starts
@@ -586,8 +592,10 @@ describe('useCard with the server render', () => {
   });
 
   it('turns into not-found when the card no longer reads (gone private or deleted)', async () => {
+    mockUseAuth.mockReturnValue({ user: null, loading: false });
     vi.mocked(getCardById).mockResolvedValue(null);
     vi.mocked(resolveCardId).mockResolvedValue('doc1');
+    vi.mocked(getPublicCardView).mockResolvedValue(null);
     const { result } = renderHook(() => useCard('a-slug', seed), { wrapper });
     await waitFor(() => expect(result.current.data).toBeNull());
     // The slug still names the same id: it isn't read a second time.
@@ -614,6 +622,84 @@ describe('useCard with the server render', () => {
     const { result } = renderHook(() => useCard('a-slug', anon), { wrapper });
     expect(result.current.data!.author).toMatchObject({ id: '', handle: '', initials: '·' });
     expect(getUserById).not.toHaveBeenCalled();
+  });
+
+  // W3: the story came in the HTML; signed in, the page's one v1 request (the lists' too) brings it again — never a
+  // third copy through the rules.
+  it("signed in, takes someone else's card from the page's one v1 request, shared with the lists, never reading it through the rules", async () => {
+    const detail = {
+      card: summary('doc1', 'a1', { slug: 'a-slug' }),
+      story: 'From the v1 answer.',
+      visibility: 'public',
+      anonymous: false,
+      resonanceCount: 2,
+      coreInsight: null,
+      isOwner: false,
+      referenceCard: null,
+      resonances: { cards: [summary('r1', 'a2')] },
+      related: { cards: [] },
+      links: { cards: [] },
+      embeds: { cards: [] },
+    } satisfies CardDetailBody;
+    api({ '/api/v1/cards/doc1?include=': detail });
+    const { result } = renderHook(
+      () => {
+        const page = useCard('a-slug', seed);
+        const lists = useCardPageLists(page.data?.card.id ?? 'doc1', undefined);
+        return { page, lists };
+      },
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.page.fromServer).toBe(false));
+    await waitFor(() => expect(result.current.lists.resonances?.cards.map((c) => c.id)).toEqual(['r1']));
+    expect(result.current.page.data!.card).toMatchObject({ id: 'doc1', authorId: 'a1', story: 'From the v1 answer.', resonanceCount: 2 });
+    expect(result.current.page.data!.card.summary).toBeUndefined();
+    expect(result.current.page.data!.author!.handle).toBe('h-a1');
+    expect(getCardById).not.toHaveBeenCalled();
+    expect(getUserById).not.toHaveBeenCalled();
+    expect(callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('signed in, asks the server what the slug names now when the id the render found is gone', async () => {
+    api({
+      '/api/v1/cards/a-slug': {
+        card: summary('doc2', 'a1', { slug: 'a-slug' }),
+        story: 'Moved.',
+        visibility: 'public',
+        anonymous: false,
+        resonanceCount: 0,
+        coreInsight: null,
+        isOwner: false,
+        referenceCard: null,
+      },
+    });
+    const { result } = renderHook(() => useCard('a-slug', seed), { wrapper });
+    await waitFor(() => expect(result.current.fromServer).toBe(false));
+    expect(result.current.data!.card).toMatchObject({ id: 'doc2', story: 'Moved.' });
+    expect(getCardById).not.toHaveBeenCalled();
+  });
+
+  // W4: the rules never read someone else's anonymous card in the browser — not a first try that must fail.
+  it("signed out, goes straight to the server for an anonymous card the render showed", async () => {
+    mockUseAuth.mockReturnValue({ user: null, loading: false });
+    const anon: CardSeed = { id: 'doc1', view: { card: { ...seed.view!.card, authorId: '', anonymous: true }, author: null } };
+    vi.mocked(getPublicCardView).mockResolvedValue({ ...anon, view: { ...anon.view!, card: { ...anon.view!.card, story: 'Fresh, unsigned.' } } });
+    const { result } = renderHook(() => useCard('anon-slug', anon), { wrapper });
+    await waitFor(() => expect(result.current.fromServer).toBe(false));
+    expect(result.current.data!.card).toMatchObject({ authorId: '', story: 'Fresh, unsigned.' });
+    expect(getPublicCardView).toHaveBeenCalledWith('anon-slug');
+    expect(getCardById).not.toHaveBeenCalled();
+    expect(resolveCardId).not.toHaveBeenCalled();
+  });
+
+  it("still reads the viewer's own card through the rules, beside the lists' request", async () => {
+    const mine: CardSeed = { id: 'doc1', view: { ...seed.view!, card: { ...seed.view!.card, authorId: 'me' } } };
+    vi.mocked(getCardById).mockResolvedValue(card('doc1', 'me', { story: 'Mine, whole' }));
+    vi.mocked(getUserById).mockResolvedValue(user('me'));
+    const { result } = renderHook(() => useCard('mine-slug', mine), { wrapper });
+    await waitFor(() => expect(result.current.fromServer).toBe(false));
+    expect(result.current.data!.card.story).toBe('Mine, whole');
+    expect(getCardById).toHaveBeenCalledWith('doc1');
   });
 
   it('with only an id (a card the server may not show), reads it by that id with nothing shown first', async () => {
@@ -719,29 +805,24 @@ describe('useMyCardBox', () => {
 });
 
 describe('useMyThoughtMap', () => {
+  const node = (cardId: string) => ({ id: cardId, cardId, x: 0, y: 0, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') });
+  /** The viewer's own card as their card box answers it (its byline theirs, an anonymous one's too). */
+  const mine = (id: string, extra: Partial<FeedCardBody> = {}) => summary(id, 'me', extra);
+
   it('includes resonated originals as placeable cards and keeps their nodes alive', async () => {
-    vi.mocked(getCardsByAuthor).mockImplementation(async (_uid, tab) => {
-      const byTab: Record<string, Card[]> = {
-        published: [card('own', 'me')],
-        private: [],
-        // The viewer's resonances: one with an original by someone else, one
-        // with someone's anonymous card (which the rules won't read here).
-        draft: [
-          card('my-answer', 'me', { publishedAt: null, referenceCardId: 'theirs' }),
-          card('my-other-answer', 'me', { publishedAt: null, referenceCardId: 'anon-orig' }),
-        ],
-      };
-      return byTab[tab] ?? [];
-    });
-    vi.mocked(getCardById).mockImplementation(async (id) => (id === 'theirs' ? card('theirs', 'other') : null));
-    api({ '/api/v1/cards?keys=': (path: string) => ({ cards: path.includes('anon-orig') ? [summary('anon-orig', null)] : [] }) });
-    const node = (cardId: string) => ({
-      id: cardId,
-      cardId,
-      x: 0,
-      y: 0,
-      createdAt: new Date('2026-01-01'),
-      updatedAt: new Date('2026-01-01'),
+    api({
+      '/api/v1/me/cardbox?shelves=published,private,draft': {
+        published: { cards: [mine('own')] },
+        private: { cards: [] },
+        // The viewer's resonances: one with an original by someone else, one with someone's anonymous card.
+        draft: {
+          cards: [
+            mine('my-answer', { publishedAt: null, referenceCardId: 'theirs' }),
+            mine('my-other-answer', { publishedAt: null, referenceCardId: 'anon-orig' }),
+          ],
+        },
+      },
+      '/api/v1/cards?keys=': { cards: [summary('theirs', 'other'), summary('anon-orig', null)] },
     });
     vi.mocked(loadMyThoughtMap).mockResolvedValue({
       nodes: [
@@ -762,37 +843,37 @@ describe('useMyThoughtMap', () => {
     expect(Object.keys(map.cards).sort()).toEqual(['anon-orig', 'my-answer', 'my-other-answer', 'own', 'theirs']);
     expect(map.resonatedIds).toEqual(['theirs', 'anon-orig']);
     expect(map.nodes.map((n) => n.cardId).sort()).toEqual(['own', 'theirs']);
-    // The originals come from the viewer's cards it just read — no second
-    // scan of those cards (the card box's resonated shelf).
-    expect(vi.mocked(getCardsByAuthor).mock.calls.map((c) => c[1]).sort()).toEqual(['draft', 'private', 'published']);
+    expect(map.cards.own.authorId).toBe('me');
   });
 
-  it('keeps a placed card older than the newest 40 own cards the reads bring', async () => {
-    vi.mocked(getCardsByAuthor).mockImplementation(async (_uid, tab) => (tab === 'published' ? [card('recent', 'me')] : []));
-    vi.mocked(getCardById).mockImplementation(async (id) => (id === 'old' ? card('old', 'me') : null));
-    api({ '/api/v1/me/cards?tab=resonated': { cards: [] }, '/api/v1/cards?keys=': { cards: [] } });
-    const node = (cardId: string) => ({ id: cardId, cardId, x: 0, y: 0, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') });
+  // W11: list summaries — no whole stories through the rules, no read for each card.
+  it('reads the own shelves in one request and the other cards in one ?keys= request, nothing through the rules', async () => {
+    api({
+      '/api/v1/me/cardbox?shelves=published,private,draft': { published: { cards: [mine('recent')] }, private: { cards: [] }, draft: { cards: [] } },
+      '/api/v1/cards?keys=': (path: string) => ({ cards: path.includes('old') ? [mine('old')] : [] }),
+    });
     vi.mocked(loadMyThoughtMap).mockResolvedValue({ nodes: [node('recent'), node('old'), node('gone')], edges: [], groups: [] });
 
     const { result } = renderHook(() => useMyThoughtMap(), { wrapper });
     await waitFor(() => expect(result.current.data).toBeDefined());
 
+    // A placed card older than the newest the shelves bring is kept.
     const map = result.current.data!;
     expect(map.nodes.map((n) => n.cardId).sort()).toEqual(['old', 'recent']);
     expect(map.cards.old?.id).toBe('old');
-    expect(getCardById).toHaveBeenCalledWith('old');
-    expect(getCardById).toHaveBeenCalledWith('gone');
+    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(callApi).toHaveBeenCalledWith('/api/v1/cards?keys=old,gone');
+    expect(getCardsByAuthor).not.toHaveBeenCalled();
+    expect(getCardById).not.toHaveBeenCalled();
   });
 
   // Its node, arrows and group stay stored (thoughtMaps/*): a restore puts it back where it was.
-  it("draws none of the viewer's cards in the trash, nor offers them, though the rules read them", async () => {
-    const trashed = { visibility: 'private' as const, trashedAt: new Date('2026-10-01'), trashedFrom: { visibility: 'public' as const, referenceCardId: null } };
-    vi.mocked(getCardsByAuthor).mockImplementation(async (_uid, tab) => (tab === 'published' ? [card('live', 'me')] : []));
-    // Placed long ago (older than the newest 40), now in the trash: the rules still read it for its author.
-    vi.mocked(getCardById).mockImplementation(async (id) => (id === 'binned' ? card('binned', 'me', trashed) : null));
-    // ?keys= leaves a card in the trash out for everyone, its author too.
-    api({ '/api/v1/cards?keys=': { cards: [] } });
-    const node = (cardId: string) => ({ id: cardId, cardId, x: 0, y: 0, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') });
+  it("draws none of the viewer's cards in the trash, nor offers them", async () => {
+    api({
+      '/api/v1/me/cardbox?shelves=': { published: { cards: [mine('live')] } },
+      // ?keys= leaves a card in the trash out for everyone, its author too.
+      '/api/v1/cards?keys=': { cards: [] },
+    });
     vi.mocked(loadMyThoughtMap).mockResolvedValue({ nodes: [node('live'), node('binned')], edges: [], groups: [] });
 
     const { result } = renderHook(() => useMyThoughtMap(), { wrapper });
@@ -802,13 +883,10 @@ describe('useMyThoughtMap', () => {
   });
 
   it("asks the server for a placed card the rules won't read here (someone else's anonymous card)", async () => {
-    vi.mocked(getCardsByAuthor).mockResolvedValue([]);
-    vi.mocked(getCardById).mockResolvedValue(null);
     api({
-      '/api/v1/me/cards?tab=resonated': { cards: [] },
+      '/api/v1/me/cardbox?shelves=': {},
       '/api/v1/cards?keys=unsigned': { cards: [summary('unsigned', null)] },
     });
-    const node = (cardId: string) => ({ id: cardId, cardId, x: 0, y: 0, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') });
     vi.mocked(loadMyThoughtMap).mockResolvedValue({ nodes: [node('unsigned')], edges: [], groups: [] });
 
     const { result } = renderHook(() => useMyThoughtMap(), { wrapper });
@@ -931,34 +1009,6 @@ describe('profile hooks', () => {
   });
 });
 
-describe('useResonators', () => {
-  it('fetches resonators for the given card, including incoming cards and parent cards', async () => {
-    vi.mocked(getResonanceCards).mockResolvedValue([
-      card('c2', 'a2'),
-      card('c3', 'a3'),
-    ]);
-    vi.mocked(getUsersByIds).mockResolvedValue({
-      a2: user('a2'),
-      a3: user('a3'),
-    });
-
-    vi.mocked(getCardById).mockImplementation(async (id) => {
-      if (id === 'c0') return card('c0', 'a0');
-      return null;
-    });
-    vi.mocked(getUserById).mockImplementation(async (id) => {
-      if (id === 'a0') return user('a0');
-      return null;
-    });
-
-    const { result } = renderHook(() => useResonators('c1', 'c0'), { wrapper });
-    await waitFor(() => expect(result.current.data).toBeDefined());
-
-    const list = result.current.data!;
-    expect(list.map((u) => u.id)).toEqual(['a0', 'a2', 'a3']);
-  });
-});
-
 // The app-wide SWR defaults (SWRProvider): coming back to the tab doesn't
 // re-run every fetcher on the page — only what must stay live does.
 describe('revalidation on tab focus', () => {
@@ -985,7 +1035,8 @@ describe('revalidation on tab focus', () => {
     expect(callApi).toHaveBeenCalledTimes(1);
   });
 
-  it("still refreshes the viewer's connections and block list (the conversations themselves are live)", async () => {
+  // W21: the connections are mutated by what changes them here, and a new one comes as a conversation.
+  it("still refreshes the block list, but neither the connections nor the conversations (live)", async () => {
     vi.mocked(listenConversations).mockImplementation((_uid, emit) => {
       emit([]);
       return () => {};
@@ -1000,8 +1051,8 @@ describe('revalidation on tab focus', () => {
     vi.mocked(getMyBlockedIds).mockClear();
 
     await focusTab();
-    await waitFor(() => expect(listMyConnectionUids).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(getMyBlockedIds).toHaveBeenCalled());
+    expect(listMyConnectionUids).not.toHaveBeenCalled();
     expect(listenConversations).toHaveBeenCalledTimes(1);
   });
 });
@@ -1305,6 +1356,26 @@ describe('useCardSummaries', () => {
 
 // The bell's rows show who each is from and the card it is about: read together, and a row whose card the
 // viewer can't read any more (deleted, in the trash) keeps its words with no card beside them.
+// B2: the list's smaller cover reaches the web's cards (media.thumbUrl), from v1 summaries as from Firestore.
+describe('a cover kept smaller for lists', () => {
+  it('rides on a summary as media.thumbUrl, and is absent where the server kept none', async () => {
+    api({
+      '/api/v1/feed': {
+        cards: [
+          summary('thumbed', 'a1', { imageUrl: 'https://img/c.webp', imageThumbUrl: 'https://img/c-960.webp' }),
+          summary('older', 'a1', { imageUrl: 'https://img/o.webp', imageThumbUrl: null }),
+        ],
+        nextCursor: null,
+      } satisfies FeedPageBody,
+    });
+    const { result } = renderHook(() => useFeed(), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    const [thumbed, older] = result.current.data!.cards;
+    expect(thumbed.media).toEqual({ type: 'image', url: 'https://img/c.webp', thumbUrl: 'https://img/c-960.webp' });
+    expect(older.media).toEqual({ type: 'image', url: 'https://img/o.webp' });
+  });
+});
+
 describe('useBellExtras', () => {
   const bell = (id: string, payload: Record<string, unknown>): Notification => ({
     id,
@@ -1334,6 +1405,19 @@ describe('useBellExtras', () => {
     expect(result.current!.people.u2).toBeUndefined();
   });
 
+  // W21: a new notification asks for its own card, not the twenty already shown.
+  it('asks only for the cards a new row brings', async () => {
+    vi.mocked(getUsersByIds).mockResolvedValue({});
+    api({ '/api/v1/cards?keys=': (path: string) => ({ cards: new URL(path, 'http://x').searchParams.get('keys')!.split(',').map((k) => summary(k, 'me')) }) });
+    const first = [bell('n1', { cardId: 'c1' }), bell('n2', { cardId: 'c2' })];
+    const { result, rerender } = renderHook(({ items }) => useBellExtras(items), { wrapper, initialProps: { items: first } });
+    await waitFor(() => expect(result.current?.cards.c2).toBeDefined());
+    rerender({ items: [bell('n3', { cardId: 'c3' }), ...first] });
+    await waitFor(() => expect(result.current?.cards.c3).toBeDefined());
+    expect(Object.keys(result.current!.cards).sort()).toEqual(['c1', 'c2', 'c3']);
+    expect(vi.mocked(callApi).mock.calls.map(([p]) => p)).toEqual(['/api/v1/cards?keys=c1,c2', '/api/v1/cards?keys=c3']);
+  });
+
   it('keeps the people when the cards fail, and asks nothing with nothing to show', async () => {
     vi.mocked(getUsersByIds).mockResolvedValue({ u1: user('u1') });
     vi.mocked(callApi).mockRejectedValue(new Error('offline'));
@@ -1346,5 +1430,85 @@ describe('useBellExtras', () => {
     expect(none.result.current).toEqual({ people: {}, cards: {} });
     expect(getUsersByIds).not.toHaveBeenCalled();
     expect(callApi).not.toHaveBeenCalled();
+  });
+});
+
+// W14: the viewer's own profile is held by many surfaces; a page change doesn't read it again, a save does.
+describe('useMyProfile', () => {
+  it('reads the profile once across page changes, and again after settings saved it', async () => {
+    vi.mocked(getCurrentUserProfile).mockResolvedValue(user('me'));
+    const seen: { handle?: string; refresh?: () => void } = {};
+    function Page() {
+      const { data } = useMyProfile();
+      seen.handle = data?.handle;
+      seen.refresh = useRefreshMyProfile();
+      return null;
+    }
+    // One app (one SWR cache); a page change mounts the surfaces holding the profile again.
+    const app = (page: number) => (
+      <SWRConfig value={{ ...SWR_DEFAULTS, provider: () => new Map() }}>
+        <Page key={page} />
+      </SWRConfig>
+    );
+    const { rerender } = render(app(1));
+    await waitFor(() => expect(seen.handle).toBe('me'));
+    // Another page, a moment later (past the 2 s the viewer's own content used to keep).
+    await new Promise((r) => setTimeout(r, 2_100));
+    rerender(app(2));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(seen.handle).toBe('me');
+    expect(getCurrentUserProfile).toHaveBeenCalledTimes(1);
+
+    vi.mocked(getCurrentUserProfile).mockResolvedValue(user('me', 'renamed'));
+    act(() => seen.refresh!());
+    await waitFor(() => expect(seen.handle).toBe('renamed'));
+    expect(getCurrentUserProfile).toHaveBeenCalledTimes(2);
+  }, 10_000);
+});
+
+// W10: a browser holding a live session cookie reads the signed-in v1 answers at once, with the cookie, under the
+// uid it was minted for — not after Firebase Auth has loaded and restored its user.
+describe('reads before Auth restores', () => {
+  const mark = (uid: string, expiresAt = Date.now() + 86_400_000) =>
+    window.localStorage.setItem('resonance:session', JSON.stringify({ uid, expiresAt }));
+  afterEach(() => window.localStorage.clear());
+
+  it('asks /api/v1/feed with the cookie while Auth is still restoring, and keeps the answer once it has', async () => {
+    mark('me');
+    mockUseAuth.mockReturnValue({ user: null, loading: true });
+    api({ '/api/v1/feed': { cards: [summary('c1', 'a1')], nextCursor: null } satisfies FeedPageBody });
+    const { result, rerender } = renderHook(() => useFeed(), { wrapper });
+    await waitFor(() => expect(result.current.data?.cards.map((c) => c.id)).toEqual(['c1']));
+    expect(callApi).toHaveBeenCalledWith('/api/v1/feed?limit=12');
+
+    // Restored as the same person: what was read stands, nothing is read again.
+    mockUseAuth.mockReturnValue({ user: { id: 'me' }, loading: false });
+    rerender();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(result.current.data?.cards.map((c) => c.id)).toEqual(['c1']);
+    expect(callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads again under the restored user when Auth restores someone else', async () => {
+    mark('before');
+    mockUseAuth.mockReturnValue({ user: null, loading: true });
+    api({ '/api/v1/feed': { cards: [summary('c1', 'a1')], nextCursor: null } satisfies FeedPageBody });
+    const { result, rerender } = renderHook(() => useFeed(), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    api({ '/api/v1/feed': { cards: [summary('c2', 'a1')], nextCursor: null } satisfies FeedPageBody });
+    mockUseAuth.mockReturnValue({ user: { id: 'after' }, loading: false });
+    rerender();
+    await waitFor(() => expect(result.current.data?.cards.map((c) => c.id)).toEqual(['c2']));
+    expect(callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits for Auth when the cookie has run out', async () => {
+    mark('me', Date.now() - 1000);
+    mockUseAuth.mockReturnValue({ user: null, loading: true });
+    const { result } = renderHook(() => useFeed(), { wrapper });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(result.current.isLoading).toBe(true);
+    expect(callApi).not.toHaveBeenCalled();
+    expect(getPublicFeedPage).not.toHaveBeenCalled();
   });
 });
