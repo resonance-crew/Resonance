@@ -77,10 +77,17 @@ export function readPageToken(token: string | null | undefined): CursorPosition 
 /** The neutral format's token for a position (what the server issues once no reader parses the first format). */
 export const encodeNeutralPageToken = encodeCursor;
 
+/** 0001-01-01T00:00:00Z and 9999-12-31T23:59:59Z, in seconds. */
+const MIN_SECONDS = -62_135_596_800;
+const MAX_SECONDS = 253_402_300_799;
+
 /** A request's page token back into its boundary — invalid_request when it isn't one this server made. */
 export function pageTokenPosition(token: string): CursorPosition {
   const position = readPageToken(token);
   if (!position || !TOKEN_ID.test(position.id)) throw notAToken();
+  // A store's timestamps run from 0001-01-01 to 9999-12-31 (Firestore's range): outside it the token is no page of ours.
+  const { seconds } = instantParts(position.t);
+  if (seconds < MIN_SECONDS || seconds > MAX_SECONDS) throw notAToken();
   return position;
 }
 

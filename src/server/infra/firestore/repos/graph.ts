@@ -44,7 +44,7 @@ export function originsOf(snap: DocumentSnapshot | null | undefined): Origins | 
   return { reasons: isMap(reasons) ? reasons : null };
 }
 
-/** A card's fields as its reach reads them (`properlyPublished` takes a Timestamp only). */
+/** A card's fields as its reach reads them: a stored card's `publishedAt` is a Timestamp, a CardRow's from another aggregate a Date — both read. */
 export function resonanceCardOf(data: DocumentData): ResonanceCard {
   return {
     authorId: data.authorId,

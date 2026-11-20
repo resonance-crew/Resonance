@@ -30,7 +30,7 @@ describe('the first token format', () => {
   });
 
   it('refuses what this server never made, as invalid_request on pageToken', () => {
-    for (const bad of ['nope', Buffer.from('[1,2]').toString('base64url'), legacy(1, 2, 'a/b'), legacy(1, 1e9, 'a'), legacy(1.5, 0, 'a'), legacy(9e15, 0, 'a'), encodeCursor({ t: '2026-01-01T00:00:00.000000Z', id: 'a/b' })]) {
+    for (const bad of ['nope', Buffer.from('[1,2]').toString('base64url'), legacy(1, 2, 'a/b'), legacy(1, 1e9, 'a'), legacy(1.5, 0, 'a'), legacy(9e15, 0, 'a'), legacy(-62150000000, 0, 'a'), encodeCursor({ t: '0000-06-01T00:00:00.000000Z', id: 'a' }), encodeCursor({ t: '2026-01-01T00:00:00.000000Z', id: 'a/b' })]) {
       let failure: unknown;
       try {
         pageTokenPosition(bad);

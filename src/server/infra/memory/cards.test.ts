@@ -8,6 +8,6 @@ describeCardsReadContract('memory', async (seed) => {
   ctx.state.seed('cards', seed.cards ?? {});
   ctx.state.seed('users', seed.users ?? {});
   for (const [uid, other] of seed.blocks ?? []) ctx.state.put(`users/${uid}/blocks`, other, { blockedUid: other });
-  for (const [a, b] of seed.connections ?? []) ctx.state.put('connections', a < b ? `${a}_${b}` : `${b}_${a}`, { users: [a, b] });
+  for (const [a, b] of seed.connections ?? []) ctx.state.put('connections', a < b ? `${a}_${b}` : `${b}_${a}`, { userIds: [a, b].sort() });
   return ctx.data;
 });
