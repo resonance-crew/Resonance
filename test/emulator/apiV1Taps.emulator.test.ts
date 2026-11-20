@@ -97,6 +97,16 @@ describe('setTap and the ring', () => {
   });
 });
 
+describe('the budget spent beside the tap (B7)', () => {
+  it('writes nothing when the budget refuses, though the tap’s reads ran beside it', async () => {
+    const refused = Promise.reject(new ApiFailure('rate_limited', 'Too many requests.'));
+    refused.catch(() => {});
+    expect(await code(setTap(db, 'alice', 'walk', true, Date.now(), refused))).toBe('rate_limited');
+    expect((await db.doc('resonanceTaps/walk_alice').get()).exists).toBe(false);
+    expect((await setTap(db, 'alice', 'walk', true, Date.now(), Promise.resolve())).changed).toBe(true);
+  });
+});
+
 describe('CardDetail.tap', () => {
   beforeEach(async () => {
     for (const [uid, m] of [['gus', 1], ['dora', 2], ['carol', 3]] as const) {

@@ -88,7 +88,15 @@ function tappable(card: Card | null, uid: string): card is Card {
  * one hidden or trashed meanwhile is not_found). Whatever reaches the author —
  * the ring, the bell — is the caller's to start after the response.
  */
-export async function setTap(db: Firestore, uid: string, cardId: string, on: boolean, now = Date.now()): Promise<TapOutcome> {
+export async function setTap(
+  db: Firestore,
+  uid: string,
+  cardId: string,
+  on: boolean,
+  now = Date.now(),
+  /** The tapper's budget, spent beside this (budgetFirst, B7): awaited before anything is written. */
+  spent?: Promise<void>,
+): Promise<TapOutcome> {
   const card = await visibleCardById(db, uid, cardId, TAP_CARD_FIELDS);
   if (!card.publishedAt || trashedAtOf(card) != null || card.trashedAt != null) throw notFound();
   if (card.authorId === uid) throw new ApiFailure('invalid_request', 'You cannot resonate with your own card.');
@@ -104,6 +112,8 @@ export async function setTap(db: Firestore, uid: string, cardId: string, on: boo
   const connection = db.doc(`connections/${pairOf(uid, author)}`);
   return db.runTransaction(async (tx) => {
     const [snap, [current], linked] = await Promise.all([tx.get(ref), tx.getAll(cardRef, { fieldMask: [...TAP_CARD_FIELDS] }), tx.get(connection)]);
+    // The budget answers before anything is written.
+    await spent;
     const fresh = current.exists ? mapCard(current.id, current.data()!) : null;
     if (!tappable(fresh, uid) || fresh.authorId !== author || !cardVisible(fresh, uid, () => linked.exists)) throw notFound();
     const wasOn = snap.exists && snap.get('on') === true;

@@ -56,6 +56,14 @@ async function failure(p: Promise<unknown>): Promise<ApiFailure> {
 }
 
 describe('publishCard', () => {
+  it('publishes nothing when the budget spent beside it refuses (B7)', async () => {
+    await draft('c1');
+    const refused = Promise.reject(new ApiFailure('rate_limited', 'Too many requests.'));
+    refused.catch(() => {});
+    expect((await failure(publishCard(db, 'alice', 'c1', slugBase, { spent: refused }))).code).toBe('rate_limited');
+    expect((await db.doc('cards/c1').get()).get('publishedAt')).toBeNull();
+  });
+
   it('stamps publishedAt once and gives the card its slug with the handle', async () => {
     await draft('c1');
     const first = await publishCard(db, 'alice', 'c1', slugBase);

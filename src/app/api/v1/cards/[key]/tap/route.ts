@@ -3,6 +3,7 @@ import { ApiFailure, parse, routeParam, withUser, type RouteContext } from '@/li
 import { setTap } from '@/lib/api/v1/taps';
 import { CardIdParam } from '@/lib/api/v1/schemas';
 import { spend } from '@/lib/api/rateLimit';
+import { budgetFirst } from '@/lib/api/v1/conversations';
 import { getAdminDb, getAdminMessaging } from '@/lib/db/firestore/admin';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { pushTap, ringTap, untapBell } from '@/lib/push/tapBell';
@@ -30,8 +31,9 @@ async function tap(uid: string, ctx: RouteContext<'key'>, on: boolean): Promise<
   // An id Firestore keeps for itself names no card: answered as one, before it costs any of the budget.
   if (isReservedId(id)) throw new ApiFailure('not_found', 'No such card.');
   const db = getAdminDb();
-  await spend(db, uid, 'tap');
-  const { ring, ...result } = await setTap(db, uid, id, on);
+  // The budget is spent beside the tap's reads, not before them (B7), and still answers first (budgetFirst).
+  const spent = spend(db, uid, 'tap');
+  const { ring, ...result } = await budgetFirst(spent, () => setTap(db, uid, id, on, Date.now(), spent));
   if (result.changed && ring) {
     after(async () => {
       try {
