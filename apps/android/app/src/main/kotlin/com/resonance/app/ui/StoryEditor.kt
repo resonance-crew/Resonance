@@ -212,10 +212,14 @@ class StoryEditorBridge(
      * the photo picker was up, or it crashed): a dead renderer's view can't be used again, and a client
      * that doesn't say it handled the loss takes the whole app down with it (A3).
      */
+    /** The publish step is over the story ([setHidden]): a view made after the renderer went is hidden too. */
+    private var hidden = false
+
     var webView: StoryWebView by mutableStateOf(makeWebView())
         private set
 
     private fun makeWebView(): StoryWebView = StoryWebView(appContext).apply {
+        importantForAccessibility = accessibility(hidden)
         settings.javaScriptEnabled = true
         // Assets are readable from file:///android_asset regardless of allowFileAccess (the fonts
         // sit at the asset root, apps/shared/fonts): nothing else on the device is.
@@ -423,9 +427,12 @@ class StoryEditorBridge(
      * the WebView's own nodes aren't Compose's to clear.
      */
     fun setHidden(hidden: Boolean) {
-        webView.importantForAccessibility =
-            if (hidden) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+        this.hidden = hidden
+        webView.importantForAccessibility = accessibility(hidden)
     }
+
+    private fun accessibility(hidden: Boolean) =
+        if (hidden) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
 
     /** Let go of ([destroy]): its island is gone, and a writer opening the card makes its own. */
     var destroyed = false

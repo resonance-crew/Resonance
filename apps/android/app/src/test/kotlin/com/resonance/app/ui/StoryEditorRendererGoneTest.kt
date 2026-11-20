@@ -58,6 +58,21 @@ class StoryEditorRendererGoneTest {
     }
 
     @Test
+    fun aNewIslandStaysHiddenUnderThePublishStep() {
+        val bridge = bridge()
+        bridge.setHidden(true)
+        val dead = bridge.webView
+        assertEquals(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS, dead.importantForAccessibility)
+        shadowOf(dead).webViewClient.onRenderProcessGone(dead, gone)
+        shadowOf(Looper.getMainLooper()).idle()
+        val fresh = bridge.webView
+        assertNotSame(dead, fresh)
+        assertEquals(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS, fresh.importantForAccessibility)
+        bridge.setHidden(false)
+        assertEquals(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_AUTO, bridge.webView.importantForAccessibility)
+    }
+
+    @Test
     fun aGoneViewThatIsNoLongerTheIslandIsLeftAlone() {
         val bridge = bridge()
         val first = bridge.webView
