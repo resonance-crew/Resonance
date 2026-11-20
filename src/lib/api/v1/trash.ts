@@ -1,18 +1,10 @@
-import { FieldValue, Timestamp, type DocumentData, type DocumentSnapshot, type Firestore, type QueryDocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
-import { DAY_MS, TRASH_DAYS, restorableVisibility, trashExpired, type TrashedFrom } from '@/lib/cards/trash';
-import { anonymousForConnections, editedAudience } from '@/lib/db/firestore/cardContent';
-import { mapCard } from '@/lib/db/firestore/mapper';
-import { isReservedId } from '@/lib/db/firestore/reservedId';
-import { getVectorStore, type IVectorStore } from '@/lib/recommend/vectorStore';
-import { cardPagePaths, landingPagePaths } from '@/lib/api/revalidate';
-import { deleteCard, deleteNotesOn } from './cards';
-import { ApiFailure } from './http';
-import { readTakeBack, takeBack } from './origins';
-import { toFeedCard } from './present';
-import { deleteSignalsOn } from './reading';
-import { becameReachable, reachOriginal, readReach } from './resonate';
-import { deleteTapsOn } from './taps';
-import type { FeedCardBody } from './schemas';
+import type { IVectorStore } from '@/lib/recommend/vectorStore';
+import { emptyTrashIn, purgeExpiredTrashIn, restoreCardIn, trashCardIn, type EmptiedTrashResult, type PurgedTrash, type RestoredCardResult, type TrashedCardResult } from '@/server/app/trash';
+import { ctxFor } from '@/server/infra/firestore/ctx';
+import type { AdminDb } from '@/server/infra/firestore/db';
+import { legacyVectors } from './cards';
+
+export type { EmptiedTrashResult, PurgedTrash, RestoredCardResult, TrashedCardResult } from '@/server/app/trash';
 
 /**
  * The trash (垃圾桶): a card its author deletes on the web or in a current
@@ -48,34 +40,8 @@ import type { FeedCardBody } from './schemas';
  * landing page only — never its author's profile (see ./cards).
  */
 
-const notFound = () => new ApiFailure('not_found', 'No such card.');
-
-/** A document id that can be put in a path (a stored field could hold anything). */
-const docId = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && !v.includes('/') && !isReservedId(v);
-
-/** When a stored card went into the trash, in ms; null for one that isn't there (or an odd value, read as not there). */
-function trashedMs(data: DocumentData | undefined): number | null {
-  const at = data?.trashedAt;
-  return at instanceof Timestamp ? at.toMillis() : null;
-}
-
-/** A stored `trashedFrom` as the trash reads it: what restoring brings back. */
-function trashedFromOf(data: DocumentData): TrashedFrom {
-  const from = data.trashedFrom && typeof data.trashedFrom === 'object' ? (data.trashedFrom as DocumentData) : {};
-  return {
-    visibility: restorableVisibility(from.visibility),
-    referenceCardId: docId(from.referenceCardId) ? from.referenceCardId : null,
-  };
-}
-
-export interface TrashedCardResult {
-  /** The card as the trash shelf shows it (its byline kept when anonymous, its trash fields). */
-  card: FeedCardBody;
-  /** False when it was in the trash already: nothing was written. */
-  changed: boolean;
-  /** Card and landing pages to revalidate after the response (never returned). */
-  stale: string[];
-}
+// The services are src/server/app/trash.ts (trashCardIn, restoreCardIn, emptyTrashIn,
+// purgeExpiredTrashIn), on a ServerCtx; these are their legacy facades on a given Firestore.
 
 /**
  * Move your card to the trash (POST /cards/{id}/trash). Someone else's card,
@@ -96,89 +62,13 @@ export interface TrashedCardResult {
  * recommender's copy goes private. No reading record comes back while it is
  * in the trash: reportReading refuses a trashed card in its transaction.
  */
-export async function trashCard(
-  db: Firestore,
+export function trashCard(
+  db: AdminDb,
   uid: string,
   id: string,
   opts: { vectors?: Pick<IVectorStore, 'setVisibility'>; now?: number; forDeletion?: boolean } = {},
 ): Promise<TrashedCardResult> {
-  if (isReservedId(id)) throw notFound();
-  const now = opts.now ?? Date.now();
-  const ref = db.doc(`cards/${id}`);
-  const { before, after, changed, me } = await db.runTransaction(async (tx) => {
-    const [snap, meSnap] = await Promise.all([tx.get(ref), tx.get(db.doc(`users/${uid}`))]);
-    if (!snap.exists || snap.get('authorId') !== uid) throw notFound();
-    const data = snap.data()!;
-    const at = trashedMs(data);
-    if (at != null && trashExpired(at, now)) throw notFound();
-    if (at != null || data.trashedAt != null) return { before: data, after: data, changed: false, me: meSnap.data() };
-    // Read before anything is written: what taking a resonance back ends.
-    const plans = await readTakeBack(tx, db, uid, id);
-    takeBack(tx, plans);
-    const trashedFrom: TrashedFrom = {
-      visibility: restorableVisibility(data.visibility),
-      referenceCardId: docId(data.referenceCardId) ? data.referenceCardId : null,
-    };
-    const trashedAt = Timestamp.fromMillis(now);
-    // Never updatedAt nor excerptAt: a draft keeps its place in edit order, a list its stored summary.
-    tx.update(ref, {
-      trashedAt,
-      trashedFrom,
-      visibility: 'private',
-      referenceCardId: FieldValue.delete(),
-      // Held while its author's account waits to be deleted (lib/account/deletion): cancelling brings back these alone.
-      ...(opts.forDeletion ? { trashedFor: 'deletion' } : {}),
-    });
-    const { referenceCardId: _parked, ...rest } = data;
-    return { before: data, after: { ...rest, trashedAt, trashedFrom, visibility: 'private' }, changed: true, me: meSnap.data() };
-  });
-  const card = mapCard(id, after);
-  if (changed) {
-    // Both before the answer, side by side, each failing alone.
-    await Promise.all([
-      // An anonymous card's notes go now, as deleting it takes them (see the module comment). Once more on a failure.
-      before.anonymous === true
-        ? deleteNotesOn(db, id)
-            .catch(() => deleteNotesOn(db, id))
-            .catch((e) => console.error('[trash] notes', id, e))
-        : null,
-      // And who resonated with it (./taps), for the same reason: restoring it brings none back.
-      before.anonymous === true
-        ? deleteTapsOn(db, id)
-            .catch(() => deleteTapsOn(db, id))
-            .catch((e) => console.error('[trash] taps', id, e))
-        : null,
-      // And how its readers read it (./reading): in their exports, it would end with its author's account.
-      before.anonymous === true
-        ? deleteSignalsOn(db, id)
-            .catch(() => deleteSignalsOn(db, id))
-            .catch((e) => console.error('[trash] reading', id, e))
-        : null,
-      before.visibility !== 'private'
-        ? Promise.resolve()
-            .then(() => (opts.vectors ?? getVectorStore()).setVisibility(id, 'private'))
-            .catch((e) => console.error('[trash] vectors', id, e))
-        : null,
-    ]);
-  }
-  return {
-    card: toFeedCard(card, me, { deanonymize: true, own: true }),
-    changed,
-    stale: changed ? [...cardPagePaths(card), ...landingPagePaths(before, after)] : [],
-  };
-}
-
-export interface RestoredCardResult {
-  /** The card as the card box shows it, out of the trash. */
-  card: FeedCardBody;
-  /** False when it wasn't in the trash: nothing was written. */
-  changed: boolean;
-  /** A resonance that came back on its own (it no longer answers the card it answered). */
-  droppedResonance: boolean;
-  /** The original author's bell, when bringing the resonance back reached them (never returned). */
-  notificationId: string | null;
-  /** Card and landing pages to revalidate after the response (never returned). */
-  stale: string[];
+  return trashCardIn(ctxFor(db, { vectors: legacyVectors(opts.vectors) }), uid, id, { now: opts.now, forDeletion: opts.forDeletion });
 }
 
 /**
@@ -213,104 +103,13 @@ export interface RestoredCardResult {
  * Never re-dates the card, never announces it to connections (that is a first
  * publish's alone), never asks an LLM.
  */
-export async function restoreCard(
-  db: Firestore,
+export function restoreCard(
+  db: AdminDb,
   uid: string,
   id: string,
   opts: { vectors?: Pick<IVectorStore, 'setVisibility'>; now?: number } = {},
 ): Promise<RestoredCardResult> {
-  if (isReservedId(id)) throw notFound();
-  const now = opts.now ?? Date.now();
-  const ref = db.doc(`cards/${id}`);
-  const editRef = db.doc(`cards/${id}/edits/current`);
-  const result = await db.runTransaction(async (tx) => {
-    const [snap, meSnap, edit] = await Promise.all([tx.get(ref), tx.get(db.doc(`users/${uid}`)), tx.get(editRef)]);
-    if (!snap.exists || snap.get('authorId') !== uid) throw notFound();
-    const data = snap.data()!;
-    const at = trashedMs(data);
-    if (at != null && trashExpired(at, now)) throw notFound();
-    if (at == null && data.trashedAt == null) {
-      return { before: data, after: data, me: meSnap.data(), changed: false, dropped: false, bell: null };
-    }
-    const from = trashedFromOf(data);
-    const original = from.referenceCardId;
-    // Read before anything is written: who else of yours answers it, and all its reach depends on.
-    const [answers, reach] = original
-      ? await Promise.all([
-          tx.get(db.collection('cards').where('authorId', '==', uid).where('referenceCardId', '==', original).limit(2)),
-          readReach(tx, db, uid, original),
-        ])
-      : [null, null];
-    const repoint =
-      !!original && original !== id && !answers!.docs.some((d) => d.id !== id) && reach!.original?.referenceCardId !== id;
-
-    const restored: Record<string, unknown> = {
-      visibility: from.visibility,
-      trashedAt: FieldValue.delete(),
-      trashedFrom: FieldValue.delete(),
-      trashedFor: FieldValue.delete(),
-      ...(repoint ? { referenceCardId: original } : {}),
-    };
-    tx.update(ref, restored);
-    const { trashedAt: _at, trashedFrom: _from, trashedFor: _for, ...rest } = data;
-    const after: DocumentData = { ...rest, visibility: from.visibility, ...(repoint ? { referenceCardId: original } : {}) };
-    alignPendingEdit(tx, edit, after, at);
-    const bell = repoint && becameReachable(data, after) ? reachOriginal(tx, db, id, after, reach!) : null;
-    return { before: data, after, me: meSnap.data(), changed: true, dropped: !!original && !repoint, bell };
-  });
-  const card = mapCard(id, result.after);
-  if (result.changed && result.after.publishedAt != null && card.visibility !== 'private') {
-    await Promise.resolve()
-      .then(() => (opts.vectors ?? getVectorStore()).setVisibility(id, card.visibility))
-      .catch((e) => console.error('[trash] vectors', id, e));
-  }
-  return {
-    card: toFeedCard(card, result.me, { deanonymize: true, own: true }),
-    changed: result.changed,
-    droppedResonance: result.dropped,
-    notificationId: result.bell,
-    stale: result.changed ? [...cardPagePaths(card), ...landingPagePaths(result.before, result.after)] : [],
-  };
-}
-
-/**
- * The restore's part in a pending edit (see restoreCard): one saved since the
- * card went in takes the restored visibility — and the card's byline beside
- * it where the visibility alone would leave the edit anonymous and for
- * connections only (applying that is refused), as a PATCH carries a change
- * into one.
- */
-function alignPendingEdit(
-  tx: Transaction,
-  edit: DocumentSnapshot,
-  card: DocumentData,
-  trashedAt: number | null,
-): void {
-  if (!edit.exists) return;
-  const saved = edit.get('updatedAt');
-  if (saved instanceof Timestamp && trashedAt != null && saved.toMillis() < trashedAt) return;
-  const patch = { visibility: card.visibility };
-  const both = { visibility: card.visibility, anonymous: card.anonymous === true };
-  tx.update(edit.ref, anonymousForConnections(editedAudience({ ...edit.data(), ...patch }, card)) ? both : patch);
-}
-
-/** How many cards a call empties from the trash, and how many at once. */
-const EMPTY_PAGE = 50;
-const EMPTY_AT_ONCE = 4;
-/**
- * A call starts no new delete after this long (its route's maxDuration is 60 s): well inside the
- * apps' 30 s request timeout, so a long page answers before an app gives up on it while the server
- * goes on deleting (the dialog then said 沒完成 over an empty trash). Clients call again for the rest.
- */
-const EMPTY_BUDGET_MS = 20_000;
-
-export interface EmptiedTrashResult {
-  deleted: number;
-  remaining: number;
-  /** The cut-off this emptying keeps to (ISO 8601): the next call sends it back. */
-  before: string;
-  /** Card and landing pages to revalidate after the response (never returned). */
-  stale: string[];
+  return restoreCardIn(ctxFor(db, { vectors: legacyVectors(opts.vectors) }), uid, id, { now: opts.now });
 }
 
 /**
@@ -320,50 +119,16 @@ export interface EmptiedTrashResult {
  * on another device between the page's read and its delete stays, and so
  * does one moved to the trash while the emptying runs. The first call sends
  * no `before`; the next ones send the first answer's, while `remaining` and
- * `deleted` are both above 0. `deleted` counts only cards deleted.
+ * `deleted` are both above 0. `deleted` counts only cards deleted. A call
+ * starts no new delete after `budgetMs` (20 s: well inside the apps' 30 s
+ * request timeout); clients call again for the rest.
  */
-export async function emptyTrash(
-  db: Firestore,
+export function emptyTrash(
+  db: AdminDb,
   uid: string,
   opts: { before?: Date | null; now?: number; vectors?: Pick<IVectorStore, 'deleteByCard'>; budgetMs?: number } = {},
 ): Promise<EmptiedTrashResult> {
-  const started = opts.now ?? Date.now();
-  const cutoff = Timestamp.fromMillis(Math.min(opts.before?.getTime() ?? started, started));
-  // Ordered as the (authorId, trashedAt desc) index is, the count too: unordered, a range on
-  // trashedAt orders it ascending, which asks for an index no one made — the page went, then
-  // the count failed, and every emptying answered 500 with the trash already empty.
-  const inTrash = db.collection('cards').where('authorId', '==', uid).where('trashedAt', '<=', cutoff).orderBy('trashedAt', 'desc');
-  const page = await inTrash.select().limit(EMPTY_PAGE).get();
-  const budget = opts.budgetMs ?? EMPTY_BUDGET_MS;
-  const stale: string[] = [];
-  let deleted = 0;
-  await eachAtOnce(page.docs, EMPTY_AT_ONCE, () => Date.now() - started < budget, async (d) => {
-    try {
-      const done = await deleteCard(db, uid, d.id, { trashedBefore: cutoff, vectors: opts.vectors });
-      if (done.deleted) deleted += 1;
-      stale.push(...done.stale);
-    } catch (e) {
-      // Gone already (another device emptied it, the cron purged it): nothing left to do.
-      if (!(e instanceof ApiFailure && e.code === 'not_found')) console.error('[trash] empty', d.id, e);
-    }
-  });
-  const remaining = (await inTrash.count().get()).data().count;
-  return { deleted, remaining, before: cutoff.toDate().toISOString(), stale: [...new Set(stale)] };
-}
-
-/** How many cards the purge reads at a time, and deletes at once. */
-const PURGE_PAGE = 50;
-const PURGE_AT_ONCE = 4;
-
-export interface PurgedTrash {
-  purged: number;
-  /** Restored (or moved there again) between the page's read and its delete: left. */
-  skipped: number;
-  failed: number;
-  /** Read but not started: out of time (the next run takes them). */
-  deferred: number;
-  /** Every page the purged cards were on, revalidated as each went (see `revalidate`). */
-  stale: string[];
+  return emptyTrashIn(ctxFor(db, { vectors: legacyVectors(opts.vectors) }), uid, { before: opts.before, now: opts.now, budgetMs: opts.budgetMs });
 }
 
 /**
@@ -376,68 +141,9 @@ export interface PurgedTrash {
  * account purged first takes its trash with it (collectAccountData reads
  * cards by author, in the trash or not).
  */
-export async function purgeExpiredTrash(
-  db: Firestore,
+export function purgeExpiredTrash(
+  db: AdminDb,
   opts: { now?: number; budgetMs: number; vectors?: Pick<IVectorStore, 'deleteByCard'>; revalidate?: (paths: string[]) => unknown },
 ): Promise<PurgedTrash> {
-  const started = Date.now();
-  const cutoff = Timestamp.fromMillis((opts.now ?? started) - TRASH_DAYS * DAY_MS);
-  const report: PurgedTrash = { purged: 0, skipped: 0, failed: 0, deferred: 0, stale: [] };
-  const inTime = () => Date.now() - started < opts.budgetMs;
-  let last: QueryDocumentSnapshot | null = null;
-  for (;;) {
-    let q = db.collection('cards').where('trashedAt', '<=', cutoff).orderBy('trashedAt', 'asc').select('authorId', 'trashedAt').limit(PURGE_PAGE);
-    if (last) q = q.startAfter(last);
-    const page = await q.get();
-    if (page.empty) break;
-    last = page.docs[page.size - 1];
-    const left = await eachAtOnce(page.docs, PURGE_AT_ONCE, inTime, async (d) => {
-      const author = d.get('authorId');
-      if (typeof author !== 'string' || !author) {
-        report.failed += 1;
-        console.error('[trash] purge: no author', d.id);
-        return;
-      }
-      try {
-        const done = await deleteCard(db, author, d.id, { trashedBefore: cutoff, vectors: opts.vectors });
-        if (!done.deleted) {
-          report.skipped += 1;
-          return;
-        }
-        report.purged += 1;
-        report.stale.push(...done.stale);
-        if (done.stale.length) opts.revalidate?.(done.stale);
-      } catch (e) {
-        if (e instanceof ApiFailure && e.code === 'not_found') report.skipped += 1;
-        else {
-          report.failed += 1;
-          console.error('[trash] purge', d.id, e);
-        }
-      }
-    });
-    report.deferred += left;
-    if (left || page.size < PURGE_PAGE) break;
-  }
-  console.log(`[trash] purged ${report.purged} · skipped ${report.skipped} · failed ${report.failed} · deferred ${report.deferred}`);
-  return report;
-}
-
-/**
- * Run `work` on each item, `atOnce` at a time, starting none once `go()`
- * says no; answers how many were never started.
- */
-async function eachAtOnce<T>(items: T[], atOnce: number, go: () => boolean, work: (item: T) => Promise<void>): Promise<number> {
-  let next = 0;
-  let stopped = false;
-  const lane = async () => {
-    while (next < items.length) {
-      if (!go()) {
-        stopped = true;
-        return;
-      }
-      await work(items[next++]);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(atOnce, items.length) }, lane));
-  return stopped ? items.length - next : 0;
+  return purgeExpiredTrashIn(ctxFor(db, { vectors: legacyVectors(opts.vectors) }), { now: opts.now, budgetMs: opts.budgetMs, revalidate: opts.revalidate });
 }

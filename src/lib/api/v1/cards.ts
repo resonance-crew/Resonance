@@ -1,22 +1,12 @@
-import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
-import { ANONYMOUS_VISIBILITY_MESSAGE, BLANK_CARD_MESSAGE, anonymousForConnections, blankForReaders, editedAudience } from '@/lib/db/firestore/cardContent';
-import { mapCard } from '@/lib/db/firestore/mapper';
-import { RETIRED_SLUG, TOMBSTONE, retirable, retiredSlugRef, tombstoneRef } from '@/lib/db/firestore/tombstones';
-import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { getVectorStore, type IVectorStore } from '@/lib/recommend/vectorStore';
-import { CARD_SIGNATURES } from '@/lib/recommend/collections';
-import { cardPagePaths, landingPagePaths } from '@/lib/api/revalidate';
-import { ApiFailure } from './http';
-import { deleteSignalsOn } from './reading';
-import { deleteTapsOn } from './taps';
-import { refuseInTrash } from './inTrash';
-import { readTakeBack, takeBack } from './origins';
-import { toFeedCard } from './present';
-import { becameReachable, hiddenResonance } from './resonate';
-import { privateShareRef } from './sharedCards';
-import { summaryFields } from './summary';
-import type { FeedCardBody, UpdateCardInput } from './schemas';
-import { TRANSLATION_TARGETS } from '@/lib/text/translation';
+import { deleteCardIn, updateCardIn, type DeletedCard, type UpdatedCard } from '@/server/app/cards';
+import { ctxFor } from '@/server/infra/firestore/ctx';
+import type { AdminDb } from '@/server/infra/firestore/db';
+import { deleteNotesOn as deleteNotesIn } from '@/server/infra/firestore/repos/cards';
+import type { VectorStore } from '@/server/ports/vectors';
+import type { UpdateCardInput } from './schemas';
+
+export { NOT_IN_TRASH_MESSAGE, type DeletedCard, type UpdatedCard } from '@/server/app/cards';
 
 /**
  * The card box's own changes to a card — its visibility, its byline, deleting
@@ -36,17 +26,23 @@ import { TRANSLATION_TARGETS } from '@/lib/text/translation';
  * watching an anonymous card vanish or come back could then find the one
  * profile whose cache started over then. The profile is revalidated where
  * the profile itself changes (POST/PATCH /me, the account purge).
+ *
+ * The services are src/server/app/cards.ts (updateCardIn, deleteCardIn), on a
+ * ServerCtx; these are their legacy facades on a given Firestore.
  */
 
-const notFound = () => new ApiFailure('not_found', 'No such card.');
-
-export interface UpdatedCard {
-  /** The card as its author's card box shows it (their byline kept when anonymous). */
-  card: FeedCardBody;
-  /** Card and landing pages to revalidate; empty when nothing changed. */
-  stale: string[];
-  /** The change made a published resonance reachable: the route reaches its original after the response (tryReachResonance). */
-  reaches: boolean;
+/**
+ * The vectors a legacy call reaches: those it was handed, else the app's own
+ * store (getVectorStore, which the emulator suites mock) — asked for only when
+ * used, inside the service's own catch, as before.
+ */
+export function legacyVectors(given?: Partial<IVectorStore>): VectorStore {
+  return new Proxy({} as VectorStore, {
+    get: (_t, key) => (...args: unknown[]) => {
+      const store = (given ?? getVectorStore()) as unknown as Record<PropertyKey, (...a: unknown[]) => unknown>;
+      return store[key](...args);
+    },
+  });
 }
 
 /**
@@ -76,63 +72,14 @@ export interface UpdatedCard {
  * back (hiddenResonance, ./origins) — the connection goes with it when
  * nothing else holds it.
  */
-export async function updateCard(
-  db: Firestore,
+export function updateCard(
+  db: AdminDb,
   uid: string,
   id: string,
   input: UpdateCardInput,
   vectors?: Pick<IVectorStore, 'setVisibility'>,
 ): Promise<UpdatedCard> {
-  if (isReservedId(id)) throw notFound();
-  const ref = db.doc(`cards/${id}`);
-  const editRef = db.doc(`cards/${id}/edits/current`);
-  const { before, data, changed, author } = await db.runTransaction(async (tx) => {
-    const [snap, edit, me] = await Promise.all([tx.get(ref), tx.get(editRef), tx.get(db.doc(`users/${uid}`))]);
-    if (!snap.exists || snap.get('authorId') !== uid) throw notFound();
-    // Nothing synced into its pending edit either: the restore sets that straight.
-    refuseInTrash(snap);
-    const patch: Record<string, unknown> = {};
-    if (input.visibility != null && input.visibility !== snap.get('visibility')) patch.visibility = input.visibility;
-    if (input.anonymous != null && input.anonymous !== (snap.get('anonymous') === true)) patch.anonymous = input.anonymous;
-    const changed = Object.keys(patch).length > 0;
-    const after = { ...snap.data()!, ...patch };
-    // Never into anonymous and for connections only; a card already that way keeps it until changed.
-    if (changed && anonymousForConnections(after)) throw new ApiFailure('invalid_request', ANONYMOUS_VISIBILITY_MESSAGE);
-    // A published card shown to others again needs words in its story; a draft's audience is publishing's to judge.
-    if (patch.visibility && snap.get('publishedAt') != null && blankForReaders(after) && !blankForReaders(snap.data()!)) {
-      throw new ApiFailure('invalid_request', BLANK_CARD_MESSAGE);
-    }
-    // Read before anything is written: what hiding a published resonance takes back.
-    const plans = changed && hiddenResonance(after) ? await readTakeBack(tx, db, uid, id) : [];
-    takeBack(tx, plans);
-    if (changed) {
-      // A published card's story is as read here: its list summary is restated
-      // with the new updatedAt (./summary). A draft gets one when it is published.
-      const summary = snap.get('publishedAt') != null ? summaryFields(snap.get('story')) : {};
-      tx.update(ref, { ...patch, updatedAt: FieldValue.serverTimestamp(), ...summary });
-      // The pending edit takes the change — and the card's other half of it,
-      // where the change alone would leave the edit anonymous and for
-      // connections only (applying that would be refused).
-      if (edit.exists) {
-        const both = { visibility: after.visibility, anonymous: after.anonymous === true };
-        tx.update(editRef, anonymousForConnections(editedAudience({ ...edit.data(), ...patch }, after)) ? both : patch);
-      }
-    }
-    return { before: snap.data()!, data: after, changed, author: me.data() };
-  });
-  const card = mapCard(id, data);
-  if (data.visibility !== before.visibility) {
-    // The card has changed either way; the route answers it. A failure is
-    // logged — the recommended feed still re-checks every card it shows.
-    await Promise.resolve()
-      .then(() => (vectors ?? getVectorStore()).setVisibility(id, card.visibility))
-      .catch((e) => console.error('[api/v1] vectors', id, e));
-  }
-  return {
-    card: toFeedCard(card, author, { deanonymize: true }),
-    stale: changed ? [...cardPagePaths(card), ...landingPagePaths(before, data)] : [],
-    reaches: changed && becameReachable(before, data),
-  };
+  return updateCardIn(ctxFor(db, { vectors: legacyVectors(vectors) }), uid, id, input);
 }
 
 export interface DeleteCardOptions {
@@ -141,8 +88,9 @@ export interface DeleteCardOptions {
    * Only a card moved to the trash at or before this moment (the purge
    * cron's cutoff, the start of an emptying): one restored since, or moved
    * there again later, is left as it is — `deleted: false`, nothing written.
+   * A Firestore Timestamp, or anything with its `toMillis()`.
    */
-  trashedBefore?: Timestamp;
+  trashedBefore?: { toMillis(): number };
   /**
    * Only a card in the trash (DELETE /cards/{id}?onlyIfTrashed=true, what the
    * trash's own 永久刪除 sends): one restored meanwhile — from another
@@ -151,16 +99,6 @@ export interface DeleteCardOptions {
    */
   onlyIfTrashed?: boolean;
 }
-
-export interface DeletedCard {
-  /** Card and landing pages to revalidate (empty when nothing was deleted). */
-  stale: string[];
-  /** False when `trashedBefore` left the card as it was. */
-  deleted: boolean;
-}
-
-/** What DELETE …?onlyIfTrashed=true refuses: a card no longer in the trash. */
-export const NOT_IN_TRASH_MESSAGE = 'This card is not in the trash.';
 
 /**
  * Delete your card for good, draft or published — the only way a published
@@ -178,65 +116,20 @@ export const NOT_IN_TRASH_MESSAGE = 'This card is not in the trash.';
  * A resonance is taken back with it, as unresonate takes it back
  * (readTakeBack): read in the transaction that deletes the card, so a
  * resonance pointed at a card a moment before can't outlive it with its
- * connection. Its pending edit goes in that same transaction. The notes go
- * just after the card — once it is gone no note can land on it — so they
- * leave their writers' backups when the card's page goes, never later with
- * its author's account, which would say whose card it was.
+ * connection. Its pending edit goes in that same transaction, and the card
+ * leaves a tombstone (and its slug retired) there too. The notes go just
+ * after the card — once it is gone no note can land on it — so they leave
+ * their writers' backups when the card's page goes, never later with its
+ * author's account, which would say whose card it was.
  */
-export async function deleteCard(db: Firestore, uid: string, id: string, opts: DeleteCardOptions = {}): Promise<DeletedCard> {
-  if (isReservedId(id)) throw notFound();
-  const ref = db.doc(`cards/${id}`);
-  const data = await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    if (!snap.exists || snap.get('authorId') !== uid) throw notFound();
-    const trashedAt = snap.get('trashedAt');
-    if (opts.trashedBefore && !(trashedAt instanceof Timestamp && trashedAt.toMillis() <= opts.trashedBefore.toMillis())) return null;
-    if (opts.onlyIfTrashed && trashedAt == null) throw new ApiFailure('conflict', NOT_IN_TRASH_MESSAGE);
-    takeBack(tx, await readTakeBack(tx, db, uid, id));
-    tx.delete(ref);
-    // What is under the card goes with it: its pending edit (the rules let a client write edits/current alone)
-    // and the translations the server kept of its story, one per interface language (POST …/translation). Deleting
-    // a missing one is nothing; once the card is gone the rules take no new edit, and the server translates no card
-    // that isn't there.
-    tx.delete(db.doc(`cards/${id}/edits/current`));
-    for (const to of TRANSLATION_TARGETS) tx.delete(db.doc(`cards/${id}/translations/${to}`));
-    // Whether it was ever shared privately is about this card alone (sharedCards PRIVATE_SHARES).
-    tx.delete(privateShareRef(db, id));
-    // Its reading (lib/recommend/indexCard): about this card alone, gone with it.
-    tx.delete(db.collection(CARD_SIGNATURES).doc(id));
-    tx.set(tombstoneRef(db, id), TOMBSTONE);
-    const slug = snap.get('slug');
-    if (retirable(slug)) tx.set(retiredSlugRef(db, slug), RETIRED_SLUG);
-    return snap.data()!;
+export function deleteCard(db: AdminDb, uid: string, id: string, opts: DeleteCardOptions = {}): Promise<DeletedCard> {
+  return deleteCardIn(ctxFor(db, { vectors: legacyVectors(opts.vectors) }), uid, id, {
+    trashedBefore: opts.trashedBefore ? new Date(opts.trashedBefore.toMillis()) : undefined,
+    onlyIfTrashed: opts.onlyIfTrashed,
   });
-  if (!data) return { stale: [], deleted: false };
-  // The card is gone either way, so each clean-up below runs whatever the other does (side by side, each
-  // failing alone): stray notes go with its author's account (or `backfill.ts orphan-notes`), and stray vectors
-  // only cost the recommender a candidate it then can't read.
-  await Promise.all([
-    deleteNotesOn(db, id).catch((e) => console.error('[api/v1] notes', id, e)),
-    // Who resonated with it (./taps) and how it was read (./reading): about this card alone, gone with it.
-    deleteTapsOn(db, id).catch((e) => console.error('[api/v1] taps', id, e)),
-    deleteSignalsOn(db, id).catch((e) => console.error('[api/v1] reading', id, e)),
-    Promise.resolve()
-      .then(() => (opts.vectors ?? getVectorStore()).deleteByCard(id))
-      .catch((e) => console.error('[api/v1] vectors', id, e)),
-  ]);
-  return { stale: [...cardPagePaths(mapCard(id, data)), ...landingPagePaths(data)], deleted: true };
 }
 
 /** Every note left on the card `id`, delivered or withheld, a batch at a time. */
-export async function deleteNotesOn(db: Firestore, id: string): Promise<void> {
-  const notes = db.collection('notes').where('cardId', '==', id).select().limit(BATCH_MAX);
-  for (;;) {
-    const page = await notes.get();
-    if (page.empty) return;
-    const batch = db.batch();
-    page.docs.forEach((d) => batch.delete(d.ref));
-    await batch.commit();
-    if (page.size < BATCH_MAX) return;
-  }
+export function deleteNotesOn(db: AdminDb, id: string): Promise<void> {
+  return deleteNotesIn(db, id);
 }
-
-/** A batch's limit on writes. */
-const BATCH_MAX = 500;
