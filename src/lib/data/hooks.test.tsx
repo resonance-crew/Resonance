@@ -74,7 +74,6 @@ import {
   getPublicCardView,
   getPublicFeedPage,
   getRelatedCards,
-  getResonanceCards,
   getUserById,
   getUserByHandle,
   getUsersByIds,
