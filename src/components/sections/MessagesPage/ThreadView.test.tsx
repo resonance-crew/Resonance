@@ -168,7 +168,8 @@ describe('a pen name that has passed to someone else', () => {
     vi.mocked(getUsersByIds).mockResolvedValue({ formerAlice: { ...alice, id: 'formerAlice', handle: 'alice2' } });
     render('formerAlice');
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/messages/alice2?note=n1&card=c1&u=formerAlice'));
-    expect(getConversation).not.toHaveBeenCalled();
+    // The thread is with the one meant from the start (W15: read beside the pen name's lookup), never the new holder.
+    for (const [pair] of vi.mocked(getConversation).mock.calls) expect(pair).not.toContain(alice.id);
     expect(screen.queryByRole('textbox')).toBeNull();
   });
 
@@ -176,7 +177,7 @@ describe('a pen name that has passed to someone else', () => {
     vi.mocked(getUsersByIds).mockResolvedValue({});
     render('goneUser');
     expect(await screen.findByText("This person doesn't exist")).toBeInTheDocument();
-    expect(getConversation).not.toHaveBeenCalled();
+    for (const [pair] of vi.mocked(getConversation).mock.calls) expect(pair).not.toContain(alice.id);
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
@@ -185,6 +186,13 @@ describe('a pen name that has passed to someone else', () => {
     vi.mocked(getUsersByIds).mockResolvedValue({ formerAlice: { ...alice, id: 'formerAlice', handle: 'alice2' } });
     render('formerAlice');
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/messages/alice2?note=n1&card=c1&u=formerAlice'));
+  });
+
+  // W15: opened from the list (which knows who), the conversation is read beside the pen name, not after it.
+  it('reads the conversation without waiting for the pen name when it knows who', async () => {
+    vi.mocked(getUserByHandle).mockReturnValue(new Promise(() => {}));
+    render(alice.id);
+    await waitFor(() => expect(getConversation).toHaveBeenCalled());
   });
 
   it('opens the thread as ever when the pen name is still theirs', async () => {

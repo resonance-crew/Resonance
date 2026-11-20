@@ -21,7 +21,7 @@ import { useToast } from '@/components/providers/ToastProvider';
 import { seedFromString } from '@/lib/design/prng';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { hideConversation, useCardSummaries, useMyBlockedIds } from '@/lib/data/hooks';
+import { hideConversation, personKey, useCardSummaries, useLiveConversation, useMyBlockedIds } from '@/lib/data/hooks';
 import { OLDER_PAGE, useChatThread } from '@/lib/data/thread';
 import { messageCard, resonanceCardKey, threadCardKeys } from '@/lib/chat/cardLink';
 import { carriedOf } from '@/lib/chat/carried';
@@ -109,10 +109,7 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
   const { mutate: globalMutate } = useSWRConfig();
   const toast = useToast();
 
-  const { data: holder, isLoading: loadingHolder } = useSWR(
-    `user:handle:${handle}`,
-    () => getUserByHandle(handle),
-  );
+  const { data: holder, isLoading: loadingHolder } = useSWR(personKey(handle), () => getUserByHandle(handle));
   // The pen name is no longer theirs (someone else took it, or nobody holds it now): find the one it meant, by id.
   const moved = !!userId && !loadingHolder && holder?.id !== userId;
   const { data: meant, isLoading: loadingMeant } = useSWR(moved ? `user:id:${userId}` : null, () =>
@@ -125,17 +122,22 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
     const q = replyNote ? `?${new URLSearchParams({ note: replyNote.noteId, card: replyNote.cardId, u: meant.id }).toString()}` : '';
     router.replace(`/messages/${encodeURIComponent(meant.handle)}${q}`);
   }, [moved, meant, handle, replyNote, router]);
-  const pairId = user && other ? conversationId(user.id, other.id) : undefined;
+  // Who the thread is with: known at once when the list opened it (`userId`, W15) — the conversation and the
+  // connection are read beside the pen name's lookup, not after it — else once the pen name answers.
+  const otherId = moved ? undefined : (userId ?? other?.id);
+  const pairId = user && otherId ? conversationId(user.id, otherId) : undefined;
+  // The live list's copy of it, if it has one: the thread listens at once instead of waiting for this read.
+  const liveConvo = useLiveConversation(pairId);
   const { data: convo, mutate: mutateConvo } = useSWR(
     pairId ? `conversation:${pairId}` : null,
     () => getConversation(pairId!),
-    { revalidateOnFocus: true },
+    { revalidateOnFocus: true, fallbackData: liveConvo },
   );
   // Read again on coming back to the tab, as the conversation is: the other may have taken back the
   // resonance that connected the two meanwhile (this browser's own take-backs read it again themselves).
   const { data: connected } = useSWR(
-    user && other && user.id !== other.id ? `connected:${pairId}` : null,
-    () => isConnected(user!.id, other!.id),
+    user && otherId && user.id !== otherId ? `connected:${pairId}` : null,
+    () => isConnected(user!.id, otherId!),
     { revalidateOnFocus: true },
   );
 

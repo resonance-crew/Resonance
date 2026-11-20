@@ -1028,6 +1028,16 @@ function useLiveConversations(): LiveState<Conversation[]> {
 }
 
 /**
+ * One conversation as the live list holds it (W15) — what a thread opened
+ * from the list starts on, before its own read of the conversation answers.
+ * Undefined while the list hasn't heard it (yet, or ever: an older one).
+ */
+export function useLiveConversation(pairId: string | undefined): Conversation | undefined {
+  const live = useLiveConversations();
+  return pairId ? live.data?.find((c) => c.id === pairId) : undefined;
+}
+
+/**
  * Conversations this browser is deleting (round 21): gone from the list and
  * the badge at once, before the server answers; `hideConversation` returns
  * what brings one back (a refusal). One the server deleted stays hidden a
@@ -1192,8 +1202,14 @@ const strangers = { isConnected: false, isBlocked: false };
  * doesn't wait for auth; the profile page's hooks share the one read.
  */
 function usePersonByHandle(handle: string | undefined) {
-  return useSWR<User | null>(handle ? `person:${handle}` : null, () => getUserByHandle(handle!));
+  return useSWR<User | null>(handle ? personKey(handle) : null, () => getUserByHandle(handle!));
 }
+
+/**
+ * The one SWR key of a person read by pen name (getUserByHandle) — the profile
+ * page's and a thread's alike (W21), so the two share one read.
+ */
+export const personKey = (handle: string) => `person:${handle}`;
 
 /**
  * A user's outward-facing, blog-style profile keyed by handle: the person, and
