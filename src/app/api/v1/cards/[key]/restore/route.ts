@@ -1,12 +1,11 @@
-import { NextResponse, after } from 'next/server';
+import { NextResponse } from 'next/server';
 import { ApiFailure, parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { restoreCard } from '@/lib/api/v1/trash';
+import { legacyVectors } from '@/lib/api/v1/cards';
 import { CardIdParam } from '@/lib/api/v1/schemas';
-import { revalidateLocalized } from '@/lib/api/revalidate';
-import { spend } from '@/lib/api/rateLimit';
-import { getAdminDb } from '@/lib/db/firestore/admin';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
-import { ringAfter } from '@/lib/push/ring';
+import { serverCtx } from '@/server/ctx';
+import { ringAfterIn } from '@/server/app/pushAfter';
+import { restoreCardIn } from '@/server/app/trash';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,10 +19,11 @@ export const dynamic = 'force-dynamic';
 export const POST = withUser(async (user, _req, ctx: RouteContext<'key'>) => {
   const id = parse(CardIdParam, await routeParam(ctx, 'key'));
   if (isReservedId(id)) throw new ApiFailure('not_found', 'No such card.');
-  const db = getAdminDb();
-  await spend(db, user.id, 'restore');
-  const { stale, notificationId, ...result } = await restoreCard(db, user.id, id);
-  ringAfter(db, notificationId);
-  if (stale.length) after(() => void revalidateLocalized(stale));
+  const server = serverCtx();
+  await server.limits.spend(user.id, 'restore');
+  // The vectors as the legacy restoreCard reached them (lib/api/v1/cards legacyVectors: the configured store).
+  const { stale, notificationId, ...result } = await restoreCardIn(serverCtx({ vectors: legacyVectors() }), user.id, id);
+  ringAfterIn(server, notificationId);
+  if (stale.length) server.later.later(() => void server.pages.revalidate(stale), 'revalidate');
   return NextResponse.json(result);
 });

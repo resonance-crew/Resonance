@@ -5,11 +5,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
-vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
+const DB = {};
+vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => DB }));
 const getCardsByKeys = vi.fn(async () => ({ cards: [] }));
-vi.mock('@/lib/api/v1/reads', () => ({ getCardsByKeys: (...a: unknown[]) => getCardsByKeys(...(a as [])) }));
+vi.mock('@/server/app/cardsRead', async (orig) => ({ ...(await orig<object>()), getCardsByKeys: (...a: unknown[]) => getCardsByKeys(...(a as [])) }));
 
 const { GET } = await import('./route');
+const { serverCtx } = await import('@/server/ctx');
+// The route's context: serverCtx() on the mocked database, built once per instance.
+const CTX = serverCtx();
 const get = (query: string) => GET(new Request(`http://localhost/api/v1/cards${query}`));
 
 beforeEach(() => {
@@ -22,7 +26,7 @@ describe('GET /api/v1/cards?keys=', () => {
     const res = await get('?keys=a-walk,%20c1,,x_2');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ cards: [] });
-    expect(getCardsByKeys).toHaveBeenCalledWith({}, 'alice', ['a-walk', 'c1', 'x_2'], { shared: true });
+    expect(getCardsByKeys).toHaveBeenCalledWith(CTX, 'alice', ['a-walk', 'c1', 'x_2'], { shared: true });
   });
 
   it('refuses no keys, a key that could be a path, and more than 30', async () => {

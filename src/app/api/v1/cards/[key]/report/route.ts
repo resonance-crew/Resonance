@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import { parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { reportCard } from '@/lib/api/v1/safety';
 import { CardKey, ReportCardRequest } from '@/lib/api/v1/schemas';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { spend } from '@/lib/api/rateLimit';
+import { serverCtx } from '@/server/ctx';
+import { reportCardIn } from '@/server/app/safety';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export const POST = withUser(async (user, req, ctx: RouteContext<'key'>) => {
   const key = parse(CardKey, await routeParam(ctx, 'key'));
   const input = parse(ReportCardRequest, await req.json().catch(() => null));
-  const db = getAdminDb();
-  await spend(db, user.id, 'report');
-  return NextResponse.json({ id: await reportCard(db, user.id, key, input) }, { status: 201 });
+  const server = serverCtx();
+  await server.limits.spend(user.id, 'report');
+  return NextResponse.json({ id: await reportCardIn(server, user.id, key, input) }, { status: 201 });
 });
