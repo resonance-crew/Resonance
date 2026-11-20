@@ -1,8 +1,10 @@
-import { restoreCard, trashCard } from '@/lib/api/v1/trash';
+import { legacyVectors } from '@/lib/api/v1/cards';
 import {
+  holdAnonymousCardsIn,
   purgeAccountDataIn,
   purgeAccountIn,
   purgeDueAccountsIn,
+  releaseHeldCardsIn,
   scheduleAccountDeletionIn,
   UPLOAD_DELETE_BATCH,
   type PurgeInOptions,
@@ -55,32 +57,14 @@ export function scheduleAccountDeletion(db: Firestore, uid: string, now: Date = 
  * (releaseHeldCards). Returns the card pages to revalidate. Best effort, a
  * card at a time: the deletion stands whatever this does.
  */
-export async function holdAnonymousCards(db: Firestore, uid: string): Promise<string[]> {
-  const cards = await db.collection('cards').where('authorId', '==', uid).where('anonymous', '==', true).select('publishedAt', 'trashedAt').get();
-  const stale: string[] = [];
-  for (const d of cards.docs) {
-    if (d.get('publishedAt') == null || d.get('trashedAt') != null) continue;
-    try {
-      stale.push(...(await trashCard(db, uid, d.id, { forDeletion: true })).stale);
-    } catch (err) {
-      console.error(`Account deletion: could not hold card ${d.id}`, err);
-    }
-  }
-  return stale;
+export function holdAnonymousCards(db: Firestore, uid: string): Promise<string[]> {
+  // The vectors as trashCard(db, …) reached them: the configured store (legacyVectors).
+  return holdAnonymousCardsIn(ctxFor(db, { vectors: legacyVectors() }), uid);
 }
 
 /** A cancelled deletion's held cards back from the trash, as they were (restoreCard). Returns the pages to revalidate. */
-export async function releaseHeldCards(db: Firestore, uid: string): Promise<string[]> {
-  const held = await db.collection('cards').where('authorId', '==', uid).where('trashedFor', '==', 'deletion').select().get();
-  const stale: string[] = [];
-  for (const d of held.docs) {
-    try {
-      stale.push(...(await restoreCard(db, uid, d.id)).stale);
-    } catch (err) {
-      console.error(`Account deletion: could not bring back card ${d.id}`, err);
-    }
-  }
-  return stale;
+export function releaseHeldCards(db: Firestore, uid: string): Promise<string[]> {
+  return releaseHeldCardsIn(ctxFor(db, { vectors: legacyVectors() }), uid);
 }
 
 export function cancelAccountDeletion(db: Firestore, uid: string): Promise<void> {

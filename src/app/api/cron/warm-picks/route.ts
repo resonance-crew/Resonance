@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { warmPicks } from '@/lib/recommend/warm';
+import { recommendFeed } from '@/lib/recommend/funnel';
 import { refreshPoolStats } from '@/lib/recommend/poolStats';
 import { currentEmbedModel } from '@/lib/recommend/indexCard';
 import { cronAuthorized } from '@/lib/api/cronAuth';
+import { warmPicksIn } from '@/server/app/recommendWarm';
+import { serverCtx } from '@/server/ctx';
 
 export const dynamic = 'force-dynamic';
 // Pinned to hnd1 in vercel.json: the builds call OpenAI, which refuses Hong Kong.
@@ -34,7 +35,7 @@ export async function GET(req: Request) {
   const started = Date.now();
   // First the pool's numbers (lib/recommend/poolStats: μ, r(x), τ — no model), which today's builds then use.
   const pool = await refreshPoolStats(currentEmbedModel()).catch((e) => (console.error('[warm-picks] pool stats', e), null));
-  const run = await warmPicks(getAdminDb(), { deadline: started + WARM_BUDGET_MS, buildDeadline: started + BUILD_DEADLINE_MS });
+  const run = await warmPicksIn(serverCtx(), { deadline: started + WARM_BUDGET_MS, buildDeadline: started + BUILD_DEADLINE_MS, build: recommendFeed });
   console.log('[warm-picks]', JSON.stringify({ pool, ...run }));
   return NextResponse.json({ pool, ...run });
 }

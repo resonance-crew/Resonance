@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
-vi.mock('@/lib/recommend/warm', () => ({ warmPicks: vi.fn() }));
+vi.mock('@/server/app/recommendWarm', () => ({ warmPicksIn: vi.fn() }));
 // Round 26 §A2.3: the pool's numbers are worked out first (no model), every day.
 vi.mock('@/lib/recommend/poolStats', () => ({ refreshPoolStats: vi.fn(async () => ({ cards: 12, parts: 30 })) }));
 vi.mock('@/lib/recommend/indexCard', () => ({ currentEmbedModel: () => 'text-embedding-3-small' }));
 
-import { warmPicks } from '@/lib/recommend/warm';
+import { warmPicksIn as warmPicks } from '@/server/app/recommendWarm';
 import { GET } from './route';
 
 const call = (authorization?: string) =>

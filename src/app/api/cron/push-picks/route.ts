@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getAdminDb, getAdminMessaging } from '@/lib/db/firestore/admin';
-import { pushPicks } from '@/lib/push/picks';
+import { pushPicksIn } from '@/server/app/pushPicks';
+import { serverCtx } from '@/server/ctx';
 import { cronAuthorized } from '@/lib/api/cronAuth';
 
 export const dynamic = 'force-dynamic';
@@ -19,7 +19,7 @@ const PICKS_BUDGET_MS = (maxDuration - 30) * 1000;
 export async function GET(req: Request) {
   if (!cronAuthorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const started = Date.now();
-  const run = await pushPicks(getAdminDb(), await getAdminMessaging(), { deadline: started + PICKS_BUDGET_MS });
+  const run = await pushPicksIn(serverCtx(), { deadline: started + PICKS_BUDGET_MS, clock: Date.now });
   console.log('[push-picks]', JSON.stringify(run));
   return NextResponse.json(run);
 }

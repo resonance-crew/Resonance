@@ -9,7 +9,7 @@ const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
 vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
 const limited = vi.fn();
-vi.mock('@/lib/api/rateLimit', () => ({ limited: (...a: unknown[]) => limited(...a) }));
+vi.mock('@/server/infra/firestore/rateLimit', () => ({ firestoreRateLimiter: () => ({ limited: (...a: unknown[]) => limited(...a) }) }));
 const mirrorInsight = vi.fn();
 vi.mock('@/lib/ai/tasks', () => ({ mirrorInsight: (...a: unknown[]) => mirrorInsight(...a) }));
 
@@ -34,7 +34,7 @@ describe('POST /api/cards/insight', () => {
     expect(await res.json()).toEqual({ coreInsight: 'A morning can be yours' });
     expect(mirrorInsight).toHaveBeenCalledWith({ title: 'Mine', story: STORY }, { signal: expect.any(AbortSignal) });
     expect(getCurrentUser).toHaveBeenCalledWith({ revocation: 'cached' });
-    expect(limited).toHaveBeenCalledWith(expect.anything(), 'alice', 'insight');
+    expect(limited).toHaveBeenCalledWith('alice', 'insight');
   });
 
   it('answers null — no line — for a draft too short to read, spending nothing and asking no model', async () => {

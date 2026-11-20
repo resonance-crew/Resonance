@@ -6,7 +6,7 @@ type TagInput = { existingTags: string[]; title: string; story: string };
 const suggest = vi.fn(async (_input: TagInput) => ['alpha', 'beta']);
 vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => fake.db }));
 vi.mock('@/lib/auth', () => ({ getCurrentUser: async () => ({ id: 'writer' }) }));
-vi.mock('@/lib/api/rateLimit', () => ({ limited: async () => null }));
+vi.mock('@/server/infra/firestore/rateLimit', () => ({ firestoreRateLimiter: () => ({ limited: async () => null }) }));
 vi.mock('@/lib/ai/tasks', () => ({ suggestStoryTags: (input: TagInput) => suggest(input) }));
 
 import { POST } from './route';

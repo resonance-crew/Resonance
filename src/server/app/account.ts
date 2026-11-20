@@ -1,6 +1,7 @@
 import type { ServerCtx } from '@/server/ctx';
 import { purgePlan, type EntityName } from '@/server/domain/schema/registry';
 import type { AccountDeletion, PurgeSession } from '@/server/ports/repos/account';
+import { restoreCardIn, trashCardIn } from './trash';
 
 /**
  * Account deletion (App Store 5.1.1(v) / Google Play account-deletion policy),
@@ -328,4 +329,37 @@ export function purgedEntities(): Set<EntityName> {
     ...plan.rows.map((q) => q.entity),
     ...plan.byCard.map((b) => b.entity),
   ]);
+}
+
+// --- routes lane
+
+/**
+ * Out of sight from the moment the deletion is scheduled: the account's
+ * published anonymous cards go to its trash (`trashedFor: 'deletion'`), as
+ * src/lib/account/deletion.ts holdAnonymousCards says. Best effort, a card at
+ * a time; answers the card pages to revalidate.
+ */
+export async function holdAnonymousCardsIn(ctx: ServerCtx, uid: string): Promise<string[]> {
+  const stale: string[] = [];
+  for (const id of await ctx.data.cards.anonymousCardsToHold(uid)) {
+    try {
+      stale.push(...(await trashCardIn(ctx, uid, id, { forDeletion: true })).stale);
+    } catch (err) {
+      console.error(`Account deletion: could not hold card ${id}`, err);
+    }
+  }
+  return stale;
+}
+
+/** A cancelled deletion's held cards back from the trash, as they were (restoreCardIn). Answers the pages to revalidate. */
+export async function releaseHeldCardsIn(ctx: ServerCtx, uid: string): Promise<string[]> {
+  const stale: string[] = [];
+  for (const id of await ctx.data.cards.cardsHeldForDeletion(uid)) {
+    try {
+      stale.push(...(await restoreCardIn(ctx, uid, id)).stale);
+    } catch (err) {
+      console.error(`Account deletion: could not bring back card ${id}`, err);
+    }
+  }
+  return stale;
 }

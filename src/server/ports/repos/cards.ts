@@ -240,4 +240,16 @@ export interface CardsData {
   countTrashed(uid: string, cutoff: Date): Promise<number>;
   /** Every card moved to the trash at or before `cutoff`, the longest there first, a page of `pageSize` at a time. */
   expiredTrash(cutoff: Date, pageSize: number): AsyncIterable<TrashedRow[]>;
+
+  // --- routes lane
+
+  /**
+   * The tags of up to `limit` of `uid`'s cards, each card's list (strings
+   * only), in no order: the history /api/cards/tags ranks for the model.
+   */
+  authorTagHistory(uid: string, limit: number): Promise<string[][]>;
+  /** Ids of `uid`'s anonymous cards that are published and out of the trash: what an account deletion holds. */
+  anonymousCardsToHold(uid: string): Promise<string[]>;
+  /** Ids of `uid`'s cards in the trash for the account's deletion (`trashedFor: 'deletion'`): what cancelling it brings back. */
+  cardsHeldForDeletion(uid: string): Promise<string[]>;
 }

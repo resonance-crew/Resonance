@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getAdminDb } from '@/lib/db/firestore/admin';
 import { toCardSeed } from '@/lib/data/cardSeed';
-import { readCardForPage } from '@/app/[locale]/(app)/card/[slug]/cardPageData';
+import { readCardForPage } from '@/server/app/cardsRead';
+import { serverCtx } from '@/server/ctx';
 
 export const runtime = 'nodejs';
 
@@ -20,7 +20,7 @@ const KEY = /^[A-Za-z0-9_-]{1,160}$/;
 export async function GET(req: Request) {
   const key = new URL(req.url).searchParams.get('key')?.trim() ?? '';
   if (!KEY.test(key)) return NextResponse.json({ id: null, view: null }, { headers: { 'Cache-Control': 'no-store' } });
-  const loaded = await readCardForPage(getAdminDb(), key);
+  const loaded = await readCardForPage(serverCtx(), key);
   const seed = toCardSeed(loaded.id, loaded.card, loaded.author);
   // Nothing to show is never kept: the card may be published a moment later.
   return NextResponse.json(seed, { headers: { 'Cache-Control': seed.view ? VIEW_CACHE : 'no-store' } });

@@ -1,6 +1,7 @@
-import { coverThumbKey } from '@/lib/images/coverThumb';
+import { storeOwnedIn, storeOwnedWithThumbIn } from '@/server/app/uploads';
 import { ctxFor } from '@/server/infra/firestore/ctx';
 import type { AdminDb } from '@/server/infra/firestore/db';
+import { systemClock } from '@/server/infra/system/clock';
 import type { IStorageProvider } from './interfaces';
 import type { StoredObject, UploadIntent } from './types';
 
@@ -37,14 +38,7 @@ export async function storeOwned(
   intent: UploadIntent,
   body: Uint8Array,
 ): Promise<StoredObject> {
-  const stored = await storage.uploadObject(intent, body);
-  try {
-    await recordUpload(db, intent.ownerId, stored, intent.kind);
-  } catch (e) {
-    await storage.deleteObject(stored.key).catch(() => {});
-    throw e;
-  }
-  return stored;
+  return storeOwnedIn({ data: ctxFor(db).data, objects: storage, clock: systemClock }, intent, body);
 }
 
 /**
@@ -62,22 +56,5 @@ export async function storeOwnedWithThumb(
   body: Uint8Array,
   thumb: { contentType: string; body: Uint8Array },
 ): Promise<StoredObject & { thumbUrl: string }> {
-  const stored = await storage.uploadObject(intent, body);
-  const thumbKey = coverThumbKey(stored.key);
-  let thumbStored: StoredObject | null = null;
-  try {
-    if (!thumbKey) throw new Error(`No copy key for ${stored.key}`);
-    thumbStored = await storage.putObject(thumbKey, thumb.contentType, thumb.body);
-    await Promise.all([
-      recordUpload(db, intent.ownerId, stored, intent.kind),
-      recordUpload(db, intent.ownerId, thumbStored, intent.kind),
-    ]);
-  } catch (e) {
-    await Promise.all([
-      storage.deleteObject(stored.key).catch(() => {}),
-      thumbKey ? storage.deleteObject(thumbKey).catch(() => {}) : undefined,
-    ]);
-    throw e;
-  }
-  return { ...stored, thumbUrl: thumbStored.publicUrl };
+  return storeOwnedWithThumbIn({ data: ctxFor(db).data, objects: storage, clock: systemClock }, intent, body, thumb);
 }

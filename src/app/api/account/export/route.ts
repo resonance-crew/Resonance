@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { exportAccountJson } from '@/lib/account/export';
-import { limited } from '@/lib/api/rateLimit';
+import { exportAccountJsonIn } from '@/server/app/accountExport';
+import { serverCtx } from '@/server/ctx';
 
 /**
  * Download everything the signed-in user wrote, as one JSON file — streamed
@@ -14,12 +13,12 @@ import { limited } from '@/lib/api/rateLimit';
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-  const db = getAdminDb();
-  const tooMany = await limited(db, user.id, 'export');
+  const ctx = serverCtx();
+  const tooMany = await ctx.limits.limited(user.id, 'export');
   if (tooMany) return tooMany;
 
   const now = new Date();
-  const pieces = exportAccountJson(db, user.id, now);
+  const pieces = exportAccountJsonIn(ctx, user.id, now);
   const first = await pieces.next();
   const encoder = new TextEncoder();
   const body = new ReadableStream<Uint8Array>({

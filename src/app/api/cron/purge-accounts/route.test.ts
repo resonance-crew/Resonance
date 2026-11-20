@@ -3,11 +3,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('@/lib/auth/firebase/server', () => ({ getAdminAuth: () => ({ deleteUser: vi.fn() }) }));
 vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
 vi.mock('@/lib/storage', () => ({ getStorageProvider: () => ({ deletePrefix: vi.fn() }) }));
-vi.mock('@/lib/account/deletion', () => ({ purgeDueAccounts: vi.fn() }));
+vi.mock('@/server/app/account', () => ({ purgeDueAccountsIn: vi.fn() }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { revalidatePath } from 'next/cache';
-import { purgeDueAccounts } from '@/lib/account/deletion';
+import { purgeDueAccountsIn } from '@/server/app/account';
 import { GET } from './route';
 
 function call(authorization?: string) {
@@ -20,7 +20,7 @@ function call(authorization?: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(purgeDueAccounts).mockResolvedValue({ purged: ['alice'], failed: [], deferred: ['bob'] });
+  vi.mocked(purgeDueAccountsIn).mockResolvedValue({ purged: ['alice'], failed: [], deferred: ['bob'] });
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -32,19 +32,19 @@ describe('/api/cron/purge-accounts', () => {
     const res = await call('Bearer s3cret');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ purged: 1, failed: 0, deferred: 1 });
-    expect(purgeDueAccounts).toHaveBeenCalledTimes(1);
+    expect(purgeDueAccountsIn).toHaveBeenCalledTimes(1);
   });
 
   it('gives the run its time budget: the function may live 300 s, the run starts nothing past 270', async () => {
     vi.stubEnv('CRON_SECRET', 's3cret');
     await call('Bearer s3cret');
-    expect(vi.mocked(purgeDueAccounts).mock.calls[0][1]).toEqual({ budgetMs: 270_000 });
+    expect(vi.mocked(purgeDueAccountsIn).mock.calls[0][2]).toEqual({ budgetMs: 270_000 });
   });
 
   it("drops the purged accounts' cached pages in every locale", async () => {
     vi.stubEnv('CRON_SECRET', 's3cret');
     await call('Bearer s3cret');
-    const { revalidate } = vi.mocked(purgeDueAccounts).mock.calls[0][0];
+    const { revalidate } = vi.mocked(purgeDueAccountsIn).mock.calls[0][1];
     revalidate?.(['/card/a-card', '/u/alice']);
     expect(vi.mocked(revalidatePath).mock.calls.map(([p]) => p)).toEqual([
       '/en/card/a-card', '/zh-TW/card/a-card', '/en/u/alice', '/zh-TW/u/alice',
@@ -55,12 +55,12 @@ describe('/api/cron/purge-accounts', () => {
     vi.stubEnv('CRON_SECRET', 's3cret');
     expect((await call('Bearer nope')).status).toBe(401);
     expect((await call()).status).toBe(401);
-    expect(purgeDueAccounts).not.toHaveBeenCalled();
+    expect(purgeDueAccountsIn).not.toHaveBeenCalled();
   });
 
   it('refuses everyone when CRON_SECRET is not configured', async () => {
     vi.stubEnv('CRON_SECRET', '');
     expect((await call('Bearer ')).status).toBe(401);
-    expect(purgeDueAccounts).not.toHaveBeenCalled();
+    expect(purgeDueAccountsIn).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,5 @@
-import { getAdminDb } from '@/lib/db/firestore/admin';
 import { indexCardIn, type IndexOptions, type IndexResult } from '@/server/app/recommendIndex';
-import { ctxFor } from '@/server/infra/firestore/ctx';
+import { serverCtx } from '@/server/ctx';
 import { getVectorStore } from './vectorStore';
 
 /**
@@ -13,5 +12,5 @@ export { currentEmbedModel, indexContentHash, INDEX_VERSION } from './indexHash'
 export type { IndexOptions, IndexResult } from '@/server/app/recommendIndex';
 
 export function indexCard(cardId: string, opts: IndexOptions = {}): Promise<IndexResult> {
-  return indexCardIn(ctxFor(getAdminDb(), { vectors: getVectorStore() }), cardId, opts);
+  return indexCardIn(serverCtx({ vectors: getVectorStore() }), cardId, opts);
 }

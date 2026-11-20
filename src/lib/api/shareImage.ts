@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { getStorageProvider } from '@/lib/storage';
+import { serverCtx } from '@/server/ctx';
 import { storageKeyOf } from '@/lib/storage/publicUrl';
 import { MAX_INPUT_PIXELS } from '@/lib/storage/image';
 import { OG_COVER_PATH } from '@/lib/og';
@@ -204,5 +204,5 @@ export async function shareImageResponse(
 
 /** One of our stored pictures, by its key (never fetched from a URL), or null when it is gone. */
 export function readStoredPicture(key: string): Promise<Uint8Array | null> {
-  return getStorageProvider().getObject(key, MAX_SOURCE_BYTES);
+  return serverCtx().objects.getObject(key, MAX_SOURCE_BYTES);
 }

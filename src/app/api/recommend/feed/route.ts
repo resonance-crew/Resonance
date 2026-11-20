@@ -1,7 +1,7 @@
 import { NextResponse, after } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { dailyRecommendations } from '@/lib/recommend/daily';
+import { recommendFeed } from '@/lib/recommend/funnel';
+import { dailyRecommendationsIn } from '@/server/app/recommendDaily';
 import { serverCtx } from '@/server/ctx';
 
 export const runtime = 'nodejs';
@@ -20,14 +20,14 @@ export const maxDuration = 60;
 export async function GET() {
   const user = await getCurrentUser({ revocation: 'cached' });
   if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-  const db = getAdminDb();
-  const { items, cached, status, refresh, asked } = await dailyRecommendations(db, user.id);
+  const ctx = serverCtx();
+  const { items, cached, status, refresh, asked } = await dailyRecommendationsIn(ctx, user.id, { build: recommendFeed });
   if (refresh) after(refresh);
   // The reader opened their picks today: the evening's pick push leaves them be.
   if (asked) after(asked);
   // Picks were stored when built: a card made private, trashed or deleted
   // since then — its reason derived from its words — is left out now, as the
   // v1 recommended feed leaves it out (present()).
-  const open = await serverCtx().data.cards.stillPublic(items.map((i) => i.cardId));
+  const open = await ctx.data.cards.stillPublic(items.map((i) => i.cardId));
   return NextResponse.json({ items: items.filter((i) => open.has(i.cardId)).map(({ cardId, reason }) => ({ cardId, reason })), cached, status });
 }
