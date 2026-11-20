@@ -1,5 +1,6 @@
 'use client';
 
+import { onScrollPassive } from '@/lib/design/scrollFrame';
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { ResonanceIcon } from '@/components/atoms/ResonanceIcon/ResonanceIcon';
@@ -73,8 +74,10 @@ export function AppHeader({ user, signedIn = true, authReady = true, activeKey }
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', onScroll);
-    return () => window.removeEventListener('scroll', onScroll);
+    // passive, and read once a frame at most (the perf audit's W21): a scroll event can come many times a frame
+    const off = onScrollPassive(onScroll);
+    onScroll();
+    return off;
   }, []);
 
   useEffect(() => {
