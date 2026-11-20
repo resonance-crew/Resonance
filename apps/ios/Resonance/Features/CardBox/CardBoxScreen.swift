@@ -289,7 +289,8 @@ struct CardBoxScreen: View {
         // A cold start: the published shelf as the last run kept it, at once — then the server's.
         if s == .published, shelves[s] == nil, !drewKept, let uid = session.uid {
             drewKept = true
-            if let kept = session.kept.value(.published, uid: uid) {
+            // Read and decoded off the main thread (audit I7): the box is never a cold start's first frame.
+            if let kept = await session.kept.load(.published, uid: uid), shelves[s] == nil {
                 shelves[s] = kept
                 unconfirmed.insert(s)
             }
