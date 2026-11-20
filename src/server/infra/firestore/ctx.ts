@@ -9,11 +9,11 @@ import { chatObjectStore, publicObjectStore } from '../s3/objects';
 import { systemClock } from '../system/clock';
 import { systemIds } from '../system/ids';
 import { consoleLogger } from '../system/log';
-import { noopRealtime } from '../system/realtime';
 import { notWired } from '../wiring';
 import type { AdminDb } from './db';
 import { firestoreLeaseStore } from './lease';
 import { firestoreRateLimiter } from './rateLimit';
+import { firestoreRealtime } from './realtime';
 import { buildDataRepos } from './repos';
 import { firestoreUow } from './uow';
 import { firestoreVectors } from './vectors';
@@ -52,7 +52,7 @@ export function ctxFor(db: AdminDb, overrides: Partial<ServerCtx> = {}): ServerC
     leases: firestoreLeaseStore(db),
     vectors: firestoreVectors(db),
     llm: notWired<LlmProvider>('llm', LLM_HINT),
-    realtime: noopRealtime,
+    realtime: firestoreRealtime(db, log),
     pages: nextPageCache,
     later: nextAfter(log),
     clock: systemClock,
