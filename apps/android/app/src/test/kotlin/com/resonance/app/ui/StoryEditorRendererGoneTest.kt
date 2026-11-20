@@ -72,6 +72,27 @@ class StoryEditorRendererGoneTest {
     }
 
     @Test
+    fun aPastedPictureAndAnEarlyBridgeAreTheHosts() {
+        // X6: the island's pasteImage reaches the host, which reads the clipboard itself.
+        assertEquals(IslandMessage.PasteImage, IslandMessage.parse("""{"type":"pasteImage"}"""))
+        val bridge = bridge()
+        var asked = 0
+        bridge.onPasteImage = { asked++ }
+        bridge.handle(IslandMessage.PasteImage)
+        assertEquals(1, asked)
+        // X1: made before its card was read, the bridge takes the card's reading of its type — until the island says.
+        bridge.presume(com.resonance.kit.story.StoryScript.Latin, "en")
+        assertEquals(com.resonance.kit.story.StoryScript.Latin, bridge.script)
+        bridge.handle(IslandMessage.Script(com.resonance.kit.story.StoryScript.Cjk, "zh-TW"))
+        bridge.presume(com.resonance.kit.story.StoryScript.Latin, "en")
+        assertEquals("zh-TW", bridge.lang)
+        // Let go twice (the screen and the writer's leave): once is done, the second is nothing.
+        bridge.destroy()
+        bridge.destroy()
+        assertTrue(bridge.destroyed)
+    }
+
+    @Test
     fun theOpeningScriptSaysOnlyWhatIsHeld() {
         assertNull(IslandContent().openScript())
         val script = IslandContent(markdown = "words").openScript()!!

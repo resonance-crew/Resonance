@@ -8,6 +8,8 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.os.Looper
+import android.webkit.WebSettings
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -77,6 +79,21 @@ class MainActivity : ComponentActivity() {
         AppFirebase.configure(this, config)
         val session = (application as ResonanceApp).session(config)
         this.session = session
+        if (savedInstanceState == null) {
+            // The API's connection made while the account's tokens are on their way (A1 c).
+            (application as ResonanceApp).warmConnection(config.origin)
+            // The browser's provider loaded once the first frame is up and the main thread idle (X1):
+            // the writer's (and the puppets') first WebView then doesn't load it on the tap that opens it.
+            window.decorView.post {
+                Looper.myQueue().addIdleHandler {
+                    if (!webViewWarm) {
+                        webViewWarm = true
+                        runCatching { WebSettings.getDefaultUserAgent(this) }
+                    }
+                    false
+                }
+            }
+        }
         // The splash stays until the first screen is the page itself (not the loader while the
         // account restores, nor the wait for a profile this device hasn't seen), at most Launch.HOLD_MILLIS.
         Launch.hold(this, splash, fresh = savedInstanceState == null) {
@@ -398,3 +415,6 @@ object DebugLaunch {
         }
     }
 }
+
+/** The browser's provider has been loaded in this process (MainActivity's idle warm-up, X1). */
+private var webViewWarm = false

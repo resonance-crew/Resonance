@@ -427,10 +427,34 @@ class StoryEditorBridge(
             if (hidden) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
     }
 
+    /** Let go of ([destroy]): its island is gone, and a writer opening the card makes its own. */
+    var destroyed = false
+        private set
+
     override fun destroy() {
+        if (destroyed) return
+        destroyed = true
         webView.removeJavascriptInterface("ResonanceBridge")
         webView.destroy()
     }
+
+    /**
+     * How the story is set until the island says, read again once the card is there (a bridge made
+     * before its card was read, X1): the island's own `script` message wins once it comes.
+     */
+    fun presume(script: StoryScript, lang: String?) {
+        if (heardScript) return
+        this.script = script
+        this.lang = lang
+    }
+    private var heardScript = false
+
+    /**
+     * A paste whose clipboard holds a picture (the island's `pasteImage`, X6): the island cancelled it,
+     * and the host reads the picture from the clipboard, uploads it as its photo picker's are and puts it
+     * in with `exec('insertImage', {src})`.
+     */
+    var onPasteImage: () -> Unit = {}
 
     /**
      * The browser's renderer went with [dead] in it: that view goes (out of the page, destroyed) and a new
@@ -515,7 +539,9 @@ class StoryEditorBridge(
                     webView.touchY = null
                 }
             }
+            is IslandMessage.PasteImage -> onPasteImage()
             is IslandMessage.Script -> {
+                heardScript = true
                 script = m.script
                 lang = m.lang
             }
@@ -749,6 +775,8 @@ sealed interface IslandMessage {
     /** The page's height, in CSS px (dp at the device's width). */
     data class Height(val px: Int) : IslandMessage
     data class State(val active: StoryEditorBridge.Active, val link: IslandLink? = null, val canCard: Boolean = false) : IslandMessage
+    /** A paste of a picture the island cancelled (X6): the host reads it from the clipboard. */
+    data object PasteImage : IslandMessage
     /** A link card was tapped (round 16 §6). */
     data class LinkTap(val href: String) : IslandMessage
     data class Focus(val focused: Boolean) : IslandMessage
@@ -787,6 +815,7 @@ sealed interface IslandMessage {
                         (m["canCard"] as? JsonPrimitive)?.booleanOrNull ?: false,
                     )
                 }
+                "pasteImage" -> PasteImage
                 "linkTap" -> string("href")?.takeIf { it.isNotEmpty() }?.let { LinkTap(it) }
                 "focus" -> Focus((m["focused"] as? JsonPrimitive)?.booleanOrNull ?: false)
                 "script" -> Script(if (string("script") == "latin") StoryScript.Latin else StoryScript.Cjk, string("lang"))
