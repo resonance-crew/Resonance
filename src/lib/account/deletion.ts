@@ -153,8 +153,11 @@ export interface PurgeReport {
  *
  * Deliberately kept: other people's cards that responded to this user's cards
  * (their `referenceCardId` dangles and readers resolve it to null, the same
- * as for a deleted card), other users' block lists (a uid is never reused),
- * and reports filed *against* the user (moderation history) — but not the
+ * as for a deleted card), other users' bookmarks of this user's cards
+ * (`users/{other}/bookmarks/{cardId}` stores only the card's id, no uid: the
+ * card goes under a tombstone and the shelf drops what no longer resolves —
+ * the bookmark is the other person's record, not this user's), and reports
+ * filed *against* the user (moderation history) — but not the
  * copy of what they wrote that a report kept (`reportEvidence`): that is
  * their writing, and goes with them, as it does with the reporter's account.
  *
@@ -254,6 +257,10 @@ async function collectAccountData(db: Firestore, uid: string) {
     // A pending edit outlives its card when an older app deleted the card
     // straight from the client; the ones that carry their author are found here.
     db.collectionGroup('edits').where('authorId', '==', uid),
+    // Other people's blocks of them (`users/{other}/blocks/{uid}`: the rules make `blockedUid` the doc id, every
+    // client writes it): it names the account, and a uid is never reused, so the block has nothing left to hide.
+    // A collection group query on `blockedUid` (its COLLECTION_GROUP override in firestore.indexes.json).
+    db.collectionGroup('blocks').where('blockedUid', '==', uid),
   ];
   // Records found through one of the cards (see above): other readers'
   // resonance records on them, and every note left on them.
