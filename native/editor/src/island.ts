@@ -438,7 +438,38 @@ function rootAttributes(): Record<string, string> {
   return { class: 'story-prose', 'data-script': type.script, ...(type.lang ? { lang: type.lang } : {}) };
 }
 
+// ── What the host hears of the story ──
+// The story as Markdown, serialized once per document: ProseMirror's documents are immutable, so the one
+// the state holds now is the key. The change message, the type read, setMarkdown and getMarkdown all ask
+// here, so opening a story or a pause in writing serializes it once, not three times (audit X2).
+let cachedDoc: unknown = null;
+let cachedMarkdown = '';
+function storyMarkdown(): string {
+  const doc = editor.state.doc;
+  if (doc !== cachedDoc) {
+    cachedMarkdown = getMarkdown(editor);
+    cachedDoc = doc;
+  }
+  return cachedMarkdown;
+}
+
+/** How long writing must pause before the host is told the story changed; blur, a hidden page and leaving it tell at once. */
+const CHANGE_DELAY_MS = 450;
 let timer: ReturnType<typeof setTimeout> | undefined;
+let changePending = false;
+/** Tells the host the story now, if it changed since it was last told. */
+function flushChange() {
+  clearTimeout(timer);
+  if (!changePending) return;
+  changePending = false;
+  send({ type: 'change', markdown: storyMarkdown() });
+}
+/** A story the host put in (setMarkdown, open, reset) is one it knows: an edit not yet told is dropped with it. */
+function dropChange() {
+  clearTimeout(timer);
+  changePending = false;
+}
+
 const editor = new Editor({
   element: document.getElementById('editor')!,
   extensions,
@@ -446,8 +477,9 @@ const editor = new Editor({
   // A story's type is the web's src/styles/story.css, keyed on this class (island.css).
   editorProps: { attributes: rootAttributes() },
   onUpdate: () => {
+    changePending = true;
     clearTimeout(timer);
-    timer = setTimeout(() => send({ type: 'change', markdown: getMarkdown(editor) }), 150);
+    timer = setTimeout(flushChange, CHANGE_DELAY_MS);
     readTypeSoon();
   },
   onTransaction: () => sendState(),
@@ -456,8 +488,16 @@ const editor = new Editor({
     send({ type: 'focus', focused: true });
     sendCaret();
   },
-  onBlur: () => send({ type: 'focus', focused: false }),
+  onBlur: () => {
+    flushChange();
+    send({ type: 'focus', focused: false });
+  },
 });
+// The app going to the background or the page going away never waits out the pause.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushChange();
+});
+window.addEventListener('pagehide', flushChange);
 
 /** Sets the story's type on its root, and tells the host. */
 function setType(next: { script: StoryScript; lang: string | null }) {
@@ -469,7 +509,7 @@ function setType(next: { script: StoryScript; lang: string | null }) {
 
 /** The type the text calls for: from `from` (writerScript's hysteresis), or as set by hand. */
 function readType(from: StoryScript): { script: StoryScript; lang: string | null } {
-  const story = editor.isEmpty ? '' : getMarkdown(editor);
+  const story = editor.isEmpty ? '' : storyMarkdown();
   if (forced) return { script: forced, lang: forcedLang ?? storyLang(title, story) ?? null };
   return { script: writerScript(from, title, story), lang: storyLang(title, story) ?? null };
 }
@@ -538,17 +578,24 @@ new ResizeObserver(() => {
   if (editor.isFocused) sendCaret();
 }).observe(document.body);
 
+/** Puts a story in: out of undo history and emitting no update (loading a draft is not an edit). */
+function loadStory(md: string) {
+  dropChange();
+  editor.chain().setMeta('addToHistory', false).setContent(md, { emitUpdate: false }).run();
+}
+
 window.ResonanceEditor = {
   // Loading a draft is not an edit: kept out of undo history, so undo can
   // never take the page back to empty.
   setMarkdown(md) {
-    editor.chain().setMeta('addToHistory', false).setContent(md, { emitUpdate: false }).run();
+    loadStory(md);
     // A story opened is read as it is (from the UI locale's type), not from whatever was set before.
     clearTimeout(typeTimer);
     setType(readType(startScript));
-    return getMarkdown(editor);
+    // Kept for older hosts; serialized once with the type read above (the cache).
+    return storyMarkdown();
   },
-  getMarkdown: () => getMarkdown(editor),
+  getMarkdown: () => storyMarkdown(),
   /** Parse and re-serialize without touching the visible document (corpus checks). */
   roundtrip(md) {
     const scratch = new Editor({ extensions: storyExtensions(), content: md });

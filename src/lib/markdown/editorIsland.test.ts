@@ -1,6 +1,19 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// Every serialization the island makes, counted (it calls through to the real one).
+const serialized = vi.hoisted(() => ({ count: 0 }));
+vi.mock('./editorSchema', async (actual) => {
+  const real = await actual<typeof import('./editorSchema')>();
+  return {
+    ...real,
+    getMarkdown: (editor: Parameters<typeof real.getMarkdown>[0]) => {
+      serialized.count++;
+      return real.getMarkdown(editor);
+    },
+  };
+});
+
 // The native apps' editor island (native/editor/src/island.ts), run here in
 // jsdom: what a host asks of it in the query and over the bridge, and what it
 // posts back. The apps' own suites (StoryEditorBridgeTests…) run the built
@@ -21,6 +34,9 @@ beforeEach(() => {
   vi.resetModules();
 });
 afterEach(() => {
+  // Each test's island stays on the window (its listeners): whatever it hadn't told yet is told now, before
+  // the next test's messages are counted.
+  window.dispatchEvent(new Event('pagehide'));
   vi.useRealTimers();
   window.history.replaceState(null, '', '/');
 });
@@ -90,6 +106,80 @@ describe('the editor island', () => {
     island.setMarkdown('A line');
     island.focus();
     await vi.waitFor(() => expect(last('caret')).toEqual({ type: 'caret', top: 40, bottom: 64 }));
+  });
+
+  describe('what it tells the host of the story (audit X2)', () => {
+    it('serializes an opened story once, and answers again from the same document without serializing', async () => {
+      const island = await open('layout=canvas');
+      serialized.count = 0;
+      expect(island.setMarkdown('那天早上下著小雨，**我**站在操場邊。')).toBe('那天早上下著小雨，**我**站在操場邊。');
+      expect(serialized.count).toBe(1);
+      expect(island.getMarkdown()).toBe('那天早上下著小雨，**我**站在操場邊。');
+      expect(island.getMarkdown()).toBe('那天早上下著小雨，**我**站在操場邊。');
+      expect(serialized.count).toBe(1);
+      // An edit is a new document: serialized again, once.
+      island.exec('insertCard', { href: '/card/x', title: 'X' });
+      island.getMarkdown();
+      island.getMarkdown();
+      expect(serialized.count).toBe(2);
+    });
+
+    it('waits out a pause of 450 ms before telling the host, once for a burst of edits', async () => {
+      vi.useFakeTimers();
+      const island = await open('layout=canvas');
+      island.setMarkdown('一');
+      island.focus();
+      const changes = () => posted.filter((m) => m.type === 'change');
+      for (const word of ['二', '三', '四']) {
+        island.exec('insertCard', { href: '/card/x', title: word });
+        await vi.advanceTimersByTimeAsync(200);
+      }
+      expect(changes()).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(450);
+      expect(changes()).toHaveLength(1);
+      expect(changes()[0].markdown).toBe(island.getMarkdown());
+      // Nothing more to tell: no second message.
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(changes()).toHaveLength(1);
+    });
+
+    it('tells at once on blur, on a hidden page and when the page goes away', async () => {
+      vi.useFakeTimers();
+      const island = await open('layout=canvas');
+      island.setMarkdown('');
+      const changes = () => posted.filter((m) => m.type === 'change');
+      island.focus();
+      await vi.advanceTimersByTimeAsync(20);
+      island.exec('insertCard', { href: '/card/a', title: 'A' });
+      // Tiptap blurs on the next frame: well inside the pause.
+      island.blur();
+      await vi.advanceTimersByTimeAsync(20);
+      expect(changes()).toHaveLength(1);
+
+      island.exec('insertCard', { href: '/card/b', title: 'B' });
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      document.dispatchEvent(new Event('visibilitychange'));
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+      expect(changes()).toHaveLength(2);
+
+      island.exec('insertCard', { href: '/card/c', title: 'C' });
+      window.dispatchEvent(new Event('pagehide'));
+      expect(changes()).toHaveLength(3);
+      expect(changes()[2].markdown).toBe(island.getMarkdown());
+      // Told already: the pause ends in silence.
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(changes()).toHaveLength(3);
+    });
+
+    it('never tells the host a story it put in itself', async () => {
+      vi.useFakeTimers();
+      const island = await open('layout=canvas');
+      island.focus();
+      island.exec('insertCard', { href: '/card/a', title: 'A' });
+      island.setMarkdown('另一張卡');
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(posted.filter((m) => m.type === 'change')).toHaveLength(0);
+    });
   });
 
   describe('links (round 16 §6)', () => {
