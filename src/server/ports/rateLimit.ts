@@ -1,9 +1,9 @@
-import type { Bucket, Spend } from '@/lib/api/rateLimit';
+import type { Bucket, Spend } from '@/server/domain/rateLimit';
 
 export type { Bucket, Spend };
 
 /**
- * Per-user fixed windows (src/lib/api/rateLimit.ts `LIMITS`): one window per
+ * Per-user fixed windows (src/server/domain/rateLimit.ts `LIMITS`): one window per
  * user and bucket, spent atomically so two requests can't both take the last
  * unit.
  */
