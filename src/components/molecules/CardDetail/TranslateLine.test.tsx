@@ -123,6 +123,19 @@ describe('the line’s states (§F2)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1); // the translation in hand is shown again, not asked for
   });
 
+  // W21: coming back to the card this visit shows its translation again without a second POST.
+  it('shows a translation this visit was given again when the card is opened again, asking nothing', async () => {
+    answer(200, EN_TRANSLATION);
+    const first = draw();
+    fireEvent.click(screen.getByRole('button', { name: 'Translate to English' }));
+    await waitFor(() => expect(screen.getByTestId('title')).toHaveTextContent('A walk in the rain'));
+    first.unmount();
+    draw();
+    fireEvent.click(screen.getByRole('button', { name: 'Translate to English' }));
+    await waitFor(() => expect(screen.getByTestId('title')).toHaveTextContent('A walk in the rain'));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('a failure offers to try again; a spent budget says so and offers nothing', async () => {
     answer(503, { error: { code: 'internal' } });
     draw();
