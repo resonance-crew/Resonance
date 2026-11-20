@@ -124,7 +124,7 @@ describe('the editor island', () => {
       expect(serialized.count).toBe(2);
     });
 
-    it('waits out a pause of 450 ms before telling the host, once for a burst of edits', async () => {
+    it('waits out a pause of 150 ms before telling the host, once for a burst of edits', async () => {
       vi.useFakeTimers();
       const island = await open('layout=canvas');
       island.setMarkdown('一');
@@ -132,10 +132,10 @@ describe('the editor island', () => {
       const changes = () => posted.filter((m) => m.type === 'change');
       for (const word of ['二', '三', '四']) {
         island.exec('insertCard', { href: '/card/x', title: word });
-        await vi.advanceTimersByTimeAsync(200);
+        await vi.advanceTimersByTimeAsync(100);
       }
       expect(changes()).toHaveLength(0);
-      await vi.advanceTimersByTimeAsync(450);
+      await vi.advanceTimersByTimeAsync(150);
       expect(changes()).toHaveLength(1);
       expect(changes()[0].markdown).toBe(island.getMarkdown());
       // Nothing more to tell: no second message.

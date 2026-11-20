@@ -40,7 +40,7 @@
  *   'linkTap' | 'pasteImage', ...} posted to
  *   iOS  window.webkit.messageHandlers.editor
  *   Android window.ResonanceBridge.postMessage(json)
- *   'change' {markdown}: the story, after writing paused 450 ms — at once on blur, a hidden page and pagehide;
+ *   'change' {markdown}: the story, after writing paused 150 ms (the hosts save what the last one said) — at once on blur, a hidden page and pagehide;
  *   'height' {px, content}: the page's scrollHeight and the foot of the story's last block (CSS px, zoom
  *   included, as iOS's measureContent() measured it), sent only when either changed;
  *   'pasteImage' {}: a paste of an image file with no words to keep, cancelled — the host reads the picture
@@ -518,7 +518,7 @@ function storyMarkdown(): string {
 }
 
 /** How long writing must pause before the host is told the story changed; blur, a hidden page and leaving it tell at once. */
-const CHANGE_DELAY_MS = 450;
+const CHANGE_DELAY_MS = 150;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let changePending = false;
 /** Tells the host the story now, if it changed since it was last told. */
