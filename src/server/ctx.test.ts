@@ -8,24 +8,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   db: { name: 'db-1' } as object,
   revalidateLocalized: vi.fn((paths: Iterable<string>) => [...paths].map((p) => `/en${p}`)),
-  vectorStore: vi.fn(),
 }));
 vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => mocks.db }));
 vi.mock('@/lib/api/revalidate', () => ({ revalidateLocalized: mocks.revalidateLocalized }));
-vi.mock('@/lib/recommend/vectorStore/firestore', () => ({
-  FirestoreVectorStore: class {
-    constructor(db: unknown) {
-      mocks.vectorStore(db);
-    }
-    async deleteByCard(id: string) {
-      return `deleted ${id}`;
-    }
-  },
-}));
 
 const { serverCtx } = await import('./ctx');
 const { ctxFor } = await import('./infra/firestore/ctx');
 const { NotWiredError, lazyAsync } = await import('./infra/wiring');
+const { FirestoreVectorStore } = await import('./infra/firestore/vectors');
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -63,9 +53,9 @@ describe('ctxFor', () => {
     const ctx = ctxFor(db);
     await ctx.limits.spend('u1', 'note', 2, 1000);
     expect(set).toHaveBeenCalledWith({ path: 'rateLimits/u1_note' }, { userId: 'u1', bucket: 'note', windowStart: 1000, used: 2 });
-    expect(mocks.vectorStore).not.toHaveBeenCalled(); // nothing loaded until used
-    expect(await ctx.vectors.deleteByCard('c1')).toBe('deleted c1');
-    expect(mocks.vectorStore).toHaveBeenCalledWith(db);
+    // The vector index on this database, built without a read.
+    expect(ctx.vectors).toBeInstanceOf(FirestoreVectorStore);
+    expect((ctx.vectors as unknown as { firestore: unknown }).firestore).toBe(db);
   });
 
   it('drops pages through revalidateLocalized', () => {
@@ -81,9 +71,12 @@ describe('ctxFor', () => {
 
   it('a port no lane has wired throws NotWiredError on use, never on build', () => {
     const ctx = ctxFor(db);
-    // (push is wired since the push lane: FCM, loaded on the first send — infra/fcm/push.test.ts.)
-    expect(() => ctx.leases.release('k')).toThrow(NotWiredError);
-    expect(() => ctx.leases.release('k')).toThrow(/ServerCtx\.leases is not wired/);
+    // (push is wired since the push lane, leases since the recommend lane; the model stays out on purpose.)
+    expect(() => ctx.llm.chat({} as never, {} as never)).toThrow(NotWiredError);
+  });
+
+  it('wires leases on the database (infra/firestore/lease.ts): a key is a document path', async () => {
+    await expect(ctxFor(db).leases.release('k')).rejects.toThrow(/document path/);
   });
 });
 

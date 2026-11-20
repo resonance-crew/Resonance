@@ -82,7 +82,7 @@ describe('memoryCtx', () => {
 
   it('a port with no memory adapter yet throws when called, not when the context is built', async () => {
     const ctx = memoryCtx();
-    expect(() => ctx.push.send(['t'], { data: {} })).toThrow(/not wired/);
+    expect(() => ctx.llm.chat({} as never, {} as never)).toThrow(/not wired/); // the model never has a memory default
     const sent: string[][] = [];
     const wired = memoryCtx({ push: { send: async (tokens) => (sent.push(tokens), { sent: tokens.length, dead: [] }) } });
     expect(await wired.push.send(['t'], { data: {} })).toEqual({ sent: 1, dead: [] });
