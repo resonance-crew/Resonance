@@ -116,6 +116,8 @@ interface PresentOptions {
   shared?: ReadonlySet<ListCard>;
   /** The viewer's blocks when the caller already read them (beside its own query). */
   blocked?: Set<string>;
+  /** The cards visibleTo already let through for this viewer (B13). */
+  readable?: ReadonlySet<ListCard>;
 }
 
 /**
@@ -131,12 +133,14 @@ async function presentAll(
   blocked: Set<string>,
   reasons?: Map<string, string>,
   shared?: ReadonlySet<ListCard>,
+  /** The cards visibleTo already let through for this viewer (B13): not worked out again. */
+  readable?: ReadonlySet<ListCard>,
 ): Promise<FeedCardBody[][]> {
   // A card in the trash is in no list but the trash shelf — not even its
   // author's (a thought map falling back to ?keys=, a thread's shared card
   // read the same by both people); to everyone else it is private anyway.
   const unblocked = lists.map((cards) => cards.filter((c) => !blockHides(c, blocked) && !inTrash(c)));
-  const visible = new Set(await visibleTo(db, viewerId, unblocked.flat()));
+  const visible = new Set(readable ? unblocked.flat().filter((c) => readable.has(c)) : await visibleTo(db, viewerId, unblocked.flat()));
   for (const c of unblocked.flat()) if (shared?.has(c)) visible.add(c);
   const [authors] = await Promise.all([loadAuthors(db, [...visible]), withStories(db, [...visible])]);
   // An empty reason (a quick first pass has none) is no reason.
@@ -148,7 +152,7 @@ async function presentAll(
 /** Cards the viewer may read, in the given order, minus the named cards of people they blocked (blockHides). */
 async function present(db: Firestore, viewerId: string, cards: ListCard[], opts: PresentOptions = {}): Promise<FeedCardBody[]> {
   const blocked = opts.blocked ?? (await blockedByViewer(db, viewerId));
-  return (await presentAll(db, viewerId, [cards], blocked, opts.reasons, opts.shared))[0];
+  return (await presentAll(db, viewerId, [cards], blocked, opts.reasons, opts.shared, opts.readable))[0];
 }
 
 const toCards = (snap: QuerySnapshot) => snap.docs.map((d) => listCard(d.id, d.data()));
@@ -220,9 +224,13 @@ export async function getCardsByKeys(db: Firestore, viewerId: string, keys: stri
   if (opts.shared === false) return { cards: await present(db, viewerId, cards, { blocked }) };
   // A thread's bubbles ask for the cards sent in it: one its author shared with
   // the viewer there is shown though the rules would keep it from them.
-  const readable = new Set(await visibleTo(db, viewerId, cards));
-  const shared = await sharedAmong(db, viewerId, cards.filter((c) => !readable.has(c) && !inTrash(c)));
-  return { cards: await present(db, viewerId, cards, { blocked, shared }) };
+  // Side by side (B13): what the viewer may read, and which of the rest were shared with them — every card
+  // a stranger might not read (anything but a published public one) asked about, so neither waits on the other.
+  const maybeHidden = cards.filter((c) => !inTrash(c) && !(c.visibility === 'public' && c.publishedAt));
+  const [visible, sharedAll] = await Promise.all([visibleTo(db, viewerId, cards), sharedAmong(db, viewerId, maybeHidden)]);
+  const readable = new Set(visible);
+  const shared = new Set([...sharedAll].filter((c) => !readable.has(c)));
+  return { cards: await present(db, viewerId, cards, { blocked, shared, readable }) };
 }
 
 /** The cards a story embeds; one that can't be read for them gives none (embeds only save the reader a request each). */

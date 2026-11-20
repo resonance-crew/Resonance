@@ -252,6 +252,20 @@ describe('connections-only cards in a list', () => {
     expect((await getRecommendedFeed(db, 'alice', load)).cards.map((c) => c.id)).toEqual(['b1', 'a1', 'b2', 'e1']);
     expect((await getRecommendedFeed(db, 'dana', load)).cards.map((c) => c.id)).toEqual(['d1', 'e1']);
   });
+
+  it('are checked once for a thread’s ?keys=, not again when presented (B13)', async () => {
+    await card('b1', 'bob', 1, { visibility: 'connections' });
+    await card('d1', 'dana', 2, { visibility: 'connections' });
+    await card('e1', 'erin', 5);
+    const getAll = vi.spyOn(db, 'getAll');
+    try {
+      expect((await getCardsByKeys(db, 'alice', ['b1', 'd1', 'e1'])).cards.map((c) => c.id)).toEqual(['b1', 'e1']);
+      const connectionReads = getAll.mock.calls.filter((refs) => refs.some((r) => (r as { path?: string }).path?.startsWith('connections/')));
+      expect(connectionReads).toHaveLength(1);
+    } finally {
+      getAll.mockRestore();
+    }
+  });
 });
 
 describe('profiles', () => {
