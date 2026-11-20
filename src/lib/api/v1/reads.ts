@@ -594,6 +594,10 @@ export async function getProfileLinks(db: Firestore, viewerId: string, handle: s
 const BOX_LIMIT = 40;
 /** How many drafts are read to find the most recently edited ones. */
 const DRAFT_SCAN = 200;
+/** The draft shelf's ordered read: the shelf and a trash's worth more (drafts in the trash are left out after it). */
+const DRAFT_PAGE = BOX_LIMIT + 20;
+/** The most replies the resonated shelf reads. */
+const RESONATED_SCAN = 60;
 /** The trash shelf shows the newest this many (emptying it takes them all). */
 export const TRASH_SHELF_LIMIT = 100;
 
@@ -616,23 +620,27 @@ async function ownShelf(db: Firestore, viewerId: string, shelf: OwnShelf, now: n
   const kept = (d: QueryDocumentSnapshot) => d.get('trashedAt') == null;
   if (shelf === 'trash') return trashShelf(db, viewerId, now);
   if (shelf === 'draft') {
-    // Scanned without their stories: only the drafts shown have theirs read, after the cut.
-    const snap = await own.where('publishedAt', '==', null).select(...LIST_FIELDS).limit(DRAFT_SCAN).get();
+    // Read without their stories: only the drafts shown have theirs read, after the cut.
+    const drafts = own.where('publishedAt', '==', null).select(...LIST_FIELDS);
+    // The most recently edited, through its index (B12: authorId, publishedAt, updatedAt desc), a trash's worth
+    // more than the shelf shows. Only when that comes back short is the rest scanned: a draft with no
+    // updatedAt (an older build's) is in no ordered query, and sorts last anyway, so a full page needs none.
+    const ordered = await drafts.orderBy('updatedAt', 'desc').limit(DRAFT_PAGE).get();
+    const snap = ordered.size < DRAFT_PAGE ? await drafts.limit(DRAFT_SCAN).get() : ordered;
     const edited = (d: QueryDocumentSnapshot) => {
       const at = d.get('updatedAt');
       return at instanceof Timestamp ? at.toMillis() : 0;
     };
-    // Most recently edited first (sorted here: drafts are few, and this needs no composite index).
+    // Most recently edited first.
     return snap.docs
       .filter(kept)
       .sort((a, b) => edited(b) - edited(a))
       .slice(0, BOX_LIMIT)
       .map((d) => {
-        // A draft shows a summary of its story as it is (the summary stored at publish is no draft's):
-        // with none to stand in, getCardBoxShelves reads the shown drafts' stories in its one batch (withStories).
-        const card = listCard(d.id, d.data());
-        delete card.listing;
-        return card;
+        // A draft shows a summary of its story as it is: a stored one only while it is current (storedSummary —
+        // the one a list kept after reading the draft, B6), else getCardBoxShelves reads the shown drafts'
+        // stories in its one batch (withStories).
+        return listCard(d.id, d.data());
       });
   }
   const isPrivate = shelf === 'private';
@@ -676,7 +684,14 @@ async function trashShelf(db: Firestore, viewerId: string, now: number): Promise
 /** The ids on a shelf of others' cards, in shelf order. */
 async function othersShelfIds(db: Firestore, viewerId: string, shelf: OthersShelf): Promise<string[]> {
   if (shelf === 'resonated') {
-    const snap = await db.collection('cards').where('authorId', '==', viewerId).select('referenceCardId').limit(60).get();
+    // Only the cards that answer one (B12: authorId, referenceCardId), so an author's 61st card no longer hides a reply.
+    const snap = await db
+      .collection('cards')
+      .where('authorId', '==', viewerId)
+      .where('referenceCardId', '>', '')
+      .select('referenceCardId')
+      .limit(RESONATED_SCAN)
+      .get();
     return snap.docs.map((d) => d.get('referenceCardId')).filter((id): id is string => typeof id === 'string' && id.length > 0);
   }
   if (shelf === 'linked') {

@@ -501,6 +501,24 @@ describe('the card box in one request (GET /me/cardbox?shelves=)', () => {
     }
   });
 
+  it('finds a reply past an author’s 60th card, and the newest drafts of many through their index (B12)', async () => {
+    // erin: 70 cards that answer nothing, written before her one reply (doc ids sort the reply last).
+    for (let i = 0; i < 70; i++) await card(`erin-a${String(i).padStart(2, '0')}`, 'erin', 30 + i);
+    await card('erin-z-reply', 'erin', 5, { referenceCardId: 'bob-pub' });
+    const erin = await getCardBoxShelves(db, 'erin', new Set(['resonated', 'draft'] as const));
+    expect(erin.resonated!.cards.map((c) => c.id)).toEqual(['bob-pub']);
+
+    // 65 drafts edited one after another and one older without updatedAt: the 40 newest, newest first.
+    for (let i = 0; i < 65; i++) await card(`fay-d${String(i).padStart(2, '0')}`, 'fay', 0, { publishedAt: null, updatedAt: minutesAgo(100 - i) });
+    await db.doc('cards/fay-undated').set({ authorId: 'fay', thoughtCore: 'u', story: 's', tags: [], visibility: 'private', publishedAt: null });
+    const fay = await getCardBoxShelves(db, 'fay', new Set(['draft'] as const));
+    expect(fay.draft!.cards.map((c) => c.id)).toEqual(Array.from({ length: 40 }, (_, n) => `fay-d${String(64 - n).padStart(2, '0')}`));
+    // A short shelf still lists the draft with no stamp (it is scanned), last.
+    await card('gil-d', 'gil', 0, { publishedAt: null, updatedAt: minutesAgo(1) });
+    await db.doc('cards/gil-undated').set({ authorId: 'gil', thoughtCore: 'u', story: 's', tags: [], visibility: 'private', publishedAt: null });
+    expect((await getCardBoxShelves(db, 'gil', new Set(['draft'] as const))).draft!.cards.map((c) => c.id)).toEqual(['gil-d', 'gil-undated']);
+  });
+
   it('fills the shelves as the card box shows them: own bylines kept, others filtered by visibility, blocks and anonymity', async () => {
     const ids = (box: Awaited<ReturnType<typeof getCardBoxShelves>>, s: keyof typeof box) => box[s]!.cards.map((c) => c.id);
     const alice = await getCardBoxShelves(db, 'alice', ALL);
