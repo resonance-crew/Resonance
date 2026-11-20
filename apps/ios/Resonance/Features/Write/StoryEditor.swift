@@ -55,6 +55,12 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
     var onChange: (String) -> Void = { _ in }
     /// A link card in the story was tapped (it is picked now): the host opens its link sheet, 卡片 chosen.
     var onLinkTap: (String) -> Void = { _ in }
+    /// A picture was pasted into the story (the island let it go, saying nothing of it): the host reads it from the
+    /// system's pasteboard and uploads it as the photo picker's (audit X6).
+    var onPasteImage: () -> Void = {}
+
+    /// The one data store every writer's web view keeps nothing in (`nonPersistent`, never on disk).
+    @MainActor static let dataStore = WKWebsiteDataStore.nonPersistent()
 
     @ObservationIgnored let webView: WKWebView
     @ObservationIgnored let layout: EditorPage.Layout
@@ -93,8 +99,9 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
         config.userContentController = controller
         // The page and its fonts, from the bundle under the page's own scheme — nothing else.
         config.setURLSchemeHandler(EditorPageHandler(), forURLScheme: EditorPage.scheme)
-        // It keeps nothing: no cookies, storage or cache on disk.
-        config.websiteDataStore = .nonPersistent()
+        // It keeps nothing: no cookies, storage or cache on disk — one store for every writer the app opens, so
+        // WebKit may hand a new one a WebContent process already warmed by the last (audit X1).
+        config.websiteDataStore = Self.dataStore
         config.preferences.javaScriptCanOpenWindowsAutomatically = false
         webView = WKWebView(frame: .zero, configuration: config)
         super.init()
@@ -200,7 +207,8 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
             pendingMarkdown = markdown
             return
         }
-        Task { _ = try? await webView.callAsyncJavaScript("return ResonanceEditor.setMarkdown(md)", arguments: ["md": markdown], contentWorld: .page) }
+        // Not asked for its answer (audit X2): the story as the island serialized it, which no one read.
+        Task { _ = try? await webView.callAsyncJavaScript("ResonanceEditor.setMarkdown(md)", arguments: ["md": markdown], contentWorld: .page) }
     }
 
     /// A toolbar command; `args` for insertCard (href, title) and insertImage (src, alt).
@@ -244,6 +252,15 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
         let image: String?
     }
 
+    /// The previews as the island takes them: pictures made absolute against `origin`.
+    private static func previewList(_ previews: [HostLinkPreview], origin: URL) -> [[String: String]] {
+        previews.map { p in
+            var entry = ["url": p.url, "title": p.title]
+            if let image = p.image, let absolute = URL(string: image, relativeTo: origin)?.absoluteString { entry["image"] = absolute }
+            return entry
+        }
+    }
+
     /// A live card's stored link previews (its `linkPreviews`), for the link cards the story shows: their
     /// titles, and pictures from our own link-image route only (made absolute against `origin`).
     func setLinkPreviews(_ previews: [HostLinkPreview], origin: URL) {
@@ -252,11 +269,7 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
             pendingPreviews = (previews, origin)
             return
         }
-        let list: [[String: String]] = previews.map { p in
-            var entry = ["url": p.url, "title": p.title]
-            if let image = p.image, let absolute = URL(string: image, relativeTo: origin)?.absoluteString { entry["image"] = absolute }
-            return entry
-        }
+        let list = Self.previewList(previews, origin: origin)
         Task { _ = try? await webView.callAsyncJavaScript("ResonanceEditor.setLinkPreviews?.(p)", arguments: ["p": list], contentWorld: .page) }
     }
 
@@ -349,20 +362,25 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
             // loaded); out of a window its traits say nothing yet, and its trait change on landing in one will.
             if webView.window != nil { wear(IslandAppearance(webView.traitCollection)) }
             setTextScale(textScale)
-            // The title first: the story opened is read with it.
-            if let pendingTitle { setTitle(pendingTitle) }
+            // The card in one call (audit X5): the title, the story and its previews set together, its type read once.
+            open(title: pendingTitle, markdown: pendingMarkdown, previews: pendingPreviews)
             pendingTitle = nil
-            if let pendingMarkdown { setMarkdown(pendingMarkdown) }
             pendingMarkdown = nil
-            if let pendingPreviews { setLinkPreviews(pendingPreviews.previews, origin: pendingPreviews.origin) }
             pendingPreviews = nil
         case "change":
             let markdown = body["markdown"] as? String ?? ""
             heldMarkdown = markdown
             onChange(markdown)
         case "height":
-            if let px = Self.number(body["px"]) { height = max(minimumHeight, CGFloat(px)) }
-            if layout == .canvas { measureContent() }
+            // Set only when it changed (audit X3): each set redrew the writer, the same height or not.
+            if let px = Self.number(body["px"]) {
+                let next = max(minimumHeight, CGFloat(px))
+                if next != height { height = next }
+            }
+            if layout == .canvas {
+                // The island says how tall what is written stands with it; an older one is asked.
+                if let content = Self.number(body["content"]) { setContentHeight(CGFloat(content)) } else { measureContent() }
+            }
         case "state":
             let a = body["active"] as? [String: Bool] ?? [:]
             active = Active(bold: a["bold"] ?? false, italic: a["italic"] ?? false, h2: a["h2"] ?? false, h3: a["h3"] ?? false,
@@ -370,6 +388,8 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
             canUndo = body["canUndo"] as? Bool ?? false
             link = Self.link(body["link"])
             canCard = body["canCard"] as? Bool ?? false
+        case "pasteImage":
+            onPasteImage()
         case "linkTap":
             if let href = body["href"] as? String, !href.isEmpty { onLinkTap(href) }
         case "focus":
@@ -414,9 +434,32 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
             return Math.ceil((el.getBoundingClientRect().bottom + window.scrollY) * scale);
             """
             if let px = Self.number(try? await webView.callAsyncJavaScript(script, arguments: [:], contentWorld: .page)) {
-                contentHeight = CGFloat(px)
+                setContentHeight(CGFloat(px))
             }
         }
+    }
+
+    private func setContentHeight(_ next: CGFloat) {
+        if contentHeight != next { contentHeight = next }
+    }
+
+    /// What the host held for the island before it was ready, handed over at once: `ResonanceEditor.open`, or —
+    /// an island built before it — `setTitle`, `setMarkdown`, `setLinkPreviews` in that order (the title first:
+    /// the story is read with it).
+    private func open(title: String?, markdown: String?, previews: (previews: [HostLinkPreview], origin: URL)?) {
+        var card: [String: Any] = [:]
+        if let title { card["title"] = title }
+        if let markdown { card["markdown"] = markdown }
+        if let previews { card["previews"] = Self.previewList(previews.previews, origin: previews.origin) }
+        guard !card.isEmpty else { return }
+        let script = """
+        const E = ResonanceEditor;
+        if (typeof E.open === 'function') { E.open(o); return; }
+        if ('title' in o) E.setTitle(o.title);
+        if ('markdown' in o) E.setMarkdown(o.markdown);
+        if ('previews' in o) E.setLinkPreviews?.(o.previews);
+        """
+        Task { _ = try? await webView.callAsyncJavaScript(script, arguments: ["o": card], contentWorld: .page) }
     }
 
     /// A number as WebKit hands one over (an NSNumber, whatever JavaScript made of it).
