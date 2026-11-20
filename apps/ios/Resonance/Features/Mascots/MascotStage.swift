@@ -35,6 +35,9 @@ struct MascotStage: ViewModifier {
     /// What of the content was last in view (it moves every frame of a scroll: nothing here redraws for it).
     @State private var seen = Seen()
     @State private var appeared = false
+    /// Covered by a page pushed over it, or on a tab not shown, for a while (audit I8): its island (a web view
+    /// and its WebContent process) is let go, and made again — the scene sent anew — when the page is back.
+    @State private var parked = false
 
     final class Seen {
         var view: MascotView?
@@ -47,6 +50,12 @@ struct MascotStage: ViewModifier {
 
     private var on: Bool { store.mascots && allowed }
     private var showing: Bool { appeared && selectedTab && scenePhase == .active }
+    /// On screen in its tab (the app may be in the background: that only pauses it).
+    private var present: Bool { appeared && selectedTab }
+    /// An island is kept: the puppets are on and the page hasn't been away long.
+    private var live: Bool { on && !parked }
+    /// How long a page may be covered before its island goes.
+    static let parkAfter: Duration = .seconds(5)
 
     func body(content: Content) -> some View {
         content
@@ -63,7 +72,13 @@ struct MascotStage: ViewModifier {
             .onScrollPhaseChange { _, phase in island?.moving(phase != .idle) }
             .onAppear { appeared = true }
             .onDisappear { appeared = false }
-            .task(id: on) {
+            .task(id: present) {
+                guard !present else { parked = false; return }
+                try? await Task.sleep(for: Self.parkAfter)
+                if !Task.isCancelled { parked = true }
+            }
+            .task(id: live) {
+                let on = live
                 if on, island == nil {
                     island = MascotIsland(page: page)
                     MascotIsland.log.info("island made: \(page, privacy: .public)")
