@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { MessageHistory } from '@/lib/chat/history';
 import { canReply, quoteOf, type ChatMessage } from '@/lib/chat/message';
@@ -453,10 +453,13 @@ export function useChatThread({ pairId, to, listen, onSent }: ChatThreadOptions)
   useEffect(() => {
     if (store && searching) store.loadAll(LOAD_ALL_CAP);
   }, [store, searching, state.version]);
+  // The hits follow the query a step behind (W16): a key — a CJK keyboard's composing ones too — draws the field
+  // at once, and the search over the history when React has the time.
+  const shownQuery = useDeferredValue(query);
   const hits = useMemo(
-    () => (store && searching ? searchMessages(store.history.messages, query) : []),
+    () => (store && searching ? searchMessages(store.history.messages, shownQuery) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [store, searching, query, state.version],
+    [store, searching, shownQuery, state.version],
   );
 
   // The actions stay the same functions while the conversation does, so rows drawn with them needn't draw again.

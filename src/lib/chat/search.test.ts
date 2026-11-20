@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { Message } from '@/lib/db/types';
 import { foldForSearch, searchMessages, searchSnippet } from './search';
 
@@ -67,5 +67,23 @@ describe('searchSnippet', () => {
       { start: 201, end: 202 },
     ]);
     expect(marked(s)).toEqual(['x']);
+  });
+});
+
+// W16: each key of a search folds only the messages it hasn't folded yet.
+describe('searching again', () => {
+  it('folds each message once, and finds the same hits', async () => {
+    const mod = await import('./search');
+    const messages = Array.from({ length: 50 }, (_, i) => ({ id: `m${i}`, text: `Ｍessage ${i} about RAIN` }) as unknown as Message);
+    const first = mod.searchMessages(messages, 'rain');
+    const lower = vi.spyOn(String.prototype, 'toLowerCase');
+    try {
+      const again = mod.searchMessages(messages, 'rai');
+      expect(again.map((h) => h.messageId)).toEqual(first.map((h) => h.messageId));
+      // Only the query was folded this time, not the fifty messages.
+      expect(lower.mock.calls.length).toBeLessThan(10);
+    } finally {
+      lower.mockRestore();
+    }
   });
 });
