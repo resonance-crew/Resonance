@@ -64,6 +64,27 @@ called — never when the context is built. Pass a real one in `overrides`.
 - **Attestation** — `infra/appcheck/appCheck.ts` (verify, mint); Turnstile,
   the exchange's brake and the tally stay in `lib/appCheck/server`.
 
+## Conversations (Phase 1 wave 3)
+
+- Notes, letters, messages, reactions, unsending, private shares, chat
+  pictures, reports and the public pictures' owner records (`uploads`):
+  services in `app/{conversations,messages,sharedCards,chatImages,
+  chatImageUpload,safety}.ts`, the Firestore code in
+  `infra/firestore/repos/conversations.ts`, pure names and policy in
+  `domain/conversations.ts`; `lib/api/v1/{conversations,messageActions,
+  sharedCards,chatImages,chatImageUpload,safety}.ts` and `lib/storage/uploads`
+  are facades. The Transaction- or snapshot-taking helpers other modules
+  compose (`clearLetters(tx, db, …)`, `letterRef`, `openRequest`,
+  `hasPenName`, `lettersLeft`, `chatImageFiles`, `privateShareRef`…) live in
+  the infra repo and are re-exported from their old paths.
+- A message's `sentAt` reaches services as an `Instant`, so a page
+  (`data.conversations.listMessages`, `(sentAt, id)` descending) never skips
+  messages sent in the same millisecond. Writes take the service's `at`;
+  Firestore writes its server time instead, memory a strictly increasing
+  instant shared by one transaction's writes (as a commit's).
+- The chat push stays `lib/push/chat` (`afterMessage.ts` schedules it on
+  `AfterResponse`, Next's `after()` by default).
+
 ## Legacy facades
 
 Every export an emulator suite or a script imports keeps its path, name and
