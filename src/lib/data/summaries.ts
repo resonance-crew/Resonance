@@ -42,7 +42,16 @@ export function summaryCard(c: FeedCardBody): Card {
     story: c.excerpt,
     tags: c.tags,
     ...(c.imageUrl
-      ? { media: { type: 'image' as const, url: c.imageUrl, ...(c.imageLabel ? { label: c.imageLabel } : {}), ...(c.imageFrame ? { frame: c.imageFrame } : {}) } }
+      ? {
+          media: {
+            type: 'image' as const,
+            url: c.imageUrl,
+            ...(c.imageLabel ? { label: c.imageLabel } : {}),
+            ...(c.imageFrame ? { frame: c.imageFrame } : {}),
+            // The list's smaller cover (B2), when the server kept one.
+            ...(c.imageThumbUrl ? { thumbUrl: c.imageThumbUrl } : {}),
+          },
+        }
       : {}),
     // The title and excerpt translated by AI (round 25 §F7): the server sends them only while they match, so `of`
     // has nothing left to check here (a summary is never checked again: lib/adapters/story translatedSummary).

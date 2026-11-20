@@ -1356,6 +1356,26 @@ describe('useCardSummaries', () => {
 
 // The bell's rows show who each is from and the card it is about: read together, and a row whose card the
 // viewer can't read any more (deleted, in the trash) keeps its words with no card beside them.
+// B2: the list's smaller cover reaches the web's cards (media.thumbUrl), from v1 summaries as from Firestore.
+describe('a cover kept smaller for lists', () => {
+  it('rides on a summary as media.thumbUrl, and is absent where the server kept none', async () => {
+    api({
+      '/api/v1/feed': {
+        cards: [
+          summary('thumbed', 'a1', { imageUrl: 'https://img/c.webp', imageThumbUrl: 'https://img/c-960.webp' }),
+          summary('older', 'a1', { imageUrl: 'https://img/o.webp', imageThumbUrl: null }),
+        ],
+        nextCursor: null,
+      } satisfies FeedPageBody,
+    });
+    const { result } = renderHook(() => useFeed(), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    const [thumbed, older] = result.current.data!.cards;
+    expect(thumbed.media).toEqual({ type: 'image', url: 'https://img/c.webp', thumbUrl: 'https://img/c-960.webp' });
+    expect(older.media).toEqual({ type: 'image', url: 'https://img/o.webp' });
+  });
+});
+
 describe('useBellExtras', () => {
   const bell = (id: string, payload: Record<string, unknown>): Notification => ({
     id,
