@@ -44,6 +44,8 @@ struct MapCard: Equatable, Sendable {
     let accentHue: Double?
     /// The cover's frame (round 25 §G1): the node's square thumb is cut from it. Nil: the centre.
     var coverFrame: CoverFraming? = nil
+    /// The cover itself when `mediaURL` is its smaller copy (B2): asked for once if that fails.
+    var mediaFallbackURL: URL? = nil
 }
 
 extension MapCard {
@@ -53,7 +55,20 @@ extension MapCard {
     nonisolated init(summary c: FeedCard) {
         self.init(id: c.id, authorId: c.author?.value1.id ?? "", slug: c.slug, title: c.title, story: c.excerpt,
                   tags: c.tags, visibility: c.visibility.rawValue, publishedAt: c.publishedAt.flatMap(ISO8601.date),
-                  mediaURL: c.listCoverURL, accentHue: c.accentHue, coverFrame: c.coverFraming)
+                  mediaURL: c.listCoverURL, accentHue: c.accentHue, coverFrame: c.coverFraming,
+                  mediaFallbackURL: c.listCoverFallbackURL)
+    }
+
+    /// A card document's `media` as the map draws it (B2): the smaller copy (`thumbUrl`) and the cover to fall back
+    /// on — the copy only while it is the current cover's (`ThoughtMapService.isCopy`), else the cover alone. Nil for
+    /// no picture.
+    nonisolated static func cover(media: [String: Any]?) -> (url: URL?, fallback: URL?) {
+        guard (media?["type"] as? String) == "image", let full = media?["url"] as? String, !full.isEmpty else { return (nil, nil) }
+        let fullURL = URL(string: full)
+        if let thumb = media?["thumbUrl"] as? String, ThoughtMapService.isCopy(thumb, of: full), let thumbURL = URL(string: thumb) {
+            return (thumbURL, fullURL)
+        }
+        return (fullURL, nil)
     }
 }
 
@@ -302,6 +317,7 @@ struct ThoughtMapService {
     nonisolated static func card(id: String, data d: [String: Any]) -> MapCard? {
         guard d["trashedAt"] == nil || d["trashedAt"] is NSNull else { return nil }
         let media = d["media"] as? [String: Any]
+        let cover = MapCard.cover(media: media)
         return MapCard(
             id: id,
             authorId: d["authorId"] as? String ?? "",
@@ -311,8 +327,18 @@ struct ThoughtMapService {
             tags: d["tags"] as? [String] ?? [],
             visibility: d["visibility"] as? String ?? "public",
             publishedAt: (d["publishedAt"] as? Timestamp)?.dateValue(),
-            mediaURL: (media?["type"] as? String) == "image" ? ((media?["thumbUrl"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? media?["url"] as? String).flatMap(URL.init(string:)) : nil,
-            accentHue: num(d["accentHue"]), coverFrame: CoverFrames.of(media: media))
+            mediaURL: cover.url,
+            accentHue: num(d["accentHue"]), coverFrame: CoverFrames.of(media: media), mediaFallbackURL: cover.fallback)
+    }
+
+    /// Whether a document's `media.thumbUrl` is the smaller copy of its `media.url` (B2): the cover's address with
+    /// its last extension replaced by `-w960.webp` (`…/B.webp` → `…/B-w960.webp`). A draft's save merges `media`, so a
+    /// changed cover can keep the old cover's `thumbUrl`, which is then not this cover's and is ignored.
+    nonisolated static func isCopy(_ thumb: String, of url: String) -> Bool {
+        guard !thumb.isEmpty, !url.isEmpty else { return false }
+        let slash = url.lastIndex(of: "/").map { url.index(after: $0) } ?? url.startIndex
+        let stem = url[slash...].lastIndex(of: ".").map { String(url[..<$0]) } ?? url
+        return thumb == stem + "-w960.webp"
     }
 
     nonisolated private static func num(_ v: Any?) -> Double? { (v as? NSNumber)?.doubleValue }
