@@ -1,0 +1,24 @@
+/* GrainOverlay's still grain (`still`): the scheme's grain ink through a tileable noise mask (128 px, 8 levels — the
+   landing film's own tile, its `.grain`), drawn once and never a live feTurbulence: WebKit runs SVG filters on the CPU
+   and drew a feed's grain again on every tile it rastered while scrolling (the perf audit's W1). Its mean alpha is
+   about ½ as the noise's is, so the overlay's doubled opacity keeps the same mean darkening. */
+.still {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 10;
+  background-color: var(--grain-ink);
+  -webkit-mask-image: url('./grain.png');
+  mask-image: url('./grain.png');
+  -webkit-mask-size: 128px 128px;
+  mask-size: 128px 128px;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+}
+@media (min-resolution: 2dppx) {
+  .still {
+    -webkit-mask-size: 64px 64px;
+    mask-size: 64px 64px;
+  }
+}

@@ -1,11 +1,18 @@
 'use client';
 
 import { useId } from 'react';
+import styles from './GrainOverlay.module.css';
 
 export interface GrainOverlayProps {
   opacity?: number;
   extendTop?: number;
   extendBottom?: number;
+  /**
+   * The grain as a still bitmap (a noise tile through a mask) instead of a live feTurbulence: for a surface repeated
+   * down a scrolling list (the story cards), which WebKit would run the filter for again on every tile it rasters.
+   * Its mean darkening is the filter's; a surface matched to the live noise elsewhere (AuthCard's strips) keeps it.
+   */
+  still?: boolean;
 }
 
 /**
@@ -17,8 +24,22 @@ export interface GrainOverlayProps {
  * specks on a dark paper read louder — and the noise spreads it unevenly from
  * pixel to pixel so it reads as grain rather than a flat tint.
  */
-export function GrainOverlay({ opacity = 0.06, extendTop = 0, extendBottom = 0 }: GrainOverlayProps) {
+export function GrainOverlay({ opacity = 0.06, extendTop = 0, extendBottom = 0, still = false }: GrainOverlayProps) {
   const id = useId().replace(/:/g, '');
+  if (still) {
+    return (
+      <span
+        aria-hidden="true"
+        data-grain="still"
+        className={styles.still}
+        style={{
+          top: -extendTop,
+          bottom: -extendBottom,
+          opacity: `calc(${Math.min(1, opacity * 2)} * var(--grain-scale, 1))`,
+        }}
+      />
+    );
+  }
   return (
     <svg
       style={{

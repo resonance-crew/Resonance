@@ -3,7 +3,6 @@
 import { useMemo, useRef, useState, type MouseEvent } from 'react';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import { BrushWash } from '@/components/atoms/BrushWash/BrushWash';
-import { ShapeGrain } from '@/components/atoms/ShapeGrain/ShapeGrain';
 import { GrainOverlay } from '@/components/atoms/GrainOverlay/GrainOverlay';
 import { STORY_GRAIN } from '@/lib/design/grain';
 import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
@@ -111,7 +110,7 @@ export function MiniStoryCard({
     >
       {isMobile ? (
         <>
-          <GrainOverlay opacity={STORY_GRAIN.band} />
+          <GrainOverlay still opacity={STORY_GRAIN.band} />
           <svg
             viewBox="0 0 200 6"
             preserveAspectRatio="none"
@@ -148,7 +147,15 @@ export function MiniStoryCard({
             w={w} h={h} d={borderPath} color={cardHovered}
             x={pos.x} y={pos.y} on={hovered} duration={460}
           />
-          <ShapeGrain w={w} h={h} d={borderPath} opacity={STORY_GRAIN.paper} frequency={0.85} seed={seed} />
+          {/* the paper's grain, a still tile cut to the outline (the perf audit's W1) */}
+          {borderPath && (
+            <span
+              aria-hidden="true"
+              data-grain="paper"
+              className={styles.stillGrain}
+              style={{ clipPath: `path('${borderPath}')`, opacity: `calc(${STORY_GRAIN.paper} * var(--grain-scale, 1))` }}
+            />
+          )}
           <HandDrawnBorder
             w={w} h={h} R={R} seed={seed} mag={mag}
             strokeColor={bc1}
@@ -167,7 +174,7 @@ export function MiniStoryCard({
           ratio={0.56}
           frame={imageUrl ? imageFrame : undefined}
           className={styles.imagePlaceholder}
-          grain={<GrainOverlay opacity={STORY_GRAIN.cover} />}
+          grain={<GrainOverlay still opacity={STORY_GRAIN.cover} />}
         >
           {!imageUrl && (
             <div className={`${styles.imageFallback} ${fallback.className}`} style={{ ...fallback.style, background: fallback.fill }} aria-hidden />

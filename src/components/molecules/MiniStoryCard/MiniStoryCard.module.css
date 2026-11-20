@@ -4,6 +4,28 @@
   transition: background 320ms ease;
 }
 
+/* The paper's grain as StoryCard's (its .stillGrain): grey specks through the still tile, cut to the drawn outline —
+   drawn once, never a filter (the perf audit's W1). */
+.stillGrain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* colour-fixed: ShapeGrain's own noise grey, the same in either scheme (it carries no token) */
+  background-color: oklch(80% 0 0);
+  -webkit-mask-image: url('../../atoms/GrainOverlay/grain.png');
+  mask-image: url('../../atoms/GrainOverlay/grain.png');
+  -webkit-mask-size: 128px 128px;
+  mask-size: 128px 128px;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+}
+@media (min-resolution: 2dppx) {
+  .stillGrain {
+    -webkit-mask-size: 64px 64px;
+    mask-size: 64px 64px;
+  }
+}
+
 .imagePlaceholder {
   position: relative;
   width: 100%;

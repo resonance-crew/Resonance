@@ -123,6 +123,21 @@ describe('StoryCard over a moving stage', () => {
     expect(render(<StoryCard story={story} />).container.querySelector('feTurbulence')).toBeTruthy();
   });
 
+  // The perf audit's W1: a feed card's grains — its paper's, its band's, its cover's — are the still tile, never a
+  // live noise filter per card (WebKit drew each again on every tile a scroll rastered); only the chalk stays live.
+  it('a feed card wears still grains, the chalk the one live noise left', () => {
+    const { container } = render(<StoryCard story={story} />);
+    const card = container.querySelector('article')!;
+    const paper = card.querySelector('[data-grain="paper"]') as HTMLElement;
+    const outline = card.querySelector('.res-shape-stand-in path[stroke="var(--card-border-0)"]')!.getAttribute('d');
+    expect(paper.style.clipPath).toBe(`path('${outline}')`);
+    expect(card.querySelector('[data-grain="still"]')).toBeTruthy();
+    expect(card.querySelector('filter[id^="sg-"], filter[id^="grain-"]')).toBeNull();
+    for (const t of Array.from(card.querySelectorAll('feTurbulence'))) {
+      expect(t.closest('filter')!.id).toMatch(/^chalk-hdb-/);
+    }
+  });
+
   it('carries its foot in place of the byline', () => {
     render(<StoryCard story={{ ...story, tags: [] }} framed preview foot={<button type="button">Write your story</button>} />);
     expect(screen.getByRole('button', { name: 'Write your story' })).toBeInTheDocument();

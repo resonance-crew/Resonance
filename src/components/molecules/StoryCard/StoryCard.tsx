@@ -4,7 +4,6 @@ import { CSSProperties, MouseEvent, ReactNode, memo, useMemo, useRef, useState }
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import { BrushWash } from '@/components/atoms/BrushWash/BrushWash';
 import { INK, INK_LIGHT } from '@/lib/design/strokes';
-import { ShapeGrain } from '@/components/atoms/ShapeGrain/ShapeGrain';
 import { GrainOverlay } from '@/components/atoms/GrainOverlay/GrainOverlay';
 import { STORY_GRAIN } from '@/lib/design/grain';
 import { TagPill } from '@/components/atoms/TagPill/TagPill';
@@ -77,7 +76,7 @@ function StoryImage({
       frame={imageUrl ? frame : undefined}
       className={styles.imagePlaceholder}
       overlay={slot}
-      grain={grain ? <GrainOverlay opacity={STORY_GRAIN.cover} /> : undefined}
+      grain={grain ? <GrainOverlay still opacity={STORY_GRAIN.cover} /> : undefined}
     >
       {!imageUrl && (
         <svg
@@ -199,10 +198,10 @@ export interface StoryCardProps {
    */
   framed?: boolean;
   /**
-   * The paper's grain as a still bitmap (a tile's URL) instead of the live
-   * noise filters (the paper's chalk and grain, the cover's): for a card that
-   * moves on every frame, which a filter would be drawn again for in WebKit.
-   * Cut to the card's outline, as ShapeGrain is.
+   * For a card that moves on every frame (the landing film's stage), which a filter would be drawn again for in
+   * WebKit: no live filter at all — no chalk on the paper, no grain over the cover — and the paper's still grain
+   * through this tile (a URL). Every card's paper grain is a still tile since the perf audit's W1; this one also
+   * leaves the chalk and the cover's grain off.
    */
   stillGrain?: string;
   /**
@@ -306,7 +305,7 @@ export const StoryCard = memo(function StoryCard({
         <>
           <div className={styles.skeletonChrome} aria-hidden style={{ background: cardInterior }} />
           <div className={styles.skeletonMobileChrome} aria-hidden>
-            <GrainOverlay opacity={STORY_GRAIN.band} />
+            <GrainOverlay still opacity={STORY_GRAIN.band} />
             <MobileDividers d={dividerPath} stroke={bc1} isLast={isLast} isFirst={isFirst} />
           </div>
         </>
@@ -317,7 +316,7 @@ export const StoryCard = memo(function StoryCard({
           {/* a framed card has no band to show */}
           {!framed && (
             <div className={styles.mobileChrome} aria-hidden data-mascot="card-edge">
-              <GrainOverlay opacity={STORY_GRAIN.band} />
+              <GrainOverlay still opacity={STORY_GRAIN.band} />
               <MobileDividers d={dividerPath} stroke={bc1} isLast={isLast} isFirst={isFirst} />
             </div>
           )}
@@ -349,22 +348,21 @@ export const StoryCard = memo(function StoryCard({
               w={w} h={h} d={borderPath} color={cardHovered}
               x={pos.x} y={pos.y} on={hovered} duration={460}
             />
-            {stillGrain ? (
-              borderPath && (
-                <span
-                  aria-hidden="true"
-                  className={styles.stillGrain}
-                  style={
-                    {
-                      clipPath: `path('${borderPath}')`,
-                      '--still-grain': `url('${stillGrain}')`,
-                      opacity: `calc(${STORY_GRAIN.paper} * var(--grain-scale, 1))`,
-                    } as CSSProperties
-                  }
-                />
-              )
-            ) : (
-              <ShapeGrain w={w} h={h} d={borderPath} opacity={STORY_GRAIN.paper} frequency={0.85} seed={seed} />
+            {/* The paper's grain: a still tile cut to the outline (the perf audit's W1 — a live
+                ShapeGrain per card was drawn again on every tile a scroll rastered). */}
+            {borderPath && (
+              <span
+                aria-hidden="true"
+                data-grain="paper"
+                className={stillGrain ? `${styles.stillGrain} ${styles.ownGrain}` : styles.stillGrain}
+                style={
+                  {
+                    clipPath: `path('${borderPath}')`,
+                    ...(stillGrain ? { '--still-grain': `url('${stillGrain}')` } : null),
+                    opacity: `calc(${STORY_GRAIN.paper} * var(--grain-scale, 1))`,
+                  } as CSSProperties
+                }
+              />
             )}
             <HandDrawnBorder
               w={w} h={h} R={R} seed={seed} mag={mag}
