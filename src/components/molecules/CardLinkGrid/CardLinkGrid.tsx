@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { StoryCard, type Story } from '@/components/molecules/StoryCard/StoryCard';
+import { CARD_CHALK_SEEDS, StoryCard, type Story } from '@/components/molecules/StoryCard/StoryCard';
+import { ChalkFilters } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import type { Card, User } from '@/lib/db/types';
 import { cardToStory } from '@/lib/adapters/story';
 import { useAutoTranslate } from '@/components/providers/TweaksPanel';
@@ -144,6 +145,7 @@ export function CardLinkGrid({ cards, authors, cardHref, renderActions, renderCa
             isLast={i === cards.length - 1}
             isFirst={seamTop && i === 0}
             quote={quoteFor ? quoteFor(card, i) ?? undefined : undefined}
+            sharedChalk
           />
         </Link>
         {renderActions && <div className={styles.actions}>{renderActions(card, i, palettes[i])}</div>}
@@ -152,23 +154,32 @@ export function CardLinkGrid({ cards, authors, cardHref, renderActions, renderCa
     );
   };
 
+  // The cards' chalk, defined once for the list beside it (W7): each card refers to its seed's (`index % 6`).
+  const chalk = <ChalkFilters seeds={CARD_CHALK_SEEDS} />;
+
   // One column (a phone) is the server's grid as it is: the same cards in the
   // same nodes, so nothing the server drew is taken down and built again.
   if (cols === null || cols === 1) {
     return (
-      <div data-card-grid className={styles.grid}>
-        {cards.map(renderItem)}
-      </div>
+      <>
+        {chalk}
+        <div data-card-grid className={styles.grid}>
+          {cards.map(renderItem)}
+        </div>
+      </>
     );
   }
 
   return (
-    <div data-card-grid className={styles.cols} style={{ '--feed-cols': cols } as React.CSSProperties}>
-      {Array.from({ length: cols }, (_, c) => (
-        <div key={c} className={styles.col}>
-          {cards.map((card, i) => (i % cols === c ? renderItem(card, i) : null))}
-        </div>
-      ))}
-    </div>
+    <>
+      {chalk}
+      <div data-card-grid className={styles.cols} style={{ '--feed-cols': cols } as React.CSSProperties}>
+        {Array.from({ length: cols }, (_, c) => (
+          <div key={c} className={styles.col}>
+            {cards.map((card, i) => (i % cols === c ? renderItem(card, i) : null))}
+          </div>
+        ))}
+      </div>
+    </>
   );
 }

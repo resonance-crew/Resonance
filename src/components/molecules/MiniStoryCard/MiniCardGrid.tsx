@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { cardPalettes } from '@/lib/design/cardColours';
 import { MiniStoryCard } from './MiniStoryCard';
+import { CARD_CHALK_SEEDS } from '@/components/molecules/StoryCard/StoryCard';
+import { ChalkFilters } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import type { Card, User } from '@/lib/db/types';
 import { anonymousByline } from '@/lib/adapters/story';
 import { Link } from '@/i18n/navigation';
@@ -18,41 +20,46 @@ export function MiniCardGrid({ cards, authors }: MiniCardGridProps) {
   // No card wears the family of the three before it (one column or a row of three alike).
   const palettes = useMemo(() => cardPalettes(cards.map((c) => c.accentHue)), [cards]);
   return (
-    <div data-card-grid className={styles.grid}>
-      {cards.map((card, i) => {
-        const author = authors[card.authorId];
-        const byline = card.anonymous
-          ? anonymousByline(card, t('anonymousAuthor'))
-          : {
-              author: author ? author.handle : '—',
-              authorInitials: author?.initials ?? '?',
-              avatarUrl: author?.avatarUrl,
-              avatarSeed: author ? author.avatarSeed : undefined,
-            };
-        return (
-          <Link
-            key={card.id}
-            href={`/card/${card.slug ?? card.id}`}
-            className={styles.item}
-            style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
-          >
-            <MiniStoryCard
-              title={card.thoughtCore}
-              author={byline.author}
-              authorInitials={byline.authorInitials}
-              authorSeed={byline.avatarSeed != null ? Number(byline.avatarSeed) : undefined}
-              authorAvatarUrl={byline.avatarUrl}
-              imageUrl={card.media?.url}
-              imageFrame={card.media?.frame}
-              imageLabel={card.media?.label ?? card.thoughtCore.slice(0, 24)}
-              accentHue={card.accentHue}
-              index={i}
-              palette={palettes[i]}
-              isLast={i === cards.length - 1}
-            />
-          </Link>
-        );
-      })}
-    </div>
+    <>
+      {/* the cards' chalk, defined once for the grid (W7) */}
+      <ChalkFilters seeds={CARD_CHALK_SEEDS} />
+      <div data-card-grid className={styles.grid}>
+        {cards.map((card, i) => {
+          const author = authors[card.authorId];
+          const byline = card.anonymous
+            ? anonymousByline(card, t('anonymousAuthor'))
+            : {
+                author: author ? author.handle : '—',
+                authorInitials: author?.initials ?? '?',
+                avatarUrl: author?.avatarUrl,
+                avatarSeed: author ? author.avatarSeed : undefined,
+              };
+          return (
+            <Link
+              key={card.id}
+              href={`/card/${card.slug ?? card.id}`}
+              className={styles.item}
+              style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+            >
+              <MiniStoryCard
+                title={card.thoughtCore}
+                author={byline.author}
+                authorInitials={byline.authorInitials}
+                authorSeed={byline.avatarSeed != null ? Number(byline.avatarSeed) : undefined}
+                authorAvatarUrl={byline.avatarUrl}
+                imageUrl={card.media?.url}
+                imageFrame={card.media?.frame}
+                imageLabel={card.media?.label ?? card.thoughtCore.slice(0, 24)}
+                accentHue={card.accentHue}
+                index={i}
+                palette={palettes[i]}
+                isLast={i === cards.length - 1}
+                sharedChalk
+              />
+            </Link>
+          );
+        })}
+      </div>
+    </>
   );
 }

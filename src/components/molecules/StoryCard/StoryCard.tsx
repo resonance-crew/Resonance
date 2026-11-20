@@ -2,6 +2,12 @@
 
 import { CSSProperties, MouseEvent, ReactNode, memo, useMemo, useRef, useState } from 'react';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
+
+/**
+ * The chalk seeds a list of cards shares (the perf audit's W7): card i wears `i % 6`, its filter defined once by the
+ * list (`<ChalkFilters seeds={CARD_CHALK_SEEDS}>`, as the thought map does) rather than once per card.
+ */
+export const CARD_CHALK_SEEDS = [0, 1, 2, 3, 4, 5] as const;
 import { BrushWash } from '@/components/atoms/BrushWash/BrushWash';
 import { INK, INK_LIGHT } from '@/lib/design/strokes';
 import { GrainOverlay } from '@/components/atoms/GrainOverlay/GrainOverlay';
@@ -210,6 +216,11 @@ export interface StoryCardProps {
    * carries its one action here.
    */
   foot?: ReactNode;
+  /**
+   * The list defines the chalk filters once (`<ChalkFilters seeds={CARD_CHALK_SEEDS}>`): this card only refers to
+   * its own (`index % 6`). Without it the card defines its filter itself.
+   */
+  sharedChalk?: boolean;
 }
 
 /**
@@ -234,6 +245,7 @@ export const StoryCard = memo(function StoryCard({
   framed = false,
   stillGrain,
   foot,
+  sharedChalk = false,
 }: StoryCardProps) {
   const [hoveredRaw, setHovered] = useState(false);
   const hovered = hoveredRaw && !preview;
@@ -340,7 +352,8 @@ export const StoryCard = memo(function StoryCard({
               fillColor={cardInterior}
               strokeColor="transparent"
               strokeWidth={0}
-              chalkSeed={stillGrain ? null : index}
+              chalkSeed={stillGrain ? null : index % CARD_CHALK_SEEDS.length}
+              sharedChalk={sharedChalk}
               segmentsH={[3, 4]} segmentsV={[5, 6]}
               curve={0.55} cornerJitter={0.7} cornerOffset={4}
             />

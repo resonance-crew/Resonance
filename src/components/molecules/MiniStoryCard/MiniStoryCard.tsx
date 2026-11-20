@@ -15,6 +15,7 @@ import { wavyLine } from '@/lib/design/wavyPath';
 import { INK, INK_LIGHT } from '@/lib/design/strokes';
 import { cardVar, preferredPalette } from '@/lib/design/cardColours';
 import { personFill } from '@/lib/design/personFill';
+import { CARD_CHALK_SEEDS } from '@/components/molecules/StoryCard/StoryCard';
 import styles from './MiniStoryCard.module.css';
 
 export interface MiniStoryCardProps {
@@ -33,6 +34,8 @@ export interface MiniStoryCardProps {
   isLast?: boolean;
   /** The colour family its list chose (`cardPalettes`); unset: its own (cover hue, else position). */
   palette?: number;
+  /** Its grid defines the chalk filters once (`<ChalkFilters seeds={CARD_CHALK_SEEDS}>`, W7). */
+  sharedChalk?: boolean;
 }
 
 /**
@@ -54,6 +57,7 @@ export function MiniStoryCard({
   index = 0,
   isLast = false,
   palette,
+  sharedChalk = false,
 }: MiniStoryCardProps) {
   const [hovered, setHovered] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -139,7 +143,8 @@ export function MiniStoryCard({
             fillColor={cardInterior}
             strokeColor="transparent"
             strokeWidth={0}
-            chalkSeed={index}
+            chalkSeed={index % CARD_CHALK_SEEDS.length}
+            sharedChalk={sharedChalk}
             segmentsH={[3, 4]} segmentsV={[4, 5]}
             curve={0.6} cornerJitter={0.7} cornerOffset={4}
           />
