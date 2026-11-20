@@ -20,12 +20,17 @@ public struct WritingAPI: Sendable {
     /// The client for the calls that may answer slowly (emptying the trash): the app's, through
     /// `AppHTTP.slowSession`; `client` when none is given.
     let slowClient: Client
+    /// The App Check token at hand for the web's own routes (`AppCheckHeader` unless a test says
+    /// otherwise); the contract's calls get theirs from `AppCheckMiddleware`.
+    let appCheckToken: @Sendable () -> String?
 
-    public init(client: Client, configuration: APIConfiguration, session: URLSession = AppHTTP.session, slowClient: Client? = nil) {
+    public init(client: Client, configuration: APIConfiguration, session: URLSession = AppHTTP.session, slowClient: Client? = nil,
+                appCheckToken: @escaping @Sendable () -> String? = { AppCheckHeader.current }) {
         self.client = client
         self.configuration = configuration
         self.session = session
         self.slowClient = slowClient ?? client
+        self.appCheckToken = appCheckToken
     }
 
     /// Publishes one of your cards: stamps it once, gives it its slug, and
@@ -292,12 +297,9 @@ public struct WritingAPI: Sendable {
 
     /// POSTs and hands back the body as it streams in, with the same token refresh as `send`.
     private func open(_ path: String, body: Data, contentType: String) async throws -> URLSession.AsyncBytes {
-        var request = URLRequest(url: configuration.origin.appending(path: path))
+        var request = post(path, body: body, contentType: contentType)
         // Rendering can go quiet for a while between previews; the route allows two minutes.
         request.timeoutInterval = 150
-        request.httpMethod = "POST"
-        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
-        request.httpBody = body
         var token = try await configuration.idToken(false)
         for attempt in 0..<2 {
             if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
@@ -314,16 +316,23 @@ public struct WritingAPI: Sendable {
         throw APIFailure(code: "unauthenticated", message: "Sign in again.", status: 401)
     }
 
+    /// A POST to one of the web's own routes, carrying the App Check token at hand, if any.
+    private func post(_ path: String, body: Data, contentType: String) -> URLRequest {
+        var request = URLRequest(url: configuration.origin.appending(path: path))
+        request.httpMethod = "POST"
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        request.attachAppCheck(appCheckToken())
+        return request
+    }
+
     private func send<T: Encodable>(_ path: String, json: T) async throws -> Data {
         try await send(path, body: try JSONEncoder().encode(json), contentType: "application/json")
     }
 
     /// POSTs with the ID token; a rejected token is refreshed once, like the v1 middleware.
     private func send(_ path: String, body: Data, contentType: String) async throws -> Data {
-        var request = URLRequest(url: configuration.origin.appending(path: path))
-        request.httpMethod = "POST"
-        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
-        request.httpBody = body
+        var request = post(path, body: body, contentType: contentType)
         var token = try await configuration.idToken(false)
         for attempt in 0..<2 {
             if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }

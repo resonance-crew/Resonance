@@ -7,10 +7,14 @@ import Foundation
 public struct AccountAPI: Sendable {
     let configuration: APIConfiguration
     let session: URLSession
+    /// The App Check token at hand (`AppCheckHeader` unless a test says otherwise).
+    let appCheckToken: @Sendable () -> String?
 
-    public init(_ configuration: APIConfiguration, session: URLSession = AppHTTP.session) {
+    public init(_ configuration: APIConfiguration, session: URLSession = AppHTTP.session,
+                appCheckToken: @escaping @Sendable () -> String? = { AppCheckHeader.current }) {
         self.configuration = configuration
         self.session = session
+        self.appCheckToken = appCheckToken
     }
 
     struct DeletionBody: Decodable {
@@ -46,6 +50,7 @@ public struct AccountAPI: Sendable {
     private func send(_ method: String, _ path: String) async throws -> (Data, URLResponse) {
         var request = URLRequest(url: configuration.origin.appending(path: path))
         request.httpMethod = method
+        request.attachAppCheck(appCheckToken())
         if let token = try await configuration.idToken(false) {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
