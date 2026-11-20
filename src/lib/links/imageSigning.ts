@@ -1,6 +1,7 @@
-import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { isIP } from 'node:net';
 import { isInternalHostName, isPublicAddress } from './ip';
+import { isProductionProcess, linkPreviewKeys } from './previewSecret';
 import { normalizeLink } from './url';
 
 /**
@@ -17,23 +18,22 @@ export const LINK_IMAGE_PATH = '/api/link-image';
 const DEV_KEY = Buffer.from('resonance link-image development key (not a secret)');
 
 /**
- * The HMAC key. `LINK_PREVIEW_SECRET` if it is set; otherwise one derived
- * (HKDF-SHA256, info "resonance link-image v1") from the Firebase service
- * account's private key, which every deployment has and which is never sent
- * anywhere — so a deployment needs no extra setting, and the key it signs
- * with is not the one that signs anything else. Without either, only a
- * non-production process (emulators, dev, tests) gets a fixed key; production
- * fails closed, which means no pictures, not pictures anyone can sign.
- * Changing the secret orphans the pictures of previews already written (they
- * 404 and the card shows none) — the text of a preview keeps working.
+ * The HMAC key: `linkPreviewKeys().link` (./previewSecret — `LINK_PREVIEW_SECRET`
+ * when it is set, else HKDF-SHA256 of the Firebase service account's private
+ * key, info "resonance link-image v1", which a production process logs once).
+ * Without either, only a non-production process (emulators, dev, tests) gets a
+ * fixed key; production fails closed, which means no pictures, not pictures
+ * anyone can sign. Changing the key orphans the pictures of previews already
+ * written (they 404 and the card shows none) — the text of a preview keeps
+ * working.
  */
 export function signingKey(env: Record<string, string | undefined> = process.env): Buffer {
-  const explicit = env.LINK_PREVIEW_SECRET?.trim();
-  if (explicit) return Buffer.from(explicit);
-  const pem = env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n').trim();
-  if (pem) return Buffer.from(hkdfSync('sha256', pem, 'resonance', 'resonance link-image v1', 32));
-  if (env.FIRESTORE_EMULATOR_HOST || env.NODE_ENV !== 'production') return DEV_KEY;
-  throw new Error('Set LINK_PREVIEW_SECRET (or FIREBASE_PRIVATE_KEY) to sign link-preview pictures.');
+  const keys = linkPreviewKeys(env);
+  if (keys) return keys.link;
+  if (!isProductionProcess(env)) return DEV_KEY;
+  throw new Error(
+    'No link-preview signing key: set LINK_PREVIEW_SECRET (the value scripts/ops/link-preview-secret.ts prints) or FIREBASE_PRIVATE_KEY.',
+  );
 }
 
 /** base64url(HMAC-SHA256(key, url)). */

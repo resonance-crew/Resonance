@@ -267,11 +267,9 @@ async function main() {
     }
     case 'link-previews': {
       // The pictures' paths are signed by this process: with a key the deployment doesn't have, they 404.
-      const source = process.env.LINK_PREVIEW_SECRET?.trim()
-        ? 'LINK_PREVIEW_SECRET'
-        : process.env.FIREBASE_PRIVATE_KEY?.trim()
-          ? 'a key derived from FIREBASE_PRIVATE_KEY'
-          : null;
+      const { linkPreviewKeys } = await import('../src/lib/links/previewSecret');
+      const keys = linkPreviewKeys();
+      const source = !keys ? null : keys.source === 'env' ? 'LINK_PREVIEW_SECRET' : 'a key derived from FIREBASE_PRIVATE_KEY';
       if (apply && !useEmulator && !source) {
         throw new Error('Set LINK_PREVIEW_SECRET (or FIREBASE_PRIVATE_KEY) as the deployment has it: the pictures would be signed with a key it does not know.');
       }
