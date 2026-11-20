@@ -807,29 +807,24 @@ describe('useMyCardBox', () => {
 });
 
 describe('useMyThoughtMap', () => {
+  const node = (cardId: string) => ({ id: cardId, cardId, x: 0, y: 0, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') });
+  /** The viewer's own card as their card box answers it (its byline theirs, an anonymous one's too). */
+  const mine = (id: string, extra: Partial<FeedCardBody> = {}) => summary(id, 'me', extra);
+
   it('includes resonated originals as placeable cards and keeps their nodes alive', async () => {
-    vi.mocked(getCardsByAuthor).mockImplementation(async (_uid, tab) => {
-      const byTab: Record<string, Card[]> = {
-        published: [card('own', 'me')],
-        private: [],
-        // The viewer's resonances: one with an original by someone else, one
-        // with someone's anonymous card (which the rules won't read here).
-        draft: [
-          card('my-answer', 'me', { publishedAt: null, referenceCardId: 'theirs' }),
-          card('my-other-answer', 'me', { publishedAt: null, referenceCardId: 'anon-orig' }),
-        ],
-      };
-      return byTab[tab] ?? [];
-    });
-    vi.mocked(getCardById).mockImplementation(async (id) => (id === 'theirs' ? card('theirs', 'other') : null));
-    api({ '/api/v1/cards?keys=': (path: string) => ({ cards: path.includes('anon-orig') ? [summary('anon-orig', null)] : [] }) });
-    const node = (cardId: string) => ({
-      id: cardId,
-      cardId,
-      x: 0,
-      y: 0,
-      createdAt: new Date('2026-01-01'),
-      updatedAt: new Date('2026-01-01'),
+    api({
+      '/api/v1/me/cardbox?shelves=published,private,draft': {
+        published: { cards: [mine('own')] },
+        private: { cards: [] },
+        // The viewer's resonances: one with an original by someone else, one with someone's anonymous card.
+        draft: {
+          cards: [
+            mine('my-answer', { publishedAt: null, referenceCardId: 'theirs' }),
+            mine('my-other-answer', { publishedAt: null, referenceCardId: 'anon-orig' }),
+          ],
+        },
+      },
+      '/api/v1/cards?keys=': { cards: [summary('theirs', 'other'), summary('anon-orig', null)] },
     });
     vi.mocked(loadMyThoughtMap).mockResolvedValue({
       nodes: [
@@ -850,37 +845,37 @@ describe('useMyThoughtMap', () => {
     expect(Object.keys(map.cards).sort()).toEqual(['anon-orig', 'my-answer', 'my-other-answer', 'own', 'theirs']);
     expect(map.resonatedIds).toEqual(['theirs', 'anon-orig']);
     expect(map.nodes.map((n) => n.cardId).sort()).toEqual(['own', 'theirs']);
-    // The originals come from the viewer's cards it just read — no second
-    // scan of those cards (the card box's resonated shelf).
-    expect(vi.mocked(getCardsByAuthor).mock.calls.map((c) => c[1]).sort()).toEqual(['draft', 'private', 'published']);
+    expect(map.cards.own.authorId).toBe('me');
   });
 
-  it('keeps a placed card older than the newest 40 own cards the reads bring', async () => {
-    vi.mocked(getCardsByAuthor).mockImplementation(async (_uid, tab) => (tab === 'published' ? [card('recent', 'me')] : []));
-    vi.mocked(getCardById).mockImplementation(async (id) => (id === 'old' ? card('old', 'me') : null));
-    api({ '/api/v1/me/cards?tab=resonated': { cards: [] }, '/api/v1/cards?keys=': { cards: [] } });
-    const node = (cardId: string) => ({ id: cardId, cardId, x: 0, y: 0, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') });
+  // W11: list summaries — no whole stories through the rules, no read for each card.
+  it('reads the own shelves in one request and the other cards in one ?keys= request, nothing through the rules', async () => {
+    api({
+      '/api/v1/me/cardbox?shelves=published,private,draft': { published: { cards: [mine('recent')] }, private: { cards: [] }, draft: { cards: [] } },
+      '/api/v1/cards?keys=': (path: string) => ({ cards: path.includes('old') ? [mine('old')] : [] }),
+    });
     vi.mocked(loadMyThoughtMap).mockResolvedValue({ nodes: [node('recent'), node('old'), node('gone')], edges: [], groups: [] });
 
     const { result } = renderHook(() => useMyThoughtMap(), { wrapper });
     await waitFor(() => expect(result.current.data).toBeDefined());
 
+    // A placed card older than the newest the shelves bring is kept.
     const map = result.current.data!;
     expect(map.nodes.map((n) => n.cardId).sort()).toEqual(['old', 'recent']);
     expect(map.cards.old?.id).toBe('old');
-    expect(getCardById).toHaveBeenCalledWith('old');
-    expect(getCardById).toHaveBeenCalledWith('gone');
+    expect(callApi).toHaveBeenCalledTimes(2);
+    expect(callApi).toHaveBeenCalledWith('/api/v1/cards?keys=old,gone');
+    expect(getCardsByAuthor).not.toHaveBeenCalled();
+    expect(getCardById).not.toHaveBeenCalled();
   });
 
   // Its node, arrows and group stay stored (thoughtMaps/*): a restore puts it back where it was.
-  it("draws none of the viewer's cards in the trash, nor offers them, though the rules read them", async () => {
-    const trashed = { visibility: 'private' as const, trashedAt: new Date('2026-10-01'), trashedFrom: { visibility: 'public' as const, referenceCardId: null } };
-    vi.mocked(getCardsByAuthor).mockImplementation(async (_uid, tab) => (tab === 'published' ? [card('live', 'me')] : []));
-    // Placed long ago (older than the newest 40), now in the trash: the rules still read it for its author.
-    vi.mocked(getCardById).mockImplementation(async (id) => (id === 'binned' ? card('binned', 'me', trashed) : null));
-    // ?keys= leaves a card in the trash out for everyone, its author too.
-    api({ '/api/v1/cards?keys=': { cards: [] } });
-    const node = (cardId: string) => ({ id: cardId, cardId, x: 0, y: 0, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') });
+  it("draws none of the viewer's cards in the trash, nor offers them", async () => {
+    api({
+      '/api/v1/me/cardbox?shelves=': { published: { cards: [mine('live')] } },
+      // ?keys= leaves a card in the trash out for everyone, its author too.
+      '/api/v1/cards?keys=': { cards: [] },
+    });
     vi.mocked(loadMyThoughtMap).mockResolvedValue({ nodes: [node('live'), node('binned')], edges: [], groups: [] });
 
     const { result } = renderHook(() => useMyThoughtMap(), { wrapper });
@@ -890,13 +885,10 @@ describe('useMyThoughtMap', () => {
   });
 
   it("asks the server for a placed card the rules won't read here (someone else's anonymous card)", async () => {
-    vi.mocked(getCardsByAuthor).mockResolvedValue([]);
-    vi.mocked(getCardById).mockResolvedValue(null);
     api({
-      '/api/v1/me/cards?tab=resonated': { cards: [] },
+      '/api/v1/me/cardbox?shelves=': {},
       '/api/v1/cards?keys=unsigned': { cards: [summary('unsigned', null)] },
     });
-    const node = (cardId: string) => ({ id: cardId, cardId, x: 0, y: 0, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') });
     vi.mocked(loadMyThoughtMap).mockResolvedValue({ nodes: [node('unsigned')], edges: [], groups: [] });
 
     const { result } = renderHook(() => useMyThoughtMap(), { wrapper });

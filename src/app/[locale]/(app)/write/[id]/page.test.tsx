@@ -110,11 +110,13 @@ describe('EditCardPage (client-fetched)', () => {
     );
   });
 
-  it('does not go looking for buffered edits on a draft (there cannot be any)', async () => {
+  // W21: the buffer is asked for beside the card, not after it — for a draft (which has none) its answer, or its
+  // failing, counts for nothing.
+  it('opens a draft on its own text, whatever the buffer read beside it says', async () => {
     vi.mocked(getCardById).mockResolvedValue(card('me'));
+    vi.mocked(getPendingCardEdit).mockRejectedValue(new Error('refused'));
     renderPage();
     await waitFor(() => expect(screen.getByTestId('write-workspace')).toBeInTheDocument());
-    expect(getPendingCardEdit).not.toHaveBeenCalled();
     expect(workspaceSpy).toHaveBeenCalledWith(
       expect.objectContaining({ title: en.write.editTitle }),
     );
@@ -123,6 +125,14 @@ describe('EditCardPage (client-fetched)', () => {
   // A published card's unsaved revision lives off the live document, so the
   // editor has to be handed the buffered copy — otherwise reopening it would
   // silently show the published text and lose the work.
+  it('reads the card and its buffer side by side, not one after the other', async () => {
+    vi.mocked(getCardById).mockReturnValue(new Promise(() => {}));
+    vi.mocked(getPendingCardEdit).mockResolvedValue(null);
+    renderPage();
+    await waitFor(() => expect(getPendingCardEdit).toHaveBeenCalled());
+    expect(getCardById).toHaveBeenCalled();
+  });
+
   it('reopens a published card on its buffered revision, not the live text', async () => {
     vi.mocked(getCardById).mockResolvedValue({
       ...card('me'),

@@ -9,6 +9,7 @@ vi.mock('@/components/providers/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 'me' } }),
 }));
 vi.mock('@/lib/db/firestore/client/cardEdits', () => ({ getPendingCardEdit: vi.fn(async () => null) }));
+vi.mock('@/lib/db/firestore/client/reads', () => ({ getCardById: vi.fn() }));
 vi.mock('./LazyOriginalCardPanel', () => ({ OriginalCardPanel: () => <p>reading</p> }));
 // The editor (its own suite): what the pane hands it, and its save state and step, which it reports.
 const seen = vi.hoisted(() => ({ props: null as null | Record<string, unknown> }));
@@ -49,6 +50,19 @@ describe('OpenedCardPane', () => {
     view.unmount();
     renderWithIntl(<OpenedCardPane card={{ ...draftLike, id: 'c3', visibility: 'public' }} />);
     expect(await screen.findByText('Edit card')).toBeInTheDocument();
+  });
+
+  // W11: the map holds list summaries (an excerpt, never the story): the editor is handed the card read whole,
+  // or it would autosave the excerpt over the story.
+  it('reads a card the map holds as a summary whole before its editor opens', async () => {
+    const { getCardById } = await import('@/lib/db/firestore/client/reads');
+    const whole = { id: 'c4', authorId: 'me', thoughtCore: 'Mine', story: 'The whole story, every line.', tags: [], visibility: 'private', anonymous: false, publishedAt: null } as unknown as Card;
+    vi.mocked(getCardById).mockResolvedValue(whole);
+    const summary = { ...whole, story: 'The whole story', summary: { readMinutes: 1 } } as Card;
+    renderWithIntl(<OpenedCardPane card={summary} titled={false} />);
+    await screen.findByRole('button', { name: 'to the step' });
+    expect(getCardById).toHaveBeenCalledWith('c4');
+    expect(seen.props?.initial).toMatchObject({ story: 'The whole story, every line.' });
   });
 
   // Whether saving makes a resonance reach its original turns on the live card, not on its pending copy.

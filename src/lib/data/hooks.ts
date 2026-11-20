@@ -33,6 +33,7 @@ import { hasSessionMark } from '@/lib/auth/firebase/client';
 import { linkPreviewsOf } from '@/lib/links/previewShape';
 import { trashExpired } from '@/lib/cards/trash';
 import type {
+  CardBoxBody,
   CardBoxTabName,
   CardDetailBody,
   CardListBody,
@@ -635,37 +636,40 @@ export interface MyThoughtMap extends ThoughtMapData {
   resonatedIds: string[];
 }
 
-/** The signed-in viewer's thought map plus their own + resonated cards. */
+/** The own shelves the thought map places and offers (GET /api/v1/me/cardbox). */
+const MAP_SHELVES = 'published,private,draft';
+
+/**
+ * The signed-in viewer's thought map plus their own + resonated cards — as
+ * list summaries (W11): the viewer's own shelves in one GET
+ * /api/v1/me/cardbox (the server reads them without their stories), the
+ * other cards it places in GET /api/v1/cards?keys= (30 a request), instead of
+ * some 320 whole stories through the rules and a read for each card beside
+ * them. A summary never stands for the card in an editor: a card opened from
+ * the map is read whole there (readWriterCard).
+ */
 export function useMyThoughtMap() {
   const { user } = useAuth();
   return useSWR<MyThoughtMap>(user ? `thoughtmap:${user.id}` : null, async () => {
     const uid = user!.id;
-    const [map, published, priv, draft] = await Promise.all([
-      loadMyThoughtMap(),
-      getCardsByAuthor(uid, 'published'),
-      getCardsByAuthor(uid, 'private'),
-      getCardsByAuthor(uid, 'draft'),
-    ]);
-    // (Cards in the trash are on none of these shelves: see getCardsByAuthor.)
-    const own = [...published, ...priv, ...draft].filter((c) => !c.trashedAt);
+    const [map, box] = await Promise.all([loadMyThoughtMap(), callApi<CardBoxBody>(`/api/v1/me/cardbox?shelves=${MAP_SHELVES}`)]);
+    // (Cards in the trash are on none of these shelves.)
+    const own = [box.published, box.private, box.draft].flatMap((shelf) => summaryList(shelf).cards).filter((c) => !c.trashedAt);
     const ownIds = new Set(own.map((c) => c.id));
     // The originals the viewer resonated with, named by their own resonance
     // cards just read — not a second scan of the same cards (the card box's
     // resonated shelf reads its own) — and, beside them, the cards placed on
-    // the map long ago, older than the newest 40 read above. The server
-    // answers for the ones the rules won't read here (someone else's
-    // anonymous card); should that fail, those cards are just not shown this
-    // time — the map keeps their places.
+    // the map long ago, older than the newest the shelves bring. The server
+    // answers them as this viewer may read them (someone else's anonymous
+    // card without its author; none in the trash, the viewer's own neither,
+    // whose node, arrows and group stay stored so a restore puts it back);
+    // should that fail, those cards are just not shown this time — the map
+    // keeps their places.
     const refIds = [...new Set(own.flatMap((c) => (c.referenceCardId ? [c.referenceCardId] : [])))];
     const missing = [...new Set(map.nodes.map((n) => n.cardId))].filter((id) => !ownIds.has(id) && !refIds.includes(id));
     const wanted = [...refIds, ...missing];
     const found = new Map<string, Card>();
-    // One of the viewer's own cards in the trash is read here (the rules let
-    // its author read it) but is not drawn: its node, arrows and group stay
-    // stored, so a restore puts it back where it was.
-    for (const c of await Promise.all(wanted.map((id) => getCardById(id)))) if (c && !c.trashedAt) found.set(c.id, c);
-    const unread = wanted.filter((id) => !found.has(id));
-    if (unread.length) for (const c of (await fetchCardSummaries(unread).catch(() => EMPTY)).cards) found.set(c.id, c);
+    if (wanted.length) for (const c of (await fetchCardSummaries(wanted).catch(() => EMPTY)).cards) if (!c.trashedAt) found.set(c.id, c);
     const resonated = refIds.flatMap((id) => found.get(id) ?? []);
     const older = missing.flatMap((id) => found.get(id) ?? []);
     const cards: Record<string, Card> = {};

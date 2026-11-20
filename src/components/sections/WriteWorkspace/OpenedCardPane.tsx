@@ -3,7 +3,6 @@
 import { editTitleKey } from '@/components/molecules/CardEditor/writerTitle';
 import { useLocale, useTranslations } from 'next-intl';
 import type { Ref } from 'react';
-import useSWR from 'swr';
 import {
   CardEditor,
   type CardEditorHandle,
@@ -13,7 +12,7 @@ import { PageTitle } from '@/components/molecules/PageShell/PageShell';
 import { SketchLoader } from '@/components/atoms/SketchLoader/SketchLoader';
 import { LoadError } from '@/components/molecules/LoadError/LoadError';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { getPendingCardEdit } from '@/lib/db/firestore/client/cardEdits';
+import { useWriterCard } from '@/lib/data/writerCard';
 import { OriginalCardPanel } from './LazyOriginalCardPanel';
 import type { Card, Locale } from '@/lib/db/types';
 import styles from './WriteWorkspace.module.css';
@@ -62,24 +61,24 @@ export function OpenedCardPane({
   const { user } = useAuth();
 
   const isOwn = user?.id === card.authorId;
-  const { data: pending, isLoading, error, mutate } = useSWR(
-    isOwn && card.publishedAt ? `pendingEdit:${card.id}` : null,
-    () => getPendingCardEdit(card.id)
-  );
+  // The whole card (the map holds list summaries, W11) and a published card's buffer, read side by side on
+  // each opening (useWriterCard, as the writer's page reads them) — a draft the map holds whole opens at once.
+  const needsRead = isOwn && (!!card.summary || !!card.publishedAt);
+  const { data: read, failed, retry } = useWriterCard(needsRead && user ? `${card.id}:${user.id}` : null, card.id, card);
 
   if (!isOwn) return <OriginalCardPanel cardId={card.id} />;
 
-  // The buffer couldn't be read: an editor on the live fields would autosave
-  // them over it, so none until a read succeeds.
-  if (pending === undefined && error) {
+  // The card or its buffer couldn't be read: an editor on what is here would autosave it over them, so none
+  // until a read succeeds.
+  if (needsRead && failed) {
     return (
       <div className={styles.editorCol} style={{ display: 'grid', placeItems: 'center' }}>
-        <LoadError onRetry={() => void mutate()} />
+        <LoadError onRetry={retry} />
       </div>
     );
   }
 
-  if (isLoading) {
+  if (needsRead && read === undefined) {
     return (
       <div className={styles.editorCol} aria-busy="true" style={{ display: 'grid', placeItems: 'center' }}>
         <SketchLoader />
@@ -87,8 +86,12 @@ export function OpenedCardPane({
     );
   }
 
+  const whole = needsRead ? read?.card : card;
+  // Gone since the map read it (deleted, or no longer the viewer's): nothing to write in.
+  if (!whole || whole.authorId !== user?.id) return <OriginalCardPanel cardId={card.id} />;
+  const pending = needsRead ? (read?.pending ?? null) : null;
   // Buffered edits win over the live fields — that is the copy being worked on.
-  const values = pending ?? card;
+  const values = pending ?? whole;
   return (
     <div className={styles.editorCol}>
       {titled && <PageTitle>{t(editTitleKey(card))}</PageTitle>}
