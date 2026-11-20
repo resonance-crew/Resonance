@@ -7,6 +7,7 @@ import type { InfraData, InfraTxRepo } from './repos/infra';
 import type { PushStateData, PushStateTxRepo } from './repos/pushState';
 import type { RecommendData, RecommendTxRepo } from './repos/recommend';
 import type { TapsData, TapsTxRepo } from './repos/taps';
+import type { TranslationsData, TranslationsTxRepo } from './repos/translations';
 import type { UsersData, UsersTxRepo } from './repos/users';
 
 /**
@@ -26,6 +27,7 @@ export interface TxRepos {
   recommend: RecommendTxRepo;
   account: AccountTxRepo;
   infra: InfraTxRepo;
+  translations: TranslationsTxRepo;
 }
 
 /** The same aggregates outside a transaction: reads, and writes that need none. */
@@ -40,6 +42,7 @@ export interface DataRepos {
   recommend: RecommendData;
   account: AccountData;
   infra: InfraData;
+  translations: TranslationsData;
 }
 
 export interface UowOptions {

@@ -10,6 +10,7 @@ import { infraData, infraTx } from './infra';
 import { pushStateData, pushStateTx } from './pushState';
 import { recommendData, recommendTx } from './recommend';
 import { tapsData, tapsTx } from './taps';
+import { translationsData, translationsTx } from './translations';
 import { usersData, usersTx } from './users';
 
 // Lanes fill their own aggregate's file; this one only lists them.
@@ -26,6 +27,7 @@ export function buildMemoryTxRepos(tx: MemoryTx): TxRepos {
     recommend: recommendTx(tx),
     account: accountTx(tx),
     infra: infraTx(tx),
+    translations: translationsTx(tx),
   };
 }
 
@@ -41,5 +43,6 @@ export function buildMemoryDataRepos(state: MemoryState): DataRepos {
     recommend: recommendData(state),
     account: accountData(state),
     infra: infraData(state),
+    translations: translationsData(state),
   };
 }
