@@ -39,7 +39,8 @@ describe('the agents’ guide', () => {
       expect(globs!.length, f).toBeGreaterThan(0);
       for (const g of globs!) expect(tracked.some((t) => matchesGlob(t, g)), `${f.slice(ROOT.length + 1)}: ${g} matches no file`).toBe(true);
     }
-  });
+    // every glob against ~4k tracked files: ~1.5 s alone, past 5 s under the full suite's load (and CI is slower still)
+  }, 30_000);
 
   it('links only to files that are there', () => {
     for (const f of [join(ROOT, 'CLAUDE.md'), join(ROOT, 'AGENTS.md'), ...rules]) {
