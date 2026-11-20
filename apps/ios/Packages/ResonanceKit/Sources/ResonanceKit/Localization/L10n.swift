@@ -801,8 +801,6 @@ public enum L10n {
         public enum Tap {
             /// Resonate
             public static var label: String { Strings.shared.string("card.tap.label") }
-            /// Resonated
-            public static var on: String { Strings.shared.string("card.tap.on") }
             /// You resonated
             public static var selfOnly: String { Strings.shared.string("card.tap.selfOnly") }
             /// People you're connected with who resonated: {names}

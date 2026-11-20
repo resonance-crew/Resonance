@@ -148,13 +148,15 @@ describe('the end row: three answers in one capsule (§U1)', () => {
     client.mockRestore();
   });
 
-  it('tapping 共振 opens nothing: the segment fills (已共振, two waves) and the viewer’s face slides in first', async () => {
+  it('tapping 共振 opens nothing: the segment fills (two waves, its words unchanged) and the viewer’s face slides in first', async () => {
     const { container } = renderPage({ ...NO_TAPS, faces: [face('dora')] });
     await screen.findByRole('button', { name: /People you're connected with who resonated: dora/ });
     await user().click(within(capsule()).getByRole('button', { name: 'Resonate' }));
 
-    const on = within(capsule()).getByRole('button', { name: 'Resonated' });
+    // Its words stay (the owner, 2026-11-20: 已共振 moved the wave beside it): on is told by aria-pressed and the face.
+    const on = within(capsule()).getByRole('button', { name: 'Resonate' });
     expect(on).toHaveAttribute('aria-pressed', 'true');
+    expect(within(capsule()).queryByRole('button', { name: 'Resonated' })).toBeNull();
     expect(on.style.color).toBe('var(--color-cream)');
     expect(setTap).toHaveBeenCalledWith('c1', true);
     // Nothing opened: no field, no dialog.

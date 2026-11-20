@@ -1,4 +1,6 @@
-# alice reads bob's card 一場雨後的散步 and resonates with it (round 26, the tap): 共振 fills and says 已共振, the faces
+# alice reads bob's card 一場雨後的散步 and resonates with it (round 26, the tap): 共振 fills and turns on — its words
+# never change (the owner, 2026-11-20: 已共振 moved the wave beside it), so TalkBack's checked / VoiceOver's selected
+# tell it — the faces
 # under it hold hers first, and nothing else opens — no note field, no dialog. Then 寄小紙條 opens the note in place under
 # the faces (no dialog: no 取消 on screen), she writes and sends it (紙條寄出了, the field closes), and takes the tap back:
 # 共振 again, no one told.
@@ -19,9 +21,25 @@ tags:
     element: 共振
     direction: DOWN
 - tapOn: 共振
-- extendedWaitUntil:
-    visible: 已共振
-    timeout: 10000
+# Android: the segment's node is checked, its words a child of it; iOS: the button selected.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          visible:
+            checked: true
+            containsChild: 共振
+          timeout: 10000
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible:
+            text: 共振
+            selected: true
+          timeout: 10000
 # Her face among the faces (one button for them all), and no field: tapping 共振 opens nothing.
 - assertVisible:
     id: tap-faces
@@ -42,9 +60,24 @@ tags:
     timeout: 15000
 - assertNotVisible:
     id: note-field
-# Taken back: 共振 again.
-- tapOn: 已共振
-- extendedWaitUntil:
-    visible: 共振
-    timeout: 10000
+# Taken back: 共振 off again.
+- tapOn: 共振
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          notVisible:
+            checked: true
+            containsChild: 共振
+          timeout: 10000
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          notVisible:
+            text: 共振
+            selected: true
+          timeout: 10000
 - takeScreenshot: tap

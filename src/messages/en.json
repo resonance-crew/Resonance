@@ -465,7 +465,6 @@
     },
     "tap": {
       "label": "Resonate",
-      "on": "Resonated",
       "selfOnly": "You resonated",
       "facesReader": "People you're connected with who resonated: {names}",
       "facesAuthor": "Resonated with this card: {names}",

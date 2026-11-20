@@ -32,7 +32,7 @@ extension Fixture {
 /// under it, always 44 tall, so the reader's face comes in without moving the page.
 @MainActor @Suite(.serialized) struct CardEndRowTests {
     @Test func theCapsuleSaysTheThreeKindsOfFeedbackShorterWhenItMust() {
-        let zh = EndRowLabels.candidates(language: .zhTW, tapOn: false, reply: .answer, column: 350)
+        let zh = EndRowLabels.candidates(language: .zhTW, reply: .answer, column: 350)
         #expect(zh.map(\.tap) == [L10n.Card.Tap.label, L10n.Card.Tap.label])
         #expect(zh.first?.note == L10n.Card.Note.entryShort)
         #expect(zh.first?.reply == L10n.Card.Reply.label)
@@ -40,7 +40,7 @@ extension Fixture {
         #expect(zh.last?.reply == L10n.Card.Reply.short)
         #expect(zh.last?.note == L10n.Card.Note.short)
         // English is always the short set (Resonate · Note · Card).
-        let en = EndRowLabels.candidates(language: .en, tapOn: false, reply: .answer, column: 600)
+        let en = EndRowLabels.candidates(language: .en, reply: .answer, column: 600)
         #expect(en.count == 1)
         #expect(en.first?.reply == L10n.Card.Reply.short)
     }
@@ -50,25 +50,26 @@ extension Fixture {
     @Test func aNarrowColumnTakesTheShortWords() {
         let short = EndRowLabels.Words(tap: L10n.Card.Tap.label, note: L10n.Card.Note.short, reply: L10n.Card.Reply.short)
         let full = EndRowLabels.Words(tap: L10n.Card.Tap.label, note: L10n.Card.Note.entryShort, reply: L10n.Card.Reply.label)
-        #expect(EndRowLabels.candidates(language: .zhTW, tapOn: false, reply: .answer, column: 335) == [short])
-        #expect(EndRowLabels.candidates(language: .zhTW, tapOn: false, reply: .answer, column: 340) == [short])
-        #expect(EndRowLabels.candidates(language: .zhTW, tapOn: false, reply: .answer, column: 341) == [full, short])
+        #expect(EndRowLabels.candidates(language: .zhTW, reply: .answer, column: 335) == [short])
+        #expect(EndRowLabels.candidates(language: .zhTW, reply: .answer, column: 340) == [short])
+        #expect(EndRowLabels.candidates(language: .zhTW, reply: .answer, column: 341) == [full, short])
         // Not measured yet: the full words first, as the web's room 0.
-        #expect(EndRowLabels.candidates(language: .zhTW, tapOn: false, reply: .answer, column: 0) == [full, short])
+        #expect(EndRowLabels.candidates(language: .zhTW, reply: .answer, column: 0) == [full, short])
         // A draft's 修改 stays whatever the width.
-        #expect(EndRowLabels.candidates(language: .zhTW, tapOn: false, reply: .draft, column: 335).map(\.reply) == [L10n.Card.modify])
+        #expect(EndRowLabels.candidates(language: .zhTW, reply: .draft, column: 335).map(\.reply) == [L10n.Card.modify])
     }
 
     @Test func theReplySegmentSaysWhatAnswersTheCardAlready() {
-        let draft = EndRowLabels.candidates(language: .zhTW, tapOn: false, reply: .draft, column: 350)
+        let draft = EndRowLabels.candidates(language: .zhTW, reply: .draft, column: 350)
         #expect(draft.allSatisfy { $0.reply == L10n.Card.modify })
-        let published = EndRowLabels.candidates(language: .zhTW, tapOn: true, reply: .published, column: 350)
-        #expect(published.allSatisfy { $0.reply == L10n.Card.Reply.done && $0.tap == L10n.Card.Tap.on })
+        let published = EndRowLabels.candidates(language: .zhTW, reply: .published, column: 350)
+        // The tap's words never change with it (the owner, 2026-11-20: 已共振 moved the wave beside it).
+        #expect(published.allSatisfy { $0.reply == L10n.Card.Reply.done && $0.tap == L10n.Card.Tap.label })
     }
 
     /// The zh words fit a 390 phone's column on one line (§U1.3: about 315 of 350).
     @Test func theChineseWordsFitAPhonesColumn() {
-        let words = EndRowLabels.candidates(language: .zhTW, tapOn: false, reply: .answer, column: 350)[0]
+        let words = EndRowLabels.candidates(language: .zhTW, reply: .answer, column: 350)[0]
         let bar = SegmentedActionBar([
             SegmentSpec(id: "tap", icon: .wave, label: words.tap) {},
             SegmentSpec(id: "note", icon: .note, label: words.note) {},

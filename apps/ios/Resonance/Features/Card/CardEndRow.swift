@@ -7,7 +7,7 @@ import SwiftUI
 /// 按鈕…第二種是用小紙條回應它，第三種是用自己的卡片跟它連接…那其他被動的就包括分享和收藏」):
 ///
 /// 1. **The capsule**, the three kinds of feedback, all tonal at rest — 共振 (the tap: a switch, solid with
-///    `wave-pair` and 已共振 once on), 寄小紙條 (opens the note in place under row 2, its wash held while open, never
+///    `wave-pair` once on, its words unchanged), 寄小紙條 (opens the note in place under row 2, its wash held while open, never
 ///    a dialog), 用卡片回應 (the picker: write a card in answer or pick one; 修改 with a draft, 已回應 once published).
 ///    The puppets measure this bar alone (`.readingMark(.respond)`): row 2 and the field never move their ground.
 /// 2. **Row 2**, directly under it, 44 tall, as wide as it: the faces of who resonated (the reader first, then their
@@ -172,7 +172,7 @@ struct CardEndRow: View {
 
     /// The first set of words that fits on one line, else the capsule in two (共振 alone on the first).
     private var capsule: some View {
-        let sets = EndRowLabels.candidates(language: Strings.shared.language, tapOn: tap.on, reply: replyFace, column: column)
+        let sets = EndRowLabels.candidates(language: Strings.shared.language, reply: replyFace, column: column)
         let short = sets[sets.count - 1]
         return ViewThatFits(in: .horizontal) {
             ForEach(Array(sets.enumerated()), id: \.offset) { _, words in
@@ -190,7 +190,8 @@ struct CardEndRow: View {
         [tapSegment(words), noteSegment(words), replySegment(words)]
     }
 
-    /// 共振 — a switch: tonal at rest, solid with `wave-pair` and 已共振 once on.
+    /// 共振 — a switch: tonal at rest, solid with `wave-pair` once on; its words stay (the owner, 2026-11-20: 已共振
+    /// moved the wave beside it), VoiceOver hearing it selected.
     private func tapSegment(_ words: EndRowLabels.Words) -> SegmentSpec {
         SegmentSpec(id: "tap", icon: tap.on ? .wavePairOrWave : .wave, label: words.tap,
                     fill: tap.on ? Tokens.buttonFill : nil, ink: tap.on ? Tokens.cream : Tokens.buttonOnTonal,
@@ -381,7 +382,7 @@ struct RowTwoBookmark: View {
 /// The capsule's words (§U1.3): in Chinese 共振 · 寄小紙條 · 用卡片回應 where they fit, then 寫卡片 for the last; in English,
 /// or in a column of `narrowRow` or less (a 375 phone's 335), only the short set (Resonate · Note · Card, 共振 · 寄小紙條 ·
 /// 寫卡片), as the web's `NARROW_ROW` and Android's `EndRowLayout.NARROW`. The reply segment says 修改 with a draft and 已回應 once published,
-/// whatever the width; the tap 已共振 once on. No segment is ever hidden: past the last set the capsule takes two lines.
+/// whatever the width; the tap 共振 on and off. No segment is ever hidden: past the last set the capsule takes two lines.
 nonisolated enum EndRowLabels {
     enum Reply: Equatable { case answer, draft, published }
 
@@ -395,8 +396,8 @@ nonisolated enum EndRowLabels {
     }
 
     /// The sets to try, widest first, for a story column `column` wide (0: not measured yet, so the full words first).
-    static func candidates(language: Strings.Language, tapOn: Bool, reply: Reply, column: CGFloat) -> [Words] {
-        let tap = tapOn ? L10n.Card.Tap.on : L10n.Card.Tap.label
+    static func candidates(language: Strings.Language, reply: Reply, column: CGFloat) -> [Words] {
+        let tap = L10n.Card.Tap.label
         func replyWords(short: Bool) -> String {
             switch reply {
             case .answer: short ? L10n.Card.Reply.short : L10n.Card.Reply.label

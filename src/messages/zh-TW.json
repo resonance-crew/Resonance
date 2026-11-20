@@ -465,7 +465,6 @@
     },
     "tap": {
       "label": "共振",
-      "on": "已共振",
       "selfOnly": "你共振了",
       "facesReader": "你連結的人裡，與這張卡片共振的：{names}",
       "facesAuthor": "與這張卡片共振的人：{names}",

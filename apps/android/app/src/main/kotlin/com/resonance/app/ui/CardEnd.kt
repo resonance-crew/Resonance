@@ -82,8 +82,11 @@ internal class ReplyAction private constructor(val label: String, val icon: Icon
     }
 }
 
-/** The tap's segment (§U1.1): 共振 with the wave at rest; on, 已共振 with two waves in phase on the solid face. */
-internal fun tapLabel(on: Boolean): String = if (on) L10n.Card.Tap.on else L10n.Card.Tap.label
+/**
+ * The tap's segment (§U1.1): 共振 with the wave at rest; on, two waves in phase on the solid face — the same words, so
+ * nothing in the capsule moves (the owner, 2026-11-20: 已共振 moved the wave beside it). TalkBack hears it checked.
+ */
+internal val tapLabel: String get() = L10n.Card.Tap.label
 internal fun tapIcon(on: Boolean): IconName = if (on) IconName.WavePair else IconName.Wave
 
 /**

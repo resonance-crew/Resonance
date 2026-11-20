@@ -22,7 +22,7 @@ come, are Playwright's.
 | `send-picture` | alice | `addMedia` puts `assets/paper.png` in the library; ＋ (附上圖片或卡片) → Android's 允許存取 and the system's question / iOS's inline picker → the picture rides (移除第 1 張圖片) → 送出 → 查看圖片 in the thread |
 | `answer-letter` | alice | `/messages/carol`: carol's letter (her note quoting alice's card, 回覆後，你們就能開始聊天); alice's reply connects them, the hint goes |
 | `leave-note` | alice | bob's card `rain-walk`: 寄小紙條 opens the note in place (`note-field`) — no dialog on screen (no 取消) — writes, 寄出, 紙條寄出了 |
-| `tap` | alice | bob's card `rain-walk` (round 26): 共振 → 已共振, her face in the faces (`tap-faces`) and no field appears; 寄小紙條 opens the note in place (no 取消), writes, 寄出, 紙條寄出了, the field closes; 已共振 takes the tap back → 共振 |
+| `tap` | alice | bob's card `rain-walk` (round 26): 共振 turns on (its words unchanged: checked / selected), her face in the faces (`tap-faces`) and no field appears; 寄小紙條 opens the note in place (no 取消), writes, 寄出, 紙條寄出了, the field closes; 共振 again takes the tap back |
 | `reply-with-card` | alice | carol's card `carol-note`: 用卡片回應 → the picker (用卡片回應這篇) → 寫給十年前的自己 → 回應: ✓ 已回應, her card listed under carol's; 收藏 → 取消收藏 |
 | `open-link` | alice | links into the app (#8): bob's card by its link; a crafted thread link (a note id with a `/`) opens the thread alone; a card key with a `/` names no page; the app still routes: bob's profile by its link. Android: `openLink` with `autoVerify`; iOS: a relaunch with `-openLink` (`common/open-link.yaml` says why) |
 | `open-notification` | alice | the tab bar's 通知: carol's letter and bob's note unread with their words; carol's row opens their conversation (her note quoting alice's card, 回覆後，你們就能開始聊天) |

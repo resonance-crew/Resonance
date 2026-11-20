@@ -47,7 +47,8 @@ export const NARROW_ROW = 340;
 
 /**
  * The end of a story, for a reader (round 26 §U1): the three answers in one capsule — 共振 (the tap: a switch, so
- * all three are tonal at rest and only a tap that is on is solid, `wave-pair`, 已共振), 寄小紙條 (the note, written in
+ * all three are tonal at rest and only a tap that is on is solid with `wave-pair` — its words stay 共振, so nothing in
+ * the capsule moves (the owner, 2026-11-20) —), 寄小紙條 (the note, written in
  * place under the row, never in a dialog) and 用卡片回應 (a card of one's own; 修改 with a draft, 已回應 once
  * published) — then, right under it and as wide, the second line: the faces of who resonated at its start, 收藏 at
  * its end (and, after a long story at the desktop's width, the card's share and ⋯). The note opens 12 under that.
@@ -102,7 +103,7 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
   }, []);
   const tapOn = !!tap?.mine;
   const replyState = mine?.publishedAt ? 'done' : mine ? 'draft' : 'none';
-  // A new width, new words (已共振, 已回應) or the fonts in: weigh them again from the full words.
+  // A new width, new words (已回應) or the fonts in: weigh them again from the full words.
   useLayoutEffect(() => setFit(base), [room, base, tapOn, replyState, fonts]);
   useLayoutEffect(() => {
     if (fit === 'split') return;
@@ -174,7 +175,9 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
   const tapSegment: SegmentSpec = {
     key: 'tap',
     icon: <Icon name={tapOn ? 'wave-pair' : 'wave'} size={16} />,
-    label: tapOn ? t('tap.on') : t('tap.label'),
+    // The same words on and off (the owner, 2026-11-20: 已共振 moved the wave beside it): the solid face, the two waves
+    // and aria-pressed say it is on.
+    label: t('tap.label'),
     pressed: tapOn,
     ...(tapOn
       ? { fill: 'var(--button-fill)', textColor: 'var(--color-cream)', hoverOverlay: 'color-mix(in oklch, var(--toward-ink) 14%, transparent)' }

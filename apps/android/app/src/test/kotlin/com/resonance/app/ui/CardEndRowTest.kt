@@ -70,13 +70,12 @@ class CardEndRowTest {
     }
 
     @Test fun theTapIsASwitchWithTwoWavesInPhaseWhenOn() {
-        assertEquals("共振", tapLabel(false))
+        // One set of words on and off (the owner, 2026-11-20: 已共振 moved the wave beside it); the icon and face change.
+        assertEquals("共振", tapLabel)
         assertEquals(IconName.Wave, tapIcon(false))
-        assertEquals("已共振", tapLabel(true))
         assertEquals(IconName.WavePair, tapIcon(true))
         Strings.language = Strings.Language.En
-        assertEquals("Resonate", tapLabel(false))
-        assertEquals("Resonated", tapLabel(true))
+        assertEquals("Resonate", tapLabel)
     }
 
     @Test fun theReplyIsTheOldResonanceInItsNewWords() {

@@ -63,7 +63,7 @@ import kotlinx.coroutines.launch
  * answers and two quiet things, the owner's: 「三種回饋的操作…其他被動的就包括分享和收藏」.
  *
  * - **Row 1, the capsule** ([SegmentedActionBar], the paper puppets standing on it): **共振** — a switch, tonal at rest,
- *   on in the solid face with two waves in phase and 已共振; it opens nothing — · **寄小紙條**, opening the note's field
+ *   on in the solid face with two waves in phase, its words unchanged; it opens nothing — · **寄小紙條**, opening the note's field
  *   in place under row 2 (never a dialog) · **用卡片回應** (the old 共振: write a card in answer, or pick one —
  *   [ResonatePicker]; 修改 with a draft, 已回應 once published). All three tonal at rest. Narrow, in English or with large
  *   text the reply says 寫卡片; still too wide, two lines ([EndRowLayout]). No segment is ever hidden.
@@ -190,7 +190,7 @@ fun CardViewerActions(
     BoxWithConstraints(modifier) {
         val room = maxWidth.value
         fun width(text: String) = with(density) { measurer.measure(text, style, softWrap = false, maxLines = 1).size.width.toDp().value }
-        val tapWords = width(tapLabel(true)).coerceAtLeast(width(tapLabel(false)))
+        val tapWords = width(tapLabel)
         val noteWords = width(L10n.Card.Note.short)
         val replyFull = ReplyAction.of(mine.asMine(), short = false).label
         val replyShort = ReplyAction.of(mine.asMine(), short = true).label
@@ -205,7 +205,7 @@ fun CardViewerActions(
         val capsule = EndRowLayout.capsuleWidth(listOf(tapWords, noteWords, width(reply.label)), room, form)
 
         val tap = Segment(
-            "tap", tapLabel(switch.on), tapIcon(switch.on),
+            "tap", tapLabel, tapIcon(switch.on),
             fill = if (switch.on) Tokens.ButtonFill else null,
             textColor = if (switch.on) Tokens.Cream else null,
             press = if (switch.on) OrganicIndication.OnFill else null,

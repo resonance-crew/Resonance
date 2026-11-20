@@ -803,8 +803,6 @@ object L10n {
         object Tap {
             /** Resonate */
             val label: String get() = Strings.string("card.tap.label")
-            /** Resonated */
-            val on: String get() = Strings.string("card.tap.on")
             /** You resonated */
             val selfOnly: String get() = Strings.string("card.tap.selfOnly")
             /** People you're connected with who resonated: {names} */

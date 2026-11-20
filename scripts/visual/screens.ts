@@ -146,7 +146,7 @@ export const SCREENS: Screen[] = [
   // row to just under the middle of the window (its scroll-margin), the story's last lines above it.
   { id: 'card-tapped', route: '/card/first-coffee', as: 'alice', web: { scrollTo: '[data-end-row]' },
     app: { ios: ['-visualEnd', 'YES'], android: ['--es', 'cardEnd', 'end'] },
-    expect: "bob's 第一杯自己沖的咖啡 read by alice, who resonated with it: the capsule 已共振 (the verb's solid face, two waves) · 寄小紙條 · 用卡片回應 (tonal), and right under it alice's face first, then dora's and eli's, overlapping with no pad of paper round any (the front face's own pen line parts them), a blank paper disc after them (no number, no words), 收藏 at the line's end" },
+    expect: "bob's 第一杯自己沖的咖啡 read by alice, who resonated with it: the capsule 共振 on (the verb's solid face, two waves, its words the same as at rest) · 寄小紙條 · 用卡片回應 (tonal), and right under it alice's face first, then dora's and eli's, overlapping with no pad of paper round any (the front face's own pen line parts them), a blank paper disc after them (no number, no words), 收藏 at the line's end" },
   { id: 'card-note-open', route: '/card/first-coffee', as: 'alice',
     web: { click: '[data-end-row] button[data-segment="note"]', scrollTo: '[data-end-row]' },
     app: { ios: ['-visualEnd', 'YES', '-visualNote', 'open'], android: ['--es', 'cardEnd', 'note'] },
