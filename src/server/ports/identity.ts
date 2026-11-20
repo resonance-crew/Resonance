@@ -5,13 +5,13 @@ export type { AuthSession, AuthUser };
 /**
  * `'live'` asks the identity service whether the account was disabled or its
  * sessions revoked; `'cached'` trusts what this instance saw lately
- * (src/lib/auth/firebase/server.ts, Revocation).
+ * (src/server/infra/firebase-auth/auth.ts, Revocation).
  */
 export type RevocationCheck = 'live' | 'cached';
 
 /**
  * Who a request is. Null for a credential that is no good (expired, forged,
- * revoked, disabled); throws the auth module's AuthUnavailableError when the
+ * revoked, disabled); throws AuthUnavailableError (src/server/domain/identity.ts) when the
  * service could not be asked (a 500, not a 401).
  */
 export interface IdentityVerifier {

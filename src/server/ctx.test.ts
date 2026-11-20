@@ -7,12 +7,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   db: { name: 'db-1' } as object,
-  spend: vi.fn(async () => {}),
   revalidateLocalized: vi.fn((paths: Iterable<string>) => [...paths].map((p) => `/en${p}`)),
   vectorStore: vi.fn(),
 }));
 vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => mocks.db }));
-vi.mock('@/lib/api/rateLimit', () => ({ spend: mocks.spend, spendAll: vi.fn(), limited: vi.fn() }));
 vi.mock('@/lib/api/revalidate', () => ({ revalidateLocalized: mocks.revalidateLocalized }));
 vi.mock('@/lib/recommend/vectorStore/firestore', () => ({
   FirestoreVectorStore: class {
@@ -52,12 +50,19 @@ describe('serverCtx', () => {
 });
 
 describe('ctxFor', () => {
-  const db = { name: 'emulator' } as unknown as Parameters<typeof ctxFor>[0];
+  const set = vi.fn();
+  const db = {
+    name: 'emulator',
+    doc: (path: string) => ({ path }),
+    runTransaction: vi.fn(async (fn: (tx: unknown) => unknown) =>
+      fn({ getAll: async (...refs: unknown[]) => refs.map(() => ({ get: () => undefined })), set }),
+    ),
+  } as unknown as Parameters<typeof ctxFor>[0];
 
   it('binds the database-backed ports to the database it was given', async () => {
     const ctx = ctxFor(db);
     await ctx.limits.spend('u1', 'note', 2, 1000);
-    expect(mocks.spend).toHaveBeenCalledWith(db, 'u1', 'note', 2, 1000);
+    expect(set).toHaveBeenCalledWith({ path: 'rateLimits/u1_note' }, { userId: 'u1', bucket: 'note', windowStart: 1000, used: 2 });
     expect(mocks.vectorStore).not.toHaveBeenCalled(); // nothing loaded until used
     expect(await ctx.vectors.deleteByCard('c1')).toBe('deleted c1');
     expect(mocks.vectorStore).toHaveBeenCalledWith(db);

@@ -1,17 +1,28 @@
+import { chargeWindows, rateWindowId } from '@/server/domain/rateLimit';
 import type { RateLimiter } from '@/server/ports/rateLimit';
+import { rateLimiterOver } from '../rateLimit';
 import type { AdminDb } from './db';
 
 /**
- * `rateLimits/{uid}_{bucket}` — for now by delegating to src/lib/api/rateLimit
- * (loaded on first use, so that module may later import this one without a
- * cycle). The rate-limit lane moves the transaction here and keeps
- * `spend(db, …)` there as a legacy facade.
+ * One server-only document per user and bucket (`rateLimits/{uid}_{bucket}`,
+ * closed to clients by the rules; deleted with the account) holds the
+ * window's start and what was spent in it — a fixed window, counted in a
+ * transaction (every window read first, `tx.getAll`) so concurrent requests
+ * can't both take the last unit.
  */
 export function firestoreRateLimiter(db: AdminDb): RateLimiter {
-  const lib = () => import('@/lib/api/rateLimit');
-  return {
-    spend: async (uid, bucket, weight, now) => (await lib()).spend(db, uid, bucket, weight, now),
-    spendAll: async (uid, spends, now) => (await lib()).spendAll(db, uid, spends, now),
-    limited: async (uid, bucket, weight) => (await lib()).limited(db, uid, bucket, weight),
-  };
+  return rateLimiterOver(async (uid, spends, now) => {
+    const refs = spends.map(([bucket]) => db.doc(`rateLimits/${rateWindowId(uid, bucket)}`));
+    return db.runTransaction(async (tx) => {
+      const snaps = await tx.getAll(...refs);
+      const { allowed, writes } = chargeWindows(
+        uid,
+        spends,
+        snaps.map((snap) => ({ windowStart: snap.get('windowStart'), used: snap.get('used') })),
+        now,
+      );
+      for (const { index, window } of writes) tx.set(refs[index], { ...window });
+      return allowed;
+    });
+  });
 }

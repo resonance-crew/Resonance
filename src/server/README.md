@@ -45,6 +45,25 @@ Building a context loads no SDK: adapters load theirs on first use
 built an adapter yet is `notWired('<port>')`, which throws `NotWiredError` when
 called — never when the context is built. Pass a real one in `overrides`.
 
+## Platform ports (Phase 1 wave 2)
+
+- **One admin app**: `infra/firebase/app.ts` `ensureAdminApp()` is the only
+  `initializeApp` — Firestore, Auth and App Check each call it first.
+- **RateLimiter** — the budgets (`LIMITS`) and the fixed-window arithmetic are
+  `domain/rateLimit.ts`; `infra/firestore/rateLimit.ts` keeps the windows in
+  `rateLimits/{uid}_{bucket}` (one transaction, `tx.getAll` first),
+  `infra/memory/rateLimit.ts` in the state's `rateLimits` table; both answer
+  through `infra/rateLimit.ts` (the 429). `lib/api/rateLimit` `spend(db, …)`
+  is a facade.
+- **Identity** — `infra/firebase-auth/auth.ts` is the Admin SDK code (the
+  revocation cache, the unverified-password refusal, `isAuthOutage`);
+  `./identity.ts` the ports over it, loaded on first use. `getCurrentUser()`
+  asks `infra/identityChain.ts` `requestVerifier()`: verifiers in order, the
+  first non-null answer wins, an outage (`domain/identity.ts`
+  `AuthUnavailableError`) stops it. A second identity joins that list.
+- **Attestation** — `infra/appcheck/appCheck.ts` (verify, mint); Turnstile,
+  the exchange's brake and the tally stay in `lib/appCheck/server`.
+
 ## Legacy facades
 
 Every export an emulator suite or a script imports keeps its path, name and

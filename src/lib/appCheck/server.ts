@@ -1,5 +1,12 @@
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { APP_CHECK_HEADER, APP_CHECK_TTL_MS, TURNSTILE_ACTION } from './config';
+// The Admin SDK half of App Check (minting, verifying) moved to
+// src/server/infra/appcheck/appCheck.ts; its exports stay here as facades.
+// What is left is no SDK's: Cloudflare's siteverify, the exchange's brake,
+// and the monitoring tally.
+import { checkAppCheck } from '@/server/infra/appcheck/appCheck';
+import type { AttestationVerdict } from '@/server/ports/attestation';
+import { TURNSTILE_ACTION } from './config';
+
+export { checkAppCheck, mintWebToken, platformOf } from '@/server/infra/appcheck/appCheck';
 
 const SITEVERIFY = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 /** Cloudflare usually answers in well under a second. */
@@ -68,19 +75,6 @@ export function resetExchanges(): void {
   exchanges.clear();
 }
 
-async function adminAppCheck() {
-  getAdminDb(); // makes the admin app
-  const { getAppCheck } = await import('firebase-admin/app-check');
-  return getAppCheck();
-}
-
-/** An App Check token for the web app (NEXT_PUBLIC_FIREBASE_APP_ID). */
-export async function mintWebToken(): Promise<{ token: string; ttlMillis: number }> {
-  const appId = process.env.NEXT_PUBLIC_FIREBASE_APP_ID;
-  if (!appId) throw new Error('NEXT_PUBLIC_FIREBASE_APP_ID is not set');
-  return (await adminAppCheck()).createToken(appId, { ttlMillis: APP_CHECK_TTL_MS });
-}
-
 // --- monitoring ---------------------------------------------------------------
 //
 // Nothing is refused yet: each API request's token is checked after the
@@ -93,12 +87,7 @@ export async function mintWebToken(): Promise<{ token: string; ttlMillis: number
 const LOG_WINDOW_MS = 10 * 60 * 1000;
 const seen = new Map<string, { since: number; count: number }>();
 
-export type AppCheckVerdict = 'valid' | 'missing' | 'invalid';
-
-/** Which of the project's apps a token was minted for, from its Firebase app id (`1:…:web:…`). */
-export function platformOf(appId: string | undefined): string {
-  return appId?.split(':')[2] ?? 'unknown';
-}
+export type AppCheckVerdict = AttestationVerdict;
 
 /** v1 path segments that name a route, not a card, person or id. */
 const ROUTE_WORDS = new Set([
@@ -112,18 +101,6 @@ export function routePattern(pathname: string): string {
     .split('/')
     .map((segment, i) => (i === 0 || ROUTE_WORDS.has(segment) ? segment : ':'))
     .join('/');
-}
-
-/** Check a request's App Check token (if any): its verdict and which app it was minted for. */
-export async function checkAppCheck(req: Request): Promise<{ verdict: AppCheckVerdict; platform: string }> {
-  const token = req.headers.get(APP_CHECK_HEADER);
-  if (!token) return { verdict: 'missing', platform: 'unknown' };
-  try {
-    const { appId } = await (await adminAppCheck()).verifyToken(token);
-    return { verdict: 'valid', platform: platformOf(appId) };
-  } catch {
-    return { verdict: 'invalid', platform: 'unknown' };
-  }
 }
 
 /** Count one request's verdict; answers the log line when this kind's window is up (else null). */
