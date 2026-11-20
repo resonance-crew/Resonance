@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
 import { crossOriginCookieWrite } from '@/lib/api/sameOrigin';
 import { z } from 'zod';
-import type { Firestore } from 'firebase-admin/firestore';
 import { getCurrentUser } from '@/lib/auth';
 import { REVALIDATE_MAX_PATHS, revalidateLocalized } from '@/lib/api/revalidate';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { cardByKey } from '@/lib/db/firestore/cardKey';
 import { handleKey } from '@/lib/db/firestore/handles';
+import { serverCtx, type ServerCtx } from '@/server/ctx';
 
 const Body = z.object({ paths: z.array(z.string().min(1).max(512)).max(REVALIDATE_MAX_PATHS) });
 
@@ -28,14 +26,13 @@ function segment(path: string, prefix: string): string | null {
  * asks after the writes it still makes itself (a profile field, a card
  * edit); everything the server writes drops its own pages.
  */
-async function mayRevalidate(db: Firestore, uid: string, path: string, profile: () => Promise<string | null>): Promise<boolean> {
+async function mayRevalidate(ctx: ServerCtx, uid: string, path: string, profile: () => Promise<string | null>): Promise<boolean> {
   const key = segment(path, '/card/');
   if (key) {
-    const card = await cardByKey(db, key);
+    const card = await ctx.data.cards.findByKey(key);
     if (!card) return false;
-    if (card.get('authorId') === uid) return true;
-    const answer = await db.collection('cards').where('authorId', '==', uid).where('referenceCardId', '==', card.id).limit(1).get();
-    return !answer.empty;
+    if (card.authorId === uid) return true;
+    return ctx.data.translations.hasAnswerTo(uid, card.id);
   }
   const handle = segment(path, '/u/');
   if (handle) {
@@ -60,15 +57,15 @@ export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'Bad request' }, { status: 400 });
 
-  const db = getAdminDb();
+  const ctx = serverCtx();
   let handle: Promise<string | null> | null = null;
   const profile = () =>
-    (handle ??= db.doc(`users/${user.id}`).get().then((s) => {
-      const lower = s.get('handleLower');
+    (handle ??= ctx.data.users.getRow(user.id).then((row) => {
+      const lower = row?.handleLower;
       return typeof lower === 'string' && lower ? lower : null;
     }));
   const unique = [...new Set(parsed.data.paths)];
-  const allowed = await Promise.all(unique.map((p) => mayRevalidate(db, user.id, p, profile).catch(() => false)));
+  const allowed = await Promise.all(unique.map((p) => mayRevalidate(ctx, user.id, p, profile).catch(() => false)));
   const paths = unique.filter((_, i) => allowed[i]);
   if (!paths.length) return NextResponse.json({ ok: true, revalidated: [] });
 

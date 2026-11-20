@@ -15,7 +15,10 @@ const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
 vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/server')>()), after: () => {} }));
 const spend = vi.fn();
-vi.mock('@/lib/api/rateLimit', () => ({ spend: (...a: unknown[]) => spend(...a) }));
+// The service spends through its context's RateLimiter (ctxFor's firestoreRateLimiter), which the facade lib/api/rateLimit's spend(db, …) wraps.
+vi.mock('@/server/infra/firestore/rateLimit', () => ({
+  firestoreRateLimiter: (db: unknown) => ({ spend: (...a: unknown[]) => spend(db, ...a) }),
+}));
 const translateStory = vi.fn();
 vi.mock('@/lib/ai/translate', async (orig) => ({
   ...(await orig<typeof import('@/lib/ai/translate')>()),
