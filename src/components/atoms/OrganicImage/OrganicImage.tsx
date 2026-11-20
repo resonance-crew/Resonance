@@ -42,6 +42,11 @@ export interface OrganicImageProps {
    * `ratio` fills it. Absent: covered and centred.
    */
   frame?: CoverFrame | null;
+  /**
+   * Laid over the picture once it has landed (a cover's grain): never while its place shimmers, so the shimmer
+   * moves over nothing a filter or mask has to draw again (the perf audit's W2). With no picture, at once.
+   */
+  grain?: ReactNode;
 }
 
 /**
@@ -63,6 +68,7 @@ export function OrganicImage({
   overlay,
   priority = false,
   frame,
+  grain,
 }: OrganicImageProps) {
   const framed = coverImageBox(frame, ratio);
   const ref = useRef<HTMLDivElement>(null);
@@ -164,6 +170,7 @@ export function OrganicImage({
           picture
         )}
         {children}
+        {!shimmering && grain}
       </div>
       {overlay != null && <div style={{ position: 'absolute', inset: 0 }}>{overlay}</div>}
     </div>

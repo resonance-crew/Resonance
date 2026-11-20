@@ -77,6 +77,7 @@ function StoryImage({
       frame={imageUrl ? frame : undefined}
       className={styles.imagePlaceholder}
       overlay={slot}
+      grain={grain ? <GrainOverlay opacity={STORY_GRAIN.cover} /> : undefined}
     >
       {!imageUrl && (
         <svg
@@ -114,7 +115,6 @@ function StoryImage({
           )}
         </svg>
       )}
-      {grain && <GrainOverlay opacity={STORY_GRAIN.cover} />}
     </OrganicImage>
   );
 }

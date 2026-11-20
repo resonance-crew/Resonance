@@ -87,3 +87,24 @@ describe('a framed cover', () => {
     expect(Math.abs(drawnAspect / frame.ar - 1)).toBeLessThan(0.01);
   });
 });
+
+// A cover's grain waits for its picture (the perf audit's W2): while the place shimmers nothing a mask or filter
+// draws lies over the shimmer, so its sweep never has the grain drawn again.
+describe('a cover grain', () => {
+  const SRC = 'https://img.example.com/image/cover.avif';
+  const grain = <i data-testid="grain" />;
+
+  it('comes once the picture has landed, never over the shimmer', () => {
+    const { container, queryByTestId } = render(<OrganicImage src={SRC} grain={grain} />);
+    expect(container.querySelector('span[aria-hidden]')).not.toBeNull();
+    expect(queryByTestId('grain')).toBeNull();
+    fireEvent.load(container.querySelector('img')!);
+    expect(container.querySelector('span[aria-hidden]')).toBeNull();
+    expect(queryByTestId('grain')).not.toBeNull();
+  });
+
+  it('is there at once with no picture', () => {
+    const { queryByTestId } = render(<OrganicImage grain={grain} />);
+    expect(queryByTestId('grain')).not.toBeNull();
+  });
+});

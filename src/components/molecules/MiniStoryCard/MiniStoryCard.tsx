@@ -167,11 +167,11 @@ export function MiniStoryCard({
           ratio={0.56}
           frame={imageUrl ? imageFrame : undefined}
           className={styles.imagePlaceholder}
+          grain={<GrainOverlay opacity={STORY_GRAIN.cover} />}
         >
           {!imageUrl && (
             <div className={`${styles.imageFallback} ${fallback.className}`} style={{ ...fallback.style, background: fallback.fill }} aria-hidden />
           )}
-          <GrainOverlay opacity={STORY_GRAIN.cover} />
         </OrganicImage>
 
         <h3 className={styles.title}>{title}</h3>
