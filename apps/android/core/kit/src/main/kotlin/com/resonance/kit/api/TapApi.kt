@@ -29,6 +29,10 @@ class TapApi(private val api: DefaultApi) {
      */
     suspend fun setPassage(id: String, passage: String?): String? = call { api.setTapPassage(id, TapPassageRequest(passage)) }.passage
 
-    /** A page of the people behind the faces ([pageToken]: the last page's `nextPageToken`). */
-    suspend fun taps(id: String, pageToken: String? = null): TapList = call { api.getCardTaps(id, pageToken) }
+    /**
+     * A page of the people behind the faces ([pageToken]: the last page's `nextPageToken`). [passage] (round 29 §S4.4,
+     * the author's alone): only the people who picked that sentence (one of `CardTap.picked`' ids), newest first; for a
+     * reader it changes nothing.
+     */
+    suspend fun taps(id: String, pageToken: String? = null, passage: String? = null): TapList = call { api.getCardTaps(id, pageToken, passage) }
 }
