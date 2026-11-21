@@ -191,6 +191,11 @@ async function androidDevice(ctx: CaptureContext, kind: FlowDevice): Promise<Dev
   // Put back as it was when the flows end.
   const listed = async (all: boolean) =>
     (await android.shell(serial, `ime list -s${all ? ' -a' : ''}`)).split('\n').map((l) => l.trim()).filter(Boolean);
+  // Gboard first, as a capture finds it: a run cut off before its `close` (a hold stopped by its PID, 2026-11-21)
+  // leaves the AVD with voice input as its only keyboard, and the next run would take that for the state to put
+  // back — a voice session then opens with the first field ("Tap to speak"), hears nothing, has no keyboard to hand
+  // back to, and typing fails with "No active input connection" (publish-card, twice, on both stacks).
+  await android.keysOn((command) => android.shell(serial, command));
   const enabled = await listed(false);
   const quiet = (await listed(true)).find((ime) => /voice/i.test(ime));
   const defaultIme = await android.shell(serial, 'settings get secure default_input_method');
