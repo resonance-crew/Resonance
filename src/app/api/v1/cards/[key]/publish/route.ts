@@ -9,6 +9,7 @@ import { announceNewCard } from '@/lib/push/connectionCards';
 import { spend } from '@/lib/api/rateLimit';
 import { budgetFirst } from '@/lib/api/v1/conversations';
 import { indexCard } from '@/lib/recommend/indexCard';
+import { makeTapPassages } from '@/lib/api/v1/tapPassagesMake';
 import { makeSummaryTranslations } from '@/lib/api/v1/summaryTranslationsMake';
 import { cardPagePaths, revalidateLocalized } from '@/lib/api/revalidate';
 import { unfurlCardLinks } from '@/lib/links/cardLinks';
@@ -35,8 +36,9 @@ export const POST = withUser(async (user, req, ctx: RouteContext<'key'>) => {
   });
   ringAfter(db, notificationId);
   // Same grace notes as the web editor: never awaited by the writer, never failing the publish.
-  after(() =>
-    Promise.all([
+  after(() => {
+    const indexed = indexCard(id).catch((e) => console.error('[api/v1] index', e));
+    return Promise.all([
       (async () => {
         const [slug] = await Promise.all([
           // A slug that came late (the answer said null) is written once this resolves.
@@ -46,12 +48,14 @@ export const POST = withUser(async (user, req, ctx: RouteContext<'key'>) => {
         // After both, so the cached page is rendered with its slug and its link previews.
         revalidateLocalized(cardPagePaths({ id, slug }));
       })(),
-      indexCard(id).catch((e) => console.error('[api/v1] index', e)),
+      indexed,
+      // Its tap passages (round 27): a reader's 選一段 after 共振 — a failure is marked owed once the reading settled.
+      makeTapPassages(db, id, { markAfter: indexed }).catch((e) => console.error('[api/v1] tap passages', e)),
       // Its title and excerpt in the other interface language, for readers who turned auto-translate on (one small call).
       makeSummaryTranslations(db, id).catch((e) => console.error('[api/v1] summary translations', e)),
       // The first time only: the author's connections who asked hear of it, once its slug is settled.
       result.firstPublish ? announceNewCard(db, id, result.slug ?? pendingSlug) : null,
-    ]),
-  );
+    ]);
+  });
   return NextResponse.json(result);
 });
