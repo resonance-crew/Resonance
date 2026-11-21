@@ -36,6 +36,8 @@ export function listTaps(cardId: string, pageToken?: string | null, passage?: st
   if (pageToken) params.set('pageToken', pageToken);
   // Round 29 §S4.4: the author's list of one picked sentence's people (a `TapPicked.id`).
   if (passage) params.set('passage', passage);
-  const q = params.size ? `?${params.toString()}` : '';
+  // Not `params.size`: it is undefined before Safari 17 / Chrome 113, which would drop both parameters.
+  const s = params.toString();
+  const q = s ? `?${s}` : '';
   return callApi<TapListBody>(`/api/v1/cards/${encodeURIComponent(cardId)}/taps${q}`);
 }
