@@ -57,8 +57,8 @@ class AvatarGroupTest {
     @Test fun aGroupIsAsBigAsItsFacesWithNothingRoundThem() {
         compose.setContent {
             Column {
-                Box(Modifier.testTag("one")) { AvatarGroup(faces.take(1), more = false, size = 28.dp, reducedMotion = true) }
-                Box(Modifier.testTag("three")) { AvatarGroup(faces + GroupFace("c", "", null, front, 13.0), more = true, size = 28.dp, reducedMotion = true) }
+                Box(Modifier.testTag("one")) { AvatarGroup(faces.take(1), size = 28.dp, reducedMotion = true) }
+                Box(Modifier.testTag("three")) { AvatarGroup(faces + GroupFace("c", "", null, front, 13.0), size = 28.dp, reducedMotion = true) }
             }
         }
         compose.waitForIdle()
@@ -67,9 +67,9 @@ class AvatarGroupTest {
         assertEquals(28 * density, one.width, 1f)
         assertEquals(28 * density, one.height, 1f)
         assertEquals(28f, AvatarGroup.width(1, 28.dp).value, 0.01f)
-        // Three faces and the disc: three steps and the last place whole.
+        // Three faces and nothing after them (round 29 §S5: no blank disc): two steps and the last face whole.
         val three = compose.onNodeWithTag("three").fetchSemanticsNode().boundsInRoot
-        assertEquals((28 * 0.66f * 3 + 28) * density, three.width, 1f)
+        assertEquals((28 * 0.66f * 2 + 28) * density, three.width, 1f)
         assertEquals(28 * density, three.height, 1f)
     }
 
@@ -82,7 +82,7 @@ class AvatarGroupTest {
                         // A table far from the paper under the group (black by day, white at night), so anything the
                         // group lays down besides the faces shows.
                         Box(Modifier.background(if (palette.dark) Color.White else Color.Black).padding(12.dp)) {
-                            Box(Modifier.testTag("group$i")) { AvatarGroup(faces, more = false, size = 28.dp, reducedMotion = true) }
+                            Box(Modifier.testTag("group$i")) { AvatarGroup(faces, size = 28.dp, reducedMotion = true) }
                         }
                     }
                 }
