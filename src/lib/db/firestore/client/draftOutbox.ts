@@ -14,6 +14,8 @@
  * - A network failure (or a 5xx, a 429) rejects that save's promise (the writer says 未儲存) and keeps its words,
  *   tried again after a pause that grows, or as soon as the browser is back online; a refusal (any other 4xx)
  *   drops them and rejects.
+ * - A kept save that lands later has nobody waiting on it (its promise was rejected when it failed), so the writer
+ *   is told another way: `onOutboxCaughtUp` hears each time a card's outbox has stored everything it was given.
  * - `flushOutbox` sends at once and settles when nothing is left: publishing, applying an edit and discarding wait
  *   on it. `dropOutbox` forgets what wasn't sent (a card deleted, a working copy thrown away) and waits out the
  *   request in flight, so nothing lands after it.
@@ -122,6 +124,34 @@ function merge(earlier: Payload | null, later: Payload): Payload {
   return { fields, clear };
 }
 
+// ---- telling the writer ---------------------------------------------------------------------
+
+type CaughtUp = (kind: OutboxKind, id: string, saved: DraftSavedBody) => void;
+const caughtUpListeners = new Set<CaughtUp>();
+
+/**
+ * Hears each time a card's outbox has stored everything it was given: a send went through and nothing waits behind
+ * it. The writer listens for the save it was told had failed — the words were kept and sent again, after the pause
+ * or as the browser came back online, and without this it went on saying 未儲存 over words the server held (the web
+ * flow write-draft, 2026-11-21). Returns how to stop listening.
+ */
+export function onOutboxCaughtUp(listener: CaughtUp): () => void {
+  caughtUpListeners.add(listener);
+  return () => {
+    caughtUpListeners.delete(listener);
+  };
+}
+
+function tellCaughtUp(e: Entry, saved: DraftSavedBody) {
+  for (const listener of [...caughtUpListeners]) {
+    try {
+      listener(e.kind, e.id, saved);
+    } catch (err) {
+      console.error('An outbox listener failed:', err);
+    }
+  }
+}
+
 // ---- sending --------------------------------------------------------------------------------
 
 function send(kind: OutboxKind, id: string, rev: number, payload: Payload): Promise<DraftSavedBody> {
@@ -202,6 +232,7 @@ function pump(e: Entry): void {
       e.failures = 0;
       for (const w of waiting) w.resolve(saved);
       pump(e);
+      if (!e.pending && !e.inflight) tellCaughtUp(e, saved);
       cleanUp(e);
     },
     (err: unknown) => {
@@ -288,4 +319,5 @@ export function resetOutboxForTests(): void {
   for (const e of entries.values()) if (e.retryTimer) clearTimeout(e.retryTimer);
   entries.clear();
   memoryRevs.clear();
+  caughtUpListeners.clear();
 }
