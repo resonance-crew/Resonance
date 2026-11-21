@@ -5,15 +5,18 @@ import type { ClientConfigBody, ClientFeaturesBody } from '@/lib/api/v1/schemas'
 
 /**
  * The paths an app build takes when the environment says nothing: the
- * Phase 2 /api/v1 paths on, but drafts (the writer's autosave, the riskiest
- * to move) still on Firestore until the owner turns them on.
+ * Phase 2 /api/v1 paths on, but the writer's two — drafts (autosave, the
+ * riskiest to move) and the thought map (its op queues so far tested against
+ * fake servers only, Android's draft outbox seen stalling after a reconnect) —
+ * still on Firestore until the owner turns them on (`CLIENT_FEATURES`) after
+ * a check on devices.
  */
 export const DEFAULT_FEATURES: Readonly<ClientFeaturesBody> = {
   signals: true,
   apiSocial: true,
   apiInbox: true,
   apiBell: true,
-  apiThoughtMap: true,
+  apiThoughtMap: false,
   apiDrafts: false,
 };
 

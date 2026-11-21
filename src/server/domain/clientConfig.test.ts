@@ -3,12 +3,12 @@ import { ClientConfig } from '@/lib/api/v1/schemas';
 import { clientConfigOf, DEFAULT_FEATURES } from './clientConfig';
 
 describe('clientConfigOf', () => {
-  it('with nothing set: no build must or should update, and the default flags (drafts still off)', () => {
+  it('with nothing set: no build must or should update, and the default flags (the writer’s drafts and thought map still off)', () => {
     const config = clientConfigOf({});
     expect(config).toEqual({
       minBuild: { ios: 0, android: 0 },
       recommendedBuild: { ios: 0, android: 0 },
-      features: { signals: true, apiSocial: true, apiInbox: true, apiBell: true, apiThoughtMap: true, apiDrafts: false },
+      features: { signals: true, apiSocial: true, apiInbox: true, apiBell: true, apiThoughtMap: false, apiDrafts: false },
     });
     expect(ClientConfig.safeParse(config).success).toBe(true);
   });
