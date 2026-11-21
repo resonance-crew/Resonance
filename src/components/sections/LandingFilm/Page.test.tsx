@@ -47,7 +47,8 @@ const MODEL: FilmModel = {
   picks: [tile('pick-1'), tile('lets-enjoy-me-time'), tile('pick-anon', { author: undefined, anonSeed: '3410' }), tile('pick-4'), tile('pick-5'), tile('pick-6')],
 };
 
-describe("the film's look on the page", () => {
+// (the whole page rendered in jsdom, seconds each alone: 60 s, as script/changes/changes.test.ts says)
+describe("the film's look on the page", { timeout: 60_000 }, () => {
   it('draws the waves, and the peaks (with their grass and lanterns shown) only for the lab', () => {
     const film = renderWithIntl(<Page model={MODEL} locale="en" />);
     expect(film.container.querySelector('[data-film-root]')!.hasAttribute('data-look')).toBe(false);
@@ -59,7 +60,7 @@ describe("the film's look on the page", () => {
   });
 });
 
-describe('the film page', () => {
+describe('the film page', { timeout: 60_000 }, () => {
   it('has one h1, the four scenes as h2s, and the cards as links (hidden ones inert)', () => {
     const { container } = renderWithIntl(<Page model={MODEL} locale="en" />);
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);

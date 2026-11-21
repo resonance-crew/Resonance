@@ -62,7 +62,9 @@ const bottomOf = (pl: ChangeInfo['old'][number], m: PlaneMove) => (m.foot === 'a
 const outOfView = (pl: ChangeInfo['old'][number], m: PlaneMove) => m.alpha <= 0.01 || pl.top + m.y >= 1 || bottomOf(pl, m) + m.y <= 0 || Math.abs(m.x ?? 0) >= 1;
 const inPlace = (m: PlaneMove) => near(m.y, 0, 1e-4) && near(m.x, 0, 1e-4) && m.alpha >= 0.999 && near(m.scale, 1, 1e-4) && near(m.rot, 0, 1e-3);
 
-describe('the scene change styles', () => {
+// The whole film reckoned frame by frame on every screen: a second or so alone, past the default 5 s under the full
+// suite's load on a busy machine (a stop gate's run, 2026-11-21) and on CI — as ThreadView's long conversation (546e41bc).
+describe('the scene change styles', { timeout: 60_000 }, () => {
   it('are picked by ?change=, an unknown name falling back to the default (flats: the panel’s choice)', () => {
     expect(DEFAULT_CHANGE).toBe('flats');
     expect(changeStyleOf(null).name).toBe(DEFAULT_CHANGE);

@@ -115,7 +115,7 @@ describe('mascot stage', () => {
     }
     // both ways happen on their own: a guest walking up (meet), and two greeting from their places (an act)
     expect([...kinds].sort()).toEqual(['act', 'meet']);
-  });
+  }, 20_000);   // four minutes of the stage, as the test above: seconds alone, past 5 s under the full suite's load
 
   it('sends a guest to the place across, and the two greet from afar', () => {
     const t = mount({ seed: 5 });

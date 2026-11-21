@@ -65,7 +65,8 @@ function cover(p: number, info: ChangeInfo, opaque = 0.999): [number, number][] 
 }
 const covers = (iv: [number, number][], a: number, b: number) => iv.some(([lo, hi]) => lo <= a && hi >= b);
 
-describe('mist: through the clouds', () => {
+// (every p on every screen: 60 s, as changes.test.ts says)
+describe('mist: through the clouds', { timeout: 60_000 }, () => {
   it('draws a paper for every strip, the same every time', () => {
     for (let i = 0; i < mist.strips; i++) {
       const d = mist.paper!(i);

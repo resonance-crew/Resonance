@@ -1286,7 +1286,9 @@ describe('around the thread', () => {
   });
 });
 
-describe('a long conversation searched', () => {
+// 300 messages drawn and searched: ~3 s for the slowest alone, past the default 5 s under the full suite's load (and CI
+// is slower still) — as the rules-paths check (58eaaa5d).
+describe('a long conversation searched', { timeout: 30_000 }, () => {
   const at = (n: number) => new Date(Date.UTC(2026, 2, 1, 8) + n * 60_000);
   const long = Array.from({ length: 300 }, (_, i) =>
     text(`m${String(i + 1).padStart(3, '0')}`, i === 99 ? 'a needle in the hay' : `message ${i + 1}`, { sentAt: at(i) }),
