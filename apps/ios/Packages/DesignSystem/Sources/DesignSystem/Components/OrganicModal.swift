@@ -405,18 +405,24 @@ struct OrganicModalCard<Content: View>: View {
             .padding(.vertical, 32)
             .frame(maxWidth: maxWidth, alignment: .leading)
         if clipsToPaper {
+            // The clip's own frame stands ``ModalPaper/bleed`` past the paper's on every side, the paper drawn inside it and
+            // the layout given back: SwiftUI clips a platform view inside (the list's UIScrollView) to the clipped view's
+            // frame as well as to its shape, which would cut a row's ink square at the frame where the wobble swings out.
+            let paper = InsetShape(base: shape, inset: ModalPaper.bleed)
             card
                 .environment(\.modalPaperClips, true)
+                .padding(ModalPaper.bleed)
                 .background {
-                    shape.fill(Tokens.cardBg)
-                    GrainLayer(shape: shape, mode: .tile, opacity: 0.3, tile: "grain-card")
+                    paper.fill(Tokens.cardBg)
+                    GrainLayer(shape: paper, mode: .tile, opacity: 0.3, tile: "grain-card")
                 }
-                .clipShape(shape)
+                .clipShape(paper)
                 // The pen line over the ink, whole: the web's border above its clipped body.
                 .overlay {
-                    shape.stroke(Tokens.modalBorder, style: StrokeStyle(lineWidth: Tokens.ink, lineJoin: .round))
+                    paper.stroke(Tokens.modalBorder, style: StrokeStyle(lineWidth: Tokens.ink, lineJoin: .round))
                         .allowsHitTesting(false)
                 }
+                .padding(-ModalPaper.bleed)
                 .accessibilityElement(children: .contain)
         } else {
             card
