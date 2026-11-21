@@ -85,6 +85,26 @@ in, so a run that fires at 01:37 still covers exactly [Monday 01:00 − 7 days, 
 the run's day, so a second run the same day writes nothing new. **Fire it within the hour after Monday 01:00 UTC**:
 a run at another hour covers another week.
 
+## Not scheduled: `/api/cron/replicate` (Phase 3)
+
+The outbox's replicator (`src/server/app/replicate.ts`, plan section 4.3): Firestore's `changeLog` into
+PostgreSQL. **It is not in `vercel.json` `crons`, on purpose** — nothing in production runs it, and it answers
+`{ "replicated": false, "off": "…" }` unless `OUTBOX_ENABLED=1`, `REPLICA_TARGET=postgres` and `POSTGRES_URL`
+are all set (none is). It keeps the contract above: `GET`, `Authorization: Bearer $CRON_SECRET`, counts only
+(`seen`, `applied`, `stale`, `more` — never ids), `maxDuration` 60 s, starts no batch past 45 s.
+
+When Phase 4 is decided (docs/ops/postgres.md), it would run **every minute**, region `hkg1` (it calls no
+model), and is safe to run as often as wanted or twice at once: each change is applied only when it is newer
+than what the target holds (`replica_versions`), and an entry is marked done only after its row was applied.
+Vercel Cron needs a Pro plan for a per-minute job; elsewhere:
+
+- `vercel.json`: `{ "path": "/api/cron/replicate", "schedule": "* * * * *" }`
+- GitHub Actions: `schedule: - cron: '*/5 * * * *'` (Actions' floor is five minutes) calling it with `curl` as below.
+- Cloud Scheduler: `--schedule="* * * * *"`, the same header.
+- A long-running worker can call `replicate()` in a loop instead (no route at all).
+
+PostgreSQL's TTL sweep (`select resonance_ttl_sweep()`, docs/ops/postgres.md) would be a daily job beside it.
+
 ## The same jobs on another scheduler
 
 Whatever calls them, keep: the UTC times and their order, the bearer header, a client timeout a little above the

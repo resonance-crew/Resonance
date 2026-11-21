@@ -117,6 +117,7 @@ const WORLD: Record<EntityName, Record<string, Record<string, unknown>>> = {
   rateLimits: { [`${BOB}_notes`]: { userId: BOB, bucket: 'notes', windowStart: 1763607845123, used: 2 } },
   quotas: { [`${BOB}_2026-01-01`]: { userId: BOB, inviteCount: 1 } },
   uploads: { 'b7c0': { ownerId: BOB, key: 'image/u/b7c0.webp', kind: 'image', createdAt: T2 } },
+  changeLog: { '01JDZ8Q5X3V9K2M4N6P8R0T2W4': { entity: 'users', id: BOB, op: 'upsert', version: 1763607845123456, at: T2, done: false, expireAt: T2, userIds: [BOB] } },
   config: { storage: { host: 'img.example', formerHosts: ['old.example'] }, recommendPool: { mu: { insight: [0.1], situation: [0.2] }, tau: 0.5, cards: 3, embedModel: 'e', at: T2 } },
   devices: { inst1: { userId: BOB, token: 'tok', platform: 'ios', locale: 'en', appVersion: null, capabilities: ['tap'], timeZone: 'Asia/Taipei', updatedAt: T2 } },
   notificationSettings: { [BOB]: { picks: true, connectionCards: false, messages: true, resonanceTaps: true, picksConsentAt: T2, connectionCardsConsentAt: null, updatedAt: T2 } },

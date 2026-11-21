@@ -596,6 +596,23 @@ export const SCHEMAS = {
       used: f.num(),
     },
   }),
+  // The outbox (Phase 3, OUTBOX_ENABLED): which row a transaction wrote, never its content; `version` is µs since
+  // the epoch (the order the replicator applies), `at` when it was recorded.
+  changeLog: defineEntity({
+    version: 1,
+    id: '<ulid>',
+    complete: true,
+    fields: {
+      entity: f.str(),
+      id: f.str(),
+      op: f.str(),
+      version: f.num(),
+      at: f.time(),
+      done: f.bool(),
+      expireAt: f.time(),
+      userIds: f.rel('users'),
+    },
+  }),
   quotas: passthrough(1, '<uid>_<yyyy-mm-dd> (legacy)', {
     userId: f.str(),
     inviteCount: f.int(),
