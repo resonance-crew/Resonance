@@ -469,6 +469,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
                 }}
                 tap={lists.tap}
                 trailing={endsApart && wide === true ? cardActions : undefined}
+                translated={!!tr.shown}
               />
             )}
 
