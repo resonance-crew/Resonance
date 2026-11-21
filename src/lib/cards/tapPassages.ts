@@ -31,8 +31,11 @@ export const PASSAGE_MAX_CJK = 36;
 export const PASSAGE_MIN_WORDS = 4;
 export const PASSAGE_MAX_WORDS = 20;
 export const PASSAGE_MAX_CHARS = 120;
-/** How long a story must be (CJK characters and other words, as the mirror counts) to offer passages. */
-export const PASSAGES_MIN_UNITS = 200;
+/**
+ * How long a story must be (CJK characters and other words, as the mirror counts) to offer passages: three passages
+ * at their longest (3 × 36) are then at most 60 % of it, so the pick is still a pick and not the story read back.
+ */
+export const PASSAGES_MIN_UNITS = 180;
 /** Failures for one text before it is left alone until the story changes. */
 export const PASSAGES_TRIES_MAX = 3;
 
