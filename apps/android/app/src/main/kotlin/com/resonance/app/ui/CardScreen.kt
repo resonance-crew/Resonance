@@ -90,7 +90,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -160,7 +159,6 @@ import com.resonance.design.ProseStyle
 import com.resonance.kit.story.InlineRun
 import com.resonance.kit.story.StoryScripts
 import androidx.compose.foundation.layout.heightIn
-import com.resonance.design.TagPill
 import com.resonance.design.LocalToasts
 import com.resonance.design.OrganicConfirmDialog
 import com.resonance.app.ui.share.CardSharing
@@ -633,9 +631,10 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                     }
                                 }
                             }
-                            FlowRow(Modifier.padding(top = type.endGap.dp, bottom = 40.dp).mascotMark("tags"), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                card.tags.forEach { TagPill(it, fill = Tokens.TerracottaLight) }
-                            }
+                            // 收藏, a reader's of someone else's card (round 28 §S5): one state, at the tags' row's end on a phone,
+                            // the capsule's row's end wide (§S2, §S3).
+                            val bookmark = if (!trashedOwn && !d.isOwner && !isSharedPrivateCard(d)) rememberCardBookmark(session, card.id) else null
+                            StoryTagsRow(card.tags, bookmark, Modifier.padding(top = type.endGap.dp, bottom = 40.dp), tagsModifier = Modifier.mascotMark("tags"))
                             // The story's end is the response bar alone (round 9 §3: share and ⋯ are in the bar,
                             // or the byline); the author's own card has no end row. Someone else's 私人卡 is theirs
                             // to read and only to read (the server refuses a note, a resonance, a bookmark): a quiet
@@ -663,6 +662,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                 onNoteRoom = { barAside = it },
                                 translated = { model.translator?.takeIf { it.isFor(card.title, d.story) }?.showing == true },
                                 onStale = { model.refresh(changes, session.lastCardChange, retry = true) },
+                                bookmark = bookmark,
                             )
                             // The author's own published card: who resonated, where a reader's row would be (§U3).
                             else if (!trashedOwn && card.publishedAt != null) {

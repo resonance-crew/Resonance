@@ -25,9 +25,41 @@ import kotlinx.coroutines.sync.withLock
  */
 internal enum class EndRowForm { Full, Short, TwoLines }
 
+/**
+ * Where 收藏 stands at a story's end (round 28 §S2–§S4; the owner, 2026-11-21: 「收藏按鈕不應該放在這裡」 — under the
+ * capsule): [Wide] — a column the capsule stands in at its own width (≥ [SegmentedLayout.SPREAD_BELOW], a tablet) —
+ * at the end of the capsule's own row, the content column's end; [Phone] — the capsule spans the column — at the end of
+ * the tags' row, on their first line. Row 2 under the capsule is the faces' alone either way.
+ */
+internal enum class EndRowPlacement { Wide, Phone }
+
 internal object EndRowLayout {
     /** At most this wide (dp), a column takes the short words whatever fits (§U1.3). */
     const val NARROW = 340f
+
+    /** Between what 收藏 ends and its box (dp): the capsule on a wide column, the tags' column on a phone (§S2, §S3). */
+    const val BESIDE_GAP = 12f
+
+    /** 收藏's touch box (dp), a finger's ([BookmarkButton]). */
+    const val BOOKMARK_BOX = 48f
+
+    /** Where 收藏 stands in a content column [column] wide (dp). */
+    fun placement(column: Float): EndRowPlacement =
+        if (column >= SegmentedLayout.SPREAD_BELOW) EndRowPlacement.Wide else EndRowPlacement.Phone
+
+    /** The room the capsule's words are weighed in (§S2): the column less 收藏's box and the gap before it when wide, else the column. */
+    fun capsuleRoom(column: Float): Float =
+        if (placement(column) == EndRowPlacement.Wide) column - BESIDE_GAP - BOOKMARK_BOX else column
+
+    /** The tags' own column (§S3): on a phone with 收藏 at their row's end, the column less its box and the gap; else the column. */
+    fun tagsWidth(column: Float, bookmark: Boolean): Float =
+        if (bookmark && placement(column) == EndRowPlacement.Phone) column - BESIDE_GAP - BOOKMARK_BOX else column
+
+    /**
+     * Where 收藏's box stands (its top, from the row's) beside a first line [line] tall (the tags' first line, or the
+     * capsule's): centred on it — above the row when the box is the taller, so the row stays the line's height.
+     */
+    fun besideTop(line: Int, box: Int): Int = (line - box) / 2
 
     /** A text scale past this is "large text" (§U1.3): the short words. */
     const val LARGE_TEXT = 1.15f
@@ -42,12 +74,15 @@ internal object EndRowLayout {
     fun need(labels: List<Float>, pad: Float = SegmentedLayout.PAD): Float = labels.sumOf { natural(it, pad).toDouble() }.toFloat()
 
     /**
-     * The form for a column [room] wide, the segments' words measured [full] (共振, 寄小紙條, 用卡片回應) and [short]
-     * (共振, 寄小紙條, 寫卡片); [english] or [largeText] take the short words at once.
+     * The form for a content column [column] wide, the segments' words measured [full] (共振, 寄小紙條, 用卡片回應) and
+     * [short] (共振, 寄小紙條, 寫卡片); [english] or [largeText] take the short words at once. The words are weighed in
+     * the room the capsule has ([capsuleRoom]: beside 收藏 when wide, §S2); the ≤ [NARROW] rule and the segments'
+     * padding read the column.
      */
-    fun choose(full: List<Float>, short: List<Float>, room: Float, english: Boolean, largeText: Boolean): EndRowForm {
-        val pad = if (room < SegmentedLayout.SPREAD_BELOW) SegmentedLayout.PAD else SegmentedLayout.WIDE_PAD
-        val shortWords = english || largeText || room <= NARROW
+    fun choose(full: List<Float>, short: List<Float>, column: Float, english: Boolean, largeText: Boolean): EndRowForm {
+        val pad = if (column < SegmentedLayout.SPREAD_BELOW) SegmentedLayout.PAD else SegmentedLayout.WIDE_PAD
+        val shortWords = english || largeText || column <= NARROW
+        val room = capsuleRoom(column)
         if (!shortWords && need(full, pad) <= room + 0.5f) return EndRowForm.Full
         if (need(short, pad) <= room + 0.5f) return EndRowForm.Short
         return EndRowForm.TwoLines
@@ -55,11 +90,32 @@ internal object EndRowLayout {
 
     /**
      * How wide the capsule stands (dp) — and row 2 under it, as wide: a phone's column whole (the bar spans it), a wider
-     * one the segments' own widths, never past the room. Two lines span the column.
+     * one the segments' own widths, never past the room beside 收藏 ([capsuleRoom]). Two lines span that room.
      */
-    fun capsuleWidth(labels: List<Float>, room: Float, form: EndRowForm): Float {
-        if (form == EndRowForm.TwoLines || room < SegmentedLayout.SPREAD_BELOW) return room
+    fun capsuleWidth(labels: List<Float>, column: Float, form: EndRowForm): Float {
+        val room = capsuleRoom(column)
+        if (form == EndRowForm.TwoLines || placement(column) == EndRowPlacement.Phone) return room
         return minOf(room, need(labels, SegmentedLayout.WIDE_PAD))
+    }
+
+    /**
+     * The tags' lines (§S3): which of the pills [widths] (px) stand on each line of a column [max] wide, [gap] between
+     * them — in order, a pill on a line of its own when it is as wide as the column (it is measured no wider).
+     */
+    fun tagLines(widths: List<Int>, max: Int, gap: Int): List<List<Int>> {
+        val lines = mutableListOf<MutableList<Int>>()
+        var used = 0
+        widths.forEachIndexed { i, w ->
+            val line = lines.lastOrNull()
+            if (line != null && used + gap + w <= max) {
+                line += i
+                used += gap + w
+            } else {
+                lines += mutableListOf(i)
+                used = w
+            }
+        }
+        return lines
     }
 }
 

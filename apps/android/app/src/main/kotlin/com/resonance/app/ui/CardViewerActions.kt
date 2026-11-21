@@ -67,9 +67,12 @@ import kotlinx.coroutines.launch
  *   in place under row 2 (never a dialog) · **用卡片回應** (the old 共振: write a card in answer, or pick one —
  *   [ResonatePicker]; 修改 with a draft, 已回應 once published). All three tonal at rest. Narrow, in English or with large
  *   text the reply says 寫卡片; still too wide, two lines ([EndRowLayout]). No segment is ever hidden.
+ * - **收藏** ([bookmark], the page's — round 28 §S2): on a wide column at the end of the capsule's own row, the
+ *   content column's end, centred on the capsule's (first) line, the capsule's words weighed in the room left
+ *   ([EndRowLayout.capsuleRoom]); on a phone the page draws it at the end of the tags' row ([StoryTagsRow]).
+ *   Share and ⋯ stay where the page has them (the bar, the byline).
  * - **Row 2**, right under it, 48 tall and as wide: the faces of the viewer's connections who resonated (their own
- *   first while on), one button opening the list ([TapFacesButton], [ReaderTapList]); at its end 收藏, a glyph alone.
- *   Share stays where the page has it (the bar, the byline).
+ *   first while on), one button opening the list ([TapFacesButton], [ReaderTapList]) — nothing at its end (§S4).
  * - **The note's field** ([NoteInPlace]), 12 under row 2 when open.
  *
  * The tap flips at once and goes on ([TapSwitch]); a refusal flips it back with 沒送出去，再試一次. [onTapChanged] hands the
@@ -98,6 +101,8 @@ fun CardViewerActions(
     translated: () -> Boolean = { false },
     /** The card is to be read again (round 27 §U1.6: a pick refused because the passages or the tap changed). */
     onStale: () -> Unit = {},
+    /** The page's 收藏 ([rememberCardBookmark]): drawn here on a wide column, in the tags' row on a phone (round 28). */
+    bookmark: BookmarkToggle? = null,
 ) {
     val cardId = detail.card.id
     val toasts = LocalToasts.current
@@ -232,14 +237,13 @@ fun CardViewerActions(
         }
     }
 
-    var bookmarked by remember(cardId) { mutableStateOf(false) }
-    LaunchedEffect(cardId) { bookmarked = runCatching { session.bookmarks?.isBookmarked(cardId) }.getOrNull() ?: false }
-
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val style = AppFonts.body(14f, 600, lineHeight = 1f)
     BoxWithConstraints(modifier) {
-        val room = maxWidth.value
+        // The content column; wide, the capsule shares its row with 收藏 (§S2).
+        val column = maxWidth.value
+        val wide = EndRowLayout.placement(column) == EndRowPlacement.Wide
         fun width(text: String) = with(density) { measurer.measure(text, style, softWrap = false, maxLines = 1).size.width.toDp().value }
         val tapWords = width(tapLabel)
         val noteWords = width(L10n.Card.Note.short)
@@ -248,12 +252,12 @@ fun CardViewerActions(
         val form = EndRowLayout.choose(
             listOf(tapWords, noteWords, width(replyFull)),
             listOf(tapWords, noteWords, width(replyShort)),
-            room,
+            column,
             english = Strings.language == Strings.Language.En,
             largeText = density.fontScale > EndRowLayout.LARGE_TEXT,
         )
         val reply = ReplyAction.of(mine.asMine(), short = form != EndRowForm.Full)
-        val capsule = EndRowLayout.capsuleWidth(listOf(tapWords, noteWords, width(reply.label)), room, form)
+        val capsule = EndRowLayout.capsuleWidth(listOf(tapWords, noteWords, width(reply.label)), column, form)
 
         val tap = Segment(
             "tap", tapLabel, tapIcon(switch.on),
@@ -296,36 +300,30 @@ fun CardViewerActions(
                 else -> onModify(answered.id)
             }
         }
+        val twoLines = form == EndRowForm.TwoLines
+        // The capsule's (first) line: 共振 alone on two lines (the puppets stand on it), else the three.
+        val firstLine: @Composable () -> Unit = {
+            SegmentedActionBar(
+                if (twoLines) listOf(tap) else listOf(tap, noteSegment, replySegment),
+                Modifier.width(capsule.dp).onGloballyPositioned(onRow),
+                mascotKey = "respond",
+            )
+        }
         Column(Modifier.fillMaxWidth()) {
-            if (form == EndRowForm.TwoLines) {
-                // 共振 alone on the first line (the puppets stand on it), 寄小紙條 · 寫卡片 on the second.
-                SegmentedActionBar(listOf(tap), Modifier.width(capsule.dp).onGloballyPositioned(onRow), mascotKey = "respond")
+            // Wide: 收藏 ends the capsule's row at the column's end, its glyph where the byline's ⋯ ends (§S2).
+            if (wide && bookmark != null) EndBeside(
+                main = firstLine,
+                end = { BookmarkButton(bookmark.saved, glyphEnd = BylineGlyphEnd) { bookmark.toggle() } },
+                modifier = Modifier.fillMaxWidth(),
+            ) else firstLine()
+            if (twoLines) {
+                // 寄小紙條 · 寫卡片 on the second line.
                 Spacer(Modifier.height(EndRowLayout.LINE_GAP.dp))
                 SegmentedActionBar(listOf(noteSegment, replySegment), Modifier.width(capsule.dp), seed = 73.0)
-            } else {
-                SegmentedActionBar(
-                    listOf(tap, noteSegment, replySegment),
-                    Modifier.width(capsule.dp).onGloballyPositioned(onRow),
-                    mascotKey = "respond",
-                )
             }
-            // Row 2: the faces at its start, under 共振; 收藏 at its end. Always there, so nothing moves as faces come.
-            EndRowTwo(
-                Modifier.width(capsule.dp),
-                faces = { TapFacesButton(faces, session.uid, author = false, onOpen = { openList = true }, selfOpens = faces.offersPassages && !translated()) },
-            ) {
-                BookmarkButton(bookmarked) {
-                    val bookmarks = session.bookmarks ?: return@BookmarkButton
-                    // Optimistic, then reconciled with what the write returns.
-                    val saving = !bookmarked
-                    bookmarked = saving
-                    haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                    // Said as it is drawn, as the web does: 收藏到卡片盒了.
-                    if (saving) toasts.show(L10n.Card.saved)
-                    scope.launch {
-                        bookmarked = runCatching { bookmarks.set(cardId, saving) }.onSuccess { session.noteOwnWrite() }.getOrElse { !saving }
-                    }
-                }
+            // Row 2: the faces at its start, under 共振, and nothing else (§S4). Always there, so nothing moves as faces come.
+            EndRowTwo(Modifier.width(capsule.dp)) {
+                TapFacesButton(faces, session.uid, author = false, onOpen = { openList = true }, selfOpens = faces.offersPassages && !translated())
             }
             NoteInPlace(
                 note, mayNote = mayNote, reducedMotion = reduced,
@@ -397,9 +395,9 @@ internal val Row2Height = 48.dp
 internal val Row2FacesStart = 12.dp
 
 /**
- * How far in from row 2's end 收藏's glyph stands, in its 48 to the finger flush with that end: the web's — its glyph
- * centred in a 44 button (a finger's pointer) on the row's end — so its 48 box keeps the finger's room and only the
- * glyph moves (centred, it stood 14 in).
+ * How far in from the tags' row's end (a phone, round 28 §S3) 收藏's glyph stands, in its 48 to the finger flush with
+ * that end: the web's — its glyph centred in a 44 button (a finger's pointer) on the row's end — so its 48 box keeps
+ * the finger's room and only the glyph moves (centred, it stood 14 in). Wide, it is the byline's ⋯'s: [BylineGlyphEnd].
  */
 internal val Row2GlyphEnd = 12.dp
 
@@ -407,15 +405,13 @@ internal val Row2GlyphEnd = 12.dp
 internal val BookmarkGlyph = 20.dp
 
 /**
- * Row 2 (§U1.2): as wide as the capsule ([modifier] gives the width), [Row2Height] tall — [faces] at its start, the
- * first face [Row2FacesStart] in; [end] (收藏) at its end.
+ * Row 2 (§U1.2, round 28 §S4): as wide as the capsule ([modifier] gives the width), [Row2Height] tall — [faces] at its
+ * start, the first face [Row2FacesStart] in, and nothing at its end (收藏 ends the capsule's row or the tags').
  */
 @Composable
-internal fun EndRowTwo(modifier: Modifier, faces: @Composable () -> Unit, end: @Composable () -> Unit) {
+internal fun EndRowTwo(modifier: Modifier, faces: @Composable () -> Unit) {
     Row(modifier.height(Row2Height), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.padding(start = Row2FacesStart)) { faces() }
-        Spacer(Modifier.weight(1f))
-        end()
     }
 }
 
@@ -432,13 +428,13 @@ private fun keepDraft(session: Session, cardId: String, text: String) {
 }
 
 /**
- * 收藏 (§U1.2): a glyph alone at row 2's end, a 48 square to the finger — a bare glyph (the web's BareIconButton): the
+ * 收藏 (§U1.2, round 28): a glyph alone at the end of the tags' row or the capsule's, a 48 square to the finger — a bare glyph (the web's BareIconButton): the
  * muted text ink with the one pen (INK) at rest and once saved, drawn filled then, never the capsule's label brown —
- * its glyph [Row2GlyphEnd] in from the square's end, where the web's stands. Named by what a tap does (收藏 / 取消收藏,
- * what the flows say to it).
+ * its glyph [glyphEnd] in from the square's end ([Row2GlyphEnd], where the web's stands; [BylineGlyphEnd] beside the
+ * capsule). Named by what a tap does (收藏 / 取消收藏, what the flows say to it).
  */
 @Composable
-internal fun BookmarkButton(saved: Boolean, onClick: () -> Unit) {
+internal fun BookmarkButton(saved: Boolean, glyphEnd: androidx.compose.ui.unit.Dp = Row2GlyphEnd, onClick: () -> Unit) {
     val label = if (saved) L10n.Card.Bookmark.remove else L10n.Card.Bookmark.add
     Box(
         Modifier
@@ -448,7 +444,7 @@ internal fun BookmarkButton(saved: Boolean, onClick: () -> Unit) {
         contentAlignment = Alignment.CenterEnd,
     ) {
         OrganicIcon(
-            IconName.Bookmark, Modifier.padding(end = Row2GlyphEnd), size = BookmarkGlyph, color = Tokens.TextMuted,
+            IconName.Bookmark, Modifier.padding(end = glyphEnd), size = BookmarkGlyph, color = Tokens.TextMuted,
             fill = if (saved) Tokens.TextMuted else null,
             strokeWidth = Tokens.Ink.value,
         )
