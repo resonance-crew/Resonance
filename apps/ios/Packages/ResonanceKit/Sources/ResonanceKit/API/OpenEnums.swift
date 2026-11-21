@@ -31,22 +31,33 @@ public enum OpenEnums {
     /// Far above any v1 answer (a card with its story and lists is a few hundred KB).
     static let maxBytes = 16 * 1024 * 1024
 
-    /// Each enum in the contract's answers, by property name (no other
-    /// property in an answer shares one of these names — `OpenEnumsTests`
-    /// checks the table against openapi.json): the values this build knows,
-    /// and what an unknown one is taken for.
-    static let fields: [String: (known: Set<String>, fallback: String)] = [
+    /// Each enum in the contract's answers, by property name: the values this build knows, what an unknown one
+    /// is taken for, and `within` — the other keys an object must hold for the rule to read its field (empty:
+    /// every object). A name that is an enum in one answer schema and a plain string in another (`type`: a
+    /// cover's `image`/`video`, a bell row's any kind) is scoped by keys its enum's schema requires and the
+    /// plain one's never has. `OpenEnumsTests` checks the table against openapi.json: every enum in an answer
+    /// covered, and no rule reaching a schema where its name is a plain field.
+    static let fields: [String: (known: Set<String>, fallback: String, within: Set<String>)] = [
         // A card's audience: an unknown one is treated as the narrowest (never offered as public).
         "visibility": (Set(Components.Schemas.FeedCard.VisibilityPayload.allCases.map(\.rawValue))
-            .union(Components.Schemas.CardDetail.VisibilityPayload.allCases.map(\.rawValue)), "private"),
-        "primaryLocale": (Set(Components.Schemas.Me.PrimaryLocalePayload.allCases.map(\.rawValue)), "en"),
+            .union(Components.Schemas.CardDetail.VisibilityPayload.allCases.map(\.rawValue))
+            .union(Components.Schemas.PendingEdit.VisibilityPayload.allCases.map(\.rawValue)), "private", []),
+        "primaryLocale": (Set(Components.Schemas.Me.PrimaryLocalePayload.allCases.map(\.rawValue)), "en", []),
         // What restoring a card from the trash brings back (the owner's own answers only): unknown reads as private.
-        "restoresTo": (Set(Components.Schemas.FeedCard.RestoresToPayload.allCases.map(\.rawValue)), "private"),
+        "restoresTo": (Set(Components.Schemas.FeedCard.RestoresToPayload.allCases.map(\.rawValue)), "private", []),
         // Today's picks: unknown is "not final" — the app asks again later.
-        "status": (Set(Components.Schemas.RecommendedFeed.StatusPayload.allCases.map(\.rawValue)), "stale"),
+        "status": (Set(Components.Schemas.RecommendedFeed.StatusPayload.allCases.map(\.rawValue)), "stale", []),
         // An error's code: one this build can't act on is an error all the same (its message still shows).
-        "code": (Set(Components.Schemas.ErrorCode.allCases.map(\.rawValue)), "internal"),
+        "code": (Set(Components.Schemas.ErrorCode.allCases.map(\.rawValue)), "internal", []),
+        // A draft's or a pending edit's cover (`DraftMedia`: its `type` beside its `url`): a kind this build can't
+        // draw is kept as a picture at its address. A bell row's `type` (no `url` beside it) is any string.
+        "type": (Set(Components.Schemas.DraftMedia._TypePayload.allCases.map(\.rawValue)), "image", ["url"]),
     ]
+
+    /// Whether `field`'s rule reads it in an object that has the keys `has` says it has.
+    static func applies(_ field: (known: Set<String>, fallback: String, within: Set<String>), has: (String) -> Bool) -> Bool {
+        field.within.allSatisfy(has)
+    }
 
     /// The answer with every unknown enum value replaced; untouched when there is none (or it isn't JSON).
     static func normalize(_ data: Data) -> Data {
@@ -106,6 +117,8 @@ public enum OpenEnums {
                 }
                 guard k < n else { return true }
                 let value = String(decoding: UnsafeBufferPointer(rebasing: bytes[start..<k]), as: UTF8.self)
+                // (A rule scoped by `within` may not apply to the object this key is in — a bell row's `type`:
+                // its unknown-looking value is told apart by the look through the JSON.)
                 if fields[field]?.known.contains(value) != true { return true }
                 i = k + 1
             }
@@ -119,7 +132,8 @@ public enum OpenEnums {
         if let object = value as? NSDictionary {
             var found = false
             object.enumerateKeysAndObjects { key, child, stop in
-                if let key = key as? String, let field = fields[key], let string = child as? String {
+                if let key = key as? String, let field = fields[key], let string = child as? String,
+                   applies(field, has: { object[$0] != nil }) {
                     found = !field.known.contains(string)
                 } else {
                     found = holdsUnknown(child)
@@ -137,7 +151,7 @@ public enum OpenEnums {
     private static func normalize(_ value: Any, changed: inout Bool) -> Any {
         if var object = value as? [String: Any] {
             for (key, child) in object {
-                if let field = fields[key], let string = child as? String {
+                if let field = fields[key], let string = child as? String, applies(field, has: { object[$0] != nil }) {
                     if !field.known.contains(string) {
                         object[key] = field.fallback
                         changed = true

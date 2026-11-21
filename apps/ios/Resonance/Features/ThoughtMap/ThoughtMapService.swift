@@ -72,15 +72,23 @@ extension MapCard {
     }
 }
 
-/// The thought map (thoughtMaps/{uid}/nodes|edges|groups), read and written
-/// straight to Firestore like the web's client/thoughtMap.ts — the owner's
-/// own documents, `isSelf` in the rules. Every function mirrors its web twin
-/// and batches the same way.
+/// The thought map (thoughtMaps/{uid}/nodes|edges|groups). With `features.apiThoughtMap` (Phase 2 of the
+/// middleware decouple) through `/api/v1`, as the web's client/thoughtMap.ts: read whole (GET /me/thought-map, once
+/// every change made here has landed) and changed through the account's `MapOpQueue` (POST /me/thought-map/ops
+/// batches, in order, a drop's moves folded). Otherwise read and written straight to Firestore — the owner's own
+/// documents, `isSelf` in the rules — the older path kept one release. Either way the canvas has drawn the change
+/// before it gets here. The cards the map holds are read as before (`cards()`).
 struct ThoughtMapService {
     let uid: String
     /// Cards' summaries from the server, by id (GET /cards?keys=): for the cards
     /// the rules won't let this client read (someone else's anonymous card).
     let summaries: @Sendable ([String]) async throws -> [FeedCard]
+    /// The `/api/v1` path: the account's op queue and the map's read; nil: Firestore.
+    var ops: MapOpQueue? = nil
+    var api: ThoughtMapAPI? = nil
+
+    /// Which path this service takes.
+    var usesAPI: Bool { ops != nil && api != nil }
     private var db: Firestore { FirebaseBootstrap.db }
     private var map: DocumentReference { db.collection("thoughtMaps").document(uid) }
     private var nodesCol: CollectionReference { map.collection("nodes") }
@@ -95,6 +103,10 @@ struct ThoughtMapService {
 
     /// loadMyThoughtMap: the three collections in full (document-id order).
     func load() async throws -> Loaded {
+        if let ops, let api {
+            await ops.flush()
+            return Self.loaded(try await api.map())
+        }
         async let n = nodesCol.getDocuments()
         async let e = edgesCol.getDocuments()
         async let g = groupsCol.getDocuments()
@@ -115,9 +127,38 @@ struct ThoughtMapService {
             })
     }
 
+    /// The map as GET /me/thought-map answers it (numbers a stored item lacks already read as below).
+    nonisolated static func loaded(_ map: ThoughtMapAPI.Map) -> Loaded {
+        Loaded(nodes: map.nodes.map { MapNode(cardId: $0.cardId, x: $0.x, y: $0.y, groupId: $0.groupId) },
+               edges: map.edges.map { MapEdge(id: $0.id, sourceCardId: $0.sourceCardId, targetCardId: $0.targetCardId, label: $0.label) },
+               groups: map.groups.map { MapGroup(id: $0.id, title: $0.title, hue: $0.hue, x: $0.x, y: $0.y, w: $0.w, h: $0.h) })
+    }
+
     static func edgeId(_ source: String, _ target: String) -> String { "\(source)_\(target)" }
 
+    /// One op of the flat `MapOp`, its kind's fields only.
+    nonisolated static func op(_ kind: ThoughtMapAPI.Op.OpPayload, cardId: String? = nil, x: Double? = nil, y: Double? = nil,
+                               groupId: String? = nil, source: String? = nil, target: String? = nil, label: String? = nil,
+                               id: String? = nil, title: String? = nil, hue: Double? = nil, w: Double? = nil, h: Double? = nil) -> ThoughtMapAPI.Op {
+        ThoughtMapAPI.Op(op: kind, cardId: cardId, x: x, y: y, groupId: groupId, sourceCardId: source, targetCardId: target,
+                         label: label, id: id, title: title, hue: hue, w: w, h: h)
+    }
+
+    /// The ops that move a card and file it in `groupId` (nil: unfiled), as the web's moveMapNode.
+    nonisolated static func moveOps(_ cardId: String, x: Double, y: Double, groupId: String?) -> [ThoughtMapAPI.Op] {
+        if let groupId { return [op(.moveNode, cardId: cardId, x: x, y: y, groupId: groupId)] }
+        return [op(.moveNode, cardId: cardId, x: x, y: y), op(.setNodeGroup, cardId: cardId)]
+    }
+
+    /// A group's patch (`title`, `hue`, `x`, `y`, `w`, `h`) as one op.
+    nonisolated static func updateGroupOp(_ id: String, _ patch: [String: Any]) -> ThoughtMapAPI.Op {
+        func num(_ k: String) -> Double? { (patch[k] as? NSNumber)?.doubleValue }
+        return op(.updateGroup, x: num("x"), y: num("y"), groupId: id, title: patch["title"] as? String, hue: num("hue"),
+                  w: num("w"), h: num("h"))
+    }
+
     func addNode(_ cardId: String, x: Double, y: Double) async throws {
+        if let ops { return try await ops.enqueue([Self.op(.addNode, cardId: cardId, x: x, y: y)]) }
         try await nodesCol.document(cardId).setData([
             "cardId": cardId, "x": x, "y": y, "groupId": NSNull(),
             "createdAt": FieldValue.serverTimestamp(), "updatedAt": FieldValue.serverTimestamp(),
@@ -125,6 +166,7 @@ struct ThoughtMapService {
     }
 
     func moveNode(_ cardId: String, x: Double, y: Double, groupId: String?) async throws {
+        if let ops { return try await ops.enqueue(Self.moveOps(cardId, x: x, y: y, groupId: groupId)) }
         try await nodesCol.document(cardId).updateData([
             "x": x, "y": y, "groupId": groupId ?? NSNull(), "updatedAt": FieldValue.serverTimestamp(),
         ])
@@ -133,6 +175,7 @@ struct ThoughtMapService {
     /// setNodeGroups: re-file cards in one batch.
     func setNodeGroups(_ changes: [(cardId: String, groupId: String?)]) async throws {
         guard !changes.isEmpty else { return }
+        if let ops { return try await ops.enqueue(changes.map { Self.op(.setNodeGroup, cardId: $0.cardId, groupId: $0.groupId) }) }
         let batch = db.batch()
         for c in changes {
             batch.updateData(["groupId": c.groupId ?? NSNull(), "updatedAt": FieldValue.serverTimestamp()],
@@ -143,6 +186,7 @@ struct ThoughtMapService {
 
     /// removeMapNode: the node and every arrow touching it (the card itself stays).
     func removeNode(_ cardId: String) async throws {
+        if let ops { return try await ops.enqueue([Self.op(.removeNode, cardId: cardId)]) }
         async let out = edgesCol.whereField("sourceCardId", isEqualTo: cardId).getDocuments()
         async let inn = edgesCol.whereField("targetCardId", isEqualTo: cardId).getDocuments()
         let (a, b) = try await (out, inn)
@@ -154,20 +198,29 @@ struct ThoughtMapService {
 
     func createEdge(_ source: String, _ target: String, label: String = "") async throws {
         guard source != target else { return }
+        if let ops { return try await ops.enqueue([Self.op(.addEdge, source: source, target: target, label: label)]) }
         try await edgesCol.document(Self.edgeId(source, target)).setData([
             "sourceCardId": source, "targetCardId": target, "label": label, "createdAt": FieldValue.serverTimestamp(),
         ])
     }
 
     func updateEdgeLabel(_ id: String, _ label: String) async throws {
+        if let ops { return try await ops.enqueue([Self.op(.setEdgeLabel, label: label, id: id)]) }
         try await edgesCol.document(id).updateData(["label": label])
     }
 
     func removeEdge(_ id: String) async throws {
+        if let ops { return try await ops.enqueue([Self.op(.removeEdge, id: id)]) }
         try await edgesCol.document(id).delete()
     }
 
     func createGroup(title: String, hue: Double, x: Double, y: Double, w: Double, h: Double) async throws -> String {
+        if let ops {
+            // Under an id made here (the server takes the one the client chose); answered once stored.
+            let id = DraftService.newId()
+            try await ops.enqueue([Self.op(.addGroup, x: x, y: y, groupId: id, title: title, hue: hue, w: w, h: h)])
+            return id
+        }
         let ref = groupsCol.document()
         try await ref.setData(["title": title, "hue": hue, "x": x, "y": y, "w": w, "h": h,
                                "createdAt": FieldValue.serverTimestamp()])
@@ -175,11 +228,16 @@ struct ThoughtMapService {
     }
 
     func updateGroup(_ id: String, _ patch: [String: Any]) async throws {
+        if let ops { return try await ops.enqueue([Self.updateGroupOp(id, patch)]) }
         try await groupsCol.document(id).updateData(patch)
     }
 
     /// A region moved with its cards: the web's two writes, here in one batch so they land together.
     func moveGroup(_ id: String, x: Double, y: Double, members: [(cardId: String, x: Double, y: Double)]) async throws {
+        if let ops {
+            return try await ops.enqueue([Self.op(.updateGroup, x: x, y: y, groupId: id)]
+                + members.map { Self.op(.moveNode, cardId: $0.cardId, x: $0.x, y: $0.y) })
+        }
         let batch = db.batch()
         batch.updateData(["x": x, "y": y], forDocument: groupsCol.document(id))
         for m in members {
@@ -190,6 +248,7 @@ struct ThoughtMapService {
 
     /// removeMapGroup: the region goes, its cards stay on the map, unfiled.
     func removeGroup(_ id: String) async throws {
+        if let ops { return try await ops.enqueue([Self.op(.removeGroup, groupId: id)]) }
         let members = try await nodesCol.whereField("groupId", isEqualTo: id).getDocuments()
         let batch = db.batch()
         batch.deleteDocument(groupsCol.document(id))

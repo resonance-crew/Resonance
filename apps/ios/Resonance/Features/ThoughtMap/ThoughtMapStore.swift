@@ -137,8 +137,49 @@ final class ThoughtMapStore {
     @ObservationIgnored var readBoard: (ThoughtMapService) async throws -> Board = { try await ThoughtMapStore.read($0) }
     @ObservationIgnored var readCard: (ThoughtMapService, String) async throws -> MapCard? = { try await $0.card($1) }
 
+    /// The `/api/v1` path (`features.apiThoughtMap`): the map's read and the account's op queue; nil: Firestore.
+    @ObservationIgnored private var mapPath: (api: ThoughtMapAPI, ops: MapOpQueue)?
+    @ObservationIgnored private var mapSignal: SignalSubscription?
+
     init(api: ReadingAPI) {
         summaries = { try await api.cards(keys: $0) }
+    }
+
+    /// The paths the session's live lists take now: with `api` the map is read and changed through `/api/v1`, and
+    /// read again when `signals/{uid}`'s `map` moves (a change from another device). Nil: Firestore, as before.
+    /// The next visit reads everything again on a path that changed.
+    func use(_ api: ThoughtMapAPI?, signals: SignalListener?) {
+        mapSignal?.cancel()
+        mapSignal = nil
+        if let api {
+            if mapPath == nil { mapPath = (api, MapOpQueue(api)) }
+            mapSignal = signals?.observe([.map]) { [weak self] topics in
+                // The 60 s safety pull (no topic) reads nothing here: a map shown is read again on its own signal.
+                guard !topics.isEmpty else { return }
+                Task { await self?.mapMoved() }
+            }
+        } else {
+            mapPath = nil
+        }
+    }
+
+    /// The service for `uid` on the path in use.
+    func makeService(uid: String) -> ThoughtMapService {
+        var service = ThoughtMapService(uid: uid, summaries: summaries)
+        service.api = mapPath?.api
+        service.ops = mapPath?.ops
+        return service
+    }
+
+    /// `map` moved (any device stored a batch): the map as the server has it now, its new cards read — unless a
+    /// change made here is still on its way (its own signal follows it) or a finger is on the board.
+    func mapMoved() async {
+        guard loaded, let service, service.usesAPI, !(service.ops?.busy ?? false), dragNodeId == nil else { return }
+        guard let map = try? await service.load(), !(service.ops?.busy ?? false), dragNodeId == nil else { return }
+        var byId = cards
+        let missing = map.nodes.map(\.cardId).filter { byId[$0] == nil && parked[$0] == nil }
+        if !missing.isEmpty { for card in await service.cards(ids: missing) { byId[card.id] = card } }
+        show(map, cards: byId, resonated: resonated)
     }
 
     // MARK: - Visits
@@ -180,7 +221,7 @@ final class ThoughtMapStore {
         editingGroupId = nil
         editingEdgeId = nil
         touchesCancelled()
-        await run(Self.refresh(loaded: loaded && service?.uid == uid, readAt: readAt, seenChanges: seenChanges,
+        await run(Self.refresh(loaded: loaded && service?.uid == uid && service?.usesAPI == (mapPath != nil), readAt: readAt, seenChanges: seenChanges,
                                changes: changes, lastChange: lastChange, now: now),
                   uid: uid, changes: changes)
     }
@@ -227,7 +268,7 @@ final class ThoughtMapStore {
     /// Reads the whole board (再試一次 too, which shows the loader again). Only the latest read's answer
     /// is shown; a first read with no answer past `firstReadPatience` says so (再試一次).
     func load(uid: String) async {
-        let service = ThoughtMapService(uid: uid, summaries: summaries)
+        let service = makeService(uid: uid)
         self.service = service
         let earlier = (board: boardRead, all: allCardsRead)
         let read = begin()
