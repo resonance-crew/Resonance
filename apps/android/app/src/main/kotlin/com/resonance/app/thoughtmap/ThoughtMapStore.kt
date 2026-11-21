@@ -41,6 +41,14 @@ import com.resonance.geometry.seedFromString
 import com.resonance.geometry.wobRect
 import com.resonance.geometry.zoomAt
 import com.resonance.kit.api.ReadingApi
+import com.resonance.kit.api.WriterApi
+import com.resonance.kit.config.Features
+import com.resonance.kit.realtime.SignalHub
+import com.resonance.kit.realtime.Signals
+import com.resonance.kit.realtime.launchPulls
+import com.resonance.kit.writing.MapOpQueue
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.drop
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.reading.FeedLoader
 import kotlinx.coroutines.CancellationException
@@ -192,6 +200,26 @@ class ThoughtMapStore(private val reading: ReadingApi) {
     var onOpen: (MapCard) -> Unit = {}
 
     private var service: ThoughtMapService? = null
+
+    /**
+     * The contract's path (Phase 2): the map read from GET /me/thought-map and changed through
+     * [MapOpQueue] while client-config's `apiThoughtMap` is on (read as each [load] begins), and read
+     * again when the `map` signal moves while the map is on screen ([followSignals]). Null: Firestore.
+     */
+    class Remote(val writer: WriterApi, val signals: SignalHub, val onScreen: StateFlow<Boolean>, val features: () -> Features)
+
+    var remote: Remote? = null
+    /** The map's changes on their way (the contract's path): made once, for the store's account. */
+    internal var queue: MapOpQueue? = null
+
+    private fun queueFor(writer: WriterApi): MapOpQueue = queue ?: MapOpQueue(writer::applyMapOps, scope).also { q ->
+        // A batch the server refused: what is drawn may not be what it keeps — read it as it is.
+        q.onRefused = { e ->
+            Log.w("ThoughtMap", "ops refused", e)
+            scope.launch { mapChanged(force = true) }
+        }
+        queue = q
+    }
     /**
      * When everything was last read, and the count of card changes it had seen then (the session
      * keeps this store between visits: see [open]).
@@ -369,7 +397,8 @@ class ThoughtMapStore(private val reading: ReadingApi) {
      * answer is shown; a first read with no answer past [firstReadPatience] says so (再試一次).
      */
     suspend fun load(uid: String) {
-        val service = ThoughtMapService(uid, reading).also { this.service = it }
+        val api = remote?.takeIf { it.features().apiThoughtMap }?.let { ThoughtMapService.Api(it.writer, queueFor(it.writer)) }
+        val service = ThoughtMapService(uid, reading, api).also { this.service = it }
         val earlierBoard = boardRead
         val earlierAll = allCardsRead
         val read = begin()
@@ -456,6 +485,63 @@ class ThoughtMapStore(private val reading: ReadingApi) {
         failed = false
         frameIfFraming()
     }
+
+    /**
+     * While the map is on screen (the contract's path): read again when the `map` signal moves — a change
+     * made on another device — and every minute in the foreground. Runs until cancelled (the screen goes).
+     */
+    suspend fun followSignals() {
+        val remote = remote ?: return
+        if (service?.onApi != true && !remote.features().apiThoughtMap) return
+        coroutineScope {
+            // The first value is the signal as it stands: the open's own read has just answered for it.
+            launchPulls(remote.signals.topic(Signals.Topic.Map).drop(1), remote.onScreen) { mapChanged() }
+        }
+    }
+
+    /**
+     * The map read again as the server has it (its cards stay; ones newly placed elsewhere are read).
+     * Not while a change made here is on its way or a gesture is under way — the server's copy would put
+     * back what the finger just moved; the next signal (our own batch raises it) or minute catches up.
+     */
+    internal suspend fun mapChanged(force: Boolean = false) {
+        val service = service ?: return
+        if (!service.onApi || !loaded) return
+        if (!force && busy()) return
+        val read = begin()
+        boardRead = read
+        val m = inDrawingOrder(service.load())
+        if (boardRead != read || (!force && busy())) return
+        val byId = LinkedHashMap(cards)
+        val missing = m.nodes.map { it.cardId }.filter { byId[it] == null && parked[it] == null }
+        if (missing.isNotEmpty()) for (card in service.cards(missing)) byId[card.id] = card
+        if (boardRead != read || (!force && busy())) return
+        if (m == drawn()) return
+        place(m, byId, resonated)
+    }
+
+    /** [m] with what is drawn already kept in its drawing order (what overlaps stays on top), the rest after it. */
+    private fun inDrawingOrder(m: ThoughtMapService.Loaded): ThoughtMapService.Loaded {
+        fun <T> ordered(items: List<T>, order: List<String>, id: (T) -> String): List<T> {
+            val rank = order.withIndex().associate { (i, k) -> k to i }
+            return items.withIndex().sortedWith(compareBy({ rank[id(it.value)] ?: Int.MAX_VALUE }, { it.index })).map { it.value }
+        }
+        return ThoughtMapService.Loaded(
+            nodes = ordered(m.nodes, nodeOrder + parked.keys) { it.cardId },
+            edges = ordered(m.edges, edgeOrder) { it.id },
+            groups = ordered(m.groups, groupOrder) { it.id },
+        )
+    }
+
+    /** A change of the map on its way, or a finger on it: the server's copy waits. */
+    private fun busy(): Boolean = queue?.idle == false || drag != null || touches.isNotEmpty() || editingGroupId != null || editingEdgeId != null
+
+    /** The map as drawn now, in the shape a read hands it over (parked nodes too: their places are kept). */
+    private fun drawn(): ThoughtMapService.Loaded = ThoughtMapService.Loaded(
+        nodes = (nodeOrder.mapNotNull { nodes[it] } + parked.values).map { MapNodeDoc(it.cardId, it.x, it.y, it.groupId) },
+        edges = edgeOrder.mapNotNull { edges[it] }.map { MapEdgeDoc(it.id, it.sourceCardId, it.targetCardId, it.label) },
+        groups = groupOrder.mapNotNull { groups[it] }.map { MapGroupDoc(it.id, it.title, it.hue, it.x, it.y, it.w, it.h) },
+    )
 
     /** Titles and tags may have changed in the writer: refresh the cards, keep the map. */
     suspend fun refreshCards() {

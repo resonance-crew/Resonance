@@ -63,6 +63,7 @@ import com.resonance.kit.config.ClientConfigStore
 import com.resonance.kit.config.Features
 import com.resonance.kit.config.UpdateNeed
 import com.resonance.kit.realtime.SignalHub
+import com.resonance.kit.writing.DraftOutbox
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -109,6 +110,8 @@ class Session(
     private val readingReports: com.resonance.app.ui.ReadingReports? = null,
     /** This build (versionCode), against client-config's `minBuild.android` / `recommendedBuild.android`. */
     private val appBuild: Int = BuildConfig.VERSION_CODE,
+    /** The writer's words on their way through the contract, per account (draft-outbox.xml): emptied with the account. */
+    private val draftOutboxPrefs: SharedPreferences? = null,
 ) {
     enum class Phase { Restoring, SignedOut, SignedIn }
     sealed interface Profile {
@@ -170,6 +173,8 @@ class Session(
     val inbox = InboxApi(api, http)
     /** People, bookmarks, blocks, connections, hints and the avatar through the contract (Phase 2, `apiSocial`). */
     val social = SocialApi(api, http)
+    /** Drafts, pending edits and the thought map through the contract (Phase 2, `apiDrafts` / `apiThoughtMap`). */
+    val writer = com.resonance.kit.api.WriterApi(api, http)
     /**
      * client-config (GET /api/v1/client-config) as this install last read it — which paths go through
      * /api/v1 instead of Firestore, and whether this build is still wanted ([updateNeed]). Asked at
@@ -264,8 +269,13 @@ class Session(
      * The account's thought map, kept between visits so opening it again within a while shows it
      * at once without reading a hundred cards ([ThoughtMapStore.open]).
      */
-    var thoughtMap = ThoughtMapStore(reading)
+    var thoughtMap = newThoughtMap()
         private set
+
+    /** A thought map for the account now: its own changes' queue, on the path client-config says at each read. */
+    private fun newThoughtMap() = ThoughtMapStore(reading).also {
+        it.remote = ThoughtMapStore.Remote(writer, signals, _onScreen) { features }
+    }
 
     /** A write that goes straight to Firestore (a bookmark): what the API reads back is read afresh. */
     fun noteOwnWrite() = httpCaching.invalidate()
@@ -292,7 +302,25 @@ class Session(
 
     val safety: SafetyService? get() = uid?.let { SafetyService(it, safetyApi, social.takeIf { features.apiSocial }, conversations::graphChanged) }
     val bookmarks: BookmarkService? get() = uid?.let { BookmarkService(it, if (features.apiSocial) BookmarkService.Api(social, reading) else null) }
-    val drafts: DraftService? get() = uid?.let(::DraftService)
+    val drafts: DraftService? get() = uid?.let { DraftService(it, draftOutbox?.takeIf { features.apiDrafts }?.let { o -> DraftService.Api(writer, o) }) }
+
+    /**
+     * The signed-in account's [DraftOutbox] (client-config's `apiDrafts`): started at sign-in whatever the
+     * switch says now, so words a last launch left on their way still go; stopped and emptied with the account.
+     */
+    private var draftOutbox: DraftOutbox? = null
+
+    private fun outboxFor(who: String): DraftOutbox = DraftOutbox(
+        storage = object : DraftOutbox.Storage {
+            private val key = "outbox:$who"
+            override fun read(): String? = (draftOutboxPrefs ?: prefs).getString(key, null)
+            override fun write(value: String?) {
+                (draftOutboxPrefs ?: prefs).edit().apply { if (value == null) remove(key) else putString(key, value) }.apply()
+            }
+        },
+        sender = DraftService.Sender(writer, writing),
+        scope = scope,
+    )
     val hints: HintService? get() = uid?.let { HintService(it, prefs, if (features.apiSocial) HintService.Api(social, { me }, ::setMe) else null) }
     /** Notes on their way from the account (round 21): their client ids, and a failed one's 再寄一次. */
     val noteSends = NoteSends()
@@ -395,7 +423,10 @@ class Session(
             uid = next
             _signedInUid.value = next
             cardCache.clear()
-            thoughtMap = ThoughtMapStore(reading)
+            thoughtMap.queue?.stop()
+            thoughtMap = newThoughtMap()
+            draftOutbox?.stop()
+            draftOutbox = next?.let(::outboxFor)?.also { it.start() }
             writerChange = null
             // Signed out (deletion signs out too) or someone else signed in: nothing of the account stays.
             // Its listeners stop first; the next account's start once Firestore's copy of it is gone.
@@ -478,6 +509,8 @@ class Session(
         }
         // The notes it wrote and didn't send: words to someone, kept for this account alone.
         noteDraftStore?.forget(who)
+        // Its drafts' words not sent yet, as Firestore's own queue of them goes below.
+        scope.launch { outboxFor(who).forget() }
         // How it read cards, not sent yet (round 26 §U7).
         readingReports?.forget(who)
         selfFace = null
@@ -517,6 +550,8 @@ class Session(
         reconnects.cameBack(at, signedIn = _phase.value == Phase.SignedIn)
         // Live lists whose listener failed (or whose people couldn't be read) listen again.
         if (_phase.value == Phase.SignedIn) {
+            // Words that waited offline go now rather than at their next retry.
+            draftOutbox?.kick()
             signalListener.resume()
             notifications.resume()
             conversations.resume()
