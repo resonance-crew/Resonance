@@ -206,9 +206,17 @@ export function topSpots(L: Layout, A: Box, B: Box, waveW = 61): PairSpots {
 export const SKY_CARDS = 3;
 
 /**
+ * The header's side margin on a wide screen, px (FilmHeader `.row`: 5 % of the window, and past 1333 px its 1200 px
+ * column, centred). What stands over the stage in the page's own px keeps inside it — film.module.css gives the hero
+ * the same (the owner, 2026-11-21, of a wide window: 「整個畫布的內容旁邊都有留空…它卻是凸到左邊去了」).
+ */
+export const columnEdge = (w: number) => Math.max(32, 0.05 * w, (w - 1200) / 2);
+
+/**
  * The night sky's small cards (wide only), i < SKY_CARDS: two on the left, staggered, the lower one's foot over the
  * five's heads; one on the right, under the moon (moonSpot), never over it. Scaled alike, never over the card in the
- * middle. `skySpot(L, SKY_CARDS)` is the fourth lantern's place (a lantern that stays one), left of the moon.
+ * middle, their outer edges on the header's margin (`columnEdge`: a window wider than the header's column no longer
+ * has them out by its sides). `skySpot(L, SKY_CARDS)` is the fourth lantern's place (a lantern that stays one), left of the moon.
  */
 export function skySpot(L: Layout, i: number, ctaW = 380): Spot {
   const top = HELD_TOP + 18;
@@ -216,8 +224,8 @@ export function skySpot(L: Layout, i: number, ctaW = 380): Spot {
   const scale = clamp((headsY(L) - 12 - top - gapY) / (2 * SKY_BOX.h), 0.5, 0.7);
   const w = SKY_BOX.w * scale;
   const h = SKY_BOX.h * scale;
-  const edge = Math.max(32, 0.05 * L.w);
-  // the room between the screen's edge and the call to action's, 24 px from each
+  const edge = columnEdge(L.w);
+  // the room between the header's margin and the call to action's edge, 24 px from each
   const room = L.w / 2 - ctaW / 2 - 24 - edge;
   const step = Math.max(0, Math.min(0.75 * w, room - w));
   const moon = moonSpot(L);
