@@ -110,9 +110,22 @@ import Testing
         #expect(OpenEnums.normalize(unknown) != unknown)
     }
 
-    /// Every enum the contract's answers carry is in the table, by a property
-    /// name no other answer field uses, with the values this build knows — so
-    /// a new enum in an answer fails here until it is covered.
+    /// `type` is an enum in a cover (`DraftMedia`, beside its `url`) and any string in a bell row: a cover kind
+    /// from the future reads as a picture, a bell row's kind is never touched.
+    @Test func aCoversTypeIsReadAsAnEnumAndABellRowsNever() throws {
+        let edit = Data(#"{"edit":{"thoughtCore":"t","media":{"type":"gif","url":"https://img.example/a.gif"}}}"#.utf8)
+        let fixed = try #require(JSONSerialization.jsonObject(with: OpenEnums.normalize(edit)) as? [String: Any])
+        #expect(((fixed["edit"] as? [String: Any])?["media"] as? [String: Any])?["type"] as? String == "image")
+        let bell = Data(#"{"items":[{"id":"n1","type":"note","payload":{"cardId":"c1"}}],"people":[],"nextPageToken":null}"#.utf8)
+        #expect(OpenEnums.normalize(bell) == bell)
+        let known = Data(#"{"media":{"type":"video","url":"https://img.example/a.mp4"}}"#.utf8)
+        #expect(OpenEnums.normalize(known) == known)
+    }
+
+    /// Every enum the contract's answers carry is in the table, with the values
+    /// this build knows, and no rule reads a field of its name where that name
+    /// is a plain field (`within`) — so a new enum in an answer fails here
+    /// until it is covered.
     @Test func theTableCoversEveryEnumInTheContractsAnswers() throws {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appendingPathComponent("../../../../../../openapi/v1/openapi.json").standardized
@@ -137,30 +150,46 @@ import Testing
             queue += refs(schema)
         }
 
-        // Each property name in those schemas, and the enum values it carries (nil: not an enum).
-        var properties: [String: [Set<String>?]] = [:]
+        // Each property name in those schemas: the enum values it carries (nil: not an enum), and the keys the
+        // object it is in requires and may hold.
+        struct Use {
+            let values: Set<String>?
+            let required: Set<String>
+            let keys: Set<String>
+        }
+        var properties: [String: [Use]] = [:]
         func collect(_ node: Any) {
             guard let object = node as? [String: Any] else {
                 (node as? [Any])?.forEach(collect)
                 return
             }
-            for (name, property) in (object["properties"] as? [String: Any]) ?? [:] {
+            let props = (object["properties"] as? [String: Any]) ?? [:]
+            let required = Set(object["required"] as? [String] ?? [])
+            for (name, property) in props {
                 let p = property as? [String: Any] ?? [:]
                 var values = (p["enum"] as? [String]).map(Set.init)
                 if let ref = p["$ref"] as? String, let target = schemas[String(ref.split(separator: "/").last!)] as? [String: Any],
                    let e = target["enum"] as? [String] { values = Set(e) }
-                properties[name, default: []].append(values)
+                properties[name, default: []].append(Use(values: values, required: required, keys: Set(props.keys)))
             }
             object.values.forEach(collect)
         }
         for name in reachable { collect(schemas[name] as Any) }
 
-        let enums = properties.filter { $0.value.contains { $0 != nil } }
+        let enums = properties.filter { $0.value.contains { $0.values != nil } }
         #expect(Set(enums.keys) == Set(OpenEnums.fields.keys))
         for (name, uses) in enums {
-            #expect(!uses.contains { $0 == nil }, "\(name) is also a plain field somewhere")
             let field = try #require(OpenEnums.fields[name])
-            #expect(uses.allSatisfy { $0 == field.known }, "\(name)")
+            for use in uses {
+                if let values = use.values {
+                    // The rule reads it wherever it is an enum (its object always has the keys the rule looks for)…
+                    #expect(field.within.isSubset(of: use.required), "\(name) is an enum where the rule's keys aren't required")
+                    #expect(values == field.known, "\(name)")
+                } else {
+                    // …and never where it is a plain field (its object can't hold them all).
+                    #expect(!field.within.isEmpty && !field.within.isSubset(of: use.keys), "\(name) is also a plain field the rule would read")
+                }
+            }
             #expect(field.known.contains(field.fallback))
         }
     }
