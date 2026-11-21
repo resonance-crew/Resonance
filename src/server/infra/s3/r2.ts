@@ -12,6 +12,7 @@ import type { IStorageProvider } from '@/lib/storage/interfaces';
 import { currentPublicBaseSetting } from '@/lib/storage/publicUrl';
 import type { StoredObject, UploadIntent } from '@/lib/storage/types';
 import type { ObjectHead, ObjectListing, PrivateObjectStore } from '@/server/ports/objects';
+import { assertMediaConfig } from '../env/media';
 import { bareEtag, IMMUTABLE, objectKey, PAGE_KEYS } from './keys';
 
 // R2 through its S3 API: the only place the AWS SDK is used. src/lib/storage/r2
@@ -53,6 +54,11 @@ export class R2StorageProvider implements IStorageProvider {
 
   private bucket = env('R2_BUCKET');
   private publicBase = (currentPublicBaseSetting() ?? env('R2_PUBLIC_BASE')).replace(/\/$/, '');
+
+  constructor() {
+    // On a deployment, a base the apps wouldn't draw story pictures from fails every upload, loudly (ADR 0005).
+    if (process.env.VERCEL_ENV) assertMediaConfig();
+  }
 
   async uploadObject(intent: UploadIntent, body: Uint8Array): Promise<StoredObject> {
     return this.putObject(objectKey(intent), intent.contentType, body);

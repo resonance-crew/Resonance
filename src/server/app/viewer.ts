@@ -10,7 +10,7 @@ import type { PersonRow, UsersData } from '@/server/ports/repos/users';
  */
 
 /** What toAuthor reads of a profile: the field mask of every profile a list reads (authorsOf). */
-export const AUTHOR_FIELDS = ['handle', 'initials', 'accentColor', 'avatarUrl', 'avatarSeed', 'verified', 'region'] as const;
+export const AUTHOR_FIELDS = ['handle', 'initials', 'accentColor', 'avatarUrl', 'avatarKey', 'avatarSeed', 'verified', 'region'] as const;
 
 /** firestore.rules `cardVisible`, for a server that bypasses the rules. */
 export async function canView(users: UsersData, card: Card, viewerId: string): Promise<boolean> {

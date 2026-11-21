@@ -12,6 +12,7 @@ import {
   putPendingEditIn,
   saveDraftIn,
 } from '@/server/app/writer';
+import { mediaKeyFor } from '@/server/domain/media';
 import { DRAFT_LOG_DAYS } from '@/server/domain/writer';
 import type { RealtimeTopic } from '@/server/ports/realtime';
 
@@ -288,10 +289,13 @@ export function describeWriterContract(name: string, make: () => Promise<WriterH
       await createDraftIn(h.ctx, ALICE, newDraft({ media: COVER, accentHue: 30 }));
       const { frame: _frame, ...unframed } = COVER;
       await saveDraftIn(h.ctx, ALICE, DRAFT, { rev: 1, media: unframed });
-      expect((await h.read(`cards/${DRAFT}`))!.media).toEqual(unframed);
+      // Its storage key beside its URL when the URL is that key on the current base (ADR 0005); none where no base is known.
+      const key = mediaKeyFor(h.ctx.media, unframed.url);
+      const stored = { ...unframed, ...(key ? { key } : {}) };
+      expect((await h.read(`cards/${DRAFT}`))!.media).toEqual(stored);
       // Null is absent (a Kotlin client sends every field): nothing removed.
       await saveDraftIn(h.ctx, ALICE, DRAFT, { rev: 2, media: null, accentHue: null, story: '仍然' });
-      expect(await h.read(`cards/${DRAFT}`)).toMatchObject({ media: unframed, accentHue: 30, story: '仍然' });
+      expect(await h.read(`cards/${DRAFT}`)).toMatchObject({ media: stored, accentHue: 30, story: '仍然' });
       await saveDraftIn(h.ctx, ALICE, DRAFT, { rev: 3, clear: ['media', 'accentHue'] });
       const card = await h.read(`cards/${DRAFT}`);
       expect('media' in card!).toBe(false);

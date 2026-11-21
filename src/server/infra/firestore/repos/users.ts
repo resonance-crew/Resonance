@@ -181,6 +181,7 @@ export function usersTx(db: AdminDb, tx: Transaction): UsersTxRepo {
       if (p.region != null) patch.region = p.region;
       if (p.primaryLocale != null) patch.primaryLocale = p.primaryLocale;
       if (p.avatarUrl != null) patch.avatarUrl = p.avatarUrl;
+      if (p.avatarKey !== undefined) patch.avatarKey = p.avatarKey ?? FieldValue.delete();
       if (p.autoTranslateTo != null) patch.autoTranslateTo = p.autoTranslateTo;
       // Each hint on its own path, as the clients' `hintsSeen.{key}` writes: the other counts stay.
       for (const [key, count] of Object.entries(p.hintsSeen ?? {})) patch[`hintsSeen.${key}`] = count;

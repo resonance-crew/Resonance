@@ -37,6 +37,10 @@
  *   npx tsx scripts/backfill.ts avatar-colors [--apply] [--emulator]
  *       profiles still wearing the one avatar colour every profile was given (or none) → their own,
  *       picked by uid from lib/design/avatarColors as a new profile's is; any other colour stays
+ *   npx tsx scripts/backfill.ts media-keys    [--apply] [--emulator]
+ *       the storage key beside each stored picture URL (ADR 0005): `users.avatarKey`, `cards.media.key`,
+ *       where the URL is that key on the current base (MEDIA_PUBLIC_BASE / R2_PUBLIC_BASE); a key that no
+ *       longer goes with its URL is put right or removed. Only those fields are written
  *   npx tsx scripts/backfill.ts notes         [--apply] [--emulator]
  *       notes left before notes went into the thread → a `kind: 'note'` message in the two people's
  *       conversation (never on an anonymous card; no unread counted; opens a missing conversation,
@@ -227,6 +231,12 @@ async function main() {
       await backfillAvatarColors(db, { apply });
       return;
     }
+    case 'media-keys': {
+      const { backfillMediaKeys } = await import('./backfills/mediaKeys');
+      const { envMediaUrls } = await import('../src/server/infra/env/media');
+      await backfillMediaKeys(db, { apply, media: envMediaUrls() });
+      return;
+    }
     case 'notes': {
       const { backfillNotes } = await import('./backfills/notes');
       await backfillNotes(db, { apply });
@@ -279,7 +289,7 @@ async function main() {
       return;
     }
     default:
-      throw new Error(`Unknown task "${task ?? ''}" (anonymous | handles | edits | storage-host | rekey-images | rehost-images | square-avatars | reencode-legacy | cover-thumbs | avatar-colors | notes | anonymous-bells | orphan-notes | card-tombstones | link-previews | summary-translations | story-translations | recommend-index)`);
+      throw new Error(`Unknown task "${task ?? ''}" (anonymous | handles | edits | storage-host | rekey-images | rehost-images | square-avatars | reencode-legacy | cover-thumbs | avatar-colors | media-keys | notes | anonymous-bells | orphan-notes | card-tombstones | link-previews | summary-translations | story-translations | recommend-index)`);
   }
 }
 

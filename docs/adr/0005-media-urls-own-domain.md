@@ -36,3 +36,19 @@ abstraction (our domain in front of whichever store).
   tool); data needs no rewrite.
 - New write paths must store keys; the resolver becomes the only place that knows the public base.
 - A domain outside `*.resonance.channel` is effectively ruled out for story pictures.
+
+## Built (Phase 3, 2026-11-21)
+
+- Writes: the server keeps `media.key` (drafts, autosaves, pending edits, applying an edit) and `avatarKey`
+  (PATCH /me, by key or URL) beside the URL — only when the URL is exactly that key on the current base
+  (`src/server/domain/media.ts` `mediaKeyFor`), so a stored pair always agrees; a photo whose URL has no such
+  key drops the old key. The rules take both as optional, and only as the key the URL ends in.
+- Reads: `resolvedMediaUrl` answers `publicUrl(key)` on the current base, unless the stored URL names another
+  of our keys (an older client changed only the URL) — then the URL; no key: the URL as stored. The v1
+  presenters (`toAuthor`, `toFeedCard`'s `imageUrl` / `imageThumbUrl`, `GET /me`) go through it.
+- The current base must be `https` on `resonance.channel` or a subdomain (http localhost for the emulators):
+  on a deployment (`VERCEL_ENV`) any other makes every key-built URL and upload throw `MediaConfigError`,
+  logged (`src/server/infra/env/media.ts` `assertMediaConfig`). Former bases are only read, so any host may
+  stay there while a move finishes.
+- Older documents: `npx tsx scripts/backfill.ts media-keys [--apply]`. A bucket move:
+  `docs/ops/storage-migration.md`.

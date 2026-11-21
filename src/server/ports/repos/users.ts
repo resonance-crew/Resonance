@@ -66,6 +66,8 @@ export interface ProfilePatch {
   primaryLocale?: string;
   /** One of our stored pictures (checked by the service). */
   avatarUrl?: string;
+  /** Its storage key, set with `avatarUrl` (ADR 0005); null removes a key that no longer goes with the URL. */
+  avatarKey?: string | null;
   /** Replaces the list. */
   autoTranslateTo?: string[];
   /** These hints' counts, each key set on its own (the others kept). */

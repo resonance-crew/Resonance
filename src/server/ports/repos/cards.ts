@@ -77,7 +77,7 @@ export interface EditedContent {
   story: string;
   tags: string[];
   accentHue: number | null;
-  media: { type: string; url: string; label?: string; frame?: CoverFrame } | null;
+  media: { type: string; url: string; key?: string; label?: string; frame?: CoverFrame } | null;
 }
 
 /** What taking a resonance back writes, read first (opaque to services: the repository's own plan). */

@@ -8,6 +8,7 @@ import type { Visibility } from '@/lib/db/types';
 import type { CoverFrame } from '@/lib/images/coverFrame';
 import type { ServerCtx } from '@/server/ctx';
 import { asSnap, becameReachable, hiddenResonance } from '@/server/domain/cardsWrite';
+import { mediaKeyFor } from '@/server/domain/media';
 import type { EditedContent } from '@/server/ports/repos/cards';
 
 export interface ApplyEditResult {
@@ -53,7 +54,7 @@ export async function applyCardEditIn(ctx: ServerCtx, uid: string, id: string): 
       story,
       tags: Array.isArray(e.tags) ? e.tags.filter((t): t is string => typeof t === 'string') : [],
       accentHue: typeof e.accentHue === 'number' ? e.accentHue : null,
-      media: isMedia(e.media) ? pickMedia(e.media) : null,
+      media: isMedia(e.media) ? pickMedia(ctx, e.media) : null,
     };
     // The buffer may predate the rules' limits: the server copies nothing a client couldn't write.
     const keptUrl = asSnap(stored).get('media.url');
@@ -82,11 +83,17 @@ function isMedia(m: unknown): m is { type: string; url: string; label?: unknown;
   return !!m && typeof m === 'object' && typeof (m as { url?: unknown }).url === 'string' && typeof (m as { type?: unknown }).type === 'string';
 }
 
-/** A cover's own fields only (the buffer could hold anything beside them) — its frame too, whatever it holds (cardContentProblem judges it). */
-function pickMedia(m: { type: string; url: string; label?: unknown; frame?: unknown }): EditedContent['media'] {
+/**
+ * A cover's own fields only (the buffer could hold anything beside them) — its frame too, whatever it holds
+ * (cardContentProblem judges it) — and its storage key, made again from its URL (never the buffer's: an older
+ * client's copy keeps none, or one that no longer goes with the URL).
+ */
+function pickMedia(ctx: ServerCtx, m: { type: string; url: string; label?: unknown; frame?: unknown }): EditedContent['media'] {
+  const key = mediaKeyFor(ctx.media, m.url);
   return {
     type: m.type,
     url: m.url,
+    ...(key ? { key } : {}),
     ...(typeof m.label === 'string' ? { label: m.label } : {}),
     ...(m.frame != null ? { frame: m.frame as CoverFrame } : {}),
   };

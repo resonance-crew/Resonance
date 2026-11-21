@@ -20,6 +20,7 @@ import type { Card } from '@/lib/db/types';
 import { isCoverFrame } from '@/lib/images/coverFrame';
 import { publicBases, storageKeyOf } from '@/lib/storage/publicUrl';
 import type { ServerCtx } from '@/server/ctx';
+import { mediaKeyFor } from '@/server/domain/media';
 import { cardVisible } from '@/server/domain/visibility';
 import { MapOpRefused, draftLogExpiry, mapReadsOf, planMapOps, revApplies, storedRev } from '@/server/domain/writer';
 import type { RealtimeTopic } from '@/server/ports/realtime';
@@ -94,12 +95,18 @@ export async function applyMapOpsIn(ctx: ServerCtx, uid: string, flat: readonly 
 
 /* ───────────── drafts ───────────── */
 
-/** A cover as sent, without its null fields; null when none was sent. */
-function coverOf(m: DraftMediaInput | null | undefined): DraftCover | null {
+/**
+ * A cover as sent, without its null fields, its storage key beside its URL
+ * when the URL is one of ours on the current base (ADR 0005: answers build
+ * the URL from the key); null when none was sent.
+ */
+function coverOf(ctx: ServerCtx, m: DraftMediaInput | null | undefined): DraftCover | null {
   if (!m) return null;
+  const key = mediaKeyFor(ctx.media, m.url);
   return {
     type: m.type,
     url: m.url,
+    ...(key ? { key } : {}),
     ...(m.thumbUrl != null ? { thumbUrl: m.thumbUrl } : {}),
     ...(m.label != null ? { label: m.label } : {}),
     ...(m.frame != null ? { frame: m.frame } : {}),
@@ -137,7 +144,7 @@ const keptCoverUrl = (row: CardRow | null) => {
  * answers the draft already there (`created: false`) and writes nothing.
  */
 export async function createDraftIn(ctx: ServerCtx, uid: string, input: CreateDraftInput): Promise<CreatedDraftBody> {
-  const cover = coverOf(input.media);
+  const cover = coverOf(ctx, input.media);
   const draft: NewDraft = {
     thoughtCore: input.thoughtCore,
     story: input.story,
@@ -190,7 +197,7 @@ export async function createDraftIn(ctx: ServerCtx, uid: string, input: CreateDr
  */
 export async function saveDraftIn(ctx: ServerCtx, uid: string, id: string, input: UpdateDraftInput): Promise<DraftSavedBody> {
   const { rev, clear, media, ...fields } = input;
-  const cover = coverOf(media);
+  const cover = coverOf(ctx, media);
   const set: DraftPatch['set'] = Object.fromEntries(Object.entries({ ...fields, ...(cover ? { media: cover } : {}) }).filter(([, v]) => v != null));
   const patch: DraftPatch = { set, clear: [...new Set(clear ?? [])].filter((f) => !(f in set)) };
   await ctx.limits.spend(uid, 'draftSave');
@@ -257,7 +264,7 @@ export async function getPendingEditIn(ctx: ServerCtx, uid: string, id: string):
  * only unless it already is. Ordered by `rev` as a draft's autosaves.
  */
 export async function putPendingEditIn(ctx: ServerCtx, uid: string, id: string, input: PendingEditInput): Promise<DraftSavedBody> {
-  const cover = coverOf(input.media);
+  const cover = coverOf(ctx, input.media);
   const copy: EditCopy = {
     thoughtCore: input.thoughtCore,
     story: input.story,
