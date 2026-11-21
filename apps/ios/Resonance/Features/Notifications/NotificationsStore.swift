@@ -3,8 +3,11 @@ import Foundation
 import Observation
 import ResonanceKit
 
-/// The signed-in person's notifications, live (a Firestore snapshot listener
-/// on the same query the web's bell reads). Drives the tab badge too.
+/// The signed-in person's notifications, live. Drives the tab badge too. With `features.apiBell` (Phase 2 of the
+/// middleware decouple) read through GET /api/v1/me/bell — pulled again when `signals/{uid}` `bell` moves and on the
+/// 60 s foreground pull, a 304 when nothing changed — and read through POST /notifications/read, the row drawn read
+/// at once; otherwise (the older path, kept one release) a Firestore snapshot listener on the same query the web's
+/// bell read, its rows read by writing `readAt`.
 @Observable
 final class NotificationsStore {
     struct Item: Identifiable, Equatable {
@@ -29,6 +32,13 @@ final class NotificationsStore {
         var readers: Int?
         var reread = false
         var isUnread: Bool { readAt == nil }
+
+        /// The row read at `at`.
+        func read(at: Date) -> Item {
+            Item(id: id, type: type, fromHandle: fromHandle, fromUserId: fromUserId, cardId: cardId, preview: preview, noteId: noteId,
+                 count: count, readAt: at, createdAt: createdAt, anonymous: anonymous, fromUserIds: fromUserIds, readers: readers,
+                 reread: reread)
+        }
     }
 
     private(set) var items: [Item] = []
@@ -41,20 +51,39 @@ final class NotificationsStore {
     private(set) var unreadCount = 0
 
     @ObservationIgnored private let listeners = LiveListeners()
+    /// The API path this run takes (nil: Firestore), and the bell signal that says when to pull.
+    @ObservationIgnored private var bell: InboxAPI?
+    @ObservationIgnored private var subscription: SignalSubscription?
+    @ObservationIgnored private var pulls = PullGate()
+    @ObservationIgnored private var uid: String?
+    /// Rows read here and not yet read in the server's answer: they stay read (a pull that started before the read
+    /// was written would otherwise bring the dot back for a moment).
+    @ObservationIgnored private var readHere: [String: Date] = [:]
+
+    /// Whether this run reads the bell through the API.
+    var usesAPI: Bool { bell != nil }
     /// Who the rows are from and the cards they are about (round 21), as read while the screen showed;
     /// kept until sign-out.
     @ObservationIgnored private var keptExtras: BellExtras?
 
     /// The rows' faces and cards, made the first time the screen asks.
-    func extras(reading: ReadingAPI) -> BellExtras {
+    func extras(reading: ReadingAPI, readPeople: (@Sendable (Set<String>) async -> [String: PeopleBook.Read])? = nil) -> BellExtras {
         if let keptExtras { return keptExtras }
-        let made = BellExtras(cards: CardSummaries(api: reading))
+        let made = readPeople.map { BellExtras(cards: CardSummaries(api: reading), readPeople: $0) }
+            ?? BellExtras(cards: CardSummaries(api: reading))
         keptExtras = made
         return made
     }
 
-    func start(uid: String) {
+    func start(uid: String, bell: InboxAPI? = nil, signals: SignalListener? = nil) {
         stop()
+        self.uid = uid
+        if let bell {
+            self.bell = bell
+            subscription = signals?.observe([.bell]) { [weak self] _ in self?.pull() }
+            pull()
+            return
+        }
         listeners.add("notifications") { [weak self] in
             let registration = FirebaseBootstrap.db.collection("notifications")
                 .whereField("userId", isEqualTo: uid)
@@ -79,13 +108,50 @@ final class NotificationsStore {
         }
     }
 
-    /// Back in the foreground (or the retry tapped): a failed listener listens again.
+    /// Back in the foreground (or the retry tapped): a failed listener listens again (the API's bell is asked again).
     func resume() {
         if listeners.resume() { failed = false }
+        if bell != nil { pull() }
+    }
+
+    /// Asks the server for the bell (one pull at a time; one asked for meanwhile runs after it).
+    private func pull() {
+        guard let bell, let uid else { return }
+        pulls.run("bell") { [weak self] in
+            do {
+                let page = try await bell.bell(limit: 50)
+                guard let self, self.uid == uid else { return }
+                self.show(page.items.map(Self.item(api:)))
+            } catch {
+                guard let self, self.uid == uid else { return }
+                self.failed = true
+            }
+        }
+    }
+
+    private func show(_ fresh: [Item]) {
+        // A row read here keeps its read until the server says so too.
+        let shown = fresh.map { item -> Item in
+            guard item.isUnread, let at = readHere[item.id] else {
+                readHere[item.id] = nil
+                return item
+            }
+            return item.read(at: at)
+        }
+        if shown != items { items = shown }
+        unreadCount = shown.filter(\.isUnread).count
+        loaded = true
+        failed = false
     }
 
     func stop() {
         listeners.removeAll()
+        subscription?.cancel()
+        subscription = nil
+        bell = nil
+        pulls = PullGate()
+        uid = nil
+        readHere = [:]
         keptExtras = nil
         items = []
         unreadCount = 0
@@ -101,8 +167,44 @@ final class NotificationsStore {
     /// A tapped push reads its row (it may not have arrived in the list yet).
     func markRead(id: String) {
         if let item = items.first(where: { $0.id == id }), !item.isUnread { return }
+        if let bell {
+            // Drawn read at once; the server's answer follows on the bell's signal.
+            let now = Date()
+            readHere[id] = now
+            show(items)
+            Task { [weak self] in
+                do { try await bell.markBellRead([id]) } catch {
+                    // Not read after all: the dot comes back with the next answer.
+                    self?.readHere[id] = nil
+                    self?.pull()
+                }
+            }
+            return
+        }
         FirebaseBootstrap.db.collection("notifications").document(id)
             .updateData(["readAt": FieldValue.serverTimestamp()])
+    }
+
+    /// A row of GET /me/bell, as the list draws it (the payload as the server wrote it, as the document had it).
+    nonisolated static func item(api row: InboxAPI.BellItem) -> Item {
+        let payload = row.payload
+        let tappers = payload.fromUserIds ?? []
+        return Item(
+            id: row.id,
+            type: row._type,
+            fromHandle: payload.fromHandle,
+            fromUserId: payload.fromUserId ?? tappers.first,
+            cardId: payload.cardId,
+            preview: payload.preview,
+            noteId: payload.noteId,
+            count: payload.count.map { Int($0) },
+            readAt: row.readAt.flatMap(ISO8601.date),
+            createdAt: ISO8601.date(row.createdAt),
+            anonymous: payload.anonymous == true,
+            fromUserIds: tappers,
+            readers: payload.readers.map { Int($0) },
+            reread: payload.reread == true
+        )
     }
 
     nonisolated static func item(_ doc: QueryDocumentSnapshot) -> Item {
@@ -149,11 +251,17 @@ final class BellExtras {
     let cards: CardSummaries
     @ObservationIgnored private var book = PeopleBook()
     @ObservationIgnored private var reading: Set<String> = []
-    @ObservationIgnored private let readPerson: @Sendable (String) async -> PeopleBook.Read
+    @ObservationIgnored private let readPeople: @Sendable (Set<String>) async -> [String: PeopleBook.Read]
 
     init(cards: CardSummaries, readPerson: @escaping @Sendable (String) async -> PeopleBook.Read = { await ConversationsStore.read($0) }) {
         self.cards = cards
-        self.readPerson = readPerson
+        readPeople = { await PeopleBook.readEach($0, readPerson) }
+    }
+
+    /// People read many at once (the session's path: GET /users with `features.apiSocial`).
+    init(cards: CardSummaries, readPeople: @escaping @Sendable (Set<String>) async -> [String: PeopleBook.Read]) {
+        self.cards = cards
+        self.readPeople = readPeople
     }
 
     func person(_ uid: String?) -> Sender {
@@ -184,12 +292,10 @@ final class BellExtras {
         let cardIds = items.compactMap(\.cardId).filter { !$0.isEmpty && seen.insert($0).inserted }
         let cards = cards
         async let cardsRead: Void = cards.load(cardIds)
-        let readPerson = readPerson
-        await withTaskGroup(of: (String, PeopleBook.Read).self) { group in
+        if !wanted.isEmpty {
+            let reads = await readPeople(wanted)
             for id in wanted {
-                group.addTask { (id, await readPerson(id)) }
-            }
-            for await (id, read) in group {
+                let read = reads[id] ?? .failed
                 book.record(id, read)
                 if case let .found(person) = read { people[id] = person }
                 answered.insert(id)

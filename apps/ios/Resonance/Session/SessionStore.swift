@@ -97,6 +97,11 @@ final class SessionStore {
     let writing: WritingAPI
     let notifications = NotificationsStore()
     let conversations = ConversationsStore()
+    /// What the server says to this build: the paths to take, and whether it is too old (Phase 2 of the middleware
+    /// decouple). Asked at launch and on the way back to the foreground; the last answer kept on disk.
+    let clientConfig: ClientConfigStore
+    /// `signals/{uid}`: what tells the lists read through the API to pull again (and their 60 s foreground pull).
+    let signals = SignalListener()
     /// Cards seen in lists, drawn while a card's page loads (this account's only).
     let cardPreviews = CardPreviewCache()
     /// The card reads this run has reported, by account and card (never shown).
@@ -125,6 +130,8 @@ final class SessionStore {
     /// A link into the app (a universal link, the Smart App Banner's 打開) waiting for the tabs to open it.
     let links = LinkInbox()
     @ObservationIgnored private var listener: AuthStateDidChangeListenerHandle?
+    /// The last account's local data is being cleared: the next one's lists wait for it (`apply`).
+    @ObservationIgnored private var forgettingAccount = false
     @ObservationIgnored private let apple = AppleSignIn()
 
     init(config: AppConfig) {
@@ -145,6 +152,7 @@ final class SessionStore {
         writing = WritingAPI(client: api, configuration: configuration,
                              slowClient: ResonanceClient.make(configuration, cache: httpCache, session: AppHTTP.slowSession))
         thoughtMap = ThoughtMapStore(api: ReadingAPI(client: api))
+        clientConfig = ClientConfigStore(fetch: { try await ClientConfigAPI(client: client).fetch() })
         let settingsAPI = NotificationSettingsAPI(client: client)
         notifyAsks = NotificationAsks(permission: { await PushCenter.shared.permission() },
                                       ask: { await PushCenter.shared.askIfUndetermined() },
@@ -175,6 +183,49 @@ final class SessionStore {
         }
         // Connected or no longer (a resonance or a take-back, an answered letter, a block — anyone's, anywhere).
         conversations.onConnectionsChange = { [weak self] people in self?.connectionsChanged(people) }
+        // The server changed the paths: the live lists start again on the new ones.
+        clientConfig.onFeaturesChange = { [weak self] _ in self?.restartLive() }
+        Task { [clientConfig] in await clientConfig.refresh() }
+    }
+
+    /// The live lists of `uid` on the paths `clientConfig` names: the bell and the conversations through the API
+    /// with `apiBell` / `apiInbox` / `apiSocial` — pulled when `signals/{uid}` moves (listened to with `signals`) —
+    /// else their Firestore listeners, as before.
+    private func startLive(_ uid: String) {
+        let paths = livePaths
+        signals.start(uid: uid, listens: paths.signals)
+        let inbox = InboxAPI(client: api)
+        notifications.start(uid: uid, bell: paths.bell ? inbox : nil, signals: signals)
+        conversations.readPeople = peopleReader ?? { ids in await PeopleBook.readEach(ids) { await ConversationsStore.read($0) } }
+        conversations.start(uid: uid, inbox: paths.conversations ? inbox : nil,
+                            social: paths.social ? SocialAPI(client: api) : nil, signals: signals)
+    }
+
+    private func stopLive() {
+        notifications.stop()
+        conversations.stop()
+        signals.stop()
+    }
+
+    /// The paths changed under a signed-in account (a client-config answer): its lists start again on them.
+    private func restartLive() {
+        guard phase == .signedIn, let uid, !forgettingAccount else { return }
+        stopLive()
+        startLive(uid)
+    }
+
+    /// The paths this run's reads and writes take.
+    var livePaths: LivePaths { LivePaths(clientConfig.features) }
+
+    /// People by id the API's way (GET /users, 30 at a time) with `features.apiSocial`; nil: the older path.
+    var peopleReader: (@Sendable (Set<String>) async -> [String: PeopleBook.Read])? {
+        guard livePaths.social else { return nil }
+        let social = SocialAPI(client: api)
+        return { ids in
+            do { return PeopleBook.reads(try await social.users(Array(ids))) } catch {
+                return Dictionary(uniqueKeysWithValues: ids.map { ($0, PeopleBook.Read.failed) })
+            }
+        }
     }
 
     /// Who this account is connected with changed: what the server said about it (a profile's
@@ -190,14 +241,23 @@ final class SessionStore {
     var profiles: ProfileAPI { ProfileAPI(client: api) }
     var safety: SafetyService? {
         let freshness = httpCache.freshness
-        return uid.map { SafetyService(uid: $0, api: SafetyAPI(client: api), onWrite: freshness.invalidate) }
+        let social = livePaths.social ? SocialAPI(client: api) : nil
+        let conversations = conversations
+        return uid.map {
+            SafetyService(uid: $0, api: SafetyAPI(client: api), onWrite: freshness.invalidate, social: social,
+                          onBlockChange: { conversations.blockChanged($0, blocked: $1) })
+        }
     }
     var bookmarks: BookmarkService? {
         let freshness = httpCache.freshness
-        return uid.map { BookmarkService(uid: $0, onWrite: freshness.invalidate) }
+        let social = livePaths.social ? SocialAPI(client: api) : nil
+        return uid.map { BookmarkService(uid: $0, onWrite: freshness.invalidate, social: social, reading: reading) }
     }
     var drafts: DraftService? { uid.map(DraftService.init(uid:)) }
-    var hints: HintService? { uid.map(HintService.init(uid:)) }
+    var hints: HintService? {
+        let social = livePaths.social ? SocialAPI(client: api) : nil
+        return uid.map { HintService(uid: $0, social: social, profile: profiles) }
+    }
     var messaging: MessagingAPI { MessagingAPI(client: api) }
     var pushAPI: PushAPI { PushAPI(client: api) }
     var notificationSettings: NotificationSettingsAPI { NotificationSettingsAPI(client: api) }
@@ -222,6 +282,7 @@ final class SessionStore {
     @discardableResult
     func cameBack(now: Date = .now) -> Bool {
         guard phase == .signedIn else { return false }
+        signals.setForeground(true)
         readingReports.flush(uid: uid)
         guard foreground.isStale(at: now) else { return false }
         foreground = ForegroundRefresh(last: now)
@@ -372,19 +433,19 @@ final class SessionStore {
         // An account this install has seen with a profile opens straight onto the tabs.
         land(newUID != nil && UserDefaults.standard.string(forKey: Self.profiledKey) == newUID ? .tabs : .pending)
         // The last account's listeners stop before anything of it is cleared off the device.
-        notifications.stop()
-        conversations.stop()
+        stopLive()
         // Signed out (deletion signs out too), or switched: what Firestore and the system kept of
         // the last account goes — the next one's listeners start once that is done.
         if previous != nil { PushCenter.lastRegistration = nil }
         let forgetting = previous.map { previous in Task { await Self.forget(previous) } }
+        forgettingAccount = forgetting != nil
         if let newUID {
             signedOutForDeletion = false
             Task { [weak self] in
                 await forgetting?.value
                 guard let self, self.uid == newUID else { return }
-                notifications.start(uid: newUID)
-                conversations.start(uid: newUID)
+                forgettingAccount = false
+                startLive(newUID)
                 // Reading reports an earlier run couldn't send (the app went away first).
                 readingReports.flush(uid: newUID)
             }
@@ -634,5 +695,25 @@ struct ConnectionsMove: Equatable {
     /// Whether it touches `uid` (an unknown person is no one's).
     func concerns(_ uid: String?) -> Bool {
         uid.map(people.contains) ?? false
+    }
+}
+
+/// Which path each converged read and write takes, from client-config's `features` (Phase 2 of the middleware
+/// decouple): true is `/api/v1`, false the older Firestore path kept one release.
+struct LivePaths: Equatable {
+    /// `signals/{uid}` is listened to.
+    let signals: Bool
+    /// The bell (GET /me/bell, POST /notifications/read).
+    let bell: Bool
+    /// The conversations list and the thread (GET /conversations…, POST …/read).
+    let conversations: Bool
+    /// Blocks, bookmarks, hints, the avatar, people by id, connections.
+    let social: Bool
+
+    init(_ features: ClientFeatures) {
+        signals = features.signals
+        bell = features.apiBell
+        conversations = features.apiInbox
+        social = features.apiSocial
     }
 }

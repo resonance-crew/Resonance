@@ -243,7 +243,14 @@ struct AvatarSaver {
     @MainActor static func live(_ session: SessionStore, uid: String) -> AvatarSaver {
         AvatarSaver(
             upload: { try await session.writing.upload($0, filename: "avatar.jpg", purpose: "avatar") },
-            write: { try await FirebaseBootstrap.db.collection("users").document(uid).setData($0, merge: true) },
+            write: { fields in
+                // `features.apiSocial` (Phase 2 of the middleware decouple): PATCH /me; else the profile document, as before.
+                if session.livePaths.social {
+                    try await SocialAPI(client: session.api).updateMe(avatarUrl: fields["avatarUrl"] as? String)
+                } else {
+                    try await FirebaseBootstrap.db.collection("users").document(uid).setData(fields, merge: true)
+                }
+            },
             refresh: {
                 // Written past the API: the HTTP cache asks the server again, and Me comes back with it.
                 session.noteOwnWrite()
