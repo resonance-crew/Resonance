@@ -172,7 +172,18 @@ export const SCREENS: Screen[] = [
   { id: 'taps-author-list', route: '/card/rich-story', as: 'alice',
     web: { click: '[data-tap-author] button' },
     app: { ios: ['-visualEnd', 'YES', '-visualTaps', 'author'], android: ['--es', 'cardEnd', 'taps'] },
-    expect: "Who resonated with alice's rich story, in a centred dialog on every device: 與這張卡片共振的人, then gus, hana, bob and carol (her note's first line 讀到搬家那段，好像看見自己。 muted under her name), each a face 36, the small 關閉 at its foot" },
+    expect: "Who resonated with alice's rich story, in a centred dialog on every device: 與這張卡片共振的人, then gus, hana, bob and carol, each a face 36 — under gus's, bob's and carol's pen names the passage each picked, in 「」 and muted (gus and bob the first, carol the second), and under carol's quote her note's first line 讀到搬家那段，好像看見自己。, muted; hana's row a name alone — the small 關閉 at its foot" },
+  // Round 27 §V2: the passages' dialog after a press that turns 共振 on, as dora (no tap of hers on the rich story). The
+  // web holds it with `?visualTap=` (emulator builds only, nothing written: a real press would turn the stored tap off
+  // on the next device), the apps with their launch args.
+  { id: 'card-passages', route: '/card/rich-story', as: 'dora',
+    web: { query: 'visualTap=passages', scrollTo: '[data-end-row]' },
+    app: { ios: ['-visualEnd', 'YES', '-visualTap', 'passages'], android: ['--es', 'cardEnd', 'passages'] },
+    expect: "alice's rich story read by dora, who just pressed 共振 (on: the verb's solid face, two waves): a small centred dialog over the dimmed page — its title 悄悄告訴作者，哪一段讓你有共鳴, then three banded rows of alice's own sentences, each wrapped in full in the story's type (never cut, no 「…」), nothing drawn round a row at rest, and the small 略過 at the foot's end, no ✕ — a phone 400 or the column less 16 a side, tablet and desktop 480; never a bottom sheet, never a popover" },
+  { id: 'card-passage-picked', route: '/card/rich-story', as: 'dora', set: 'extended',
+    web: { query: 'visualTap=picked', scrollTo: '[data-end-row]' },
+    app: { ios: ['-visualEnd', 'YES', '-visualTap', 'picked'], android: ['--es', 'cardEnd', 'passage-picked'] },
+    expect: "The same dialog with the second row chosen: that row's band in the press ink between its two hand-drawn curves, a small check at its end, the other two rows bare — no toast" },
   { id: 'card-private', route: '/card/alice-draft', as: 'alice',
     expect: "alice's private card: 🔒 私人卡 at the end of the meta line and an edit pen before the ⋯" },
   { id: 'profile', route: '/u/bob', as: 'alice',

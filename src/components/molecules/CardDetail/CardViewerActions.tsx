@@ -19,6 +19,7 @@ import { cardShareKey } from '@/lib/share/links';
 import { NoteInPlace, useNoteInPlace } from './NoteInPlace';
 import { TapFaces } from './TapFaces';
 import { reducedMotion } from './TapPassages';
+import { useVisualTap } from './visualTap';
 import styles from './CardViewerActions.module.css';
 
 // Loaded on the first 用卡片回應: most readers never open it.
@@ -83,6 +84,8 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
   useEffect(() => () => window.clearTimeout(passagesTimer.current), []);
   const passages = tap?.passages ?? [];
   const offersPassages = passages.length >= 2 && !translated;
+  const openPassages = useCallback(() => setPassagesOpen(true), []);
+  useVisualTap(cardId, user?.id, tap, me?.handle ? faceOf(me) : null, openPassages);
   // Still being read (undefined): a kept draft waits for it before it opens anything.
   const note = useNoteInPlace({ cardId, uid: user?.id, mayNote: tap === undefined ? undefined : (tap?.mayNote ?? true) });
   // The viewer's face as it slides in (their id) or out (their face, drawn once more).
