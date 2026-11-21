@@ -137,16 +137,20 @@ export const SCREENS: Screen[] = [
   { id: 'card', route: '/card/rich-story', as: 'alice',
     expect: "alice's own card 搬家後的第一個安靜夜晚: title, byline, bold/italic, a heading, a quote, lists, an embedded card, a link, a rule, an English line at the end" },
   { id: 'card-other', route: '/card/rain-walk', as: 'alice',
-    expect: "bob's card read by alice: byline with bob; where the story's end is in view, the end row — one capsule 共振 · 寄小紙條 · ✓ 已回應 (alice replied with 我也在雨裡走過), all tonal — and under it dora's, eli's and fay's faces overlapping, each on no pad of paper (the front face's pen line parts them), with 收藏 at the line's end" },
+    expect: "bob's card read by alice: byline with bob; where the story's end is in view, the end row — one capsule 共振 · 寄小紙條 · ✓ 已回應 (alice replied with 我也在雨裡走過), all tonal — and under it dora's, eli's and fay's faces overlapping, each on no pad of paper (the front face's pen line parts them), nothing else on their line; 收藏 alone at the end of the capsule's row, at the column's end under the byline's ⋯ (a phone: at the end of the tags' row, the capsule spanning the column)" },
   { id: 'card-anonymous', route: '/card/unsigned-letter', as: 'alice',
-    expect: 'An anonymous card: 匿名 in the byline, never a pen name; where its end is in view, the same end row as a named card (共振 · 寄小紙條 · 用卡片回應, 收藏)' },
+    expect: "An anonymous card: 匿名 in the byline, never a pen name; where its end is in view, the same end row as a named card (共振 · 寄小紙條 · 用卡片回應; 收藏 at the end of the capsule's row, on a phone at the end of the tags' row)" },
   // Round 26 (§V4, SETTLED 9): the end of a story — the tap, its faces and their list, the note written in place, and
   // what the author sees. The seed: alice resonated with bob's first coffee after dora, eli and fay; dora's three notes
   // to carol wait; strangers and bob (carol with a note) resonated with alice's rich story. The web scrolls the end
   // row to just under the middle of the window (its scroll-margin), the story's last lines above it.
   { id: 'card-tapped', route: '/card/first-coffee', as: 'alice', web: { scrollTo: '[data-end-row]' },
     app: { ios: ['-visualEnd', 'YES'], android: ['--es', 'cardEnd', 'end'] },
-    expect: "bob's 第一杯自己沖的咖啡 read by alice, who resonated with it: the capsule 共振 on (the verb's solid face, two waves, its words the same as at rest) · 寄小紙條 · 用卡片回應 (tonal), and right under it alice's face first, then dora's and eli's, overlapping with no pad of paper round any (the front face's own pen line parts them), a blank paper disc after them (no number, no words), 收藏 at the line's end" },
+    expect: "bob's 第一杯自己沖的咖啡 read by alice, who resonated with it: the capsule 共振 on (the verb's solid face, two waves, its words the same as at rest) · 寄小紙條 · 用卡片回應 (tonal), and right under it alice's face first, then dora's and eli's, overlapping with no pad of paper round any (the front face's own pen line parts them), a blank paper disc after them (no number, no words) and nothing else on that line; 收藏 at the end of the capsule's own row, at the column's end under the byline's ⋯ — on a phone, where the capsule spans the column, at the end of the tags' row instead (round 28; the owner, 2026-11-21: 「把它移到這個 segmented buttons 的右邊」, and of 收藏 under 用卡片回應 「這收藏按鈕不應該放在這裡」)" },
+  // Round 28: a long story read by someone else — the byline is out of view at its end, so the web repeats the card's
+  // 分享 · ⋯ there, after 收藏, the three one group. (The apps keep 分享 · ⋯ in the bar: their end is card-tapped's.)
+  { id: 'card-end-long', route: '/card/rich-story', as: 'bob', platforms: ['web'], web: { scrollTo: '[data-end-row]' },
+    expect: "alice's long 搬家後的第一個安靜夜晚 read by bob, who resonated with it, its end in view: the capsule (共振 on · 寄小紙條 · 用卡片回應) at its own width with 收藏 · 分享 · ⋯ as one group at the end of its row, at the column's end; bob's face on the line under 共振, nothing else on it; the tags' row above bare — on a phone the capsule spans the column and the three glyphs end the tags' row, the tags wrapping in their own column" },
   { id: 'card-note-open', route: '/card/first-coffee', as: 'alice',
     web: { click: '[data-end-row] button[data-segment="note"]', scrollTo: '[data-end-row]' },
     app: { ios: ['-visualEnd', 'YES', '-visualNote', 'open'], android: ['--es', 'cardEnd', 'note'] },
