@@ -1,0 +1,165 @@
+{
+  "about": "Round 29 §P3: where a picked sentence lies in one drawn text of the story. src/lib/markdown/passageRange.ts is the rule; the web (passageRange.test.ts), iOS (PassageMarksTests) and Android (PassageMarksTest) run these cases alike. A case has a `leaf` (expect { start, end } in UTF-16 code units, end exclusive, or null) or `leaves` in the story's order (expect { leaf, start, end } or null). `cjkRanges`: the code points read as CJK, inclusive.",
+  "cjkRanges": [
+    [
+      4352,
+      4607
+    ],
+    [
+      11904,
+      12255
+    ],
+    [
+      12272,
+      12351
+    ],
+    [
+      12352,
+      12799
+    ],
+    [
+      12800,
+      19903
+    ],
+    [
+      19968,
+      40959
+    ],
+    [
+      43360,
+      43391
+    ],
+    [
+      44032,
+      55295
+    ],
+    [
+      63744,
+      64255
+    ],
+    [
+      65072,
+      65103
+    ],
+    [
+      65280,
+      65519
+    ],
+    [
+      131072,
+      262143
+    ]
+  ],
+  "cases": [
+    {
+      "name": "crossing bold: the leaf is the words as drawn, the range runs through the strong run",
+      "leaf": "箱子堆滿了客廳，我坐在地上，第一次覺得安靜是屬於自己的。窗外有人在慢慢地收衣服。",
+      "sentence": "我坐在地上，第一次覺得安靜是屬於自己的。",
+      "expect": {
+        "start": 8,
+        "end": 28
+      }
+    },
+    {
+      "name": "the quote's soft break after a CJK stop, kept as a line break",
+      "leaf": "你不是失去了一個家，\n你是多了一個可以回去的地方。",
+      "sentence": "你不是失去了一個家，你是多了一個可以回去的地方。",
+      "expect": {
+        "start": 0,
+        "end": 25
+      }
+    },
+    {
+      "name": "the quote's soft break drawn as a space (`， `)",
+      "leaf": "你不是失去了一個家， 你是多了一個可以回去的地方。",
+      "sentence": "你不是失去了一個家，你是多了一個可以回去的地方。",
+      "expect": {
+        "start": 0,
+        "end": 25
+      }
+    },
+    {
+      "name": "crossing a link: the leaf draws a space before the link's words, the sentence has none",
+      "leaf": "有些東西在打包的時候就決定留下了：舊沙發、一面有裂痕的鏡子，還有 一篇讀過很多次的文章。",
+      "sentence": "舊沙發、一面有裂痕的鏡子，還有一篇讀過很多次的文章。",
+      "expect": {
+        "start": 17,
+        "end": 44
+      }
+    },
+    {
+      "name": "twice in one leaf: the first",
+      "leaf": "我走了進去。燈還亮著。我走了進去。",
+      "sentence": "我走了進去。",
+      "expect": {
+        "start": 0,
+        "end": 6
+      }
+    },
+    {
+      "name": "twice in the story: the first leaf, in the story's order, that holds it",
+      "leaves": [
+        "燈還亮著。",
+        "我走了進去。",
+        "後來，我走了進去。"
+      ],
+      "sentence": "我走了進去。",
+      "expect": {
+        "leaf": 1,
+        "start": 0,
+        "end": 6
+      }
+    },
+    {
+      "name": "a Latin sentence, its spaces read as one",
+      "leaf": "The quiet after moving out  felt like mine — finally.",
+      "sentence": "The quiet after moving out felt like mine — finally.",
+      "expect": {
+        "start": 0,
+        "end": 53
+      }
+    },
+    {
+      "name": "a Latin match on word edges: \"at the door\" is not inside \"that the door\"",
+      "leaf": "He said that the door was open, so we waited at the door.",
+      "sentence": "at the door",
+      "expect": {
+        "start": 45,
+        "end": 56
+      }
+    },
+    {
+      "name": "a Latin match ends on a word edge too",
+      "leaf": "She stood in the doorway.",
+      "sentence": "stood in the door",
+      "expect": null
+    },
+    {
+      "name": "a character outside the Basic Multilingual Plane counts two code units",
+      "leaf": "𠮷野家的燈還亮著。我走了進去。",
+      "sentence": "我走了進去。",
+      "expect": {
+        "start": 10,
+        "end": 16
+      }
+    },
+    {
+      "name": "across two list items: not in either leaf",
+      "leaf": "把書按照顏色排好",
+      "sentence": "把書按照顏色排好 在窗台放一盆薄荷",
+      "expect": null
+    },
+    {
+      "name": "a literal * the renderer draws: not found",
+      "leaf": "窗外有人在*慢慢地*收衣服。",
+      "sentence": "窗外有人在慢慢地收衣服。",
+      "expect": null
+    },
+    {
+      "name": "not there",
+      "leaf": "箱子堆滿了客廳。",
+      "sentence": "窗外有人在收衣服。",
+      "expect": null
+    }
+  ]
+}
