@@ -506,7 +506,7 @@ struct CardScreen: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.bottom, 40)
                 } else if !trashed, !detail.isOwner {
-                    endRow(detail).padding(.bottom, 40)
+                    endRow(model, detail, script: type.script, translated: shown != nil).padding(.bottom, 40)
                 } else if !trashed, AuthorTaps.shows(detail), let tap = detail.tap?.value1 {
                     // The author's own card (§U3): who resonated, as faces after the wave — nothing when no one has.
                     AuthorTaps(cardId: card.id, faces: tap.faces, more: tap.more)
@@ -574,8 +574,8 @@ struct CardScreen: View {
     /// The story's end (round 26 §U1): the three kinds of feedback (共振 · 寄小紙條 · 用卡片回應), the faces and 收藏 under
     /// them, and the note in place when it is open (``CardEndRow``) — the card's share and ⋯ are in the bar or the
     /// byline already. It fades in once scrolled to; its coming into view is the story read through (§U7).
-    private func endRow(_ detail: CardDetail) -> some View {
-        CardEndRow(detail: detail)
+    private func endRow(_ model: CardModel, _ detail: CardDetail, script: StoryScript, translated: Bool) -> some View {
+        CardEndRow(detail: detail, script: script, translated: translated) { Task { await model.load() } }
             .id(Self.pageEnd)
             .revealedOnScroll()
             .onScrollVisibilityChange(threshold: 0.3) { [reading] visible in if visible { reading.sawEnd() } }

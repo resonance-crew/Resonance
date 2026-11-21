@@ -4,6 +4,7 @@ import ResonanceAPI
 public typealias CardTap = Components.Schemas.CardTap
 public typealias TapList = Components.Schemas.TapList
 public typealias TapPerson = Components.Schemas.TapPerson
+public typealias TapPassage = Components.Schemas.TapPassage
 public typealias ReadingReportBody = Components.Schemas.ReadingReportRequest
 
 /// The resonance tap (共振, round 26 §R1) and the reading report (§R3) as plain async calls — the reading
@@ -29,6 +30,23 @@ extension ReadingAPI {
     public func untap(_ id: String) async throws -> Bool {
         switch try await client.untapCard(path: .init(key: id)) {
         case let .ok(r): return try r.body.json.on
+        case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
+        case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
+        case let .forbidden(r): throw APIFailure(try r.body.json, status: 403)
+        case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
+        case let .conflict(r): throw APIFailure(try r.body.json, status: 409)
+        case let .tooManyRequests(r): throw APIFailure(try r.body.json, status: 429)
+        case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
+        }
+    }
+
+    /// Says which part of card `id` stayed with the reader (PUT /cards/{id}/tap/passage, round 27 §P4): one of
+    /// `CardTap.passages`' ids, or nil to clear the pick. Only the author learns it; nothing rings. Answers the pick
+    /// as the server holds it now. A 409 (the tap is off) or a 400 (not one of the card's passages now) tells the
+    /// page to read the card again.
+    public func setTapPassage(_ id: String, passage: String?) async throws -> String? {
+        switch try await client.setTapPassage(path: .init(key: id), body: .json(.init(passage: passage))) {
+        case let .ok(r): return try r.body.json.passage
         case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
         case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
         case let .forbidden(r): throw APIFailure(try r.body.json, status: 403)

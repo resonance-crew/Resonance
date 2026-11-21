@@ -16,10 +16,17 @@ import SwiftUI
 /// 3. **The note field** when 寄小紙條 opened it (``NoteField``) — or, while three notes wait for the author's answer,
 ///    one muted line in its place.
 ///
-/// Tapping 共振 opens nothing: the segment fills, the face slides in, that is all; a failure flips it back with
-/// 「沒送出去，再試一次」.
+/// Tapping 共振 fills the segment and slides the face in; a failure flips it back with 「沒送出去，再試一次」. On a card
+/// that offers passages (round 27 §U1), a press that turned it on opens ``TapPassages`` 240 ms later — the tap never
+/// waits on it — unless the story on screen is its translation.
 struct CardEndRow: View {
     let detail: CardDetail
+    /// The story's script: the passages are set in its type.
+    let script: StoryScript
+    /// The translation shows in place of the story: no passages are offered (they are the author's own words).
+    let translated: Bool
+    /// Reads the card again (a pick refused because its passages changed or the tap went).
+    let reload: () -> Void
     @Environment(SessionStore.self) private var session
     @Environment(WriteLauncher.self) private var writer
     @Environment(\.openRoute) private var openRoute
@@ -42,11 +49,20 @@ struct CardEndRow: View {
     /// Why the last send failed, for the field opened again on its words.
     @State private var noteWhy: String?
     @State private var listOpen = false
+    /// Which part stayed with the reader (round 27 §U1): the dialog of the card's passages.
+    @State private var passagesOpen = false
+    /// The tap's own request on its way, which a pick's waits for (`nil` once answered: failed).
+    @State private var tapSend: Task<Bool?, Never>?
+    /// The screenshots' `-visualTap picked`: the dialog held open on its pick, nothing sent.
+    @State private var passagesHeld = false
     /// The story's column, which a wide window's note field spans up to 680.
     @State private var column: CGFloat = 0
 
-    init(detail: CardDetail) {
+    init(detail: CardDetail, script: StoryScript = .cjk, translated: Bool = false, reload: @escaping () -> Void = {}) {
         self.detail = detail
+        self.script = script
+        self.translated = translated
+        self.reload = reload
         _tap = State(initialValue: TapState(detail.tap?.value1))
     }
 
@@ -97,8 +113,18 @@ struct CardEndRow: View {
         // The reader's list of who resonated: a centred dialog with no title (the reader sees only their connections),
         // a phone's, a tablet's and the Mac's alike.
         .organicModal(isPresented: $listOpen, seed: 29, maxWidth: TapListMetrics.readerWidth(compact: compact), closeLabel: L10n.Native.close) {
-            ReaderTapList(cardId: cardId) { listOpen = false }.withSession(session)
+            ReaderTapList(cardId: cardId, offersPassages: offersPassages, onPick: openPassagesFromList) { listOpen = false }
+                .withSession(session)
         }
+        // Which part stayed with the reader (round 27 §U1): centred, as wide as the reader's list; 略過, the backdrop and
+        // Escape leave the tap on with no passage.
+        .organicModal(isPresented: $passagesOpen, seed: 37, maxWidth: TapListMetrics.readerWidth(compact: compact),
+                      closeLabel: L10n.Card.Tap.passageSkip) {
+            TapPassages(passages: tap.passages, picked: tap.passage, script: script, onChoose: choosePassage) {
+                passagesOpen = false
+            }
+        }
+        .onChange(of: translated) { _, now in if now { passagesOpen = false } }
         // The note field opens again, focused, on its words: the toast's 再寄一次, or a failure while the page is here.
         .onAppear {
             session.noteSends.host(cardId, true)
@@ -140,10 +166,20 @@ struct CardEndRow: View {
         guard defaults.string(forKey: "visualTap") != nil || defaults.string(forKey: "visualNote") != nil
             || defaults.string(forKey: "visualTaps") != nil else { return }
         try? await Task.sleep(for: .milliseconds(600))
-        if defaults.string(forKey: "visualTap") == "on", !tap.on {
+        let visualTap = defaults.string(forKey: "visualTap")
+        if ["on", "passages", "picked"].contains(visualTap), !tap.on {
             let viewer = session.me.map(Author.viewer)
             _ = tap.flip(viewer: viewer)
             tap.settled(turningOn: true, result: true, viewer: viewer)
+        }
+        // `-visualTap passages`: the dialog open after the press (card-passages); `-visualTap picked`: its second row
+        // pressed and held in its ink and check (card-passage-picked). Nothing is sent.
+        if visualTap == "passages" || visualTap == "picked", offersPassages {
+            if visualTap == "picked", tap.passages.count > 1 {
+                passagesHeld = true
+                tap.pick(tap.passages[1].id)
+            }
+            passagesOpen = true
         }
         switch defaults.string(forKey: "visualNote") {
         case "open":
@@ -154,7 +190,8 @@ struct CardEndRow: View {
             noteFocusOnOpen = false
             noteOpen = true
         case "wait":
-            tap = TapState(CardTap(mine: tap.on, faces: tap.faces, more: tap.more, mayNote: false))
+            tap = TapState(CardTap(mine: tap.on, faces: tap.faces, more: tap.more, mayNote: false,
+                                   passages: tap.passages, passage: tap.passage))
             noteFocusOnOpen = false
             noteOpen = true
         default: break
@@ -236,16 +273,72 @@ struct CardEndRow: View {
     }
 
     /// The tap: flipped at once (the reader's face slides in first, or out), then set to what the server answers —
-    /// back as it was, with 「沒送出去，再試一次」, when it fails.
+    /// back as it was, with 「沒送出去，再試一次」, when it fails. Turned on, on a card with passages, the dialog opens
+    /// 240 ms after the press (at once under Reduce Motion); the tap's failing closes it.
     private func flipTap() {
         guard !tap.working, session.uid != nil else { return }
         let viewer = session.me.map(Author.viewer)
         let turningOn = withAnimation(reduceMotion ? nil : TapFaces.slide) { tap.flip(viewer: viewer) }
         let api = session.reading, id = cardId, toasts = session.toasts
+        let send = Task { try? await (turningOn ? api.tap(id) : api.untap(id)) }
+        tapSend = send
+        if TapPassageRules.opens(turningOn: turningOn, passages: tap.passages, translated: translated) {
+            passagesHeld = false
+            Task {
+                try? await Task.sleep(for: TapPassageRules.delay(TapPassageRules.openDelay, reduceMotion: reduceMotion))
+                if tap.on { passagesOpen = true }
+            }
+        }
         Task {
-            let result = try? await (turningOn ? api.tap(id) : api.untap(id))
+            let result = await send.value
             withAnimation(reduceMotion ? nil : TapFaces.slide) { tap.settled(turningOn: turningOn, result: result, viewer: viewer) }
-            if result == nil { toasts.show(L10n.Card.Tap.failed) }
+            if result == nil {
+                passagesOpen = false
+                toasts.show(L10n.Card.Tap.failed)
+            }
+        }
+    }
+
+    /// The card offers passages to this reader (two at least).
+    private var offersPassages: Bool { TapPassageRules.offers(tap.passages) && !translated }
+
+    /// A press on a passage's row: shown chosen at once (or cleared), the dialog closing 300 ms later; the request goes
+    /// once the tap's own has answered. Refused because the options changed or the tap went (400, 409): read the card
+    /// again, quietly; any other failure: 「沒送出去，再試一次」, the tap still on, the pick as it was.
+    private func choosePassage(_ choice: String?) {
+        let before = tap.passage
+        tap.pick(choice)
+        guard !passagesHeld else { return }
+        Task {
+            try? await Task.sleep(for: TapPassageRules.delay(TapPassageRules.closeDelay, reduceMotion: reduceMotion))
+            passagesOpen = false
+        }
+        let api = session.reading, id = cardId, toasts = session.toasts, send = tapSend, reload = reload
+        Task {
+            // The tap's PUT first: a pick is only taken on a tap that is on.
+            if let send, await send.value != true { return }
+            do {
+                _ = try await api.setTapPassage(id, passage: choice)
+            } catch {
+                if tap.passage == choice { tap.pick(before) }
+                switch TapPassageRules.refusal(status: (error as? APIFailure)?.status) {
+                case .readAgain:
+                    passagesOpen = false
+                    reload()
+                case .failed:
+                    toasts.show(L10n.Card.Tap.failed)
+                }
+            }
+        }
+    }
+
+    /// The reader's own row in the list (§U3): the list closes, then the dialog opens on the pick as it stands.
+    private func openPassagesFromList() {
+        passagesHeld = false
+        Task {
+            // The list's cover goes first (its scrim lifts in 160 ms), so the two never stand at once.
+            try? await Task.sleep(for: .milliseconds(reduceMotion ? 200 : 360))
+            if tap.on, offersPassages { passagesOpen = true }
         }
     }
 
@@ -254,8 +347,9 @@ struct CardEndRow: View {
     private var rowTwo: some View {
         EndRowTwo {
             if !tap.shownFaces.isEmpty {
+                // With passages on offer, the reader's own face alone is a button too: their row picks one (§U3).
                 TapFaces(faces: tap.shownFaces, more: tap.showsMore, spoken: tap.spoken(viewer: session.uid),
-                         isButton: !tap.onlyMine(viewer: session.uid)) { listOpen = true }
+                         isButton: !tap.onlyMine(viewer: session.uid) || (tap.on && offersPassages)) { listOpen = true }
             }
         } end: {
             // 收藏: pressed while saved (filled), flipped at once; saving says 「收藏到卡片盒了」.
@@ -424,29 +518,48 @@ nonisolated struct TapState: Equatable {
     private(set) var mayNote: Bool
     /// A tap's request is on its way: another tap waits for it.
     private(set) var working = false
+    /// The card's passages offered to this reader (round 27 §P3; none on a short card, or for the author).
+    private(set) var passages: [TapPassage]
+    /// The reader's pick among them, its id (none: nil).
+    private(set) var passage: String?
+    /// The pick before a flip, put back when the flip fails.
+    private var passageBefore: String?
 
     init(_ tap: CardTap?) {
         on = tap?.mine ?? false
         faces = tap?.faces ?? []
         more = tap?.more ?? false
         mayNote = tap?.mayNote ?? true
+        passages = tap?.passages ?? []
+        passage = tap?.passage
     }
 
-    /// The tap: shown flipped at once — the viewer's face in first, or out. Returns whether it is turning on.
+    /// The tap: shown flipped at once — the viewer's face in first, or out. Returns whether it is turning on. Either
+    /// way it starts with no pick (the server clears it when the tap goes; a tap turned on again has none).
     mutating func flip(viewer: Author?) -> Bool {
         on.toggle()
         place(viewer)
         working = true
+        passageBefore = passage
+        passage = nil
         return on
     }
 
-    /// The server's answer (`nil`: it failed, so it goes back as it was).
+    /// The server's answer (`nil`: it failed, so it goes back as it was, its pick too).
     mutating func settled(turningOn: Bool, result: Bool?, viewer: Author?) {
         working = false
         let now = result ?? !turningOn
         guard now != on else { return }
         on = now
         place(viewer)
+        if result == nil { passage = passageBefore }
+    }
+
+    /// The reader's pick, shown at once (nil clears it); only while the tap is on, and only one of the passages.
+    mutating func pick(_ id: String?) {
+        guard on else { return }
+        guard let id else { passage = nil; return }
+        if passages.contains(where: { $0.id == id }) { passage = id }
     }
 
     private mutating func place(_ viewer: Author?) {

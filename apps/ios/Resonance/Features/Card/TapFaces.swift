@@ -99,21 +99,28 @@ enum TapListMetrics {
     static func readerWidth(compact: Bool) -> CGFloat { compact ? 400 : dialogWidth }
     static let dialogRow: CGFloat = 60
     static let dialogFace: CGFloat = 36
+    /// A row's quote and its note's excerpt: two lines each at most, on every platform (round 27 §U2, S9).
+    static let lineLimit = 2
+    /// Above and below a row's content: within 60 for a name and one line.
+    static let rowPad: CGFloat = 8
 }
 
 /// One person of a list: their face and pen name, banded (the curves show as a press's wash), leading to their page —
-/// or, on the author's list when they left a note on the card, its first line muted under the name, leading to that
-/// conversation (an unconnected reader's is the letter; replying connects, as today).
+/// or, on the author's list when they left a note on the card, to that conversation (an unconnected reader's is the
+/// letter; replying connects, as today). Under the name (round 27 §U2, §U3): the passage they picked, quoted (``TapRowLine``),
+/// muted, two lines at most, or 選一段 on a reader's own row; then the note's excerpt, muted, two lines at most (as
+/// Android's). A row with neither is 60 tall, as before.
 struct TapPersonRow: View {
     let person: TapPerson
+    let line: TapRowLine?
     let top: String
     let bottom: String
-    let open: (Route) -> Void
+    let action: () -> Void
 
     var body: some View {
         let author = person.author
         let note = person.note?.value1.excerpt
-        Button { open(Self.route(for: person)) } label: {
+        Button(action: action) {
             HStack(spacing: 12) {
                 HandDrawnAvatar(initials: author.initials, imageURL: author.avatarUrl.flatMap(URL.init(string:)),
                                 color: author.accent, size: TapListMetrics.dialogFace, seed: author.avatarSeedValue)
@@ -122,19 +129,30 @@ struct TapPersonRow: View {
                         .font(AppFonts.body(15, weight: .semibold))
                         .foregroundStyle(Tokens.text)
                         .lineLimit(1)
+                    if let line {
+                        Text(line.words)
+                            .font(AppFonts.body(13))
+                            .foregroundStyle(line == .pick ? Tokens.buttonOnTonal : Tokens.textMuted)
+                            .lineLimit(TapListMetrics.lineLimit)
+                            .truncationMode(.tail)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     if let note {
                         Text(note)
                             .font(AppFonts.body(13))
                             .foregroundStyle(Tokens.textMuted)
-                            .lineLimit(1)
+                            .lineLimit(TapListMetrics.lineLimit)
                             .truncationMode(.tail)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             // 12 a side, which the dialog's scroll (-12) pulls back to its own padding: a face stands at the dialog's
-            // padding and the bands reach nearer its paper's edges.
+            // padding and the bands reach nearer its paper's edges. 8 above and below: a row of a name and one line
+            // stays 60, and one with a quote and a note grows past it with air at both ends.
             .padding(.horizontal, 12)
+            .padding(.vertical, TapListMetrics.rowPad)
             .frame(minHeight: TapListMetrics.dialogRow)
             .contentShape(Rectangle())
         }
@@ -150,17 +168,18 @@ struct TapPersonRow: View {
     }
 }
 
-/// The rows of a list, banded, each curve keyed by the row under it (``ListBands``).
+/// The rows of a list, banded, each curve keyed by the row under it (``ListBands``); `line` gives each its second line.
 private struct TapRows: View {
     let people: [TapPerson]
-    let open: (Route) -> Void
+    let line: (TapPerson) -> TapRowLine?
+    let press: (TapPerson) -> Void
 
     var body: some View {
         let ids = people.map { "tap:\($0.author.id)" }
         let below = ListBands.below(ids, after: ListBands.endKey)
         VStack(spacing: 0) {
             ForEach(Array(people.enumerated()), id: \.element.author.id) { i, person in
-                TapPersonRow(person: person, top: ids[i], bottom: below[i], open: open)
+                TapPersonRow(person: person, line: line(person), top: ids[i], bottom: below[i]) { press(person) }
             }
         }
     }
@@ -205,6 +224,9 @@ private struct TapListState: View {
 /// 60 tall with faces of 36, each leading to that person's page; then the dialog's 關閉 at its foot's end.
 struct ReaderTapList: View {
     let cardId: String
+    /// The card offers passages (round 27 §U3): the reader's own row says their pick or 選一段, and opens the dialog.
+    var offersPassages = false
+    var onPick: () -> Void = {}
     let onClose: () -> Void
     @Environment(SessionStore.self) private var session
     @Environment(\.window) private var window
@@ -215,9 +237,12 @@ struct ReaderTapList: View {
         VStack(alignment: .leading, spacing: 0) {
             if let people {
                 ScrollView {
-                    TapRows(people: people.people) { route in
+                    TapRows(people: people.people) { person in
+                        TapRowLine.of(person, authorList: false, viewer: session.uid, offersPassages: offersPassages)
+                    } press: { person in
                         onClose()
-                        openRoute(route)
+                        if offersPassages, person.author.id == session.uid { return onPick() }
+                        openRoute(TapPersonRow.route(for: person))
                     }
                     TapListState(people: people)
                 }
@@ -290,7 +315,8 @@ struct AuthorTaps: View {
 /// The author's list of who resonated (§U3.2): a centred dialog on every device — the title 「與這張卡片共振的人」, then
 /// thirty people a page (顯示更多 the next), each a face of 36 and their pen name; one who left a note on the card has its
 /// first line muted under the name and opens that conversation; one who only resonated opens their page (a tap is no
-/// way to be written to). An anonymous card's list has faces and names only (the server sends no note).
+/// way to be written to). Round 27 §U2: the passage each picked, quoted under the name, before the note's excerpt. An
+/// anonymous card's list has no note (the server sends none).
 struct AuthorTapList: View {
     let cardId: String
     let onClose: () -> Void
@@ -304,9 +330,11 @@ struct AuthorTapList: View {
             ModalTitle(L10n.Card.ResonatorsModal.title).padding(.bottom, 10)
             if let people {
                 ScrollView {
-                    TapRows(people: people.people) { route in
+                    TapRows(people: people.people) { person in
+                        TapRowLine.of(person, authorList: true, viewer: session.uid, offersPassages: false)
+                    } press: { person in
                         onClose()
-                        openRoute(route)
+                        openRoute(TapPersonRow.route(for: person))
                     }
                     TapListState(people: people)
                     if people.next != nil {

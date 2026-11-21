@@ -131,14 +131,16 @@ nonisolated struct BandShape: Shape {
 
 /// A row of a banded list: nothing at rest, the band between its curves washed while pressed or under a pointer.
 /// `cut`: the row stands in a wide window's reading column, its band cut at the column's sides (``BandShape``).
+/// `held`: the row is the one chosen (round 27's picked passage), its band resting in the press's wash.
 struct BandWashStyle: ButtonStyle {
     /// The row's own key (its top curve) and the key under it (``ListBands/below(_:after:)``).
     let top: String
     let bottom: String
     var cut = false
+    var held = false
 
     func makeBody(configuration: Configuration) -> some View {
-        BandWash(label: configuration.label, top: top, bottom: bottom, cut: cut, pressed: configuration.isPressed)
+        BandWash(label: configuration.label, top: top, bottom: bottom, cut: cut, held: held, pressed: configuration.isPressed)
     }
 }
 
@@ -147,6 +149,7 @@ private struct BandWash<Label: View>: View {
     let top: String
     let bottom: String
     let cut: Bool
+    let held: Bool
     let pressed: Bool
     @Environment(\.listScrolling) private var scrolling
     @State private var press = BandPress()
@@ -156,7 +159,7 @@ private struct BandWash<Label: View>: View {
     var body: some View {
         label
             .background {
-                let alpha = ListBands.alpha(press: press, hovered: hovered)
+                let alpha = held ? ListBands.pressAlpha : ListBands.alpha(press: press, hovered: hovered)
                 if alpha > 0 {
                     BandShape(top: top, bottom: bottom, cut: cut).fill(Tokens.towardInk.opacity(alpha))
                 }
