@@ -102,10 +102,12 @@ export function cardTap(
  * A reader: the same people as `CardDetail.tap.faces` without the cap — they
  * themselves first, then their connections —, one page, no notes. Anyone for
  * whom `tap` is null (a draft, a card in the trash, a named card across a
- * block, a card they can't read) is not_found.
+ * block, a card they can't read) is not_found. `passage` (round 29): the
+ * author's pages of the people whose pick has that id only — the same rows,
+ * order, page size and blocks; for a reader it changes nothing.
  */
-export function listTaps(db: AdminDb, viewerId: string, cardId: string, pageToken?: string | null): Promise<TapListBody> {
-  return listTapsIn(ctxFor(db), viewerId, cardId, pageToken);
+export function listTaps(db: AdminDb, viewerId: string, cardId: string, pageToken?: string | null, passage?: string | null): Promise<TapListBody> {
+  return listTapsIn(ctxFor(db), viewerId, cardId, pageToken, passage);
 }
 
 /**

@@ -226,12 +226,12 @@ export function tapsData(db: AdminDb): TapsData {
       );
       return pages.flatMap((page) => page.docs.map(tapperOf).filter((t): t is Tapper => !!t));
     },
-    async tapsOnPage(cardId, limit, after): Promise<TapPage> {
+    async tapsOnPage(cardId, limit, after, passage): Promise<TapPage> {
       const from = after ? decodePageToken(after) : undefined;
-      let q = db
-        .collection(TAPS)
-        .where('cardId', '==', cardId)
-        .where('on', '==', true)
+      let base = db.collection(TAPS).where('cardId', '==', cardId).where('on', '==', true);
+      // One picked sentence's people (round 29): the composite index (cardId, on, passage.id, at desc).
+      if (passage) base = base.where('passage.id', '==', passage);
+      let q = base
         .orderBy('at', 'desc')
         .orderBy(FieldPath.documentId(), 'desc')
         .limit(limit);
