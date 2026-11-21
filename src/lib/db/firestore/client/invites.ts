@@ -1,19 +1,11 @@
 'use client';
 
-import {
-  collection,
-  doc,
-  getDocs,
-  orderBy,
-  query,
-  runTransaction,
-  Timestamp,
-  where,
-} from './sdk';
 import type { Invite } from '@/lib/db/types';
+import type { InviteListBody } from '@/lib/api/v1/schemas';
 import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
-import { getClientDb } from './init';
 import { callApi } from './api';
+import { rememberPeople } from './reads';
+import { pokeSignal } from './signals';
 
 function requireUid(): string {
   const uid = getFirebaseClientAuth().currentUser?.uid;
@@ -39,67 +31,39 @@ export async function acceptInvite(inviteId: string): Promise<string> {
   return connectionId;
 }
 
-/** The recipient says no: the invite closes, no connection, no notification. */
+/** The recipient says no (POST /api/v1/invites/{id}/decline): the invite closes, no connection, no notification. */
 export async function declineInvite(inviteId: string): Promise<void> {
-  const uid = requireUid();
-  const db = getClientDb();
-  await runTransaction(db, async (tx) => {
-    const ref = doc(db, 'invites', inviteId);
-    const snap = await tx.get(ref);
-    if (!snap.exists()) throw new Error('Invite not found');
-    const data = snap.data();
-    if (data.toUserId !== uid) throw new Error('Only the recipient can decline');
-    if (data.status !== 'pending') throw new Error('Invite no longer pending');
-    tx.update(ref, { status: 'declined' });
-  });
-}
-
-export async function withdrawInvite(inviteId: string): Promise<void> {
-  const uid = requireUid();
-  const db = getClientDb();
-  await runTransaction(db, async (tx) => {
-    const ref = doc(db, 'invites', inviteId);
-    const snap = await tx.get(ref);
-    if (!snap.exists()) throw new Error('Invite not found');
-    const data = snap.data();
-    if (data.fromUserId !== uid) throw new Error('Only the sender can withdraw');
-    tx.update(ref, { status: 'withdrawn' });
-  });
-}
-
-function mapInvite(id: string, data: Record<string, unknown>): Invite {
-  const expiresAt = data.expiresAt instanceof Timestamp ? data.expiresAt.toDate() : new Date(0);
-  const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(0);
-  return {
-    id,
-    fromUserId: String(data.fromUserId),
-    toUserId: String(data.toUserId),
-    message: String(data.message ?? ''),
-    referenceCardId: (data.referenceCardId as string | null) ?? undefined,
-    status: data.status as Invite['status'],
-    expiresAt,
-    createdAt,
-  };
+  requireUid();
+  await callApi(`/api/v1/invites/${encodeURIComponent(inviteId)}/decline`, { method: 'POST' });
+  pokeSignal('graph');
 }
 
 /**
  * The invites still waiting for the signed-in viewer's answer, newest first:
  * pending and not yet past their "respond by" date. One past it the server
  * refuses (409) and closes as expired, but until someone taps Accept it is
- * still `pending` — so the date is checked here, on the invites the query
- * finds (a few at most: none are sent any more). One without a date was
+ * still `pending` — so the date is checked here too, on the invites the
+ * server lists (GET /api/v1/invites?box=incoming: a few at most, none are
+ * sent any more). One without a date was
  * never sent by a writer of ours, and is as closed as the server finds it.
  */
 export async function listIncomingPendingInvites(now: Date = new Date()): Promise<Invite[]> {
   const uid = getFirebaseClientAuth().currentUser?.uid;
   if (!uid) return [];
-  const snap = await getDocs(
-    query(
-      collection(getClientDb(), 'invites'),
-      where('toUserId', '==', uid),
-      where('status', '==', 'pending'),
-      orderBy('createdAt', 'desc'),
-    ),
-  );
-  return snap.docs.map((d) => mapInvite(d.id, d.data())).filter((i) => i.expiresAt.getTime() > now.getTime());
+  const body = await callApi<InviteListBody>('/api/v1/invites?box=incoming');
+  rememberPeople(body.invites.map((i) => i.from));
+  return body.invites
+    .map(
+      (i): Invite => ({
+        id: i.id,
+        fromUserId: i.fromUserId,
+        toUserId: uid,
+        message: i.message,
+        referenceCardId: i.referenceCardId ?? undefined,
+        status: 'pending',
+        expiresAt: new Date(i.expiresAt),
+        createdAt: i.createdAt ? new Date(i.createdAt) : new Date(0),
+      }),
+    )
+    .filter((i) => i.expiresAt.getTime() > now.getTime());
 }

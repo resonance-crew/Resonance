@@ -1,71 +1,54 @@
 'use client';
 
-import { doc, getDocs, limit as fsLimit, orderBy, query, serverTimestamp, updateDoc, where, collection } from './sdk';
-import type { Notification } from '@/lib/db/types';
+import type { Notification, User } from '@/lib/db/types';
+import type { BellPageBody } from '@/lib/api/v1/schemas';
 import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
-import { getClientDb } from './init';
-import { listenLazily } from './listen';
+import { summaryAuthor } from '@/lib/data/summaries';
+import { callApi } from './api';
+import { rememberUsers } from './reads';
+import { pokeSignal } from './signals';
 
-/** A Timestamp from either SDK (Lite's for a read, the full SDK's for the bell's listener), a Date, or an ISO string. */
-function tsToDate(value: unknown): Date | null {
-  if (value instanceof Date) return value;
-  if (value && typeof (value as { toDate?: unknown }).toDate === 'function') return (value as { toDate(): Date }).toDate();
-  if (typeof value === 'string') return new Date(value);
-  return null;
+/** The bell's newest rows and the people they name, as GET /api/v1/me/bell answers them. */
+export interface BellRows {
+  items: Notification[];
+  /** The people the rows are from (a gone account is absent), by uid. */
+  people: Record<string, User>;
 }
 
-function mapNotification(id: string, data: Record<string, unknown>): Notification {
-  return {
-    id,
-    userId: String(data.userId),
-    type: data.type as Notification['type'],
-    payload: (data.payload as Record<string, unknown>) ?? {},
-    readAt: tsToDate(data.readAt),
-    createdAt: tsToDate(data.createdAt) ?? new Date(0),
-  };
-}
-
-export async function listNotifications(maxItems = 20): Promise<Notification[]> {
-  const uid = getFirebaseClientAuth().currentUser?.uid;
-  if (!uid) return [];
-  const snap = await getDocs(
-    query(
-      collection(getClientDb(), 'notifications'),
-      where('userId', '==', uid),
-      orderBy('createdAt', 'desc'),
-      fsLimit(maxItems),
-    ),
-  );
-  return snap.docs.map((d) => mapNotification(d.id, d.data()));
+function time(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 /**
- * Subscribe to the viewer's newest notifications (newest first): the bell's
- * badge and list, live — a row the server writes, or one marked read, shows
- * without a reload. Returns the unsubscribe function.
+ * The viewer's newest bell rows, newest first (GET /api/v1/me/bell: the rows
+ * the apps list, with the anonymous flags the server sets), and the profiles
+ * of the people they name. The bell pulls it again when its signal moves
+ * (lib/data/hooks' useNotifications).
  */
-export function listenNotifications(
-  uid: string,
-  onItems: (items: Notification[]) => void,
-  onError?: (err: Error) => void,
-  max = 20,
-): () => void {
-  return listenLazily(
-    ({ listenNewest }) =>
-      listenNewest(
-        ['notifications'],
-        'createdAt',
-        max,
-        (docs) => onItems(docs.map((d) => mapNotification(d.id, d.data))),
-        (err) => onError?.(err),
-        [{ field: 'userId', op: '==', value: uid }],
-      ),
-    onError,
+export async function getBell(max = 20): Promise<BellRows> {
+  const uid = getFirebaseClientAuth().currentUser?.uid ?? '';
+  const body = await callApi<BellPageBody>(`/api/v1/me/bell?limit=${Math.min(Math.max(1, max), 50)}`);
+  const items = body.items.map(
+    (n): Notification => ({
+      id: n.id,
+      userId: uid,
+      type: n.type as Notification['type'],
+      payload: n.payload as Record<string, unknown>,
+      readAt: time(n.readAt),
+      createdAt: time(n.createdAt) ?? new Date(0),
+    }),
   );
+  const people: Record<string, User> = {};
+  for (const a of body.people) people[a.id] = { ...summaryAuthor(a), avatarSeed: a.avatarSeed ?? '0' };
+  // The rows' faces need no read of their own (useBellExtras asks the cache).
+  rememberUsers(people);
+  return { items, people };
 }
 
+/** One row read (POST /api/v1/notifications/read `{ ids }`); the bell pulls itself again at once. */
 export async function markNotificationRead(id: string): Promise<void> {
-  await updateDoc(doc(getClientDb(), 'notifications', id), {
-    readAt: serverTimestamp(),
-  });
+  await callApi('/api/v1/notifications/read', { method: 'POST', body: { ids: [id] } });
+  pokeSignal('bell');
 }

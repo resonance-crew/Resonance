@@ -5,11 +5,12 @@ import type { Message } from '@/lib/db/types';
 
 // One open conversation on the real thread model (history, outbox, search):
 // the client's thread reads and the send are the module boundary — a fake
-// server holds the conversation, its listener hears the newest messages and
-// a page read answers the ones before a cursor.
+// server holds the conversation, the thread's follower (GET …/messages,
+// pulled on its signal) hears the newest messages and a page read answers the
+// ones before a cursor (the API's opaque string: here, the message's id).
 
-type Entry = { message: Message; cursor: { seconds: number; nanoseconds: number; id: string } };
-type Window = { entries: Entry[]; fromCache: boolean };
+type Entry = { message: Message; cursor: string };
+type Window = { entries: Entry[] };
 
 const server = vi.hoisted(() => ({
   /** The whole conversation, oldest first. */
@@ -21,41 +22,39 @@ const server = vi.hoisted(() => ({
   failPages: false,
 }));
 
-const entry = (message: Message): Entry => ({
-  message,
-  cursor: { seconds: Math.floor(message.sentAt.getTime() / 1000), nanoseconds: 0, id: message.id },
-});
+const entry = (message: Message): Entry => ({ message, cursor: message.id });
 
 vi.mock('@/lib/db/firestore/client/messages', () => ({
   MESSAGE_MAX_LENGTH: 2000,
-  listenThread: vi.fn((pairId: string, onWindow: (w: Window) => void, onError: (e: Error) => void) => {
+  isGone: (e: unknown) => [403, 404].includes((e as { status?: number } | null)?.status ?? 0),
+  followThread: vi.fn((pairId: string, onWindow: (w: Window) => void, onError: (e: Error) => void) => {
     const listener = { pairId, onWindow, onError, stopped: false };
     server.listeners.push(listener);
     return () => {
       listener.stopped = true;
     };
   }),
-  getOlderMessages: vi.fn(async (_pairId: string, before: { id: string }, max: number) => {
-    server.pageReads.push({ id: before.id, max });
+  getMessagesBefore: vi.fn(async (_pairId: string, before: string, max: number) => {
+    server.pageReads.push({ id: before, max });
     if (server.gate) await server.gate;
     if (server.failPages) throw Object.assign(new Error('offline'), { code: 'unavailable' });
-    const at = server.all.findIndex((m) => m.id === before.id);
+    const at = server.all.findIndex((m) => m.id === before);
     return server.all
       .slice(Math.max(0, at - max), at)
       .reverse()
-      .map((message) => ({
-        message,
-        cursor: { seconds: Math.floor(message.sentAt.getTime() / 1000), nanoseconds: 0, id: message.id },
-      }));
+      .map((message) => ({ message, cursor: message.id }));
   }),
   sendMessage: vi.fn(),
   uploadChatImage: vi.fn(async (_file: Blob, _to: string, opts: { clientId: string }) => ({ id: opts.clientId, width: 10, height: 10 })),
 }));
 
+const pokes = vi.hoisted(() => [] as string[]);
+vi.mock('@/lib/db/firestore/client/signals', () => ({ pokeSignal: (topic: string) => pokes.push(topic) }));
+
 const mockUseAuth = vi.fn();
 vi.mock('@/components/providers/AuthProvider', () => ({ useAuth: () => mockUseAuth() }));
 
-import { getOlderMessages, sendMessage, uploadChatImage } from '@/lib/db/firestore/client/messages';
+import { getMessagesBefore, sendMessage, uploadChatImage } from '@/lib/db/firestore/client/messages';
 import {
   ALL_PAGE,
   LOAD_ALL_CAP,
@@ -77,10 +76,10 @@ const msg = (n: number, extra: Partial<Message> = {}): Message => ({
 /** A conversation of `count` messages, numbered from 1. */
 const conversation = (count: number) => Array.from({ length: count }, (_, i) => msg(i + 1));
 
-/** The live listener (the last one started) hears the newest 50 of the conversation. */
-function hearNewest(fromCache = false) {
+/** The follower (the last one started) hears the newest 50 of the conversation. */
+function hearNewest() {
   const live = server.listeners.filter((l) => !l.stopped).at(-1)!;
-  act(() => live.onWindow({ entries: server.all.slice(-50).reverse().map(entry), fromCache }));
+  act(() => live.onWindow({ entries: server.all.slice(-50).reverse().map(entry) }));
 }
 
 function open(options: Partial<ChatThreadOptions> = {}) {
@@ -99,6 +98,7 @@ beforeEach(() => {
   server.pageReads = [];
   server.gate = null;
   server.failPages = false;
+  pokes.length = 0;
   vi.mocked(sendMessage).mockImplementation(async (_to, _text, extras) => ({ conversationId: 'bob_me', id: extras?.clientId ?? 'x' }));
 });
 afterEach(() => {
@@ -176,7 +176,7 @@ describe('the history', () => {
     const { result } = open();
     // The listener heard an old stretch (it was away) …
     const live = server.listeners[0];
-    act(() => live.onWindow({ entries: server.all.slice(100, 150).reverse().map(entry), fromCache: false }));
+    act(() => live.onWindow({ entries: server.all.slice(100, 150).reverse().map(entry) }));
     let release!: () => void;
     server.gate = new Promise<void>((r) => (release = r));
     act(() => result.current.loadOlder());
@@ -222,7 +222,7 @@ describe('the history', () => {
     hearNewest();
     expect(result.current.error).toBeNull();
 
-    act(() => server.listeners[1].onError(Object.assign(new Error('denied'), { code: 'permission-denied' })));
+    act(() => server.listeners[1].onError(Object.assign(new Error('No such conversation.'), { status: 404 })));
     expect(result.current.messages).toEqual([]);
     // Refused is not an outage: coming back doesn't listen again.
     act(() => void window.dispatchEvent(new Event('online')));
@@ -268,6 +268,8 @@ describe('sending', () => {
 
     await act(async () => answer());
     await waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(2));
+    // The server has the first: the thread and the list read it back at once, not a signal's round trip later.
+    expect(pokes.slice(0, 2)).toEqual(['thread:bob_me', 'inbox']);
     expect(vi.mocked(sendMessage).mock.calls[1]).toEqual([
       'bob',
       'second',
@@ -510,7 +512,7 @@ describe('searching', () => {
     expect(result.current.search.complete).toBe(false);
     expect(result.current.messages.length).toBeGreaterThanOrEqual(LOAD_ALL_CAP);
     expect(result.current.messages.length).toBeLessThan(LOAD_ALL_CAP + 400);
-    expect(getOlderMessages).toHaveBeenCalledTimes(Math.ceil((LOAD_ALL_CAP - 50) / ALL_PAGE));
+    expect(getMessagesBefore).toHaveBeenCalledTimes(Math.ceil((LOAD_ALL_CAP - 50) / ALL_PAGE));
   });
 });
 
