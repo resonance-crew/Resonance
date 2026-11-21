@@ -52,6 +52,9 @@ public enum OpenEnums {
         // A draft's or a pending edit's cover (`DraftMedia`: its `type` beside its `url`): a kind this build can't
         // draw is kept as a picture at its address. A bell row's `type` (no `url` beside it) is any string.
         "type": (Set(Components.Schemas.DraftMedia._TypePayload.allCases.map(\.rawValue)), "image", ["url"]),
+        // A session's token type (`AuthSession`, ADR 0004): the access token is sent as a bearer credential whatever
+        // a later server calls it, so a name this build doesn't know never fails the whole answer's decoding.
+        "tokenType": (Set(Components.Schemas.AuthSession.TokenTypePayload.allCases.map(\.rawValue)), "Bearer", []),
     ]
 
     /// Whether `field`'s rule reads it in an object that has the keys `has` says it has.
