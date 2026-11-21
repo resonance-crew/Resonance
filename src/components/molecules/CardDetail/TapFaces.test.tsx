@@ -145,3 +145,55 @@ describe('TapFaces', () => {
     expect(listTaps).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('TapFaces: the reader’s own row on a card with passages (round 27 §U3)', () => {
+  const PASSAGES = [
+    { id: '14fecaaf', text: 'The lamp at the corner came on first.' },
+    { id: '8b3a1c4d', text: 'I wiped every window anyway.' },
+  ];
+  const open = async (tap: CardTapBody, onOwnRow?: () => void) => {
+    renderWithIntl(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <TapFaces cardId="c1" tap={tap} viewerId="alice" onOwnRow={onOwnRow} />
+      </SWRConfig>,
+    );
+    await user().click(screen.getByRole('button', { name: /resonated/i }));
+    return screen.findByRole('dialog');
+  };
+
+  it('quotes the reader’s pick on their own row alone, and opens the passages’ dialog from it', async () => {
+    const onOwnRow = vi.fn();
+    listTaps.mockResolvedValueOnce({
+      people: [
+        { author: face('alice'), note: null, passage: { text: PASSAGES[1].text } },
+        { author: face('dora'), note: null, passage: { text: PASSAGES[0].text } },
+      ],
+      nextPageToken: null,
+    });
+    const dialog = await open({ mine: true, faces: [face('alice'), face('dora')], more: false, mayNote: true, passages: PASSAGES, passage: '8b3a1c4d' }, onOwnRow);
+    const own = await within(dialog).findByRole('button', { name: /alice/ });
+    expect(own).toHaveTextContent(`“${PASSAGES[1].text}”`);
+    // dora's pick is never shown to alice (M3), whatever came.
+    const dora = within(dialog).getByRole('link');
+    expect(dora).not.toHaveTextContent(PASSAGES[0].text);
+    await user().click(own);
+    expect(onOwnRow).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('says 選一段 on the own row with no pick; the faces are a button even with only the reader’s own', async () => {
+    listTaps.mockResolvedValueOnce({ people: [{ author: face('alice'), note: null }], nextPageToken: null });
+    const dialog = await open({ mine: true, faces: [face('alice')], more: false, mayNote: true, passages: PASSAGES, passage: null }, () => {});
+    expect(await within(dialog).findByRole('button', { name: /alice/ })).toHaveTextContent('Pick a part');
+  });
+
+  it('without passages the own row leads where it did, and the reader’s face alone is still a picture', async () => {
+    renderWithIntl(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <TapFaces cardId="c1" tap={{ mine: true, faces: [face('alice')], more: false, mayNote: true }} viewerId="alice" />
+      </SWRConfig>,
+    );
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.getByRole('img', { name: 'You resonated' })).toBeInTheDocument();
+  });
+});
