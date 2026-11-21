@@ -7,6 +7,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getBoundsInRoot
@@ -265,6 +267,27 @@ class TapPassagesTest {
         compose.waitForIdle()
         assertEquals(1, closed)
         assertTrue(picks.isEmpty())
+    }
+
+    @Test fun eachRowsBandRunsFromThePapersLeftEdgeToItsRightTheWordsWhereTheyWere() {
+        // The owner, 2026-11-21: the chosen band reaches the dialog card's left and right edges, as the web's.
+        assertFalse("never the tablet's rounded cut", PassageBand.cut)
+        assertEquals(40f, PassageBand.wordsInset.value)
+        show(picked = "8b3a1c4d")
+        compose.waitForIdle()
+        val paper = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.PaneTitle), useUnmergedTree = true).getBoundsInRoot()
+        for (i in passages.indices) {
+            val row = compose.onNodeWithTag("tap-passage-$i", useUnmergedTree = true).getBoundsInRoot()
+            assertEquals(paper.left.value, row.left.value, 0.5f)
+            assertEquals(paper.right.value, row.right.value, 0.5f)
+        }
+        // The words keep their 28 + 12 from the paper's edge; the title its 28.
+        // (Their left by position: a clipped bounds box reads zero for text under a merged button.)
+        val words = compose.onNodeWithText(passages[2].text, useUnmergedTree = true).fetchSemanticsNode().positionInRoot.x / compose.density.density
+        assertEquals(paper.left.value + 40f, words, 0.5f)
+        val title = compose.onNodeWithText(L10n.Card.Tap.passageTitle, useUnmergedTree = true).fetchSemanticsNode().positionInRoot.x / compose.density.density
+        assertEquals(paper.left.value + 28f, title, 0.5f)
+        compose.onNodeWithTag("tap-passage-1", useUnmergedTree = true).assertIsSelected()
     }
 
     @Test fun aRowPressedIsPickedThenTheDialogCloses() {

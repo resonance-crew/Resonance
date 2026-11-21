@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.em
 import com.resonance.api.models.TapPassage
 import com.resonance.design.AppFonts
 import com.resonance.design.LocalWindowLayout
+import com.resonance.design.ModalPaperInset
 import com.resonance.design.ModalCloseButton
 import com.resonance.design.ModalTitle
 import com.resonance.design.OrganicIcon
@@ -39,6 +40,7 @@ import com.resonance.design.StoryType
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.plainClickable
+import com.resonance.design.toModalPaperEdges
 import com.resonance.kit.api.ApiFailure
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.story.StoryScript
@@ -143,12 +145,26 @@ internal class PassagePick(
     }
 }
 
+/**
+ * A row's band in the dialog (the owner, 2026-11-21: 「这个选中的区块是延伸到这个 pop up 这个卡片的最左边和最右边的」):
+ * the web's — uncut, the list widened to the paper's edges ([toModalPaperEdges]) and the paper clipping it to its wobble,
+ * the pen line over it; the words stay where they were, the paper's inset and the dialog rows' own 12 in.
+ */
+internal object PassageBand {
+    /** Never the tablet's rounded cut: the band runs to the paper's edges. */
+    const val cut = false
+
+    /** From the paper's edge to a row's words (and from its check to the other edge): 28 + 12, as before. */
+    val wordsInset: Dp = ModalPaperInset + TapRowMeasure.Dialog.inset
+}
+
 /** The list's tallest before it scrolls inside: min(420, 55 % of the window's height) — the reader list's cap. */
 internal fun passagesListMax(windowHeight: Dp): Dp = min(420f, windowHeight.value * 0.55f).dp
 
 /**
  * The dialog (§U1.3): a centred [OrganicModal] — never a bottom sheet, never a popover — [readerListWidth] wide (400 on a
- * phone, 480 wider), titled 悄悄告訴作者，哪一段讓你有共鳴; the [passages] as banded rows, each a button with its words
+ * phone, 480 wider), titled 悄悄告訴作者，哪一段讓你有共鳴; the [passages] as banded rows from the paper's edge to its
+ * edge ([PassageBand]), each a button with its words
  * in the story's type ([script]) at 16 with the story's leading, **wrapped in full** — never cut; 略過 at the foot's end,
  * no ✕. [picked] (reopened from the reader's own row, §U1.7) rests in the press ink with its check, selected.
  *
@@ -178,13 +194,18 @@ internal fun TapPassages(
     // Focus lands on the first row, or the picked one (S10).
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
 
-    OrganicModal(onDismiss, L10n.Card.Tap.passageTitle, seed = 47.0, closeLabel = L10n.Card.Tap.passageSkip, maxWidth = readerListWidth(layout.cls)) {
+    OrganicModal(
+        onDismiss, L10n.Card.Tap.passageTitle, seed = 47.0, closeLabel = L10n.Card.Tap.passageSkip,
+        maxWidth = readerListWidth(layout.cls), clipToPaper = true,
+    ) {
         ModalTitle(L10n.Card.Tap.passageTitle)
         val keys = passages.map { "passage:" + it.id }
         val below = bandsBelow(keys, ListBands.EndKey)
         val press = Tokens.TowardInk.copy(alpha = ListBands.PressAlpha)
         Column(
             Modifier
+                // The bands reach the paper's edges, clipped to its wobble (the modal's clipToPaper).
+                .toModalPaperEdges()
                 .fillMaxWidth()
                 .flowTag("tap-passages")
                 .heightIn(max = cap)
@@ -197,7 +218,7 @@ internal fun TapPassages(
                     Modifier
                         .fillMaxWidth()
                         .then(if (i == focused) Modifier.focusRequester(first) else Modifier)
-                        .listBand(keys[i], below[i], source, { false }, rest = if (isChosen) press else null, cut = true)
+                        .listBand(keys[i], below[i], source, { false }, rest = if (isChosen) press else null, cut = PassageBand.cut)
                         .flowTag("tap-passage-$i")
                         .plainClickable(role = Role.Button) {
                             if (closing) return@plainClickable
@@ -213,7 +234,7 @@ internal fun TapPassages(
                             }
                         }
                         .semantics { selected = isChosen }
-                        .padding(horizontal = TapRowMeasure.Dialog.inset, vertical = ListBands.RowPad),
+                        .padding(horizontal = PassageBand.wordsInset, vertical = ListBands.RowPad),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
