@@ -8,6 +8,7 @@ import { isReservedId } from '@/lib/db/firestore/reservedId';
 import type { ServerCtx } from '@/server/ctx';
 import { docId, penName, properlyPublishedAt, reachable, resonanceReason, type ResonanceCard } from '@/server/domain/graph';
 import type { GraphTxRepo, Reach } from '@/server/ports/repos/graph';
+import { signal } from './realtime';
 
 // Resonances — a card answering another — as application services: what
 // each checks, in which order, and what it writes. Why: the module comments
@@ -17,9 +18,11 @@ import type { GraphTxRepo, Reach } from '@/server/ports/repos/graph';
 /**
  * Reach the original's author, in the transaction that read `r` — `card` is
  * the resonance as that transaction leaves it (src/lib/api/v1/resonate.ts
- * `reachOriginal`). Answers the bell's id, or null when nothing rang.
+ * `reachOriginal`). Answers the bell's id, or null when nothing rang. A
+ * connection it makes is added to `made` (the two, to signal once the
+ * transaction has committed).
  */
-export function reachOriginalWith(graph: GraphTxRepo, cardId: string, card: ResonanceCard, r: Reach, now: number): string | null {
+export function reachOriginalWith(graph: GraphTxRepo, cardId: string, card: ResonanceCard, r: Reach, now: number, made?: string[][]): string | null {
   const o = r.original;
   if (!reachable(card) || card.authorId !== r.from || card.referenceCardId !== r.originalId || !properlyPublishedAt(card.publishedAt, now)) return null;
   if (!o || !docId(o.authorId) || o.authorId === r.from || !cardVisible(o, r.from, () => r.connected)) return null;
@@ -28,7 +31,10 @@ export function reachOriginalWith(graph: GraphTxRepo, cardId: string, card: Reso
   if (named) {
     const reason = resonanceReason(r.from, cardId, r.originalId);
     if (r.connected) graph.addReason([r.from, o.authorId], r.origins, reason);
-    else if (!r.rang) graph.connect([r.from, o.authorId], reason);
+    else if (!r.rang) {
+      graph.connect([r.from, o.authorId], reason);
+      made?.push([r.from, o.authorId]);
+    }
   }
   if (r.rang) return null;
   graph.ringResonance(r.bellId, { to: o.authorId, from: r.from, fromHandle: String(r.me!.handle), cardId: r.originalId, anonymous: !named });
@@ -36,16 +42,25 @@ export function reachOriginalWith(graph: GraphTxRepo, cardId: string, card: Reso
 }
 
 /** See src/lib/api/v1/resonate.ts `reachResonance`. */
-export function reachResonanceIn(ctx: ServerCtx, uid: string, cardId: string): Promise<string | null> {
-  return ctx.uow.run(
+export async function reachResonanceIn(ctx: ServerCtx, uid: string, cardId: string): Promise<string | null> {
+  let made: string[][] = [];
+  const bell = await ctx.uow.run(
     async (tx) => {
+      made = [];
       const card = await tx.graph.getCard(cardId);
       const fields = card?.resonance;
       if (!fields || fields.authorId !== uid || !reachable(fields) || !docId(fields.referenceCardId)) return null;
-      return reachOriginalWith(tx.graph, cardId, fields, await tx.graph.readReach(uid, fields.referenceCardId), ctx.clock.now());
+      return reachOriginalWith(tx.graph, cardId, fields, await tx.graph.readReach(uid, fields.referenceCardId), ctx.clock.now(), made);
     },
     { label: 'reachResonance' },
   );
+  await signalGraph(ctx, made);
+  return bell;
+}
+
+/** Tell both people of each connection made or ended that their graph changed — after the commit. */
+function signalGraph(ctx: ServerCtx, pairs: readonly string[][]): Promise<void> {
+  return pairs.length ? signal(ctx, { kind: 'graph', uids: pairs.flat() }) : Promise.resolve();
 }
 
 /** See src/lib/api/v1/resonate.ts `tryReachResonance`. */
@@ -74,8 +89,10 @@ export async function resonateWithIn(ctx: ServerCtx, uid: string, targetId: stri
   // An id Firestore keeps for itself names no card of theirs (reading it would throw).
   if (isReservedId(cardId)) throw notFound();
 
-  return ctx.uow.run(
+  let made: string[][] = [];
+  const resonated = await ctx.uow.run(
     async (tx) => {
+      made = [];
       // "One per reader": any card of theirs already answering the target (a draft too — the button says 修改 then).
       const [chosen, answers, reach] = await Promise.all([tx.graph.getCard(cardId), tx.graph.findAnswers(uid, targetId, 2), tx.graph.readReach(uid, targetId)]);
       const targetNow = reach.original;
@@ -110,17 +127,21 @@ export async function resonateWithIn(ctx: ServerCtx, uid: string, targetId: stri
 
       tx.graph.pointCard(cardId, targetId);
       // An anonymous card reaches no one (reachable): it still answers.
-      return result(true, reachOriginalWith(tx.graph, cardId, answered, reach, now));
+      return result(true, reachOriginalWith(tx.graph, cardId, answered, reach, now, made));
     },
     { label: 'resonateWith' },
   );
+  await signalGraph(ctx, made);
+  return resonated;
 }
 
 /** See src/lib/api/v1/resonate.ts `unresonate`. */
 export async function unresonateIn(ctx: ServerCtx, uid: string, targetId: string, cardId: string): Promise<{ changed: boolean; stale: string[] }> {
   if (isReservedId(cardId)) throw notFound();
-  return ctx.uow.run(
+  let ended: string[][] = [];
+  const done = await ctx.uow.run(
     async (tx) => {
+      ended = [];
       const card = await tx.graph.getCard(cardId);
       if (!card || card.resonance.authorId !== uid) throw notFound();
       if (card.resonance.referenceCardId !== targetId) return { changed: false, stale: [] };
@@ -128,8 +149,17 @@ export async function unresonateIn(ctx: ServerCtx, uid: string, targetId: string
       // Not `updatedAt` either: nothing a list shows of it changes.
       tx.graph.unpointCard(cardId);
       tx.graph.takeBack(plans);
+      // A connection that ends with it changes both sides' lists.
+      ended = plans.filter((p) => p.ends).map((p) => [uid, otherOf(p.pair, uid)]);
       return { changed: true, stale: cardPagePaths({ id: cardId, slug: card.slug }) };
     },
     { label: 'unresonate' },
   );
+  await signalGraph(ctx, ended);
+  return done;
+}
+
+/** The other person of a pair id (the two uids, sorted, joined by `_`) `uid` is in. */
+function otherOf(pair: string, uid: string): string {
+  return pair.startsWith(uid + '_') ? pair.slice(uid.length + 1) : pair.slice(0, pair.length - uid.length - 1);
 }

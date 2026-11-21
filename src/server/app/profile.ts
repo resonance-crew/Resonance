@@ -1,5 +1,5 @@
 import { ApiFailure } from '@/lib/api/v1/http';
-import type { CreateProfileInput, MeBody, UpdateProfileInput } from '@/lib/api/v1/schemas';
+import { HINTS_SEEN_MAX, type CreateProfileInput, type MeBody, type UpdateProfileInput } from '@/lib/api/v1/schemas';
 import type { AuthUser } from '@/lib/auth/types';
 import { avatarColorFor } from '@/lib/design/avatarColors';
 import type { ServerCtx } from '@/server/ctx';
@@ -60,6 +60,51 @@ export async function createProfileIn(ctx: ServerCtx, user: AuthUser, input: Cre
   return { me: await getMe(ctx, user.id), created: outcome === 'created', named: outcome !== 'kept' };
 }
 
+const badRequest = (path: string, message: string) => new ApiFailure('invalid_request', message, [{ path, message }]);
+
+/**
+ * The profile photo a PATCH names, as the URL stored: `avatarKey` — a key of
+ * our storage, made its public URL — or `avatarUrl`, which must be one of
+ * our stored pictures (MediaUrlResolver.isOurs): what the rules' storedFile
+ * asks of a client's own write, so an avatar is never a picture elsewhere
+ * (a tracking pixel). Null when neither is sent.
+ */
+function avatarOf(ctx: ServerCtx, input: UpdateProfileInput): string | null {
+  if (input.avatarKey != null) {
+    let url: string;
+    try {
+      url = ctx.media.publicUrl(input.avatarKey);
+    } catch {
+      throw badRequest('avatarKey', 'Pictures cannot be stored here.');
+    }
+    if (ctx.media.keyOf(url) !== input.avatarKey) throw badRequest('avatarKey', 'Not one of our pictures.');
+    return url;
+  }
+  if (input.avatarUrl != null) {
+    if (!ctx.media.isOurs(input.avatarUrl)) throw badRequest('avatarUrl', 'Not one of our pictures.');
+    return input.avatarUrl;
+  }
+  return null;
+}
+
+/**
+ * The hint counts to write: each sent count that raises the stored one (a
+ * count never falls — two devices showing a hint count it the larger way),
+ * null when none does. The merged map keeps to the rules' size
+ * (HINTS_SEEN_MAX), or the request is refused.
+ */
+export function mergedHints(stored: unknown, sent: Record<string, number>): Record<string, number> | null {
+  const before = stored && typeof stored === 'object' && !Array.isArray(stored) ? (stored as Record<string, unknown>) : {};
+  const keys = new Set([...Object.keys(before), ...Object.keys(sent)]);
+  if (keys.size > HINTS_SEEN_MAX) throw badRequest('hintsSeen', `At most ${HINTS_SEEN_MAX} hints are counted.`);
+  const raised: Record<string, number> = {};
+  for (const [key, count] of Object.entries(sent)) {
+    const was = before[key];
+    if (!(typeof was === 'number' && was >= count)) raised[key] = count;
+  }
+  return Object.keys(raised).length ? raised : null;
+}
+
 /**
  * The settings page's profile fields: only those sent change; a new pen name
  * must be free and moves the reservation (the old one released into a hold
@@ -88,6 +133,13 @@ export async function updateProfileIn(ctx: ServerCtx, uid: string, input: Update
     if (input.bio != null) patch.bio = input.bio;
     if (input.region != null) patch.region = input.region;
     if (input.primaryLocale != null) patch.primaryLocale = input.primaryLocale;
+    const avatarUrl = avatarOf(ctx, input);
+    if (avatarUrl != null) patch.avatarUrl = avatarUrl;
+    if (input.autoTranslateTo != null) patch.autoTranslateTo = [...new Set(input.autoTranslateTo)];
+    if (input.hintsSeen != null) {
+      const hints = mergedHints(row.hintsSeen, input.hintsSeen);
+      if (hints) patch.hintsSeen = hints;
+    }
     tx.users.patchProfile(uid, patch);
     return renamed;
   }, { label: 'updateProfile' });

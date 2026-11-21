@@ -104,7 +104,7 @@ export function buildOpenApi(): Json {
         },
         patch: {
           operationId: 'updateProfile',
-          summary: 'Change your pen name, bio, region or writing language',
+          summary: 'Change your pen name, bio, region, writing language, photo, translation languages or hint counts',
           requestBody: { required: true, ...json(ref('UpdateProfileRequest')) },
           responses: { '200': { description: 'OK', ...json(ref('Me')) }, ...errors(400, 401, 404, 409) },
         },
@@ -682,6 +682,70 @@ export function buildOpenApi(): Json {
           responses: { '204': { description: 'Removed (or it was not yours)' }, ...errors(400, 401) },
         },
       },
+      // --- Phase 2 social (2a-social)
+      '/client-config': {
+        get: {
+          operationId: 'getClientConfig',
+          summary: 'What an app asks at launch: the builds that must or should update, and which paths to take',
+          description:
+            'No sign-in needed; the same for everyone (`Cache-Control: public, s-maxage=60`, an `ETag`, `304` on a match). ' +
+            'A build below `minBuild` for its platform shows the update screen and goes no further; one below ' +
+            '`recommendedBuild` may say an update is waiting. `features`: each flag true takes the /api/v1 path, false the older one.',
+          security: [],
+          responses: { '200': { description: 'OK', ...json(ref('ClientConfig')) } },
+        },
+      },
+      '/users': get('getUsers', 'Profiles by id, at most 30, in the order asked', 'PersonList', {
+        description:
+          'Each id once, in the order asked; an account that is gone (deleted, or never was) comes back `gone` with nothing ' +
+          'else. A profile is public: a block changes nothing here. `429` past the hourly budget.',
+        parameters: [{ name: 'ids', in: 'query', required: true, description: 'User ids, comma-separated (1–30)', schema: { type: 'string' } }],
+      }, [400, 401, 429]),
+      '/me/bookmarks/{cardId}': {
+        put: {
+          operationId: 'putBookmark',
+          summary: 'Bookmark a card you may read (again: unchanged)',
+          description: '`404` for a card you may not read, exactly as GET /cards/{key} answers it. Your bookmarks are yours alone: no one is told.',
+          parameters: [pathParam('cardId', 'The card id')],
+          responses: { '204': { description: 'Bookmarked' }, ...errors(400, 401, 404, 429) },
+        },
+        delete: {
+          operationId: 'deleteBookmark',
+          summary: 'Take a bookmark back (whether or not there was one)',
+          parameters: [pathParam('cardId', 'The card id')],
+          responses: { '204': { description: 'Not bookmarked' }, ...errors(400, 401, 429) },
+        },
+      },
+      '/me/blocks': get('getBlocks', 'Everyone you blocked, the latest first', 'BlockList', {}, [401]),
+      '/me/blocks/{uid}': {
+        put: {
+          operationId: 'blockUser',
+          summary: 'Block someone: the connection ends and every pending invite between you is withdrawn, at once',
+          description: 'They are never told. Blocking again changes nothing; yourself is `400`.',
+          parameters: [pathParam('uid', 'Their user id')],
+          responses: { '204': { description: 'Blocked' }, ...errors(400, 401, 429) },
+        },
+        delete: {
+          operationId: 'unblockUser',
+          summary: 'Unblock someone: only the block goes (a connection it ended stays ended)',
+          parameters: [pathParam('uid', 'Their user id')],
+          responses: { '204': { description: 'Not blocked' }, ...errors(400, 401, 429) },
+        },
+      },
+      '/me/connections': get('getConnections', 'The people you are connected with, the latest first', 'ConnectionList', {}, [401]),
+      '/invites': get('getInvites', 'Legacy invites waiting for your answer (pending and before their date), the latest first', 'InviteList', {
+        parameters: [{ name: 'box', in: 'query', required: true, schema: { type: 'string', enum: ['incoming'] } }],
+      }, [400, 401]),
+      '/invites/{id}/decline': {
+        post: {
+          operationId: 'declineInvite',
+          summary: 'Say no to a legacy invite sent to you: it closes, and no one is told (again: unchanged)',
+          description: '`404` for an invite that is not yours to answer; `409` once it closed otherwise (accepted, withdrawn, expired).',
+          parameters: [pathParam('id', 'The invite id')],
+          responses: { '204': { description: 'Declined' }, ...errors(400, 401, 404, 409, 429) },
+        },
+      },
+      // --- end Phase 2 social (2a-social)
     },
     components: {
       securitySchemes: { firebaseIdToken: { type: 'http', scheme: 'bearer', bearerFormat: 'Firebase ID token' } },

@@ -64,6 +64,12 @@ export interface ProfilePatch {
   bio?: string;
   region?: string;
   primaryLocale?: string;
+  /** One of our stored pictures (checked by the service). */
+  avatarUrl?: string;
+  /** Replaces the list. */
+  autoTranslateTo?: string[];
+  /** These hints' counts, each key set on its own (the others kept). */
+  hintsSeen?: Record<string, number>;
 }
 
 // --- read side (cardsRead lane)

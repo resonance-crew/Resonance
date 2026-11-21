@@ -94,6 +94,12 @@ export const LIMITS = {
    * at most once ever per reader and card, so it is no way to reach anyone.
    */
   restore: { max: 200, windowMs: DAY },
+  /** Bookmarking a card and taking it back (PUT / DELETE /me/bookmarks/{cardId}): private, but a write each. */
+  bookmark: { max: 1000, windowMs: DAY },
+  /** Blocking and unblocking (PUT / DELETE /me/blocks/{uid}): blocking ends a connection and closes invites, in one transaction. */
+  block: { max: 100, windowMs: DAY },
+  /** Profiles by id (GET /users?ids=, 30 at a time): bounds a script walking the directory, never a reader's lists. */
+  lookup: { max: 3000, windowMs: HOUR },
 } as const satisfies Record<string, { max: number; windowMs: number }>;
 
 export type Bucket = keyof typeof LIMITS;
