@@ -1,0 +1,58 @@
+# alice sits in her open thread with bob and does nothing; bob sends her a message from outside the app (his own
+# sign-in at the Auth emulator, then POST /api/v1/messages — common/send-as.js). His words appear in the open thread
+# within 10 s with no tap, no pull, no reopening: the server's change lands on signals/alice, the app's one listener
+# hears it and pulls the thread over /api/v1 (任務 #3, the middleware decouple: apiInbox on).
+appId: com.resonance.stories
+name: live-message
+tags:
+  - chat
+  - signals
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /messages/bob
+# The seeded thread's last message: bob's note on alice's letter.
+- extendedWaitUntil:
+    visible: 你的信讓我想起我自己的十年前。
+    timeout: 30000
+- assertNotVisible: 剛下班，路上又下雨了 Maestro
+# bob, on his own phone.
+- runScript:
+    file: common/send-as.js
+    env:
+      FROM: bob
+      TO: alice
+      TEXT: 剛下班，路上又下雨了 Maestro
+- extendedWaitUntil:
+    visible: 剛下班，路上又下雨了 Maestro
+    timeout: 10000
+- takeScreenshot: live-message-thread
+# Back to the conversation list, where she again only watches: bob writes once more and his row turns to the new
+# words by itself (the same signal, the list's pull).
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: 所有對話
+- extendedWaitUntil:
+    visible: 剛下班，路上又下雨了 Maestro
+    timeout: 10000
+- assertVisible: 私訊
+- runScript:
+    file: common/send-as.js
+    env:
+      FROM: bob
+      TO: alice
+      TEXT: 帶傘了嗎 Maestro
+- extendedWaitUntil:
+    visible: 帶傘了嗎 Maestro
+    timeout: 10000
+- assertNotVisible: 剛下班，路上又下雨了 Maestro
+- takeScreenshot: live-message

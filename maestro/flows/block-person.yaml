@@ -1,0 +1,74 @@
+# alice blocks bob from his profile and unblocks him from her block list, through the apps' own UI — the safety
+# graph over /api/v1 (任務 #3, the middleware decouple: apiSocial on): ⋯ (更多選項) → 封鎖 → the question 封鎖 bob？ →
+# 封鎖 (PUT /api/v1/me/blocks/bob) and the profile turns into 你已封鎖 bob — his cards gone (0 篇公開卡片, not
+# 一場雨後的散步) and their connection ended (no 已連結, no 傳訊息). Then 我的卡片盒 → 編輯個人檔案 (settings) →
+# 隱私與連結 → 管理封鎖名單 lists him (GET /api/v1/me/blocks); 解除封鎖 (DELETE /api/v1/me/blocks/bob) leaves the
+# list empty — 你還沒有封鎖任何人.
+appId: com.resonance.stories
+name: block-person
+tags:
+  - safety
+  - social
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /u/bob
+- extendedWaitUntil:
+    visible: bob 的測試帳號
+    timeout: 30000
+- assertVisible: 2 篇公開卡片
+- tapOn: 更多選項
+- tapOn: 封鎖
+- extendedWaitUntil:
+    visible: 封鎖 bob？
+    timeout: 10000
+# The question's own verb (the menu has gone; its title is 封鎖 bob？).
+- tapOn: 封鎖
+- extendedWaitUntil:
+    visible: 你已封鎖 bob
+    timeout: 15000
+- assertVisible: 你看不到對方的卡片，對方也無法聯絡你
+- assertVisible: 0 篇公開卡片
+- assertNotVisible: 一場雨後的散步
+- assertNotVisible: 已連結
+- assertNotVisible: 傳訊息
+- takeScreenshot: block-person-profile
+# Her settings: 我的卡片盒 → 編輯個人檔案 → 隱私與連結 → 管理封鎖名單.
+# First back from his profile (Android's system back; iOS's 返回), then the tab bar's 我的卡片盒. iOS keeps the other tabs'
+# screens in the tree, 我的卡片盒's own title among them: the tab is the one right of the bell (通知, with its count).
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+      - tapOn: 我的卡片盒
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: 返回
+      - tapOn:
+          text: 我的卡片盒
+          rightOf:
+            text: 通知(, \d+)?
+- tapOn: 編輯個人檔案
+- tapOn: 隱私與連結
+- scrollUntilVisible:
+    element: 管理封鎖名單
+    direction: DOWN
+- tapOn: 管理封鎖名單
+- extendedWaitUntil:
+    visible: 封鎖名單
+    timeout: 10000
+- extendedWaitUntil:
+    visible: bob
+    timeout: 15000
+- takeScreenshot: block-person-list
+- tapOn: 解除封鎖
+- extendedWaitUntil:
+    visible: 你還沒有封鎖任何人
+    timeout: 15000
+- assertNotVisible: bob
+- takeScreenshot: block-person
