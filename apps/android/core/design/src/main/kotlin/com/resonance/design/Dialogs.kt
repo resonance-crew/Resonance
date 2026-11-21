@@ -304,9 +304,15 @@ private fun EdgeToEdgeDialogWindow() {
  * content that lays itself out in a column of its own adds the gap, `Modifier.padding(top = ModalGap)`).
  */
 @Composable
-fun ModalCloseButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun ModalCloseButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** The pill's own (a test tag a flow taps: the row's [modifier] spans the foot, the pill only its end). */
+    buttonModifier: Modifier = Modifier,
+) {
     Box(modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.CenterEnd) {
-        OrganicButton(label, Modifier.heightIn(min = ModalActionMinHeight).widthIn(min = ModalActionMinWidth), variant = ButtonVariant.Tonal, small = true, onClick = onClick)
+        OrganicButton(label, buttonModifier.heightIn(min = ModalActionMinHeight).widthIn(min = ModalActionMinWidth), variant = ButtonVariant.Tonal, small = true, onClick = onClick)
     }
 }
 
