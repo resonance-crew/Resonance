@@ -148,4 +148,19 @@ class MessageHistoryTest {
         // The same again is nothing.
         assertEquals(Merged.Unchanged, history.mergeWindow(listOf(Entry(unsent, "cursor-3"), Entry(reacted, "cursor-2"), Entry(message(1), "cursor-1"))))
     }
+
+    @Test fun aCatchUpPastTheWindowKeepsWhatWasHeld() {
+        val history = MessageHistory<String>(liveLimit = 3)
+        history.mergeWindow(entries(5 downTo 3))
+        // Away a while: ten new messages, the newest three of which are the window now. Caught up with
+        // `after=` first (Phase 2), the window shares messages with the history and nothing restarts.
+        assertTrue(history.mergeNewer(entries(6..12)))
+        assertEquals(Merged.Unchanged, history.mergeWindow(entries(12 downTo 10)))
+        assertEquals((3..12).map { "m%03d".format(it) }, ids(history))
+        assertEquals("cursor-3", history.oldestCursor)
+        // Without it, the same window would have started the history afresh.
+        val fresh = MessageHistory<String>(liveLimit = 3)
+        fresh.mergeWindow(entries(5 downTo 3))
+        assertEquals(Merged.Restarted, fresh.mergeWindow(entries(12 downTo 10)))
+    }
 }

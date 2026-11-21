@@ -70,6 +70,13 @@ class MessageHistory<C : Any>(private val liveLimit: Int = LIVE_LIMIT) {
         return upsert(page)
     }
 
+    /**
+     * Messages newer than the newest held, caught up on page by page (the API's `after=`, Phase 2)
+     * before a window that would otherwise share nothing with the history: held, saying nothing
+     * about older ones. Returns whether anything new came in.
+     */
+    fun mergeNewer(entries: List<Entry<C>>): Boolean = upsert(entries)
+
     /** Forgets everything (the conversation is gone, or the listener lost track of it). */
     fun clear() {
         byId.clear()

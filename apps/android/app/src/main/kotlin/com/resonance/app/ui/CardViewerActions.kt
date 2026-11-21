@@ -259,7 +259,7 @@ fun CardViewerActions(
                     // Said as it is drawn, as the web does: 收藏到卡片盒了.
                     if (saving) toasts.show(L10n.Card.saved)
                     scope.launch {
-                        bookmarked = runCatching { bookmarks.toggle(cardId) }.onSuccess { session.noteOwnWrite() }.getOrElse { !saving }
+                        bookmarked = runCatching { bookmarks.set(cardId, saving) }.onSuccess { session.noteOwnWrite() }.getOrElse { !saving }
                     }
                 }
             }

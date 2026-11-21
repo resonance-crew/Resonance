@@ -4,6 +4,7 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Query
 import com.resonance.kit.api.SafetyApi
+import com.resonance.kit.api.SocialApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -18,8 +19,18 @@ import java.util.Date
  * the same rules the web's client uses (lib/db/firestore/client/blocks.ts):
  * the block list is owner-only, and blocking also ends the connection and
  * withdraws the blocker's pending invites. The twin of iOS's SafetyService.
+ *
+ * Phase 2: with client-config's `apiSocial` on ([social] non-null) a block is one call (PUT
+ * /me/blocks/{uid}: the server blocks, ends the connection and withdraws the invites both ways in
+ * one transaction), an unblock a DELETE, the list GET /me/blocks; [onGraphChanged] then asks the
+ * live lists to read the graph again (a block alone raises no signal: it would tell the blocked).
  */
-class SafetyService(private val uid: String, private val api: SafetyApi) {
+class SafetyService(
+    private val uid: String,
+    private val api: SafetyApi,
+    private val social: SocialApi? = null,
+    private val onGraphChanged: () -> Unit = {},
+) {
     enum class Reason(val key: String) { Spam("spam"), Harassment("harassment"), Hate("hate"), Sexual("sexual"), SelfHarm("self_harm"), Violence("violence"), Other("other") }
 
     sealed interface Target {
@@ -62,6 +73,11 @@ class SafetyService(private val uid: String, private val api: SafetyApi) {
 
     suspend fun block(other: String) {
         if (other == uid) return
+        social?.let {
+            it.block(other)
+            onGraphChanged()
+            return
+        }
         // The block goes first: once it exists the rules refuse any new contact,
         // so the cleanup below can't race a fresh connection.
         db.collection("users").document(uid).collection("blocks").document(other)
@@ -78,11 +94,30 @@ class SafetyService(private val uid: String, private val api: SafetyApi) {
     }
 
     suspend fun unblock(other: String) {
+        social?.let {
+            it.unblock(other)
+            onGraphChanged()
+            return
+        }
         db.collection("users").document(uid).collection("blocks").document(other).delete().await()
     }
 
     /** The block list, newest first, with each person's current name (a deleted account shows as such). */
     suspend fun blocked(): List<BlockedPerson> = coroutineScope {
+        social?.let { api ->
+            return@coroutineScope api.blocks().map { b ->
+                val author = b.person.author?.takeIf { !b.person.gone }
+                BlockedPerson(
+                    id = b.userId,
+                    handle = author?.handle,
+                    initials = author?.initials?.ifEmpty { null } ?: "·",
+                    since = b.blockedAt?.toInstant()?.let(Date::from),
+                    avatarUrl = author?.avatarUrl,
+                    accentColor = author?.accentColor?.ifEmpty { null },
+                    avatarSeed = author?.avatarSeed?.toDoubleOrNull(),
+                )
+            }
+        }
         val snap = db.collection("users").document(uid).collection("blocks")
             .orderBy("createdAt", Query.Direction.DESCENDING).get().await()
         // Everyone's profile at once, the list keeping its order.

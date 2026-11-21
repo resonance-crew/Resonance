@@ -5,8 +5,18 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QueryDocumentSnapshot
 import com.resonance.api.models.FeedCard
+import com.resonance.api.models.BellItem
+import com.resonance.kit.chat.isoDate
+import com.resonance.kit.realtime.Signals
+import com.resonance.kit.realtime.launchPulls
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,8 +29,21 @@ import java.util.Date
  * The signed-in person's notifications, live (a Firestore snapshot listener on
  * the same query the web's bell reads). Drives the tab badge too. The twin of
  * iOS's NotificationsStore.
+ *
+ * Phase 2: with client-config's `apiBell` on, the rows are pulled from GET /me/bell instead (on
+ * the `bell` signal, back in the foreground, each minute on screen — a 304 when nothing moved) and
+ * read through POST /notifications/read, drawn read at once. Chosen at [start]; the listener stays
+ * for a release.
  */
 class NotificationsStore {
+    /** The /api/v1 path's clients and switches (Phase 2); null: Firestore only. */
+    var remote: LiveRemote? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var pull: Job? = null
+    private val kicks = MutableStateFlow(0)
+    /** Rows read here that the last pull may not show read yet: drawn read meanwhile. */
+    private val readHere = HashMap<String, Date>()
+
     data class Item(
         val id: String,
         val type: String,
@@ -162,7 +185,8 @@ class NotificationsStore {
      * null when it is gone or has no pen name. Anything passing (offline, a timeout) throws.
      */
     suspend fun readPerson(uid: String): Person? = try {
-        Person.from(uid, AppFirebase.db.collection("users").document(uid).get().await().data)
+        val social = remote?.takeIf { it.features().apiSocial }?.social
+        if (social != null) social.person(uid) else Person.from(uid, AppFirebase.db.collection("users").document(uid).get().await().data)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -171,6 +195,27 @@ class NotificationsStore {
 
     fun start(uid: String) {
         stop()
+        val remote = remote
+        if (remote != null && remote.features().apiBell) {
+            pull = scope.launchPulls(merge(remote.signals.topic(Signals.Topic.Bell), kicks), remote.onScreen) {
+                val page = try {
+                    remote.inbox.bell(LIMIT)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    _failed.value = true
+                    return@launchPulls
+                }
+                if (pull == null) return@launchPulls
+                val items = page.items.map(::bellItemOf)
+                // A row the server shows read no longer needs this device's mark.
+                items.forEach { if (it.readAt != null) readHere.remove(it.id) }
+                _items.value = items.map { item -> readHere[item.id]?.let { item.copy(readAt = it) } ?: item }
+                _loaded.value = true
+                _failed.value = false
+            }
+            return
+        }
         listeners.add(NAME) {
             val registration: ListenerRegistration = AppFirebase.db.collection("notifications")
                 .whereEqualTo("userId", uid)
@@ -193,10 +238,14 @@ class NotificationsStore {
     /** Back in the foreground (or the retry tapped): a failed listener listens again. */
     fun resume() {
         if (listeners.resume()) _failed.value = false
+        if (pull != null) kicks.value++
     }
 
     fun stop() {
         listeners.removeAll()
+        pull?.cancel()
+        pull = null
+        readHere.clear()
         _extras.value = Extras()
         _items.value = emptyList()
         _loaded.value = false
@@ -213,6 +262,25 @@ class NotificationsStore {
         // Not a document id (an empty one would point Firestore at the collection itself and throw).
         if (id.isEmpty() || '/' in id) return
         if (_items.value.firstOrNull { it.id == id }?.isUnread == false) return
+        val remote = remote
+        if (pull != null && remote != null) {
+            // Drawn read at once (the badge too), then told.
+            val now = Date()
+            readHere[id] = now
+            _items.update { list -> list.map { if (it.id == id) it.copy(readAt = now) else it } }
+            scope.launch {
+                try {
+                    remote.inbox.markBellRead(listOf(id))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // Not told: the next pull draws it as the server has it.
+                    readHere.remove(id)
+                }
+                kicks.value++
+            }
+            return
+        }
         AppFirebase.db.collection("notifications").document(id).update("readAt", FieldValue.serverTimestamp())
     }
 
@@ -221,6 +289,8 @@ class NotificationsStore {
 
     private companion object {
         const val NAME = "notifications"
+        /** As many rows as the listener read. */
+        const val LIMIT = 50
     }
 
     private fun item(doc: QueryDocumentSnapshot): Item {
@@ -228,6 +298,17 @@ class NotificationsStore {
         val payload = doc.get("payload") as? Map<String, Any?> ?: emptyMap()
         return bellItem(doc.id, doc.getString("type") ?: "", payload, doc.getTimestamp("readAt")?.toDate(), doc.getTimestamp("createdAt")?.toDate())
     }
+}
+
+/** A bell row as GET /me/bell answers it, read by the same [bellItem] as a document's. */
+internal fun bellItemOf(row: BellItem): NotificationsStore.Item {
+    val p = row.payload
+    val payload = mapOf(
+        "fromUserId" to p.fromUserId, "fromHandle" to p.fromHandle, "fromUserIds" to p.fromUserIds, "cardId" to p.cardId,
+        "noteId" to p.noteId, "preview" to p.preview, "count" to p.count, "readers" to p.readers, "reread" to p.reread,
+        "anonymous" to p.anonymous,
+    )
+    return bellItem(row.id, row.type, payload, isoDate(row.readAt), isoDate(row.createdAt))
 }
 
 /** A bell row from its document's fields (its [payload] as Firestore hands it). */
