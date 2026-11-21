@@ -69,6 +69,12 @@ fun ResonanceRoot(session: Session, incomingRoute: MutableState<String?>) {
     val summaryReader = SummaryReader(viewer, appearance.autoTranslate, Strings.language.tag)
     CompositionLocalProvider(LocalIndication provides OrganicIndication(), LocalModalBackdrop provides backdrop, LocalSummaryReader provides summaryReader) {
         val phase by session.phase.collectAsStateWithLifecycle()
+        // Below client-config's minBuild (Phase 2) nothing else shows: only the way to the store.
+        val updateNeed by session.updateNeed.collectAsStateWithLifecycle()
+        if (updateNeed == com.resonance.kit.config.UpdateNeed.Required) {
+            Box(Modifier.fillMaxSize().cream()) { UpdateScreen() }
+            return@CompositionLocalProvider
+        }
         // Under the launch's splash the first screen simply is; a crossfade would show the loader leaving as it dissolves.
         Crossfade(phase, Modifier.fillMaxSize().cream().softenedUnder { BackdropBlurBudget.softening(soft.value) }, animationSpec = if (Launch.covering) snap() else tween(), label = "phase") { p ->
             when (p) {
