@@ -20,6 +20,7 @@ vi.mock('@/components/providers/AuthProvider', () => ({
 }));
 vi.mock('@/lib/db/firestore/client/cards', () => ({
   createCardDraft: vi.fn(),
+  newCardId: () => 'newCardId00000000000',
   updateCardDraft: vi.fn(),
   publishCard: vi.fn(),
   deleteCardForever: vi.fn(),

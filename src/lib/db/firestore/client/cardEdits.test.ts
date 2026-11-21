@@ -1,11 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// --- Firebase boundary mocks ------------------------------------------------
+// --- The boundary: the network ------------------------------------------------
 // These functions are the whole reason a published card's autosave is safe:
-// edits must land in `cards/{id}/edits/current` and never on the card itself,
-// and only the server applies them. Mock the SDK and the network and assert
-// the document paths, payloads and calls our code chooses.
-vi.mock('./init', () => ({ getClientDb: vi.fn(() => ({ __db: true })) }));
+// edits must land in the card's working copy (`…/edits/current`) and never on
+// the card itself, and only the server applies them. Since phase 2b they are
+// server calls (GET / PUT / DELETE /api/v1/cards/{id}/edits/current) — the
+// browser never touches Firestore for them (a call to it throws).
+vi.mock('./init', () => ({
+  getClientDb: vi.fn(() => {
+    throw new Error('Firestore is not written by the writer');
+  }),
+}));
 
 type MockUser = { uid: string; getIdToken: () => Promise<string> };
 const signedIn = (): MockUser => ({ uid: 'me', getIdToken: async () => 'id-token' });
@@ -14,27 +19,13 @@ vi.mock('@/lib/auth/firebase/client', () => ({
   getFirebaseClientAuth: vi.fn(() => mockAuth),
   ensureAppCheck: vi.fn(),
 }));
+vi.mock('@/lib/auth/firebase/appCheck', () => ({ appCheckHeaders: vi.fn(async () => ({})) }));
 
-vi.mock('firebase/firestore/lite', () => ({
-  // doc(db, ...segments) → a stand-in that records the path it addresses.
-  doc: vi.fn((_db: unknown, ...segments: string[]) => ({ path: segments.join('/') })),
-  deleteDoc: vi.fn(),
-  getDoc: vi.fn(),
-  setDoc: vi.fn(),
-  serverTimestamp: vi.fn(() => '<server-time>'),
-  Timestamp: class {},
-}));
+import { applyPendingCardEdit, discardPendingCardEdit, getPendingCardEdit, savePendingCardEdit, type CardEditValues } from './cardEdits';
+import { resetOutboxForTests } from './draftOutbox';
+import { getClientDb } from './init';
 
-import { deleteDoc, getDoc, setDoc } from 'firebase/firestore/lite';
-import {
-  applyPendingCardEdit,
-  discardPendingCardEdit,
-  getPendingCardEdit,
-  savePendingCardEdit,
-  type CardEditValues,
-} from './cardEdits';
-
-const EDIT_PATH = 'cards/card-1/edits/current';
+const EDIT_PATH = '/api/v1/cards/card-1/edits/current';
 
 const values: CardEditValues = {
   thoughtCore: 'A revised title',
@@ -46,9 +37,16 @@ const values: CardEditValues = {
   anonymous: false,
 };
 
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+let fetchMock: ReturnType<typeof vi.fn>;
+const calls = () => fetchMock.mock.calls.map(([url, init]) => ({ url: url as string, method: (init as RequestInit).method, body: (init as RequestInit).body ? JSON.parse(String((init as RequestInit).body)) : null, headers: (init as RequestInit).headers as Record<string, string> }));
+
 beforeEach(() => {
   vi.clearAllMocks();
+  resetOutboxForTests();
   mockAuth.currentUser = signedIn();
+  fetchMock = vi.fn(async () => json({ applied: true, rev: 1, updatedAt: '2026-11-21T08:00:00.000Z' }));
+  vi.stubGlobal('fetch', fetchMock);
 });
 
 afterEach(() => {
@@ -56,99 +54,78 @@ afterEach(() => {
 });
 
 describe('pending card edits', () => {
-  it('autosaves into the card’s private edits doc, never the card itself', async () => {
+  it('autosaves into the card’s working copy, never the card itself', async () => {
     await savePendingCardEdit('card-1', values);
 
-    expect(setDoc).toHaveBeenCalledTimes(1);
-    const [ref, payload] = vi.mocked(setDoc).mock.calls[0];
-    expect((ref as unknown as { path: string }).path).toBe(EDIT_PATH);
-    // It names its author: the account purge finds it even once its card is gone.
-    expect(payload).toMatchObject({ ...values, authorId: 'me', updatedAt: '<server-time>' });
-    // The live document is what readers are looking at — it must stay untouched
-    // until the author explicitly saves.
-    expect(
-      vi.mocked(setDoc).mock.calls.some(
-        ([r]) => (r as unknown as { path: string }).path === 'cards/card-1',
-      ),
-    ).toBe(false);
+    expect(calls()).toHaveLength(1);
+    const [put] = calls();
+    expect(put).toMatchObject({ url: EDIT_PATH, method: 'PUT' });
+    expect(put.headers.Authorization).toBe('Bearer id-token');
+    // The whole copy, counted (rev) so a late save never puts older words back.
+    expect(put.body).toEqual({ ...values, rev: 1 });
+    // The live card is what readers are looking at — untouched until the author explicitly saves.
+    expect(calls().some((c) => c.url === '/api/v1/cards/card-1' || c.url.endsWith('/draft'))).toBe(false);
+    expect(getClientDb).not.toHaveBeenCalled();
   });
 
   it('refuses to autosave when nobody is signed in', async () => {
     mockAuth.currentUser = null;
     await expect(savePendingCardEdit('card-1', values)).rejects.toThrow('Not signed in');
-    expect(setDoc).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('reads a buffered working copy back', async () => {
-    vi.mocked(getDoc).mockResolvedValue({
-      exists: () => true,
-      data: () => ({ ...values, updatedAt: null }),
-    } as never);
+    fetchMock.mockResolvedValueOnce(json({ edit: { ...values, media: { type: 'image', url: 'https://cdn/x.avif', thumbUrl: null, label: null, frame: null }, updatedAt: '2026-11-20T08:00:00.000Z', rev: 3 } }));
 
     const pending = await getPendingCardEdit('card-1');
-    expect(pending).toMatchObject({
-      thoughtCore: 'A revised title',
-      tags: ['memory'],
-      accentHue: 55,
-      anonymous: false,
-    });
+    expect(calls()[0]).toMatchObject({ url: EDIT_PATH, method: 'GET' });
+    expect(pending).toEqual({ ...values, updatedAt: new Date('2026-11-20T08:00:00.000Z') });
   });
 
-  it('reports no pending edit when there is none (or the read is denied)', async () => {
-    vi.mocked(getDoc).mockResolvedValue({ exists: () => false } as never);
+  it('reports no pending edit when there is none (or the card is not yours)', async () => {
+    fetchMock.mockResolvedValueOnce(json({ edit: null }));
     await expect(getPendingCardEdit('card-1')).resolves.toBeNull();
 
-    vi.mocked(getDoc).mockRejectedValue(Object.assign(new Error('Missing or insufficient permissions'), { code: 'permission-denied' }));
+    fetchMock.mockResolvedValueOnce(json({ error: { code: 'not_found', message: 'No such card.' } }, 404));
     await expect(getPendingCardEdit('card-1')).resolves.toBeNull();
   });
 
   // Opened on "no pending edit", the editor would autosave the live fields
   // over the working copy the read failed to fetch.
   it('lets a read that failed (offline) fail instead of reporting no pending edit', async () => {
-    vi.mocked(getDoc).mockRejectedValue(Object.assign(new Error('Failed to get document because the client is offline.'), { code: 'unavailable' }));
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch: offline'));
     await expect(getPendingCardEdit('card-1')).rejects.toThrow('offline');
+    fetchMock.mockResolvedValueOnce(json({ error: { code: 'internal', message: 'Something went wrong.' } }, 500));
+    await expect(getPendingCardEdit('card-1')).rejects.toMatchObject({ status: 500 });
   });
 
   // The live card is what readers see: the server applies the revision (one
   // transaction, its date and slug kept, held to a card's limits — pinned in
   // test/emulator/apiV1Edits), never this browser.
   it('applies the revision through the API with the ID token, writing nothing itself', async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ id: 'card-1', slug: 'a-revised-title', applied: true }), { status: 200 }),
-    );
-    vi.stubGlobal('fetch', fetchMock);
+    fetchMock.mockResolvedValueOnce(json({ id: 'card-1', slug: 'a-revised-title', applied: true }));
 
     await expect(applyPendingCardEdit('card-1')).resolves.toEqual({ id: 'card-1', slug: 'a-revised-title', applied: true });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('/api/v1/cards/card-1/edits/apply');
-    expect(init.method).toBe('POST');
-    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer id-token');
-    expect(setDoc).not.toHaveBeenCalled();
-    expect(deleteDoc).not.toHaveBeenCalled();
+    expect(calls()).toHaveLength(1);
+    expect(calls()[0]).toMatchObject({ url: '/api/v1/cards/card-1/edits/apply', method: 'POST' });
+    expect(calls()[0].headers.Authorization).toBe('Bearer id-token');
   });
 
   it("surfaces the server's refusal", async () => {
-    vi.stubGlobal('fetch', vi.fn(async () =>
-      new Response(JSON.stringify({ error: { code: 'invalid_request', message: 'The edit does not fit a card.' } }), { status: 400 }),
-    ));
+    fetchMock.mockResolvedValueOnce(json({ error: { code: 'invalid_request', message: 'The edit does not fit a card.' } }, 400));
     await expect(applyPendingCardEdit('card-1')).rejects.toMatchObject({ status: 400, code: 'invalid_request', message: 'The edit does not fit a card.' });
   });
 
   it('refuses to apply when nobody is signed in', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
     mockAuth.currentUser = null;
     await expect(applyPendingCardEdit('card-1')).rejects.toThrow('Not signed in');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('discards a working copy without touching the card', async () => {
+    fetchMock.mockResolvedValueOnce(json({ deleted: true }));
     await discardPendingCardEdit('card-1');
-    expect((vi.mocked(deleteDoc).mock.calls[0][0] as unknown as { path: string }).path).toBe(
-      EDIT_PATH,
-    );
-    expect(setDoc).not.toHaveBeenCalled();
+    expect(calls()).toEqual([expect.objectContaining({ url: EDIT_PATH, method: 'DELETE' })]);
   });
 });

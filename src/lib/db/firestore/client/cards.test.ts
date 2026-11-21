@@ -21,17 +21,9 @@ vi.mock('firebase/firestore/lite', () => ({
   Timestamp: class {},
 }));
 
-import { getDoc, setDoc } from 'firebase/firestore/lite';
-import { deleteCardForever, emptyTrash, publishCard, resonateWith, restoreCard, trashCard, unresonate, updateCardDraft } from './cards';
+import { setDoc } from 'firebase/firestore/lite';
+import { deleteCardForever, emptyTrash, publishCard, resonateWith, restoreCard, trashCard, unresonate } from './cards';
 import { ApiError } from './api';
-
-function snapshot(publishedAt: unknown) {
-  return {
-    id: 'card-1',
-    exists: () => true,
-    data: () => ({ authorId: 'me', publishedAt }),
-  } as never;
-}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -71,21 +63,8 @@ describe('publishCard', () => {
   });
 });
 
-describe('updateCardDraft', () => {
-  it('deletes a removed cover instead of leaving the old one behind', async () => {
-    vi.mocked(getDoc).mockResolvedValue(snapshot(null));
-    await updateCardDraft('card-1', { thoughtCore: 'x', media: undefined, accentHue: null });
-    const [, payload, options] = vi.mocked(setDoc).mock.calls[0];
-    expect(payload).toMatchObject({ media: '<delete>', accentHue: null });
-    expect(options).toEqual({ merge: true });
-  });
-
-  it('leaves the cover alone when the patch does not mention it', async () => {
-    vi.mocked(getDoc).mockResolvedValue(snapshot(null));
-    await updateCardDraft('card-1', { thoughtCore: 'x' });
-    expect(vi.mocked(setDoc).mock.calls[0][1]).not.toHaveProperty('media');
-  });
-});
+// updateCardDraft (a removed cover cleared, one not mentioned left alone) goes through the server and the
+// writer's outbox now: draftOutbox.test.ts.
 
 describe('resonateWith / unresonate', () => {
   // The rules never let the browser point a written card at another
