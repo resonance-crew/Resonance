@@ -45,14 +45,15 @@ public enum ResonanceClient {
     }
 
     /// Every client reads answers through `OpenEnumsMiddleware`, so a value the
-    /// contract adds to an enum later never fails a whole answer, and sends the
-    /// App Check token at hand (`AppCheckHeader`).
+    /// contract adds to an enum later never fails a whole answer, sends a required
+    /// field's null as null (`RequiredNulls`), and sends the App Check token at hand
+    /// (`AppCheckHeader`).
     static func make(_ configuration: APIConfiguration, transport: any ClientTransport, middlewares: [any ClientMiddleware]) -> Client {
         Client(
             serverURL: configuration.apiURL,
             configuration: .init(dateTranscoder: .iso8601WithFractionalSeconds),
             transport: transport,
-            middlewares: [OpenEnumsMiddleware(), AppCheckMiddleware()] + middlewares
+            middlewares: [OpenEnumsMiddleware(), RequiredNullsMiddleware(), AppCheckMiddleware()] + middlewares
         )
     }
 }
