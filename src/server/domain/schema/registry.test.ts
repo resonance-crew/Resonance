@@ -147,7 +147,8 @@ describe('the account registry', () => {
   it('names the entities the rules leave to their default deny', () => {
     const inRules = new Set(ruleBlocks().map((b) => b.name));
     // Server-only, written by the Admin SDK alone (lib/push/devices): no client may read or write a device token.
-    expect(ENTITY_NAMES.filter((e) => !inRules.has(e))).toEqual(['devices']);
+    // The outbox (domain/outbox.ts) is the server's own record of its writes: no client reads or writes it either.
+    expect(ENTITY_NAMES.filter((e) => !inRules.has(e))).toEqual(['changeLog', 'devices']);
   });
 
   it('declares every person field its rules or its queries name: purged, kept with a reason, or handled by a step', () => {
@@ -242,6 +243,8 @@ describe('the account registry', () => {
         'group edits authorId ==',
         'group draftLog authorId ==',
         'group blocks blockedUid ==',
+        // Added since: the outbox's entries naming the account (domain/outbox.ts).
+        'changeLog userIds array-contains',
       ].sort(),
     );
     expect(plan.byCard.map((b) => `${b.entity} ${b.field}`)).toEqual(['resonances cardId', 'notes cardId', 'cardReads cardId', 'resonanceTaps cardId', 'readerSignals cardId']);
@@ -261,8 +264,8 @@ describe('the account registry', () => {
     }
   });
 
-  it('counts its entities (47: 38 collections, 9 subcollections)', () => {
-    expect(Object.keys(ENTITIES)).toHaveLength(47);
+  it('counts its entities (48: 39 collections, 9 subcollections)', () => {
+    expect(Object.keys(ENTITIES)).toHaveLength(48);
     expect(ENTITY_NAMES.filter((n) => SPECS[n].parent)).toHaveLength(9);
   });
 });

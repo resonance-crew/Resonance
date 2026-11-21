@@ -197,6 +197,10 @@ export const ENTITIES = {
   quotas: { uid: ['userId'], purge: 'rows', export: 'none' },
   uploads: { uid: ['ownerId'], purge: 'rows', steps: ['uploadFiles'], export: 'none' },
   config: { uid: [], note: `${NO_UID}: the service's settings (storage, recommendPool)`, purge: 'none', export: 'none' },
+  // The outbox (Phase 3, domain/outbox.ts): which row a transaction wrote, never its content. A row id may be or
+  // hold a uid (`users/{uid}`, `resonanceTaps/{card}_{uid}`); the replicator needs it plain, so `userIds` lists the
+  // id's segments and the account's entries go by it. Kept 7 days at most (TTL `expireAt`).
+  changeLog: { uid: ['userIds[]'], purge: 'rows', export: 'none' },
 
   // --- push ---
   devices: { uid: ['userId'], purge: 'rows', export: 'none' },

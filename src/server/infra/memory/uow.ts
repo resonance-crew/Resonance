@@ -1,5 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { CHANGE_LOG, changeEntry, entityOfPath } from '@/server/domain/outbox';
 import { ReadAfterWriteError, type TxRepos, type UnitOfWork, type UowOptions } from '@/server/ports/uow';
+import { ulid } from '../system/ulid';
 import { buildMemoryTxRepos } from './repos';
 import type { MemoryState, Row, StoredRow } from './state';
 
@@ -63,6 +65,17 @@ export class MemoryTx {
     this.ops.push({ kind: 'delete', table, id });
   }
 
+  /** The rows written, each with its last op (the outbox's record). */
+  written(): { table: string; id: string; op: 'upsert' | 'delete' }[] {
+    const out = new Map<string, { table: string; id: string; op: 'upsert' | 'delete' }>();
+    for (const op of this.ops) {
+      const key = JSON.stringify([op.table, op.id]);
+      out.delete(key);
+      out.set(key, { table: op.table, id: op.id, op: op.kind === 'delete' ? 'delete' : 'upsert' });
+    }
+    return [...out.values()];
+  }
+
   /** Apply what was written (the UoW calls it once `fn` resolved). */
   commit(): void {
     for (const op of this.ops) {
@@ -71,6 +84,12 @@ export class MemoryTx {
       else this.state.delete(op.table, op.id);
     }
   }
+}
+
+export interface MemoryUowOptions {
+  /** Record the outbox (`changeLog/{ulid}`) with each commit, as FirestoreUnitOfWork with `OUTBOX_ENABLED=1`. */
+  outbox?: () => boolean;
+  now?: () => number;
 }
 
 /**
@@ -86,6 +105,7 @@ export class MemoryUnitOfWork<R = TxRepos> implements UnitOfWork<R> {
   constructor(
     private readonly state: MemoryState,
     private readonly build: (tx: MemoryTx) => R,
+    private readonly opts: MemoryUowOptions = {},
   ) {}
 
   run<T>(fn: (tx: R) => Promise<T>, opts: UowOptions = {}): Promise<T> {
@@ -94,6 +114,17 @@ export class MemoryUnitOfWork<R = TxRepos> implements UnitOfWork<R> {
       this.inside.run(true, async () => {
         const tx = new MemoryTx(this.state, new TxTracker(opts.label));
         const value = await fn(this.build(tx));
+        if (this.opts.outbox?.()) {
+          const at = (this.opts.now ?? Date.now)();
+          // A memory table is a collection (`cards`) or a subcollection's path (`users/{uid}/blocks`); `blocks`
+          // mirrors the latter by `{uid}/{other}`: one entry per row either way.
+          const rows = new Map<string, { entity: string; id: string; op: 'upsert' | 'delete' }>();
+          for (const { table, id, op } of tx.written()) {
+            const row = table.includes('/') ? entityOfPath(`${table}/${id}`) : { entity: table, id };
+            rows.set(`${row.entity}/${row.id}`, { ...row, op });
+          }
+          for (const { entity, id, op } of rows.values()) if (entity !== CHANGE_LOG) tx.put(CHANGE_LOG, ulid(at), { ...changeEntry(entity, id, op, at) });
+        }
         tx.commit();
         return value;
       }),
@@ -104,6 +135,6 @@ export class MemoryUnitOfWork<R = TxRepos> implements UnitOfWork<R> {
 }
 
 /** The memory UnitOfWork with every aggregate's repositories. */
-export function memoryUow(state: MemoryState): UnitOfWork {
-  return new MemoryUnitOfWork<TxRepos>(state, buildMemoryTxRepos);
+export function memoryUow(state: MemoryState, opts: MemoryUowOptions = {}): UnitOfWork {
+  return new MemoryUnitOfWork<TxRepos>(state, buildMemoryTxRepos, opts);
 }
