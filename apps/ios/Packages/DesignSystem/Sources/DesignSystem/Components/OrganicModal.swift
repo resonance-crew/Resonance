@@ -10,11 +10,16 @@ extension View {
     /// VoiceOver's escape — none of them while `dismissible` is false (an
     /// action in flight). `closeLabel` is what the backdrop says it does to
     /// VoiceOver: the modal's own cancel or close words.
+    ///
+    /// `clipsToPaper` (round 27, the passages' dialog): what the card holds is clipped to the paper's own wobble and the
+    /// pen line drawn over it, so a row's ink may run past the words' inset to the paper's edge (``ModalPaper``) — the
+    /// web's Modal clipping its scroll body to the paper (`useModalPaper()`). Off, as every other dialog has it.
     public func organicModal<Card: View>(isPresented: Binding<Bool>, seed: Double = 17, maxWidth: CGFloat = 440,
-                                         closeLabel: String, dismissible: Bool = true,
+                                         closeLabel: String, dismissible: Bool = true, clipsToPaper: Bool = false,
                                          @ViewBuilder content: @escaping () -> Card) -> some View {
         modifier(OrganicModalPresenter(isPresented: isPresented, seed: seed, maxWidth: maxWidth,
-                                       closeLabel: closeLabel, dismissible: dismissible, card: content))
+                                       closeLabel: closeLabel, dismissible: dismissible, clipsToPaper: clipsToPaper,
+                                       card: content))
     }
 
     /// ConfirmModal: title, a line of explanation, then cancel and the verb at
@@ -243,6 +248,7 @@ struct OrganicModalPresenter<Card: View>: ViewModifier {
     let maxWidth: CGFloat
     let closeLabel: String
     let dismissible: Bool
+    let clipsToPaper: Bool
     let card: () -> Card
     /// The cover itself; it comes and goes without UIKit's slide, and the
     /// stage inside fades and pops like the web's dialog.
@@ -252,7 +258,8 @@ struct OrganicModalPresenter<Card: View>: ViewModifier {
         content
             .fullScreenCover(isPresented: $coverShown) {
                 OrganicModalStage(isPresented: $isPresented, coverShown: $coverShown, seed: seed, maxWidth: maxWidth,
-                                  closeLabel: closeLabel, dismissible: dismissible, card: card)
+                                  closeLabel: closeLabel, dismissible: dismissible, clipsToPaper: clipsToPaper,
+                                  card: card)
                     .presentationBackground(.clear)
             }
             .onChange(of: isPresented, initial: true) { _, show in
@@ -307,6 +314,7 @@ struct OrganicModalStage<Card: View>: View {
     let maxWidth: CGFloat
     let closeLabel: String
     let dismissible: Bool
+    let clipsToPaper: Bool
     let card: () -> Card
     @State private var shown = false
     /// This modal counts toward ``ModalBackdrop`` (from its appearing to its closing).
@@ -331,7 +339,7 @@ struct OrganicModalStage<Card: View>: View {
                 // The backdrop scrolls when the dialog is taller than the screen
                 // (the web's overflow-y: auto); a tap beside the card closes it.
                 ScrollView {
-                    OrganicModalCard(seed: seed, maxWidth: maxWidth, content: card)
+                    OrganicModalCard(seed: seed, maxWidth: maxWidth, clipsToPaper: clipsToPaper, content: card)
                         .contentShape(Rectangle())
                         .onTapGesture {}
                         .scaleEffect(shown ? 1 : 0.96)
@@ -382,25 +390,62 @@ struct OrganicModalStage<Card: View>: View {
 
 /// The dialog card: card paper with grain in the wobbly outline — radius 26,
 /// the wobble 2.5% of its short side, three or four turns across and five or
-/// six down — and the ink border.
+/// six down — and the ink border. `clipsToPaper`: the content is clipped to the
+/// paper and the border drawn over it (``View/organicModal(isPresented:seed:maxWidth:closeLabel:dismissible:clipsToPaper:content:)``).
 struct OrganicModalCard<Content: View>: View {
     let seed: Double
     let maxWidth: CGFloat
+    var clipsToPaper = false
     let content: () -> Content
 
     var body: some View {
         let shape = ModalShape(seed: seed)
-        VStack(alignment: .leading, spacing: 0) { content() }
-            .padding(.horizontal, 28)
+        let card = VStack(alignment: .leading, spacing: 0) { content() }
+            .padding(.horizontal, ModalPaper.inset)
             .padding(.vertical, 32)
             .frame(maxWidth: maxWidth, alignment: .leading)
-            .background {
-                shape.fill(Tokens.cardBg)
-                GrainLayer(shape: shape, mode: .tile, opacity: 0.3, tile: "grain-card")
-                shape.stroke(Tokens.modalBorder, style: StrokeStyle(lineWidth: Tokens.ink, lineJoin: .round))
-            }
-            .accessibilityElement(children: .contain)
+        if clipsToPaper {
+            card
+                .environment(\.modalPaperClips, true)
+                .background {
+                    shape.fill(Tokens.cardBg)
+                    GrainLayer(shape: shape, mode: .tile, opacity: 0.3, tile: "grain-card")
+                }
+                .clipShape(shape)
+                // The pen line over the ink, whole: the web's border above its clipped body.
+                .overlay {
+                    shape.stroke(Tokens.modalBorder, style: StrokeStyle(lineWidth: Tokens.ink, lineJoin: .round))
+                        .allowsHitTesting(false)
+                }
+                .accessibilityElement(children: .contain)
+        } else {
+            card
+                .background {
+                    shape.fill(Tokens.cardBg)
+                    GrainLayer(shape: shape, mode: .tile, opacity: 0.3, tile: "grain-card")
+                    shape.stroke(Tokens.modalBorder, style: StrokeStyle(lineWidth: Tokens.ink, lineJoin: .round))
+                }
+                .accessibilityElement(children: .contain)
+        }
     }
+}
+
+/// A dialog's paper as its children see it: the words' inset from the paper's frame, and how far past the frame a
+/// child's ink may reach so that, clipped to the wobble (which swings out as well as in), it meets the pen line
+/// everywhere. A child reaches only inside an ``View/organicModal(isPresented:seed:maxWidth:closeLabel:dismissible:clipsToPaper:content:)``
+/// that clips (``EnvironmentValues/modalPaperClips``); anywhere else its ink would show past the line.
+public nonisolated enum ModalPaper {
+    /// The content's inset from the paper's frame, a side.
+    public static let inset: CGFloat = 28
+    /// Past the frame, a side: more than the wobble's widest swing out at a dialog's sizes.
+    public static let bleed: CGFloat = 16
+    /// The paper's outline in `rect` (the frame), as the dialog seeded `seed` draws it.
+    public static func outline(in rect: CGRect, seed: Double) -> Path { ModalShape(seed: seed).path(in: rect) }
+}
+
+extension EnvironmentValues {
+    /// The modal this view stands in clips its content to the paper (``ModalPaper``).
+    @Entry public var modalPaperClips = false
 }
 
 nonisolated struct ModalShape: Shape {
