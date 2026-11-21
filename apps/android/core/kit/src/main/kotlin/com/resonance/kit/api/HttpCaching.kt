@@ -91,6 +91,14 @@ class HttpCaching(private val cache: Cache?) {
 
     private fun changesReads(url: HttpUrl): Boolean {
         val path = url.encodedPath
-        return path.startsWith("/api/v1/") && !path.startsWith("/api/v1/me/devices/")
+        return path.startsWith("/api/v1/") && !path.startsWith("/api/v1/me/devices/") && !isReadMark(path)
     }
+
+    /**
+     * Marking a conversation or bell rows read (Phase 2): it changes only the inbox's and the bell's
+     * reads, which the server answers `no-cache` (each read revalidated by its ETag anyway) — so
+     * reading a thread as its messages arrive doesn't send every other read past the cache.
+     */
+    private fun isReadMark(path: String): Boolean =
+        path == "/api/v1/notifications/read" || (path.startsWith("/api/v1/conversations/") && path.endsWith("/read"))
 }

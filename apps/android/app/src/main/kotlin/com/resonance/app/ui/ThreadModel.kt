@@ -53,9 +53,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
+import com.resonance.app.person
+import com.resonance.kit.chat.toChatMessage
+import com.resonance.kit.realtime.launchPulls
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.util.Date
@@ -206,8 +213,21 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
     /** Older messages are being read for the search: [searchHits] may still grow. */
     val searchLoading: Boolean get() = loadingOlder && searchQuery.isNotBlank()
 
-    private val history = MessageHistory<DocumentSnapshot>()
-    private var listeners: List<ListenerRegistration> = emptyList()
+    /** Cursors are a Firestore document (the listener's path) or the contract's `c1.` string (the API's, Phase 2). */
+    private val history = MessageHistory<Any>()
+    /** How to stop what keeps the thread current: Firestore's listeners, or the API path's pulls. */
+    private var listeners: List<() -> Unit> = emptyList()
+    /**
+     * The thread is pulled from /api/v1 (client-config's `apiInbox`, read as it starts listening):
+     * GET /conversations/{pair} and its newest messages on the `threads[pair]` signal, back in the
+     * foreground and each minute on screen, with `If-None-Match` (a reaction, an unsend, a preview
+     * changes the ETag); older pages by `before=`, and `after=` to catch up past the window.
+     */
+    private var pullsApi = false
+    /** Asks the API path for a pull now (a message of mine delivered). */
+    private val pullKicks = MutableStateFlow(0)
+    /** The newest message's cursor the API path has read, where a catch-up starts. */
+    private var newestCursor: String? = null
     /** Which [listen] the live listeners belong to (a late callback of a removed one is ignored). */
     private var listening = 0
     /** Which life of the conversation's history a page read belongs to (a reset makes a late page void). */
@@ -330,7 +350,8 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
         val name = session.conversations.person(id)?.handle ?: handle
         read(name)?.takeIf { it.author.id == id }?.let { return it }
         val current = try {
-            AppFirebase.db.collection("users").document(id).get().await().getString("handle")
+            if (session.features.apiSocial) session.remote.social.person(id)?.handle
+            else AppFirebase.db.collection("users").document(id).get().await().getString("handle")
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -409,8 +430,10 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
     private fun listen(pair: String) {
         stop()
         val run = ++listening
+        pullsApi = session.features.apiInbox
+        if (pullsApi) return pull(pair, run)
         val ref = AppFirebase.db.collection("conversations").document(pair)
-        listeners = listOf(
+        listeners = listOf<ListenerRegistration>(
             ref.addSnapshotListener { doc, error ->
                 if (run != listening) return@addSnapshotListener
                 if (error != null) return@addSnapshotListener refused(pair, error)
@@ -440,7 +463,87 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
                     checkRestoredReply(conversationGone = false)
                     markReadIfNeeded()
                 },
-        )
+        ).map { registration -> { registration.remove() } }
+    }
+
+    /** The API path's [listen]: pulls on the thread's signal (and a kick), one at a time, until [stop]. */
+    private fun pull(pair: String, run: Int) {
+        val remote = session.remote
+        val job = scope.launchPulls(merge(remote.signals.thread(pair), pullKicks), remote.onScreen) { pullOnce(pair, run) }
+        listeners = listOf({ job.cancel() })
+    }
+
+    private suspend fun pullOnce(pair: String, run: Int) {
+        val inbox = session.remote.inbox
+        val read = try {
+            coroutineScope {
+                val conversation = async { inbox.conversation(pair) }
+                val page = async { runCatching { inbox.messages(pair, limit = MessageHistory.LIVE_LIMIT) } }
+                conversation.await() to page.await()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (run == listening) cannotListen()
+            return
+        }
+        if (run != listening) return
+        val (conversation, pageRead) = read
+        // None the viewer is in (not yet, or deleted): what Firestore's refusal said.
+        val page = pageRead.getOrElse { e ->
+            if (conversation == null || (e as? ApiFailure)?.status == 404) gone(pair) else cannotListen()
+            return
+        }
+        if (conversation == null) return gone(pair)
+        conversationExists = true
+        refusals = 0
+        unreadForMe = conversation.unread
+        noteRequest(conversation.request?.from)
+        letterKnown = true
+        val origin = session.config.origin
+        val window = page.messages.map { MessageHistory.Entry<Any>(it.toChatMessage(origin), it.cursor) }
+        // More than a window arrived since the last pull (away a long while): caught up from the newest held first.
+        if (history.size > 0 && window.none { it.message.id in history }) catchUp(pair, run)
+        if (run != listening) return
+        val merged = history.mergeWindow(window, authoritative = true)
+        page.messages.firstOrNull()?.cursor?.let { newestCursor = it }
+        if (merged == MessageHistory.Merged.Restarted) forgetPaging()
+        listenFailed = false
+        threadReady = true
+        historyChanged()
+        checkRestoredReply(conversationGone = false)
+        markReadIfNeeded()
+    }
+
+    /** The messages after the newest held, `after=` page by page (a failure leaves the window to start afresh). */
+    private suspend fun catchUp(pair: String, run: Int) {
+        var cursor = newestCursor ?: return
+        val origin = session.config.origin
+        repeat(CATCH_UP_PAGES) {
+            val page = try {
+                session.remote.inbox.messages(pair, after = cursor, limit = JUMP_PAGE)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                return
+            }
+            if (run != listening) return
+            history.mergeNewer(page.messages.map { MessageHistory.Entry<Any>(it.toChatMessage(origin), it.cursor) })
+            cursor = page.newerCursor ?: return
+            newestCursor = cursor
+            if (!page.hasNewer) return
+        }
+    }
+
+    /**
+     * Not "no conversation" — offline for good, the backend busy: what was read stays, and it is read
+     * again back in the foreground ([resumeIfFailed]). Whether a note waits can't be asked: the foot
+     * goes by what is known.
+     */
+    private fun cannotListen() {
+        listenFailed = true
+        threadReady = true
+        letterKnown = true
     }
 
     /**
@@ -449,23 +552,23 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
      * at once if the list already has it (it was created while this read was on its way).
      */
     private fun refused(pair: String, error: FirebaseFirestoreException) {
-        stop()
         if (error.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) {
-            // Not "no conversation" — offline for good, the backend busy: what was read stays, and the
-            // listeners attach again back in the foreground ([resumeIfFailed]). Whether a note waits can't
-            // be asked: the foot goes by what is known.
-            listenFailed = true
-            threadReady = true
-            letterKnown = true
-            return
+            stop()
+            return cannotListen()
         }
+        gone(pair)
+    }
+
+    /** The conversation isn't there for the viewer (Firestore's refusal, the API's 404). */
+    private fun gone(pair: String) {
+        stop()
         conversationExists = false
         requestFrom = null
         resetHistory()
         threadReady = true
         // No conversation (any more): a reply restored from a draft answers nothing.
         if (pair !in session.conversations.ids.value) checkRestoredReply(conversationGone = true)
-        if (error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED && pair in session.conversations.ids.value && refusals++ < 3) {
+        if (pair in session.conversations.ids.value && refusals++ < 3) {
             // The list has it (a creation racing this read): its answer is the next listener's.
             listen(pair)
         } else {
@@ -488,7 +591,7 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
     /** Stops listening (the screen is going away, or the conversation is being deleted). */
     fun stop() {
         listening++
-        listeners.forEach { it.remove() }
+        listeners.forEach { it() }
         listeners = emptyList()
     }
 
@@ -508,6 +611,18 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
         if (PushCenter.viewingConversation != pair) return
         PushCenter.cancelConversation(pair)
         if (unreadForMe <= 0) return
+        if (pullsApi) {
+            // Drawn read at once — here and in the list's badge — then told (POST …/read).
+            unreadForMe = 0
+            val conversations = session.conversations
+            conversations.readHere(pair)
+            val inbox = session.remote.inbox
+            session.launch {
+                runCatching { inbox.markRead(pair) }
+                conversations.readHere(pair, done = true)
+            }
+            return
+        }
         AppFirebase.db.collection("conversations").document(pair).update("unread.$me", 0)
     }
 
@@ -722,8 +837,19 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
         val life = epoch
         olderError = false
         try {
+            if (cursor is String) {
+                // The API path's page (at most its 100).
+                val asked = minOf(limit, API_PAGE_MAX)
+                val page = session.remote.inbox.messages(pair, before = cursor, limit = asked)
+                if (life != epoch) return false
+                val origin = session.config.origin
+                // The page says itself whether there is more (`olderCursor`), not by its length.
+                history.mergePage(page.messages.map { MessageHistory.Entry<Any>(it.toChatMessage(origin), it.cursor) }, if (page.olderCursor == null) Int.MAX_VALUE else 0)
+                historyChanged()
+                return true
+            }
             val docs = AppFirebase.db.collection("conversations").document(pair).collection("messages")
-                .orderBy("sentAt", Query.Direction.DESCENDING).startAfter(cursor).limit(limit.toLong())
+                .orderBy("sentAt", Query.Direction.DESCENDING).startAfter(cursor as DocumentSnapshot).limit(limit.toLong())
                 .get().await()
             if (life != epoch) return false
             // Offline, Firestore answers from what it has: a short answer then is no sign of the beginning.
@@ -766,6 +892,8 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
         // The first message made the conversation: listen to it now.
         val pair = pairId
         if (pair != null && listeners.isEmpty() && entries.any { it.status == Outbox.Status.Sent }) listen(pair)
+        // Delivered: the API path reads it back at once, whether or not a signal comes.
+        else if (pullsApi && entries.any { it.status == Outbox.Status.Sent }) pullKicks.value++
         // An answer to their note connected you: whether you may write is asked again.
         if (foot == ThreadFoot.Answer && entries.any { it.status == Outbox.Status.Sent }) reaskConnection()
     }
@@ -1173,6 +1301,10 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
         const val SEARCH_OFF_MAIN = 400
         /** How many pages of older messages a link to a note reads in looking for it. */
         const val NOTE_PAGES = 5
+        /** GET …/messages answers at most this many a page. */
+        const val API_PAGE_MAX = 100
+        /** How many `after=` pages a catch-up reads before it lets the window start afresh. */
+        const val CATCH_UP_PAGES = 20
     }
 }
 
