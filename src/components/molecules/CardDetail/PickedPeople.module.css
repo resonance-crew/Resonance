@@ -1,0 +1,26 @@
+/* Round 29 §S4.2: the who-resonated dialog's title, then the sentence once, then its people. */
+.title {
+  font-family: var(--font-heading);
+  font-size: 20px;
+  margin: 0 0 10px;
+}
+
+/* The sentence in the story's type at 16, muted, in full (never cut). */
+.sentence {
+  margin: 0 0 14px;
+  font-family: var(--font-story-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.sentence[data-script='latin'] {
+  font-family: var(--font-body);
+}
+
+.more {
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
+}

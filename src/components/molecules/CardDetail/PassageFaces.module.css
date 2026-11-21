@@ -1,0 +1,59 @@
+/* Round 29 §S2: one group of faces for a picked sentence — the house stack (AvatarGroup), a button with no face of
+   its own (icon-like: only the faces), its hit area 44 × 44 round it, reaching into the lines above and below (the
+   story's words are not controls; a link's own box wins, story.css). */
+.group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  animation: passageIn 150ms ease-out;
+}
+
+.group::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(44px, 100%);
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+.group:focus-visible {
+  outline: 2px solid var(--color-terracotta-light);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* In the line: as tall as the slot (one line box), the faces centred in it. */
+.group[data-placement='inline'] {
+  height: 100%;
+  vertical-align: top;
+}
+
+/* In the margin: laid on the margin's column at its centre's height (PassageMarks). */
+.group[data-placement='margin'] {
+  position: absolute;
+  left: 0;
+}
+
+/* When the answer comes after the story is drawn (§S3): a fade, opacity only; at once under reduced motion. */
+@keyframes passageIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .group {
+    animation: none;
+  }
+}

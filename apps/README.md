@@ -22,6 +22,7 @@ apps/
 native/geometry/            the hand-drawn geometry in Swift and Kotlin (used by the apps)
 native/editor/              the story editor island both apps load in a WebView
 native/fixtures/            golden files the web and both apps' tests read alike
+test/vectors/               cases the web's and both apps' renderers run alike (passageMarks.json: where a picked sentence lies in a drawn text, round 29 §P3 — web passageRange / rehypePassageMarks, iOS PassageMarksTests, Android PassageMarksTest)
 ```
 
 ## Both apps

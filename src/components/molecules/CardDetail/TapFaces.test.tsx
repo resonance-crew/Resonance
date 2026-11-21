@@ -65,17 +65,18 @@ describe('TapFaces', () => {
     expect(screen.getByRole('img', { name: '你共振了' })).toBeInTheDocument();
   });
 
-  it('is one button, its faces spoken and never written, then the blank disc for more', () => {
+  it('is one button, its faces spoken and never written, and nothing drawn for more (round 29 §S5: no blank disc)', () => {
     const { container } = renderFaces({ mine: true, faces: [face('alice'), face('dora'), face('eli')], more: true, mayNote: true }, { zh: true });
     // The viewer's own face first is said first, as the apps say it (iOS TapState.spoken, Android facesLabel).
     const button = screen.getByRole('button', { name: '你共振了，你連結的人裡，與這張卡片共振的：dora、eli，還有其他人' });
     // On screen: only faces (their initials) — no sentence, no number.
     expect(button.textContent).toBe('ALDOEL');
-    expect(container.querySelector('[data-more]')).not.toBeNull();
+    expect(container.querySelector('[data-more]')).toBeNull();
+    expect(button.querySelector('[data-count]')?.getAttribute('data-count')).toBe('3');
     expect([...container.querySelectorAll('[data-face]')].map((f) => f.getAttribute('data-face'))).toEqual(['alice', 'dora', 'eli']);
   });
 
-  it('says what is seen when only the viewer’s face is drawn before the blank disc — never an empty list of names', () => {
+  it('says there are others when only the viewer’s face is drawn — never an empty list of names', () => {
     renderFaces({ mine: true, faces: [face('alice')], more: true, mayNote: true }, { zh: true });
     expect(screen.getByRole('button', { name: '你共振了，你連結的人裡，與這張卡片共振的：還有其他人' })).toBeInTheDocument();
   });

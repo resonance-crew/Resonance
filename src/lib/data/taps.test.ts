@@ -50,10 +50,10 @@ describe('withMine', () => {
     expect(withMine(on, true, alice).faces).toEqual([alice, dora, eli, fay]);
   });
 
-  it('draws the tap on as three faces and the blank disc, and off again as the three it had', () => {
+  it('draws the tap on as three faces (no blank disc since round 29 §S5, still said), and off again as the three it had', () => {
     const on = drawn(withMine(READ, true, alice));
     expect(on.faces).toEqual(['alice', 'dora', 'eli']);
-    expect(on.disc).toBe(true);
+    expect(on.disc).toBe(false);
     expect(on.name).toBe('你共振了，你連結的人裡，與這張卡片共振的：dora、eli，還有其他人');
 
     const off = drawn(withMine(withMine(READ, true, alice), false, alice));

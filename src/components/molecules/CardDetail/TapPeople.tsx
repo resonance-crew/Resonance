@@ -39,6 +39,11 @@ export interface TapPeopleProps {
   onPick?: () => void;
   /** The key the last band ends on (a "show more" under it, or the list's end). */
   endKey?: string;
+  /**
+   * The author's list quotes each person's pick under their name (round 27 §U2); false for one sentence's people
+   * (round 29 §S4.2: the sentence heads the dialog, so no row says it again).
+   */
+  quotes?: boolean;
 }
 
 /**
@@ -47,7 +52,7 @@ export interface TapPeopleProps {
  * of the note they left on the card, muted, under the name. A row opens that note's conversation, or else their page:
  * a tap alone gives no way to write to anyone.
  */
-export function TapPeople({ people, own, onPick, endKey = BAND_END_KEY }: TapPeopleProps) {
+export function TapPeople({ people, own, onPick, endKey = BAND_END_KEY, quotes = true }: TapPeopleProps) {
   const below = bandsBelow(people.map((p) => p.author.id), endKey);
   return (
     <ul className={styles.list}>
@@ -58,6 +63,7 @@ export function TapPeople({ people, own, onPick, endKey = BAND_END_KEY }: TapPeo
             band={{ top: p.author.id, bottom: below[i] }}
             onPick={onPick}
             own={own ? (p.author.id === own.id ? own : null) : undefined}
+            quotes={quotes}
           />
         </li>
       ))}
@@ -69,8 +75,8 @@ export function TapPeople({ people, own, onPick, endKey = BAND_END_KEY }: TapPeo
  * A row's second line, round 27: the author's list quotes each person's pick (§U2), a reader's list only their own —
  * their pick, or 選一段 when the card has passages and they picked none (§U3). Null: no such line.
  */
-function rowQuote(person: TapPersonBody, own: TapOwnRow | null | undefined): { quote: string } | { pick: true } | null {
-  if (own === undefined) return person.passage?.text ? { quote: person.passage.text } : null;
+function rowQuote(person: TapPersonBody, own: TapOwnRow | null | undefined, quotes = true): { quote: string } | { pick: true } | null {
+  if (own === undefined) return quotes && person.passage?.text ? { quote: person.passage.text } : null;
   if (!own) return null;
   const text = own.quote === undefined ? person.passage?.text : own.quote;
   if (text) return { quote: text };
@@ -82,17 +88,19 @@ function PersonRow({
   band,
   onPick,
   own,
+  quotes,
 }: {
   person: TapPersonBody;
   band: { top: string; bottom: string };
   onPick?: () => void;
+  quotes?: boolean;
   /** Undefined in the author's list; in a reader's, their own row's (§U3) or null on everyone else's. */
   own?: TapOwnRow | null;
 }) {
   const t = useTranslations('card.tap');
   const press = useBandPress();
   const a = person.author;
-  const second = rowQuote(person, own);
+  const second = rowQuote(person, own, quotes);
   const inner = (
     <>
       <BandWash topKey={band.top} bottomKey={band.bottom} />
