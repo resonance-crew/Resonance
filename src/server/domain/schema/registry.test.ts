@@ -266,3 +266,29 @@ describe('the account registry', () => {
     expect(ENTITY_NAMES.filter((n) => SPECS[n].parent)).toHaveLength(9);
   });
 });
+
+describe('the canonical schema (plan §4.1)', () => {
+  it('gives every registered entity a schema and its version', () => {
+    for (const entity of ENTITY_NAMES) {
+      const spec = SPECS[entity] as Partial<(typeof SPECS)[EntityName]>;
+      expect(spec.schema, entity).toBeDefined();
+      expect(spec.schema!.zod, entity).toBeDefined();
+      expect(Number.isInteger(spec.version) && spec.version! >= 1, entity).toBe(true);
+      expect(spec.version, entity).toBe(spec.schema!.version);
+    }
+  });
+
+  it('types every person field the registry names: a string, or a relation of users', () => {
+    for (const entity of ENTITY_NAMES) {
+      const { schema, uid } = SPECS[entity];
+      for (const field of uid.filter(isQueriedField)) {
+        let at: unknown = schema;
+        for (const part of field.replace(/\[\]$/, '').split('.')) at = (at as { fields?: Record<string, unknown> } | undefined)?.fields?.[part];
+        const kind = at as { kind?: string; relation?: string } | undefined;
+        expect(kind, `${entity}.${field}`).toBeDefined();
+        const ok = field.endsWith('[]') ? kind!.kind === 'strings' && kind!.relation === 'users' : kind!.kind === 'string';
+        expect(ok, `${entity}.${field}`).toBe(true);
+      }
+    }
+  });
+});

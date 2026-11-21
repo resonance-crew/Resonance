@@ -17,6 +17,9 @@
  * - `'field[]'` the field is an array holding uids (`where(field, 'array-contains', uid)`).
  */
 
+import type { EntitySchema } from './fields';
+import { SCHEMAS } from './entities';
+
 export type PurgeKind =
   /** The document `{uid}` and everything under it, deleted last (the profile among them). */
   | 'root'
@@ -88,14 +91,21 @@ export interface EntitySpec<Name extends string = string> {
   kept?: Readonly<Record<string, string>>;
   /** The export section the entity feeds, or `'none'`. */
   export: ExportSectionKey | 'none';
+  /** The canonical storage schema (entities.ts, plan §4.1). */
+  schema: EntitySchema;
+  /** Its version: what an export's rows carry as `_v` (equal to `schema.version`). */
+  version: number;
 }
 
 const NO_UID = 'holds no uid';
 
+/** An entry's canonical schema and its version (entities.ts; scripts/portability writes `_v` from it). */
+const S = <N extends keyof typeof SCHEMAS>(name: N) => ({ schema: SCHEMAS[name], version: SCHEMAS[name].version });
+
 export const ENTITIES = {
   // --- users ---
-  users: { uid: ['$id'], purge: 'root', steps: ['pages'], export: 'profile' },
-  bookmarks: {
+  users: { ...S('users'), uid: ['$id'], purge: 'root', steps: ['pages'], export: 'profile' },
+  bookmarks: { ...S('bookmarks'),
     parent: 'users',
     uid: ['$parent'],
     purge: 'subtree',
@@ -103,30 +113,30 @@ export const ENTITIES = {
     // tombstone and their shelf drops what no longer resolves — the bookmark is theirs, not this account's.
     export: 'bookmarks',
   },
-  blocks: {
+  blocks: { ...S('blocks'),
     parent: 'users',
     // Their own blocks go with users/{uid}; others' blocks of them (users/{other}/blocks/{uid}) by `blockedUid`.
     uid: ['$parent', 'blockedUid'],
     purge: 'rows',
     export: 'none',
   },
-  handles: { uid: ['uid'], purge: 'rows', steps: ['holdHandle'], export: 'none' },
+  handles: { ...S('handles'), uid: ['uid'], purge: 'rows', steps: ['holdHandle'], export: 'none' },
   // The signal channel's counters (Phase 2, ports/realtime.ts): the account's own document goes with it. Others'
   // `threads.{pair}` keys name a conversation with it, which the purge takes whole (a stale counter refetches nothing).
-  signals: { uid: ['$id'], purge: 'root', export: 'none' },
-  handleHolds: { uid: ['heldFor'], purge: 'rows', export: 'none' },
+  signals: { ...S('signals'), uid: ['$id'], purge: 'root', export: 'none' },
+  handleHolds: { ...S('handleHolds'), uid: ['heldFor'], purge: 'rows', export: 'none' },
 
   // --- cards ---
-  cards: { uid: ['authorId'], purge: 'tree', steps: ['byCard', 'retireCard', 'pages'], export: 'cards' },
-  edits: {
+  cards: { ...S('cards'), uid: ['authorId'], purge: 'tree', steps: ['byCard', 'retireCard', 'pages'], export: 'cards' },
+  edits: { ...S('edits'),
     parent: 'cards',
     // Goes with its card's tree; one an older app's client-side delete left without its card is found by `authorId`.
     uid: ['authorId'],
     purge: 'rows',
     export: 'none',
   },
-  translations: { parent: 'cards', uid: [], note: `${NO_UID}: the server's translation of a story, with its card's tree`, purge: 'subtree', export: 'none' },
-  draftLog: {
+  translations: { ...S('translations'), parent: 'cards', uid: [], note: `${NO_UID}: the server's translation of a story, with its card's tree`, purge: 'subtree', export: 'none' },
+  draftLog: { ...S('draftLog'),
     parent: 'cards',
     // A draft's applied autosaves, 7 days (TTL `expireAt`): with its card's tree, after a delete for good (deleteCard),
     // and by `authorId` when an older app deleted its draft from the client.
@@ -134,38 +144,38 @@ export const ENTITIES = {
     purge: 'rows',
     export: 'none',
   },
-  cardTombstones: { uid: [], note: `${NO_UID}: a purged card's id, kept dead for good (retireCard)`, purge: 'kept', export: 'none' },
-  retiredSlugs: { uid: [], note: `${NO_UID}: a purged card's slug, retired for good (retireCard)`, purge: 'kept', export: 'none' },
-  cardLinks: { uid: ['sourceAuthorId', 'targetAuthorId'], purge: 'rows', export: 'none' },
+  cardTombstones: { ...S('cardTombstones'), uid: [], note: `${NO_UID}: a purged card's id, kept dead for good (retireCard)`, purge: 'kept', export: 'none' },
+  retiredSlugs: { ...S('retiredSlugs'), uid: [], note: `${NO_UID}: a purged card's slug, retired for good (retireCard)`, purge: 'kept', export: 'none' },
+  cardLinks: { ...S('cardLinks'), uid: ['sourceAuthorId', 'targetAuthorId'], purge: 'rows', export: 'none' },
 
   // --- graph ---
-  connections: { uid: ['userIds[]'], purge: 'rows', export: 'none' },
-  connectionOrigins: { uid: ['userIds[]'], purge: 'rows', export: 'none' },
-  invites: { uid: ['fromUserId', 'toUserId'], purge: 'rows', export: 'none' },
-  letters: { uid: ['from', 'to'], purge: 'rows', export: 'none' },
-  resonances: { uid: ['userId'], purge: 'rows', byCard: 'cardId', export: 'none' },
-  notes: { uid: ['fromUserId', 'toUserId', 'withheldFor'], purge: 'rows', byCard: 'cardId', export: 'notesSent' },
+  connections: { ...S('connections'), uid: ['userIds[]'], purge: 'rows', export: 'none' },
+  connectionOrigins: { ...S('connectionOrigins'), uid: ['userIds[]'], purge: 'rows', export: 'none' },
+  invites: { ...S('invites'), uid: ['fromUserId', 'toUserId'], purge: 'rows', export: 'none' },
+  letters: { ...S('letters'), uid: ['from', 'to'], purge: 'rows', export: 'none' },
+  resonances: { ...S('resonances'), uid: ['userId'], purge: 'rows', byCard: 'cardId', export: 'none' },
+  notes: { ...S('notes'), uid: ['fromUserId', 'toUserId', 'withheldFor'], purge: 'rows', byCard: 'cardId', export: 'notesSent' },
 
   // --- conversations ---
-  conversations: { uid: ['participants[]'], purge: 'tree', export: 'none' },
-  messages: {
+  conversations: { ...S('conversations'), uid: ['participants[]'], purge: 'tree', export: 'none' },
+  messages: { ...S('messages'),
     parent: 'conversations',
     // Every message is in a conversation of two, which goes whole with either of them.
     uid: ['senderId'],
     purge: 'subtree',
     export: 'messagesSent',
   },
-  unsentMessages: { uid: ['senderId', 'to'], purge: 'rows', export: 'none' },
-  privateShares: { uid: ['authorId'], purge: 'rows', export: 'none' },
-  chatImages: { uid: ['senderId', 'to'], purge: 'rows', steps: ['chatPictureFiles'], export: 'none' },
+  unsentMessages: { ...S('unsentMessages'), uid: ['senderId', 'to'], purge: 'rows', export: 'none' },
+  privateShares: { ...S('privateShares'), uid: ['authorId'], purge: 'rows', export: 'none' },
+  chatImages: { ...S('chatImages'), uid: ['senderId', 'to'], purge: 'rows', steps: ['chatPictureFiles'], export: 'none' },
 
   // --- taps, reading ---
-  cardReads: { uid: ['userId'], purge: 'rows', byCard: 'cardId', export: 'none' },
-  resonanceTaps: { uid: ['userId'], purge: 'rows', byCard: 'cardId', export: 'cardsResonated' },
-  readerSignals: { uid: ['userId'], purge: 'rows', byCard: 'cardId', export: 'reading' },
+  cardReads: { ...S('cardReads'), uid: ['userId'], purge: 'rows', byCard: 'cardId', export: 'none' },
+  resonanceTaps: { ...S('resonanceTaps'), uid: ['userId'], purge: 'rows', byCard: 'cardId', export: 'cardsResonated' },
+  readerSignals: { ...S('readerSignals'), uid: ['userId'], purge: 'rows', byCard: 'cardId', export: 'reading' },
 
   // --- bell ---
-  notifications: {
+  notifications: { ...S('notifications'),
     uid: ['userId', 'payload.fromUserId', 'payload.fromUserIds[]'],
     purge: 'rows',
     special: { 'payload.fromUserIds[]': 'tapRows' },
@@ -173,13 +183,13 @@ export const ENTITIES = {
   },
 
   // --- thought map ---
-  thoughtMaps: { uid: ['$id'], purge: 'root', export: 'none' },
-  nodes: { parent: 'thoughtMaps', uid: ['$parent'], purge: 'subtree', export: 'thoughtMap.nodes' },
-  edges: { parent: 'thoughtMaps', uid: ['$parent'], purge: 'subtree', export: 'thoughtMap.edges' },
-  groups: { parent: 'thoughtMaps', uid: ['$parent'], purge: 'subtree', export: 'thoughtMap.groups' },
+  thoughtMaps: { ...S('thoughtMaps'), uid: ['$id'], purge: 'root', export: 'none' },
+  nodes: { ...S('nodes'), parent: 'thoughtMaps', uid: ['$parent'], purge: 'subtree', export: 'thoughtMap.nodes' },
+  edges: { ...S('edges'), parent: 'thoughtMaps', uid: ['$parent'], purge: 'subtree', export: 'thoughtMap.edges' },
+  groups: { ...S('groups'), parent: 'thoughtMaps', uid: ['$parent'], purge: 'subtree', export: 'thoughtMap.groups' },
 
   // --- safety ---
-  reports: {
+  reports: { ...S('reports'),
     uid: ['reporterId'],
     purge: 'rows',
     kept: {
@@ -189,26 +199,26 @@ export const ENTITIES = {
     export: 'none',
   },
   // The copy of what was reported goes with either side: it is the reported person's writing.
-  reportEvidence: { uid: ['reporterId', 'targetUserId'], purge: 'rows', export: 'none' },
-  accountDeletions: { uid: ['$id'], purge: 'last', steps: ['storagePrefixes', 'authUser'], export: 'none' },
+  reportEvidence: { ...S('reportEvidence'), uid: ['reporterId', 'targetUserId'], purge: 'rows', export: 'none' },
+  accountDeletions: { ...S('accountDeletions'), uid: ['$id'], purge: 'last', steps: ['storagePrefixes', 'authUser'], export: 'none' },
 
   // --- infra ---
-  rateLimits: { uid: ['userId'], purge: 'rows', export: 'none' },
-  quotas: { uid: ['userId'], purge: 'rows', export: 'none' },
-  uploads: { uid: ['ownerId'], purge: 'rows', steps: ['uploadFiles'], export: 'none' },
-  config: { uid: [], note: `${NO_UID}: the service's settings (storage, recommendPool)`, purge: 'none', export: 'none' },
+  rateLimits: { ...S('rateLimits'), uid: ['userId'], purge: 'rows', export: 'none' },
+  quotas: { ...S('quotas'), uid: ['userId'], purge: 'rows', export: 'none' },
+  uploads: { ...S('uploads'), uid: ['ownerId'], purge: 'rows', steps: ['uploadFiles'], export: 'none' },
+  config: { ...S('config'), uid: [], note: `${NO_UID}: the service's settings (storage, recommendPool)`, purge: 'none', export: 'none' },
 
   // --- push ---
-  devices: { uid: ['userId'], purge: 'rows', export: 'none' },
-  notificationSettings: { uid: ['$id'], purge: 'root', export: 'none' },
-  pickPushes: { uid: ['$id'], purge: 'root', export: 'none' },
-  connectionCardPushes: { uid: ['$id'], purge: 'root', export: 'none' },
+  devices: { ...S('devices'), uid: ['userId'], purge: 'rows', export: 'none' },
+  notificationSettings: { ...S('notificationSettings'), uid: ['$id'], purge: 'root', export: 'none' },
+  pickPushes: { ...S('pickPushes'), uid: ['$id'], purge: 'root', export: 'none' },
+  connectionCardPushes: { ...S('connectionCardPushes'), uid: ['$id'], purge: 'root', export: 'none' },
 
   // --- recommend ---
-  cardVectors: { uid: ['authorId'], purge: 'rows', export: 'none' },
-  cardSignatures: { uid: ['authorId'], purge: 'rows', export: 'none' },
-  userProfiles: { uid: ['$id'], purge: 'root', export: 'none' },
-  recommendations: { uid: ['$id'], purge: 'root', export: 'none' },
+  cardVectors: { ...S('cardVectors'), uid: ['authorId'], purge: 'rows', export: 'none' },
+  cardSignatures: { ...S('cardSignatures'), uid: ['authorId'], purge: 'rows', export: 'none' },
+  userProfiles: { ...S('userProfiles'), uid: ['$id'], purge: 'root', export: 'none' },
+  recommendations: { ...S('recommendations'), uid: ['$id'], purge: 'root', export: 'none' },
 } as const satisfies Record<string, EntitySpec>;
 
 export type EntityName = keyof typeof ENTITIES;
