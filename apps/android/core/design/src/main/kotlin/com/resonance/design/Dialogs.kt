@@ -167,6 +167,11 @@ val LocalModalBackdrop = staticCompositionLocalOf<ModalBackdrop?> { null }
  * Back — none of them while `onDismiss` is null (the web's busy state). For
  * TalkBack the scrim is a button named `closeLabel`, read after the card,
  * and the card carries the same dismiss action.
+ *
+ * [clipToPaper] (off by default, every other dialog as it was): what the content draws is clipped to the paper's
+ * wobble and the pen line is drawn over it, so a child widened to the paper's edges ([toModalPaperEdges]) — a banded
+ * row's wash — runs from the paper's left edge to its right, under the line, never past it: the web's Modal, whose
+ * scroll body is clipped to the paper (`useModalPaper()`).
  */
 @Composable
 fun OrganicModal(
@@ -177,6 +182,7 @@ fun OrganicModal(
     closeLabel: String = L10n.Safety.Report.close,
     /** The card's widest (Modal's `maxWidth`): 460 unless a small dialog asks for less. */
     maxWidth: Dp = 460.dp,
+    clipToPaper: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     // The screens under it are softened while it is up (review F8): the root listens.
@@ -239,16 +245,23 @@ fun OrganicModal(
                             val path = cmds.toPath(density)
                             val grain = Grain.brush(GrainMode.Tile, "grain-card", size, density, 0.3f, grainInk)
                             val ink = Stroke(Tokens.Ink.toPx())
-                            onDrawBehind {
+                            onDrawWithContent {
                                 drawPath(path, card)
                                 grain?.let { drawPath(path, it, alpha = 0.3f) }
-                                drawPath(path, border, style = ink)
+                                if (clipToPaper) {
+                                    // The content inside the wobble, the pen line over it.
+                                    clipPath(path) { this@onDrawWithContent.drawContent() }
+                                    drawPath(path, border, style = ink)
+                                } else {
+                                    drawPath(path, border, style = ink)
+                                    drawContent()
+                                }
                             }
                         }
                         // A card taller than the room scrolls, its words fading where there is more.
                         .scrollFade(scroll, ModalScrollFade)
                         .verticalScroll(scroll)
-                        .padding(horizontal = 28.dp, vertical = 32.dp),
+                        .padding(horizontal = ModalPaperInset, vertical = 32.dp),
                     verticalArrangement = Arrangement.spacedBy(ModalGap),
                     content = content,
                 )
@@ -256,6 +269,22 @@ fun OrganicModal(
         }
         }
     }
+}
+
+/** The paper's side padding: from its edge to the content's. */
+val ModalPaperInset = 28.dp
+
+/**
+ * A modal's child widened by [ModalPaperInset] on each side, to the paper's own edges (its siblings keep the inset):
+ * for a wash that runs edge to edge, inside an [OrganicModal] with `clipToPaper`. Its content keeps its place only if
+ * it pads itself the inset back.
+ */
+fun Modifier.toModalPaperEdges(): Modifier = layout { measurable, constraints ->
+    val bleed = ModalPaperInset.roundToPx()
+    val wide = if (constraints.hasBoundedWidth) constraints.maxWidth + bleed * 2 else constraints.maxWidth
+    val placeable = measurable.measure(constraints.copy(minWidth = constraints.minWidth, maxWidth = wide))
+    val width = (placeable.width - bleed * 2).coerceAtLeast(0)
+    layout(width, placeable.height) { placeable.place(-bleed, 0) }
 }
 
 /** How far a modal's scrolling content fades out at an edge with more beyond it: a hint, not a veil. */
