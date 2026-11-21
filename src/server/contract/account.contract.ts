@@ -78,6 +78,9 @@ export async function seedAccountWorld(seed: AccountHarness['seed']): Promise<vo
   put(`cards/${CARD}/edits/current`, { authorId: UID, story: 'draft' });
   put(`cards/gone-card/edits/current`, { authorId: UID, story: 'an edit outliving its card' });
   put(`cards/${CARD}/translations/en`, { title: 'Hers', story: 's' });
+  // Her drafts' patch log: under her card, and one an older app's own delete of its draft left behind.
+  put(`cards/${CARD}/draftLog/1`, { authorId: UID, rev: 1, patch: { set: { story: 'draft' }, clear: [] }, expireAt: now });
+  put(`cards/gone-draft/draftLog/3`, { authorId: UID, rev: 3, patch: { set: { story: 'a log outliving its draft' }, clear: [] }, expireAt: now });
   put(`conversations/${CONVERSATION}/messages/m1`, { senderId: UID, text: 'hi', sentAt: now });
   put(`conversations/${CONVERSATION}/messages/m2`, { senderId: BOB, text: 'hey', sentAt: now });
   put(`thoughtMaps/${UID}/nodes/${CARD}`, { cardId: CARD, x: 0, y: 0 });

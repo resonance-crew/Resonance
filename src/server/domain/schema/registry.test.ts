@@ -240,6 +240,7 @@ describe('the account registry', () => {
         'reportEvidence reporterId ==',
         'reportEvidence targetUserId ==',
         'group edits authorId ==',
+        'group draftLog authorId ==',
         'group blocks blockedUid ==',
       ].sort(),
     );
@@ -260,8 +261,8 @@ describe('the account registry', () => {
     }
   });
 
-  it('counts its entities (45: 37 collections, 8 subcollections)', () => {
-    expect(Object.keys(ENTITIES)).toHaveLength(45);
-    expect(ENTITY_NAMES.filter((n) => SPECS[n].parent)).toHaveLength(8);
+  it('counts its entities (46: 37 collections, 9 subcollections)', () => {
+    expect(Object.keys(ENTITIES)).toHaveLength(46);
+    expect(ENTITY_NAMES.filter((n) => SPECS[n].parent)).toHaveLength(9);
   });
 });

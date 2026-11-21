@@ -123,6 +123,14 @@ export const ENTITIES = {
     export: 'none',
   },
   translations: { parent: 'cards', uid: [], note: `${NO_UID}: the server's translation of a story, with its card's tree`, purge: 'subtree', export: 'none' },
+  draftLog: {
+    parent: 'cards',
+    // A draft's applied autosaves, 7 days (TTL `expireAt`): with its card's tree, after a delete for good (deleteCard),
+    // and by `authorId` when an older app deleted its draft from the client.
+    uid: ['authorId'],
+    purge: 'rows',
+    export: 'none',
+  },
   cardTombstones: { uid: [], note: `${NO_UID}: a purged card's id, kept dead for good (retireCard)`, purge: 'kept', export: 'none' },
   retiredSlugs: { uid: [], note: `${NO_UID}: a purged card's slug, retired for good (retireCard)`, purge: 'kept', export: 'none' },
   cardLinks: { uid: ['sourceAuthorId', 'targetAuthorId'], purge: 'rows', export: 'none' },
