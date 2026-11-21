@@ -244,4 +244,57 @@ import UIKit
         })
         #expect(ids == ["passage-faces-0", "passage-faces-1"], "\(ids)")
     }
+
+    /// A table's cell is a leaf (§P): a sentence picked in a body cell is washed there with its faces (in the line,
+    /// never in the next column), numbered before a later paragraph's — as the web's CardDetailClient case and
+    /// Android's StoryTable do.
+    @Test func aSentencePickedInATableCellWearsItsFacesInTheCell() async throws {
+        let ax = AccessibilityOn()
+        defer { ax.restore() }
+        let story: [StoryBlock] = [
+            .table(head: [[InlineRun("日子")], [InlineRun("做了什麼")]],
+                   rows: [[[InlineRun("週一")], [InlineRun("把書按照顏色排好。")]]],
+                   alignments: [.start, .start]),
+            .paragraph([InlineRun("我坐在地上，第一次覺得安靜是屬於自己的。")]),
+        ]
+        let marks = PassageLeaves.marks(story, sentences: [("cell", "把書按照顏色排好。"), ("para", "我坐在地上，第一次覺得安靜是屬於自己的。")])
+        #expect(marks[[0, 1, 1]] == [PassageLeaves.Mark(id: "cell", order: 0, start: 0, end: 9)])
+        #expect(marks[[1]]?.map(\.order) == [1])
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 800)
+        let face = TapFaces.face(Fixture.author("gus"))
+        let spoken = L10n.Card.Tap.pickedBy(names: "gus")
+        // A wide room: on the page the paragraph's faces would stand in the margin, the cell's still in its line.
+        let plan = StoryPassageMarks(passages: [
+            .init(id: "cell", text: "把書按照顏色排好。", faces: [face], spoken: spoken),
+            .init(id: "para", text: "我坐在地上，第一次覺得安靜是屬於自己的。", faces: [face], spoken: spoken),
+        ], room: 80, reading: 1, latinCompact: false) { _ in }
+        #expect(plan.inLineOnly.place == .inline && plan.place == .margin)
+        window.rootViewController = UIHostingController(rootView: ScrollView {
+            StoryMarkdownView(blocks: story, typography: StoryTypography(script: .cjk, layout: .compact), onOpenURL: { _ in }) { _, _ in
+                EmptyView?.none
+            }
+            .storyPassages(plan)
+            .padding(.horizontal, 20)
+        })
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        var found: [NSObject] = []
+        _ = await eventually {
+            found = AccessibilityOn.elements(in: window).filter { $0.accessibilityLabel == spoken }
+            return found.count == 2
+        }
+        let byID = Dictionary(found.compactMap { element -> (String, CGRect)? in
+            guard element.responds(to: NSSelectorFromString("accessibilityIdentifier")),
+                  let id = element.value(forKey: "accessibilityIdentifier") as? String else { return nil }
+            return (id, element.accessibilityFrame)
+        }, uniquingKeysWith: { a, _ in a })
+        #expect(Set(byID.keys) == ["passage-faces-0", "passage-faces-1"], "\(byID.keys)")
+        // The cell's faces stand above the paragraph's, inside the window's column (in the line, not past the table).
+        let cell = try #require(byID["passage-faces-0"])
+        let para = try #require(byID["passage-faces-1"])
+        #expect(cell.midY < para.midY)
+        #expect(cell.maxX <= 402 - 20 + 1, "\(cell)")
+    }
 }

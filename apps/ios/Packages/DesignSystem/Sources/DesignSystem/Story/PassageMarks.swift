@@ -208,6 +208,14 @@ public struct StoryPassageMarks {
         self.latinCompact = latinCompact
         self.press = press
     }
+
+    /// The same marks with every group in the line (Android's `inLineOnly()`): a table cell's faces stay in its
+    /// cell, never in a margin that is the next column.
+    public var inLineOnly: StoryPassageMarks {
+        var plan = self
+        plan.place = .inline
+        return plan
+    }
 }
 
 private struct StoryPassagesKey: EnvironmentKey {

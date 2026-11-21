@@ -211,7 +211,7 @@ struct BlockView<Embed: View, LinkCard: View>: View {
         case let .code(code):
             CodeBlockView(code: code, typography: style.typography, size: em)
         case let .table(head, rows, alignments):
-            StoryTableView(head: head, rows: rows, alignments: alignments, style: style, onOpenURL: onOpenURL)
+            StoryTableView(head: head, rows: rows, alignments: alignments, style: style, onOpenURL: onOpenURL, path: path)
         }
     }
 
