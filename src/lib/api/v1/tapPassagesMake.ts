@@ -44,13 +44,22 @@ const textOf = (data: DocumentData) => ({
   story: typeof data.story === 'string' ? data.story : '',
 });
 
+/**
+ * Whether the card's story is one to make passages for: offersPassages, the
+ * trash aside. A card in the trash keeps them, and has them made for an edit
+ * applied there, since restoring it (within 30 days, publishedAt kept) runs
+ * nothing that would make them again; while it is in the trash nobody can
+ * tap it, and presentTapPassages checks `of` against the story.
+ */
+const qualifies = (data: DocumentData) => offersPassages({ ...data, trashedAt: null });
+
 /** A failure worth trying again (a timeout, a server error, a cut answer) — a refusal is an answer: none. */
 const refused = (e: unknown) => e instanceof ChatIncomplete && e.kind === 'refusal';
 
 /**
  * Make (or remove) card `id`'s tap passages as its story is now. Nothing for
  * a card whose `of` already matches; removes them from a card that may not
- * offer any (unpublished, in the trash, too short or too complex); writes
+ * offer any (unpublished, too short or too complex; the trash keeps them: `qualifies`); writes
  * the pick only while the card still has the story it was made from (a newer
  * save's run wins: 'moved'). Never touches `updatedAt`.
  */
@@ -60,7 +69,7 @@ export async function makeTapPassages(db: Firestore, id: string, opts: TapPassag
   if (!snap?.exists) return 'not-found';
   const data = snap.data()!;
   const stored = data.tapPassages as { of?: unknown; failed?: { of?: unknown; tries?: unknown } } | undefined;
-  if (!offersPassages(data)) {
+  if (!qualifies(data)) {
     if (stored === undefined) return 'none';
     await ref.update({ tapPassages: FieldValue.delete() });
     return 'removed';
@@ -110,7 +119,7 @@ export async function makeTapPassages(db: Firestore, id: string, opts: TapPassag
     const [now] = await tx.getAll(ref, { fieldMask: FIELDS });
     if (!now.exists) return 'not-found';
     const d = now.data()!;
-    if (!offersPassages(d) || passagesHash(textOf(d).story) !== of) return 'moved';
+    if (!qualifies(d) || passagesHash(textOf(d).story) !== of) return 'moved';
     // Never `updatedAt`: nothing the author wrote changed. The whole value, so a failure count goes with it.
     tx.update(ref, { tapPassages: { of, items, model, at: FieldValue.serverTimestamp() } });
     return items.length ? 'made' : 'none';
