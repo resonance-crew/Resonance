@@ -1,5 +1,6 @@
 import DesignSystem
 import ResonanceKit
+import StoryFormat
 import SwiftUI
 
 /// A card's page (card/[slug]/page.tsx): the cover, the title in the story's type, the byline under
@@ -45,6 +46,9 @@ struct CardScreen: View {
     @State private var reading = ReadingTracker()
     /// What the page has across.
     @State private var width: CGFloat?
+    /// The picked sentence whose people the dialog shows (round 29 §S4), and whether it is open.
+    @State private var picked: PickedPeople.Passage?
+    @State private var pickedOpen = false
     private static let pageSpace = "card.page"
     /// The page's head, where the trash banner stands.
     private static let pageHead = "card.head"
@@ -92,8 +96,9 @@ struct CardScreen: View {
             // The toast's 看譯文 brings the reader back to the same place in the translated story.
             .scrollPosition($position)
             // The paper puppets (round 19), while Settings → 外觀 → 小紙團 is on: on the card once it has
-            // loaded, never one in the trash. A tablet's contents rail keeps them out of the right margin.
-            .modifier(MascotStage(page: "card", allowed: mascotsAllowed, rail: layout.rail ? CGRect(x: layout.railX, y: 0, width: Tokens.cardRailW, height: 1) : nil))
+            // loaded, never one in the trash. A tablet's contents rail keeps them out of the right margin, and so do the
+            // faces of the author's picked sentences standing there (round 29 §S1.1).
+            .modifier(MascotStage(page: "card", allowed: mascotsAllowed, rail: layout.rail ? CGRect(x: layout.railX, y: 0, width: Tokens.cardRailW, height: 1) : marginFaces))
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             // The page's own scroll (the bar's line and progress): on the page's scroll view alone, not
             // on the rail's table of contents, which scrolls by itself.
@@ -422,6 +427,37 @@ struct CardScreen: View {
         return L10n.Card.sharedPrivately(handle: author?.handle ?? L10n.Card.anonymousAuthor)
     }
 
+    /// What the author's own page hands its story (round 29 §U1): nil on every other page, and on the author's when the
+    /// card is in the trash, private, or shown in a translation. The faces stand in the right margin when the white right
+    /// of the column is ≥ 70 (to the contents rail, else the window's edge), else in the line after the sentence (§S1).
+    private func passageMarks(_ detail: CardDetail, blocks: [StoryBlock], story: StoryTypography, script: StoryScript, trashed: Bool,
+                              translated: Bool) -> StoryPassageMarks? {
+        guard PickedPeople.washes(detail, trashed: trashed, translated: translated), !Self.isPrivate(detail.card) else { return nil }
+        let passages = PickedPeople.passages(detail.tap?.value1)
+        return StoryPassageMarks(passages: passages, room: PassageFaces.room(layout, width: width ?? window.contentWidth),
+                                 reading: story.scale(.body), latinCompact: script == .latin && window.layoutClass == .compact) { id in
+            guard let passage = passages.first(where: { $0.id == id }) else { return }
+            openPicked(PickedPeople.Passage(id: passage.id, text: passage.text))
+        }
+    }
+
+    /// The right margin, when the author's picked sentences' faces stand in it (round 29 §S1.1): the paper puppets take
+    /// no place there, as beside a contents rail.
+    private var marginFaces: CGRect? {
+        guard let detail = model?.detail, model?.phase == .loaded, !layout.rail,
+              PickedPeople.washes(detail, trashed: TrashedCardBanner.shows(detail), translated: shownStory != nil),
+              !PickedPeople.passages(detail.tap?.value1).isEmpty else { return nil }
+        let pageWidth = width ?? window.contentWidth
+        let room = PassageFaces.room(layout, width: pageWidth)
+        guard PassageFaces.place(room: room) == .margin else { return nil }
+        return CGRect(x: pageWidth - room, y: 0, width: room, height: 1)
+    }
+
+    private func openPicked(_ passage: PickedPeople.Passage) {
+        picked = passage
+        pickedOpen = true
+    }
+
     private func page(_ model: CardModel, _ detail: CardDetail) -> some View {
         let card = detail.card
         // The translation, while it shows (round 25 §F2): its own script's type and language, its own headings.
@@ -483,10 +519,34 @@ struct CardScreen: View {
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.pageSpace)) } action: { [translator] frame in
                     if StoryCrossfade.measures(translatedCopy: translatedCopy, showing: translator?.showing == true) { meter.story = frame }
                 }
+                // The author's own page (round 29 §U1): the sentences readers picked, washed, with who picked each.
+                .storyPassages(passageMarks(detail, blocks: blocks, story: story, script: type.script, trashed: trashed,
+                                            translated: translatedCopy))
                 .id(translatedCopy)
                 .transition(.opacity)
                 }
                 .padding(.bottom, story.endGap)
+                .organicModal(isPresented: $pickedOpen, seed: 41, maxWidth: PickedPeople.width(compact: window.layoutClass == .compact),
+                              closeLabel: L10n.Native.close) {
+                    if let picked {
+                        PickedPeople(cardId: card.id, passage: picked, quoteFont: Font(AppFonts.uiFont(story.bodyFamily, size: 16))) {
+                            pickedOpen = false
+                        }
+                        .withSession(session)
+                    }
+                }
+                #if DEBUG
+                // The release screenshots' `card-picked-people`: `-visualTaps picked` opens the first sentence's people.
+                .task(id: detail.tap?.value1.picked?.first?.id) {
+                    guard UserDefaults.standard.string(forKey: "visualTaps") == "picked",
+                          PickedPeople.washes(detail, trashed: trashed, translated: false) else { return }
+                    let sentences = PickedPeople.passages(detail.tap?.value1).map { ($0.id, $0.text) }
+                    guard let first = PassageLeaves.marks(blocks, sentences: sentences).values.flatMap({ $0 }).min(by: { $0.order < $1.order }),
+                          let text = sentences.first(where: { $0.0 == first.id })?.1 else { return }
+                    try? await Task.sleep(for: .milliseconds(600))
+                    openPicked(PickedPeople.Passage(id: first.id, text: text))
+                }
+                #endif
                 if !card.tags.isEmpty {
                     // Tags are app furniture: the theme colour, not the card's hue.
                     FlowRow(spacing: 8) {

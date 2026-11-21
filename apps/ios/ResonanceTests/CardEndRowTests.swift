@@ -114,9 +114,9 @@ extension Fixture {
     /// mark — the faces' row and the field never move their ground.
     @Test func rowTwoKeepsItsHeightFacesOrNone() {
         #expect(TapFaces.rowHeight == 44)
-        let empty = UIHostingController(rootView: TapFaces(faces: [], more: false, spoken: "", isButton: false) {}.fixedSize())
+        let empty = UIHostingController(rootView: TapFaces(faces: [], spoken: "", isButton: false) {}.fixedSize())
             .sizeThatFits(in: CGSize(width: 400, height: 400))
-        let three = UIHostingController(rootView: TapFaces(faces: ["a", "b", "c"].map { Fixture.author($0) }, more: true,
+        let three = UIHostingController(rootView: TapFaces(faces: ["a", "b", "c"].map { Fixture.author($0) },
                                                            spoken: "", isButton: true) {}.fixedSize())
             .sizeThatFits(in: CGSize(width: 400, height: 400))
         #expect(abs(empty.height - 44) < 0.5)
@@ -213,7 +213,7 @@ extension Fixture {
         #expect(RowTwo.faceInset == 12 && RowTwo.glyphEnd == 12)
         let width: CGFloat = 300
         let row = EndRowTwo {
-            TapFaces(faces: [Fixture.author("dora")], more: false, spoken: "", isButton: true) {}
+            TapFaces(faces: [Fixture.author("dora")], spoken: "", isButton: true) {}
         } end: {
             RowTwoBookmark(saved: false) {}
         }
