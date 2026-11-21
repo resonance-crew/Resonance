@@ -3,7 +3,7 @@ import type { Clock } from '@/server/ports/clock';
 import type { IdGenerator } from '@/server/ports/ids';
 import type { Logger } from '@/server/ports/log';
 import type { PageCache } from '@/server/ports/pageCache';
-import type { RealtimePublisher, RealtimeTopic } from '@/server/ports/realtime';
+import { SIGNALS_VERSION, type RealtimePublisher, type RealtimeTopic, type SignalsDoc } from '@/server/ports/realtime';
 
 /** 2026-11-20T00:00:00Z: where a memory clock starts unless told. */
 export const MEMORY_EPOCH = Date.UTC(2026, 10, 20);
@@ -79,9 +79,11 @@ export function memoryAfter(log: Logger): MemoryAfter {
   };
 }
 
-/** Remembers every touch. */
+/** Remembers every touch, and the signal document the touches leave. */
 export interface MemoryRealtime extends RealtimePublisher {
   readonly touches: { uid: string; topics: RealtimeTopic[] }[];
+  /** `signals/{uid}` as the touches so far leave it (every counter 0 when none reached them). */
+  signals(uid: string): SignalsDoc;
 }
 
 export function memoryRealtime(): MemoryRealtime {
@@ -89,6 +91,17 @@ export function memoryRealtime(): MemoryRealtime {
   return {
     touches,
     touch: async (uid, topics) => void touches.push({ uid, topics: [...topics] }),
+    signals(uid) {
+      const doc: SignalsDoc = { v: SIGNALS_VERSION, inbox: 0, bell: 0, graph: 0, map: 0, drafts: 0, threads: {} };
+      for (const t of touches) {
+        if (t.uid !== uid) continue;
+        for (const topic of t.topics) {
+          if (typeof topic === 'string') doc[topic] += 1;
+          else doc.threads[topic.thread] = (doc.threads[topic.thread] ?? 0) + 1;
+        }
+      }
+      return doc;
+    },
   };
 }
 

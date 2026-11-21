@@ -111,6 +111,9 @@ export const ENTITIES = {
     export: 'none',
   },
   handles: { uid: ['uid'], purge: 'rows', steps: ['holdHandle'], export: 'none' },
+  // The signal channel's counters (Phase 2, ports/realtime.ts): the account's own document goes with it. Others'
+  // `threads.{pair}` keys name a conversation with it, which the purge takes whole (a stale counter refetches nothing).
+  signals: { uid: ['$id'], purge: 'root', export: 'none' },
   handleHolds: { uid: ['heldFor'], purge: 'rows', export: 'none' },
 
   // --- cards ---

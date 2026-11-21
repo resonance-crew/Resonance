@@ -44,6 +44,12 @@ export function usersTx(tx: MemoryTx): UsersTxRepo {
       if (p.bio != null) patch.bio = p.bio;
       if (p.region != null) patch.region = p.region;
       if (p.primaryLocale != null) patch.primaryLocale = p.primaryLocale;
+      if (p.avatarUrl != null) patch.avatarUrl = p.avatarUrl;
+      if (p.autoTranslateTo != null) patch.autoTranslateTo = [...p.autoTranslateTo];
+      if (p.hintsSeen && Object.keys(p.hintsSeen).length) {
+        const stored = tx.get<{ hintsSeen?: unknown }>('users', uid)?.hintsSeen;
+        patch.hintsSeen = { ...(stored && typeof stored === 'object' ? stored : {}), ...p.hintsSeen };
+      }
       if (Object.keys(patch).length) tx.merge('users', uid, patch);
     },
     reserveHandle(uid, handle) {

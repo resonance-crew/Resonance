@@ -338,7 +338,7 @@ export async function getCardDetail(
   // viewer's blocks only thin the lists around it.
   // One read of the viewer's blocks for the lists and the tap's people (B4).
   const blockedP = card.referenceCardId || include.size ? users.blockedBy(viewerId) : null;
-  const [author, reference, blocked, resonances, recent, linking, embedded, tap] = await Promise.all([
+  const [author, reference, blocked, resonances, recent, linking, embedded, tap, bookmarked] = await Promise.all([
     card.anonymous ? null : users.getRow(card.authorId),
     card.referenceCardId ? cards.listByIds([card.referenceCardId]) : [],
     blockedP ?? new Set<string>(),
@@ -348,6 +348,8 @@ export async function getCardDetail(
     embedKeys.length ? cardsByKeys(ctx, embedKeys).then((found) => askedByKey(found, embedKeys, viewerId)) : [],
     // The resonance tap (taps): who resonated as the viewer may see them — none through a shared-card pass.
     cards.tapOf(viewerId, card, { pass, ...(blockedP ? { blocked: blockedP } : {}) }),
+    // The viewer's own bookmark of it (users/{viewer}/bookmarks): theirs alone, so it tells no one anything.
+    viewerId ? ctx.data.social.isBookmarked(viewerId, card.id) : null,
   ]);
   const [referenceCard, resonanceCards, relatedCards, linkCards, embedCards] = await presentAll(
     ctx,
@@ -366,6 +368,7 @@ export async function getCardDetail(
     isOwner,
     referenceCard: referenceCard[0] ?? null,
     tap,
+    ...(bookmarked === null ? {} : { bookmarked }),
     ...(include.has('resonances') ? { resonances: { cards: resonanceCards } } : {}),
     ...(include.has('related') ? { related: { cards: relatedOf(relatedCards) } } : {}),
     ...(include.has('links') ? { links: { cards: linkCards } } : {}),
@@ -538,6 +541,12 @@ export async function getProfileLinks(ctx: ServerCtx, viewerId: string, handle: 
   return { cards: await present(ctx, viewerId, cards, { blocked }) };
 }
 
+/** The stored hint counts that are counts (a hand-edited profile may hold anything). */
+function hintsOf(v: unknown): Record<string, number> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  return Object.fromEntries(Object.entries(v as Record<string, unknown>).filter((e): e is [string, number] => Number.isInteger(e[1])));
+}
+
 /** The signed-in account, with its scheduled deletion if any (read beside the profile). */
 export async function getMe(ctx: ServerCtx, uid: string): Promise<MeBody> {
   const [u, deletion] = await Promise.all([ctx.data.users.getRow(uid), ctx.data.users.deletionOf(uid)]);
@@ -553,6 +562,9 @@ export async function getMe(ctx: ServerCtx, uid: string): Promise<MeBody> {
     primaryLocale: u.primaryLocale === 'en' || u.primaryLocale === 'zh-TW' ? u.primaryLocale : null,
     handleChangedAt: u.handleChangedAt instanceof Date ? u.handleChangedAt.toISOString() : null,
     deletion: deletion ? { requestedAt: deletion.requestedAt.toISOString(), purgeAfter: deletion.purgeAfter.toISOString() } : null,
+    // Each only once the account has one (and only the values the contract names).
+    ...(Array.isArray(u.autoTranslateTo) ? { autoTranslateTo: [...new Set(u.autoTranslateTo.filter((l): l is 'en' | 'zh-TW' => l === 'en' || l === 'zh-TW'))] } : {}),
+    ...(u.hintsSeen && typeof u.hintsSeen === 'object' ? { hintsSeen: hintsOf(u.hintsSeen) } : {}),
   };
 }
 

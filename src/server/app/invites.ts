@@ -2,6 +2,7 @@ import { noPenName } from '@/lib/api/v1/conversations';
 import { ApiFailure } from '@/lib/api/v1/http';
 import type { ServerCtx } from '@/server/ctx';
 import { inviteOpen, inviteReason, pairKey, penName } from '@/server/domain/graph';
+import { signal } from './realtime';
 
 // Accepting a legacy invite as an application service. Why each step: the
 // comment of src/lib/api/v1/invites.ts `acceptInvite` (the legacy facade,
@@ -16,10 +17,12 @@ export interface AcceptedInvite {
 
 /** See src/lib/api/v1/invites.ts `acceptInvite`. */
 export async function acceptInviteIn(ctx: ServerCtx, uid: string, inviteId: string): Promise<AcceptedInvite> {
+  let sender: string | null = null;
   const accepted = await ctx.uow.run(
     async (tx): Promise<AcceptedInvite | 'expired'> => {
       const invite = await tx.graph.getInvite(inviteId);
       const other = invite ? invite.fromUserId : null;
+      sender = typeof other === 'string' ? other : null;
       if (!invite || invite.toUserId !== uid || typeof other !== 'string' || !other || other.includes('/') || other === uid) {
         throw new ApiFailure('not_found', 'No such invite.');
       }
@@ -47,5 +50,7 @@ export async function acceptInviteIn(ctx: ServerCtx, uid: string, inviteId: stri
     { label: 'acceptInvite' },
   );
   if (accepted === 'expired') throw new ApiFailure('conflict', 'This invite has expired.');
+  // A first accept connects the two (or adds a reason) and closes the sender's invite: both lists changed.
+  if (accepted.notificationId && sender) await signal(ctx, { kind: 'graph', uids: [uid, sender] });
   return accepted;
 }

@@ -73,6 +73,10 @@ export const Me = named(
      * Absent only from servers older than the field.
      */
     deletion: AccountDeletionStatus.nullable().optional(),
+    /** The languages the account reads stories translated into (PATCH /me `autoTranslateTo`). Absent when never set, and from older servers. */
+    autoTranslateTo: z.array(z.enum(['en', 'zh-TW'])).optional(),
+    /** How often each hint was shown, by its key (PATCH /me `hintsSeen`). Absent when none was, and from older servers. */
+    hintsSeen: z.record(z.string(), z.number().int()).optional(),
   }),
   'Me',
   'The signed-in account.',
@@ -320,6 +324,8 @@ export const CardDetail = named(
      * from servers older than the field.
      */
     tap: CardTap.nullable().optional(),
+    /** The viewer bookmarked this card (PUT /me/bookmarks/{cardId}). Absent from older servers. */
+    bookmarked: z.boolean().optional(),
     // The card page's lists, when asked for with `include` (absent otherwise):
     // each is exactly what its own endpoint answers this viewer.
     /** `include=resonances`: GET /cards/{id}/resonances. */
@@ -423,6 +429,15 @@ export const CreateProfileRequest = named(
   'Onboarding: the pen name, region and writing language of a new account.',
 );
 
+// The rules' limits on a client's own `users/{uid}` write (firestore.rules validProfileChanges), which PATCH /me
+// keeps too (2a-social): src/lib/api/v1/profileLimits.test.ts holds them equal.
+export const AUTO_TRANSLATE_MAX = 5;
+export const HINTS_SEEN_MAX = 50;
+export const HINT_COUNT_MAX = 10;
+export const AVATAR_URL_MAX = 2048;
+/** A hint's key (lib/hints): never a `.`, which would make it a path inside `hintsSeen`. */
+export const HintKey = z.string().regex(/^[A-Za-z0-9_:-]{1,64}$/, 'Not a valid hint key.');
+
 export const UpdateProfileRequest = named(
   z.object({
     handle: Handle.nullish(),
@@ -430,6 +445,17 @@ export const UpdateProfileRequest = named(
     bio: z.string().trim().max(BIO_MAX).nullish(),
     region: Region.nullish(),
     primaryLocale: Locale.nullish(),
+    /** A profile photo by its URL: one of our stored pictures (`/api/upload` `purpose=avatar` answers it). */
+    avatarUrl: z.string().max(AVATAR_URL_MAX).nullish(),
+    /** …or by its storage key (the same upload's `key`); with both, `avatarKey` wins. */
+    avatarKey: z.string().max(512).nullish(),
+    /** The languages to read stories translated into (replaces the list). */
+    autoTranslateTo: z.array(Locale).max(AUTO_TRANSLATE_MAX).nullish(),
+    /**
+     * How often hints were shown, by key: merged into the stored counts, each the larger of the two (a count never
+     * falls), at most 50 keys in all.
+     */
+    hintsSeen: z.record(HintKey, z.number().int().min(0).max(HINT_COUNT_MAX)).nullish(),
   }),
   'UpdateProfileRequest',
   'Only the fields sent change.',
@@ -918,6 +944,115 @@ export const ConversationIdParam = z.string().min(3).max(257).regex(/^[^/]+_[^/]
 export const MessageIdParam = DocId;
 /** Pen names may be any script (2–20 characters); never a path. */
 export const HandleParam = z.string().trim().min(1).max(40).regex(/^[^/?#]+$/, 'Not a valid handle.');
+
+// --- Phase 2 social (2a-social)
+// The client-config, the people lookups, bookmarks, blocks, connections and incoming invites the clients read and
+// wrote straight from Firestore until Phase 2 (src/server/app/social.ts, clientConfig).
+
+export const ClientBuilds = named(
+  z.object({ ios: z.number().int().min(0), android: z.number().int().min(0) }),
+  'ClientBuilds',
+  'A build number per app (iOS CFBundleVersion, Android versionCode).',
+);
+
+export const ClientFeatures = named(
+  z.object({
+    /** Listen to signals/{uid} and pull on its counters. */
+    signals: z.boolean(),
+    /** Bookmarks, blocks, connections, profile lookups and invites through /api/v1. */
+    apiSocial: z.boolean(),
+    /** Conversations and messages through /api/v1. */
+    apiInbox: z.boolean(),
+    /** The bell through /api/v1. */
+    apiBell: z.boolean(),
+    /** The thought map through /api/v1. */
+    apiThoughtMap: z.boolean(),
+    /** Drafts and pending edits through /api/v1. */
+    apiDrafts: z.boolean(),
+  }),
+  'ClientFeatures',
+  "Which paths an app build takes: the /api/v1 path when true, its older Firestore path when false (the server's rollback).",
+);
+
+export const ClientConfig = named(
+  z.object({
+    /** Builds below these must update before going on (the update screen). 0: none must. */
+    minBuild: ClientBuilds,
+    /** Builds below these are asked, not made, to update. 0: none is. */
+    recommendedBuild: ClientBuilds,
+    features: ClientFeatures,
+  }),
+  'ClientConfig',
+  'What the apps ask at launch (GET /client-config, no sign-in needed): the builds they need, and which paths to take.',
+);
+
+export const Person = named(
+  z.object({
+    id: z.string(),
+    /** No such account (deleted, or never was): `author` and the rest are null. */
+    gone: z.boolean(),
+    author: Author.nullable(),
+    bio: z.string().nullable(),
+    joinedAt: z.iso.datetime().nullable(),
+  }),
+  'Person',
+  'A profile by its id, as anyone may read it.',
+);
+
+/** GET /users?ids=: at most this many at once. */
+export const USERS_IDS_MAX = 30;
+export const UsersQuery = z.object({
+  ids: z
+    .string()
+    .transform((v) => [...new Set(v.split(',').map((k) => k.trim()).filter(Boolean))])
+    .pipe(z.array(DocId).min(1).max(USERS_IDS_MAX)),
+});
+
+export const PersonList = named(z.object({ users: z.array(Person) }), 'PersonList', 'The people asked for, in the order asked, each once.');
+
+export const BlockedPerson = named(
+  z.object({ userId: z.string(), blockedAt: z.iso.datetime().nullable(), person: Person }),
+  'BlockedPerson',
+);
+
+export const BlockList = named(z.object({ blocks: z.array(BlockedPerson) }), 'BlockList', 'Everyone you blocked, the latest first.');
+
+export const Connection = named(
+  z.object({ userId: z.string(), establishedAt: z.iso.datetime().nullable(), person: Person }),
+  'Connection',
+);
+
+export const ConnectionList = named(z.object({ connections: z.array(Connection) }), 'ConnectionList', 'The people you are connected with, the latest first.');
+
+export const IncomingInvite = named(
+  z.object({
+    id: z.string(),
+    fromUserId: z.string(),
+    message: z.string(),
+    referenceCardId: z.string().nullable(),
+    createdAt: z.iso.datetime().nullable(),
+    /** Answer before this (POST /invites/{id}/accept). */
+    expiresAt: z.iso.datetime(),
+    from: Person,
+  }),
+  'IncomingInvite',
+);
+
+export const InviteList = named(z.object({ invites: z.array(IncomingInvite) }), 'InviteList', 'Legacy invites waiting for your answer, the latest first.');
+
+export const InvitesQuery = z.object({ box: z.enum(['incoming']) });
+
+/** Another account's uid in a path (blocks). */
+export const UserIdParam = DocId;
+
+export type ClientConfigBody = z.infer<typeof ClientConfig>;
+export type ClientFeaturesBody = z.infer<typeof ClientFeatures>;
+export type PersonBody = z.infer<typeof Person>;
+export type PersonListBody = z.infer<typeof PersonList>;
+export type BlockListBody = z.infer<typeof BlockList>;
+export type ConnectionListBody = z.infer<typeof ConnectionList>;
+export type InviteListBody = z.infer<typeof InviteList>;
+// --- end Phase 2 social (2a-social)
 
 export type ApiErrorBody = z.infer<typeof ApiError>;
 export type MeBody = z.infer<typeof Me>;

@@ -213,6 +213,17 @@ service cloud.firestore {
       allow list, write: if false;
     }
 
+    // --- signals (signals/{uid}) ---
+    // The signal channel (Phase 2): counters the server raises after a write
+    // that changes what this person's screens list (inbox, bell, graph, map,
+    // drafts, threads.{pair}), so their clients refetch through /api/v1.
+    // Numbers only — no content, no one else's uid but in the pair ids of
+    // their own conversations. Its owner listens; only the server writes.
+    match /signals/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
     // --- cards ---
     // Reads are governed by visibility and anonymity (cardReadable). The
     // author writes a draft's content straight from the client (web, iOS and

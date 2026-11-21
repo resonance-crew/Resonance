@@ -180,6 +180,10 @@ export function usersTx(db: AdminDb, tx: Transaction): UsersTxRepo {
       if (p.bio != null) patch.bio = p.bio;
       if (p.region != null) patch.region = p.region;
       if (p.primaryLocale != null) patch.primaryLocale = p.primaryLocale;
+      if (p.avatarUrl != null) patch.avatarUrl = p.avatarUrl;
+      if (p.autoTranslateTo != null) patch.autoTranslateTo = p.autoTranslateTo;
+      // Each hint on its own path, as the clients' `hintsSeen.{key}` writes: the other counts stay.
+      for (const [key, count] of Object.entries(p.hintsSeen ?? {})) patch[`hintsSeen.${key}`] = count;
       if (Object.keys(patch).length) tx.update(userRef(uid), patch);
     },
     reserveHandle: (uid, handle) => reserveHandle(db, tx, uid, handle),

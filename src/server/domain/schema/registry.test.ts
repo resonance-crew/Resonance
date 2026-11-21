@@ -201,7 +201,7 @@ describe('the account registry', () => {
     const plan = purgePlan();
     const q = (list: typeof plan.rows) => list.map((r) => `${r.group ? 'group ' : ''}${r.entity} ${r.field} ${r.op}`).sort();
     expect(plan.roots.slice().sort()).toEqual(
-      ['thoughtMaps', 'userProfiles', 'recommendations', 'notificationSettings', 'pickPushes', 'connectionCardPushes', 'users'].sort(),
+      ['thoughtMaps', 'userProfiles', 'recommendations', 'notificationSettings', 'pickPushes', 'connectionCardPushes', 'users', 'signals'].sort(),
     );
     expect(q(plan.trees)).toEqual(['cards authorId ==', 'conversations participants array-contains']);
     expect(q(plan.rows)).toEqual(
@@ -260,8 +260,8 @@ describe('the account registry', () => {
     }
   });
 
-  it('counts its entities (45: 37 collections, 8 subcollections)', () => {
-    expect(Object.keys(ENTITIES)).toHaveLength(45);
+  it('counts its entities (46: 38 collections, 8 subcollections)', () => {
+    expect(Object.keys(ENTITIES)).toHaveLength(46);
     expect(ENTITY_NAMES.filter((n) => SPECS[n].parent)).toHaveLength(8);
   });
 });

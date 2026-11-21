@@ -122,7 +122,7 @@
       },
       "patch": {
         "operationId": "updateProfile",
-        "summary": "Change your pen name, bio, region or writing language",
+        "summary": "Change your pen name, bio, region, writing language, photo, translation languages or hint counts",
         "requestBody": {
           "required": true,
           "content": {
@@ -3546,6 +3546,482 @@
           }
         }
       }
+    },
+    "/client-config": {
+      "get": {
+        "operationId": "getClientConfig",
+        "summary": "What an app asks at launch: the builds that must or should update, and which paths to take",
+        "description": "No sign-in needed; the same for everyone (`Cache-Control: public, s-maxage=60`, an `ETag`, `304` on a match). A build below `minBuild` for its platform shows the update screen and goes no further; one below `recommendedBuild` may say an update is waiting. `features`: each flag true takes the /api/v1 path, false the older one.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientConfig"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "operationId": "getUsers",
+        "summary": "Profiles by id, at most 30, in the order asked",
+        "description": "Each id once, in the order asked; an account that is gone (deleted, or never was) comes back `gone` with nothing else. A profile is public: a block changes nothing here. `429` past the hourly budget.",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "required": true,
+            "description": "User ids, comma-separated (1–30)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/bookmarks/{cardId}": {
+      "put": {
+        "operationId": "putBookmark",
+        "summary": "Bookmark a card you may read (again: unchanged)",
+        "description": "`404` for a card you may not read, exactly as GET /cards/{key} answers it. Your bookmarks are yours alone: no one is told.",
+        "parameters": [
+          {
+            "name": "cardId",
+            "in": "path",
+            "required": true,
+            "description": "The card id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Bookmarked"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteBookmark",
+        "summary": "Take a bookmark back (whether or not there was one)",
+        "parameters": [
+          {
+            "name": "cardId",
+            "in": "path",
+            "required": true,
+            "description": "The card id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Not bookmarked"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/blocks": {
+      "get": {
+        "operationId": "getBlocks",
+        "summary": "Everyone you blocked, the latest first",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/blocks/{uid}": {
+      "put": {
+        "operationId": "blockUser",
+        "summary": "Block someone: the connection ends and every pending invite between you is withdrawn, at once",
+        "description": "They are never told. Blocking again changes nothing; yourself is `400`.",
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "description": "Their user id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Blocked"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "unblockUser",
+        "summary": "Unblock someone: only the block goes (a connection it ended stays ended)",
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "description": "Their user id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Not blocked"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/connections": {
+      "get": {
+        "operationId": "getConnections",
+        "summary": "The people you are connected with, the latest first",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/invites": {
+      "get": {
+        "operationId": "getInvites",
+        "summary": "Legacy invites waiting for your answer (pending and before their date), the latest first",
+        "parameters": [
+          {
+            "name": "box",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "incoming"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/invites/{id}/decline": {
+      "post": {
+        "operationId": "declineInvite",
+        "summary": "Say no to a legacy invite sent to you: it closes, and no one is told (again: unchanged)",
+        "description": "`404` for an invite that is not yours to answer; `409` once it closed otherwise (accepted, withdrawn, expired).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The invite id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Declined"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3680,6 +4156,24 @@
                 "$ref": "#/components/schemas/AccountDeletionStatus"
               }
             ]
+          },
+          "autoTranslateTo": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "en",
+                "zh-TW"
+              ]
+            }
+          },
+          "hintsSeen": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
           }
         },
         "required": [
@@ -4121,6 +4615,9 @@
               }
             ]
           },
+          "bookmarked": {
+            "type": "boolean"
+          },
           "resonances": {
             "$ref": "#/components/schemas/CardList"
           },
@@ -4254,6 +4751,37 @@
               "en",
               "zh-TW"
             ]
+          },
+          "avatarUrl": {
+            "nullable": true,
+            "type": "string",
+            "maxLength": 2048
+          },
+          "avatarKey": {
+            "nullable": true,
+            "type": "string",
+            "maxLength": 512
+          },
+          "autoTranslateTo": {
+            "nullable": true,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "en",
+                "zh-TW"
+              ]
+            }
+          },
+          "hintsSeen": {
+            "nullable": true,
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10
+            }
           }
         },
         "description": "Only the fields sent change."
@@ -4960,6 +5488,260 @@
           "available"
         ],
         "description": "Whether a pen name is free (your own counts as free)."
+      },
+      "ClientBuilds": {
+        "type": "object",
+        "properties": {
+          "ios": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "android": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "ios",
+          "android"
+        ],
+        "description": "A build number per app (iOS CFBundleVersion, Android versionCode)."
+      },
+      "ClientFeatures": {
+        "type": "object",
+        "properties": {
+          "signals": {
+            "type": "boolean"
+          },
+          "apiSocial": {
+            "type": "boolean"
+          },
+          "apiInbox": {
+            "type": "boolean"
+          },
+          "apiBell": {
+            "type": "boolean"
+          },
+          "apiThoughtMap": {
+            "type": "boolean"
+          },
+          "apiDrafts": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "signals",
+          "apiSocial",
+          "apiInbox",
+          "apiBell",
+          "apiThoughtMap",
+          "apiDrafts"
+        ],
+        "description": "Which paths an app build takes: the /api/v1 path when true, its older Firestore path when false (the server's rollback)."
+      },
+      "ClientConfig": {
+        "type": "object",
+        "properties": {
+          "minBuild": {
+            "$ref": "#/components/schemas/ClientBuilds"
+          },
+          "recommendedBuild": {
+            "$ref": "#/components/schemas/ClientBuilds"
+          },
+          "features": {
+            "$ref": "#/components/schemas/ClientFeatures"
+          }
+        },
+        "required": [
+          "minBuild",
+          "recommendedBuild",
+          "features"
+        ],
+        "description": "What the apps ask at launch (GET /client-config, no sign-in needed): the builds they need, and which paths to take."
+      },
+      "Person": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "gone": {
+            "type": "boolean"
+          },
+          "author": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Author"
+              }
+            ]
+          },
+          "bio": {
+            "nullable": true,
+            "type": "string"
+          },
+          "joinedAt": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "gone",
+          "author",
+          "bio",
+          "joinedAt"
+        ],
+        "description": "A profile by its id, as anyone may read it."
+      },
+      "PersonList": {
+        "type": "object",
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Person"
+            }
+          }
+        },
+        "required": [
+          "users"
+        ],
+        "description": "The people asked for, in the order asked, each once."
+      },
+      "BlockedPerson": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "blockedAt": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "person": {
+            "$ref": "#/components/schemas/Person"
+          }
+        },
+        "required": [
+          "userId",
+          "blockedAt",
+          "person"
+        ]
+      },
+      "BlockList": {
+        "type": "object",
+        "properties": {
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlockedPerson"
+            }
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "description": "Everyone you blocked, the latest first."
+      },
+      "Connection": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "establishedAt": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "person": {
+            "$ref": "#/components/schemas/Person"
+          }
+        },
+        "required": [
+          "userId",
+          "establishedAt",
+          "person"
+        ]
+      },
+      "ConnectionList": {
+        "type": "object",
+        "properties": {
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Connection"
+            }
+          }
+        },
+        "required": [
+          "connections"
+        ],
+        "description": "The people you are connected with, the latest first."
+      },
+      "IncomingInvite": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "fromUserId": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "referenceCardId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "createdAt": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "from": {
+            "$ref": "#/components/schemas/Person"
+          }
+        },
+        "required": [
+          "id",
+          "fromUserId",
+          "message",
+          "referenceCardId",
+          "createdAt",
+          "expiresAt",
+          "from"
+        ]
+      },
+      "InviteList": {
+        "type": "object",
+        "properties": {
+          "invites": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IncomingInvite"
+            }
+          }
+        },
+        "required": [
+          "invites"
+        ],
+        "description": "Legacy invites waiting for your answer, the latest first."
       },
       "ConversationLastMessage": {
         "type": "object",
