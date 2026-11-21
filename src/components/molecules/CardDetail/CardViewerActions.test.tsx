@@ -361,6 +361,38 @@ describe('which part (round 27 §U1): the passages’ dialog after a press that 
     expect(setTap).toHaveBeenLastCalledWith('c1', true);
   });
 
+  it('loads the dialog only on its first open: nothing of TapPassages is imported up front (its dynamic split kept)', () => {
+    const source = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/CardViewerActions.tsx'), 'utf8');
+    expect(source).not.toMatch(/^import[^;]*from '\.\/TapPassages';/m);
+    expect(source).toMatch(/dynamic\(\(\) => import\('\.\/TapPassages'\)/);
+  });
+
+  it('a translation arriving while it is open closes it for good: the original on screen again opens nothing unpressed', async () => {
+    // The auto-translation lands after the press (TranslateLine starts it on mount): the dialog leaves, and going back
+    // to the original must not bring it back (§U1.1: only a press that turns 共振 on, or the reader's own row).
+    const cache = new Map();
+    const page = renderWithIntl(pageTree(WITH, cache));
+    await press();
+    await dialog();
+    page.rerender(pageTree(WITH, cache, true));
+    await waitFor(() => expect(document.querySelector('[data-tap-passages]')).toBeNull());
+    page.rerender(pageTree(WITH, cache, false));
+    await new Promise((r) => setTimeout(r, 400));
+    expect(document.querySelector('[data-tap-passages]')).toBeNull();
+    expect(within(capsule()).getByRole('button', { name: 'Resonate' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('a translation arriving inside the 240 ms after the press stops its timer: nothing opens once the original is back', async () => {
+    const cache = new Map();
+    const page = renderWithIntl(pageTree(WITH, cache));
+    await press();
+    page.rerender(pageTree(WITH, cache, true));
+    await new Promise((r) => setTimeout(r, 400));
+    page.rerender(pageTree(WITH, cache, false));
+    await new Promise((r) => setTimeout(r, 400));
+    expect(document.querySelector('[data-tap-passages]')).toBeNull();
+  });
+
   it('sends the pick only after the tap’s own PUT has answered, the row chosen at once', async () => {
     let answer: (v: { on: boolean; changed: boolean }) => void = () => {};
     setTap.mockImplementationOnce(() => new Promise((r) => (answer = r)));

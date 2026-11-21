@@ -16,9 +16,10 @@ import { useMyProfile, useMyResonance } from '@/lib/data/hooks';
 import { faceOf, useTapPassage, useTapToggle, type TapFailure } from '@/lib/data/taps';
 import { isBookmarked, toggleBookmark } from '@/lib/db/firestore/client/bookmarks';
 import { cardShareKey } from '@/lib/share/links';
+import type { StoryScript } from '@/lib/text/script';
 import { NoteInPlace, useNoteInPlace } from './NoteInPlace';
 import { TapFaces } from './TapFaces';
-import { reducedMotion } from './TapPassages';
+import { reducedMotion } from './tapMotion';
 import { useVisualTap } from './visualTap';
 import styles from './CardViewerActions.module.css';
 
@@ -46,6 +47,8 @@ export interface CardViewerActionsProps {
   trailing?: ReactNode;
   /** The story is on screen in translation (round 25 §F): the passages, the author's own words, are not offered then. */
   translated?: boolean;
+  /** The story's script (src/lib/text/script.ts): the passages' dialog sets its rows in the story's own type (§U1.3). */
+  script?: StoryScript;
 }
 
 /** How the capsule's words fit (§U1.3): in full, short (寫卡片 / Card), or the short ones on two lines (共振 alone first). */
@@ -65,7 +68,7 @@ export const NARROW_ROW = 340;
  * turns it on also asks, 240 ms later, which part stayed with them — a small centred dialog the tap never waits on.
  * Nothing here is the author's.
  */
-export function CardViewerActions({ cardId, referenceCardId, author, tap, trailing, translated = false }: CardViewerActionsProps) {
+export function CardViewerActions({ cardId, referenceCardId, author, tap, trailing, translated = false, script = 'cjk' }: CardViewerActionsProps) {
   const t = useTranslations('card');
   const locale = useLocale();
   const router = useRouter();
@@ -85,6 +88,18 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
   const passages = tap?.passages ?? [];
   const offersPassages = passages.length >= 2 && !translated;
   const openPassages = useCallback(() => setPassagesOpen(true), []);
+  // The dialog can't be offered any more (a translation arrived — the auto-translate one included — or the tap went
+  // off): it closes for good and its timer stops, so it never comes back on its own once the original is on screen
+  // again (§U1.1: it opens only from a press that turns 共振 on, or from the reader's own row).
+  const offerable = offersPassages && !!tap?.mine;
+  const wasOfferable = useRef(offerable);
+  useEffect(() => {
+    if (wasOfferable.current && !offerable) {
+      window.clearTimeout(passagesTimer.current);
+      setPassagesOpen(false);
+    }
+    wasOfferable.current = offerable;
+  }, [offerable]);
   useVisualTap(cardId, user?.id, tap, me?.handle ? faceOf(me) : null, openPassages);
   // Still being read (undefined): a kept draft waits for it before it opens anything.
   const note = useNoteInPlace({ cardId, uid: user?.id, mayNote: tap === undefined ? undefined : (tap?.mayNote ?? true) });
@@ -313,7 +328,7 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
       )}
 
       {passagesOpen && offersPassages && tapOn && (
-        <TapPassages passages={passages} picked={tap?.passage ?? null} onPick={(p) => void onPickPassage(p)} onClose={() => setPassagesOpen(false)} />
+        <TapPassages passages={passages} script={script} picked={tap?.passage ?? null} onPick={(p) => void onPickPassage(p)} onClose={() => setPassagesOpen(false)} />
       )}
 
       {picking && <ResonatePicker open onClose={() => setPicking(false)} targetId={cardId} targetReferenceId={referenceCardId} />}

@@ -7,24 +7,22 @@ import { Icon } from '@/components/atoms/Icon';
 import { Modal } from '@/components/molecules/Modal/Modal';
 import { DialogScroll } from '@/components/sections/AppHeader/BellList';
 import type { TapPassageBody } from '@/lib/api/v1/schemas';
+import type { StoryScript } from '@/lib/text/script';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { BAND_END_KEY, bandsBelow } from '@/lib/design/listBands';
 import { TAP_LIST_DIALOG_WIDTH, TAP_LIST_PHONE_QUERY } from './TapFaces';
+import { PASSAGE_CHOSEN_MS, reducedMotion } from './tapMotion';
 import styles from './TapPassages.module.css';
 
-/** How long a chosen row holds its ink and check before the dialog closes (§U1.5); at once under reduced motion. */
-export const PASSAGE_CHOSEN_MS = 300;
-
-/** Whether the reader asked for less motion (a test's jsdom has no matchMedia: motion as usual). */
-export function reducedMotion(): boolean {
-  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
+export { PASSAGE_CHOSEN_MS, reducedMotion };
 
 export interface TapPassagesProps {
   /** The card's passages (`CardDetail.tap.passages`): two or three of the author's own sentences. */
   passages: TapPassageBody[];
   /** The reader's pick now (`CardDetail.tap.passage`): its row rests in the press ink with its check. */
   picked: string | null;
+  /** The story's script: the rows are set in its type and leading, as story.css sets the story (§U1.3). CJK by default. */
+  script?: StoryScript;
   /** A row was chosen: its id, or null when the picked row was pressed again (the pick cleared). */
   onPick: (passage: string | null) => void;
   /** It closes: 略過, Escape, the backdrop, or a moment after a pick. */
@@ -38,7 +36,7 @@ export interface TapPassagesProps {
  * the dialog closes; the picked row, reopened from the reader's own row, rests chosen and a press on it clears the
  * pick. The tap never waits on it: skipping leaves the tap on with no passage. Never a bottom sheet, never a popover.
  */
-export function TapPassages({ passages, picked, onPick, onClose }: TapPassagesProps) {
+export function TapPassages({ passages, picked, script = 'cjk', onPick, onClose }: TapPassagesProps) {
   const t = useTranslations('card.tap');
   const onPhone = useMediaQuery(TAP_LIST_PHONE_QUERY) !== false;
   // The row just pressed, holding its ink (and its check, unless it cleared the pick) until the dialog closes.
@@ -90,7 +88,7 @@ export function TapPassages({ passages, picked, onPick, onClose }: TapPassagesPr
       closeLabel={t('passageSkip')}
       closeButton
     >
-      <div data-tap-passages="" className={styles.body}>
+      <div data-tap-passages="" data-script={script} className={styles.body}>
         <h3 className={styles.title}>{t('passageTitle')}</h3>
         <DialogScroll>
           <ul ref={listRef} className={styles.list}>

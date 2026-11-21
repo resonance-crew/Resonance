@@ -5,6 +5,26 @@
   flex-direction: column;
   /* The list's cap (§U1.3): the reader list's, and it scrolls inside (DialogScroll reads it). */
   --dialog-scroll-max: min(420px, 55vh);
+  /* The story's own type (§U1.3), as story.css sets it by script: CJK first by default… */
+  --passage-face: var(--font-story-sans);
+  --passage-leading: var(--story-leading);
+}
+
+/* …a Latin-script story in its body face and leading. */
+.body[data-script='latin'] {
+  --passage-face: var(--font-body);
+  --passage-leading: var(--story-leading-latin);
+}
+
+/* A phone takes the compact leading (story.css's 640 literal: a media query can't read a token). */
+@media (max-width: 640px) {
+  .body {
+    --passage-leading: var(--story-leading-compact);
+  }
+
+  .body[data-script='latin'] {
+    --passage-leading: var(--story-leading-latin-compact);
+  }
 }
 
 .title {
@@ -60,9 +80,9 @@
 .text {
   flex: 1;
   min-width: 0;
-  font-family: var(--font-story-sans);
+  font-family: var(--passage-face);
   font-size: 16px;
-  line-height: var(--story-leading);
+  line-height: var(--passage-leading);
   color: var(--color-text);
   overflow-wrap: anywhere;
 }
@@ -70,5 +90,6 @@
 .check {
   display: inline-flex;
   flex: none;
-  color: var(--button-on-tonal);
+  /* The text ink, as the apps draw it (iOS Tokens.text, Android Tokens.Text). */
+  color: var(--color-text);
 }

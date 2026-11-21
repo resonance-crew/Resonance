@@ -20,10 +20,10 @@ const PASSAGES: TapPassageBody[] = [
   { id: '85007cbf', text: '我想把這一段路走得慢一點。' },
 ];
 
-function renderDialog(picked: string | null = null) {
+function renderDialog(picked: string | null = null, script?: 'cjk' | 'latin') {
   const onPick = vi.fn();
   const onClose = vi.fn();
-  const page = renderWithIntl(<TapPassages passages={PASSAGES} picked={picked} onPick={onPick} onClose={onClose} />, {
+  const page = renderWithIntl(<TapPassages passages={PASSAGES} picked={picked} script={script} onPick={onPick} onClose={onClose} />, {
     locale: 'zh-TW',
     messages: zhMessages,
   });
@@ -39,6 +39,25 @@ afterEach(() => {
 });
 
 describe('TapPassages (§U1)', () => {
+  it('sets the rows in the story’s own type: a Latin story in its body face and leading, as iOS and Android do', async () => {
+    renderDialog(null, 'latin');
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.querySelector('[data-tap-passages]')).toHaveAttribute('data-script', 'latin');
+    const css = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/TapPassages.module.css'), 'utf8');
+    const latin = css.match(/\.body\[data-script='latin'\]\s*\{([^}]*)\}/g)?.join('\n') ?? '';
+    expect(latin).toMatch(/--passage-face:\s*var\(--font-body\)/);
+    expect(latin).toMatch(/--story-leading-latin\)/);
+    expect(latin).toMatch(/--story-leading-latin-compact\)/);
+    // The chosen row's check in the text ink, as the apps draw it.
+    expect(css).toMatch(/\.check\s*\{[^}]*color:\s*var\(--color-text\)/);
+  });
+
+  it('a story in CJK (the default) keeps the CJK face and leading', async () => {
+    renderDialog();
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.querySelector('[data-tap-passages]')).toHaveAttribute('data-script', 'cjk');
+  });
+
   it('is a dialog named by its title, the passages as rows in full, 略過 alone at its foot', async () => {
     renderDialog();
     const dialog = await screen.findByRole('dialog', { name: '悄悄告訴作者，哪一段讓你有共鳴' });
