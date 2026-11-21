@@ -33,7 +33,8 @@ const FLOWS_DIR = join(ROOT, 'maestro/flows');
 const ORDER = [
   'sign-in', 'send-message', 'send-sticker', 'react-reply', 'unsend-message', 'chat-draft', 'composer-toggle',
   'sticker-replies', 'send-picture', 'answer-letter', 'leave-note', 'tap', 'tap-passage', 'reply-with-card', 'open-notification', 'open-link',
-  'publish-card', 'trash-restore', 'sticker-breath', 'translate-story', 'block-person', 'live-message',
+  'publish-card', 'trash-restore', 'sticker-breath', 'translate-story', 'block-person', 'live-message', 'thought-map',
+  'draft-offline',
 ];
 
 export type FlowDevice = 'phone' | 'tablet';
@@ -78,25 +79,38 @@ export function withTags(flows: string[], tags: string[], device: FlowDevice = '
  *     which run on no other stack — on the usual one the app goes on to its home.
  *   - `writer-api`: the apps' writer through /api/v1 (`apiDrafts`, `apiThoughtMap`, off by default until checked
  *     on devices — docs/release/owed.md, flags), for the flows tagged `writer`: the same journeys the usual
- *     stack takes over Firestore.
+ *     stack takes over Firestore. A flow also tagged `writer-api` (its `alone`) runs on this stack and no other:
+ *     draft-offline, whose usual-stack half is Firestore's offline queue kept on disk — which an emulator build
+ *     doesn't have (its Firestore cache is memory only, AppFirebase.kt), so there the words are lost with the app.
  */
-export const STACKS: Record<string, { env: Record<string, string>; tag: string; only: boolean }> = {
+export const STACKS: Record<string, { env: Record<string, string>; tag: string; only: boolean; alone?: string }> = {
   'update-gate': { env: { CLIENT_MIN_BUILD_IOS: '999999', CLIENT_MIN_BUILD_ANDROID: '999999' }, tag: 'update-gate', only: true },
-  'writer-api': { env: { CLIENT_FEATURES: JSON.stringify({ apiDrafts: true, apiThoughtMap: true }) }, tag: 'writer', only: false },
+  'writer-api': { env: { CLIENT_FEATURES: JSON.stringify({ apiDrafts: true, apiThoughtMap: true }) }, tag: 'writer', only: false, alone: 'writer-api' },
 };
 
 /**
- * The flows a stack runs: on a named one, those carrying its tag; on the usual one, every flow but those made for
- * a stack alone (`only`), which would fail there.
+ * The flows a stack runs: on a named one, those carrying its tag (but none made for another stack alone); on the
+ * usual one, every flow but those made for a stack alone (`only`: the stack's whole tag; `alone`: a second tag on
+ * single flows), which would fail there.
  */
 export function forStack(flows: string[], stack: string | undefined, tagsFor: (flow: string) => string[] = tagsOf): string[] {
-  if (stack === undefined) {
-    const elsewhere = Object.values(STACKS).filter((s) => s.only).map((s) => s.tag);
-    return flows.filter((f) => !tagsFor(f).some((t) => elsewhere.includes(t)));
-  }
-  const named = STACKS[stack];
-  if (!named) throw new Error(`No such stack: ${stack} (have ${Object.keys(STACKS).join(', ')})`);
-  return flows.filter((f) => tagsFor(f).includes(named.tag));
+  const aloneOn = (name: string) => [...(STACKS[name].only ? [STACKS[name].tag] : []), ...(STACKS[name].alone ? [STACKS[name].alone!] : [])];
+  if (stack !== undefined && !STACKS[stack]) throw new Error(`No such stack: ${stack} (have ${Object.keys(STACKS).join(', ')})`);
+  const elsewhere = Object.keys(STACKS).filter((name) => name !== stack).flatMap(aloneOn);
+  const here = flows.filter((f) => !tagsFor(f).some((t) => elsewhere.includes(t)));
+  return stack === undefined ? here : here.filter((f) => tagsFor(f).includes(STACKS[stack].tag));
+}
+
+/**
+ * The flows one app alone can run, split from the rest: a flow tagged `android-only` (the iOS simulator cannot cut its
+ * network: draft-offline) is left out on iOS, one tagged `ios-only` on Android — skipped, said in the log, never a failure.
+ */
+export function forPlatform(flows: string[], platform: FlowPlatform, tagsFor: (flow: string) => string[] = tagsOf): { run: string[]; skipped: string[] } {
+  const other = platform === 'ios' ? 'android-only' : 'ios-only';
+  return {
+    run: flows.filter((f) => !tagsFor(f).includes(other)),
+    skipped: flows.filter((f) => tagsFor(f).includes(other)),
+  };
 }
 
 /** Where Maestro lives (the official installer's place unless MAESTRO_BIN says otherwise) and the Java it runs on. */
@@ -261,7 +275,8 @@ function maestroTest(deviceId: string, flow: string, outDir: string, ports: type
  */
 export async function runFlows(platform: FlowPlatform, ctx: CaptureContext, { tags = [], device: kind = 'phone', stack }: { tags?: string[]; device?: FlowDevice; stack?: string } = {}): Promise<FlowResult[]> {
   if (!existsSync(MAESTRO)) throw new Error(`No Maestro at ${MAESTRO}: install it (maestro/README.md) or set MAESTRO_BIN`);
-  const flows = forStack(withTags(flowsToRun(ctx.only), tags, kind), stack);
+  const { run: flows, skipped } = forPlatform(forStack(withTags(flowsToRun(ctx.only), tags, kind), stack), platform);
+  for (const flow of skipped) ctx.log(`  skip  ${platform}/${flow}  (tagged ${platform === 'ios' ? 'android-only' : 'ios-only'})`);
   if (!flows.length) {
     ctx.log(`  no flow to run on the ${platform} ${kind}${tags.length ? ` tagged ${tags.join(', ')}` : ''}`);
     return [];

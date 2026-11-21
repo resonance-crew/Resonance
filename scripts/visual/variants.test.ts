@@ -22,7 +22,9 @@ describe('the variant sets', () => {
     // cover-frame) × the web's five, the iPhone's three, the iPad, the Mac, the Android phone's three and the tablet
     // round 26: six more (card-tapped, card-note-open, card-note-wait, card-own-taps, taps-list, taps-author-list) on
     // the same fourteen devices and variants: 387 + 6 × 14; round 27: card-passages on the same fourteen
-    expect(estimate('release').captures).toBe(485);
+    // 任務 #3: update-required, the apps alone — the iPhone's three, the iPad, the Mac, the Android phone's three and
+    // the tablet: 485 + 9
+    expect(estimate('release').captures).toBe(494);
   });
 
   it('adds the device states after the device they run on, and only in the extended set', () => {

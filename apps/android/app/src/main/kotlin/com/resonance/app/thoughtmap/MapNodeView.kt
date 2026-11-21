@@ -1,5 +1,6 @@
 package com.resonance.app.thoughtmap
 
+import com.resonance.app.ui.flowTag
 import com.resonance.design.CoverFit
 import com.resonance.design.CoverFraming
 import com.resonance.design.generated.LocalResonanceColors
@@ -211,6 +212,8 @@ fun MapNodeView(
     Box(
         modifier
             .requiredSize(mapNodeW.dp, mapNodeH.dp)
+            // Its title is painted, not laid out: the flows find the card by its id (maestro/flows/thought-map.yaml).
+            .flowTag("map-node-${card.id}")
             .drawWithCache {
                 val d = density
                 val fill = if (tabbed) inks.nodeFill(hue, true) else inks.nodeFill(hue, emphasized)
@@ -389,7 +392,8 @@ private fun RemoveButton() {
     Box(
         Modifier
             .offset((ThoughtMapStore.removeX - 14).dp, (ThoughtMapStore.removeY - 14).dp)
-            .size(28.dp),
+            .size(28.dp)
+            .flowTag("map-node-remove"),
         contentAlignment = Alignment.Center,
     ) { OrganicIcon(IconName.Trash, size = 14.dp, color = Tokens.TextMuted) }
 }

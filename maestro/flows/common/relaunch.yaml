@@ -1,0 +1,52 @@
+# The debug app opened again WITHOUT clearing anything (common/launch.yaml clears it): what the last launch kept on
+# the device — the signed-in account, the writer's outbox, Firestore's own queue — is still there. Signed in as
+# ${ACCOUNT} already (the launch's email/password only sign in when another account is restored) and opened at ${ROUTE}.
+#
+#   - runFlow:
+#       file: common/relaunch.yaml
+#       env:
+#         ACCOUNT: alice
+#         ROUTE: /me
+#
+# Reads AUTH_PORT, FIRESTORE_PORT, API_PORT and PASSWORD from the runner (`-e`), as common/launch.yaml does.
+appId: com.resonance.stories
+---
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          clearState: false
+          stopApp: true
+          arguments:
+            -emulator: "YES"
+            -emulatorAuthPort: ${AUTH_PORT}
+            -emulatorFirestorePort: ${FIRESTORE_PORT}
+            -emulatorApiPort: ${API_PORT}
+            -visualCapture: "YES"
+            -appearance.scheme: light
+            -appearance.mascots: "NO"
+            -appLanguage: zh-TW
+            -AppleLanguages: (zh-Hant)
+            -AppleLocale: zh_TW
+            -askForNotifications: "NO"
+            -email: ${ACCOUNT}@resonance.test
+            -password: ${PASSWORD}
+            -route: ${ROUTE}
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          clearState: false
+          stopApp: true
+          arguments:
+            emulator: true
+            emulatorAuthPort: ${AUTH_PORT}
+            emulatorFirestorePort: ${FIRESTORE_PORT}
+            emulatorApiPort: ${API_PORT}
+            mascots: false
+            askForNotifications: false
+            email: ${ACCOUNT}@resonance.test
+            password: ${PASSWORD}
+            route: ${ROUTE}

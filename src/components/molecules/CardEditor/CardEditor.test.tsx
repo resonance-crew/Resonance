@@ -32,6 +32,16 @@ vi.mock('@/lib/db/firestore/client/cardEdits', () => ({
 }));
 // The card read again when a save is refused (is it in the trash?).
 vi.mock('@/lib/db/firestore/client/reads', () => ({ getCardById: vi.fn() }));
+// The outbox's word that a card has caught up (a save kept after a failure, stored at last): said by the test.
+const outbox = vi.hoisted(() => ({ listeners: new Set<(kind: string, id: string, saved: unknown) => void>() }));
+vi.mock('@/lib/db/firestore/client/draftOutbox', () => ({
+  onOutboxCaughtUp: (listener: (kind: string, id: string, saved: unknown) => void) => {
+    outbox.listeners.add(listener);
+    return () => outbox.listeners.delete(listener);
+  },
+}));
+const outboxCaughtUp = (kind: 'draft' | 'edit', id: string) =>
+  act(() => outbox.listeners.forEach((listener) => listener(kind, id, { applied: true, rev: 9, updatedAt: null })));
 vi.mock('./trashedCard', async (original) => ({
   ...(await original<typeof import('./trashedCard')>()),
   restoreTrashedCard: vi.fn(),
@@ -847,6 +857,50 @@ describe('CardEditor — autosave', () => {
     await expect(editor.current!.saveNow()).rejects.toThrow('offline');
     await waitFor(() => expect(onSaveStatusChange).toHaveBeenLastCalledWith({ label: en.write.status.failed, failed: true }));
     await act(() => editor.current!.saveNow());
+    await waitFor(() => expect(onSaveStatusChange).toHaveBeenLastCalledWith(expect.objectContaining({ label: en.write.status.saved })));
+  });
+
+  it('says 已儲存 once the outbox has stored the save it called failed — the retry lands with nobody waiting on it', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const onSaveStatusChange = vi.fn();
+    vi.mocked(updateCardDraft).mockRejectedValueOnce(new Error('offline'));
+    const editor = createRef<CardEditorHandle>();
+    renderWithIntl(<Writer locale="en" editorRef={editor} onSaveStatusChange={onSaveStatusChange} />);
+    fireEvent.change(title(), { target: { value: 'Kept on the way' } });
+    await act(() => editor.current!.saveNow());
+    fireEvent.change(title(), { target: { value: 'Kept on the way, typed offline' } });
+    await expect(editor.current!.saveNow()).rejects.toThrow('offline');
+    const failed = { label: en.write.status.failed, failed: true };
+    await waitFor(() => expect(onSaveStatusChange).toHaveBeenLastCalledWith(failed));
+
+    // Another card's outbox, or this card's other kind, says nothing about these words.
+    outboxCaughtUp('draft', 'someone-elses-card');
+    outboxCaughtUp('edit', 'draft-1');
+    expect(onSaveStatusChange).toHaveBeenLastCalledWith(failed);
+
+    // The outbox sent the kept words again and the server stored them: the bar says so, with nothing typed.
+    outboxCaughtUp('draft', 'draft-1');
+    await waitFor(() => expect(onSaveStatusChange).toHaveBeenLastCalledWith(expect.objectContaining({ label: en.write.status.saved })));
+    // …and they count as written: coming back online has nothing left to save.
+    const writes = vi.mocked(updateCardDraft).mock.calls.length;
+    act(() => void window.dispatchEvent(new Event('online')));
+    await act(async () => {});
+    expect(updateCardDraft).toHaveBeenCalledTimes(writes);
+  });
+
+  it('tries a first save that failed again as the browser comes back online (no card yet, so no outbox kept it)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const onSaveStatusChange = vi.fn();
+    vi.mocked(createCardDraft).mockRejectedValueOnce(new Error('offline'));
+    const editor = createRef<CardEditorHandle>();
+    renderWithIntl(<Writer locale="en" editorRef={editor} onSaveStatusChange={onSaveStatusChange} />);
+    fireEvent.change(title(), { target: { value: 'Started on a train' } });
+    await expect(editor.current!.saveNow()).rejects.toThrow('offline');
+    await waitFor(() => expect(onSaveStatusChange).toHaveBeenLastCalledWith({ label: en.write.status.failed, failed: true }));
+    expect(createCardDraft).toHaveBeenCalledTimes(1);
+
+    act(() => void window.dispatchEvent(new Event('online')));
+    await waitFor(() => expect(createCardDraft).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(onSaveStatusChange).toHaveBeenLastCalledWith(expect.objectContaining({ label: en.write.status.saved })));
   });
 });

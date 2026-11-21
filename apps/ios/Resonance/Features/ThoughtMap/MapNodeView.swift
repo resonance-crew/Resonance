@@ -140,6 +140,9 @@ struct MapNodeView: View, Equatable {
                 meta
             }
             .padding(EdgeInsets(top: 14, leading: 16, bottom: 12, trailing: 16))
+            // Its words are fitted by hand, line by line: the flows find the card by its id (maestro/flows/thought-map.yaml),
+            // on its words alone, so 移除 below keeps its own.
+            .accessibilityIdentifier("map-node-\(card.id)")
             // Nothing hovers on a touch screen, so a selected card shows all four (the web's `hover: none`).
             if selected && showsHandle && !dragging {
                 ForEach(ThoughtMapStore.NodeSide.allCases, id: \.self) { linkHandle($0) }
@@ -250,5 +253,6 @@ struct MapNodeView: View, Equatable {
         OrganicIcon(.trash, size: 14).foregroundStyle(Tokens.textMuted)
             .frame(width: 28, height: 28)
             .offset(x: ThoughtMapStore.removeX - 14, y: ThoughtMapStore.removeY - 14)
+            .accessibilityIdentifier("map-node-remove")
     }
 }

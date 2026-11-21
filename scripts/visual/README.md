@@ -167,6 +167,25 @@ shows is fixed, or accepted as it is, raise it to `fail` in `WEB_CHECKS`. `phone
 (2026-11-13): a phone slice of home, card, profile, me, messages, notifications and settings in all three
 variants found nothing, so it can go to `fail` once a full web run agrees.
 
+## The web's interaction flows
+
+The Maestro flows (maestro/README.md) walk the apps; the web's twin is `scripts/visual/webFlows.ts` — Playwright
+journeys in Chromium against the same private stack, each at a desktop and a phone width: a message and a bell row
+arriving while the page only watches (`signals/{uid}` → a pull over `/api/v1`), a block and its undoing, a draft
+through the outbox (a reload, an offline stretch, publishing), a published card's pending edit, the thought map's
+batched ops, a bookmark. Every flow also fails on a Firestore write from the page, a listener on anything but
+`signals/{uid}`, a 5xx or an uncaught page error. `scripts/visual/webflows/README.md` says what each proves and how
+to add one.
+
+```bash
+npx tsx scripts/visual/webFlows.ts                       # every flow, both widths
+npx tsx scripts/visual/webFlows.ts --only write-draft --width phone
+```
+
+It holds the same port locks as a capture (below) and reports to `visual/webflows/<run>/` (git-ignored); its last
+line is `Web flows <run>: N passed · M failed` and its exit code says the same. A release's `capture --flows` does
+not run it yet: run it beside the release run when a change touches the web's data paths.
+
 ## One run at a time, and the owner's devices
 
 Two runs on the same devices hurt each other: the second finds the first one's simulators up and

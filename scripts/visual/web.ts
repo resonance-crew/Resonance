@@ -29,7 +29,8 @@ export const WEB_DEVICES: WebDevice[] = [
 /** Next's dev-mode badge, and anything else a dev build draws that production doesn't. */
 const HIDE_DEV_CHROME = 'nextjs-portal{display:none!important}';
 
-async function newContext(browser: Browser, device: WebDevice, v: Variant): Promise<BrowserContext> {
+/** A browser context as the captures make one (shared with the web flows, webFlows.ts). */
+export async function newContext(browser: Browser, device: WebDevice, v: Variant): Promise<BrowserContext> {
   const context = await browser.newContext({
     viewport: { width: device.width, height: device.height },
     deviceScaleFactor: 2,
@@ -52,7 +53,8 @@ async function newContext(browser: Browser, device: WebDevice, v: Variant): Prom
   return context;
 }
 
-async function signIn(page: Page, ctx: CaptureContext, v: Variant, account: Account) {
+/** Signs `account` in on the emulator build (`window.__emulatorSignIn`) and waits for the session cookie (shared with webFlows.ts). */
+export async function signIn(page: Page, ctx: Pick<CaptureContext, 'devUrl' | 'log'>, v: Variant, account: Account) {
   await page.goto(`${ctx.devUrl}/${v.locale}/signin`, { waitUntil: 'load' });
   await page.waitForFunction(() => '__emulatorSignIn' in window, null, { timeout: 60_000 });
   await page.evaluate(
