@@ -207,6 +207,7 @@ internal fun TapPassages(
             }
         }
         // 略過: the one way out at the foot's end, no ✕.
-        ModalCloseButton(L10n.Card.Tap.passageSkip, onDismiss, buttonModifier = Modifier.flowTag("tap-passage-skip"))
+        val skipTag = Modifier.flowTag("tap-passage-skip")
+        ModalCloseButton(L10n.Card.Tap.passageSkip, onDismiss, buttonModifier = skipTag)
     }
 }
