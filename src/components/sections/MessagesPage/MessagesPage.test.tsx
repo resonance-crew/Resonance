@@ -84,26 +84,29 @@ const server = vi.hoisted(() => ({
   listening: [] as string[],
   emit: null as ((window: unknown) => void) | null,
   windowOf: (messages: Message[]) => ({
-    entries: [...messages].reverse().map((message) => ({ message, cursor: { seconds: 0, nanoseconds: 0, id: message.id } })),
-    fromCache: false,
+    entries: [...messages].reverse().map((message) => ({ message, cursor: message.id })),
   }),
 }));
+// The signal channel: nothing listens to Firestore here (watchers are kept, pokes do nothing).
+vi.mock('@/lib/db/firestore/client/signals', () => ({ watchSignal: () => () => {}, pokeSignal: () => {} }));
 vi.mock('@/lib/db/firestore/client/messages', () => ({
   MESSAGE_MAX_LENGTH: 2000,
   conversationId: (a: string, b: string) => [a, b].sort().join('_'),
   deleteConversation: (pairId: string) => mockDeleteConversation(pairId),
   getConversation: () => mockGetConversation(),
-  markConversationRead: (pairId: string) => mockMarkRead(pairId),
+  readConversation: (pairId: string) => mockMarkRead(pairId),
+  listConversations: () => new Promise(() => {}),
+  isGone: (e: unknown) => [403, 404].includes((e as { status?: number } | null)?.status ?? 0),
   sendMessage: (...args: unknown[]) => mockSendMessage(...args),
   uploadChatImage: (...args: unknown[]) => mockUploadChatImage(...args),
   chatImageUrl: (id: string, size: 'thumb' | 'full') => `/api/v1/chat-images/${id}${size === 'thumb' ? '?size=thumb' : ''}`,
-  listenThread: (pairId: string, onWindow: (window: unknown) => void) => {
+  followThread: (pairId: string, onWindow: (window: unknown) => void) => {
     server.listening.push(pairId);
     server.emit = onWindow;
     onWindow(server.windowOf(server.messages));
     return () => {};
   },
-  getOlderMessages: async () => [],
+  getMessagesBefore: async () => [],
 }));
 const deliver = (messages: Message[]) => act(() => server.emit!(server.windowOf(messages)));
 // A picture is made ready on the device (scaled, re-encoded): here it is taken as it is, 1200 × 900.

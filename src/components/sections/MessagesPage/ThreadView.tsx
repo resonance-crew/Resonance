@@ -22,7 +22,7 @@ import { seedFromString } from '@/lib/design/prng';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { hideConversation, personKey, useCardSummaries, useLiveConversation, useMyBlockedIds } from '@/lib/data/hooks';
-import { OLDER_PAGE, useChatThread } from '@/lib/data/thread';
+import { OLDER_PAGE, readConversationNow, useChatThread } from '@/lib/data/thread';
 import { messageCard, resonanceCardKey, threadCardKeys } from '@/lib/chat/cardLink';
 import { carriedOf } from '@/lib/chat/carried';
 import { footComposes, threadFoot } from '@/lib/chat/foot';
@@ -34,14 +34,13 @@ import { changeShown, withLocalChange, type LocalChange } from '@/lib/chat/messa
 import { localPicture } from '@/lib/chat/localPictures';
 import { chatImageUrl } from '@/lib/db/firestore/client/messages';
 import { ApiError } from '@/lib/db/firestore/client/api';
-import { isAbsent } from '@/lib/db/firestore/client/errors';
 import type { TextRange } from '@/lib/chat/search';
 import { getUserByHandle, getUsersByIds, isConnected } from '@/lib/db/firestore/client/reads';
 import {
   conversationId,
   deleteConversation,
   getConversation,
-  markConversationRead,
+  isGone,
   reactToMessage,
   stopSharingCard,
   unsendMessage,
@@ -369,9 +368,8 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
     if (!convo || !user || !pairId) return;
     const incoming = !!lastMessage && lastMessage.senderId !== user.id;
     if (incoming || (convo.unread[user.id] ?? 0) > 0) {
-      // The list and the header's badge listen to the conversation: they
-      // hear the zeroed counter on their own, nothing to read again.
-      void markConversationRead(pairId).then(() => void mutateConvo());
+      // The list and the header's badge pull the zeroed counter again on their own (the read pokes them).
+      void readConversationNow(user.id, pairId).then(() => void mutateConvo());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [convo, user?.id, pairId, lastMessageId]);
@@ -707,7 +705,7 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
     const replying = thread.replyingTo;
     if (!replying) return;
     const held = drawn.find((m) => m.id === replying.id) ?? thread.messages.find((m) => m.id === replying.id);
-    const gone = convo === null || (!!thread.error && isAbsent(thread.error));
+    const gone = convo === null || (!!thread.error && isGone(thread.error));
     if (gone || held?.unsentAt || (!held && historyComplete)) thread.cancelReply();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawn, thread.messages, thread.replyingTo, historyComplete, thread.error, convo]);
