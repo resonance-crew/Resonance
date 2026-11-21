@@ -64,6 +64,11 @@
  *       into English for a Chinese story, 繁體中文 for a Latin-script one, both for Japanese or Korean), as a
  *       publish makes them — one small OpenAI call each, two at a time; needs OPENAI_API_KEY to apply (on the
  *       emulator no model is asked: every card answers `offline`) — production runs are the owner's call
+ *   npx tsx scripts/backfill.ts tap-passages [--apply] [--emulator]
+ *       published cards long enough get their tap passages (round 27: up to three sentences of the story, word for
+ *       word, a reader may pick after 共振), as a publish makes them — one small OpenAI call each, two at a time;
+ *       needs OPENAI_API_KEY to apply (on the emulator no model is asked: the offline pick) — production runs are
+ *       the owner's call (docs/release/owed.md)
  *   npx tsx scripts/backfill.ts story-translations [--apply] [--emulator]
  *       every story a reader may translate (published, public, not in the trash) gets its kept translation
  *       (cards/{id}/translations/{to}) into each language it may go into, made now as the card page's translate
@@ -260,6 +265,11 @@ async function main() {
       await backfillStoryTranslations(db, { apply });
       return;
     }
+    case 'tap-passages': {
+      const { backfillTapPassages } = await import('./backfills/tapPassages');
+      await backfillTapPassages(db, { apply });
+      return;
+    }
     case 'summary-translations': {
       const { backfillSummaryTranslations } = await import('./backfills/summaryTranslations');
       await backfillSummaryTranslations(db, { apply });
@@ -281,7 +291,7 @@ async function main() {
       return;
     }
     default:
-      throw new Error(`Unknown task "${task ?? ''}" (anonymous | handles | edits | storage-host | rekey-images | rehost-images | square-avatars | reencode-legacy | cover-thumbs | avatar-colors | notes | anonymous-bells | orphan-notes | card-tombstones | link-previews | summary-translations | story-translations | recommend-index)`);
+      throw new Error(`Unknown task "${task ?? ''}" (anonymous | handles | edits | storage-host | rekey-images | rehost-images | square-avatars | reencode-legacy | cover-thumbs | avatar-colors | notes | anonymous-bells | orphan-notes | card-tombstones | link-previews | summary-translations | story-translations | tap-passages | recommend-index)`);
   }
 }
 
