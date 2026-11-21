@@ -8,8 +8,6 @@ import type { Card, CardBoxTab, User } from '@/lib/db';
 import {
   getCardById,
   getCardBySlugOrId,
-  getCardsByAuthor,
-  getMyDrafts,
   getCurrentUserProfile,
   getMyResonanceCard,
   getPublicCardView,
@@ -37,6 +35,7 @@ import type {
   CardBoxTabName,
   CardDetailBody,
   CardListBody,
+  FeedCardBody,
   CardTapBody,
   FeedPageBody,
   ProfileBody,
@@ -633,19 +632,29 @@ async function othersShelf(tab: Extract<CardBoxTabName, 'resonated' | 'linked' |
 }
 
 /**
- * A shelf: the viewer's own cards read through the rules, the others' from
- * the server — and the trash from the server too: its list summaries (never a
- * hundred whole stories through the rules), each saying when it went in and
- * what restoring brings back. A summary never prefills a card page.
+ * A shelf, from the server (phase 2b: GET /api/v1/me/cards?tab=, the 草稿
+ * shelf's two in one GET /api/v1/me/cardbox): list summaries — never forty
+ * whole stories — the viewer's own anonymous cards with their byline, the
+ * trash's saying when each went in and what restoring brings back. A summary
+ * never prefills a card page, nor an editor (readWriterCard reads it whole).
  */
-async function readShelf(uid: string, shelf: CardBoxShelf): Promise<CardBoxShelfData> {
+async function readShelf(shelf: CardBoxShelf): Promise<CardBoxShelfData> {
   // A bookmarked card that has since gone private simply drops out.
   if (shelf === 'resonated' || shelf === 'linked' || shelf === 'bookmarks') return othersShelf(shelf);
-  if (shelf === 'trash') return summaryList(await callApi<CardListBody>('/api/v1/me/cards?tab=trash'));
-  // 草稿: drafts and the cards kept private, together (round 8 §1.1).
-  const cards = shelf === 'draft' ? await getMyDrafts(uid) : await getCardsByAuthor(uid, shelf);
-  return { cards, authors: await getUsersByIds(bylineAuthorIds(cards, uid)) };
+  if (shelf !== 'draft') return summaryList(await callApi<CardListBody>(`/api/v1/me/cards?tab=${shelf}`));
+  // 草稿: drafts and the cards kept private, together (round 8 §1.1), the most recently changed first.
+  const box = await callApi<CardBoxBody>('/api/v1/me/cardbox?shelves=draft,private');
+  const seen = new Set<string>();
+  const edited = (c: FeedCardBody) => (c.editedAt ? Date.parse(c.editedAt) || 0 : 0);
+  const cards = [...(box.draft?.cards ?? []), ...(box.private?.cards ?? [])]
+    .filter((c) => !c.trashedAt && !seen.has(c.id) && seen.add(c.id))
+    .sort((a, b) => edited(b) - edited(a))
+    .slice(0, DRAFT_SHELF_LIMIT);
+  return summaryList(cards);
 }
+
+/** The 草稿 shelf's size (each of its two shelves is as long on the server). */
+const DRAFT_SHELF_LIMIT = 40;
 
 /**
  * One shelf of the signed-in viewer's card box — the one on screen, read when
@@ -655,7 +664,7 @@ async function readShelf(uid: string, shelf: CardBoxShelf): Promise<CardBoxShelf
 export function useMyCardBox(shelf: CardBoxShelf | null) {
   const { user } = useAuth();
   return useSWR<CardBoxShelfData>(user && shelf ? `cardbox:${user.id}:${shelf}` : null, async () => {
-    return readShelf(user!.id, shelf!);
+    return readShelf(shelf!);
   }, OWN_CONTENT);
 }
 

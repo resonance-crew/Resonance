@@ -38,6 +38,12 @@ vi.mock('@/lib/db/firestore/client/messages', () => ({
 vi.mock('@/lib/db/firestore/client/notifications', () => ({
   listenNotifications: vi.fn(),
 }));
+// Phase 2b: what reads the server never reaches Firestore (a call to it throws).
+vi.mock('@/lib/db/firestore/client/init', () => ({
+  getClientDb: vi.fn(() => {
+    throw new Error('Firestore is not read here');
+  }),
+}));
 vi.mock('@/lib/db/firestore/client/api', () => ({
   callApi: vi.fn(),
   ApiError: class ApiError extends Error {
@@ -86,6 +92,7 @@ import { listenNotifications } from '@/lib/db/firestore/client/notifications';
 import { resetLive } from './live';
 import { ApiError, callApi } from '@/lib/db/firestore/client/api';
 import { loadMyThoughtMap } from '@/lib/db/firestore/client/thoughtMap';
+import { getClientDb } from '@/lib/db/firestore/client/init';
 import type { CardDetailBody, CardListBody, FeedCardBody, FeedPageBody, RecommendedFeedBody } from '@/lib/api/v1/schemas';
 import { getMyBlockedIds } from '@/lib/db/firestore/client/blocks';
 import {
@@ -716,11 +723,21 @@ describe('useCard with the server render', () => {
 describe('useMyCardBox', () => {
   // The box read all six shelves (three of them the same query of the
   // viewer's cards, each whole) before showing any; it reads the one on screen.
-  it('reads only the shelf on screen, with its authors', async () => {
-    vi.mocked(getCardsByAuthor).mockImplementation(async (_uid, tab) => [card(`${tab}-card`, 'me')]);
-    // 草稿 holds the drafts and the cards kept private together (round 8 §1.1).
-    vi.mocked(getMyDrafts).mockResolvedValue([card('draft', 'me', { publishedAt: null })]);
-    vi.mocked(getUsersByIds).mockResolvedValue({ me: user('me') });
+  // Phase 2b: the viewer's own shelves are the server's (never forty whole stories through the rules).
+  it('reads only the shelf on screen, from the server, with its authors', async () => {
+    // 草稿 holds the drafts and the cards kept private together (round 8 §1.1), the latest changed first.
+    api({
+      '/api/v1/me/cardbox?shelves=draft,private': {
+        draft: { cards: [summary('draft-old', 'me', { publishedAt: null, editedAt: '2026-10-01T08:00:00.000Z' })] },
+        private: {
+          cards: [
+            summary('kept', 'me', { visibility: 'private', editedAt: '2026-10-03T08:00:00.000Z' }),
+            summary('binned', 'me', { visibility: 'private', trashedAt: '2026-10-04T08:00:00.000Z' }),
+          ],
+        },
+      },
+      '/api/v1/me/cards?tab=published': { cards: [summary('published-card', 'me')] },
+    });
 
     const { result, rerender } = renderHook(({ shelf }) => useMyCardBox(shelf).data, {
       wrapper,
@@ -728,16 +745,18 @@ describe('useMyCardBox', () => {
     });
     await waitFor(() => expect(result.current).toBeDefined());
 
-    expect(result.current!.cards.map((c) => c.id)).toEqual(['draft']);
+    expect(result.current!.cards.map((c) => c.id)).toEqual(['kept', 'draft-old']);
     expect(result.current!.authors).toHaveProperty('me');
-    expect(getMyDrafts).toHaveBeenCalledWith('me');
+    expect(vi.mocked(callApi).mock.calls.map((c) => c[0])).toEqual(['/api/v1/me/cardbox?shelves=draft,private']);
+    expect(getMyDrafts).not.toHaveBeenCalled();
     expect(getCardsByAuthor).not.toHaveBeenCalled();
-    expect(callApi).not.toHaveBeenCalled();
+    expect(getClientDb).not.toHaveBeenCalled();
 
     // Opening another shelf reads that one.
     rerender({ shelf: 'published' });
     await waitFor(() => expect(result.current?.cards.map((c) => c.id)).toEqual(['published-card']));
-    expect(vi.mocked(getCardsByAuthor).mock.calls.map((c) => c[1])).toEqual(['published']);
+    expect(callApi).toHaveBeenLastCalledWith('/api/v1/me/cards?tab=published');
+    expect(getCardsByAuthor).not.toHaveBeenCalled();
   });
 
   it("reads others' cards from the server, an anonymous original without its author", async () => {

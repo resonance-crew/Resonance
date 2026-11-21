@@ -18,14 +18,14 @@ import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { MarkdownEditor, type MarkdownEditorHandle } from '@/components/molecules/MarkdownEditor/MarkdownEditor';
 import { PublishStep, reachesOriginal, stepTitleKey } from '@/components/molecules/PublishStep/PublishStep';
 import type { SaveStatus } from './SaveState';
-import { createCardDraft, deleteCardForever, publishCard, updateCardDraft } from '@/lib/db/firestore/client/cards';
+import { createCardDraft, deleteCardForever, newCardId, publishCard, updateCardDraft, type SavedDraft } from '@/lib/db/firestore/client/cards';
 import {
   applyPendingCardEdit,
   discardPendingCardEdit,
   savePendingCardEdit,
 } from '@/lib/db/firestore/client/cardEdits';
 import { getCardById } from '@/lib/db/firestore/client/reads';
-import type { Card, CardMedia, LinkPreview, Visibility, Locale } from '@/lib/db/types';
+import type { CardMedia, LinkPreview, Visibility, Locale } from '@/lib/db/types';
 import { useRouter } from '@/i18n/navigation';
 import { ApiError } from '@/lib/db/firestore/client/api';
 import { useOpenedOnce } from '@/lib/hooks/useOpenedOnce';
@@ -365,6 +365,9 @@ export function CardEditor({
   // Everything the save needs travels through refs so the debounce timer, the
   // unmount flush, and the publish path all write the same latest values.
   const draftIdRef = useRef(initial?.id);
+  // A new card's id, made once here: its first save, sent again after a lost answer, finds the draft it made.
+  const newIdRef = useRef<string | undefined>(undefined);
+  if (!initial?.id && !newIdRef.current) newIdRef.current = newCardId();
   // The same id, for what is drawn from it (the preview's colours): a new card has one from its first save.
   const [cardId, setCardId] = useState(initial?.id);
   // Before 匿名公開: was this card ever sent privately in a message? (asked once the step is shown; a warning only)
@@ -473,7 +476,7 @@ export function CardEditor({
    * need its freshly minted id); a published card's edits land in the buffer,
    * which has no card to hand back — hence `null`.
    */
-  function saveDraft(): Promise<Card | null> {
+  function saveDraft(): Promise<SavedDraft | null> {
     const run = writeChainRef.current.then(async () => {
       // Said in the bar only once it runs long; whether it went through, always.
       const shown = window.setTimeout(() => setSavingShown(true), SAVING_SHOWN_MS);
@@ -494,7 +497,7 @@ export function CardEditor({
   }
 
   /** One write of what is on screen: the draft's document, or a live card's buffer. */
-  async function writeDraft(): Promise<Card | null> {
+  async function writeDraft(): Promise<SavedDraft | null> {
     const v = latest();
     const payload = payloadFrom(v);
     if (isPublished && draftIdRef.current) {
@@ -506,7 +509,7 @@ export function CardEditor({
     }
     const card = draftIdRef.current
       ? await updateCardDraft(draftIdRef.current, payload)
-      : await createCardDraft({ ...payload, originalLocale: locale, referenceCardId });
+      : await createCardDraft({ ...payload, id: newIdRef.current, originalLocale: locale, referenceCardId });
     if (!draftIdRef.current) {
       createdHereRef.current = true;
       // First save of a fresh draft: swap /write for /write/{id} in place

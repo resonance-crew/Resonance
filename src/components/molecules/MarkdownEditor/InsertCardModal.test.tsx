@@ -7,14 +7,38 @@ import { renderWithIntl as render, screen, userEvent, waitFor } from '@/../test/
 vi.mock('@/components/providers/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 'me' }, loading: false }),
 }));
-vi.mock('@/lib/db/firestore/client/reads', () => ({ getCardsByAuthor: vi.fn(), getMyDrafts: vi.fn(), getUsersByIds: vi.fn(async () => ({})) }));
+// The card box's shelves are the server's (phase 2b): the published one answers what `getPublished` does.
+const getPublished = vi.hoisted(() => vi.fn<() => Promise<FeedCardBody[]>>());
+vi.mock('@/lib/db/firestore/client/api', () => ({
+  callApi: vi.fn(async (path: string) => ({ cards: path === '/api/v1/me/cards?tab=published' ? await getPublished() : [] })),
+}));
+vi.mock('@/lib/db/firestore/client/init', () => ({
+  getClientDb: () => {
+    throw new Error('Firestore is not read here');
+  },
+}));
 
-import { getCardsByAuthor } from '@/lib/db/firestore/client/reads';
-import type { Card } from '@/lib/db/types';
+import { callApi } from '@/lib/db/firestore/client/api';
+import type { FeedCardBody } from '@/lib/api/v1/schemas';
 import { InsertCardModal } from './InsertCardModal';
 
-const card = (id: string, title: string): Card =>
-  ({ id, thoughtCore: title, visibility: 'public', publishedAt: new Date('2026-10-20T00:00:00Z') }) as unknown as Card;
+const card = (id: string, title: string): FeedCardBody => ({
+  id,
+  slug: null,
+  title,
+  excerpt: '',
+  tags: [],
+  publishedAt: '2026-10-20T00:00:00.000Z',
+  author: { id: 'me', handle: 'me', initials: 'ME', accentColor: 'c', avatarUrl: null, avatarSeed: '1', verified: false, region: null },
+  anonymous: false,
+  visibility: 'public',
+  imageUrl: null,
+  imageLabel: null,
+  accentHue: null,
+  readMinutes: 1,
+  referenceCardId: null,
+  reason: null,
+});
 
 afterEach(() => vi.clearAllMocks());
 
@@ -26,7 +50,7 @@ describe('InsertCardModal', () => {
   // (The pick list itself needs real layout for its scrollbar; the picker's
   // chrome — the one button it adds — is what this pins.)
   it('leaves through a tonal cancel', async () => {
-    vi.mocked(getCardsByAuthor).mockResolvedValue([]);
+    vi.mocked(getPublished).mockResolvedValue([]);
     const onClose = vi.fn();
     renderWithIntl(<InsertCardModal open onClose={onClose} onPick={vi.fn()} />);
 
@@ -42,8 +66,8 @@ describe('InsertCardModal', () => {
   // Round 9 C2: while the cards are read, their rows' footprint — never "…"; a read that fails says so and
   // reads again on 再試一次, never "no cards".
   it('stands four rows in while the cards are read, then the cards', async () => {
-    let answer!: (cards: Card[]) => void;
-    vi.mocked(getCardsByAuthor).mockReturnValue(new Promise((r) => (answer = r)));
+    let answer!: (cards: FeedCardBody[]) => void;
+    vi.mocked(getPublished).mockReturnValue(new Promise((r) => (answer = r)));
     const { container } = renderWithIntl(<InsertCardModal open onClose={vi.fn()} onPick={vi.fn()} />);
 
     const skeleton = container.ownerDocument.querySelector('[data-skeleton]');
@@ -59,24 +83,24 @@ describe('InsertCardModal', () => {
   });
 
   it('says a read failed, and reads again on Try again', async () => {
-    vi.mocked(getCardsByAuthor).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([card('a', 'After the rain')]);
+    vi.mocked(getPublished).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([card('a', 'After the rain')]);
     renderWithIntl(<InsertCardModal open onClose={vi.fn()} onPick={vi.fn()} />);
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent("Couldn't load your cards");
     // A failure is not an empty shelf.
     expect(screen.queryByText('You have no public cards yet')).toBeNull();
-    expect(getCardsByAuthor).toHaveBeenCalledTimes(1);
+    expect(getPublished).toHaveBeenCalledTimes(1);
 
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByRole('button', { name: 'After the rain' })).toBeInTheDocument();
-    expect(getCardsByAuthor).toHaveBeenCalledTimes(2);
+    expect(getPublished).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
   // W13: the card box's shelf (useMyCardBox), not a read of its own each time the picker opens.
   it('opens again on the cards it read, with no skeleton, reading them once more behind them', async () => {
-    vi.mocked(getCardsByAuthor).mockResolvedValue([card('a', 'After the rain')]);
+    vi.mocked(getPublished).mockResolvedValue([card('a', 'After the rain')]);
     const cache = new Map();
     const at = (open: boolean) => (
       <SWRConfig value={{ provider: () => cache, dedupingInterval: 0 }}>
@@ -86,10 +110,10 @@ describe('InsertCardModal', () => {
     const view = render(at(true));
     expect(await screen.findByRole('button', { name: 'After the rain' })).toBeInTheDocument();
     view.rerender(at(false));
-    vi.mocked(getCardsByAuthor).mockReturnValue(new Promise(() => {}));
+    vi.mocked(getPublished).mockReturnValue(new Promise(() => {}));
     view.rerender(at(true));
     expect(await screen.findByRole('button', { name: 'After the rain' })).toBeInTheDocument();
     expect(view.container.ownerDocument.querySelector('[data-skeleton]')).toBeNull();
-    expect(getCardsByAuthor).toHaveBeenCalledWith('me', 'published');
+    expect(callApi).toHaveBeenCalledWith('/api/v1/me/cards?tab=published');
   });
 });

@@ -25,10 +25,36 @@ vi.mock('@/lib/db/firestore/client/reads', () => ({
   getUsersByIds: async () => ({}),
 }));
 const mockCallApi = vi.fn();
+// The published shelf is the server's (GET /api/v1/me/cards?tab=published, phase 2b): it answers what
+// `mockShelf` holds, as the summaries the server sends.
 vi.mock('@/lib/db/firestore/client/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/db/firestore/client/api')>()),
-  callApi: (...args: unknown[]) => mockCallApi(...args),
+  callApi: async (...args: unknown[]) =>
+    args[0] === '/api/v1/me/cards?tab=published'
+      ? { cards: ((await mockShelf('me', 'published')) as Card[]).map(asSummary) }
+      : mockCallApi(...args),
 }));
+
+/** A card as the card box's shelves answer it (the viewer's own: their byline kept). */
+function asSummary(c: Card) {
+  return {
+    id: c.id,
+    slug: c.slug ?? null,
+    title: c.thoughtCore,
+    excerpt: c.story,
+    tags: c.tags,
+    publishedAt: c.publishedAt ? c.publishedAt.toISOString() : null,
+    author: { id: c.authorId, handle: c.authorId, initials: 'ME', accentColor: 'c', avatarUrl: null, avatarSeed: '1', verified: false, region: null },
+    anonymous: !!c.anonymous,
+    visibility: c.visibility,
+    imageUrl: null,
+    imageLabel: null,
+    accentHue: null,
+    readMinutes: 1,
+    referenceCardId: c.referenceCardId ?? null,
+    reason: null,
+  };
+}
 
 import { ApiError } from '@/lib/db/firestore/client/api';
 import { ResonatePicker, resonateChoices } from './ResonatePicker';
