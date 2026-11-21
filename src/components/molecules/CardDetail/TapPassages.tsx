@@ -48,16 +48,24 @@ export function TapPassages({ passages, picked, onPick, onClose }: TapPassagesPr
   const listRef = useRef<HTMLUListElement>(null);
 
   // Focus on the first row, or on the picked one (§U1.8), so the keyboard and a screen reader start there.
-  // After the dialog's own focus (Modal puts it on its paper as it mounts), so a frame later.
+  // After the dialog's own focus (Modal puts it on its paper once it has measured it, a few frames in): for a short
+  // while, focus that sits on the paper or nowhere moves to the row; a row or 略過 the reader reached is left alone.
   const pickedAtOpen = useRef(picked);
   useEffect(() => {
-    const frame = window.setTimeout(() => {
+    let frames = 0;
+    let handle = 0;
+    const step = () => {
       const list = listRef.current;
       const at = pickedAtOpen.current;
       const target = (at && list?.querySelector<HTMLButtonElement>(`[data-passage="${at}"]`)) || list?.querySelector<HTMLButtonElement>('[data-passage]');
-      target?.focus({ preventScroll: true });
-    }, 0);
-    return () => window.clearTimeout(frame);
+      const now = document.activeElement;
+      if (target && (!now || now === document.body || now.getAttribute('role') === 'dialog' || !now.closest('[role="dialog"]'))) {
+        target.focus({ preventScroll: true });
+      }
+      if (++frames < 30) handle = window.setTimeout(step, 16);
+    };
+    handle = window.setTimeout(step, 0);
+    return () => window.clearTimeout(handle);
   }, []);
 
   const choose = (id: string) => {
