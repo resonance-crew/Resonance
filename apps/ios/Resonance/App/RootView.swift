@@ -44,7 +44,14 @@ struct RootView: View {
                         .transition(.opacity)
                 }
             }
+            // Below the build the server still serves (client-config `minBuild`): only the way to the store.
+            if session.clientConfig.updateRequired {
+                UpdateRequiredScreen()
+                    .transition(.opacity)
+            }
         }
+        // A newer build is out: a note the reader may put off.
+        .updateRecommendation(session.clientConfig)
         // Softened 2 pt under an organic modal, as the web's Modal backdrop blurs (round 16 review F8).
         .softenedUnderModals()
         .animation(phaseChange, value: session.phase)
@@ -62,6 +69,10 @@ struct RootView: View {
         // show (`cameBack`). Otherwise a profile that failed to load is asked for again
         // (a new account that was offline at first still reaches onboarding).
         .onChange(of: scenePhase) { _, phase in
+            // The signals' safety pull runs only in the foreground.
+            if phase == .background { session.signals.setForeground(false) }
+            // What the server says to this build, asked again (at most every few minutes), signed in or not.
+            if phase == .active { Task { await session.clientConfig.refresh() } }
             guard phase == .active, session.phase == .signedIn else { return }
             // Live lists whose listener failed (or whose people couldn't be read) listen again.
             session.notifications.resume()

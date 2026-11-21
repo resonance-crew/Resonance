@@ -29,6 +29,13 @@ import ResonanceKit
 /// It is read — its unread count reset, its pushes taken out of Notification Center — only while
 /// the screen says it is on show (`setOnScreen`).
 ///
+/// **Two paths** (Phase 2 of the middleware decouple), chosen each time it starts listening: with
+/// `features.apiInbox` the conversation and its newest window are GETs of `/api/v1` — asked again with
+/// `If-None-Match` when `signals/{uid}` `threads[pair]` moves and on the 60 s foreground pull, caught up with
+/// `after=` when the thread moved on by more than a window — older pages by `before=` cursors, and reading it is
+/// POST …/read; what is still on its way is the chat outbox's (`ChatOutboxes`). Otherwise, the older path kept one
+/// release, the two Firestore listeners and the `unread` write, as before.
+///
 /// **Letters.** A note left on a card connects no one: the card's author answering it does. The
 /// conversation says whose letter waits (`request.from`), and `access` what the thread's foot
 /// offers — the composer, the wait for an answer, the answer that connects, or nothing to write.
@@ -132,7 +139,13 @@ final class ThreadModel {
     @ObservationIgnored private var listeners: [ListenerRegistration] = []
     /// Which `attach` the live listeners belong to (a late callback of a removed one is ignored).
     @ObservationIgnored private var listening = 0
-    @ObservationIgnored private var history = MessageHistory<DocumentSnapshot>()
+    @ObservationIgnored private var history = MessageHistory<ThreadCursor>()
+    /// The API path this listening takes (nil: Firestore's listeners, or not listening).
+    @ObservationIgnored private var inbox: InboxAPI?
+    @ObservationIgnored private var subscription: SignalSubscription?
+    @ObservationIgnored private var pulls = PullGate()
+    /// Each message's cursor as the API answered it (the newest one held starts an `after=` catch-up).
+    @ObservationIgnored private var apiCursors: [String: String] = [:]
     @ObservationIgnored private var thread = ThreadMessages()
     /// Which life of the conversation's history a page read belongs to (a reset makes a late page void).
     @ObservationIgnored private var epoch = 0
@@ -280,6 +293,10 @@ final class ThreadModel {
 
     /// Their pen name now (users/{uid} is public); nil for an account that's gone.
     private func currentHandle(of uid: String) async throws -> String? {
+        if session.livePaths.social {
+            guard case let .found(person) = PeopleBook.reads(try await SocialAPI(client: session.api).users([uid]))[uid] else { return nil }
+            return person.handle
+        }
         let data = try await FirebaseBootstrap.db.collection("users").document(uid).getDocument().data()
         return Person(id: uid, data: data)?.handle
     }
@@ -289,17 +306,24 @@ final class ThreadModel {
     /// Back on screen (from a page pushed over the thread), or the conversation
     /// just appeared in Messages: listening again if the listeners stopped.
     func resume() {
-        guard phase == .ready, listeners.isEmpty, !closed else { return }
+        guard phase == .ready, !closed else { return }
+        // The API's thread stays attached: it asks again.
+        if inbox != nil { return pullThread() }
+        guard listeners.isEmpty else { return }
         listenFailed = false
         attach()
     }
 
+    /// Listening, on either path.
+    private var isAttached: Bool { !listeners.isEmpty || inbox != nil }
+
     /// Listens to the conversation and its newest 50 messages, by pair id.
     private func attach() {
-        guard let pairId, listeners.isEmpty, !closed else { return }
+        guard let pairId, !isAttached, !closed else { return }
         watchOutbox()
         syncViewing()
         listening += 1
+        if session.livePaths.conversations { return attachAPI(pairId) }
         let run = listening
         let origin = session.config.origin
         let ref = FirebaseBootstrap.db.collection("conversations").document(pairId)
@@ -328,7 +352,7 @@ final class ThreadModel {
                     if let error { return self.listenerFailed(error, pair: pairId) }
                     guard let snap else { return }
                     // The newest 50 join what is held; the ones that slid out of the window stay.
-                    let window = snap.documents.map { MessageHistory<DocumentSnapshot>.Entry(Self.message($0, origin: origin), cursor: $0) }
+                    let window = snap.documents.map { MessageHistory<ThreadCursor>.Entry(Self.message($0, origin: origin), cursor: .document($0)) }
                     let merged = self.history.mergeWindow(window, authoritative: !snap.metadata.isFromCache)
                     // Held nothing in common with the window: it started afresh, and a page being read for the old one is void.
                     if merged == .restarted { self.forgetPaging() }
@@ -339,6 +363,87 @@ final class ThreadModel {
                     self.lookForOpenedNote()
                 }
             })
+    }
+
+    /// The API path: the conversation and its newest window by GET, asked again when the thread's signal moves (and
+    /// on the 60 s foreground pull) — each a 304 when nothing changed.
+    private func attachAPI(_ pairId: String) {
+        inbox = InboxAPI(client: session.api)
+        subscription = session.signals.observe([.thread(pairId)]) { [weak self] _ in self?.pullThread() }
+        pullThread()
+    }
+
+    /// Asks for the thread again (one read at a time; one asked for meanwhile runs after it).
+    private func pullThread() {
+        guard let pairId, let inbox, !closed else { return }
+        let run = listening
+        pulls.run("thread") { [weak self] in await self?.readThread(inbox, pair: pairId, run: run) }
+    }
+
+    /// The API's answers as history entries, their cursors remembered.
+    private func apiEntries(_ messages: [InboxAPI.ThreadMessage], origin: URL) -> [MessageHistory<ThreadCursor>.Entry] {
+        messages.map { message in
+            apiCursors[message.id] = message.cursor
+            return .init(ChatMessage.from(api: message, origin: origin), cursor: .api(message.cursor))
+        }
+    }
+
+    /// The most window-ful read the API path makes: the conversation (its letter, the viewer's unread count) and the
+    /// newest 50 messages together; when none of those is held any more (the thread moved on by more than a window
+    /// since), what came after the newest held is read first (`after=`), so nothing between is skipped.
+    private func readThread(_ inbox: InboxAPI, pair: String, run: Int) async {
+        let origin = session.config.origin
+        do {
+            async let reading = inbox.conversation(pair)
+            async let newest = inbox.messages(pair, limit: ChatPaging.liveLimit)
+            let (conversation, window) = try await (reading, newest)
+            guard run == listening, !closed else { return }
+            guard let conversation, let window else { return noConversationAPI(pair) }
+            conversationExists = true
+            refusals = 0
+            unreadForMe = conversation.unread
+            letterChanged(conversation.request.map { $0.value1.from }.flatMap { $0.isEmpty ? nil : $0 })
+            let entries = apiEntries(window.messages, origin: origin)
+            if !history.overlaps(entries), let newestHeld = history.messages.last.flatMap({ apiCursors[$0.id] }) {
+                var cursor = newestHeld
+                var newer: [MessageHistory<ThreadCursor>.Entry] = []
+                for _ in 0..<20 {
+                    guard let page = try await inbox.messages(pair, after: cursor, limit: 100) else { break }
+                    newer += apiEntries(page.messages, origin: origin)
+                    guard page.hasNewer, let next = page.newerCursor else { break }
+                    cursor = next
+                }
+                guard run == listening, !closed else { return }
+                history.mergeNewer(newer)
+            }
+            let merged = history.mergeWindow(entries, authoritative: true)
+            if merged == .restarted { forgetPaging() }
+            let wasFailed = listenFailed
+            listenFailed = false
+            guard merged != .unchanged || !threadReady || hasOlder != history.hasOlder || wasFailed else {
+                return markReadIfNeeded()
+            }
+            threadReady = true
+            historyChanged()
+            markReadIfNeeded()
+            lookForOpenedNote()
+        } catch {
+            guard run == listening, !closed else { return }
+            // Offline or the server busy: what was read stays, said while there is nothing; the next signal, the
+            // safety pull or the screen's retry asks again.
+            threadReady = true
+            listenFailed = true
+        }
+    }
+
+    /// The API's one 404 for "no conversation (yet, or any more)": no messages, not an error — as a refused listener.
+    private func noConversationAPI(_ pair: String) {
+        threadReady = true
+        listenFailed = false
+        let had = conversationExists || !history.isEmpty
+        conversationGone()
+        if had { resetHistory() } else { historyChanged() }
+        lookForOpenedNote()
     }
 
     /// A listener that fails is over; `resume()` starts them again. Refused
@@ -410,10 +515,18 @@ final class ThreadModel {
         // document, where a "/" or nothing at all would end the app.
         guard Route.linkId(note.noteId) != nil, Route.linkId(note.cardId) != nil else { return }
         Task {
-            let ref = FirebaseBootstrap.db.collection("conversations").document(pairId).collection("messages").document(note.noteId)
-            if (try? await ref.getDocument())?.exists == true {
-                noteToShow = note.noteId
-                return
+            if inbox != nil {
+                // The API names no single message: the note is looked for in the thread, a few pages back at most.
+                if await ensureLoaded(note.noteId, maxPages: 3) {
+                    noteToShow = note.noteId
+                    return
+                }
+            } else {
+                let ref = FirebaseBootstrap.db.collection("conversations").document(pairId).collection("messages").document(note.noteId)
+                if (try? await ref.getDocument())?.exists == true {
+                    noteToShow = note.noteId
+                    return
+                }
             }
             // Asked on its own: the thread's cards may still be on their way.
             let card = try? await session.reading.cards(keys: [note.cardId]).first { $0.id == note.cardId }
@@ -443,6 +556,10 @@ final class ThreadModel {
         listening += 1
         listeners.forEach { $0.remove() }
         listeners = []
+        subscription?.cancel()
+        subscription = nil
+        inbox = nil
+        pulls = PullGate()
     }
 
     /// The screen is gone for good: no more listening, and the older pages still being read — a
@@ -492,6 +609,10 @@ final class ThreadModel {
         guard onScreen, let pairId, let me, unreadForMe > 0 else { return }
         // Not again for each snapshot until the conversation's own count says so.
         unreadForMe = 0
+        if let inbox {
+            Task { try? await inbox.markRead(pairId) }
+            return
+        }
         FirebaseBootstrap.db.collection("conversations").document(pairId).updateData(["unread.\(me)": 0])
     }
 
@@ -551,6 +672,7 @@ final class ThreadModel {
     /// Everything held is forgotten (the conversation is gone, or the listener lost track of it).
     private func resetHistory() {
         history.clear()
+        apiCursors = [:]
         forgetPaging()
         thread.clear()
         shares = [:]
@@ -635,6 +757,25 @@ final class ThreadModel {
         let life = epoch
         let origin = session.config.origin
         olderError = false
+        if case let .api(before) = cursor {
+            guard let inbox else { return false }
+            do {
+                guard let page = try await inbox.messages(pairId, before: before, limit: limit) else {
+                    if life == epoch { olderError = true }
+                    return false
+                }
+                guard life == epoch else { return false }
+                let entries = apiEntries(page.messages, origin: origin)
+                // The server says where the beginning is: a page with no older cursor was the last.
+                history.mergePage(entries, limit: page.olderCursor == nil ? Int.max : min(limit, entries.count))
+                historyChanged()
+                return true
+            } catch {
+                if life == epoch { olderError = true }
+                return false
+            }
+        }
+        guard case let .document(cursor) = cursor else { return false }
         let query = FirebaseBootstrap.db.collection("conversations").document(pairId).collection("messages")
             .order(by: "sentAt", descending: true).start(afterDocument: cursor).limit(to: limit)
         do {
@@ -645,7 +786,7 @@ final class ThreadModel {
                 olderError = true
                 return false
             }
-            history.mergePage(snap.documents.map { .init(Self.message($0, origin: origin), cursor: $0) }, limit: limit)
+            history.mergePage(snap.documents.map { .init(Self.message($0, origin: origin), cursor: .document($0)) }, limit: limit)
             historyChanged()
             return true
         } catch {
@@ -743,9 +884,10 @@ final class ThreadModel {
         rebuild()
         loadCards()
         // The first message made the conversation: listen to it now.
-        if phase == .ready, !conversationExists, listeners.isEmpty, entries.contains(where: { $0.status == .sent }) {
+        if phase == .ready, !conversationExists, entries.contains(where: { $0.status == .sent }) {
             listenFailed = false
-            attach()
+            // The API's thread is attached already: it asks again (the signal of the first message may come later).
+            if inbox != nil { pullThread() } else if listeners.isEmpty { attach() }
         }
     }
 
@@ -983,6 +1125,16 @@ final class ThreadModel {
             if held.isUnsent, replyingTo?.id == id { replyingTo = nil }
             return
         }
+        if inbox != nil {
+            // No single message to ask for: a quote whose message turns up unsent in the next pages is dropped; one
+            // not found stays (it may be older).
+            Task { [weak self] in
+                guard let self, await self.ensureLoaded(id, maxPages: 2), let held = self.message(id), held.isUnsent,
+                      self.replyingTo?.id == id else { return }
+                self.replyingTo = nil
+            }
+            return
+        }
         Task { [weak self] in
             let doc = try? await FirebaseBootstrap.db.collection("conversations").document(pairId).collection("messages").document(id).getDocument()
             guard let self, let doc else { return }
@@ -1145,6 +1297,12 @@ final class ThreadModel {
                          sentAt: (doc.get("sentAt", serverTimestampBehavior: .estimate) as? Timestamp)?.dateValue() ?? Date(),
                          origin: origin)
     }
+}
+
+/// Where the page before a message starts: its Firestore document (the older path), or the API's neutral cursor.
+enum ThreadCursor {
+    case document(DocumentSnapshot)
+    case api(String)
 }
 
 /// A picture riding with the next send (round 22 §4.2): its key (the attach panel's picker item, or one of its
