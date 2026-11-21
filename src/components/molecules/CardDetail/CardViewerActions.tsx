@@ -58,6 +58,9 @@ type Fit = 'full' | 'short' | 'split';
 /** At this content width or less the capsule says its short words (§U1.3: 寫卡片), whether the full ones squeeze in or not — as Android. */
 export const NARROW_ROW = 340;
 
+/** Between the capsule and what ends its row, at least (CardViewerActions.module.css `.row`'s gap). */
+export const ENDS_GAP = 12;
+
 /**
  * The end of a story, for a reader (round 26 §U1): the three answers in one capsule — 共振 (the tap: a switch, so
  * all three are tonal at rest and only a tap that is on is solid with `wave-pair` — its words stay 共振, so nothing in
@@ -124,6 +127,7 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
   const [fit, setFit] = useState<Fit>(base);
   const containerRef = useRef<HTMLDivElement>(null);
   const firstBar = useRef<HTMLDivElement>(null);
+  const endsRef = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -155,7 +159,9 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
     const buttons = firstBar.current?.querySelectorAll<HTMLElement>('[role="group"] > button');
     if (!box || !buttons?.length) return;
     const need = [...buttons].reduce((w, b) => w + Math.max(b.offsetWidth, b.scrollWidth), 0);
-    if (need > box.clientWidth + 1) setFit(fit === 'full' ? 'short' : 'split');
+    // What ends the row takes its width and the 12 before it: the words shorten before it would ever wrap.
+    const ends = endsRef.current ? endsRef.current.offsetWidth + ENDS_GAP : 0;
+    if (need > Math.max(box.clientWidth - ends, 0) + 1) setFit(fit === 'full' ? 'short' : 'split');
   }, [fit, room, tapOn, replyState, fonts]);
 
   const onTap = useCallback(async () => {
@@ -297,7 +303,7 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
               </div>
             )}
           </div>
-          {trailing && <span className={styles.ends}>{trailing}</span>}
+          {trailing && <span ref={endsRef} className={styles.ends}>{trailing}</span>}
         </div>
         {user && (
           <div className={styles.second}>

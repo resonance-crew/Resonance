@@ -138,6 +138,23 @@ describe('the end row: three answers in one capsule (§U1)', () => {
     client.mockRestore();
   });
 
+  it('shortens its words before what ends its row would wrap: the room is the row less 收藏 and the 12 before it', async () => {
+    // Full words need 40×3 + 16×11 = 296, the short ones 264; the row is 341 wide, 收藏 36: 341 − 48 = 293 of room.
+    const offset = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      if (this.hasAttribute('data-segment')) return [...(this.textContent ?? '')].length * 16 + 40;
+      return this.className?.toString().includes('ends') ? 36 : 0;
+    });
+    const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute('data-end-row') ? 341 : 0;
+    });
+    renderPage(NO_TAPS, { locale: 'zh-TW' });
+    expect(within(capsule()).getAllByRole('button').map((b) => b.textContent)).toEqual(['共振', '寄小紙條', '寫卡片']);
+    expect(screen.getAllByRole('group')).toHaveLength(1);
+    await act(async () => {});
+    offset.mockRestore();
+    client.mockRestore();
+  });
+
   it('says the short words (寫卡片) on a narrow row — 340 of content or less — even when the full ones would fit', async () => {
     // Every segment measures nothing here, so only the row's own width can choose: a 375 phone's 335, then 341.
     let room = 335;
