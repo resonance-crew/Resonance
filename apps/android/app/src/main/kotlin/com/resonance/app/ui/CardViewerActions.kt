@@ -221,9 +221,9 @@ fun CardViewerActions(
         // `passages`: 共振 pressed, the dialog open; `passage-picked`: held open on the second row pressed (§V2).
         val picked = DebugLaunch.CardEnd.PassagePicked in launch
         if ((DebugLaunch.CardEnd.Passages in launch || picked) && faces.offersPassages) {
-            val flipped = !switch.on
-            if (flipped) tapJob = switch.flip()
-            fromPress = flipped
+            // Shown on, never sent: a stored tap would stay on the run's stack for the next variants (§V2).
+            fromPress = switch.showOnForCapture()
+            tapJob = null
             if (picked) {
                 holdPicked = true
                 pickShown = faces.passages[1].id

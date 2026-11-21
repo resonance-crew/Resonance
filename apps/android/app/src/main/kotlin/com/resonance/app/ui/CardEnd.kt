@@ -192,6 +192,18 @@ internal class TapSwitch(
         }
     }
 
+    /**
+     * The screenshots' `cardEnd passages|passage-picked` (round 27 §V2): drawn on, and nothing sent — the web's
+     * `visualTap` writes nothing either. A real press would store the tap on the run's seeded stack, and the later
+     * variants' author's list (`taps-author-list`) would then show the capture's reader among the seeded people.
+     * Says whether it was off: the dialog then marks no pick, as after a press.
+     */
+    fun showOnForCapture(): Boolean {
+        val was = on
+        if (!lock.isLocked) on = true
+        return !was
+    }
+
     fun flip(): Job {
         on = !on
         return launch {
