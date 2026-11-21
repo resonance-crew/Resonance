@@ -476,7 +476,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     val railed = columns.railStart != null
     // The author's own published page, the story as written (round 29 §U1): the sentences readers picked, washed, with
     // their faces — in the right margin where the white right of the column is 70 or more (§S1.1), else in the line.
-    val ownPicked = detail?.takeIf { d -> d.isOwner && !ownTrashed(d) && d.card.publishedAt != null && shownBlocks === blocks }?.tap?.picked
+    val ownPicked = detail?.let { d -> ownPickedPassages(d, original = shownBlocks === blocks) }
     val passageMarks = remember(shownBlocks, ownPicked) { passageMarks(shownBlocks, ownPicked) }
     val passageRoom = passageRoom(railed, columns.end)
     val passagesInMargin = passageMarks.isNotEmpty() && passageInMargin(passageRoom)

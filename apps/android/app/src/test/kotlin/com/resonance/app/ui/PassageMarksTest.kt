@@ -24,6 +24,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.resonance.api.models.Author
+import com.resonance.api.models.CardDetail
+import com.resonance.api.models.CardTap
+import com.resonance.api.models.FeedCard
 import com.resonance.api.models.TapPicked
 import com.resonance.design.AppFonts
 import com.resonance.design.AvatarGroup
@@ -161,6 +164,38 @@ class PassageMarksTest {
         // A list item's paragraphs and a table's cells are leaves too, in the story's order.
         assertEquals(4, leaves.size)
         assertTrue(passageMarks(blocks, null).isEmpty())
+    }
+
+    @Test fun onlyTheAuthorsPublishedCardReadersSeeWearsThePicks() {
+        val blocks = StoryParser.parse(story)
+        val picked = listOf(TapPicked("a", "我坐在地上，第一次覺得安靜是屬於自己的。", listOf(gus, bob), more = false))
+        fun detail(
+            visibility: FeedCard.Visibility = FeedCard.Visibility.`public`,
+            published: Boolean = true,
+            owner: Boolean = true,
+            trashedAt: String? = null,
+        ) = CardDetail(
+            card = FeedCard(
+                id = "c1", slug = "c1", title = "搬家", excerpt = "…", tags = emptyList(),
+                publishedAt = if (published) "2026-09-01T08:00:00Z" else null,
+                author = null, anonymous = false, visibility = visibility, imageUrl = null, imageLabel = null,
+                accentHue = null, readMinutes = 1, referenceCardId = null, reason = null,
+                trashedAt = trashedAt, purgeAt = null, restoresTo = null,
+            ),
+            story = story, visibility = CardDetail.Visibility.`public`, anonymous = false, resonanceCount = 0,
+            coreInsight = null, isOwner = owner, referenceCard = null,
+            tap = CardTap(mine = false, faces = emptyList(), more = false, mayNote = false, picked = picked),
+        )
+        fun marks(d: CardDetail, original: Boolean = true) = passageMarks(blocks, ownPickedPassages(d, original))
+        assertEquals(listOf("a"), marks(detail()).map { it.id })
+        assertEquals(listOf("a"), marks(detail(FeedCard.Visibility.connections)).map { it.id })
+        // Published, then kept private: bare, as on the web and iOS (§U1: never a private card).
+        assertTrue(marks(detail(FeedCard.Visibility.`private`)).isEmpty())
+        assertTrue(marks(detail(published = false)).isEmpty())
+        assertTrue(marks(detail(owner = false)).isEmpty())
+        assertTrue(marks(detail(trashedAt = "2026-10-20T00:00:00Z")).isEmpty())
+        // A translation showing: the story is not as written.
+        assertTrue(marks(detail(), original = false).isEmpty())
     }
 
     @Test fun atMostThreeFacesAndNothingAfterThemSaidWithAndOthers() {
