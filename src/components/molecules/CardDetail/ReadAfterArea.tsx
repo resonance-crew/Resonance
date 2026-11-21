@@ -15,6 +15,8 @@ export interface ReadAfterAreaProps {
   tap?: CardTapBody | null;
   /** What ends the second line, aligned right: the card's share and ⋯ after a long story at ≥ 1200 (round 8 §10.2). */
   trailing?: ReactNode;
+  /** The story is on screen in translation: the passages' dialog is not offered (round 27 §U1.1). */
+  translated?: boolean;
 }
 
 /**
@@ -24,7 +26,7 @@ export interface ReadAfterAreaProps {
  * when scrolled to, so reading itself carries no pressure. The paper puppets stand on the capsule alone (its
  * `role="group"`, lib/mascots/reading): the second line and the note never move their ground.
  */
-export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author, tap, trailing }: ReadAfterAreaProps) {
+export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author, tap, trailing, translated }: ReadAfterAreaProps) {
   const { user, loading } = useAuth();
 
   // Fade in on first viewport entry (IntersectionObserver; shows immediately
@@ -74,6 +76,7 @@ export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author, tap,
         author={author}
         tap={tap}
         trailing={trailing}
+        translated={translated}
       />
     </div>
   );

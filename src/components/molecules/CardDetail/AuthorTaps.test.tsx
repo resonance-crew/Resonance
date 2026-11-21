@@ -82,4 +82,22 @@ describe('AuthorTaps', () => {
     const rows = await within(await screen.findByRole('dialog')).findAllByRole('link');
     expect(rows.every((r) => r.getAttribute('href')!.startsWith('/u/'))).toBe(true);
   });
+
+  it('quotes each person’s pick under their name (round 27 §U2), the note’s first line under the quote', async () => {
+    listTaps.mockResolvedValueOnce({
+      people: [
+        { author: face('gus'), note: null, passage: { text: 'The lamp at the corner came on first.' } },
+        { author: face('carol'), note: { excerpt: 'The move, I saw myself.' }, passage: { text: 'I wiped every window anyway.' } },
+        { author: face('hana'), note: null },
+      ],
+      nextPageToken: null,
+    });
+    renderLine({ mine: false, faces: [face('gus'), face('carol'), face('hana')], more: false, mayNote: false });
+    await user().click(screen.getByRole('button', { name: /Resonated with this card/ }));
+    const [gus, carol, hana] = await within(await screen.findByRole('dialog')).findAllByRole('link');
+    expect(gus).toHaveTextContent('gus“The lamp at the corner came on first.”');
+    expect(carol.textContent).toBe('CAcarol“I wiped every window anyway.”The move, I saw myself.');
+    expect(hana.textContent).toBe('HAhana');
+    expect(carol.getAttribute('href')).toBe('/messages/carol?u=carol');
+  });
 });

@@ -52,12 +52,48 @@
   overflow-wrap: anywhere;
 }
 
-/* The first line of the note they left on the card (the author's list, a named card), muted, one line. */
+/* A row that is a button (the reader's own, round 27 §U3): no face of its own, its band the press. */
+.button {
+  width: 100%;
+  margin: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: start;
+}
+
+/* The passage they picked (round 27 §U2/§U3: the author's list, the reader's own row), 13 muted, at most 2 lines —
+   the author's own sentence, so here it may be cut. */
+.quote {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* 選一段 on the reader's own row when the card has passages and they picked none: the tonal button's ink. */
+.pick {
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 600;
+  color: var(--button-on-tonal);
+}
+
+/* The first line of the note they left on the card (the author's list, a named card), muted, at most 2 lines
+   (round 27 §U2, S9: as Android). */
 .note {
   font-size: 13px;
   line-height: 1.4;
   color: var(--color-text-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }

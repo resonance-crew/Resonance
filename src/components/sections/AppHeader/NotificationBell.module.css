@@ -19,7 +19,8 @@
 .scrollBody {
   /* Rows carry a face and a card now (~70 tall): room for six or seven before it scrolls; on a computer's
      screen, room for nine or ten. */
-  max-height: min(520px, 66vh);
+  /* A dialog may set its own cap (round 27's passages: --dialog-scroll-max on an ancestor). */
+  max-height: var(--dialog-scroll-max, min(520px, 66vh));
   overflow-y: auto;
   margin-inline: calc(-1 * var(--bell-bleed));
   /* Room under the last band for its curve's swing. */
@@ -28,7 +29,7 @@
 
 @media (min-width: 721px) and (hover: hover) and (pointer: fine) {
   .scrollBody {
-    max-height: min(720px, 72vh);
+    max-height: var(--dialog-scroll-max, min(720px, 72vh));
   }
 }
 

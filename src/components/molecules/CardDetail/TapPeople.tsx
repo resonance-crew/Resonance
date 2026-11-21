@@ -18,8 +18,23 @@ export function tapPersonHref(p: TapPersonBody): string {
 /** A row's face: 36, in the reader's dialog and the author's alike (a row 60 tall, a note's line under the name in the author's). */
 export const TAP_PERSON_FACE = 36;
 
+/**
+ * The reader's own row in their list (round 27 §U3): whose it is, the quote of their pick as the card page holds it
+ * (undefined: as the list answers it), whether the card offers passages (then, with no pick, 選一段), and what a
+ * press on it does then (closes the list and opens the passages' dialog). No other row of a reader's list ever
+ * quotes anyone.
+ */
+export interface TapOwnRow {
+  id: string;
+  quote?: string | null;
+  offer: boolean;
+  onPress?: () => void;
+}
+
 export interface TapPeopleProps {
   people: TapPersonBody[];
+  /** A reader's list: their own row (§U3). Left out: the author's list, where every row quotes its pick (§U2). */
+  own?: TapOwnRow;
   /** A row was opened (its dialog closes). */
   onPick?: () => void;
   /** The key the last band ends on (a "show more" under it, or the list's end). */
@@ -32,24 +47,54 @@ export interface TapPeopleProps {
  * of the note they left on the card, muted, under the name. A row opens that note's conversation, or else their page:
  * a tap alone gives no way to write to anyone.
  */
-export function TapPeople({ people, onPick, endKey = BAND_END_KEY }: TapPeopleProps) {
+export function TapPeople({ people, own, onPick, endKey = BAND_END_KEY }: TapPeopleProps) {
   const below = bandsBelow(people.map((p) => p.author.id), endKey);
   return (
     <ul className={styles.list}>
       {people.map((p, i) => (
         <li key={p.author.id}>
-          <PersonRow person={p} band={{ top: p.author.id, bottom: below[i] }} onPick={onPick} />
+          <PersonRow
+            person={p}
+            band={{ top: p.author.id, bottom: below[i] }}
+            onPick={onPick}
+            own={own ? (p.author.id === own.id ? own : null) : undefined}
+          />
         </li>
       ))}
     </ul>
   );
 }
 
-function PersonRow({ person, band, onPick }: { person: TapPersonBody; band: { top: string; bottom: string }; onPick?: () => void }) {
+/**
+ * A row's second line, round 27: the author's list quotes each person's pick (§U2), a reader's list only their own —
+ * their pick, or 選一段 when the card has passages and they picked none (§U3). Null: no such line.
+ */
+function rowQuote(person: TapPersonBody, own: TapOwnRow | null | undefined): { quote: string } | { pick: true } | null {
+  if (own === undefined) return person.passage?.text ? { quote: person.passage.text } : null;
+  if (!own) return null;
+  const text = own.quote === undefined ? person.passage?.text : own.quote;
+  if (text) return { quote: text };
+  return own.offer ? { pick: true } : null;
+}
+
+function PersonRow({
+  person,
+  band,
+  onPick,
+  own,
+}: {
+  person: TapPersonBody;
+  band: { top: string; bottom: string };
+  onPick?: () => void;
+  /** Undefined in the author's list; in a reader's, their own row's (§U3) or null on everyone else's. */
+  own?: TapOwnRow | null;
+}) {
+  const t = useTranslations('card.tap');
   const press = useBandPress();
   const a = person.author;
-  return (
-    <Link href={tapPersonHref(person)} className={`${styles.row} ${bandHost}`} onClick={onPick} {...press}>
+  const second = rowQuote(person, own);
+  const inner = (
+    <>
       <BandWash topKey={band.top} bottomKey={band.bottom} />
       <span className={styles.rowInner}>
         <HandDrawnAvatar
@@ -61,9 +106,43 @@ function PersonRow({ person, band, onPick }: { person: TapPersonBody; band: { to
         />
         <span className={styles.words}>
           <span className={styles.handle}>{a.handle}</span>
+          {second && 'quote' in second && (
+            <span className={styles.quote} data-tap-quote="">
+              {t('passageQuote', { text: second.quote })}
+            </span>
+          )}
+          {second && 'pick' in second && (
+            <span className={styles.pick} data-tap-pick="">
+              {t('passagePick')}
+            </span>
+          )}
           {person.note && <span className={styles.note}>{person.note.excerpt}</span>}
         </span>
       </span>
+    </>
+  );
+  // The reader's own row, on a card with passages: it reopens the dialog with their pick marked (§U3).
+  if (own?.onPress) {
+    const go = own.onPress;
+    return (
+      <button
+        type="button"
+        className={`${styles.row} ${styles.button} ${bandHost}`}
+        data-tap-own=""
+        aria-haspopup="dialog"
+        onClick={() => {
+          onPick?.();
+          go();
+        }}
+        {...press}
+      >
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <Link href={tapPersonHref(person)} className={`${styles.row} ${bandHost}`} onClick={onPick} {...press}>
+      {inner}
     </Link>
   );
 }
