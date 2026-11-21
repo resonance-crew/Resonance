@@ -123,7 +123,8 @@ describe('the page’s scrollbar in the film’s light', () => {
   }, 60_000);
 });
 
-describe('what the director writes on the stage itself', () => {
+// (the film mounted in jsdom and stepped, seconds each alone: 60 s, as script/changes/changes.test.ts says)
+describe('what the director writes on the stage itself', { timeout: 60_000 }, () => {
   it('writes the horizon on the sky, the stars and the clouds — never on the stage, where it would restyle every plane, card and puppet', () => {
     const { stage, frame } = film();
     let now = 0;
@@ -192,7 +193,7 @@ describe('what the director writes on the stage itself', () => {
   });
 });
 
-describe('the film’s paper as the director draws it', () => {
+describe('the film’s paper as the director draws it', { timeout: 60_000 }, () => {
   it('in the stills (?rest=1) shows no copy at all, every plane whole at main’s key, as main draws them', () => {
     const { stage, frame } = film();
     for (const s of [0, 11.5, 27, 50, 63]) {

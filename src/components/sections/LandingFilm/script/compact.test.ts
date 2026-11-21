@@ -79,7 +79,8 @@ const same = (a: string, b: string) => {
   p.forEach((pt, i) => pt.forEach((v, j) => (typeof v === 'number' ? expect(Math.abs(q[i][j] - v)).toBeLessThanOrEqual(0.051) : expect(q[i][j]).toBe(v))));
 };
 
-describe('compacting path data', () => {
+// (every part of every place: 60 s, as changes/changes.test.ts says)
+describe('compacting path data', { timeout: 60_000 }, () => {
   it('writes numbers to a tenth, as short as they go', () => {
     expect(fmt(0.04)).toBe('0');
     expect(fmt(-0.04)).toBe('0');
