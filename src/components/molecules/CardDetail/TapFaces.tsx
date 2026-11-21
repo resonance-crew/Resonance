@@ -18,8 +18,9 @@ export function memberOf(a: AuthorBody): AvatarGroupMember {
 }
 
 /**
- * The faces drawn (at most three) and whether the blank disc follows them: the server's `more`, or a face past the
- * three — the viewer's own, turned on, puts the third one there (lib/data/taps keeps the list whole).
+ * The faces drawn (at most three) and whether there are others than them — the server's `more`, or a face past the
+ * three (the viewer's own, turned on, puts the third one there; lib/data/taps keeps the list whole). Nothing is drawn
+ * for the others (round 29 §S5: no blank disc); the faces' spoken label says 還有其他人.
  */
 export function shownFaces(tap: CardTapBody): { faces: AuthorBody[]; more: boolean } {
   return { faces: tap.faces.slice(0, TAP_FACES_MAX), more: tap.more || tap.faces.length > TAP_FACES_MAX };
@@ -34,8 +35,8 @@ export function facesNames(faces: AuthorBody[], viewerId: string | undefined, lo
 }
 
 /**
- * What a screen reader says of a reader's faces (§U2.4), as the apps say it: what is seen — the faces drawn, then
- * 還有其他人 for the blank disc — and, when the first face is the viewer's own, 你共振了 before it:
+ * What a screen reader says of a reader's faces (§U2.4), as the apps say it: the faces drawn, then 還有其他人 when
+ * there are others (nothing on screen says it since round 29 §S5) — and, when the first face is the viewer's own, 你共振了 before it:
  * 「你共振了，你連結的人裡，與這張卡片共振的：小安、阿明，還有其他人」.
  */
 export function readerFacesLabel(
@@ -91,10 +92,10 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving, onOwnRow }:
   const onPhone = useMediaQuery(TAP_LIST_PHONE_QUERY) !== false;
   const buttonRef = useRef<HTMLButtonElement>(null);
   const faces = tap.faces;
-  // At most three drawn, the blank disc after them for the rest (the list itself stays whole: lib/data/taps).
+  // At most three drawn and nothing after them (round 29 §S5); `more` is still spoken (the list stays whole: lib/data/taps).
   const shown = shownFaces(tap);
   const group = (
-    <AvatarGroup members={shown.faces.map(memberOf)} more={shown.more} size={28} arriving={arriving} leaving={leaving ? memberOf(leaving) : undefined} />
+    <AvatarGroup members={shown.faces.map(memberOf)} size={28} arriving={arriving} leaving={leaving ? memberOf(leaving) : undefined} />
   );
   if (!faces.length && !leaving) return null;
   const onlyMine = !shown.more && faces.length === 1 && faces[0].id === viewerId && !onOwnRow;
