@@ -27,6 +27,12 @@ export interface TapPassagesProps {
   onPick: (passage: string | null) => void;
   /** It closes: 略過, Escape, the backdrop, or a moment after a pick. */
   onClose: () => void;
+  /**
+   * False only for the release screenshots' hold (`?visualTap=`): a page opened with the dialog already up has had
+   * no pointer on it, so the browser would ring the focused row as a keyboard's — which a reader who pressed 共振
+   * with a pointer or a finger never sees. The row's focus is then left to the dialog's own.
+   */
+  focusRow?: boolean;
 }
 
 /**
@@ -36,7 +42,7 @@ export interface TapPassagesProps {
  * the dialog closes; the picked row, reopened from the reader's own row, rests chosen and a press on it clears the
  * pick. The tap never waits on it: skipping leaves the tap on with no passage. Never a bottom sheet, never a popover.
  */
-export function TapPassages({ passages, picked, script = 'cjk', onPick, onClose }: TapPassagesProps) {
+export function TapPassages({ passages, picked, script = 'cjk', onPick, onClose, focusRow = true }: TapPassagesProps) {
   const t = useTranslations('card.tap');
   const onPhone = useMediaQuery(TAP_LIST_PHONE_QUERY) !== false;
   // The row just pressed, holding its ink (and its check, unless it cleared the pick) until the dialog closes.
@@ -50,6 +56,7 @@ export function TapPassages({ passages, picked, script = 'cjk', onPick, onClose 
   // while, focus that sits on the paper or nowhere moves to the row; a row or 略過 the reader reached is left alone.
   const pickedAtOpen = useRef(picked);
   useEffect(() => {
+    if (!focusRow) return;
     let frames = 0;
     let handle = 0;
     const step = () => {
@@ -64,6 +71,8 @@ export function TapPassages({ passages, picked, script = 'cjk', onPick, onClose 
     };
     handle = window.setTimeout(step, 0);
     return () => window.clearTimeout(handle);
+    // Read once, as the dialog opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const choose = (id: string) => {

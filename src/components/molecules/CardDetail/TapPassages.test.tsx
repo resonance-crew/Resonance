@@ -93,6 +93,17 @@ describe('TapPassages (§U1)', () => {
     expect(a).toHaveAttribute('aria-pressed', 'false');
   });
 
+  it('held open for a screenshot (no press came before), it puts focus on no row: no keyboard ring in the capture', async () => {
+    renderWithIntl(<TapPassages passages={PASSAGES} picked={null} onPick={vi.fn()} onClose={vi.fn()} focusRow={false} />, {
+      locale: 'zh-TW',
+      messages: zhMessages,
+    });
+    await screen.findByRole('dialog');
+    // Longer than the row's own 30 frames of trying.
+    await new Promise((r) => setTimeout(r, 600));
+    expect(document.activeElement?.hasAttribute('data-passage')).toBe(false);
+  });
+
   it('a press holds the row’s ink and its check, sends the pick, then closes a moment later', async () => {
     const { onPick, onClose } = renderDialog();
     const dialog = await screen.findByRole('dialog');

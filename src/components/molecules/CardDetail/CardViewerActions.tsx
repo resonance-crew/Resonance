@@ -100,7 +100,13 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
     }
     wasOfferable.current = offerable;
   }, [offerable]);
-  useVisualTap(cardId, user?.id, tap, me?.handle ? faceOf(me) : null, openPassages);
+  // The screenshots' hold opened it (no press came before): the dialog then rings no row (TapPassages `focusRow`).
+  const [heldOpen, setHeldOpen] = useState(false);
+  const openHeld = useCallback(() => {
+    setHeldOpen(true);
+    openPassages();
+  }, [openPassages]);
+  useVisualTap(cardId, user?.id, tap, me?.handle ? faceOf(me) : null, openHeld);
   // Still being read (undefined): a kept draft waits for it before it opens anything.
   const note = useNoteInPlace({ cardId, uid: user?.id, mayNote: tap === undefined ? undefined : (tap?.mayNote ?? true) });
   // The viewer's face as it slides in (their id) or out (their face, drawn once more).
@@ -328,7 +334,7 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
       )}
 
       {passagesOpen && offersPassages && tapOn && (
-        <TapPassages passages={passages} script={script} picked={tap?.passage ?? null} onPick={(p) => void onPickPassage(p)} onClose={() => setPassagesOpen(false)} />
+        <TapPassages passages={passages} script={script} picked={tap?.passage ?? null} onPick={(p) => void onPickPassage(p)} onClose={() => { setPassagesOpen(false); setHeldOpen(false); }} focusRow={!heldOpen} />
       )}
 
       {picking && <ResonatePicker open onClose={() => setPicking(false)} targetId={cardId} targetReferenceId={referenceCardId} />}
