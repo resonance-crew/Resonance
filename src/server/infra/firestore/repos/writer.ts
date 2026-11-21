@@ -165,7 +165,15 @@ export function writerData(db: AdminDb): WriterData {
         .sort((a, b) => a.rev - b.rev);
     },
     async deleteDraftLog(id) {
-      await db.recursiveDelete(db.collection(`cards/${id}/draftLog`));
+      // A page at a time, a batch per page (the log has nothing under it; recursiveDelete is the account purge's).
+      const log = db.collection(`cards/${id}/draftLog`).select().limit(500);
+      for (;;) {
+        const page = await log.get();
+        if (page.empty) return;
+        const batch = db.batch();
+        for (const d of page.docs) batch.delete(d.ref);
+        await batch.commit();
+      }
     },
   };
 }
