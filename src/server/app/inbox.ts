@@ -28,8 +28,11 @@ import { AUTHOR_FIELDS } from './viewer';
  * Best effort: a failure is logged, never thrown into the write it follows.
  */
 export async function signal(ctx: ServerCtx, touches: Touch[]): Promise<void> {
-  await Promise.all(
-    touches.map((t) => ctx.realtime.touch(t.uid, t.topics).catch((e: unknown) => ctx.log.warn('[signals] touch', t.uid, e))),
+  if (!touches.length) return;
+  // After the response (ctx.later.soon): the answer never waits on the signal writes.
+  await ctx.later.soon(
+    () => Promise.all(touches.map((t) => ctx.realtime.touch(t.uid, t.topics).catch((e: unknown) => ctx.log.warn('[signals] touch', t.uid, e)))),
+    'signals',
   );
 }
 

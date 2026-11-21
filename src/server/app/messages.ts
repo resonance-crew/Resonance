@@ -13,7 +13,7 @@ import {
 } from '@/server/domain/conversations';
 import type { ConversationHead } from '@/server/ports/repos/conversations';
 import { instantMillis, type Instant } from '@/server/ports/time';
-import { threadChanged } from '@/server/domain/realtimeInbox';
+import { reactionChanged, threadChanged } from '@/server/domain/realtimeInbox';
 import { noPenName } from './conversations';
 import { signal } from './inbox';
 
@@ -48,7 +48,7 @@ export async function setReactionIn(ctx: ServerCtx, uid: string, pair: string, m
     },
     { label: 'setReaction' },
   );
-  if (changed) await signal(ctx, threadChanged(pair, uid, other));
+  if (changed) await signal(ctx, reactionChanged(pair, uid, other));
 }
 
 /** See src/lib/api/v1/messageActions.ts `removeReaction`. */
@@ -65,7 +65,7 @@ export async function removeReactionIn(ctx: ServerCtx, uid: string, pair: string
     },
     { label: 'removeReaction' },
   );
-  if (changed) await signal(ctx, threadChanged(pair, uid, other));
+  if (changed) await signal(ctx, reactionChanged(pair, uid, other));
 }
 
 export interface UnsentMessage {

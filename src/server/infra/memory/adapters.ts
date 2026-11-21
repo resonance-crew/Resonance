@@ -66,6 +66,14 @@ export function memoryAfter(log: Logger): MemoryAfter {
     later(fn, label) {
       queue.push({ fn, label });
     },
+    // Memory tests read a service's touches as soon as it answers: run now.
+    async soon(fn, label) {
+      try {
+        await fn();
+      } catch (e) {
+        log.error(`[${label}]`, e);
+      }
+    },
     async flush() {
       while (queue.length) {
         const { fn, label } = queue.shift()!;

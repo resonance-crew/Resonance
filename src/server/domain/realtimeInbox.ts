@@ -32,6 +32,14 @@ export function threadChanged(pair: string, a: string, b: string): Touch[] {
   return both(a, b, ['inbox', { thread: pair }]);
 }
 
+/**
+ * A reaction set or taken back: only the thread moves for both — the conversation list shows no reaction
+ * (no preview, unread or updatedAt), so an `inbox` touch would cost every client a 304 for nothing.
+ */
+export function reactionChanged(pair: string, a: string, b: string): Touch[] {
+  return both(a, b, [{ thread: pair }]);
+}
+
 /** A message sent; `rang` when it wrote its recipient's bell row too (a conversation's first message). */
 export function messageSent(pair: string, from: string, to: string, rang: boolean): Touch[] {
   const touches = threadChanged(pair, from, to);

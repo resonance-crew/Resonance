@@ -74,7 +74,7 @@ describe('the touches every inbox write makes', () => {
     }
   });
 
-  it('messages, reactions, unsending and deleting: both people’s inbox and thread; the first message rings the bell', async () => {
+  it('messages, unsending and deleting: both people’s inbox and thread (a reaction: the thread alone); the first message rings the bell', async () => {
     connect();
     const first = await sendMessageIn(ctx, 'alice', { to: 'bob', text: 'hi' });
     expect(touched()).toEqual([`alice: inbox,thread ${PAIR}`, `bob: inbox,thread ${PAIR},bell`]);
@@ -87,12 +87,12 @@ describe('the touches every inbox write makes', () => {
     expect(touched()).toEqual([]);
 
     await setReactionIn(ctx, 'bob', PAIR, first.id, { reaction: 'heart' });
-    expect(touched()).toEqual([`bob: inbox,thread ${PAIR}`, `alice: inbox,thread ${PAIR}`]);
+    expect(touched()).toEqual([`bob: thread ${PAIR}`, `alice: thread ${PAIR}`]);
     // The same reaction again changes nothing, and touches nothing.
     await setReactionIn(ctx, 'bob', PAIR, first.id, { reaction: 'heart' });
     expect(touched()).toEqual([]);
     await removeReactionIn(ctx, 'bob', PAIR, first.id);
-    expect(touched()).toEqual([`bob: inbox,thread ${PAIR}`, `alice: inbox,thread ${PAIR}`]);
+    expect(touched()).toEqual([`bob: thread ${PAIR}`, `alice: thread ${PAIR}`]);
     await removeReactionIn(ctx, 'bob', PAIR, first.id);
     expect(touched()).toEqual([]);
 

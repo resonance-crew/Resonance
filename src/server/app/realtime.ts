@@ -7,12 +7,19 @@ import { touchesFor, type SignalEvent } from '@/server/domain/realtime';
  * a transaction may run again. Never throws — a signal that fails costs the
  * client at most its 60 s safety pull, never the write.
  */
-export async function signal(ctx: Pick<ServerCtx, 'realtime' | 'log'>, ...events: SignalEvent[]): Promise<void> {
-  await Promise.all(
-    touchesFor(events).map((t) =>
-      Promise.resolve()
-        .then(() => ctx.realtime.touch(t.uid, t.topics))
-        .catch((e) => ctx.log.warn('[realtime] touch', t.uid, e)),
-    ),
+export async function signal(ctx: Pick<ServerCtx, 'realtime' | 'log' | 'later'>, ...events: SignalEvent[]): Promise<void> {
+  const touches = touchesFor(events);
+  if (!touches.length) return;
+  // After the response (ctx.later.soon): the answer never waits on the signal writes.
+  await ctx.later.soon(
+    () =>
+      Promise.all(
+        touches.map((t) =>
+          Promise.resolve()
+            .then(() => ctx.realtime.touch(t.uid, t.topics))
+            .catch((e) => ctx.log.warn('[realtime] touch', t.uid, e)),
+        ),
+      ),
+    'realtime',
   );
 }
