@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { contrastRatio, flatten, hexOf, isBrightIsland, minimumRatio, oklabLightness, over, parseCssColor, relativeLuminance } from './contrast';
-import { contrast as paletteContrast, cssOklch, paletteFor } from './palette';
+import { ACCENTS, SCHEMES, contrast as paletteContrast, cssOklch, paletteFor } from './palette';
 
 const close = (a: number, b: number, d = 0.01) => expect(Math.abs(a - b)).toBeLessThan(d);
 
@@ -50,6 +50,20 @@ describe('the contrast audit’s maths', () => {
       const paper = parseCssColor(cssOklch(p['color-cream']))!;
       close(contrastRatio(ink, paper), paletteContrast(p['color-text'], p['color-cream']), 0.02);
     }
+  });
+
+  // Round 29 §P4: a picked sentence's wash on its author's page lies under the story's words and its links.
+  it.each(ACCENTS.flatMap((a) => SCHEMES.map((s) => [a, s] as const)))('%s / %s: the story reads on a picked sentence’s wash', (accent, scheme) => {
+    const p = paletteFor(accent, scheme);
+    const wash = parseCssColor(cssOklch(p['passage-wash']))!;
+    const paper = parseCssColor(cssOklch(p['color-cream']))!;
+    // The story's ink at least 7:1, a link's (--button-on-tonal) at least 4.5:1.
+    expect(contrastRatio(parseCssColor(cssOklch(p['color-text']))!, wash)).toBeGreaterThanOrEqual(7);
+    expect(contrastRatio(parseCssColor(cssOklch(p['button-on-tonal']))!, wash)).toBeGreaterThanOrEqual(4.5);
+    // A wash, not a fill: it stands apart from the paper — below it in light, above it at night.
+    expect(contrastRatio(wash, paper)).toBeGreaterThan(1.02);
+    if (scheme === 'light') expect(p['passage-wash'].L).toBeLessThan(p['color-cream'].L);
+    else expect(p['passage-wash'].L).toBeGreaterThan(p['color-cream'].L);
   });
 
   it('holds large text to 3:1 and the rest to 4.5:1', () => {

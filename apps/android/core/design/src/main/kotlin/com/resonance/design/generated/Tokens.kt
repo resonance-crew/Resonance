@@ -105,6 +105,9 @@ object Tokens {
     /** --link-wave */
     val LinkWave: Color
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.LinkWave
+    /** --passage-wash */
+    val PassageWash: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.PassageWash
     /** --story-code-tint */
     val StoryCodeTint: Color
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.StoryCodeTint
