@@ -115,7 +115,8 @@ async function seedWorld() {
     set('cardReads/bob_alice-card', { userId: 'bob', cardId: 'alice-card', day: '2026-10-31', expireAt: now }),
     set('cardReads/carol_bob-card', { userId: 'carol', cardId: 'bob-card', day: '2026-10-31', expireAt: now }),
     // Round 26: taps (共振) and reading records (server-only) — hers, others' on her card, and someone else's alone.
-    set('resonanceTaps/bob-card_alice', { cardId: 'bob-card', userId: 'alice', on: true, at: now, rangAt: now }),
+    // With the passage she picked (round 27): it goes with the tap.
+    set('resonanceTaps/bob-card_alice', { cardId: 'bob-card', userId: 'alice', on: true, at: now, rangAt: now, passage: { id: '0a1b2c3d', text: '她選的那一句話在這裡' } }),
     set('resonanceTaps/alice-card_bob', { cardId: 'alice-card', userId: 'bob', on: true, at: now, rangAt: now }),
     set('resonanceTaps/bob-card_carol', { cardId: 'bob-card', userId: 'carol', on: true, at: now, rangAt: now }),
     set('readerSignals/alice_bob-card', { userId: 'alice', cardId: 'bob-card', activeSeconds: 40, expireAt: now }),
@@ -825,5 +826,25 @@ describe('exportAccountData', () => {
       expect.objectContaining({ cardId: 'walk', title: 'A walk', link: '/card/walk', activeSeconds: 40, maxProgress: 1, keptUntil: '2027-05-18T10:00:00.000Z' }),
     ]);
     expect(JSON.stringify({ cardsResonated, reading })).not.toContain('bob');
+  });
+
+  it('holds the passage they picked beside a card they resonated with, on the condition its title has (round 27)', async () => {
+    const now = new Date('2026-11-19T10:00:00Z');
+    const pick = (text: string) => ({ id: '0a1b2c3d', text });
+    await Promise.all([
+      db.doc('users/alice').set({ handle: 'alice', handleLower: 'alice' }),
+      db.doc('cards/walk').set({ authorId: 'bob', thoughtCore: 'A walk', story: 's', visibility: 'public', anonymous: false, publishedAt: now }),
+      db.doc('cards/hidden').set({ authorId: 'bob', thoughtCore: 'Gone private', story: 's', visibility: 'private', anonymous: false, publishedAt: now }),
+      db.doc('cards/plain').set({ authorId: 'bob', thoughtCore: 'No pick', story: 's', visibility: 'public', anonymous: false, publishedAt: now }),
+      db.doc('resonanceTaps/walk_alice').set({ cardId: 'walk', userId: 'alice', on: true, at: now, rangAt: now, passage: pick('the rain stopped at last') }),
+      db.doc('resonanceTaps/hidden_alice').set({ cardId: 'hidden', userId: 'alice', on: true, at: now, rangAt: now, passage: pick('words of a hidden card') }),
+      db.doc('resonanceTaps/plain_alice').set({ cardId: 'plain', userId: 'alice', on: true, at: now, rangAt: now, passage: null }),
+    ]);
+    const { cardsResonated } = await exportAccountData(db, 'alice');
+    expect(cardsResonated).toEqual([
+      { cardId: 'hidden', title: null, link: '/card/hidden', at: '2026-11-19T10:00:00.000Z', passage: null },
+      { cardId: 'plain', title: 'No pick', link: '/card/plain', at: '2026-11-19T10:00:00.000Z' },
+      { cardId: 'walk', title: 'A walk', link: '/card/walk', at: '2026-11-19T10:00:00.000Z', passage: 'the rain stopped at last' },
+    ]);
   });
 });
