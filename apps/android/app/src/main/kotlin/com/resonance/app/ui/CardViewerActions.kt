@@ -157,12 +157,17 @@ fun CardViewerActions(
     var tapJob by remember(cardId) { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var pickShown by remember(cardId) { mutableStateOf<String?>(null) }
     var holdPicked by remember(cardId) { mutableStateOf(false) }
+    // Opened by the press that turned 共振 on: that tap starts with no pick on the server (§P4.4), whatever the page's
+    // copy still says while the off flip before it is in flight — so the dialog marks none (only the own row shows one).
+    var fromPress by remember(cardId) { mutableStateOf(false) }
     val currentPick = if (switch.on) faces.passage else null
     val pick = remember(cardId) {
         PassagePick(
             launch = { work -> session.launch(work) },
             send = { id -> session.taps.setPassage(cardId, id) },
             tapOn = { switch.on },
+            // The pick as the page's copy has it, which is the server's (written back only once a request answered).
+            held = { latestDetail.tap?.let { TapFaces.of(it).passage } },
             onPicked = { now ->
                 val tap = latestDetail.tap ?: return@PassagePick
                 // The page's copy and its kept page hold the pick as the server now has it (§P7).
@@ -216,7 +221,9 @@ fun CardViewerActions(
         // `passages`: 共振 pressed, the dialog open; `passage-picked`: held open on the second row pressed (§V2).
         val picked = DebugLaunch.CardEnd.PassagePicked in launch
         if ((DebugLaunch.CardEnd.Passages in launch || picked) && faces.offersPassages) {
-            if (!switch.on) tapJob = switch.flip()
+            val flipped = !switch.on
+            if (flipped) tapJob = switch.flip()
+            fromPress = flipped
             if (picked) {
                 holdPicked = true
                 pickShown = faces.passages[1].id
@@ -265,6 +272,7 @@ fun CardViewerActions(
                     if (switch.on && !translated()) {
                         pickShown = null
                         holdPicked = false
+                        fromPress = true
                         passagesOpen = true
                     }
                 }
@@ -349,13 +357,14 @@ fun CardViewerActions(
                 tapJob = null
                 pickShown = null
                 holdPicked = false
+                fromPress = false
                 passagesOpen = true
             },
         )
     }
     if (passagesOpen && switch.on && faces.offersPassages) TapPassages(
         faces.passages,
-        picked = pickShown ?: currentPick,
+        picked = passagesMarked(pickShown, currentPick, fromPress),
         script = script,
         reducedMotion = reduced,
         hold = holdPicked,

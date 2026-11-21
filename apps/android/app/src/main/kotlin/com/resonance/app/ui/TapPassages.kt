@@ -77,12 +77,20 @@ internal fun passagesOpenOnPress(turnedOn: Boolean, faces: TapFaces, translated:
 /** A press on a row (§U1.7): that row's pick — or, pressed when it is the pick already, none. */
 internal fun nextPick(current: String?, pressed: String): String? = if (current == pressed) null else pressed
 
+/**
+ * The row the dialog opens marked: the pick just pressed ([shown]); else, reopened from the reader's own row, the
+ * current pick (§U3) — but never after the press that turned the tap on ([fromPress]), which starts with no pick on the
+ * server (§P4.4) even while the page's copy still holds the old one (the off flip before it not answered yet).
+ */
+internal fun passagesMarked(shown: String?, current: String?, fromPress: Boolean): String? =
+    shown ?: if (fromPress) null else current
+
 /** What a pick that didn't go does (§U1.6). */
 internal enum class PickFailure {
     /** 400 or 409 — the options changed, or the tap went: close quietly and read the card again, no toast (S12). */
     Stale,
 
-    /** Anything else: 沒送出去，再試一次; the tap stays on, with no passage. */
+    /** Anything else: 沒送出去，再試一次; the tap stays on, with the pick it had (the web's and iOS's). */
     Failed,
 }
 
@@ -92,7 +100,8 @@ internal fun pickFailure(e: Exception): PickFailure =
 /**
  * Sends the reader's pick (§U1.5): **after** the tap's own PUT has answered ([pick]'s `after`, the tap's job) — and
  * not at all once the tap is off by then ([tapOn]: its PUT failed, or it was taken back). One request at a time, in
- * the order picked. [onPicked] hears the pick as the server now has it (null after a failure); [onStale] asks the page
+ * the order picked. [onPicked] hears the pick as the server now has it: after a 400 or 409 none; after any other failure
+ * the one it still holds ([held], the page's copy, written back only once a request answered); [onStale] asks the page
  * to read the card again; [onFailed] shows the toast. Its requests run where [launch] puts them — the account's
  * scope, as the tap's ([TapSwitch]).
  */
@@ -100,6 +109,7 @@ internal class PassagePick(
     private val launch: (suspend CoroutineScope.() -> Unit) -> Job,
     private val send: suspend (String?) -> String?,
     private val tapOn: () -> Boolean,
+    private val held: () -> String? = { null },
     private val onPicked: (String?) -> Unit,
     private val onStale: () -> Unit = {},
     private val onFailed: () -> Unit = {},
@@ -115,10 +125,16 @@ internal class PassagePick(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                onPicked(null)
                 when (pickFailure(e)) {
-                    PickFailure.Stale -> onStale()
-                    PickFailure.Failed -> onFailed()
+                    PickFailure.Stale -> {
+                        onPicked(null)
+                        onStale()
+                    }
+                    PickFailure.Failed -> {
+                        // The server still has the pick from before this send: put it back, as the web and iOS do.
+                        onPicked(held())
+                        onFailed()
+                    }
                 }
                 return@withLock
             }

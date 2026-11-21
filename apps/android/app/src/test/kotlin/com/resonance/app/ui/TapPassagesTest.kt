@@ -158,10 +158,16 @@ class TapPassagesTest {
         var failed = 0
     }
 
-    private fun CoroutineScope.picker(sent: Sent, on: () -> Boolean, answer: suspend (String?) -> String?) = PassagePick(
+    private fun CoroutineScope.picker(
+        sent: Sent,
+        on: () -> Boolean,
+        held: () -> String? = { null },
+        answer: suspend (String?) -> String?,
+    ) = PassagePick(
         launch = { work -> launch(block = work) },
         send = { id -> sent.asked += id; answer(id) },
         tapOn = on,
+        held = held,
         onPicked = { sent.picked += it },
         onStale = { sent.stale++ },
         onFailed = { sent.failed++ },
@@ -203,6 +209,22 @@ class TapPassagesTest {
         // The tap stays on (nothing here touches it), with no passage.
         assertEquals(listOf<String?>(null), sent.picked)
         assertEquals(PickFailure.Failed, pickFailure(IllegalStateException("offline")))
+    }
+
+    @Test fun aChangeThatFailsPutsBackThePickTheServerStillHolds() = runBlocking {
+        // Picked A before; reopened from the own row, B pressed; the PUT fails: A stays, as on the web and iOS.
+        for (failure in listOf<Exception>(ApiFailure("unexpected", "down", 500), IllegalStateException("offline"))) {
+            val sent = Sent()
+            picker(sent, on = { true }, held = { "14fecaaf" }) { throw failure }.pick("8b3a1c4d").join()
+            assertEquals(listOf<String?>("8b3a1c4d"), sent.asked)
+            assertEquals(listOf<String?>("14fecaaf"), sent.picked)
+            assertEquals(1, sent.failed)
+        }
+        // A 409 still ends with none: the options or the tap changed, and the card is read again.
+        val sent = Sent()
+        picker(sent, on = { true }, held = { "14fecaaf" }) { throw ApiFailure("conflict", "no", 409) }.pick("8b3a1c4d").join()
+        assertEquals(listOf<String?>(null), sent.picked)
+        assertEquals(1, sent.stale)
     }
 
     // §U1.3–8: the dialog
@@ -261,6 +283,23 @@ class TapPassagesTest {
         compose.onNodeWithTag("tap-passage-1", useUnmergedTree = true).performClick()
         compose.waitForIdle()
         assertEquals(listOf<String?>(null), picks)
+    }
+
+    @Test fun opensFromThePressThatTurnedItOnMarkingNoneEvenWhileThePageStillHoldsTheOldPick() {
+        // Off sent with A picked, on again before the off PUT answered: the page's copy still says A.
+        val current = TapFaces.of(tap(mine = true, passage = "14fecaaf")).passage
+        assertEquals("14fecaaf", current)
+        assertNull(passagesMarked(shown = null, current = current, fromPress = true))
+        // From the reader's own row the current pick is marked (§U3); a row just pressed wins either way.
+        assertEquals("14fecaaf", passagesMarked(null, current, fromPress = false))
+        assertEquals("8b3a1c4d", passagesMarked("8b3a1c4d", current, fromPress = true))
+        // So pressing A picks A (not none, as it would with A marked).
+        show(picked = passagesMarked(null, current, fromPress = true))
+        compose.waitForIdle()
+        passages.indices.forEach { compose.onNodeWithTag("tap-passage-$it", useUnmergedTree = true).assertIsNotSelected() }
+        compose.onNodeWithTag("tap-passage-0", useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf<String?>("14fecaaf"), picks)
     }
 
     @Test fun theScreenshotsPickedStateHoldsTheDialogOpenOnTheRow() {
