@@ -27,7 +27,10 @@ import type {
  */
 
 export type SharedOption = app.SharedOption;
-export const TRASH_SHELF_LIMIT = app.TRASH_SHELF_LIMIT;
+// A live re-export, not `const … = app.TRASH_SHELF_LIMIT`: this module and the service import each other
+// (through infra/firestore/repos/graph), and a copy read at load time throws in whichever loads second
+// (the card page answered 500: "Cannot access 'TRASH_SHELF_LIMIT' before initialization").
+export { TRASH_SHELF_LIMIT } from '@/server/app/cardsRead';
 
 /** A card the viewer may read, by slug or document id — else not_found (never "forbidden": that would confirm it exists). */
 export function visibleCard(db: AdminDb, viewerId: string, key: string, opts: SharedOption = {}): Promise<Card> {
