@@ -1,20 +1,18 @@
 'use client';
 
-import {
-  addDoc,
-  collection,
-  deleteField,
-  doc,
-  getDoc,
-  serverTimestamp,
-  setDoc,
-} from './sdk';
-import type { EmptiedTrashBody, FeedCardBody, ResonateResponseBody, RestoredCardBody, TrashedCardBody } from '@/lib/api/v1/schemas';
-import type { Card, CardMedia, Locale, NewCard, Visibility } from '@/lib/db/types';
+import type {
+  CreatedDraftBody,
+  DraftMediaInput,
+  EmptiedTrashBody,
+  FeedCardBody,
+  ResonateResponseBody,
+  RestoredCardBody,
+  TrashedCardBody,
+} from '@/lib/api/v1/schemas';
+import type { CardMedia, Locale, Visibility } from '@/lib/db/types';
 import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
-import { getClientDb } from './init';
-import { mapCard } from './map';
 import { callApi } from './api';
+import { dropOutbox, enqueueSave, flushOutbox, forgetRevs, noteRev } from './draftOutbox';
 
 function requireUid(): string {
   const uid = getFirebaseClientAuth().currentUser?.uid;
@@ -22,7 +20,49 @@ function requireUid(): string {
   return uid;
 }
 
+const ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+/**
+ * A new card's id, made here — 20 letters and digits, as Firestore's auto ids
+ * (`POST /api/v1/cards` takes no other). The writer keeps it across retries,
+ * so a create whose answer was lost and is sent again finds its own draft
+ * (`created: false`) instead of making a second one.
+ */
+export function newCardId(): string {
+  let id = '';
+  while (id.length < 20) {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    // 62 letters: a byte from 248 up would favour the first ones, so it is skipped.
+    for (const b of bytes) if (b < 248 && id.length < 20) id += ID_ALPHABET[b % 62];
+  }
+  return id;
+}
+
+/** What saving a draft answers: the card's id (its document is the server's). */
+export interface SavedDraft {
+  id: string;
+}
+
+/** A cover as the v1 draft calls take it (DraftMedia): its fields that are set, the whole of it. */
+export function draftMedia(media: CardMedia): DraftMediaInput {
+  return {
+    type: media.type,
+    url: media.url,
+    ...(media.thumbUrl ? { thumbUrl: media.thumbUrl } : {}),
+    ...(media.label ? { label: media.label } : {}),
+    ...(media.frame ? { frame: media.frame } : {}),
+  };
+}
+
+/**
+ * Make a new draft through the server (POST /api/v1/cards), under `input.id`
+ * or a new id: it checks the id, the card answered and the byline, and stamps
+ * the draft. Sent again with the same id, it finds the one already made.
+ */
 export async function createCardDraft(input: {
+  /** The id the writer made for it (newCardId), kept across retries. */
+  id?: string;
   thoughtCore: string;
   story: string;
   tags: string[];
@@ -33,40 +73,35 @@ export async function createCardDraft(input: {
   accentHue?: number | null;
   referenceCardId?: string;
   anonymous?: boolean;
-}): Promise<Card> {
+}): Promise<SavedDraft & { authorId: string }> {
   const uid = requireUid();
-  const data: Omit<NewCard, 'translations'> & {
-    translations: Card['translations'];
-    publishedAt: null;
-    readCount: 0;
-    resonanceCount: 0;
-    inviteCount: 0;
-  } = {
-    authorId: uid,
-    thoughtCore: input.thoughtCore,
-    story: input.story,
-    tags: input.tags,
-    visibility: input.visibility,
-    originalLocale: input.originalLocale,
-    media: input.media,
-    accentHue: input.accentHue ?? undefined,
-    referenceCardId: input.referenceCardId,
-    anonymous: input.anonymous ?? false,
-    translations: {},
-    publishedAt: null,
-    readCount: 0,
-    resonanceCount: 0,
-    inviteCount: 0,
-  };
-  const ref = await addDoc(collection(getClientDb(), 'cards'), {
-    ...data,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+  const id = input.id ?? newCardId();
+  const created = await callApi<CreatedDraftBody>('/api/v1/cards', {
+    method: 'POST',
+    body: {
+      id,
+      thoughtCore: input.thoughtCore,
+      story: input.story,
+      tags: input.tags,
+      visibility: input.visibility,
+      originalLocale: input.originalLocale,
+      ...(input.media ? { media: draftMedia(input.media) } : {}),
+      ...(input.accentHue != null ? { accentHue: input.accentHue } : {}),
+      ...(input.referenceCardId ? { referenceCardId: input.referenceCardId } : {}),
+      anonymous: input.anonymous ?? false,
+    },
   });
-  const snap = await getDoc(ref);
-  return mapCard(snap.id, snap.data() ?? {});
+  // Its saves count on from what the server stores (0 for a new one).
+  noteRev('draft', created.id, created.rev);
+  return { id: created.id, authorId: uid };
 }
 
+/**
+ * Autosave a draft (PATCH /api/v1/cards/{id}/draft) through the writer's
+ * outbox (./draftOutbox): in order, one at a time, the newest words winning,
+ * tried again after a network failure. Only the fields given change; a cover
+ * given as `undefined` and a hue as `null` are removed (`clear`).
+ */
 export async function updateCardDraft(
   id: string,
   patch: {
@@ -78,12 +113,29 @@ export async function updateCardDraft(
     accentHue?: number | null;
     anonymous?: boolean;
   }
-): Promise<Card> {
+): Promise<SavedDraft> {
   requireUid();
-  const ref = doc(getClientDb(), 'cards', id);
-  await setDoc(ref, { ...patch, ...clearedMedia(patch), updatedAt: serverTimestamp() }, { merge: true });
-  const snap = await getDoc(ref);
-  return mapCard(snap.id, snap.data() ?? {});
+  const fields: Record<string, unknown> = {};
+  const clear: string[] = [];
+  for (const key of ['thoughtCore', 'story', 'tags', 'visibility', 'anonymous'] as const) {
+    if (patch[key] !== undefined) fields[key] = patch[key];
+  }
+  // A cover given as undefined is removed, never left behind; one given replaces the old whole.
+  if ('media' in patch) {
+    if (patch.media) fields.media = draftMedia(patch.media);
+    else clear.push('media');
+  }
+  if ('accentHue' in patch) {
+    if (patch.accentHue != null) fields.accentHue = patch.accentHue;
+    else clear.push('accentHue');
+  }
+  await enqueueSave('draft', id, { fields, clear });
+  return { id };
+}
+
+/** Every autosave of the draft still waiting or on its way, sent and stored (rejects when one can't be). */
+export function flushCardDraft(id: string): Promise<void> {
+  return flushOutbox('draft', id);
 }
 
 /** What publishing answers (POST /api/v1/cards/{id}/publish). */
@@ -116,16 +168,9 @@ export async function getPrivateShares(id: string): Promise<boolean> {
  */
 export async function publishCard(id: string): Promise<PublishedCard> {
   requireUid();
+  // What was typed last goes out before the card does.
+  await flushOutbox('draft', id);
   return callApi<PublishedCard>(`/api/v1/cards/${encodeURIComponent(id)}/publish`, { method: 'POST' });
-}
-
-/**
- * A removed cover arrives as `media: undefined`, which a merge write silently
- * drops (the client runs with ignoreUndefinedProperties) — the old cover
- * would survive. Say "delete it" instead.
- */
-function clearedMedia(values: { media?: CardMedia }): { media?: ReturnType<typeof deleteField> } {
-  return 'media' in values && values.media === undefined ? { media: deleteField() } : {};
 }
 
 /**
@@ -176,8 +221,11 @@ export async function restoreCard(id: string): Promise<RestoredCardBody> {
  */
 export async function deleteCardForever(id: string, opts: { onlyIfTrashed?: boolean } = {}): Promise<void> {
   requireUid();
+  // Nothing still waiting for the card lands after it is gone.
+  await Promise.all([dropOutbox('draft', id), dropOutbox('edit', id)]);
   const query = opts.onlyIfTrashed ? '?onlyIfTrashed=true' : '';
   await callApi<null>(`/api/v1/cards/${encodeURIComponent(id)}${query}`, { method: 'DELETE' });
+  forgetRevs(id);
 }
 
 /** How many calls one emptying makes at most (each deletes a page of 50). */
