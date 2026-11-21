@@ -29,6 +29,7 @@ class MapOpQueue(
     private val scope: CoroutineScope,
     private val retryDelaysMillis: List<Long> = DraftOutbox.RETRY_DELAYS_MILLIS,
     private val maxOps: Int = MAX_OPS,
+    private val sendTimeoutMillis: Long = DraftOutbox.SEND_TIMEOUT_MILLIS,
 ) {
     /** A batch the server refused (with why): what the map shows may not be what it keeps. */
     var onRefused: (Throwable) -> Unit = {}
@@ -127,7 +128,8 @@ class MapOpQueue(
                 continue
             }
             try {
-                send(batch)
+                // A batch whose call never ends is let go and sent again (as the draft outbox's attempts).
+                withTimeoutOrNull(sendTimeoutMillis) { send(batch) } ?: throw java.io.InterruptedIOException("map ops timed out")
                 failures = 0
             } catch (e: CancellationException) {
                 synchronized(this) { queued.addAll(0, batch); sending = false }

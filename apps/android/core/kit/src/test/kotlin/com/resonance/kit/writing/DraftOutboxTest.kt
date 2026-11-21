@@ -183,6 +183,22 @@ class DraftOutboxTest {
         assertTrue(box.ops.isEmpty())
     }
 
+    @Test fun anAttemptThatNeverEndsIsLetGoAndTriedAgain() = runBlocking {
+        // Found on the AVD: a create begun as airplane mode came on never answered, and nothing went after it.
+        var hung = 1
+        val server = object : DraftOutbox.Sender by Server() {
+            val calls = java.util.Collections.synchronizedList(mutableListOf<String>())
+            override suspend fun create(request: CreateDraftRequest): CreatedDraft {
+                calls += request.id
+                if (hung-- > 0) kotlinx.coroutines.awaitCancellation()
+                return CreatedDraft(request.id, true, 0)
+            }
+        }
+        val box = DraftOutbox(Disk(), server, scope, listOf(10L), sendTimeoutMillis = 100L).also { it.start() }
+        withTimeout(5_000) { box.create(create("d7")) }
+        assertEquals(listOf("d7", "d7"), server.calls)
+    }
+
     @Test fun kickTriesAtOnceRatherThanAtTheNextRetry() = runBlocking {
         val server = Server().apply { failNext = 1 }
         val box = outbox(server = server, retry = listOf(60_000L))

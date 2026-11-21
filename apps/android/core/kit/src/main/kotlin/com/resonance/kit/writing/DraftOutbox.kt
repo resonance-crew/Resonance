@@ -46,6 +46,7 @@ class DraftOutbox(
     private val sender: Sender,
     private val scope: CoroutineScope,
     private val retryDelaysMillis: List<Long> = RETRY_DELAYS_MILLIS,
+    private val sendTimeoutMillis: Long = SEND_TIMEOUT_MILLIS,
 ) {
     /** Where the queue lives between launches (the app: SharedPreferences, per account). */
     interface Storage {
@@ -229,7 +230,9 @@ class DraftOutbox(
                 continue
             }
             val outcome = try {
-                Result.success(send(op))
+                // An attempt that never ends (a request begun as the network went, its token or socket hung) is
+                // let go after [sendTimeoutMillis] and tried again: one stuck call must never hold the words back.
+                Result.success(withTimeoutOrNull(sendTimeoutMillis) { send(op) } ?: throw java.io.InterruptedIOException("draft send timed out"))
             } catch (e: CancellationException) {
                 lock.withLock { inFlight = null }
                 throw e
@@ -290,6 +293,8 @@ class DraftOutbox(
     companion object {
         /** Offline or a server error: tried again after these waits (the last repeats), or at once on [kick]. */
         val RETRY_DELAYS_MILLIS = listOf(1_000L, 2_000L, 5_000L, 15_000L, 30_000L)
+        /** The most one attempt may take before it is let go and tried again (past the HTTP client's own timeouts). */
+        const val SEND_TIMEOUT_MILLIS = 45_000L
         private val WORDS = setOf(Kind.Create, Kind.Save, Kind.Edit)
         private val GOING = setOf(Kind.DiscardEdit, Kind.Delete)
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
