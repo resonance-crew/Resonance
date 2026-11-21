@@ -209,32 +209,130 @@ extension Fixture {
         }
     }
 
-    @Test func aFaceStandsTwelveInAndTheBookmarksGlyphEndsTwelveIn() throws {
+    /// Row 2 is the faces' alone since round 28 (§S4): a face 12 in from its start, nothing at its end — 收藏 ends the
+    /// capsule's row, or a phone's tags row (CardEndRowTests).
+    @Test func aFaceStandsTwelveInAndNothingEndsTheRow() throws {
         #expect(RowTwo.faceInset == 12 && RowTwo.glyphEnd == 12)
         let width: CGFloat = 300
         let row = EndRowTwo {
             TapFaces(faces: [Fixture.author("dora")], more: false, spoken: "", isButton: true) {}
-        } end: {
-            RowTwoBookmark(saved: false) {}
         }
         let drawn = try DrawnPixels(row.frame(width: width).background(Tokens.cream))
         #expect(drawn.width == Int(width * 2) && drawn.height == Int(TapFaces.rowHeight * 2), "\(drawn.width) × \(drawn.height)")
-        let paper = try DrawnPixels(Color.clear.frame(width: 4, height: 4).background(Tokens.cream)).rgb(2, 2)
-        // Anything off the paper: the face on the left half, 收藏's ink on the right.
-        var first: Int?, last: Int?
-        for y in 0 ..< drawn.height {
-            for x in 0 ..< drawn.width {
-                let off = zip(drawn.rgb(x, y), paper).reduce(0) { $0 + abs($1.0 - $1.1) }
-                guard off > 30 else { continue }
-                if x < drawn.width / 2 { first = min(first ?? x, x) } else { last = max(last ?? x, x) }
-            }
-        }
-        let faceStart = CGFloat(try #require(first)) / 2
-        let inkEnd = width - CGFloat(try #require(last) + 1) / 2
+        let ink = try #require(drawn.inkBounds(paper: try DrawnPixels.paper()))
+        let faceStart = CGFloat(ink.minX) / 2
         // The face's rim (its pen half outside the shape) at 12; it stood at 3.
         #expect(faceStart >= RowTwo.faceInset - 1.5 && faceStart <= RowTwo.faceInset + 1, "\(faceStart)")
-        // The glyph's 20 box ends 12 in, its ink a little inside it (the web's about 16 in); it stood on the edge.
-        #expect(inkEnd >= RowTwo.glyphEnd && inkEnd <= RowTwo.glyphEnd + 8, "\(inkEnd)")
+        // Nothing on the row's right half: 收藏 no longer hangs under the capsule's corner.
+        #expect(CGFloat(ink.maxX) / 2 < width / 2, "ink to \(CGFloat(ink.maxX) / 2)")
+    }
+}
+
+/// Where 收藏 stands at a story's end (round 28; the owner: 「這收藏按鈕不應該放在這裡」): wide, at the end of the
+/// capsule's row, its glyph on the column's edge as the byline's ⋯; on a phone, at the end of the tags' row.
+extension CardEndRowTests {
+    /// The width class decides the row: a phone (compact) stands it in the tags' row, every wider window (an iPad, the
+    /// Mac at 77 %, a phone turned) beside the capsule — as the capsule spans the column or keeps its own width.
+    @Test func aPhoneStandsTheBookmarkInTheTagsRowAndAWideWindowBesideTheCapsule() {
+        #expect(EndRowPlacement.place(compact: true) == .tagsRow)
+        #expect(EndRowPlacement.place(compact: false) == .capsuleRow)
+        #expect(LayoutClass.of(402) == .compact && LayoutClass.of(744) != .compact)
+        // Its box hangs its pad past the column, as the byline's glyphs do: 32 of the 44 in the column.
+        #expect(EndRowPlacement.hang == 12 && EndRowPlacement.boxInColumn == 32 && EndRowPlacement.gap == 12)
+    }
+
+    /// The capsule's words are weighed in the room 收藏 leaves (the column less 12 and the box), while the ≤ 340 rule
+    /// keeps reading the column itself.
+    @Test func theCapsulesWordsAreWeighedInTheRoomTheBookmarkLeaves() throws {
+        #expect(EndRowPlacement.capsuleRoom(column: 600) == 556)
+        #expect(EndRowPlacement.capsuleRoom(column: 0) == nil, "not measured yet: the full words first")
+        // A 380 column leaves 336 of room, but still says the full words first (the column is over 340).
+        #expect(EndRowLabels.candidates(language: .zhTW, reply: .answer, column: 380).count == 2)
+        // Drawn: words of 300 fit a 320 column but not its 276 of room, so the next set (200) stands beside 收藏.
+        let column: CGFloat = 320
+        let row = EndRowCapsuleRow(room: EndRowPlacement.capsuleRoom(column: column)) {
+            ViewThatFits(in: .horizontal) {
+                Color(red: 1, green: 0, blue: 0).frame(width: 300, height: 44)
+                Color(red: 0, green: 0, blue: 1).frame(width: 200, height: 44)
+            }
+        } end: {
+            RowTwoBookmark(saved: false) {}
+        }
+        let drawn = try DrawnPixels(row.frame(width: column).padding(.horizontal, 12).background(Tokens.cream))
+        let red = drawn.count { $0[0] > 200 && $0[1] < 60 && $0[2] < 60 }
+        let blue = drawn.count { $0[2] > 200 && $0[0] < 60 && $0[1] < 60 }
+        #expect(red == 0 && blue > 0, "red \(red), blue \(blue)")
+    }
+
+    /// Wide: 收藏's glyph ends on the column's edge (its box's pad in the margin, as the byline's ⋯), vertically centred
+    /// on the capsule, at least 12 from it.
+    @Test func wideTheBookmarkEndsTheCapsulesRowOnTheBylinesEdge() throws {
+        let column: CGFloat = 500, margin: CGFloat = 20
+        let row = EndRowCapsuleRow(room: EndRowPlacement.capsuleRoom(column: column)) {
+            Color.blue.frame(width: 360, height: 44)
+        } end: {
+            RowTwoBookmark(saved: false) {}
+        }
+        let drawn = try DrawnPixels(row.frame(width: column).padding(.horizontal, margin).background(Tokens.cream))
+        let glyph = try #require(drawn.inkBounds(paper: try DrawnPixels.paper(), fromX: Int((margin + 360) * 2)))
+        let inkEnd = margin + column - CGFloat(glyph.maxX + 1) / 2
+        // The glyph's box ends on the column's edge, its ink a little inside it (as the ⋯'s dots).
+        #expect(inkEnd >= 0 && inkEnd <= 6, "ink ends \(inkEnd) in from the column")
+        let middle = CGFloat(glyph.minY + glyph.maxY + 1) / 4
+        #expect(abs(middle - 22) <= 2, "glyph centred at \(middle)")
+    }
+
+    /// … and when the capsule takes two lines, 收藏 stands beside the first.
+    @Test func aCapsuleInTwoLinesHasTheBookmarkBesideItsFirst() throws {
+        let column: CGFloat = 400
+        let row = EndRowCapsuleRow(room: EndRowPlacement.capsuleRoom(column: column)) {
+            VStack(alignment: .leading, spacing: 8) {
+                Color.blue.frame(width: 120, height: 44).alignmentGuide(.capsuleFirstLine) { $0[VerticalAlignment.center] }
+                Color.blue.frame(width: 240, height: 44)
+            }
+        } end: {
+            RowTwoBookmark(saved: false) {}
+        }
+        let drawn = try DrawnPixels(row.frame(width: column).background(Tokens.cream))
+        #expect(drawn.height == 96 * 2, "\(drawn.height)")
+        let glyph = try #require(drawn.inkBounds(paper: try DrawnPixels.paper(), fromX: 260 * 2))
+        let middle = CGFloat(glyph.minY + glyph.maxY + 1) / 4
+        #expect(abs(middle - 22) <= 2, "glyph centred at \(middle), not on the second line's 74")
+    }
+
+    /// A phone: the tags wrap in their own column (the content less 收藏 and 12), 收藏 centred on their first line and
+    /// making the row no taller; with no tags, 收藏 alone ends the row, its box's height.
+    @Test func aPhonesTagsWrapBesideTheBookmarkAndTheRowIsNoTaller() throws {
+        let content: CGFloat = 335
+        #expect(EndRowPlacement.tagsColumn(content: content) == 291)
+        #expect(EndRowPlacement.tagsLineBleed(line: 22) == -11)
+        func row(tags: Int) -> some View {
+            EndRowTagsRow(hasTags: tags > 0) {
+                FlowRow(spacing: 8) {
+                    ForEach(0 ..< tags, id: \.self) { _ in Color.blue.frame(width: 100, height: 22).endRowTagLine() }
+                }
+            } end: {
+                RowTwoBookmark(saved: false) {}
+            }
+            .frame(width: content)
+        }
+        func height(_ view: some View) -> CGFloat {
+            UIHostingController(rootView: view).sizeThatFits(in: CGSize(width: content, height: 1000)).height
+        }
+        // Two tags: one line, as tall as a pill.
+        #expect(abs(height(row(tags: 2)) - 22) < 0.5, "\(height(row(tags: 2)))")
+        // Three fit 335 (316) but not the tags' 291: they wrap to a second line, 8 under the first.
+        #expect(abs(height(row(tags: 3)) - 52) < 0.5, "\(height(row(tags: 3)))")
+        // None: 收藏 alone, its 44.
+        #expect(abs(height(row(tags: 0)) - RowTwo.touch) < 0.5, "\(height(row(tags: 0)))")
+        // Drawn: 收藏's glyph centred on the first line, ending on the content's edge.
+        let margin: CGFloat = 20
+        let drawn = try DrawnPixels(row(tags: 2).padding(.horizontal, margin).padding(.vertical, 12).background(Tokens.cream))
+        let glyph = try #require(drawn.inkBounds(paper: try DrawnPixels.paper(), fromX: Int((margin + 210) * 2)))
+        let inkEnd = margin + content - CGFloat(glyph.maxX + 1) / 2
+        #expect(inkEnd >= 0 && inkEnd <= 6, "ink ends \(inkEnd) in from the content")
+        let middle = CGFloat(glyph.minY + glyph.maxY + 1) / 4 - 12
+        #expect(abs(middle - 11) <= 2, "glyph centred at \(middle) of the 22 line")
     }
 }
 
@@ -261,6 +359,31 @@ struct DrawnPixels {
     func rgb(_ x: Int, _ y: Int) -> [Int] {
         let i = (y * width + x) * 4
         return [Int(bytes[i]), Int(bytes[i + 1]), Int(bytes[i + 2])]
+    }
+
+    /// The page's paper as drawn, for telling ink from it.
+    @MainActor static func paper() throws -> [Int] {
+        try DrawnPixels(Color.clear.frame(width: 4, height: 4).background(Tokens.cream)).rgb(2, 2)
+    }
+
+    /// The box (in pixels) of everything off `paper` from column `fromX` on; nil when nothing is.
+    func inkBounds(paper: [Int], fromX: Int = 0) -> (minX: Int, maxX: Int, minY: Int, maxY: Int)? {
+        var box: (minX: Int, maxX: Int, minY: Int, maxY: Int)?
+        for y in 0 ..< height {
+            for x in max(0, fromX) ..< width {
+                let off = zip(rgb(x, y), paper).reduce(0) { $0 + abs($1.0 - $1.1) }
+                guard off > 30 else { continue }
+                box = (min(box?.minX ?? x, x), max(box?.maxX ?? x, x), min(box?.minY ?? y, y), max(box?.maxY ?? y, y))
+            }
+        }
+        return box
+    }
+
+    /// How many pixels are of a colour `matches` says.
+    func count(_ matches: ([Int]) -> Bool) -> Int {
+        var n = 0
+        for y in 0 ..< height { for x in 0 ..< width where matches(rgb(x, y)) { n += 1 } }
+        return n
     }
 
     /// The largest difference of any channel at any pixel from `other`; nil when they are not the same size.
