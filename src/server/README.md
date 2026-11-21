@@ -148,3 +148,18 @@ and `infra/memory/repos/`; a lane edits only its own aggregate's three files
 
 Cursors: `ports/time.ts` `encodeCursor` / `decodeCursor` (`c1.` + base64url
 `{ t: Instant, id }`); `contract/time.contract.ts` is what every codec keeps.
+
+## Portability (Phase 3)
+
+- `domain/schema/entities.ts` — the canonical storage schema of every
+  registered entity (`fields.ts` kinds: Instants, `f.instant()` for what is
+  ordered by, `map(…, { child })`, `rel(…)`, vectors); `registry.ts` gives
+  each entry its `schema` and `version`. `canonical.ts` turns a stored row
+  into `{ _e, _id, _v, …fields }` and back through a `StoreCodec`
+  (`infra/firestore/canonical.ts`, `infra/memory/canonical.ts`), upgrading
+  older shapes on read (each upgrade names its backfill).
+- `ports/portability.ts` — `EntitySource` and `ImportTarget`, the seams
+  `scripts/portability/{export,import,parity}.ts` know; a PostgreSQL adapter
+  gives one of each.
+- The export holds the whole database: never in the repo (`repoCheck.ts` in
+  CI), never a CI artifact, written outside the checkout. docs/ops/backup.md.

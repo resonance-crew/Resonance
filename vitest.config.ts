@@ -26,6 +26,7 @@ export default defineConfig({
       'scripts/release/**/*.test.ts',
       'scripts/ops/**/*.test.ts',
       'scripts/recommend/**/*.test.ts',
+      'scripts/portability/**/*.test.ts',
     ],
   },
 });

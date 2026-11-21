@@ -50,3 +50,7 @@ apps/android/local.properties
 # Release screenshots (scripts/visual): this machine's baselines and runs
 /visual
 /.next-visual/
+
+# Portability exports (scripts/portability): the whole database, never in the repository
+export-*/
+*.memdump

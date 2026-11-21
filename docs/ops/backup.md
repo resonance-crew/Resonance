@@ -67,10 +67,38 @@ plan below closes those gaps until Phase 3's exporter replaces it.
 - Note the date, the export used, how long it took and what failed in `Resonance-notes`; repeat
   after any change to the schedule.
 
-## What replaces it
+## What replaces it: the weekly portability export (Phase 3)
 
-Phase 3 of the middleware plan adds `scripts/portability/export.ts`: a vendor-neutral export of the
-domain schema (JSON Lines per entity, with the pictures' keys and files), the same tool for backups,
-restores into another adapter, and a move. Once it runs on a schedule and its restore drill passes,
-the managed Firestore export above can be dropped (the R2 copy stays until the exporter carries the
-files itself).
+Phase 3 of the middleware plan added `scripts/portability/` (plan §4.2): a vendor-neutral export of
+the canonical domain schema (`src/server/domain/schema/entities.ts`, one schema and version per entity
+of the registry) — the same tool for backups, restores into another adapter, and a move.
+
+- **Format 1**: `export-<UTC>-<source>/manifest.json` + `entities/<entity>/000001.ndjson.zst` (one
+  canonical row a line, keys sorted, sorted by id, ≤ 100 000 a file, zstd from Node itself) +
+  `objects/public.ndjson` (each picture's key, size, ETag, type). The manifest holds a sha256 per file
+  (hash of the rows' hashes) and per entity, so a restore checks every file as it reads it. The chat
+  bucket is listed only when its store can list (`objects.chat.listed: false` today: the private store
+  has no listing) — the rclone copy of §2 stays until the exporter carries the files themselves.
+- **It is the whole database** — every anonymous card's author, every private message, every report's
+  evidence. It goes to the owner's encrypted storage only: `--out` on that volume (the default is
+  `$TMPDIR/resonance-exports`, and a directory inside the repository is refused); `.gitignore` has
+  `export-*/`, and CI's `repoCheck.ts` fails on a tracked file shaped like one or a workflow uploading
+  one as an artifact.
+- **The owner runs it, never CI and never an agent.** There is no default project; a real one needs
+  `--i-am-the-owner` and prints a warning, with production's service account in `.env`:
+  `npx tsx scripts/portability/export.ts --i-am-the-owner --project resonance-stories --out <encrypted volume> [--objects-r2]`.
+  A value off its schema stops it (entity, id hash, field path); `--lenient` writes it generically and
+  lists the path in the manifest instead — fix the row or the schema after.
+- **The restore drill** (owner, once, then after any schema change): import the export into the
+  emulator and compare — `npm run emulators`, then
+  `npx tsx scripts/portability/import.ts --from <export> --target emulator --project demo-resonance`,
+  `npx tsx scripts/portability/parity.ts <export> --emulator --project demo-resonance` (must print
+  `parity: same`), `npx tsx scripts/integrity.ts --emulator`, and open a few pages under
+  `npm run dev:emulator`. An import never writes to a real project. Note the date, the export and the
+  time it took in `Resonance-notes`.
+- **Once that drill has passed**, the weekly export (on a machine the owner trusts, to the encrypted
+  storage, keeping e.g. 12 weeks) replaces §1's scheduled `gcloud firestore export`, which the owner may
+  then drop. Nothing is scheduled by the code: the schedule is the owner's to set up.
+
+The round trip (emulator → export → memory → export, byte for byte the same; parity finding a changed
+row by id hash and field path only) is `test/emulator/portability.roundtrip.emulator.test.ts`.

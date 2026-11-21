@@ -24,6 +24,9 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      # An export (scripts/portability) is the whole database: never a tracked file, never an artifact.
+      - name: No export in the repository
+        run: npx tsx scripts/portability/repoCheck.ts
       # Everything the apps take from the web that git tracks must match it: tokens, strings, icons,
       # reactions, the sticker catalog, the OpenAPI document (apps:generate less its git-ignored builds).
       - run: npm run apps:generate:tracked
