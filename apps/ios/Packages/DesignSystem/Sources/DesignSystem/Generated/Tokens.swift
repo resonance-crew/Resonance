@@ -67,6 +67,8 @@ public nonisolated enum Tokens {
     public static let segmentIdleInk = Color(uiColor: UI.segmentIdleInk)
     /// --link-wave · terracotta: light #ba7f64, dark #b98064
     public static let linkWave = Color(uiColor: UI.linkWave)
+    /// --passage-wash · terracotta: light #f9e0c8, dark #2f2015
+    public static let passageWash = Color(uiColor: UI.passageWash)
     /// --story-code-tint · terracotta: light #2f2115, dark #dfd6c9
     public static let storyCodeTint = Color(uiColor: UI.storyCodeTint)
     /// --footer-bg · terracotta: light #2f2115, dark #0d0b09
@@ -509,6 +511,7 @@ extension Tokens {
         public static let menuFrame = Palette.uiColor(.menuFrame)
         public static let segmentIdleInk = Palette.uiColor(.segmentIdleInk)
         public static let linkWave = Palette.uiColor(.linkWave)
+        public static let passageWash = Palette.uiColor(.passageWash)
         public static let storyCodeTint = Palette.uiColor(.storyCodeTint)
         public static let footerBg = Palette.uiColor(.footerBg)
         public static let footerInk = Palette.uiColor(.footerInk)

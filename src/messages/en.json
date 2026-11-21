@@ -481,7 +481,10 @@
       "passageTitle": "Quietly tell the author which part stayed with you",
       "passageSkip": "Skip",
       "passagePick": "Pick a part",
-      "passageQuote": "“{text}”"
+      "passageQuote": "“{text}”",
+      "pickedTitle": "People this part stayed with",
+      "pickedBy": "This part stayed with {names}",
+      "pickedByMore": "This part stayed with {names} and others"
     },
     "reply": {
       "label": "Reply with a card",

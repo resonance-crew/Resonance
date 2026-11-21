@@ -156,11 +156,12 @@ export function tapsData(state: MemoryState): TapsData {
         .map(({ row }) => tapperOf(row))
         .filter((t): t is Tapper => !!t);
     },
-    async tapsOnPage(cardId, limit, after): Promise<TapPage> {
+    async tapsOnPage(cardId, limit, after, passage): Promise<TapPage> {
       const from = after ? decodeCursor(after) : undefined;
       if (from === null) throw notAToken();
+      const picked = (row: Record<string, unknown>) => !passage || (row.passage as { id?: unknown } | null | undefined)?.id === passage;
       const rows = state
-        .rows(TAPS, (row) => row.cardId === cardId && row.on === true && row.at instanceof Date)
+        .rows(TAPS, (row) => row.cardId === cardId && row.on === true && row.at instanceof Date && picked(row))
         .map(({ id, row }) => ({ id, row, t: toInstant(row.at as Date) }))
         .sort((a, b) => (a.t === b.t ? (a.id < b.id ? 1 : -1) : a.t < b.t ? 1 : -1))
         .filter((r) => !from || r.t < from.t || (r.t === from.t && r.id < from.id))

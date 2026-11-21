@@ -1671,7 +1671,7 @@
       "get": {
         "operationId": "getCardTaps",
         "summary": "Who resonated with a card (共振), as you may see them",
-        "description": "The card's author gets everyone, newest first, 30 a page (pass `nextPageToken` back as `pageToken`), each with the excerpt of the latest note they left on a named card (`note`; open your conversation with them) — never across a block, and never a note on an anonymous card. A reader gets the faces of `CardDetail.tap` without its cap: themselves first, then the people they are connected with, in one page, with no notes. `404` wherever `CardDetail.tap` is null. `429` is documented for a budget to come; nothing answers it yet.",
+        "description": "The card's author gets everyone, newest first, 30 a page (pass `nextPageToken` back as `pageToken`), each with the excerpt of the latest note they left on a named card (`note`; open your conversation with them) — never across a block, and never a note on an anonymous card. A reader gets the faces of `CardDetail.tap` without its cap: themselves first, then the people they are connected with, in one page, with no notes. `404` wherever `CardDetail.tap` is null. `429` is documented for a budget to come; nothing answers it yet. With `passage` (round 29), the author's pages hold only the people who picked that sentence (`CardDetail.tap.picked`), the same rows, order and page size; a reader is answered the same with it or without.",
         "parameters": [
           {
             "name": "key",
@@ -1690,6 +1690,16 @@
             "schema": {
               "type": "string",
               "maxLength": 512
+            }
+          },
+          {
+            "name": "passage",
+            "in": "query",
+            "required": false,
+            "description": "For the card's author: only the people who picked this sentence (a `TapPicked.id`). Ignored for a reader.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}$"
             }
           }
         ],
@@ -5309,6 +5319,33 @@
         ],
         "description": "One passage a card offers after you resonate with it (round 27): the author's own words, picked when it was published."
       },
+      "TapPicked": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Author"
+            }
+          },
+          "more": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "people",
+          "more"
+        ],
+        "description": "A sentence of the author's story that readers picked after they resonated, and the faces of who picked it (round 29)."
+      },
       "CardTap": {
         "type": "object",
         "properties": {
@@ -5336,6 +5373,12 @@
           "passage": {
             "nullable": true,
             "type": "string"
+          },
+          "picked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TapPicked"
+            }
           }
         },
         "required": [

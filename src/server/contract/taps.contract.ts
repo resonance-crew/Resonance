@@ -124,6 +124,34 @@ export function describeTapsContract(name: string, make: () => TapsHarness | Pro
       await expect(h.data.taps.tapsOnPage(id, 2, 'not a token')).rejects.toBeInstanceOf(ApiFailure);
     });
 
+    it('tapsOnPage with a passage: only the taps whose pick has that id, newest first, paged alike, never one taken back', async () => {
+      const id = h.card('picked');
+      await h.seedCard(id, 'alice');
+      const a = { id: 'aaaaaaaa', text: 'The words she chose' };
+      const b = { id: 'bbbbbbbb', text: 'Another sentence of hers' };
+      const picks = { u1: a, u2: b, u3: a, u4: null, u5: a, u6: a } as const;
+      const at = { u1: T0 - 5000, u2: T0 - 4000, u3: T0 - 3000, u4: T0 - 2000, u5: T0 - 1000, u6: T0 };
+      await h.uow.run(async (tx) => {
+        for (const [uid, t] of Object.entries(at)) tx.taps.putTapOn(id, uid, new Date(t), null);
+      });
+      await h.uow.run(async (tx) => {
+        for (const [uid, p] of Object.entries(picks)) if (p) tx.taps.setTapPassage(id, uid, p);
+      });
+      await h.uow.run(async (tx) => tx.taps.turnTapOff(id, 'u6'));
+
+      const first = await h.data.taps.tapsOnPage(id, 2, undefined, a.id);
+      expect(first.tappers.map((t) => t.uid)).toEqual(['u5', 'u3']);
+      expect(first.tappers[0].passage).toEqual(a);
+      expect(first.full).toBe(true);
+      const second = await h.data.taps.tapsOnPage(id, 2, first.next!, a.id);
+      expect(second.tappers.map((t) => t.uid)).toEqual(['u1']);
+      expect(second.full).toBe(false);
+      expect((await h.data.taps.tapsOnPage(id, 10, undefined, b.id)).tappers.map((t) => t.uid)).toEqual(['u2']);
+      expect((await h.data.taps.tapsOnPage(id, 10, undefined, 'cccccccc')).tappers).toEqual([]);
+      // Without one, everyone that is on, as before.
+      expect((await h.data.taps.tapsOnPage(id, 10)).tappers.map((t) => t.uid)).toEqual(['u5', 'u4', 'u3', 'u2', 'u1']);
+    });
+
     it('deleteTapsOn and deleteSignalsOn take every row of the card, and only of it', async () => {
       const id = h.card('del');
       const other = h.card('keep');

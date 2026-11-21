@@ -833,6 +833,12 @@ public enum L10n {
             public static var passagePick: String { Strings.shared.string("card.tap.passagePick") }
             /// “{text}”
             public static func passageQuote(text: String) -> String { Strings.shared.format("card.tap.passageQuote", ["text": text]) }
+            /// People this part stayed with
+            public static var pickedTitle: String { Strings.shared.string("card.tap.pickedTitle") }
+            /// This part stayed with {names}
+            public static func pickedBy(names: String) -> String { Strings.shared.format("card.tap.pickedBy", ["names": names]) }
+            /// This part stayed with {names} and others
+            public static func pickedByMore(names: String) -> String { Strings.shared.format("card.tap.pickedByMore", ["names": names]) }
         }
         public enum Reply {
             /// Reply with a card

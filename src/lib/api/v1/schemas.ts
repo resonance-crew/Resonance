@@ -289,6 +289,21 @@ export const TapPassage = named(
   "One passage a card offers after you resonate with it (round 27): the author's own words, picked when it was published.",
 );
 
+export const TapPicked = named(
+  z.object({
+    /** The passage id the picks carry (8 hex characters): GET /cards/{id}/taps?passage= lists who picked it. */
+    id: z.string(),
+    /** The sentence, as it was picked (whitespace read as one space): one piece of one block of the story as it is now. */
+    text: z.string(),
+    /** Who picked it, newest first, at most 3 — never the author, never across a block either way. */
+    people: z.array(Author),
+    /** Others picked it too (a boolean, never a count): the list says who. */
+    more: z.boolean(),
+  }),
+  'TapPicked',
+  "A sentence of the author's story that readers picked after they resonated, and the faces of who picked it (round 29).",
+);
+
 export const CardTap = named(
   z.object({
     /** The viewer resonated with this card (共振, the tap) and hasn't taken it back. Always false for its author. */
@@ -299,7 +314,7 @@ export const CardTap = named(
      * everyone who resonated. Never a count.
      */
     faces: z.array(Author),
-    /** More faces than these 3: draw a blank disc after them, never a number. */
+    /** More people than these 3 faces. Never shown as a number (since round 29 not drawn either: say it, if anything). */
     more: z.boolean(),
     /**
      * Whether a note (POST /notes) from the viewer on this card would be taken now: false while 3 notes of theirs
@@ -314,6 +329,12 @@ export const CardTap = named(
     passages: z.array(TapPassage).optional(),
     /** Beside `passages`: the id of the passage the reader picked, when it is one of them now; else null. */
     passage: z.string().nullable().optional(),
+    /**
+     * For the card's author only (round 29): each sentence readers picked that is in the story now — whether or not it
+     * is still one of the card's passages —, in the story's order, with up to 3 of its pickers. Absent for every reader,
+     * and for the author while there is none to show.
+     */
+    picked: z.array(TapPicked).optional(),
   }),
   'CardTap',
   'The resonance tap (共振) on a card: whether you resonated, and the faces of who did as you may see them.',
@@ -662,7 +683,11 @@ export const TapList = named(
   'Who resonated with a card (共振): everyone, for its author; the people you are connected with, for a reader.',
 );
 
-export const TapListQuery = z.object({ pageToken: z.string().min(1).max(512).nullish() });
+export const TapListQuery = z.object({
+  pageToken: z.string().min(1).max(512).nullish(),
+  /** Round 29: the author's list of one picked sentence's people (a `TapPicked.id`); changes nothing for a reader. */
+  passage: z.string().regex(/^[0-9a-f]{8}$/, 'Not a passage id.').nullish(),
+});
 
 /** POST /cards/{id}/reading's session id: one per page view, made by the client. */
 const ReadingSession = z.string().regex(/^[A-Za-z0-9-]{8,40}$/, 'Not a valid session.');
@@ -1455,6 +1480,7 @@ export type TapResponseBody = z.infer<typeof TapResponse>;
 export type TapListBody = z.infer<typeof TapList>;
 export type TapPersonBody = z.infer<typeof TapPerson>;
 export type TapPassageBody = z.infer<typeof TapPassage>;
+export type TapPickedBody = z.infer<typeof TapPicked>;
 export type TapPassageResponseBody = z.infer<typeof TapPassageResponse>;
 export type ReadingReportInput = z.infer<typeof ReadingReportRequest>;
 export type LinkPreviewBody = z.infer<typeof LinkPreview>;
