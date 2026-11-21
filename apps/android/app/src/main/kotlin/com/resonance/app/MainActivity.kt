@@ -362,11 +362,12 @@ object DebugLaunch {
      * scrolls the end row (or the author's line) to the middle of the window, the story's last lines above it; `tap`
      * turns 共振 on, `note` opens the note's field, `lines` opens it on [VISUAL_NOTE_LINES] (`card-note-lines`: 寄出 the
      * block on the last row, never the full height — the owner's, 2026-11-20 — and nothing of it kept), `taps` the faces' list — a reader's, or on the author's own card the
-     * author's. Taken once.
+     * author's; `passages` turns 共振 on and opens the dialog of round 27 §U1, `passage-picked` holds it open on its second
+     * row pressed. Taken once.
      */
     var cardEnd: Set<CardEnd> = emptySet()
 
-    enum class CardEnd { End, Tap, Note, Lines, Taps }
+    enum class CardEnd { End, Tap, Note, Lines, Taps, Passages, PassagePicked }
 
     /** [cardEnd]'s words (comma-separated; anything else asks nothing). */
     fun cardEndOf(value: String?): Set<CardEnd> = value.orEmpty().split(',').mapNotNull { word ->
@@ -376,6 +377,9 @@ object DebugLaunch {
             "note" -> CardEnd.Note
             "lines" -> CardEnd.Lines
             "taps" -> CardEnd.Taps
+            // Round 27 §V2: `card-passages` (共振 pressed, the dialog open), `card-passage-picked` (held on the second row).
+            "passages" -> CardEnd.Passages
+            "passage-picked" -> CardEnd.PassagePicked
             else -> null
         }
     }.toSet()
