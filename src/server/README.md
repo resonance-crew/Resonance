@@ -101,6 +101,18 @@ called — never when the context is built. Pass a real one in `overrides`.
   account (`authorId`). Every write that changed something touches its
   author's `map` or `drafts` signal after the commit.
 
+## PostgreSQL, the outbox, shadow reads (Phase 3)
+
+- `infra/postgres/`: the schema (`migrations/*.sql`, `schema.ts`, `codec.ts`: columns for what is queried,
+  the rest of a document in `extra jsonb`), `PostgresUnitOfWork` (SERIALIZABLE, retried on 40001 / 40P01,
+  writes buffered to the commit), the platform ports and the taps / social / graph repositories;
+  `withPostgres(ctx, pool)` swaps a context's data ports. Optional: `pg` loads only when the environment
+  asks. The `*.pg.test.ts` suites run the contracts on it with `PG_TEST_URL` and skip without.
+- The outbox: `OUTBOX_ENABLED=1` makes `FirestoreUnitOfWork` record `changeLog/{ulid}` per written row
+  (a Proxy on the Transaction notes the writes; no repo reports them); `app/replicate.ts` replays it.
+- Shadow reads: `app/shadow.ts` `shadowRead`, `infra/shadow.ts` `shadowFromEnv` (`READ_BACKEND=shadow`);
+  logs paths and hashes only (`domain/parity.ts`). docs/ops/postgres.md has the rest.
+
 ## Legacy facades
 
 Every export an emulator suite or a script imports keeps its path, name and

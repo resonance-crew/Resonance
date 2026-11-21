@@ -72,3 +72,33 @@ jobs:
       # An exact version: the CLI runs the suite, so it is pinned like the lockfile's packages.
       - run: npm install -g firebase-tools@15.26.0
       - run: npm run test:emulator
+
+  # Phase 3 of the middleware decouple: the PostgreSQL suites (`*.pg.test.ts`, and the PostgreSQL
+  # cases of the others) on a throwaway pgvector database. Without PG_TEST_URL, `npm test` skips them.
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: resonance_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PG_TEST_URL: postgres://postgres:postgres@localhost:5432/resonance_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run src/server/infra/postgres src/server/app/replicate.test.ts src/server/app/anonymousBlocks.pg.test.ts src/server/app/shadow.test.ts
