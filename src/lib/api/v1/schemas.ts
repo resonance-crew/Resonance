@@ -1053,6 +1053,340 @@ export type BlockListBody = z.infer<typeof BlockList>;
 export type ConnectionListBody = z.infer<typeof ConnectionList>;
 export type InviteListBody = z.infer<typeof InviteList>;
 // --- end Phase 2 social (2a-social)
+// --- Phase 2 writer (2a-writer) ---
+// The thought map, drafts and a published card's pending edit through the server (任務 #3 Phase 2): what the
+// clients wrote straight to Firestore, held to the same limits as firebase/firestore.rules
+// (src/server/domain/writer.test.ts pins every number to the rules' text).
+
+/** The rules' `shortId`: a card or group id on the map, 1–128 characters (never a path, nor an id Firestore keeps). */
+export const MAP_ID_MAX = 128;
+/** The rules' `optionalString(…, "label", 500)` on an arrow and `title.size() <= 500` on a group. */
+export const MAP_LABEL_MAX = 500;
+export const MAP_TITLE_MAX = 500;
+/** Ops in one `POST /me/thought-map/ops` batch (a group dragged with every card in it is one batch). */
+export const MAP_OPS_MAX = 200;
+/** A draft's id as the clients make one (Firestore's auto ids; the rules' `^[A-Za-z0-9]{20}$`). */
+export const DRAFT_ID_PATTERN = /^[A-Za-z0-9]{20}$/;
+/** The rules' `optionalString(…, "originalLocale", 10)` and `referenceCardId.size() <= 64`. */
+export const ORIGINAL_LOCALE_MAX = 10;
+export const REFERENCE_CARD_ID_MAX = 64;
+/** The rules' `storedFile`: at most 2048 characters. */
+export const MEDIA_URL_MAX = 2048;
+/** The rules' title, story, tags and cover label limits (lib/db/firestore/cardContent CARD_LIMITS). */
+export const DRAFT_TITLE_MAX = 200;
+export const DRAFT_STORY_MAX = 200_000;
+export const DRAFT_TAGS_MAX = 30;
+export const DRAFT_TAGS_JOINED_MAX = 1000;
+export const MEDIA_LABEL_MAX = 200;
+
+/** A string of `min`–`max` UTF-16 units, as the rules' `size()` and JavaScript's `length` count (Zod's own `max` counts code points: an emoji is two units, one code point). */
+const text = (max: number, min = 0) => z.string().min(min).max(max).refine((s) => s.length <= max, `At most ${max} characters.`);
+const notReserved = (id: string) => id !== '.' && id !== '..' && !/^__.*__$/.test(id);
+const MapId = text(MAP_ID_MAX, 1).regex(/^[^/]+$/, 'Not a valid id.').refine(notReserved, 'Not a valid id.');
+/** An arrow's id: `{sourceCardId}_{targetCardId}`. */
+const MapEdgeId = text(MAP_ID_MAX * 2 + 1, 3).regex(/^[^/]+$/, 'Not a valid id.').refine(notReserved, 'Not a valid id.');
+const Coord = z.number();
+
+export const MapNode = named(
+  z.object({
+    /** The node's id: the card's id (a card is on the map once). */
+    id: z.string(),
+    cardId: z.string(),
+    x: z.number(),
+    y: z.number(),
+    /** The group it is filed in; null when unfiled. */
+    groupId: z.string().nullable(),
+    /** ISO 8601; null when the stored node has none. */
+    createdAt: z.string().nullable(),
+    updatedAt: z.string().nullable(),
+  }),
+  'MapNode',
+  'A card placed on your thought map. Only its id: what the card is, `GET /cards?keys=` answers as for any card.',
+);
+
+export const MapEdge = named(
+  z.object({
+    /** `{sourceCardId}_{targetCardId}`. */
+    id: z.string(),
+    sourceCardId: z.string(),
+    targetCardId: z.string(),
+    label: z.string(),
+    createdAt: z.string().nullable(),
+  }),
+  'MapEdge',
+  'An arrow between two cards on your map, with its words.',
+);
+
+export const MapGroup = named(
+  z.object({
+    id: z.string(),
+    title: z.string(),
+    hue: z.number(),
+    x: z.number(),
+    y: z.number(),
+    w: z.number(),
+    h: z.number(),
+    createdAt: z.string().nullable(),
+  }),
+  'MapGroup',
+  'A titled region of your map that files the cards inside it.',
+);
+
+export const ThoughtMap = named(
+  z.object({ nodes: z.array(MapNode), edges: z.array(MapEdge), groups: z.array(MapGroup) }),
+  'ThoughtMap',
+  'Your whole thought map (yours alone: no one else can read it). Numbers a stored item lacks read as the clients ' +
+    "read them: x, y 0; a group's hue 55, w 320, h 240.",
+);
+
+const op = <K extends string, S extends z.ZodRawShape>(kind: K, shape: S) => z.strictObject({ op: z.literal(kind), ...shape });
+const MapLabel = text(MAP_LABEL_MAX);
+const MapTitle = text(MAP_TITLE_MAX);
+
+/** Each op's own fields (its null fields dropped first: a Kotlin client sends every field, null when unset). */
+const MapOpKinds = z.discriminatedUnion('op', [
+  /** Place a card (again): the node is written whole — unfiled, stamped now. */
+  op('addNode', { cardId: MapId, x: Coord, y: Coord }),
+  /** Move a card; `groupId` files it (absent leaves its group: unfile with setNodeGroup). */
+  op('moveNode', { cardId: MapId, x: Coord, y: Coord, groupId: MapId.optional() }),
+  /** File a card in a group, or unfile it (no `groupId`). */
+  op('setNodeGroup', { cardId: MapId, groupId: MapId.optional() }),
+  /** Take a card off the map with every arrow touching it (the card itself stays). */
+  op('removeNode', { cardId: MapId }),
+  /** Draw an arrow (again: written whole); never from a card to itself. Its id is `{source}_{target}`. */
+  op('addEdge', { sourceCardId: MapId, targetCardId: MapId, label: MapLabel.optional() }),
+  op('setEdgeLabel', { id: MapEdgeId, label: MapLabel }),
+  op('removeEdge', { id: MapEdgeId }),
+  /** Make a group under the id the client chose (an offline queue names it before it exists); written whole. */
+  op('addGroup', { groupId: MapId, title: MapTitle, hue: Coord, x: Coord, y: Coord, w: Coord, h: Coord }),
+  /** Change a group: only the fields sent. */
+  op('updateGroup', {
+    groupId: MapId,
+    title: MapTitle.optional(),
+    hue: Coord.optional(),
+    x: Coord.optional(),
+    y: Coord.optional(),
+    w: Coord.optional(),
+    h: Coord.optional(),
+  }),
+  /** Delete a group; the cards in it stay on the map, unfiled. */
+  op('removeGroup', { groupId: MapId }),
+]);
+
+/** One map op, its kind's fields only (what the server applies). */
+export type MapOpInput = z.infer<typeof MapOpKinds>;
+
+const withoutNulls = (value: unknown): unknown =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.fromEntries(Object.entries(value).filter(([, v]) => v !== null && v !== undefined))
+    : value;
+
+/** A flat op (as MapOp takes it) as its kind: its null fields dropped, every field its kind's (else it throws). */
+export function mapOpOf(flat: unknown): MapOpInput {
+  return MapOpKinds.parse(withoutNulls(flat));
+}
+
+export const MAP_OP_KINDS = MapOpKinds.options.map((o) => o.shape.op.value);
+
+export const MapOp = named(
+  z
+    .strictObject({
+      op: z.enum(['addNode', 'moveNode', 'setNodeGroup', 'removeNode', 'addEdge', 'setEdgeLabel', 'removeEdge', 'addGroup', 'updateGroup', 'removeGroup']),
+      /** addNode, moveNode, setNodeGroup, removeNode. */
+      cardId: z.string().nullish(),
+      x: z.number().nullish(),
+      y: z.number().nullish(),
+      /** moveNode (absent: its group kept), setNodeGroup (absent: unfiled), addGroup, updateGroup, removeGroup. */
+      groupId: z.string().nullish(),
+      /** addEdge. */
+      sourceCardId: z.string().nullish(),
+      targetCardId: z.string().nullish(),
+      /** addEdge, setEdgeLabel. */
+      label: z.string().nullish(),
+      /** An arrow's id (`{sourceCardId}_{targetCardId}`): setEdgeLabel, removeEdge. */
+      id: z.string().nullish(),
+      /** addGroup, updateGroup. */
+      title: z.string().nullish(),
+      hue: z.number().nullish(),
+      w: z.number().nullish(),
+      h: z.number().nullish(),
+    })
+    .superRefine((value, ctx) => {
+      const kind = MapOpKinds.safeParse(withoutNulls(value));
+      if (!kind.success) for (const issue of kind.error.issues) ctx.addIssue({ code: 'custom', path: issue.path, message: issue.message });
+    }),
+  'MapOp',
+  'One change to your thought map, named by `op`, with that op\'s fields only (a null field is absent): addNode ' +
+    '{cardId, x, y} places a card (again: written whole, unfiled); moveNode {cardId, x, y, groupId?} moves it (and files it ' +
+    'when groupId is sent); setNodeGroup {cardId, groupId?} files or unfiles it; removeNode {cardId} takes it off with every ' +
+    'arrow touching it; addEdge {sourceCardId, targetCardId, label?} draws an arrow (never to itself; id ' +
+    '`{source}_{target}`); setEdgeLabel {id, label}; removeEdge {id}; addGroup {groupId, title, hue, x, y, w, h} under the ' +
+    'id the client chose; updateGroup {groupId, …the fields that change}; removeGroup {groupId} (its cards stay, unfiled). ' +
+    `Ids are 1–${MAP_ID_MAX} characters, labels and titles at most ${MAP_LABEL_MAX}. A change to a node, arrow or group ` +
+    'that is not there (any more) is skipped.',
+);
+
+export const MapOpsRequest = named(
+  z.strictObject({ ops: z.array(MapOp).min(1).max(MAP_OPS_MAX) }),
+  'MapOpsRequest',
+  `Up to ${MAP_OPS_MAX} changes, applied in order and all together (none when one is refused).`,
+);
+
+export const MapOpsResponse = named(
+  z.object({
+    /** How many ops changed something. */
+    applied: z.number().int(),
+    /** The indexes of the ops skipped: what they change was not there. */
+    skipped: z.array(z.number().int()),
+  }),
+  'MapOpsResponse',
+);
+
+export const DraftMedia = named(
+  z.strictObject({
+    type: z.enum(['image', 'video']),
+    url: text(MEDIA_URL_MAX).regex(/^(https:\/\/\S+|http:\/\/localhost:[0-9]+\/\S+)$/, 'Not a stored picture.'),
+    /** The cover's ≤ 960 px copy the upload answered (`…-w960.webp`). */
+    thumbUrl: text(MEDIA_URL_MAX)
+      .regex(/^(https:\/\/\S+|http:\/\/localhost:[0-9]+\/\S+)-w960\.webp$/, "Not the cover's copy.")
+      .nullish(),
+    label: text(MEDIA_LABEL_MAX).nullish(),
+    frame: CoverFrame.nullish(),
+  }),
+  'DraftMedia',
+  'A cover as a draft or a pending edit keeps it. Sent, it replaces the cover whole: a field left out or null (a ' +
+    '`frame`, a `thumbUrl`) is gone from it.',
+);
+
+const DraftTags = z
+  .array(z.string())
+  .max(DRAFT_TAGS_MAX)
+  .refine((tags) => tags.join(' ').length <= DRAFT_TAGS_JOINED_MAX, `The tags take at most ${DRAFT_TAGS_JOINED_MAX} characters.`);
+const DraftVisibility = z.enum(['public', 'connections', 'private']);
+const DraftHue = z.number().min(0).max(360);
+const DraftRev = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
+
+export const CreateDraftRequest = named(
+  z.strictObject({
+    /** The id the client made (20 letters and digits, as Firestore's auto ids): never one in use or deleted for good. */
+    id: z.string().regex(DRAFT_ID_PATTERN, 'Not a valid draft id.'),
+    thoughtCore: text(DRAFT_TITLE_MAX),
+    story: text(DRAFT_STORY_MAX),
+    tags: DraftTags,
+    visibility: DraftVisibility,
+    originalLocale: text(ORIGINAL_LOCALE_MAX).nullish(),
+    media: DraftMedia.nullish(),
+    accentHue: DraftHue.nullish(),
+    /** The card this draft answers (用卡片回應): one you may read, never across a block unless it is anonymous. */
+    referenceCardId: text(REFERENCE_CARD_ID_MAX, 1).nullish(),
+    anonymous: z.boolean().nullish(),
+  }),
+  'CreateDraftRequest',
+  'A new draft under the id the client made. Anonymous and for connections only is refused (`400`).',
+);
+
+export const CreatedDraft = named(
+  z.object({
+    id: z.string(),
+    /** False when your draft was there already under this id (a create sent again): nothing was written. */
+    created: z.boolean(),
+    /** The draft's stored `rev` (0 for a new one): the next `PATCH …/draft` sends one above it. */
+    rev: z.number().int(),
+  }),
+  'CreatedDraft',
+);
+
+/** A field `PATCH …/draft` can remove (`clear`). */
+export const DraftField = z.enum(['media', 'accentHue']);
+
+export const UpdateDraftRequest = named(
+  z.strictObject({
+    /** The client's count of this draft's saves, one higher each save: applied only when above the stored `rev`. */
+    rev: DraftRev,
+    thoughtCore: text(DRAFT_TITLE_MAX).nullish(),
+    story: text(DRAFT_STORY_MAX).nullish(),
+    tags: DraftTags.nullish(),
+    visibility: DraftVisibility.nullish(),
+    anonymous: z.boolean().nullish(),
+    /** The cover, replaced whole (see DraftMedia). */
+    media: DraftMedia.nullish(),
+    accentHue: DraftHue.nullish(),
+    /** Fields to remove: `media` (no cover), `accentHue` (no hue). A null field removes nothing: it is absent. */
+    clear: z.array(DraftField).max(2).nullish(),
+  }),
+  'UpdateDraftRequest',
+  'Only the fields sent change; a field that is null or absent is left as it is.',
+);
+
+export const DraftSaved = named(
+  z.object({
+    /**
+     * False when the stored `rev` is already this one or higher (a save that arrived late, or one sent again):
+     * nothing was written, and `rev` is the stored one. A client holding newer words than the server's (its count
+     * fell behind another device's) sends them again with `rev` one above it.
+     */
+    applied: z.boolean(),
+    rev: z.number().int(),
+    /** When it was saved (ISO 8601); null when nothing was written. */
+    updatedAt: z.string().nullable(),
+  }),
+  'DraftSaved',
+);
+
+export const PendingEditRequest = named(
+  z.strictObject({
+    /** As a draft's: applied only when above the stored copy's `rev` (a copy saved without one counts as 0). */
+    rev: DraftRev,
+    thoughtCore: text(DRAFT_TITLE_MAX),
+    story: text(DRAFT_STORY_MAX),
+    tags: DraftTags,
+    visibility: DraftVisibility,
+    anonymous: z.boolean(),
+    /** The cover; absent or null: none. */
+    media: DraftMedia.nullish(),
+    accentHue: DraftHue.nullish(),
+  }),
+  'PendingEditRequest',
+  'The whole working copy of your published card, replacing the one kept (never merged).',
+);
+
+export const PendingEdit = named(
+  z.object({
+    thoughtCore: z.string(),
+    story: z.string(),
+    tags: z.array(z.string()),
+    visibility: z.enum(['public', 'connections', 'private']),
+    anonymous: z.boolean(),
+    media: DraftMedia.nullable(),
+    accentHue: z.number().nullable(),
+    /** ISO 8601; null when the kept copy has no time. */
+    updatedAt: z.string().nullable(),
+    /** The stored `rev` (0 for a copy an older app saved, without one). */
+    rev: z.number().int(),
+  }),
+  'PendingEdit',
+  'Your unsaved working copy of a published card (`edits/current`).',
+);
+
+export const PendingEditBox = named(
+  z.object({ edit: PendingEdit.nullable() }),
+  'PendingEditBox',
+  'Your pending edit of the card, or null when there is none.',
+);
+
+export const DeletedPendingEdit = named(z.object({ deleted: z.boolean() }), 'DeletedPendingEdit', 'False when there was none to delete.');
+
+export type ThoughtMapBody = z.infer<typeof ThoughtMap>;
+export type MapOpsResponseBody = z.infer<typeof MapOpsResponse>;
+export type DraftMediaInput = z.infer<typeof DraftMedia>;
+export type CreateDraftInput = z.infer<typeof CreateDraftRequest>;
+export type CreatedDraftBody = z.infer<typeof CreatedDraft>;
+export type UpdateDraftInput = z.infer<typeof UpdateDraftRequest>;
+export type DraftSavedBody = z.infer<typeof DraftSaved>;
+export type PendingEditInput = z.infer<typeof PendingEditRequest>;
+export type PendingEditBody = z.infer<typeof PendingEdit>;
+export type PendingEditBoxBody = z.infer<typeof PendingEditBox>;
+// --- end Phase 2 writer (2a-writer) ---
 
 export type ApiErrorBody = z.infer<typeof ApiError>;
 export type MeBody = z.infer<typeof Me>;

@@ -554,6 +554,103 @@
             }
           }
         }
+      },
+      "post": {
+        "operationId": "createDraft",
+        "summary": "Start a draft under the id your client made",
+        "description": "The id is 20 letters and digits (as Firestore's auto ids), made by the client so an offline save can name the draft before it exists. Unpublished, its counters zeroed. Sent again for your own draft: `200` with `created: false`, nothing written. An id in use by another card, or one deleted for good, is `409 conflict`: make another. Anonymous and for connections only is `400 invalid_request` (\"An anonymous card is public or private.\"). With `referenceCardId`, a card you may read (`404` otherwise), and not across a block unless it is anonymous (`403 blocked`). A cover is one of ours. Autosaves go to `PATCH /cards/{key}/draft`; publishing to `POST /cards/{key}/publish`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Your draft was there already",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedDraft"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedDraft"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/cards/{key}": {
@@ -1837,6 +1934,389 @@
             }
           },
           "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cards/{key}/draft": {
+      "patch": {
+        "operationId": "saveDraft",
+        "summary": "Autosave your draft: only the fields sent, ordered by `rev`",
+        "description": "`rev` counts the client's saves of this draft, one higher each time. A save applies only when its `rev` is above the stored one (0 for a new draft); otherwise nothing changes and the answer is `200` with `applied: false` and the stored `rev` — a save that arrived late, or was sent twice, never overwrites newer words. A sent cover replaces the stored one whole (a `frame` left out is removed); `clear` removes the cover or the hue. The fields and limits are the rules' for a client writing its own card: anything else is `400`. A published card saves through its pending edit (`PUT /cards/{key}/edits/current`): `409 conflict`; a card in the trash is `409 conflict` (\"This card is in the trash.\"); someone else's card is `404`. Each applied save is kept 7 days, to bring words back.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "The card id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftSaved"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cards/{key}/edits/current": {
+      "get": {
+        "operationId": "getPendingEdit",
+        "summary": "Your working copy of your published card, or `edit: null`",
+        "description": "Only yours: someone else's card is `404`. Checked each time (ETag → 304).",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "The card id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingEditBox"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "savePendingEdit",
+        "summary": "Autosave your published card's working copy, whole, ordered by `rev`",
+        "description": "Readers never see it until you apply it (`POST /cards/{key}/edits/apply`). Applied only when `rev` is above the stored copy's (else `200` with `applied: false`, as `PATCH …/draft`). It may keep a card anonymous and for connections only that already is, never make one so (`400 invalid_request`). A card in the trash is `409 conflict`.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "The card id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PendingEditRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftSaved"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "discardPendingEdit",
+        "summary": "Throw your working copy away (the live card is left as it was)",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "The card id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedPendingEdit"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/thought-map": {
+      "get": {
+        "operationId": "getThoughtMap",
+        "summary": "Your whole thought map: nodes, arrows and groups",
+        "description": "Yours alone. Cards by id only: what each is, `GET /cards?keys=` answers. Checked each time (ETag → 304).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThoughtMap"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/thought-map/ops": {
+      "post": {
+        "operationId": "applyThoughtMapOps",
+        "summary": "Change your thought map: a batch of ops, in order, all together",
+        "description": "Every op applies, or none does: one the map never takes (an arrow from a card to itself) is `400` and changes nothing. An op on a node, arrow or group that is not there is skipped (its index in `skipped`), so a queue sent again or late does no harm. A group is made under the id the client chose.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MapOpsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MapOpsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
             "description": "Error",
             "content": {
               "application/json": {
@@ -5742,6 +6222,638 @@
           "invites"
         ],
         "description": "Legacy invites waiting for your answer, the latest first."
+      },
+      "MapNode": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "cardId": {
+            "type": "string"
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "groupId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "createdAt": {
+            "nullable": true,
+            "type": "string"
+          },
+          "updatedAt": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "cardId",
+          "x",
+          "y",
+          "groupId",
+          "createdAt",
+          "updatedAt"
+        ],
+        "description": "A card placed on your thought map. Only its id: what the card is, `GET /cards?keys=` answers as for any card."
+      },
+      "MapEdge": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sourceCardId": {
+            "type": "string"
+          },
+          "targetCardId": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "createdAt": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sourceCardId",
+          "targetCardId",
+          "label",
+          "createdAt"
+        ],
+        "description": "An arrow between two cards on your map, with its words."
+      },
+      "MapGroup": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "hue": {
+            "type": "number"
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "w": {
+            "type": "number"
+          },
+          "h": {
+            "type": "number"
+          },
+          "createdAt": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "hue",
+          "x",
+          "y",
+          "w",
+          "h",
+          "createdAt"
+        ],
+        "description": "A titled region of your map that files the cards inside it."
+      },
+      "ThoughtMap": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MapNode"
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MapEdge"
+            }
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MapGroup"
+            }
+          }
+        },
+        "required": [
+          "nodes",
+          "edges",
+          "groups"
+        ],
+        "description": "Your whole thought map (yours alone: no one else can read it). Numbers a stored item lacks read as the clients read them: x, y 0; a group's hue 55, w 320, h 240."
+      },
+      "MapOp": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string",
+            "enum": [
+              "addNode",
+              "moveNode",
+              "setNodeGroup",
+              "removeNode",
+              "addEdge",
+              "setEdgeLabel",
+              "removeEdge",
+              "addGroup",
+              "updateGroup",
+              "removeGroup"
+            ]
+          },
+          "cardId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "x": {
+            "nullable": true,
+            "type": "number"
+          },
+          "y": {
+            "nullable": true,
+            "type": "number"
+          },
+          "groupId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "sourceCardId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "targetCardId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "label": {
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "nullable": true,
+            "type": "string"
+          },
+          "title": {
+            "nullable": true,
+            "type": "string"
+          },
+          "hue": {
+            "nullable": true,
+            "type": "number"
+          },
+          "w": {
+            "nullable": true,
+            "type": "number"
+          },
+          "h": {
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "description": "One change to your thought map, named by `op`, with that op's fields only (a null field is absent): addNode {cardId, x, y} places a card (again: written whole, unfiled); moveNode {cardId, x, y, groupId?} moves it (and files it when groupId is sent); setNodeGroup {cardId, groupId?} files or unfiles it; removeNode {cardId} takes it off with every arrow touching it; addEdge {sourceCardId, targetCardId, label?} draws an arrow (never to itself; id `{source}_{target}`); setEdgeLabel {id, label}; removeEdge {id}; addGroup {groupId, title, hue, x, y, w, h} under the id the client chose; updateGroup {groupId, …the fields that change}; removeGroup {groupId} (its cards stay, unfiled). Ids are 1–128 characters, labels and titles at most 500. A change to a node, arrow or group that is not there (any more) is skipped."
+      },
+      "MapOpsRequest": {
+        "type": "object",
+        "properties": {
+          "ops": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MapOp"
+            }
+          }
+        },
+        "required": [
+          "ops"
+        ],
+        "description": "Up to 200 changes, applied in order and all together (none when one is refused)."
+      },
+      "MapOpsResponse": {
+        "type": "object",
+        "properties": {
+          "applied": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        "required": [
+          "applied",
+          "skipped"
+        ]
+      },
+      "DraftMedia": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "image",
+              "video"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 2048,
+            "pattern": "^(https:\\/\\/\\S+|http:\\/\\/localhost:[0-9]+\\/\\S+)$"
+          },
+          "thumbUrl": {
+            "nullable": true,
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 2048,
+            "pattern": "^(https:\\/\\/\\S+|http:\\/\\/localhost:[0-9]+\\/\\S+)-w960\\.webp$"
+          },
+          "label": {
+            "nullable": true,
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 200
+          },
+          "frame": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CoverFrame"
+              }
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "url"
+        ],
+        "description": "A cover as a draft or a pending edit keeps it. Sent, it replaces the cover whole: a field left out or null (a `frame`, a `thumbUrl`) is gone from it."
+      },
+      "CreateDraftRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9]{20}$"
+          },
+          "thoughtCore": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 200
+          },
+          "story": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 200000
+          },
+          "tags": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "public",
+              "connections",
+              "private"
+            ]
+          },
+          "originalLocale": {
+            "nullable": true,
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 10
+          },
+          "media": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DraftMedia"
+              }
+            ]
+          },
+          "accentHue": {
+            "nullable": true,
+            "type": "number",
+            "minimum": 0,
+            "maximum": 360
+          },
+          "referenceCardId": {
+            "nullable": true,
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "anonymous": {
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "thoughtCore",
+          "story",
+          "tags",
+          "visibility"
+        ],
+        "description": "A new draft under the id the client made. Anonymous and for connections only is refused (`400`)."
+      },
+      "CreatedDraft": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "created": {
+            "type": "boolean"
+          },
+          "rev": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "created",
+          "rev"
+        ]
+      },
+      "UpdateDraftRequest": {
+        "type": "object",
+        "properties": {
+          "rev": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "thoughtCore": {
+            "nullable": true,
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 200
+          },
+          "story": {
+            "nullable": true,
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 200000
+          },
+          "tags": {
+            "nullable": true,
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "visibility": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "public",
+              "connections",
+              "private"
+            ]
+          },
+          "anonymous": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "media": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DraftMedia"
+              }
+            ]
+          },
+          "accentHue": {
+            "nullable": true,
+            "type": "number",
+            "minimum": 0,
+            "maximum": 360
+          },
+          "clear": {
+            "nullable": true,
+            "maxItems": 2,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "media",
+                "accentHue"
+              ]
+            }
+          }
+        },
+        "required": [
+          "rev"
+        ],
+        "description": "Only the fields sent change; a field that is null or absent is left as it is."
+      },
+      "DraftSaved": {
+        "type": "object",
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "rev": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "updatedAt": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "applied",
+          "rev",
+          "updatedAt"
+        ]
+      },
+      "PendingEditRequest": {
+        "type": "object",
+        "properties": {
+          "rev": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "thoughtCore": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 200
+          },
+          "story": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 200000
+          },
+          "tags": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "public",
+              "connections",
+              "private"
+            ]
+          },
+          "anonymous": {
+            "type": "boolean"
+          },
+          "media": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DraftMedia"
+              }
+            ]
+          },
+          "accentHue": {
+            "nullable": true,
+            "type": "number",
+            "minimum": 0,
+            "maximum": 360
+          }
+        },
+        "required": [
+          "rev",
+          "thoughtCore",
+          "story",
+          "tags",
+          "visibility",
+          "anonymous"
+        ],
+        "description": "The whole working copy of your published card, replacing the one kept (never merged)."
+      },
+      "PendingEdit": {
+        "type": "object",
+        "properties": {
+          "thoughtCore": {
+            "type": "string"
+          },
+          "story": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "public",
+              "connections",
+              "private"
+            ]
+          },
+          "anonymous": {
+            "type": "boolean"
+          },
+          "media": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DraftMedia"
+              }
+            ]
+          },
+          "accentHue": {
+            "nullable": true,
+            "type": "number"
+          },
+          "updatedAt": {
+            "nullable": true,
+            "type": "string"
+          },
+          "rev": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "thoughtCore",
+          "story",
+          "tags",
+          "visibility",
+          "anonymous",
+          "media",
+          "accentHue",
+          "updatedAt",
+          "rev"
+        ],
+        "description": "Your unsaved working copy of a published card (`edits/current`)."
+      },
+      "PendingEditBox": {
+        "type": "object",
+        "properties": {
+          "edit": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PendingEdit"
+              }
+            ]
+          }
+        },
+        "required": [
+          "edit"
+        ],
+        "description": "Your pending edit of the card, or null when there is none."
+      },
+      "DeletedPendingEdit": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "description": "False when there was none to delete."
       },
       "ConversationLastMessage": {
         "type": "object",

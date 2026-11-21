@@ -105,6 +105,18 @@ export const LIMITS = {
   block: { max: 100, windowMs: DAY },
   /** Profiles by id (GET /users?ids=, 30 at a time): bounds a script walking the directory, never a reader's lists. */
   lookup: { max: 3000, windowMs: HOUR },
+  /**
+   * Thought map batches (POST /api/v1/me/thought-map/ops): one per drop, label or group change — a person
+   * arranging their map for an hour stays far under it; a group dragged with its cards is one batch.
+   */
+  mapOps: { max: 3000, windowMs: HOUR },
+  /** New drafts (POST /api/v1/cards): a writer starts a few a day. */
+  draftCreate: { max: 300, windowMs: DAY },
+  /**
+   * Autosaves (PATCH …/draft and PUT …/edits/current, once a second or two while someone types): an hour of
+   * steady writing is under 2000; the patch log keeps each applied one for 7 days.
+   */
+  draftSave: { max: 5000, windowMs: HOUR },
 } as const satisfies Record<string, { max: number; windowMs: number }>;
 
 export type Bucket = keyof typeof LIMITS;

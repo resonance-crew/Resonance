@@ -13,6 +13,7 @@ import { tapsData, tapsTx } from './taps';
 import { translationsData, translationsTx } from './translations';
 import { socialData, socialTx } from './social';
 import { usersData, usersTx } from './users';
+import { writerData, writerTx } from './writer';
 
 // Lanes fill their own aggregate's file; this one only lists them.
 
@@ -30,6 +31,7 @@ export function buildMemoryTxRepos(tx: MemoryTx): TxRepos {
     infra: infraTx(tx),
     translations: translationsTx(tx),
     social: socialTx(tx),
+    writer: writerTx(tx),
   };
 }
 
@@ -47,5 +49,6 @@ export function buildMemoryDataRepos(state: MemoryState): DataRepos {
     infra: infraData(state),
     translations: translationsData(state),
     social: socialData(state),
+    writer: writerData(state),
   };
 }

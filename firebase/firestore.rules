@@ -418,6 +418,16 @@ service cloud.firestore {
       match /translations/{to} {
         allow read, write: if false;
       }
+
+      // --- a draft's patch log (cards/{cardId}/draftLog/{rev}) ---
+      // Every autosave the server applied (PATCH /api/v1/cards/{id}/draft),
+      // kept 7 days (`expireAt`, a TTL) to bring words back should a client's
+      // save count go wrong. The server's alone: no client reads or writes it.
+      // It names its author (`authorId`), so the account purge finds one whose
+      // card went by an older app's own delete.
+      match /draftLog/{rev} {
+        allow read, write: if false;
+      }
     }
 
     // --- connections ---
