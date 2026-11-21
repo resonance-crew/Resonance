@@ -8,6 +8,7 @@ import { MemoryState } from '@/server/infra/memory/state';
 import { formatParity, parity } from './diff';
 import { assertOutsideRepo, exportFiles, exportSource, readManifest, REPO_ROOT, writeExport } from './format';
 import { load } from './load';
+import { ENTITIES } from '@/server/domain/schema/registry';
 import { checkRepo, riskyArtifactUploads, trackedExportFiles } from './repoCheck';
 import { checkProject, readMemoryDump, writeMemoryDump } from './stores';
 
@@ -70,7 +71,7 @@ describe('an export, imported into memory and exported again', () => {
     expect(manifest.entities.cards.rows).toBe(2);
     expect(manifest.entities.edits.rows).toBe(1);
     expect(manifest.objects.public).toMatchObject({ listed: true, objects: 1 });
-    expect(Object.keys(manifest.schemaVersions)).toHaveLength(47);
+    expect(Object.keys(manifest.schemaVersions)).toHaveLength(Object.keys(ENTITIES).length);
     // The rows sorted by id, one canonical text each.
     const rows = [];
     for await (const r of (await exportSource(first.dir)).read('cards')) rows.push(r.row._id);

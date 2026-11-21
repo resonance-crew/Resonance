@@ -100,6 +100,7 @@ create table identities (
   subject  text not null,
   user_id  text not null,
   created_at timestamptz not null default now(),
+  extra    jsonb not null default '{}',
   primary key (provider, subject)
 );
 create index identities_user on identities (user_id);

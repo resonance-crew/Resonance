@@ -254,6 +254,24 @@ export const PG_TABLES = {
   recommendations: { table: 'recommendations', key: [pk('user_id')], cols: { date: c('date', 'text') } },
 
   // --- outbox (Phase 3) ---
+  // Phase 3 sessions (0002_sessions.sql): `identities/{provider}_{subject}` — a provider name holds no `_`.
+  identities: {
+    table: 'identities',
+    key: [pk('provider', 'provider'), pk('subject', 'subject')],
+    cols: { userId: c('user_id', 'text'), createdAt: c('created_at', 'ts') },
+  },
+  refreshTokens: {
+    table: 'refresh_tokens',
+    key: [pk('id')],
+    cols: {
+      uid: c('uid', 'text'),
+      family: c('family', 'text'),
+      authTime: c('auth_time', 'bigint'),
+      createdAt: c('created_at', 'ts'),
+      expiresAt: c('expires_at', 'ts'),
+      usedAt: c('used_at', 'ts'),
+    },
+  },
   changeLog: {
     table: 'change_log',
     key: [pk('id')],
