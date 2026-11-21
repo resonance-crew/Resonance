@@ -355,7 +355,7 @@ struct CardEndRow: View {
         EndRowTwo {
             if !tap.shownFaces.isEmpty {
                 // With passages on offer, the reader's own face alone is a button too: their row picks one (§U3).
-                TapFaces(faces: tap.shownFaces, more: tap.showsMore, spoken: tap.spoken(viewer: session.uid),
+                TapFaces(faces: tap.shownFaces, spoken: tap.spoken(viewer: session.uid),
                          isButton: !tap.onlyMine(viewer: session.uid) || (tap.on && offersPassages)) { listOpen = true }
             }
         } end: {
