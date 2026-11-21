@@ -7,9 +7,6 @@ export const dynamic = 'force-dynamic';
 // Pinned to hnd1 in vercel.json: the readings call OpenAI, which refuses Hong Kong.
 export const maxDuration = 300;
 
-/** No reading starts past this: the one under way has its own deadline (INDEX_DEADLINE_MS, 100 s) before the function ends. */
-const START_BUDGET_MS = (maxDuration - 110) * 1000;
-
 /**
  * The daily re-reading of owed cards (vercel.json: 10:00 UTC, before the
  * warm-up of tonight's picks; see lib/recommend/indexOwed). Vercel Hobby runs
@@ -20,7 +17,9 @@ const START_BUDGET_MS = (maxDuration - 110) * 1000;
 export async function GET(req: Request) {
   if (!cronAuthorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const started = Date.now();
-  const run = await indexOwed(getAdminDb(), { deadline: started + START_BUDGET_MS });
+  // No reading starts once its deadline (100 s) and its passages' pick (20 s) would not fit before the function ends,
+  // and no pick starts that would not (INDEX_OWED_RESERVE_MS, PASSAGES_RESERVE_MS): the card is marked owed instead.
+  const run = await indexOwed(getAdminDb(), { end: started + maxDuration * 1000 });
   console.log('[index-cards]', JSON.stringify(run));
   return NextResponse.json(run);
 }

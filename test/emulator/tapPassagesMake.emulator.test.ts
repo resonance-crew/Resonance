@@ -4,9 +4,12 @@ import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestor
 import { applyCardEdit } from '@/lib/api/v1/edits';
 import { publishCard } from '@/lib/api/v1/publish';
 import { makeTapPassages } from '@/lib/api/v1/tapPassagesMake';
+import { presentTapPassages } from '@/lib/api/v1/tapPassages';
+import { restoreCard } from '@/lib/api/v1/trash';
 import { offlinePassages, passagesHash, PASSAGES_TRIES_MAX } from '@/lib/cards/tapPassages';
 import type { IVectorStore } from '@/lib/recommend/vectorStore';
-import { indexOwed } from '@/lib/recommend/indexOwed';
+import { indexOwed, INDEX_OWED_RESERVE_MS, PASSAGES_RESERVE_MS } from '@/lib/recommend/indexOwed';
+import { INDEX_DEADLINE_MS, PASSAGES_TIMEOUT_MS } from '@/lib/ai/tasks';
 
 // Making a card's tap passages (round 27 §P2) against the Firestore emulator:
 // the offline pick a publish stores under the emulators, an applied edit that
@@ -91,15 +94,31 @@ describe('makeTapPassages', () => {
     expect((await data('c1')).tapPassages).toMatchObject({ of: passagesHash(changed), items: [{ text: P1.slice(0, 15) }, { text: P2.slice(0, 15) }], model: 'm' });
   });
 
-  it('stores none for a story too short, and takes them off a card that went into the trash', async () => {
+  it('stores none for a story too short, and takes them off a card that is no longer published', async () => {
     await published('short', P1);
     expect(await makeTapPassages(db, 'short')).toBe('none');
     expect((await data('short')).tapPassages).toBeUndefined();
     await published('c1');
     await makeTapPassages(db, 'c1');
-    await db.doc('cards/c1').update({ trashedAt: Timestamp.now() });
+    await db.doc('cards/c1').update({ publishedAt: null });
     expect(await makeTapPassages(db, 'c1')).toBe('removed');
     expect((await data('c1')).tapPassages).toBeUndefined();
+  });
+
+  it('keeps them on a card in the trash, and makes them for an edit applied there: a restored card offers them', async () => {
+    await published('c1');
+    await makeTapPassages(db, 'c1');
+    await db.doc('cards/c1').update({ trashedAt: Timestamp.now() });
+    // The cron or an applied edit passes over it while it is in the trash.
+    expect(await makeTapPassages(db, 'c1')).toBe('unchanged');
+    const changed = STORY.replace('煮一鍋湯', '煮一碗湯');
+    await db.doc('cards/c1').update({ story: changed });
+    expect(await makeTapPassages(db, 'c1')).toBe('made');
+    await restoreCard(db, 'alice', 'c1', { vectors: { setVisibility: async () => {} } });
+    const card = await data('c1');
+    expect(card.trashedAt ?? null).toBeNull();
+    expect(presentTapPassages(card).length).toBeGreaterThanOrEqual(2);
+    expect(card.tapPassages.of).toBe(passagesHash(changed));
   });
 
   it('settles a pick with fewer than two of the story\'s own words as none, never asked again for that text', async () => {
@@ -126,6 +145,32 @@ describe('makeTapPassages', () => {
     card = await data('c1');
     expect(card.tapPassages).toMatchObject({ of: passagesHash(STORY), model: 'offline' });
     expect(card.tapPassages.failed).toBeUndefined();
+  });
+
+  it("never starts a pick that would not end before the cron's function does: the card is owed again, not lost", async () => {
+    // The cron's whole run (maxDuration 300 s): a reading started at the last allowed moment that runs to its own
+    // deadline, then its passages' timeout, still ends inside it.
+    const end = 300_000;
+    expect(end - INDEX_OWED_RESERVE_MS - 1 + INDEX_DEADLINE_MS + PASSAGES_TIMEOUT_MS).toBeLessThan(end);
+    await published('c1');
+    await db.doc('cards/c1').update({ indexPendingAt: Timestamp.now() });
+    // The reading starts at the last allowed moment and takes its whole 100 s, plus a second.
+    const last = end - INDEX_OWED_RESERVE_MS - 1;
+    const clock = { reads: 0 };
+    const now = () => (clock.reads++ === 0 ? last : last + INDEX_DEADLINE_MS + 1_000);
+    const pick = vi.fn(async () => ({ passages: [P1.slice(0, 15), P3.slice(0, 15)], model: 'm' }));
+    const run = await indexOwed(db, { end, now, pick });
+    expect(run).toMatchObject({ examined: 1, passages: { 'over-budget': 1 } });
+    expect(pick).not.toHaveBeenCalled();
+    expect((await data('c1')).indexPendingAt).toBeInstanceOf(Timestamp);
+    // Started past the reserve: no reading at all.
+    const late = await indexOwed(db, { end, now: () => end - INDEX_OWED_RESERVE_MS, pick });
+    expect(late).toMatchObject({ examined: 0, left: 1 });
+    // With time left, the pick runs and the card is settled.
+    const early = await indexOwed(db, { end, now: () => 0, pick });
+    expect(early.passages).toEqual({ made: 1 });
+    expect(pick).toHaveBeenCalledTimes(1);
+    expect(PASSAGES_RESERVE_MS).toBeGreaterThan(PASSAGES_TIMEOUT_MS);
   });
 
   it(`leaves a text alone after ${PASSAGES_TRIES_MAX} failures, until the story changes`, async () => {
