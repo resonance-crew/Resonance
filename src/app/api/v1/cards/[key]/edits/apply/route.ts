@@ -7,6 +7,7 @@ import { revalidateLocalized } from '@/lib/api/revalidate';
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import { markIndexOwed } from '@/lib/recommend/indexOwed';
 import { makeSummaryTranslations } from '@/lib/api/v1/summaryTranslationsMake';
+import { makeTapPassages } from '@/lib/api/v1/tapPassagesMake';
 import { unfurlCardLinks } from '@/lib/links/cardLinks';
 import { ringAfter } from '@/lib/push/ring';
 import { ApiFailure } from '@/lib/api/v1/http';
@@ -38,6 +39,9 @@ export const POST = withUser(async (user, _req, ctx: RouteContext<'key'>) => {
       .catch((e) => console.error('[api/v1] vectors', id, e));
   }
   if (result.applied) {
+    // One spend of the reindex budget for whichever of the two asks a model first, shared by both.
+    let allowed: Promise<boolean> | null = null;
+    const mayCall = () => (allowed ??= reindexAllowed(user.id));
     after(() =>
       // After "save changes", side by side as publishing does: the story's link previews (new links fetched,
       // removed ones dropped) and then the cached pages; and the card's reading marked owed (round 26 §A1.8, D6:
@@ -50,9 +54,9 @@ export const POST = withUser(async (user, _req, ctx: RouteContext<'key'>) => {
         })(),
         markIndexOwed(getAdminDb(), id).catch((e) => console.error('[api/v1] index owed', e)),
         // The title's and excerpt's translations, made again only when either changed (the same budget as the index).
-        makeSummaryTranslations(getAdminDb(), id, { mayCall: () => reindexAllowed(user.id) }).catch((e) =>
-          console.error('[api/v1] summary translations', e),
-        ),
+        makeSummaryTranslations(getAdminDb(), id, { mayCall }).catch((e) => console.error('[api/v1] summary translations', e)),
+        // Its tap passages (round 27), made again only when the story's words changed; out of budget, owed to the cron.
+        makeTapPassages(getAdminDb(), id, { mayCall }).catch((e) => console.error('[api/v1] tap passages', e)),
       ]),
     );
   }

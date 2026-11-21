@@ -21,7 +21,8 @@ import { CardBoxTab } from '@/lib/api/v1/schemas';
 import { getFeed } from '@/lib/api/v1/service';
 import { restoreCard, trashCard } from '@/lib/api/v1/trash';
 import { exportAccountData } from '@/lib/account/export';
-import { cardTap, listTaps, setTap } from '@/lib/api/v1/taps';
+import { cardTap, listTaps, setTap, setTapPassage } from '@/lib/api/v1/taps';
+import { passageItems, withPassages } from './tapPassageStory';
 import { mapCard } from '@/lib/db/firestore/mapper';
 import { ringTap } from '@/lib/push/tapBell';
 import { readCardForPage } from '@/app/[locale]/(app)/card/[slug]/cardPageData';
@@ -279,6 +280,62 @@ describe('the resonance tap on an anonymous card', () => {
       await db.recursiveDelete(db.collection('notifications'));
       await unblock();
     }
+  });
+});
+
+// Round 27 §P5: the pick among an anonymous card's passages is taken, answered and shown to the picker exactly as
+// with no block; only the author's list leaves the reader out. A named card across a block refuses it, as its list.
+describe('the passage picked after a tap on an anonymous card', () => {
+  beforeEach(async () => {
+    await db.doc('cards/masked').update(withPassages());
+    await card('namedLong', 'bob', 0, withPassages());
+  });
+
+  it('is taken, answered and shown to the picker the same — block or not', async () => {
+    const [first] = passageItems();
+    const answer = await sameInEveryState(async () => {
+      await setTap(db, 'alice', 'masked', true);
+      const seen = {
+        pick: await setTapPassage(db, 'alice', 'masked', first.id),
+        detail: (await getCardDetail(db, 'alice', 'masked', ALL)).tap,
+        herList: await listTaps(db, 'alice', 'masked'),
+        carolsList: await listTaps(db, 'carol', 'masked'),
+        bad: (await failure(setTapPassage(db, 'alice', 'masked', 'ffffffff'))).code,
+      };
+      await setTap(db, 'alice', 'masked', false);
+      return { ...seen, afterOff: (await failure(setTapPassage(db, 'alice', 'masked', first.id))).code };
+    });
+    expect(answer.pick).toEqual({ passage: first.id });
+    expect(answer.detail).toMatchObject({ mine: true, passages: passageItems(), passage: first.id });
+    expect(answer.herList.people).toEqual([expect.objectContaining({ passage: { text: first.text } })]);
+    // carol is alice's connection: she sees alice's face, never her pick.
+    expect(answer.carolsList.people.map((p) => [p.author.handle, p.passage ?? null])).toEqual([['alice', null]]);
+    expect([answer.bad, answer.afterOff]).toEqual(['invalid_request', 'conflict']);
+  });
+
+  it("leaves her pick out of the author's list alone across a block", async () => {
+    const [, second] = passageItems();
+    for (const state of STATES) {
+      await state.apply();
+      await setTap(db, 'alice', 'masked', true);
+      await setTapPassage(db, 'alice', 'masked', second.id);
+      const blocked = state.name !== 'no block';
+      const people = (await listTaps(db, 'bob', 'masked')).people.map((p) => [p.author.handle, p.passage]);
+      expect(people, state.name).toEqual(blocked ? [] : [['alice', { text: second.text }]]);
+      await setTap(db, 'alice', 'masked', false);
+      await unblock();
+    }
+  });
+
+  it('is not_found on a named card across a block either way', async () => {
+    const [first] = passageItems();
+    await setTap(db, 'alice', 'namedLong', true);
+    for (const state of STATES.slice(1)) {
+      await state.apply();
+      expect((await failure(setTapPassage(db, 'alice', 'namedLong', first.id))).code, state.name).toBe('not_found');
+      await unblock();
+    }
+    expect(await setTapPassage(db, 'alice', 'namedLong', first.id)).toEqual({ passage: first.id });
   });
 });
 

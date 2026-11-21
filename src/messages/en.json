@@ -470,7 +470,11 @@
       "facesAuthor": "Resonated with this card: {names}",
       "more": "and others",
       "send": "Send",
-      "failed": "Didn't go through, try again"
+      "failed": "Didn't go through, try again",
+      "passageTitle": "Quietly tell the author which part stayed with you",
+      "passageSkip": "Skip",
+      "passagePick": "Pick a part",
+      "passageQuote": "“{text}”"
     },
     "reply": {
       "label": "Reply with a card",

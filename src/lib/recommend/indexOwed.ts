@@ -2,6 +2,7 @@ import { runPool } from '@/lib/push/pool';
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { embedModel, signatureModel } from '@/lib/ai/openai';
 import { costOf } from '@/lib/ai/prices';
+import { makeTapPassages } from '@/lib/api/v1/tapPassagesMake';
 import { CARD_SIGNATURES, indexCard, type IndexResult } from './indexCard';
 
 /**
@@ -13,6 +14,8 @@ import { CARD_SIGNATURES, indexCard, type IndexResult } from './indexCard';
  * one rewrite happens here and in the backfill, never on publish). At most
  * `limit` readings a run (each one LLM call, two for a rewrite); a card whose
  * text turns out unchanged costs no call and no place. Logs tokens and cost.
+ * After each reading, the card's tap passages (round 27: lib/api/v1/
+ * tapPassagesMake), free when current; their outcomes in `passages`.
  */
 
 /** Readings a run asks for at most. */
@@ -29,6 +32,8 @@ export interface IndexOwedRun {
   examined: number;
   read: number;
   outcomes: Record<string, number>;
+  /** The tap passages' outcomes (round 27), one per card examined. */
+  passages: Record<string, number>;
   /** Cards left for the next run (the limit or the deadline). */
   left: number;
   tokens: { input: number; output: number; reasoning: number; embed: number };
@@ -47,7 +52,7 @@ export async function indexOwed(db: Firestore, opts: { limit?: number; deadline?
     ...pending.docs.map((d) => ({ id: d.id, rewrite: false })),
     ...templated.docs.filter((d) => d.get('rewritten') !== true).map((d) => ({ id: d.id, rewrite: true })),
   ].filter((x, i, all) => all.findIndex((y) => y.id === x.id) === i);
-  const run: IndexOwedRun = { examined: 0, read: 0, outcomes: {}, left: 0, tokens: { input: 0, output: 0, reasoning: 0, embed: 0 }, cost: 0 };
+  const run: IndexOwedRun = { examined: 0, read: 0, outcomes: {}, passages: {}, left: 0, tokens: { input: 0, output: 0, reasoning: 0, embed: 0 }, cost: 0 };
   // Three at a time (B16): each reading takes 20–60 s, and one after another twenty overran the cron's 300 s.
   // None is started past the deadline, nor once those read and still reading could reach the limit.
   let reading = 0;
@@ -72,6 +77,13 @@ export async function indexOwed(db: Firestore, opts: { limit?: number; deadline?
         const outcome = result.reason ?? 'indexed';
         run.outcomes[outcome] = (run.outcomes[outcome] ?? 0) + 1;
         if (!NO_CALL.has(result.reason)) run.read++;
+        // Its tap passages (round 27 §P2.4) after the reading, which cleared the mark: free when they are current,
+        // and a failure marks the card again for tomorrow (until PASSAGES_TRIES_MAX for one text).
+        const passages = await makeTapPassages(db, card.id).catch((e: unknown) => {
+          console.error('[index-cards] passages', card.id, e);
+          return 'failed' as const;
+        });
+        run.passages[passages] = (run.passages[passages] ?? 0) + 1;
       } catch (e) {
         run.read++;
         run.outcomes.error = (run.outcomes.error ?? 0) + 1;

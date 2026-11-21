@@ -19,6 +19,9 @@ import { backfillAvatarColors } from '../../scripts/backfills/avatarColors';
 import { backfillCardTombstones } from '../../scripts/backfills/cardTombstones';
 import { backfillRecommendIndex } from '../../scripts/backfills/recommendIndex';
 import { backfillCoverThumbs } from '../../scripts/backfills/coverThumbs';
+import { backfillTapPassages } from '../../scripts/backfills/tapPassages';
+import { passagesHash } from '@/lib/cards/tapPassages';
+import { PASSAGE_STORY, PASSAGE_TITLE, passageItems } from './tapPassageStory';
 import { avatarColorFor, LEGACY_AVATAR_COLOR } from '@/lib/design/avatarColors';
 import type { PreviewFetch } from '@/lib/links/preview';
 
@@ -920,5 +923,30 @@ describe('cover-thumbs (B2)', () => {
 
     expect(await backfillCoverThumbs(db, storage, { apply: true, publicBases: [BASE], read, exists, log: quiet })).toMatchObject({ made: 0, present: 2, named: 0 });
     expect(put).toHaveLength(1);
+  });
+});
+
+describe('tap-passages (round 27)', () => {
+  const card = (id: string, extra: Record<string, unknown> = {}) =>
+    db.doc(`cards/${id}`).set({ authorId: 'alice', thoughtCore: PASSAGE_TITLE, story: PASSAGE_STORY, visibility: 'public', publishedAt: joined('2026-11-01T00:00:00Z'), ...extra });
+
+  it('counts, then makes the passages of published cards long enough without current ones, once', async () => {
+    await Promise.all([
+      card('old'),
+      card('stale', { tapPassages: { of: passagesHash('an older story'), items: [] } }),
+      card('done', { tapPassages: { of: passagesHash(PASSAGE_STORY), items: passageItems() } }),
+      card('short', { story: '一句話而已。' }),
+      card('draft', { publishedAt: null }),
+      card('trashed', { trashedAt: joined('2026-11-10T00:00:00Z') }),
+      card('givenUp', { tapPassages: { failed: { of: passagesHash(PASSAGE_STORY), tries: 3 } } }),
+    ]);
+    const dry = await backfillTapPassages(db, { apply: false, log: quiet });
+    expect(dry.candidates).toBe(2);
+    expect((await data('cards/old'))!.tapPassages).toBeUndefined();
+    const pick = vi.fn(async () => ({ passages: passageItems().map((p) => p.text), model: 'm' }));
+    const run = await backfillTapPassages(db, { apply: true, log: quiet, pauseMs: 0, pick });
+    expect(run).toMatchObject({ candidates: 2, made: 2 });
+    expect((await data('cards/old'))!.tapPassages).toMatchObject({ of: passagesHash(PASSAGE_STORY), items: passageItems(), model: 'm' });
+    expect((await backfillTapPassages(db, { apply: false, log: quiet })).candidates).toBe(0);
   });
 });

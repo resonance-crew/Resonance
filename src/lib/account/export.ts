@@ -1,3 +1,4 @@
+import { storedPick } from '@/lib/api/v1/tapPassages';
 import { FieldPath, type DocumentData, type Firestore, type Query, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { mapCard } from '@/lib/db/firestore/mapper';
 import { CARD_VISIBILITY_FIELDS, visibleTo } from '@/lib/api/v1/present';
@@ -119,12 +120,20 @@ async function cardLines(db: Firestore, uid: string, ids: string[]): Promise<Map
   return out;
 }
 
-/** The cards the account resonated with (on only), a page at a time: `{ cardId, title, link, at }`. */
+/**
+ * The cards the account resonated with (on only), a page at a time: `{ cardId, title, link, at }`, and `passage` —
+ * the words they picked (round 27) — on a tap with a pick, on the condition `title` has: null once they may no
+ * longer read the card.
+ */
 async function* tapRows(db: Firestore, uid: string): AsyncGenerator<DocumentData[]> {
   for await (const docs of pages(db.collection(TAPS).where('userId', '==', uid))) {
     const on = docs.filter((d) => d.get('on') === true && typeof d.get('cardId') === 'string');
     const lines = await cardLines(db, uid, on.map((d) => d.get('cardId') as string));
-    yield on.map((d) => ({ ...lines.get(d.get('cardId') as string), at: plain(d.get('at')) ?? null }));
+    yield on.map((d) => {
+      const line = lines.get(d.get('cardId') as string);
+      const pick = storedPick(d.get('passage'));
+      return { ...line, at: plain(d.get('at')) ?? null, ...(pick ? { passage: line?.title != null ? pick.text : null } : {}) };
+    });
   }
 }
 

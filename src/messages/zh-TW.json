@@ -470,7 +470,11 @@
       "facesAuthor": "與這張卡片共振的人：{names}",
       "more": "還有其他人",
       "send": "寄出",
-      "failed": "沒送出去，再試一次"
+      "failed": "沒送出去，再試一次",
+      "passageTitle": "悄悄告訴作者，哪一段讓你有共鳴",
+      "passageSkip": "略過",
+      "passagePick": "選一段",
+      "passageQuote": "「{text}」"
     },
     "reply": {
       "label": "用卡片回應",

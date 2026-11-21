@@ -122,6 +122,12 @@ export interface Card {
    * Lists show them only to a reader who turned auto-translate on.
    */
   summaryTranslations?: SummaryTranslations;
+  /**
+   * Up to three sentences of its story, word for word, a reader may pick
+   * after resonating (round 27; server-only: lib/cards/tapPassages,
+   * lib/api/v1/tapPassagesMake). `of` is the story's passagesHash.
+   */
+  tapPassages?: { of?: string; items?: { id: string; text: string }[]; model?: string; at?: unknown; failed?: { of?: string; tries?: number } };
 }
 
 /**

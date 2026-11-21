@@ -29,6 +29,7 @@ async function main() {
   const { getFirestore, Timestamp } = await import('firebase-admin/firestore');
   const { translationHash } = await import('../src/lib/api/v1/translationHash');
   const { summaryHash } = await import('../src/lib/api/v1/summaryTranslations');
+  const { offlinePassages, passagesHash } = await import('../src/lib/cards/tapPassages');
   const { summarize } = await import('../src/lib/api/v1/summary');
 
   const app = initializeApp({ projectId: EMULATOR_PROJECT_ID }, 'seed');
@@ -144,6 +145,14 @@ async function main() {
     45,
     290,
   );
+  // Its tap passages (round 27 §V1): the offline pick the emulators' own publish makes, so the reader's dialog
+  // after 共振 has alice's own sentences to offer (scripts/visual/screens.ts card-passages). Written here whatever
+  // the floor says: the story is the only seeded one near it, and no new card moves the lists' baselines.
+  {
+    const rich = (await db.doc('cards/rich-story').get()).data()!;
+    const items = offlinePassages(rich.story, { title: rich.thoughtCore });
+    await db.doc('cards/rich-story').update({ tapPassages: { of: passagesHash(rich.story), items, model: 'offline', at: at(45) } });
+  }
 
   // A story in English (carol's), weeks old so it sits at the feed's end: the one a 繁體中文 reader can translate.
   await card(
@@ -306,6 +315,14 @@ async function main() {
     db.doc(`resonanceTaps/${cardId}_${uid}`).set({ cardId, userId: uid, on: true, at: at(minutesAgo), rangAt: at(minutesAgo) });
   for (const [uid, m] of [['dora', 8], ['carol', 12], ['eli', 18], ['fay', 22]] as const) await tapped('rain-walk', uid, m);
   for (const [uid, m] of [['gus', 9], ['carol', 48], ['hana', 30], ['bob', 35]] as const) await tapped('rich-story', uid, m);
+  // Their picks among its passages (round 27 §V1; taps-author-list): gus and bob the first, carol the second (her note
+  // shows under it), hana none.
+  {
+    const items = ((await db.doc('cards/rich-story').get()).get('tapPassages.items') ?? []) as { id: string; text: string }[];
+    for (const [uid, i] of [['gus', 0], ['carol', 1], ['bob', 0]] as const) {
+      if (items[i]) await db.doc(`resonanceTaps/rich-story_${uid}`).update({ passage: items[i] });
+    }
+  }
   // The end row's screens (round 26 §V4, scripts/visual/screens.ts card-tapped, card-note-open, taps-list): alice
   // resonated with bob's first coffee, after her connections dora, eli and fay — her face first, then dora's and
   // eli's, a blank disc for fay. (bob's walk stays untapped by her: the tap flows tap it there.)

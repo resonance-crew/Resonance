@@ -7,7 +7,8 @@ import { ApiFailure } from './http';
 import { decodePageToken, encodePageToken } from './paging';
 import { CARD_VISIBILITY_FIELDS, blockedByViewer, cardVisible, toAuthor, trashedAtOf } from './present';
 import { visibleCardById } from './reads';
-import { TAP_FACES_MAX, type AuthorBody, type CardTapBody, type TapListBody, type TapPersonBody } from './schemas';
+import { TAP_FACES_MAX, type AuthorBody, type CardTapBody, type TapListBody, type TapPassageResponseBody, type TapPersonBody } from './schemas';
+import { presentTapPassages, storedPick } from './tapPassages';
 
 /**
  * The resonance tap (共振, round 26): the first of the three answers under a
@@ -16,13 +17,16 @@ import { TAP_FACES_MAX, type AuthorBody, type CardTapBody, type TapListBody, typ
  * `/resonances`, `referenceCardId`). Hence the names here: the collection
  * `resonanceTaps`, the endpoint `/tap`, the bell `resonance_tap`.
  *
- * `resonanceTaps/{cardId}_{uid}` = `{ cardId, userId, on, at, rangAt }`, one
+ * `resonanceTaps/{cardId}_{uid}` = `{ cardId, userId, on, at, rangAt, passage? }`, one
  * per reader and card, server-only (the rules refuse every client read and
  * write). Taking a tap back sets `on: false` and keeps the document: its
  * `rangAt` — when the tap rang the card's author — is what keeps a reader
  * from ringing them again by tapping, taking back and tapping again (one ring
  * per reader and card, ever). `at` is when it last turned on (the lists'
- * order, newest first).
+ * order, newest first). `passage` (round 27) is the reader's pick among the
+ * card's tap passages — `{ id, text }`, the words themselves, so the author's
+ * list keeps what they chose after an edit — or null; taking the tap back
+ * clears it (setTapPassage).
  *
  * A tap connects no one, opens no conversation and gives the author no way to
  * write to the reader (their list of who resonated opens a profile, never a
@@ -119,7 +123,8 @@ export async function setTap(
     const wasOn = snap.exists && snap.get('on') === true;
     if (wasOn === on) return { on, changed: false, ring: false };
     if (!on) {
-      tx.update(ref, { on: false });
+      // Taking it back takes the pick with it (round 27): turning it on again starts without one.
+      tx.update(ref, { on: false, passage: null });
       return { on: false, changed: true, ring: false };
     }
     const rangAt = snap.exists ? (snap.get('rangAt') ?? null) : null;
@@ -149,6 +154,8 @@ const BATCH_MAX = 500;
 interface Tapper {
   uid: string;
   at: number;
+  /** Their pick among the card's passages, as stored (round 27). */
+  passage: { id: string; text: string } | null;
 }
 
 /** The people behind `uids` as the contract shows them, in that order — anyone without a profile left out. */
@@ -182,7 +189,7 @@ function tapsOnQuery(db: Firestore, cardId: string) {
 
 const tapperOf = (d: QueryDocumentSnapshot | DocumentSnapshot): Tapper | null => {
   const uid = d.get('userId');
-  return docIdOk(uid) ? { uid, at: millisOf(d.get('at')) } : null;
+  return docIdOk(uid) ? { uid, at: millisOf(d.get('at')), passage: storedPick(d.get('passage')) } : null;
 };
 
 /**
@@ -223,7 +230,7 @@ async function readerPeople(
   viewerId: string,
   card: Card,
   viewerBlocks?: Promise<ReadonlySet<string>>,
-): Promise<{ mine: boolean; people: Tapper[] }> {
+): Promise<{ mine: boolean; pick: { id: string; text: string } | null; people: Tapper[] }> {
   const [own, links] = await Promise.all([
     tapRef(db, card.id, viewerId).get(),
     db.collection('connections').where('userIds', 'array-contains', viewerId).select('userIds').get(),
@@ -251,7 +258,8 @@ async function readerPeople(
     people = taps.filter((t) => !blocked.has(t.uid) && !blockers.has(t.uid));
   }
   const mine = own.exists && own.get('on') === true;
-  return { mine, people: mine ? [{ uid: viewerId, at: Number.MAX_SAFE_INTEGER }, ...people] : people };
+  const pick = mine ? storedPick(own.get('passage')) : null;
+  return { mine, pick, people: mine ? [{ uid: viewerId, at: Number.MAX_SAFE_INTEGER, passage: pick }, ...people] : people };
 }
 
 /**
@@ -334,14 +342,19 @@ export async function cardTap(
   }
   // A reader: on a named card, the blocks either way and whether a note would be taken in one read, beside their people.
   const named = card.anonymous !== true;
-  const [standing, { mine, people }] = await Promise.all([
+  const [standing, { mine, pick, people }] = await Promise.all([
     named ? readerStanding(db, viewerId, card) : { blocked: false, mayNote: true },
     readerPeople(db, viewerId, card, opts.blocked),
   ]);
   if (standing.blocked) return null;
   const mayNote = standing.mayNote;
   const { faces, more } = await firstFaces(db, people, TAP_FACES_MAX);
-  return { mine, faces, more, mayNote };
+  // The card's passages (round 27): the same for every reader, on the story alone; their own pick while it is one.
+  // Both absent while the card offers none: a short card's answer is as it was before passages.
+  const passages = presentTapPassages(card);
+  if (!passages.length) return { mine, faces, more, mayNote };
+  const passage = pick && passages.some((p) => p.id === pick.id) ? pick.id : null;
+  return { mine, faces, more, mayNote, passages, passage };
 }
 
 /** How much of a note the author's list shows: its first line, at most this many characters. */
@@ -396,7 +409,13 @@ export async function listTaps(db: Firestore, viewerId: string, cardId: string, 
   if (view === 'reader') {
     const { people } = await readerPeople(db, viewerId, card);
     const found = await authorsOf(db, people.map((p) => p.uid));
-    return { people: people.filter((p) => found.has(p.uid)).map((p) => ({ author: found.get(p.uid)!, note: null })), nextPageToken: null };
+    // Only their own row carries a pick (round 27): no one else's is a reader's to learn, on any card.
+    return {
+      people: people
+        .filter((p) => found.has(p.uid))
+        .map((p) => ({ author: found.get(p.uid)!, note: null, ...(p.uid === viewerId && p.passage ? { passage: { text: p.passage.text } } : {}) })),
+      nextPageToken: null,
+    };
   }
   const after = pageToken ? decodePageToken(pageToken) : undefined;
   const page = await authorPeople(db, card, TAP_PAGE, after, await blockedByViewer(db, card.authorId));
@@ -407,8 +426,53 @@ export async function listTaps(db: Firestore, viewerId: string, cardId: string, 
   ]);
   const people: TapPersonBody[] = page.people
     .filter((p) => found.has(p.uid))
-    .map((p) => ({ author: found.get(p.uid)!, note: notes.has(p.uid) ? { excerpt: notes.get(p.uid)! } : null }));
+    .map((p) => ({
+      author: found.get(p.uid)!,
+      note: notes.has(p.uid) ? { excerpt: notes.get(p.uid)! } : null,
+      // A pick only where there is one (absent reads as null).
+      ...(p.passage ? { passage: { text: p.passage.text } } : {}),
+    }));
   const at = page.last?.get('at');
   const nextPageToken = page.full && page.last && at instanceof Timestamp ? encodePageToken(at, page.last.id) : null;
   return { people, nextPageToken };
+}
+
+// --- the passage a reader picked (round 27) --------------------------------------------------------------------------
+
+/** What a pick's card is read with: who may read it, and its passages as the story is now. */
+const PASSAGE_CARD_FIELDS = [...CARD_VISIBILITY_FIELDS, 'story', 'tapPassages'] as const;
+
+/**
+ * PUT /cards/{id}/tap/passage — which part of the story stayed with the
+ * reader: one of the card's passages (`presentTapPassages`), or null to
+ * clear it. Checked in this order: the card as the tap reads it (one they
+ * may read, by id, published, out of the trash, not their own) and the
+ * reader's `tap` not null — a named card across a block either way is
+ * not_found, as GET …/taps; an anonymous card across one is answered exactly
+ * as with none —; their tap is on, else `conflict`; a passage that is not one
+ * the card offers now, `invalid_request`. One transaction writes
+ * `passage: { id, text } | null` on their tap document and nothing else: no
+ * bell, no push, no `at`, no `rangAt`. Only the card's author ever reads it
+ * (their list), and the reader their own row.
+ */
+export async function setTapPassage(db: Firestore, uid: string, cardId: string, passage: string | null): Promise<TapPassageResponseBody> {
+  const card = await visibleCardById(db, uid, cardId, TAP_CARD_FIELDS);
+  if ((await tapViewOf(db, uid, card)) !== 'reader') throw notFound();
+  const ref = tapRef(db, card.id, uid);
+  const cardRef = db.doc(`cards/${card.id}`);
+  const connection = db.doc(`connections/${pairOf(uid, card.authorId)}`);
+  return db.runTransaction(async (tx) => {
+    const [snap, [current], linked] = await Promise.all([tx.get(ref), tx.getAll(cardRef, { fieldMask: [...PASSAGE_CARD_FIELDS] }), tx.get(connection)]);
+    const fresh = current.exists ? mapCard(current.id, current.data()!) : null;
+    if (!tappable(fresh, uid) || fresh.authorId !== card.authorId || !cardVisible(fresh, uid, () => linked.exists)) throw notFound();
+    if (!snap.exists || snap.get('on') !== true) throw new ApiFailure('conflict', 'Resonate with this card first.');
+    if (passage === null) {
+      tx.update(ref, { passage: null });
+      return { passage: null };
+    }
+    const chosen = presentTapPassages(fresh).find((p) => p.id === passage);
+    if (!chosen) throw new ApiFailure('invalid_request', 'Not a passage this card offers.');
+    tx.update(ref, { passage: { id: chosen.id, text: chosen.text } });
+    return { passage: chosen.id };
+  });
 }
