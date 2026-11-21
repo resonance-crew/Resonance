@@ -135,7 +135,7 @@ export const SCREENS: Screen[] = [
   { id: 'home', route: '/home', as: 'alice',
     expect: 'The home feed: story cards in hand-drawn outlines, the header with tabs/bell' },
   { id: 'card', route: '/card/rich-story', as: 'alice',
-    expect: "alice's own card 搬家後的第一個安靜夜晚: title, byline, bold/italic, a heading, a quote, lists, an embedded card, a link, a rule, an English line at the end" },
+    expect: "alice's own card 搬家後的第一個安靜夜晚: title, byline, bold/italic, a heading, a quote, lists, an embedded card, a link, a rule, an English line at the end. Round 29: the two sentences readers picked (the first paragraph's 「…第一次覺得安靜是屬於自己的。」 and the second's) on a faint wash of the tap's colour, one rounded piece per line, nothing moved; gus's and bob's faces overlapping after the first, carol's after the second — in the line right after each sentence's last character on a phone (and any window under 820), in the right margin 8 right of the column on the tablet and the desktop (beside the contents rail there); the quote bare (no one picked it); no blank disc, no number" },
   { id: 'card-other', route: '/card/rain-walk', as: 'alice',
     expect: "bob's card read by alice: byline with bob; where the story's end is in view, the end row — one capsule 共振 · 寄小紙條 · ✓ 已回應 (alice replied with 我也在雨裡走過), all tonal — and under it dora's, eli's and fay's faces overlapping, each on no pad of paper (the front face's pen line parts them), with 收藏 at the line's end" },
   { id: 'card-anonymous', route: '/card/unsigned-letter', as: 'alice',
@@ -146,7 +146,7 @@ export const SCREENS: Screen[] = [
   // row to just under the middle of the window (its scroll-margin), the story's last lines above it.
   { id: 'card-tapped', route: '/card/first-coffee', as: 'alice', web: { scrollTo: '[data-end-row]' },
     app: { ios: ['-visualEnd', 'YES'], android: ['--es', 'cardEnd', 'end'] },
-    expect: "bob's 第一杯自己沖的咖啡 read by alice, who resonated with it: the capsule 共振 on (the verb's solid face, two waves, its words the same as at rest) · 寄小紙條 · 用卡片回應 (tonal), and right under it alice's face first, then dora's and eli's, overlapping with no pad of paper round any (the front face's own pen line parts them), a blank paper disc after them (no number, no words), 收藏 at the line's end" },
+    expect: "bob's 第一杯自己沖的咖啡 read by alice, who resonated with it: the capsule 共振 on (the verb's solid face, two waves, its words the same as at rest) · 寄小紙條 · 用卡片回應 (tonal), and right under it alice's face first, then dora's and eli's, overlapping with no pad of paper round any (the front face's own pen line parts them), nothing after them for fay (no blank disc since round 29 §S5, no number, no words), 收藏 at the line's end" },
   { id: 'card-note-open', route: '/card/first-coffee', as: 'alice',
     web: { click: '[data-end-row] button[data-segment="note"]', scrollTo: '[data-end-row]' },
     app: { ios: ['-visualEnd', 'YES', '-visualNote', 'open'], android: ['--es', 'cardEnd', 'note'] },
@@ -163,7 +163,7 @@ export const SCREENS: Screen[] = [
     expect: "The note in place under the end row, its field holding alice's three lines (讀到早晨屬於自己的那段，… 也是這樣手忙腳亂地沖咖啡。): the capsule grown to three lines, the envelope and 寄出 on the last line — 寄出 the 52 × 48 block at the bottom right in the verb's solid face, its wavy seam turning round its top-left corner, never a strip the capsule's full height; the text keeps the whole width left of 寄出's column" },
   { id: 'card-own-taps', route: '/card/rich-story', as: 'alice', web: { scrollTo: '[data-tap-author]' },
     app: { ios: ['-visualEnd', 'YES'], android: ['--es', 'cardEnd', 'end'] },
-    expect: "alice's own rich story at its end: no capsule — one line, the muted wave glyph and the three newest faces of who resonated (gus, hana, bob) with a blank disc for more (carol), no number, no words; on the desktop the card's share and ⋯ at that line's end" },
+    expect: "alice's own rich story at its end: no capsule — one line, the muted wave glyph and the three newest faces of who resonated (gus, hana, bob) and nothing after them for the others (carol) — no blank disc since round 29 §S5, no number, no words; on the desktop the card's share and ⋯ at that line's end" },
   // (no scroll after the click: the page would move under the pointer left on the faces, washing a row)
   { id: 'taps-list', route: '/card/first-coffee', as: 'alice',
     web: { click: 'button[data-tap-faces]' },
@@ -173,6 +173,11 @@ export const SCREENS: Screen[] = [
     web: { click: '[data-tap-author] button' },
     app: { ios: ['-visualEnd', 'YES', '-visualTaps', 'author'], android: ['--es', 'cardEnd', 'taps'] },
     expect: "Who resonated with alice's rich story, in a centred dialog on every device: 與這張卡片共振的人, then gus, hana, bob and carol, each a face 36 — under gus's, bob's and carol's pen names the passage each picked, in 「」 and muted (gus and bob the first, carol the second), and under carol's quote her note's first line 讀到搬家那段，好像看見自己。, muted; hana's row a name alone — the small 關閉 at its foot" },
+  // Round 29 §S7: who picked one sentence of alice's own story — the first group of faces pressed.
+  { id: 'card-picked-people', route: '/card/rich-story', as: 'alice',
+    web: { click: '[data-passage-faces]' },
+    app: { ios: ['-visualEnd', 'YES', '-visualTaps', 'picked'], android: ['--es', 'cardEnd', 'picked'] },
+    expect: "Who picked the first sentence of alice's rich story, in a centred dialog (a phone's 400 or the column less 16 a side; tablet, Mac and desktop 480): the title 對這一段有共鳴的人, the sentence once in the story's type at 16, muted, in full, in 「」, then gus and bob, newest first, each a face 36 and a pen name in a banded row — no quote under a name — and the small 關閉 at the foot's end; never a bottom sheet, never a popover" },
   // Round 27 §V2: the passages' dialog after a press that turns 共振 on, as dora (no tap of hers on the rich story). The
   // web holds it with `?visualTap=` (emulator builds only, nothing written: a real press would turn the stored tap off
   // on the next device), the apps with their launch args.
