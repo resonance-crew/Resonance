@@ -1665,3 +1665,47 @@ export type MessagePageBody = z.infer<typeof MessagePage>;
 export type BellItemBody = z.infer<typeof BellItem>;
 export type BellPageBody = z.infer<typeof BellPage>;
 export type MarkNotificationsReadInput = z.infer<typeof MarkNotificationsReadRequest>;
+
+// --- Phase 3 sessions (ADR 0004)
+// Resonance's own short-lived access tokens and rotating refresh tokens, traded for a sign-in at the identity
+// provider (src/server/app/auth.ts). Firebase ID tokens keep working beside them (dual accept).
+
+export const AuthExchangeRequest = named(
+  z.object({
+    /** The identity provider whose token this is; `firebase` (the only one today) when absent. */
+    provider: z.enum(['firebase']).nullish(),
+    /** The provider's token: a Firebase ID token. */
+    token: z.string().min(1).max(8192),
+  }),
+  'AuthExchangeRequest',
+  "A sign-in at the identity provider, traded for Resonance's own tokens.",
+);
+
+export const AuthRefreshRequest = named(
+  z.object({ refreshToken: z.string().min(1).max(256) }),
+  'AuthRefreshRequest',
+  'A refresh token, traded (once) for the next pair — or, to log out, revoked.',
+);
+
+export const AuthSession = named(
+  z.object({
+    /** Send it as the bearer credential on every /api/v1 request. */
+    accessToken: z.string(),
+    tokenType: z.enum(['Bearer']),
+    /** Seconds the access token lives (at most 900): refresh before then. */
+    expiresIn: z.number().int(),
+    /** Good once: trade it for the next pair (POST /auth/refresh). Keep it as a password. */
+    refreshToken: z.string(),
+    /** When the refresh token stops being good, used or not. */
+    refreshExpiresAt: z.iso.datetime(),
+    /** The account: the same user id the identity provider's sign-in always had. */
+    userId: z.string(),
+  }),
+  'AuthSession',
+  "Resonance's own session: a short-lived access token and the refresh token for the next one.",
+);
+
+export type AuthExchangeInput = z.infer<typeof AuthExchangeRequest>;
+export type AuthRefreshInput = z.infer<typeof AuthRefreshRequest>;
+export type AuthSessionBody = z.infer<typeof AuthSession>;
+// --- end Phase 3 sessions

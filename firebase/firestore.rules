@@ -787,6 +787,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // --- sessions (server-only, Phase 3: ADR 0004) ---
+    // Resonance's own sessions (src/server/infra/firestore/sessions.ts):
+    // which identity at which provider is which account, and the refresh
+    // tokens POST /api/v1/auth/exchange handed out, kept by their hash.
+    // No client reads or writes either; both go with the account.
+    match /identities/{identityId} {
+      allow read, write: if false;
+    }
+    match /refreshTokens/{tokenHash} {
+      allow read, write: if false;
+    }
+
     // --- card tombstones (server-only) ---
     // The ids of cards deleted for good, written in the transaction that
     // deletes one (deleteCard, the account purge): no new card takes such an

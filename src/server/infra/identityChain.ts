@@ -1,5 +1,6 @@
 import type { IdentityVerifier } from '@/server/ports/identity';
-import { firebaseIdentityVerifier } from './firebase-auth/identity';
+import { firebaseAccountStanding, firebaseIdentityVerifier } from './firebase-auth/identity';
+import { resonanceJwtVerifier } from './session/verifier';
 
 /**
  * Several IdentityVerifiers as one: a credential is asked of each in order,
@@ -13,7 +14,8 @@ export function verifierChain(verifiers: readonly IdentityVerifier[]): IdentityV
     async verifyBearer(authorization, opts) {
       for (const verifier of verifiers) {
         const user = await verifier.verifyBearer(authorization, opts);
-        if (user) return user;
+        // One of its own kind (a token of ours) is its answer alone: no one after it is asked.
+        if (user || owns(verifier, authorization)) return user;
       }
       return null;
     },
@@ -27,13 +29,26 @@ export function verifierChain(verifiers: readonly IdentityVerifier[]): IdentityV
   };
 }
 
+/**
+ * Whether a verifier claims the credential as its own kind. Only a verifier's
+ * own `owns` counts: a lazily loaded one (lazyAsync's proxy) answers every
+ * method name with a promise, which must never pass for a yes.
+ */
+function owns(verifier: IdentityVerifier, authorization: string | null): boolean {
+  return Object.prototype.hasOwnProperty.call(verifier, 'owns') && verifier.owns?.(authorization) === true;
+}
+
 let chain: IdentityVerifier | null = null;
 
 /**
  * Who a request is, for getCurrentUser() (src/lib/auth): the chain of every
- * identity the server accepts. Today only Firebase Auth; a second identity
- * (Phase 3's own tokens) joins this list, and no caller changes.
+ * identity the server accepts — Resonance's own access tokens first (ADR
+ * 0004: checked locally, then the account's standing at Firebase Auth), then
+ * Firebase Auth's ID tokens and the web's session cookie, as before (dual
+ * accept: installed builds keep sending Firebase tokens). Without
+ * RESONANCE_JWT_KEYS the first verifier owns nothing, and the chain is
+ * exactly Firebase Auth.
  */
 export function requestVerifier(): IdentityVerifier {
-  return (chain ??= verifierChain([firebaseIdentityVerifier()]));
+  return (chain ??= verifierChain([resonanceJwtVerifier({ standing: firebaseAccountStanding() }), firebaseIdentityVerifier()]));
 }

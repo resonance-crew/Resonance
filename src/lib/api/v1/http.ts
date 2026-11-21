@@ -123,6 +123,40 @@ export function withUser<A extends unknown[]>(
 }
 
 /**
+ * Wrap a v1 handler that signs no one in itself — the session routes
+ * (/auth/exchange, /refresh, /logout), whose credential is in the body:
+ * ApiFailure to its status, never internals on an unexpected error, an
+ * identity-service outage a 500 (never a 401: the app must not sign out),
+ * and nothing kept by any cache.
+ */
+export function withoutUser<A extends unknown[]>(handler: (req: Request, ...rest: A) => Promise<Response>) {
+  return async (req: Request, ...rest: A): Promise<Response> => {
+    watchAppCheck(req);
+    let res: Response;
+    try {
+      res = await handler(req, ...rest);
+    } catch (e) {
+      if (e instanceof ApiFailure) return apiError(e.code, e.message, e.issues, e.status);
+      console.error('[api/v1]', e);
+      return apiError('internal', 'Something went wrong.');
+    }
+    try {
+      res.headers.set('Cache-Control', 'no-store');
+    } catch {
+      // Immutable headers: the answer goes as it is.
+    }
+    return res;
+  };
+}
+
+/** A request's JSON body, or the 400 when it has none. */
+export async function jsonBody(req: Request): Promise<unknown> {
+  return req.json().catch(() => {
+    throw new ApiFailure('invalid_request', 'The body must be JSON.');
+  });
+}
+
+/**
  * App Check is watched, not enforced: what each request's token says is
  * logged after the response (lib/appCheck/server), costing the caller nothing.
  */

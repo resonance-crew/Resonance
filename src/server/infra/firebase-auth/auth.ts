@@ -114,6 +114,23 @@ async function accountState(uid: string, revocation: RevocationCheck): Promise<A
 }
 
 /**
+ * Whether an account still stands, for Resonance's own tokens
+ * (infra/session/verifier.ts) — the same remembered state, and the same
+ * rule for reads ('cached') and writes ('live'), as Firebase tokens get
+ * above. Null for an account that is gone (deleted, purged); throws
+ * AuthUnavailableError when Firebase Auth couldn't be asked.
+ */
+export async function accountStanding(uid: string, revocation: RevocationCheck): Promise<{ disabled: boolean; validSince: number } | null> {
+  try {
+    const { disabled, validSince } = await accountState(uid, revocation);
+    return { disabled, validSince };
+  } catch (e) {
+    if (isAuthOutage(e)) throw new AuthUnavailableError(e);
+    return null; // auth/user-not-found
+  }
+}
+
+/**
  * Drop what this instance remembers of an account's sign-in state — call
  * after revoking its sessions, so the revocation holds here at once.
  */

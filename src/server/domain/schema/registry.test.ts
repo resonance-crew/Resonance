@@ -242,6 +242,9 @@ describe('the account registry', () => {
         'group edits authorId ==',
         'group draftLog authorId ==',
         'group blocks blockedUid ==',
+        // Phase 3 sessions (ADR 0004): the identity mapping and the refresh tokens go with the account.
+        'identities userId ==',
+        'refreshTokens uid ==',
       ].sort(),
     );
     expect(plan.byCard.map((b) => `${b.entity} ${b.field}`)).toEqual(['resonances cardId', 'notes cardId', 'cardReads cardId', 'resonanceTaps cardId', 'readerSignals cardId']);
@@ -261,8 +264,8 @@ describe('the account registry', () => {
     }
   });
 
-  it('counts its entities (47: 38 collections, 9 subcollections)', () => {
-    expect(Object.keys(ENTITIES)).toHaveLength(47);
+  it('counts its entities (49: 40 collections, 9 subcollections)', () => {
+    expect(Object.keys(ENTITIES)).toHaveLength(49);
     expect(ENTITY_NAMES.filter((n) => SPECS[n].parent)).toHaveLength(9);
   });
 });

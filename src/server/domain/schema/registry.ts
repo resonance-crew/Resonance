@@ -198,6 +198,11 @@ export const ENTITIES = {
   uploads: { uid: ['ownerId'], purge: 'rows', steps: ['uploadFiles'], export: 'none' },
   config: { uid: [], note: `${NO_UID}: the service's settings (storage, recommendPool)`, purge: 'none', export: 'none' },
 
+  // --- sessions (Phase 3, ADR 0004: server-only) ---
+  // Which provider's subject is which account (`firebase_<uid>` → the same uid), and the refresh tokens by their hash.
+  identities: { uid: ['userId'], purge: 'rows', export: 'none' },
+  refreshTokens: { uid: ['uid'], purge: 'rows', export: 'none' },
+
   // --- push ---
   devices: { uid: ['userId'], purge: 'rows', export: 'none' },
   notificationSettings: { uid: ['$id'], purge: 'root', export: 'none' },

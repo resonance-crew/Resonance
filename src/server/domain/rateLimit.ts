@@ -117,6 +117,13 @@ export const LIMITS = {
    * steady writing is under 2000; the patch log keeps each applied one for 7 days.
    */
   draftSave: { max: 5000, windowMs: HOUR },
+  /**
+   * Phase 3 sessions (ADR 0004): trading a Firebase sign-in for Resonance's tokens (POST /api/v1/auth/exchange) —
+   * an app does it once per sign-in, a few devices a few times an hour at most.
+   */
+  authExchange: { max: 60, windowMs: HOUR },
+  /** Refreshing them (POST /api/v1/auth/refresh): every 15 minutes per signed-in device while it is in use. */
+  authRefresh: { max: 400, windowMs: HOUR },
 } as const satisfies Record<string, { max: number; windowMs: number }>;
 
 export type Bucket = keyof typeof LIMITS;
