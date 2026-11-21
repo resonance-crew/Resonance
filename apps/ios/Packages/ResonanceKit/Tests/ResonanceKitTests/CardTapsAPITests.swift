@@ -42,6 +42,27 @@ import Testing
         #expect(transport.requests.first?.query("pageToken") == "p1")
     }
 
+    /// Round 29 §S4: who picked one sentence is the same list asked with `passage`; without it the query is as before.
+    @Test func whoPickedASentenceAsksWithItsPassage() async throws {
+        let transport = StubTransport(body: #"{"people":[],"nextPageToken":null}"#)
+        _ = try await api(transport).taps("c1", passage: "8b3a1c4d")
+        #expect(transport.requests.first?.query("passage") == "8b3a1c4d")
+        #expect(transport.requests.first?.query("pageToken") == nil)
+        _ = try await api(transport).taps("c1", pageToken: "p2")
+        #expect(transport.requests.last?.query("passage") == nil)
+    }
+
+    /// Round 29 §P1: the author's answer names the picked sentences and who picked each; a reader's has none.
+    @Test func theAuthorsPickedSentencesAreRead() throws {
+        let json = #"{"mine":false,"faces":[],"more":false,"mayNote":false,"picked":[{"id":"14fecaaf","text":"一","people":[{"id":"gus","handle":"gus","initials":"GU","accentColor":"oklch(90% 0.05 60)","avatarUrl":null,"avatarSeed":"3","verified":false,"region":null}],"more":true}]}"#
+        let tap = try JSONDecoder().decode(CardTap.self, from: Data(json.utf8))
+        #expect(tap.picked?.first?.id == "14fecaaf")
+        #expect(tap.picked?.first?.people.map(\.handle) == ["gus"])
+        #expect(tap.picked?.first?.more == true)
+        let reader = try JSONDecoder().decode(CardTap.self, from: Data(#"{"mine":true,"faces":[],"more":false,"mayNote":true}"#.utf8))
+        #expect(reader.picked == nil)
+    }
+
     /// Round 27 §P4: the pick is a PUT to …/tap/passage with the passage's id (or null to clear it), and a refusal
     /// (409: the tap went; 400: not one of the card's passages now) carries its status for the page to read again.
     @Test func aPickPutsItsPassageAndAClearSendsNull() async throws {
