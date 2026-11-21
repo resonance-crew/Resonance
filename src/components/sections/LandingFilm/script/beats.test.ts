@@ -7,7 +7,7 @@ import { BEATS, BRIDGE_IN, FADE, MEET_RESTS, MEET_RIPPLES, MEET_WALK, meetClock,
 import { WALK_FOOT, WALK_RISE, groundAt } from './ground';
 import { WATER_Y } from './world';
 import { computeLayout, finishLayout } from './layout';
-import { EDGE_PX, HEADER_CLEAR, HELD_TOP, NIGHT_ROW_PALS, SKY_CARDS, SWING_PX, camOf, journeyCamEnd, placeOf, type PalSlug } from './marks';
+import { EDGE_PX, HEADER_CLEAR, HELD_TOP, NIGHT_ROW_PALS, SKY_CARDS, SWING_PX, camOf, columnEdge, journeyCamEnd, placeOf, type PalSlug } from './marks';
 import { SEGMENTS, SEG, smooth, span, type SceneN, type SegId } from './timeline';
 
 /** A stage without a DOM: every card, actor and prop a frame places, recorded; the puppets are ghosts. */
@@ -797,6 +797,32 @@ describe('the beats, acted by ghosts', () => {
           expect(r.b, `${tag} sky${i}`).toBeLessThan(L4.groundY - L4.pal * 1.12);
           for (let j = 0; j < i; j++) expect(apart(r, sky[j]), `${tag} sky${i} sky${j}`).toBe(true);
         });
+      }
+    });
+
+    it('keeps the night sky\'s small cards inside the header\'s column on a window wider than it', () => {
+      for (const [w, h] of [
+        [1440, 900],
+        [1611, 704],
+        [1920, 1080],
+        [2560, 1300],
+      ] as const) {
+        const { frame, size } = stage(w, h);
+        const f = frame('yours', SEG.yours.dur);
+        const cta = rect(f.slots.get('cta')!, size.cta);
+        const sky = Array.from({ length: SKY_CARDS }, (_, i) => rect(f.slots.get(`sky${i}` as SlotId)!, size[`sky${i}` as SlotId]));
+        const tag = `${w}×${h}`;
+        // the header's row: 1200 px, centred (FilmHeader.module.css `.row`)
+        expect(columnEdge(w), tag).toBe((w - 1200) / 2);
+        sky.forEach((r, i) => {
+          expect(r.l, `${tag} sky${i}`).toBeGreaterThanOrEqual((w - 1200) / 2 - 0.5);
+          expect(r.r, `${tag} sky${i}`).toBeLessThanOrEqual((w + 1200) / 2 + 0.5);
+          expect(apart(r, cta), `${tag} sky${i}`).toBe(true);
+          for (let j = 0; j < i; j++) expect(apart(r, sky[j]), `${tag} sky${i} sky${j}`).toBe(true);
+        });
+        // the outer two stand on the margin itself, as the logo and the last button do
+        expect(sky[0].l, tag).toBeCloseTo((w - 1200) / 2, 0);
+        expect(sky[2].r, tag).toBeCloseTo((w + 1200) / 2, 0);
       }
     });
   });

@@ -106,6 +106,9 @@
 
 .film {
   position: relative;
+  /* the header's side margin (FilmHeader `.row`: its 1200 px column, centred), for what stands over the stage in the
+     page's own px — a percentage here is of the box that uses it, the stage's width */
+  --film-col-x: max(clamp(24px, 5vw, 80px), calc((100% - 1200px) / 2));
 }
 .film[data-film='film'] {
   /* the track (script/timeline TRACK_SVH) and the screen the stage lets go of */
@@ -935,9 +938,11 @@
   line-height: 1.5;
 }
 @media (min-width: 640px) and (max-aspect-ratio: 11/10) {
+  /* never left of the header's logo, nor right of its last button (--film-col-x): from 800 px wide the header's
+     margin is past 40 */
   .hero {
-    left: 40px;
-    right: 40px;
+    left: max(40px, var(--film-col-x));
+    right: max(40px, var(--film-col-x));
     top: 144px;
   }
   .h1 {
@@ -955,8 +960,11 @@
   }
 }
 @media (min-aspect-ratio: 11/10) {
+  /* a window wider than the header's column (from 1422 px: FilmHeader `.row`, 1200 centred) starts the words on the
+     logo's line — at 7.8vw alone they stood out left of the header and the player, which keep to their columns
+     (the owner, 2026-11-21: 「它卻是凸到左邊去了」) */
   .hero {
-    left: max(40px, 7.8vw);
+    left: max(40px, 7.8vw, calc((100% - 1200px) / 2));
     right: auto;
     width: min(620px, 46vw);
     top: clamp(104px, 16svh, 156px);
@@ -1092,8 +1100,9 @@
 .film:not([data-film='film']) .slot:not([data-slot='story']) {
   display: none;
 }
+/* (its right edge inside the header's column on a wide window, as the hero's left is) */
 .film:not([data-film='film']) .slot[data-slot='story'] {
-  right: max(40px, 6vw);
+  right: max(40px, 6vw, calc((100% - 1200px) / 2));
   left: auto;
   top: clamp(104px, 16svh, 156px);
 }
