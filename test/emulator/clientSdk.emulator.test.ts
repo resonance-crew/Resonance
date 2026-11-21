@@ -102,89 +102,12 @@ describe('reads on Lite', () => {
 });
 
 describe('writes on Lite', () => {
-  it("are what the author's next read shows, even before the write is awaited", async () => {
-    const { createCardDraft, updateCardDraft } = await client.cards();
-    const { getCardsByAuthor } = await client.reads();
-    const draft = await createCardDraft({
-      thoughtCore: 'still writing',
-      story: 'first line',
-      tags: [],
-      visibility: 'public',
-      originalLocale: 'zh-TW',
-    });
-    expect(draft.authorId).toBe(me);
-
-    // Leaving the editor flushes the autosave without waiting; the card box reads at once.
-    const saving = updateCardDraft(draft.id, { story: 'first line, then a second' });
-    const drafts = await getCardsByAuthor(me, 'draft');
-    expect(drafts.map((c) => [c.id, c.story])).toEqual([[draft.id, 'first line, then a second']]);
-    await saving;
-    expect((await db.doc(`cards/${draft.id}`).get()).get('story')).toBe('first line, then a second');
-  });
-
-  it('land in the order they were made: a card dragged twice rests where it was dropped last', async () => {
-    const { addMapNode, loadMyThoughtMap, moveMapNode } = await client.map();
-    await addMapNode('walk', 0, 0);
-    const moves = [moveMapNode('walk', 120, 40, null), moveMapNode('walk', 360, 80, null)];
-    const map = await loadMyThoughtMap();
-    expect(map.nodes.map((n) => [n.cardId, n.x, n.y])).toEqual([['walk', 360, 80]]);
-    await Promise.all(moves);
-    expect((await db.doc(`thoughtMaps/${me}/nodes/walk`).get()).data()).toMatchObject({ x: 360, y: 80 });
-  });
-
-  // The editor saves a published card's revision into its buffer, and the
-  // server applies the buffer (POST …/edits/apply): what the browser wrote
-  // there, through the rules, is exactly what goes live.
-  it("put a published card's revision where the server applies it", async () => {
-    await db.doc('cards/live').set({
-      authorId: me,
-      slug: 'a-quiet-night',
-      thoughtCore: 'a quiet night',
-      story: 'the story readers see',
-      tags: ['夜'],
-      media: { type: 'image', url: 'https://cdn/old.avif', label: 'old' },
-      accentHue: 55,
-      originalLocale: 'zh-TW',
-      translations: {},
-      visibility: 'public',
-      anonymous: false,
-      publishedAt: at('2026-09-01T08:00:00Z'),
-      readCount: 3,
-      resonanceCount: 0,
-      inviteCount: 0,
-    });
-    const { savePendingCardEdit } = await client.cardEdits();
-    // The cover removed (undefined, which the browser leaves out), the
-    // visibility and byline the update panel chose.
-    await savePendingCardEdit('live', {
-      thoughtCore: 'a quieter night',
-      story: 'the revision',
-      tags: ['夜', '雨'],
-      visibility: 'private',
-      anonymous: true,
-      media: undefined,
-      accentHue: null,
-    });
-    expect((await db.doc('cards/live').get()).get('story')).toBe('the story readers see');
-
-    const { applyCardEdit } = await import('@/lib/api/v1/edits');
-    await expect(applyCardEdit(db, me, 'live')).resolves.toMatchObject({ slug: 'a-quiet-night', applied: true });
-    const card = (await db.doc('cards/live').get()).data()!;
-    expect(card).toMatchObject({
-      thoughtCore: 'a quieter night',
-      story: 'the revision',
-      tags: ['夜', '雨'],
-      visibility: 'private',
-      anonymous: true,
-      accentHue: null,
-      slug: 'a-quiet-night',
-      readCount: 3,
-    });
-    expect(card.media).toBeUndefined();
-    expect((card.publishedAt as Timestamp).toDate().toISOString()).toBe('2026-09-01T08:00:00.000Z');
-    expect((await db.doc('cards/live/edits/current').get()).exists).toBe(false);
-  });
-
+  // 任務 #3 Phase 2b: the browser's drafts, pending edits and thought map no longer write Firestore — they go
+  // through /api/v1 (createDraft / saveDraft by rev, edits/current, thought-map ops; client/draftOutbox,
+  // client/thoughtMap). Their three cases here ("what the next read shows", "land in the order they were made",
+  // "a published card's revision where the server applies it") moved to clientWriter.emulator.test.ts, which runs
+  // the same client modules against the real route handlers. The rules for those writes stay for the installed
+  // app builds that still make them, held by rules.emulator.test.ts; what the browser must never write stays here.
   it("are refused by the rules where the browser mustn't write", async () => {
     const { getClientDb } = await import('@/lib/db/firestore/client/init');
     const { doc, setDoc } = await import('@/lib/db/firestore/client/sdk');
