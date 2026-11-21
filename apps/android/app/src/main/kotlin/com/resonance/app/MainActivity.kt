@@ -120,6 +120,7 @@ class MainActivity : ComponentActivity() {
             DebugLaunch.threadPanel = intent.getStringExtra("threadPanel")
             DebugLaunch.linkDraft = intent.getStringExtra("linkDraft")
             DebugLaunch.writeStep = intent.getStringExtra("writeStep")
+            DebugLaunch.visualUpdate = intent.getStringExtra("visualUpdate")
             // `--ez` from adb, or a string from Maestro's launchApp arguments.
             DebugLaunch.coverFrame = intent.getStringExtra("coverFrame") == "true" || intent.getBooleanExtra("coverFrame", false)
             DebugLaunch.scrollToCard = intent.getStringExtra("scrollToCard")
@@ -285,6 +286,20 @@ class MainActivity : ComponentActivity() {
 
 /** Debug launch extras the screens read (the writer's and a thread's prefill). */
 object DebugLaunch {
+    /**
+     * `--es visualUpdate required` (the release screenshots' `update-required`, scripts/visual/screens.ts): the update
+     * page whatever client-config says — its answer is the stack's, set where the stack starts, and no capture's stack
+     * retires a build. `recommended` gives the note instead. Read by [updateNeed]; a debug launch only.
+     */
+    var visualUpdate: String? = null
+
+    /** What [visualUpdate] asks for, or null to go by the server. */
+    fun updateNeed(value: String? = visualUpdate): com.resonance.kit.config.UpdateNeed? = when (value) {
+        "required" -> com.resonance.kit.config.UpdateNeed.Required
+        "recommended" -> com.resonance.kit.config.UpdateNeed.Recommended
+        else -> null
+    }
+
     var writeTitle: String? = null
     var writeStory: String? = null
     var writeCover: String? = null

@@ -130,6 +130,11 @@ export const SCREENS: Screen[] = [
     expect: 'The landing film at 63 s (scene 4, night): stars over the dark hills and houses, a card waiting — the next story is the visitor\'s' },
   { id: 'welcome', route: null, as: null, platforms: ['ios', 'android', 'mac'],
     expect: 'The signed-out start screen with its sign-in choices' },
+  // Below the build the server still serves (client-config's minBuild, 任務 #3 Phase 2). A capture's stack retires no
+  // build, so the apps take it as a debug launch argument (apps/README.md); the web has no such page.
+  { id: 'update-required', route: '/home', as: 'alice', platforms: ['ios', 'android', 'mac'],
+    app: { ios: ['-visualUpdate', 'required'], android: ['--es', 'visualUpdate', 'required'] },
+    expect: 'The update page alone on the paper: its mark, 請更新共振, the line saying this version no longer works, and the solid 前往更新 — no feed, no tab bar, nothing of the app behind it' },
   { id: 'signin', route: '/signin', as: null, platforms: ['web'],
     expect: 'Sign-in: a cover beside a sheet with the provider buttons' },
   { id: 'home', route: '/home', as: 'alice',

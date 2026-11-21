@@ -176,6 +176,9 @@ scrolls a person's page to that card once its cards are in (`profile-translated`
 the release screenshots start every other screen with `false`), `--es route /settings/<section>`,
 `--es writeStep publish`, `--ez coverFrame true`, `--es scrollToCard <slug>` (a tablet scrolls to the card's block
 of columns).
+任務 #3's: `-visualUpdate required` shows the update page whatever `client-config` answered (the release
+screenshots' `update-required`: a capture's stack retires no build), `recommended` the note that a newer build is
+out; Android's twin is `--es visualUpdate required|recommended`. A debug build only.
 `-openWriter YES` opens the writer on a new card at launch and `-writeCard <id>`
 on one of yours (a draft, a published card, one in the trash); `-writeStep publish`
 then opens its second step, `-writeFocus YES` puts the caret in the story (the

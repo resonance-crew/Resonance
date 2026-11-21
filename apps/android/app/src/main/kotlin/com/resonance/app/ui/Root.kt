@@ -70,7 +70,9 @@ fun ResonanceRoot(session: Session, incomingRoute: MutableState<String?>) {
     CompositionLocalProvider(LocalIndication provides OrganicIndication(), LocalModalBackdrop provides backdrop, LocalSummaryReader provides summaryReader) {
         val phase by session.phase.collectAsStateWithLifecycle()
         // Below client-config's minBuild (Phase 2) nothing else shows: only the way to the store.
-        val updateNeed by session.updateNeed.collectAsStateWithLifecycle()
+        val served by session.updateNeed.collectAsStateWithLifecycle()
+        // The screenshots' `--es visualUpdate required` shows it whatever the server says (DebugLaunch, debug builds).
+        val updateNeed = com.resonance.app.DebugLaunch.updateNeed() ?: served
         if (updateNeed == com.resonance.kit.config.UpdateNeed.Required) {
             Box(Modifier.fillMaxSize().cream()) { UpdateScreen() }
             return@CompositionLocalProvider
