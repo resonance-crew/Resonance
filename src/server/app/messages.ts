@@ -13,7 +13,9 @@ import {
 } from '@/server/domain/conversations';
 import type { ConversationHead } from '@/server/ports/repos/conversations';
 import { instantMillis, type Instant } from '@/server/ports/time';
+import { threadChanged } from '@/server/domain/realtimeInbox';
 import { noPenName } from './conversations';
+import { signal } from './inbox';
 
 // Reactions and unsending (round 16) as application services. Why: the
 // module comment of src/lib/api/v1/messageActions.ts (the legacy facades).
@@ -26,7 +28,7 @@ const participates = (convo: ConversationHead | null, uid: string) => !!convo?.p
 export async function setReactionIn(ctx: ServerCtx, uid: string, pair: string, messageId: string, input: SetReactionInput): Promise<void> {
   const other = otherInPair(pair, uid);
   if (!other || isReservedId(messageId)) throw notFound();
-  await ctx.uow.run(
+  const changed = await ctx.uow.run(
     async ({ conversations: tx }) => {
       const [convo, message, me, blockOut, blockIn, connection] = await Promise.all([
         tx.getConversation(pair),
@@ -40,26 +42,30 @@ export async function setReactionIn(ctx: ServerCtx, uid: string, pair: string, m
       if (!me.penName) throw noPenName();
       if (blockOut || blockIn) throw new ApiFailure('blocked', 'You cannot react to this message.');
       if (!connection) throw new ApiFailure('forbidden', 'You can react once you are connected.');
-      if (message.reactions[uid] === input.reaction) return;
+      if (message.reactions[uid] === input.reaction) return false;
       tx.setReaction(pair, messageId, uid, input.reaction);
+      return true;
     },
     { label: 'setReaction' },
   );
+  if (changed) await signal(ctx, threadChanged(pair, uid, other));
 }
 
 /** See src/lib/api/v1/messageActions.ts `removeReaction`. */
 export async function removeReactionIn(ctx: ServerCtx, uid: string, pair: string, messageId: string): Promise<void> {
   const other = otherInPair(pair, uid);
   if (!other || isReservedId(messageId)) throw notFound();
-  await ctx.uow.run(
+  const changed = await ctx.uow.run(
     async ({ conversations: tx }) => {
       const [convo, message] = await Promise.all([tx.getConversation(pair), tx.getMessage(pair, messageId)]);
       if (!participates(convo, uid) || !message) throw notFound();
-      if (message.reactions[uid] === undefined) return;
+      if (message.reactions[uid] === undefined) return false;
       tx.setReaction(pair, messageId, uid, null);
+      return true;
     },
     { label: 'removeReaction' },
   );
+  if (changed) await signal(ctx, threadChanged(pair, uid, other));
 }
 
 export interface UnsentMessage {
@@ -117,6 +123,7 @@ export async function unsendMessageIn(ctx: ServerCtx, uid: string, pair: string,
   if (!done.unsent) return { push: null };
   // A message quoted more often than one transaction writes: the rest right after it.
   if (done.more) await emptyQuotes(ctx, pair, messageId, uid);
+  await signal(ctx, threadChanged(pair, uid, other));
   return { push: { conversationId: pair, messageId, from: uid, to: other } };
 }
 

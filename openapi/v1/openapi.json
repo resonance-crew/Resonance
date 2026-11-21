@@ -2492,7 +2492,384 @@
         }
       }
     },
+    "/conversations": {
+      "get": {
+        "operationId": "listConversations",
+        "summary": "Your conversations, the most recently active first (50 a page)",
+        "description": "What the `conversations` listener read: each with your unread count, the last message's preview, the letter it holds and the other person as their profile is now (`other: null` when their account is gone). Conversations with people you blocked are listed too, as before: filter them by your blocks. Ask again when `signals/{uid}` `inbox` moves, with `If-None-Match`: an unchanged list is `304`.",
+        "parameters": [
+          {
+            "name": "pageToken",
+            "in": "query",
+            "required": false,
+            "description": "A page's `nextPageToken`",
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conversations/{pair}/messages": {
+      "get": {
+        "operationId": "listMessages",
+        "summary": "A thread's messages, newest first",
+        "description": "No cursor: the newest `limit` (the window to show, and to ask for again with `If-None-Match` when `signals/{uid}` `threads.{pair}` moves: a reaction, an unsend or a link preview changes it too). `before`: the page older than a message (`olderCursor`, or any message's `cursor`). `after`: the messages sent right after one (`newerCursor`), oldest of them first in time but answered newest first; `hasNewer` says the page was full. Ordered by send time to the microsecond, then id: two messages sent in one millisecond are never skipped. `404` for anyone but its two participants, whether the conversation exists or not.",
+        "parameters": [
+          {
+            "name": "pair",
+            "in": "path",
+            "required": true,
+            "description": "The conversation's id: its two participants' uids, sorted, joined by `_`",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "description": "A cursor: the page older than it",
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "A cursor: what came after it (not with `before`)",
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessagePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conversations/{pair}/read": {
+      "post": {
+        "operationId": "markConversationRead",
+        "summary": "You have read the thread: your unread count in it goes to 0",
+        "description": "Nothing changes for the other person. `404` for anyone but its two participants, whether it exists or not.",
+        "parameters": [
+          {
+            "name": "pair",
+            "in": "path",
+            "required": true,
+            "description": "The conversation's id: its two participants' uids, sorted, joined by `_`",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Read"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/bell": {
+      "get": {
+        "operationId": "getBell",
+        "summary": "Your bell, newest first (20 a page)",
+        "description": "What the `notifications` listener read, each row's payload as the server wrote it (`anonymous` on a note or a resonance on one of your anonymous cards: open the card, never a thread), and the profiles of the people the rows name (a tap row's first 3 readers). Ask again when `signals/{uid}` `bell` moves, with `If-None-Match`.",
+        "parameters": [
+          {
+            "name": "pageToken",
+            "in": "query",
+            "required": false,
+            "description": "A page's `nextPageToken`",
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BellPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notifications/read": {
+      "post": {
+        "operationId": "markNotificationsRead",
+        "summary": "Mark bell rows of yours read: by id, or every one up to a time",
+        "description": "Rows that aren't yours, and ids that name none, are ignored. A row read already keeps the time it was read.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkNotificationsReadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Read"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/conversations/{pair}": {
+      "get": {
+        "operationId": "getConversation",
+        "summary": "One of your conversations, as the list shows it",
+        "description": "Its letter and your unread count, as the thread reads them. `404` for anyone but its two participants, whether it exists or not.",
+        "parameters": [
+          {
+            "name": "pair",
+            "in": "path",
+            "required": true,
+            "description": "The conversation's id: its two participants' uids, sorted, joined by `_`",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "operationId": "deleteConversation",
         "summary": "Delete a conversation for both of its people: its messages, then the conversation (with a letter that waits in it — the writer withdraws it, its recipient declines it; the count of three unanswered notes is kept apart and stays). Either participant may; for anyone else it is `404`, whether the conversation exists or not. One already gone answers `204` (a retry after a lost answer)",
@@ -4583,6 +4960,462 @@
           "available"
         ],
         "description": "Whether a pen name is free (your own counts as free)."
+      },
+      "ConversationLastMessage": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "senderId": {
+            "type": "string"
+          },
+          "sentAt": {
+            "nullable": true,
+            "type": "string",
+            "description": "ISO 8601 UTC to the microsecond (2026-11-20T03:04:05.123456Z)."
+          },
+          "image": {
+            "type": "boolean"
+          },
+          "sticker": {
+            "type": "boolean"
+          },
+          "albumCount": {
+            "nullable": true,
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "unsent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "text",
+          "senderId",
+          "sentAt",
+          "image",
+          "sticker",
+          "albumCount",
+          "unsent"
+        ],
+        "description": "The conversation list's preview of the last message."
+      },
+      "ConversationLetter": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "cardId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "from",
+          "cardId",
+          "count"
+        ],
+        "description": "The letter a conversation holds: notes left by someone not connected, waiting for an answer."
+      },
+      "Conversation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "participants": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "otherId": {
+            "type": "string"
+          },
+          "other": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Author"
+              }
+            ]
+          },
+          "unread": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "lastMessage": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConversationLastMessage"
+              }
+            ]
+          },
+          "request": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConversationLetter"
+              }
+            ]
+          },
+          "createdAt": {
+            "nullable": true,
+            "type": "string",
+            "description": "ISO 8601 UTC to the microsecond (2026-11-20T03:04:05.123456Z)."
+          },
+          "updatedAt": {
+            "nullable": true,
+            "type": "string",
+            "description": "ISO 8601 UTC to the microsecond (2026-11-20T03:04:05.123456Z)."
+          },
+          "originCardId": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "participants",
+          "otherId",
+          "other",
+          "unread",
+          "lastMessage",
+          "request",
+          "createdAt",
+          "updatedAt",
+          "originCardId"
+        ],
+        "description": "One of your conversations, as the list shows it."
+      },
+      "ConversationList": {
+        "type": "object",
+        "properties": {
+          "conversations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Conversation"
+            }
+          },
+          "nextPageToken": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversations",
+          "nextPageToken"
+        ],
+        "description": "Your conversations, the most recently active first, 50 a page."
+      },
+      "MessageQuote": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "senderId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "cardRef": {
+            "type": "string"
+          },
+          "image": {
+            "type": "boolean"
+          },
+          "sticker": {
+            "$ref": "#/components/schemas/StickerRef"
+          },
+          "unsent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "senderId",
+          "text"
+        ],
+        "description": "A reply's snapshot of the message it answers."
+      },
+      "MessagePicture": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "width",
+          "height"
+        ]
+      },
+      "ThreadMessage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "cursor": {
+            "type": "string"
+          },
+          "senderId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "sentAt": {
+            "type": "string",
+            "description": "ISO 8601 UTC to the microsecond (2026-11-20T03:04:05.123456Z)."
+          },
+          "kind": {
+            "type": "string"
+          },
+          "cardRef": {
+            "type": "string"
+          },
+          "noteRef": {
+            "type": "object",
+            "properties": {
+              "cardId": {
+                "type": "string"
+              },
+              "noteId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "cardId",
+              "noteId"
+            ]
+          },
+          "replyTo": {
+            "$ref": "#/components/schemas/MessageQuote"
+          },
+          "image": {
+            "$ref": "#/components/schemas/MessagePicture"
+          },
+          "album": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "index": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "count": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "id",
+              "index",
+              "count"
+            ]
+          },
+          "sticker": {
+            "$ref": "#/components/schemas/StickerRef"
+          },
+          "reactions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "unsentAt": {
+            "type": "string",
+            "description": "ISO 8601 UTC to the microsecond (2026-11-20T03:04:05.123456Z)."
+          },
+          "privateShare": {
+            "type": "boolean"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/LinkPreview"
+          }
+        },
+        "required": [
+          "id",
+          "cursor",
+          "senderId",
+          "text",
+          "sentAt"
+        ],
+        "description": "A message as the thread shows it, its fields as stored."
+      },
+      "MessagePage": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ThreadMessage"
+            }
+          },
+          "olderCursor": {
+            "nullable": true,
+            "type": "string"
+          },
+          "newerCursor": {
+            "nullable": true,
+            "type": "string"
+          },
+          "hasNewer": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "messages",
+          "olderCursor",
+          "newerCursor",
+          "hasNewer"
+        ],
+        "description": "A page of a thread's messages."
+      },
+      "BellPayload": {
+        "type": "object",
+        "properties": {
+          "fromUserId": {
+            "type": "string"
+          },
+          "fromHandle": {
+            "type": "string"
+          },
+          "fromUserIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cardId": {
+            "type": "string"
+          },
+          "noteId": {
+            "type": "string"
+          },
+          "preview": {
+            "type": "string"
+          },
+          "count": {
+            "type": "number"
+          },
+          "readers": {
+            "type": "number"
+          },
+          "reread": {
+            "type": "boolean"
+          },
+          "anonymous": {
+            "type": "boolean"
+          },
+          "inviteId": {
+            "type": "string"
+          }
+        },
+        "description": "What a bell row says, as the server wrote it (the fields the clients draw)."
+      },
+      "BellItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/BellPayload"
+          },
+          "readAt": {
+            "nullable": true,
+            "type": "string",
+            "description": "ISO 8601 UTC to the microsecond (2026-11-20T03:04:05.123456Z)."
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "ISO 8601 UTC to the microsecond (2026-11-20T03:04:05.123456Z)."
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "payload",
+          "readAt",
+          "createdAt"
+        ]
+      },
+      "BellPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BellItem"
+            }
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Author"
+            }
+          },
+          "nextPageToken": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "people",
+          "nextPageToken"
+        ],
+        "description": "Your bell, newest first."
+      },
+      "MarkNotificationsReadRequest": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "nullable": true,
+            "minItems": 1,
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          "before": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          }
+        },
+        "description": "Mark bell rows read: by id, or everything up to a time."
       }
     }
   }

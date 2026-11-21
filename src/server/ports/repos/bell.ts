@@ -9,6 +9,7 @@
  * snapshot, `Transaction` or `FieldValue`.
  */
 import type { WeekRead } from '@/server/domain/push/readSummary';
+import type { Instant, PageCursor } from '../time';
 
 /** A bell row as the push reads it. */
 export interface BellRow {
@@ -28,6 +29,24 @@ export interface PushedRow {
   type: string;
   payload: Record<string, unknown>;
   atMs: number;
+}
+
+// --- Phase 2 inbox (2a-inbox): the bell as the clients list it, read through /api/v1
+
+/** A bell row as the bell lists it. */
+export interface ListedBellRow {
+  id: string;
+  type: string;
+  /** The stored payload (`{}` when it isn't an object). */
+  payload: Record<string, unknown>;
+  createdAt: Instant;
+  readAt: Instant | null;
+}
+
+export interface BellPage {
+  rows: ListedBellRow[];
+  /** Resumes after the page's last row; null when the page wasn't full. */
+  next: PageCursor | null;
 }
 
 /** A card as the weekly read summary weighs it. */
@@ -60,6 +79,12 @@ export interface BellData {
   listRowIdsNaming(uid: string): Promise<string[]>;
   /** The reading records reaching the end in [sinceMs, untilMs), in that order. */
   listReachedEnd(sinceMs: number, untilMs: number): Promise<WeekRead[]>;
+  /** `uid`'s rows (`userId ==`), `(createdAt, id)` descending, after `before` (invalid_request when it isn't a cursor). */
+  listRows(uid: string, limit: number, before?: PageCursor): Promise<BellPage>;
+  /** Of these rows, those that are `uid`'s and unread get `readAt` = the server's time; answers how many. */
+  markRead(uid: string, ids: string[]): Promise<number>;
+  /** `uid`'s unread rows made at `before` or earlier — of the newest `scan` such rows — read now; answers how many. */
+  markReadBefore(uid: string, before: Instant, scan: number): Promise<number>;
   /** The cards by id (null where none), as the read summary weighs them. */
   getSummaryCards(ids: string[]): Promise<(SummaryCard | null)[]>;
 }

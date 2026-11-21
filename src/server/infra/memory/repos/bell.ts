@@ -1,5 +1,7 @@
 import type { WeekRead } from '@/server/domain/push/readSummary';
-import type { BellData, BellRow, BellTxRepo, PushedRow } from '@/server/ports/repos/bell';
+import { ApiFailure } from '@/lib/api/v1/http';
+import type { BellData, BellRow, BellTxRepo, ListedBellRow, PushedRow } from '@/server/ports/repos/bell';
+import { compareInstants, decodeCursor, encodeCursor, isInstant, toInstant, type Instant } from '@/server/ports/time';
 import type { MemoryState, Row } from '../state';
 import type { MemoryTx } from '../uow';
 
@@ -26,6 +28,29 @@ function rowOf(id: string, row: Row | null): BellRow | null {
     read: row.readAt != null,
   };
 }
+
+/** A stored time as an Instant: the writers here keep epoch ms or a Date; a seeded row may hold an Instant. */
+function anyInstant(v: unknown): Instant | null {
+  if (isInstant(v)) return v;
+  if (v instanceof Date && Number.isFinite(v.getTime())) return toInstant(v);
+  if (typeof v === 'number' && Number.isFinite(v)) return toInstant(v);
+  return null;
+}
+
+function listedOf(id: string, row: Row): ListedBellRow | null {
+  const createdAt = anyInstant(row.createdAt);
+  if (!createdAt) return null;
+  const payload = row.payload;
+  return {
+    id,
+    type: typeof row.type === 'string' ? row.type : '',
+    payload: payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Record<string, unknown>) : {},
+    createdAt,
+    readAt: anyInstant(row.readAt),
+  };
+}
+
+const byPosition = (a: { t: Instant; id: string }, b: { t: Instant; id: string }) => compareInstants(a.t, b.t) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 const pushedRow = (row: PushedRow): Row => ({ userId: row.userId, type: row.type, payload: row.payload, readAt: null, createdAt: row.atMs, pushedAt: row.atMs });
 
@@ -72,6 +97,37 @@ export function bellData(state: MemoryState): BellData {
       }
       return out.sort((a, b) => a.reachedEndAt - b.reachedEndAt);
     },
+    async listRows(uid, limit, before) {
+      let at: { t: Instant; id: string } | null = null;
+      if (before !== undefined) {
+        at = decodeCursor(before);
+        if (!at) throw new ApiFailure('invalid_request', 'The request does not match the contract.', [{ path: 'pageToken', message: 'Not a valid page token.' }]);
+      }
+      const from = at;
+      const rows = newestFirst(state, uid)
+        .filter((r) => !from || byPosition({ t: r.createdAt, id: r.id }, from) < 0)
+        .slice(0, limit);
+      const last = rows[rows.length - 1];
+      return { rows, next: rows.length === limit && last ? encodeCursor({ t: last.createdAt, id: last.id }) : null };
+    },
+    async markRead(uid, ids) {
+      let n = 0;
+      for (const id of new Set(ids)) {
+        const row = state.get('notifications', id);
+        if (!row || row.userId !== uid || row.readAt != null) continue;
+        state.merge('notifications', id, { readAt: serverNow() });
+        n++;
+      }
+      return n;
+    },
+    async markReadBefore(uid, before, scan) {
+      const due = newestFirst(state, uid)
+        .filter((r) => compareInstants(r.createdAt, before) <= 0)
+        .slice(0, scan)
+        .filter((r) => r.readAt === null);
+      for (const r of due) state.merge('notifications', r.id, { readAt: serverNow() });
+      return due.length;
+    },
     async getSummaryCards(ids) {
       return ids.map((id) => {
         const card = state.get('cards', id);
@@ -81,4 +137,13 @@ export function bellData(state: MemoryState): BellData {
       });
     },
   };
+}
+
+/** `uid`'s rows, `(createdAt, id)` descending. */
+function newestFirst(state: MemoryState, uid: string): ListedBellRow[] {
+  return state
+    .rows('notifications', (row) => row.userId === uid)
+    .map(({ id, row }) => listedOf(id, row))
+    .filter((r): r is ListedBellRow => r !== null)
+    .sort((a, b) => -byPosition({ t: a.createdAt, id: a.id }, { t: b.createdAt, id: b.id }));
 }

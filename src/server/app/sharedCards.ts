@@ -2,7 +2,9 @@ import { ApiFailure } from '@/lib/api/v1/http';
 import type { Card } from '@/lib/db/types';
 import type { ServerCtx } from '@/server/ctx';
 import { idOk, keptPrivate, otherInPair, pairOf } from '@/server/domain/conversations';
+import { threadChanged } from '@/server/domain/realtimeInbox';
 import { instantMillis } from '@/server/ports/time';
+import { signal } from './inbox';
 
 // A 私人卡 shared in a conversation, as application services. Why: the module
 // comment of src/lib/api/v1/sharedCards.ts (the legacy facades).
@@ -75,6 +77,10 @@ export async function stopSharingIn(ctx: ServerCtx, uid: string, pair: string, c
       { label: 'stopSharing' },
     );
     unmarked += page;
-    if (page < UNMARK_IN_TRANSACTION) return { unmarked };
+    if (page < UNMARK_IN_TRANSACTION) {
+      // After the commits: the thread both people see lost its passes.
+      if (unmarked) await signal(ctx, threadChanged(pair, uid, other));
+      return { unmarked };
+    }
   }
 }

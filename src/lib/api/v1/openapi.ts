@@ -1,5 +1,15 @@
 import { z } from 'zod';
-import { apiRegistry, CARD_INCLUDES, CARD_KEYS_MAX, CardBoxTab, PROFILE_INCLUDES } from './schemas';
+import {
+  apiRegistry,
+  BELL_PAGE,
+  BELL_PAGE_MAX,
+  CARD_INCLUDES,
+  CARD_KEYS_MAX,
+  CardBoxTab,
+  PROFILE_INCLUDES,
+  THREAD_PAGE,
+  THREAD_PAGE_MAX,
+} from './schemas';
 
 type Json = Record<string, unknown>;
 
@@ -29,6 +39,8 @@ const get = (operationId: string, summary: string, schema: string, extra: Json =
   get: { operationId, summary, ...extra, responses: { '200': { description: 'OK', ...json(ref(schema)) }, ...errors(...errorCodes) } },
 });
 const cardId = pathParam('key', 'The card id');
+const conversationParam = pathParam('pair', "The conversation's id: its two participants' uids, sorted, joined by `_`");
+const pageTokenParam = (description: string) => ({ name: 'pageToken', in: 'query', required: false, description, schema: { type: 'string', maxLength: 512 } });
 const handle = pathParam('handle', 'Pen name (any script)');
 const include = (names: readonly string[], what: string) => ({
   name: 'include',
@@ -512,7 +524,63 @@ export function buildOpenApi(): Json {
           responses: { '201': { description: 'Created', ...json(ref('SendMessageResponse')) }, ...errors(400, 401, 403, 404) },
         },
       },
+      // --- Phase 2 inbox (2a-inbox)
+      '/conversations': get('listConversations', 'Your conversations, the most recently active first (50 a page)', 'ConversationList', {
+        description:
+          'What the `conversations` listener read: each with your unread count, the last message\'s preview, the letter it ' +
+          'holds and the other person as their profile is now (`other: null` when their account is gone). Conversations ' +
+          'with people you blocked are listed too, as before: filter them by your blocks. Ask again when `signals/{uid}` ' +
+          '`inbox` moves, with `If-None-Match`: an unchanged list is `304`.',
+        parameters: [pageTokenParam("A page's `nextPageToken`")],
+      }, [400, 401]),
+      '/conversations/{pair}/messages': get('listMessages', "A thread's messages, newest first", 'MessagePage', {
+        description:
+          'No cursor: the newest `limit` (the window to show, and to ask for again with `If-None-Match` when ' +
+          '`signals/{uid}` `threads.{pair}` moves: a reaction, an unsend or a link preview changes it too). `before`: the ' +
+          'page older than a message (`olderCursor`, or any message\'s `cursor`). `after`: the messages sent right after one ' +
+          '(`newerCursor`), oldest of them first in time but answered newest first; `hasNewer` says the page was full. ' +
+          'Ordered by send time to the microsecond, then id: two messages sent in one millisecond are never skipped. `404` ' +
+          'for anyone but its two participants, whether the conversation exists or not.',
+        parameters: [
+          conversationParam,
+          { name: 'before', in: 'query', required: false, description: 'A cursor: the page older than it', schema: { type: 'string', maxLength: 512 } },
+          { name: 'after', in: 'query', required: false, description: 'A cursor: what came after it (not with `before`)', schema: { type: 'string', maxLength: 512 } },
+          { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: THREAD_PAGE_MAX, default: THREAD_PAGE } },
+        ],
+      }),
+      '/conversations/{pair}/read': {
+        post: {
+          operationId: 'markConversationRead',
+          summary: 'You have read the thread: your unread count in it goes to 0',
+          description: 'Nothing changes for the other person. `404` for anyone but its two participants, whether it exists or not.',
+          parameters: [conversationParam],
+          responses: { '204': { description: 'Read' }, ...errors(400, 401, 404, 429) },
+        },
+      },
+      '/me/bell': get('getBell', 'Your bell, newest first (20 a page)', 'BellPage', {
+        description:
+          'What the `notifications` listener read, each row\'s payload as the server wrote it (`anonymous` on a note or a ' +
+          'resonance on one of your anonymous cards: open the card, never a thread), and the profiles of the people the rows ' +
+          'name (a tap row\'s first 3 readers). Ask again when `signals/{uid}` `bell` moves, with `If-None-Match`.',
+        parameters: [
+          pageTokenParam("A page's `nextPageToken`"),
+          { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: BELL_PAGE_MAX, default: BELL_PAGE } },
+        ],
+      }, [400, 401]),
+      '/notifications/read': {
+        post: {
+          operationId: 'markNotificationsRead',
+          summary: 'Mark bell rows of yours read: by id, or every one up to a time',
+          description: "Rows that aren't yours, and ids that name none, are ignored. A row read already keeps the time it was read.",
+          requestBody: { required: true, ...json(ref('MarkNotificationsReadRequest')) },
+          responses: { '204': { description: 'Read' }, ...errors(400, 401, 429) },
+        },
+      },
       '/conversations/{pair}': {
+        ...get('getConversation', 'One of your conversations, as the list shows it', 'Conversation', {
+          description: 'Its letter and your unread count, as the thread reads them. `404` for anyone but its two participants, whether it exists or not.',
+          parameters: [conversationParam],
+        }),
         delete: {
           operationId: 'deleteConversation',
           summary:
