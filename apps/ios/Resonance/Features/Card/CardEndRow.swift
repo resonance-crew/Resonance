@@ -123,7 +123,7 @@ struct CardEndRow: View {
         // Which part stayed with the reader (round 27 §U1): centred, as wide as the reader's list; 略過, the backdrop and
         // Escape leave the tap on with no passage.
         .organicModal(isPresented: $passagesOpen, seed: 37, maxWidth: TapListMetrics.readerWidth(compact: compact),
-                      closeLabel: L10n.Card.Tap.passageSkip) {
+                      closeLabel: L10n.Card.Tap.passageSkip, clipsToPaper: true) {
             TapPassages(passages: tap.passages, picked: tap.passage, script: script, onChoose: choosePassage) {
                 passagesOpen = false
             }

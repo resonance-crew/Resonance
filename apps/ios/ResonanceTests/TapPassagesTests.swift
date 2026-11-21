@@ -43,6 +43,32 @@ import Testing
         #expect(TapPassageRules.textSize == 16 && TapPassageRules.checkSize == 16)
     }
 
+    /// The owner's look (2026-11-21): 「这个选中的区块是延伸到这个 pop up 这个卡片的最左边和最右边的」 — a row's band runs
+    /// from the paper's left edge to its right, clipped to the wobble, as the web's; the words keep their inset.
+    @Test func aRowsBandRunsToThePapersEdgesAndItsWordsKeepTheirInset() {
+        let reach = TapPassageRules.reach(clipped: true)
+        // The band is not cut: the paper's clip shapes its ends.
+        #expect(!TapPassageRules.bandCut(clipped: true))
+        // The words: the list stands `reach` out of the dialog's content and each row pads `reach` back in, so they stay
+        // on the dialog's own 28 from the paper's frame, where they were.
+        #expect(ModalPaper.inset == 28)
+        // Past the paper's frame by the bleed, and only that much is kept from a press.
+        #expect(reach - ModalPaper.inset == ModalPaper.bleed)
+        #expect(TapPassageRules.overhang(reach: reach) == ModalPaper.bleed)
+        // Out of a clipping dialog the rows stay inside the paper, cut and rounded, as the first captures.
+        #expect(TapPassageRules.bandCut(clipped: false))
+        #expect(TapPassageRules.overhang(reach: TapPassageRules.reach(clipped: false)) == 0)
+        // At the dialog's widths (a phone's 400, a tablet's and the Mac's 480) and heights from a short list to the
+        // tallest, the paper of seed 37 never swings past the band's reach: the band meets the pen line everywhere.
+        for width in [TapListMetrics.readerWidth(compact: true), TapListMetrics.readerWidth(compact: false)] {
+            for height in [CGFloat(260), 420, 640] {
+                let frame = CGRect(x: 0, y: 0, width: width, height: height)
+                let paper = ModalPaper.outline(in: frame, seed: 37).boundingRect
+                #expect(paper.minX >= frame.minX - ModalPaper.bleed && paper.maxX <= frame.maxX + ModalPaper.bleed)
+            }
+        }
+    }
+
     @Test func aPressPicksPressingThePickedOneClearsAnotherReplaces() {
         #expect(TapPassageRules.choice(pressing: "8b3a1c4d", current: nil) == "8b3a1c4d")
         #expect(TapPassageRules.choice(pressing: "8b3a1c4d", current: "8b3a1c4d") == nil)
