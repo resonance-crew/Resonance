@@ -1,7 +1,7 @@
 import { parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { handleAvailable } from '@/lib/api/v1/profile';
 import { HandleParam } from '@/lib/api/v1/schemas';
-import { getAdminDb } from '@/lib/db/firestore/admin';
+import { serverCtx } from '@/server/ctx';
+import { handleAvailableIn } from '@/server/app/profile';
 import { OWN, cachedJson } from '@/lib/api/v1/cache';
 
 export const dynamic = 'force-dynamic';
@@ -10,5 +10,5 @@ export const dynamic = 'force-dynamic';
 export const GET = withUser(async (user, req, ctx: RouteContext<'handle'>) => {
   const handle = parse(HandleParam, await routeParam(ctx, 'handle'));
   // As-you-type: whether a name is free can change any moment.
-  return cachedJson(req, { handle, available: await handleAvailable(getAdminDb(), user.id, handle) }, OWN);
+  return cachedJson(req, { handle, available: await handleAvailableIn(serverCtx(), user.id, handle) }, OWN);
 });

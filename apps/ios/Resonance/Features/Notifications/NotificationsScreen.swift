@@ -30,7 +30,7 @@ struct NotificationsScreen: View {
                 // Still reading: the rows' own shapes, not a loader.
                 NotificationsSkeleton().readableColumn()
             } else {
-                let extras = store.extras(reading: session.reading)
+                let extras = store.extras(reading: session.reading, readPeople: session.peopleReader)
                 // The times move on by themselves (剛剛 → 1 分鐘前), and a row passes from 今天 to 這週 at midnight.
                 // Only while the tab is shown (audit I12): a tab out of sight moves on when it is chosen again.
                 TimelineView(MinutesWhileShown(shown: onSelectedTab)) { timeline in

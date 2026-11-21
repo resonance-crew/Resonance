@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
 import { crossOriginCookieWrite } from '@/lib/api/sameOrigin';
 import { getCurrentUser } from '@/lib/auth';
-import { getStorageProvider } from '@/lib/storage';
-import { storeOwned, storeOwnedWithThumb } from '@/lib/storage/uploads';
+import { storeOwnedIn, storeOwnedWithThumbIn } from '@/server/app/uploads';
+import { serverCtx } from '@/server/ctx';
 import { normalizeUpload, normalizeUploadWithThumb, UnsupportedImage, type NormalizedImage, type UploadPurpose } from '@/lib/storage/image';
 import { UPLOAD_MAX_BYTES, UPLOAD_MAX_FILE_BYTES } from '@/lib/images/limits';
-import { limited } from '@/lib/api/rateLimit';
-import { getAdminDb } from '@/lib/db/firestore/admin';
 
 export const runtime = 'nodejs';
 // A re-encode is bounded (normalizeUpload's pixel and frame limits); this bounds the rest.
@@ -47,9 +45,9 @@ export async function POST(req: Request) {
   if (file.size > UPLOAD_MAX_FILE_BYTES) return tooLarge();
   const purpose: UploadPurpose = form?.get('purpose') === 'avatar' ? 'avatar' : 'image';
 
-  const db = getAdminDb();
+  const ctx = serverCtx();
   // The count and the bytes in one transaction, as spent one after the other.
-  const refused = await limited(db, user.id, [['upload'], ['uploadBytes', file.size]]);
+  const refused = await ctx.limits.limited(user.id, [['upload'], ['uploadBytes', file.size]]);
   if (refused) return refused;
 
   let image: NormalizedImage;
@@ -72,10 +70,10 @@ export async function POST(req: Request) {
     kind: 'image' as const,
   };
   if (thumb) {
-    const stored = await storeOwnedWithThumb(db, getStorageProvider(), intent, image.data, { contentType: thumb.contentType, body: thumb.data });
+    const stored = await storeOwnedWithThumbIn(ctx, intent, image.data, { contentType: thumb.contentType, body: thumb.data });
     return NextResponse.json({ publicUrl: stored.publicUrl, key: stored.key, thumbUrl: stored.thumbUrl });
   }
-  const stored = await storeOwned(db, getStorageProvider(), intent, image.data);
+  const stored = await storeOwnedIn(ctx, intent, image.data);
 
   return NextResponse.json({ publicUrl: stored.publicUrl, key: stored.key });
 }

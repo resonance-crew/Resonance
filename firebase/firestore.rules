@@ -124,6 +124,20 @@ service cloud.firestore {
       return host == storage.host || host in storage.get("formerHosts", []);
     }
 
+    // A picture's storage key kept beside its URL (ADR 0005: `media.key`,
+    // `avatarKey`; the server writes them, an older client never sends one):
+    // a key as the storage writes them — letters, digits and _ . - /, no
+    // empty, `.` or `..` segment, never a URL — and the very key `url` ends in.
+    function storedKey(key, url) {
+      return key is string
+        && key.size() >= 1 && key.size() <= 512
+        && key.matches("[A-Za-z0-9_./-]+")
+        && !key.matches("(.*/)?[.]{1,2}(/.*)?")
+        && !key.matches("/.*|.*/|.*//.*")
+        && url is string
+        && url.matches(".+/" + key);
+    }
+
     // --- users ---
     // Profiles are public on this storytelling platform (author bylines, public
     // profile pages, and feeds are viewable by logged-out visitors). Firestore
@@ -151,6 +165,7 @@ service cloud.firestore {
           "autoTranslateTo",
           "avatarSeed",
           "avatarUrl",
+          "avatarKey",
           "initials",
           "accentColor",
           "hintsSeen"
@@ -167,6 +182,8 @@ service cloud.firestore {
               || (d.autoTranslateTo is list && d.autoTranslateTo.size() <= 5 && d.autoTranslateTo.hasOnly(["en", "zh-TW"])))
           && (!("avatarSeed" in changedKeys()) || (d.avatarSeed is string && d.avatarSeed.size() <= 40))
           && (!("avatarUrl" in changedKeys()) || storedFile(d.avatarUrl))
+          // Removed, or the key of the photo the profile names (an older client changes only the URL: allowed).
+          && (!("avatarKey" in changedKeys()) || !("avatarKey" in d) || storedKey(d.avatarKey, d.avatarUrl))
           && (!("initials" in changedKeys()) || (d.initials is string && d.initials.size() <= 8))
           && (!("accentColor" in changedKeys()) || (d.accentColor is string && d.accentColor.size() <= 60))
           // How often each hint was shown (lib/hints: 3 at most).
@@ -211,6 +228,17 @@ service cloud.firestore {
     match /handles/{handleLower} {
       allow get: if true;
       allow list, write: if false;
+    }
+
+    // --- signals (signals/{uid}) ---
+    // The signal channel (Phase 2): counters the server raises after a write
+    // that changes what this person's screens list (inbox, bell, graph, map,
+    // drafts, threads.{pair}), so their clients refetch through /api/v1.
+    // Numbers only — no content, no one else's uid but in the pair ids of
+    // their own conversations. Its owner listens; only the server writes.
+    match /signals/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
     }
 
     // --- cards ---
@@ -315,9 +343,11 @@ service cloud.firestore {
 
       function validMedia(m) {
         return m is map
-          && m.keys().hasOnly(["type", "url", "thumbUrl", "label", "frame"])
+          && m.keys().hasOnly(["type", "url", "key", "thumbUrl", "label", "frame"])
           && m.type in ["image", "video"]
           && storedFile(m.url)
+          // The cover's storage key, when kept: the key its URL ends in (ADR 0005).
+          && (!("key" in m) || storedKey(m.key, m.url))
           // The cover's ≤ 960 px copy (lib/images/coverThumb) the upload answered: the same storage, the copy of this cover.
           && (!("thumbUrl" in m) || (storedFile(m.thumbUrl) && m.thumbUrl.matches(".*-w960[.]webp")))
           && (!("label" in m) || (m.label is string && m.label.size() <= 200))
@@ -405,6 +435,16 @@ service cloud.firestore {
       // round 25): read through that route, which asks who may read the card,
       // never by a client — not even the card's author.
       match /translations/{to} {
+        allow read, write: if false;
+      }
+
+      // --- a draft's patch log (cards/{cardId}/draftLog/{rev}) ---
+      // Every autosave the server applied (PATCH /api/v1/cards/{id}/draft),
+      // kept 7 days (`expireAt`, a TTL) to bring words back should a client's
+      // save count go wrong. The server's alone: no client reads or writes it.
+      // It names its author (`authorId`), so the account purge finds one whose
+      // card went by an older app's own delete.
+      match /draftLog/{rev} {
         allow read, write: if false;
       }
     }
@@ -763,6 +803,18 @@ service cloud.firestore {
     // Per-user counters the API keeps for its costly or far-reaching
     // endpoints (src/lib/api/rateLimit.ts). Clients never see or touch them.
     match /rateLimits/{docId} {
+      allow read, write: if false;
+    }
+
+    // --- sessions (server-only, Phase 3: ADR 0004) ---
+    // Resonance's own sessions (src/server/infra/firestore/sessions.ts):
+    // which identity at which provider is which account, and the refresh
+    // tokens POST /api/v1/auth/exchange handed out, kept by their hash.
+    // No client reads or writes either; both go with the account.
+    match /identities/{identityId} {
+      allow read, write: if false;
+    }
+    match /refreshTokens/{tokenHash} {
       allow read, write: if false;
     }
 

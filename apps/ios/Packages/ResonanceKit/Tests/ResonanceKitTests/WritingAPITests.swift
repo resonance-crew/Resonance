@@ -54,14 +54,65 @@ actor TokenLog {
 @Suite(.serialized) struct WritingAPITests {
     let tokens = TokenLog()
 
-    func api(_ transport: StubTransport = StubTransport(body: "{}")) -> WritingAPI {
+    func api(_ transport: StubTransport = StubTransport(body: "{}"),
+             appCheck: @escaping @Sendable () -> String? = { nil }) -> WritingAPI {
         let tokens = tokens
         let configuration = APIConfiguration(origin: URL(string: "https://example.test")!) { await tokens.ask($0) }
         let client = Client(serverURL: configuration.apiURL, transport: transport,
                             middlewares: [BearerAuthMiddleware(idToken: configuration.idToken)])
         let session = URLSessionConfiguration.ephemeral
         session.protocolClasses = [StubURLProtocol.self]
-        return WritingAPI(client: client, configuration: configuration, session: URLSession(configuration: session))
+        return WritingAPI(client: client, configuration: configuration, session: URLSession(configuration: session),
+                          appCheckToken: appCheck)
+    }
+
+    /// Calls each of the web's own routes the writer uses once, in order: tags, insight, upload, illustration.
+    private func callTheWebsOwnRoutes(_ api: WritingAPI) async throws {
+        StubURLProtocol.reset([
+            (200, #"{"tags":["散步"]}"#),
+            (200, #"{"coreInsight":null}"#),
+            (200, #"{"publicUrl":"https://img.test/u/alice/cover.avif","key":"u/alice/cover.avif"}"#),
+            (200, #"{"type":"done","publicUrl":"https://img.test/u/alice/generated.avif"}"#),
+        ])
+        _ = try await api.suggestTags(title: "t", story: "s", tags: [])
+        _ = try await api.insight(title: "t", story: "s")
+        _ = try await api.upload(Data([0xFF, 0xD8]), filename: "cover.jpg")
+        for try await _ in api.illustrate(story: "s") {}
+        #expect(StubURLProtocol.sent.map { $0.request.url?.path } == ["/api/cards/tags", "/api/cards/insight", "/api/upload", "/api/generate-image"])
+    }
+
+    /// App Check is only watched: the web's own routes carry the token at hand, as v1's calls do…
+    @Test func theWebsOwnRoutesCarryTheAppCheckTokenAtHand() async throws {
+        try await callTheWebsOwnRoutes(api(appCheck: { "attested" }))
+        #expect(StubURLProtocol.sent.map { $0.request.value(forHTTPHeaderField: "X-Firebase-AppCheck") } == Array(repeating: "attested", count: 4))
+        #expect(StubURLProtocol.sent.allSatisfy { $0.request.value(forHTTPHeaderField: "Authorization") == "Bearer stale-token" })
+    }
+
+    /// …and go out without one when the app has none (no token yet, or the provider failed).
+    @Test func theWebsOwnRoutesGoWithoutAnAppCheckTokenWhenThereIsNone() async throws {
+        for token in [nil, ""] as [String?] {
+            try await callTheWebsOwnRoutes(api(appCheck: { token }))
+            #expect(StubURLProtocol.sent.map { $0.request.value(forHTTPHeaderField: "X-Firebase-AppCheck") } == Array(repeating: nil, count: 4))
+        }
+    }
+
+    /// The account routes (/api/account/*) carry it the same way.
+    @Test func theAccountRoutesCarryTheAppCheckTokenAtHand() async throws {
+        let session = URLSessionConfiguration.ephemeral
+        session.protocolClasses = [StubURLProtocol.self]
+        let configuration = APIConfiguration(origin: URL(string: "https://example.test")!) { _ in "token" }
+        StubURLProtocol.reset([(200, "{}"), (200, "{}")])
+        _ = try await AccountAPI(configuration, session: URLSession(configuration: session), appCheckToken: { "attested" }).export()
+        _ = try await AccountAPI(configuration, session: URLSession(configuration: session), appCheckToken: { nil }).export()
+        #expect(StubURLProtocol.sent.map { $0.request.url?.path } == ["/api/account/export", "/api/account/export"])
+        #expect(StubURLProtocol.sent.map { $0.request.value(forHTTPHeaderField: "X-Firebase-AppCheck") } == ["attested", nil])
+    }
+
+    /// A token refreshed after a 401 still goes with the same App Check token.
+    @Test func theRetryAfterARejectedTokenKeepsTheAppCheckToken() async throws {
+        StubURLProtocol.reset([(401, "{}"), (200, #"{"tags":[]}"#)])
+        _ = try await api(appCheck: { "attested" }).suggestTags(title: "t", story: "s", tags: [])
+        #expect(StubURLProtocol.sent.map { $0.request.value(forHTTPHeaderField: "X-Firebase-AppCheck") } == ["attested", "attested"])
     }
 
     @Test func publishesThroughTheContract() async throws {

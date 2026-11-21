@@ -191,6 +191,8 @@ fun ThoughtMapScreen(
 
     // Leaving the map (or opening a card from it) while a title or arrow's words are being typed keeps them, as the web's blur does.
     DisposableEffect(store) { onDispose { store.commitEditors() } }
+    // Changes made on another device (the contract's path: the `map` signal), while the map is here.
+    LaunchedEffect(store, uid) { store.followSignals() }
 
     // The world is laid out at the window's width whatever the map's box, and cut at the box: the workspace's divider
     // resizes the box on every frame of a drag, and only the touch surface, the editors and the controls follow it —

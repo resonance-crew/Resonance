@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { ApiFailure, parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { translateCard } from '@/lib/api/v1/translation';
+import { translateCardIn } from '@/lib/api/v1/translation';
 import { CardKey, TranslationRequest } from '@/lib/api/v1/schemas';
-import { getAdminDb } from '@/lib/db/firestore/admin';
+import { serverCtx } from '@/server/ctx';
 
 export const dynamic = 'force-dynamic';
 // A long story is up to eight model calls, six at a time, given 50 s in all (lib/ai/translate).
@@ -19,6 +19,6 @@ export const POST = withUser(async (user, req, ctx: RouteContext<'key'>) => {
     throw new ApiFailure('invalid_request', 'The body must be JSON.');
   });
   const { to } = parse(TranslationRequest, body);
-  const answer = await translateCard(getAdminDb(), user.id, key, to);
+  const answer = await translateCardIn(serverCtx(), user.id, key, to);
   return NextResponse.json(answer, { headers: { 'Cache-Control': 'no-store' } });
 });

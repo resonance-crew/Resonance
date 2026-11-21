@@ -1,0 +1,24 @@
+# The server no longer serves this build (client-config's minBuild above it, 任務 #3 Phase 2): alice,
+# signed in and sent to her home, gets the update page instead — its title and the way to the store —
+# and nothing of the app behind it (her feed's first card never shows).
+#
+# Runs on the `update-gate` stack alone (`npx tsx scripts/visual/flows.ts <platform> --stack update-gate`):
+# what the server answers is set where the stack starts (scripts/visual/flows.ts, STACKS). On the usual
+# stack the app goes on to home, so the runner leaves this flow out there.
+appId: com.resonance.stories
+name: update-gate
+tags:
+  - update-gate
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /home
+- extendedWaitUntil:
+    visible: 請更新共振
+    timeout: 30000
+- assertVisible: 前往更新
+# The whole window is the update page: no feed under it, no tab to leave by.
+- assertNotVisible: 我也在雨裡走過
+- takeScreenshot: update-gate

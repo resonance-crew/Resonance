@@ -6,6 +6,7 @@ vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => { throw new Error
 
 import { PICK_HALF_LIFE_DAYS, PICK_RECENCY, fallbackModel, filmCards, recommendedIds, taipeiDayIndex, type Row } from './data';
 import { toModel } from './tiles';
+import { ctxFor } from '@/server/infra/firestore/ctx';
 
 // The end's list (the owner, round 4): the recommended stories as they come — one recommendation for every visitor
 // who isn't signed in, decided here from the window the film already reads.
@@ -89,7 +90,7 @@ const rowsOf = (docs: Record<string, Record<string, unknown>>, scores: Record<st
 describe("the film's recommended stories (signed out: one list for everyone)", () => {
   it('ranks listed cards by insight with a light lift for new ones, one per named author, two anonymous at most', async () => {
     const fake = fakeAdminDb({ ...CARDS, ...READINGS, ...USERS });
-    const f = await filmCards(fake.db, { storageBases: [BASE], now: NOW });
+    const f = await filmCards(ctxFor(fake.db).data, { storageBases: [BASE], now: NOW });
     expect(f).not.toBeNull();
     // value = insight + 0.15 × 0.5^(days ÷ 14): anon-1 1.109, lead 1.083, new-good 1.046, (u3-second 1.036: u3 has
     // one), old-great 0.998, anon-2 0.929, (anon-3 0.909: the third anonymous), u4-card 0.691, (ghost: no byline)
@@ -121,7 +122,7 @@ describe("the film's recommended stories (signed out: one list for everyone)", (
 
   it('costs no query of its own: the window the film reads, the leads\' card read and byline read', async () => {
     const fake = fakeAdminDb({ ...CARDS, ...READINGS, ...USERS });
-    await filmCards(fake.db, { storageBases: [BASE], now: NOW });
+    await filmCards(ctxFor(fake.db).data, { storageBases: [BASE], now: NOW });
     const queries = fake.reads.filter((r) => r.startsWith('cards?'));
     // the window and latestForLanding's (the sky): as before the picks
     expect(queries).toHaveLength(2);
@@ -151,7 +152,7 @@ describe("the film's recommended stories (signed out: one list for everyone)", (
 
   it('falls back to the landing grid\'s newest six', async () => {
     const fake = fakeAdminDb({ ...CARDS, ...READINGS, ...USERS });
-    const model = await fallbackModel(fake.db);
+    const model = await fallbackModel(ctxFor(fake.db).data);
     // newest first (no rule but the landing grid's): the unlisted, the blank and the binned left out, and a named
     // card without a profile
     expect(model.picks.map((t) => t.id)).toEqual(['new-good', 'u3-second', 'unindexed', 'anon-1', 'lead', 'anon-2']);
@@ -191,7 +192,7 @@ describe("the film's leads and kin on round 26's readings", () => {
 
   it('pairs the two whose nearest parts are close, by the reading’s score, and leaves a card not for strangers out', async () => {
     const fake = fakeAdminDb({ ...film, ...readings, ...vectors, ...USERS });
-    const f = await filmCards(fake.db, { storageBases: [BASE], now: NOW });
+    const f = await filmCards(ctxFor(fake.db).data, { storageBases: [BASE], now: NOW });
     expect([f!.written.id, f!.answer?.id, f!.relation]).toEqual(['sea', 'shore', 'kin']);
     expect(f!.picks.map((c) => c.id)).not.toContain('moody');
     // The parts are read by id; never a vector search, never the window's popularity.
@@ -201,9 +202,9 @@ describe("the film's leads and kin on round 26's readings", () => {
 
   it('plays the best card alone when no two are close enough, and has no lead when no card is read yet', async () => {
     const apart = { ...vectors, 'cardVectors/shore__insight__0': vec([0, 0, 0, 1]), 'cardVectors/sea__insight__1': vec([0, 0, 1, 0.2]) };
-    const alone = await filmCards(fakeAdminDb({ ...film, ...readings, ...apart, ...USERS }).db, { storageBases: [BASE], now: NOW });
+    const alone = await filmCards(ctxFor(fakeAdminDb({ ...film, ...readings, ...apart, ...USERS }).db).data, { storageBases: [BASE], now: NOW });
     expect(alone!.relation).toBe('alone');
     expect(alone!.answer).toBeNull();
-    expect(await filmCards(fakeAdminDb({ ...film, ...USERS }).db, { storageBases: [BASE], now: NOW })).toBeNull();
+    expect(await filmCards(ctxFor(fakeAdminDb({ ...film, ...USERS }).db).data, { storageBases: [BASE], now: NOW })).toBeNull();
   });
 });

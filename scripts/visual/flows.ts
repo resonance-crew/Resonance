@@ -33,7 +33,7 @@ const FLOWS_DIR = join(ROOT, 'maestro/flows');
 const ORDER = [
   'sign-in', 'send-message', 'send-sticker', 'react-reply', 'unsend-message', 'chat-draft', 'composer-toggle',
   'sticker-replies', 'send-picture', 'answer-letter', 'leave-note', 'tap', 'tap-passage', 'reply-with-card', 'open-notification', 'open-link',
-  'publish-card', 'trash-restore', 'sticker-breath', 'translate-story',
+  'publish-card', 'trash-restore', 'sticker-breath', 'translate-story', 'block-person', 'live-message',
 ];
 
 export type FlowDevice = 'phone' | 'tablet';
@@ -67,6 +67,36 @@ export function withTags(flows: string[], tags: string[], device: FlowDevice = '
     const own = tagsFor(f);
     return (!tags.length || tags.some((t) => own.includes(t))) && (device === 'phone' || own.includes('tablet'));
   });
+}
+
+/**
+ * The stacks a run can ask for besides the usual one (`--stack <name>`): what the dev server is started with,
+ * and the tag whose flows that stack is for. client-config answers from the server's environment, so what it
+ * decides — the build the server still serves, which of the apps' paths go through /api/v1 — can only be set
+ * where the stack starts, never by a flow.
+ *   - `update-gate`: no build is new enough (minBuild far above any), for the flows tagged `update-gate`,
+ *     which run on no other stack — on the usual one the app goes on to its home.
+ *   - `writer-api`: the apps' writer through /api/v1 (`apiDrafts`, `apiThoughtMap`, off by default until checked
+ *     on devices — docs/release/owed.md, flags), for the flows tagged `writer`: the same journeys the usual
+ *     stack takes over Firestore.
+ */
+export const STACKS: Record<string, { env: Record<string, string>; tag: string; only: boolean }> = {
+  'update-gate': { env: { CLIENT_MIN_BUILD_IOS: '999999', CLIENT_MIN_BUILD_ANDROID: '999999' }, tag: 'update-gate', only: true },
+  'writer-api': { env: { CLIENT_FEATURES: JSON.stringify({ apiDrafts: true, apiThoughtMap: true }) }, tag: 'writer', only: false },
+};
+
+/**
+ * The flows a stack runs: on a named one, those carrying its tag; on the usual one, every flow but those made for
+ * a stack alone (`only`), which would fail there.
+ */
+export function forStack(flows: string[], stack: string | undefined, tagsFor: (flow: string) => string[] = tagsOf): string[] {
+  if (stack === undefined) {
+    const elsewhere = Object.values(STACKS).filter((s) => s.only).map((s) => s.tag);
+    return flows.filter((f) => !tagsFor(f).some((t) => elsewhere.includes(t)));
+  }
+  const named = STACKS[stack];
+  if (!named) throw new Error(`No such stack: ${stack} (have ${Object.keys(STACKS).join(', ')})`);
+  return flows.filter((f) => tagsFor(f).includes(named.tag));
 }
 
 /** Where Maestro lives (the official installer's place unless MAESTRO_BIN says otherwise) and the Java it runs on. */
@@ -161,6 +191,11 @@ async function androidDevice(ctx: CaptureContext, kind: FlowDevice): Promise<Dev
   // Put back as it was when the flows end.
   const listed = async (all: boolean) =>
     (await android.shell(serial, `ime list -s${all ? ' -a' : ''}`)).split('\n').map((l) => l.trim()).filter(Boolean);
+  // Gboard first, as a capture finds it: a run cut off before its `close` (a hold stopped by its PID, 2026-11-21)
+  // leaves the AVD with voice input as its only keyboard, and the next run would take that for the state to put
+  // back — a voice session then opens with the first field ("Tap to speak"), hears nothing, has no keyboard to hand
+  // back to, and typing fails with "No active input connection" (publish-card, twice, on both stacks).
+  await android.keysOn((command) => android.shell(serial, command));
   const enabled = await listed(false);
   const quiet = (await listed(true)).find((ime) => /voice/i.test(ime));
   const defaultIme = await android.shell(serial, 'settings get secure default_input_method');
@@ -224,9 +259,9 @@ function maestroTest(deviceId: string, flow: string, outDir: string, ports: type
  * installs the app, brings up the harness's phone, reseeds before each flow. `ctx.runDir` is the
  * run's folder (`visual/flows/<run>`); reports go to `<runDir>/<platform>/`.
  */
-export async function runFlows(platform: FlowPlatform, ctx: CaptureContext, { tags = [], device: kind = 'phone' }: { tags?: string[]; device?: FlowDevice } = {}): Promise<FlowResult[]> {
+export async function runFlows(platform: FlowPlatform, ctx: CaptureContext, { tags = [], device: kind = 'phone', stack }: { tags?: string[]; device?: FlowDevice; stack?: string } = {}): Promise<FlowResult[]> {
   if (!existsSync(MAESTRO)) throw new Error(`No Maestro at ${MAESTRO}: install it (maestro/README.md) or set MAESTRO_BIN`);
-  const flows = withTags(flowsToRun(ctx.only), tags, kind);
+  const flows = forStack(withTags(flowsToRun(ctx.only), tags, kind), stack);
   if (!flows.length) {
     ctx.log(`  no flow to run on the ${platform} ${kind}${tags.length ? ` tagged ${tags.join(', ')}` : ''}`);
     return [];
@@ -282,13 +317,28 @@ async function main() {
   const args = process.argv.slice(2);
   const platform = args[0] as FlowPlatform;
   if (platform !== 'ios' && platform !== 'android') {
-    console.log('Usage: npx tsx scripts/visual/flows.ts <android|ios> [--only sign-in,send-message] [--tags composer,links] [--device phone|tablet] [--run <id>] [--no-stack] [--wait] [--hold]');
+    console.log('Usage: npx tsx scripts/visual/flows.ts <android|ios> [--only sign-in,send-message] [--tags composer,links] [--device phone|tablet] [--run <id>] [--stack update-gate|writer-api] [--no-stack] [--wait] [--hold]');
     process.exit(platform ? 1 : 0);
   }
   const id = flag(args, 'run') ?? new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
   const runDir = join(VISUAL_DIR, 'flows', id);
   mkdirSync(join(runDir, '_logs'), { recursive: true });
   const log = (line: string) => console.log(line);
+  // A named stack (STACKS): its settings go to the dev server through this process's environment (startGroup).
+  const named = flag(args, 'stack');
+  if (named !== undefined) {
+    if (!STACKS[named]) {
+      console.error(`No such stack: ${named} (have ${Object.keys(STACKS).join(', ')})`);
+      process.exitCode = 1;
+      return;
+    }
+    if (args.includes('--no-stack')) {
+      console.error('--stack starts its own dev server: it cannot go with --no-stack');
+      process.exitCode = 1;
+      return;
+    }
+    Object.assign(process.env, STACKS[named].env);
+  }
   // The same locks as a capture's (lock.ts): this phone and, unless --no-stack, the stack's ports.
   let lock;
   try {
@@ -318,9 +368,9 @@ async function main() {
     if (kind !== 'phone' && kind !== 'tablet') throw new Error(`--device takes phone or tablet, not "${kind}"`);
     const tags = (flag(args, 'tags') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
     if (args.includes('--hold')) return await hold(platform, ctx, kind);
-    const results = await runFlows(platform, ctx, { tags, device: kind });
+    const results = await runFlows(platform, ctx, { tags, device: kind, stack: named });
     failed = results.filter((r) => !r.passed).length;
-    log(`\nFlows ${id} ${platform}: ${results.length - failed} passed · ${failed} failed`);
+    log(`\nFlows ${id} ${platform}${named ? ` (stack ${named})` : ''}: ${results.length - failed} passed · ${failed} failed`);
     log(`Reports: ${join(runDir, kind === 'phone' ? platform : `${platform}-tablet`)}`);
   } finally {
     if (stack) {

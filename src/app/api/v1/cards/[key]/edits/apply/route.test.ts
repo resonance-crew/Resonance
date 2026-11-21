@@ -9,7 +9,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
-vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
+const DB = {};
+vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => DB }));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 let afterWork: Promise<unknown>[] = [];
 vi.mock('next/server', async (orig) => ({
@@ -17,20 +18,26 @@ vi.mock('next/server', async (orig) => ({
   after: (fn: () => unknown) => void afterWork.push(Promise.resolve().then(fn)),
 }));
 const applyCardEdit = vi.fn();
-vi.mock('@/lib/api/v1/edits', () => ({ applyCardEdit: (...a: unknown[]) => applyCardEdit(...a) }));
-vi.mock('@/lib/api/v1/resonate', () => ({ tryReachResonance: vi.fn() }));
-vi.mock('@/lib/push/ring', () => ({ ringAfter: vi.fn() }));
-vi.mock('@/lib/links/cardLinks', () => ({ unfurlCardLinks: async () => {} }));
+vi.mock('@/server/app/edits', () => ({ applyCardEditIn: (...a: unknown[]) => applyCardEdit(...a) }));
+vi.mock('@/server/app/resonate', async (orig) => ({ ...(await orig<object>()), tryReachResonanceIn: vi.fn() }));
+vi.mock('@/server/app/pushAfter', () => ({ ringAfterIn: vi.fn() }));
+vi.mock('@/server/app/links', async (orig) => ({ ...(await orig<object>()), unfurlCardLinksIn: async () => {} }));
 const markIndexOwed = vi.fn(async (..._a: unknown[]) => {});
-vi.mock('@/lib/recommend/indexOwed', () => ({ markIndexOwed: (...a: unknown[]) => markIndexOwed(...a) }));
+vi.mock('@/server/app/recommendIndex', async (orig) => ({ ...(await orig<object>()), markIndexOwedIn: (...a: unknown[]) => markIndexOwed(...a) }));
 const makeSummaryTranslations = vi.fn(async (..._a: unknown[]) => 'made');
-vi.mock('@/lib/api/v1/summaryTranslationsMake', () => ({ makeSummaryTranslations: (...a: unknown[]) => makeSummaryTranslations(...a) }));
+vi.mock('@/lib/api/v1/summaryTranslationsMake', () => ({ makeSummaryTranslationsIn: (...a: unknown[]) => makeSummaryTranslations(...a) }));
 const setVisibility = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('@/lib/recommend/vectorStore', () => ({ getVectorStore: () => ({ setVisibility: (...a: unknown[]) => setVisibility(...a) }) }));
 const spend = vi.fn(async (..._a: unknown[]) => {});
-vi.mock('@/lib/api/rateLimit', () => ({ spend: (...a: unknown[]) => spend(...a) }));
+const spendAll = vi.fn();
+vi.mock('@/server/infra/firestore/rateLimit', () => ({
+  firestoreRateLimiter: () => ({ spend: (...a: unknown[]) => spend(...a), spendAll: (...a: unknown[]) => spendAll(...a), limited: async () => null }),
+}));
 
 const { POST } = await import('./route');
+const { serverCtx } = await import('@/server/ctx');
+// The route's context: serverCtx() on the mocked database, built once per instance.
+const CTX = serverCtx();
 
 const apply = () => POST(new Request('http://localhost/api/v1/cards/c1/edits/apply', { method: 'POST' }), { params: Promise.resolve({ key: 'c1' }) });
 const RESULT = { id: 'c1', slug: 'a-walk', applied: true, stale: ['/card/c1'], reaches: false, movedTo: null };
@@ -65,7 +72,7 @@ describe('POST /api/v1/cards/{id}/edits/apply', () => {
     applyCardEdit.mockResolvedValue(RESULT);
     expect((await apply()).status).toBe(200);
     await Promise.all(afterWork);
-    expect(markIndexOwed).toHaveBeenCalledWith({}, 'c1');
+    expect(markIndexOwed).toHaveBeenCalledWith(CTX, 'c1');
     expect(spend).not.toHaveBeenCalled();
   });
 
@@ -73,11 +80,11 @@ describe('POST /api/v1/cards/{id}/edits/apply', () => {
     applyCardEdit.mockResolvedValue(RESULT);
     await apply();
     await Promise.all(afterWork);
-    expect(makeSummaryTranslations).toHaveBeenCalledWith({}, 'c1', { mayCall: expect.any(Function) });
+    expect(makeSummaryTranslations).toHaveBeenCalledWith(CTX, 'c1', { mayCall: expect.any(Function) });
     expect(spend).not.toHaveBeenCalled();
     const { mayCall } = makeSummaryTranslations.mock.calls[0][2] as { mayCall: () => Promise<boolean> };
     await expect(mayCall()).resolves.toBe(true);
-    expect(spend).toHaveBeenCalledWith({}, 'alice', 'reindex');
+    expect(spend).toHaveBeenCalledWith('alice', 'reindex');
   });
 
   it('spends nothing and re-indexes nothing when there was no pending edit', async () => {

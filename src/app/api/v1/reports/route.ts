@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import { ApiFailure, parse, withUser } from '@/lib/api/v1/http';
-import { createReport } from '@/lib/api/v1/safety';
 import { CreateReportRequest } from '@/lib/api/v1/schemas';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { spend } from '@/lib/api/rateLimit';
+import { serverCtx } from '@/server/ctx';
+import { createReportIn } from '@/server/app/safety';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +12,7 @@ export const POST = withUser(async (user, req) => {
     throw new ApiFailure('invalid_request', 'The body must be JSON.');
   });
   const input = parse(CreateReportRequest, body);
-  const db = getAdminDb();
-  await spend(db, user.id, 'report');
-  return NextResponse.json({ id: await createReport(db, user.id, input) }, { status: 201 });
+  const server = serverCtx();
+  await server.limits.spend(user.id, 'report');
+  return NextResponse.json({ id: await createReportIn(server, user.id, input) }, { status: 201 });
 });

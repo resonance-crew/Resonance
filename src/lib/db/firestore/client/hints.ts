@@ -1,22 +1,19 @@
 'use client';
 
-import { doc, updateDoc } from './sdk';
 import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
-import { getClientDb } from './init';
+import { callApi } from './api';
 
 /**
- * Best-effort sync of a hint's seen-count to the signed-in user's doc
- * (`hintsSeen` map), so dismissed hints stay quiet across devices. Failures
- * are swallowed — localStorage remains the source of truth on this device.
+ * Best-effort sync of a hint's seen-count to the signed-in account
+ * (PATCH /api/v1/me `hintsSeen`, which keeps the larger of the two counts),
+ * so dismissed hints stay quiet across devices. Failures are swallowed —
+ * localStorage remains the source of truth on this device.
  */
 export async function syncHintCount(key: string, count: number): Promise<void> {
-  const uid = getFirebaseClientAuth().currentUser?.uid;
-  if (!uid) return;
+  if (!getFirebaseClientAuth().currentUser) return;
   try {
-    await updateDoc(doc(getClientDb(), 'users', uid), {
-      [`hintsSeen.${key}`]: count,
-    });
+    await callApi('/api/v1/me', { method: 'PATCH', body: { hintsSeen: { [key]: count } } });
   } catch {
-    // offline / rules hiccup — the local count still governs this device
+    // offline / a refused key — the local count still governs this device
   }
 }

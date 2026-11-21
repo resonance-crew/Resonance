@@ -1,8 +1,7 @@
-import { after } from 'next/server';
 import { ApiFailure, parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { reportReading } from '@/lib/api/v1/reading';
 import { CardIdParam, ReadingReportRequest } from '@/lib/api/v1/schemas';
-import { getAdminDb } from '@/lib/db/firestore/admin';
+import { serverCtx } from '@/server/ctx';
+import { reportReadingIn } from '@/server/app/reading';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +23,7 @@ export const POST = withUser(async (user, req, ctx: RouteContext<'key'>) => {
     throw new ApiFailure('invalid_request', 'The body must be JSON.');
   }
   const report = parse(ReadingReportRequest, body);
-  after(() => reportReading(getAdminDb(), user.id, id, report).catch((err) => console.error(`Reading: ${id} not kept`, err)));
+  const server = serverCtx();
+  server.later.later(() => reportReadingIn(server, user.id, id, report).catch((err) => console.error(`Reading: ${id} not kept`, err)), 'reading');
   return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
 }, { revocation: 'cached' });

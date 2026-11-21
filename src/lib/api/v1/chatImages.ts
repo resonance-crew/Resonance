@@ -1,8 +1,7 @@
-import { Timestamp, type DocumentSnapshot, type Firestore } from 'firebase-admin/firestore';
-import { isReservedId } from '@/lib/db/firestore/reservedId';
 import type { ChatImageStore } from '@/lib/storage/chatImages';
-import { runPool } from '@/lib/push/pool';
-import { ApiFailure } from './http';
+import { purgeUnsentChatImagesIn, readChatImageIn, streamChatImageIn, type UnsentPurge } from '@/server/app/chatImages';
+import { ctxFor } from '@/server/infra/firestore/ctx';
+import type { AdminDb } from '@/server/infra/firestore/db';
 
 /**
  * Pictures sent in chat (POST /api/v1/chat-images — ./chatImageUpload — then
@@ -21,51 +20,13 @@ import { ApiFailure } from './http';
  * other person's (lib/account/deletion). One never sent goes after a day
  * (purgeUnsentChatImages).
  */
-export const CHAT_IMAGES = 'chatImages';
 
-/** How long an uploaded picture waits for its message before it is deleted. */
-export const UNSENT_KEEP_MS = 24 * 60 * 60 * 1000;
+// Legacy facades: the services are src/server/app/chatImages.ts, their
+// Firestore code src/server/infra/firestore/repos/conversations.ts.
 
-/** A picture's id is a document id of ours (a slash would name another document). */
-const PICTURE_ID = /^[A-Za-z0-9_-]{1,128}$/;
-
-/** What a message keeps of the picture it carries (its document's `image`). */
-export interface MessageImage {
-  id: string;
-  width: number;
-  height: number;
-}
-
-export const chatImageRef = (db: Firestore, id: string) => db.collection(CHAT_IMAGES).doc(id);
-
-/**
- * What sendMessage keeps of the picture a message names, read in its
- * transaction: this sender's, for this conversation, and not sent in another
- * message — else one 400 for all of it (whose pictures exist is no one's to
- * learn). `messageId` is the message being written: its own resend finds it
- * already carrying the picture.
- */
-export function pictureToSend(picture: DocumentSnapshot, uid: string, pair: string, messageId: string): MessageImage {
-  const sent = picture.get('messageId');
-  if (
-    !picture.exists ||
-    picture.get('senderId') !== uid ||
-    picture.get('pair') !== pair ||
-    (picture.get('unsentAt') == null && sent !== messageId)
-  ) {
-    throw new ApiFailure('invalid_request', 'That is not a picture you can send here.');
-  }
-  return { id: picture.id, width: Number(picture.get('width')), height: Number(picture.get('height')) };
-}
-
-/** The message's `image`, as it was stored — or null for a message without one. */
-export function messageImageOf(value: unknown): MessageImage | null {
-  const image = value as { id?: unknown; width?: unknown; height?: unknown } | null | undefined;
-  if (!image || typeof image !== 'object' || typeof image.id !== 'string' || !image.id) return null;
-  const width = Number(image.width);
-  const height = Number(image.height);
-  return { id: image.id, width: Number.isFinite(width) ? width : 0, height: Number.isFinite(height) ? height : 0 };
-}
+export { CHAT_IMAGES, UNSENT_KEEP_MS, messageImageOf, type MessageImage } from '@/server/domain/conversations';
+export { chatImageFiles, chatImageRef } from '@/server/infra/firestore/repos/conversations';
+export { UNSENT_CONCURRENCY, type UnsentPurge } from '@/server/app/chatImages';
 
 /**
  * A sent picture's bytes for `uid` — `thumb` the thread's size, else as kept —
@@ -75,14 +36,8 @@ export function messageImageOf(value: unknown): MessageImage | null {
  * conversation's deletion, the client deleting messages before the
  * conversation, is not shown again when the two talk again). Never says which.
  */
-export async function readChatImage(
-  db: Firestore,
-  store: ChatImageStore,
-  uid: string,
-  id: string,
-  size: 'full' | 'thumb',
-): Promise<Uint8Array | null> {
-  return readChecked(db, uid, id, size, (key) => store.get(key), () => {});
+export async function readChatImage(db: AdminDb, store: ChatImageStore, uid: string, id: string, size: 'full' | 'thumb'): Promise<Uint8Array | null> {
+  return readChatImageIn(ctxFor(db, { chatObjects: store }), uid, id, size);
 }
 
 /**
@@ -91,80 +46,14 @@ export async function readChatImage(
  * they refuse. A store that can't stream answers its bytes.
  */
 export async function streamChatImage(
-  db: Firestore,
+  db: AdminDb,
   store: ChatImageStore,
   uid: string,
   id: string,
   size: 'full' | 'thumb',
 ): Promise<ReadableStream<Uint8Array> | Uint8Array | null> {
-  return readChecked<ReadableStream<Uint8Array> | Uint8Array>(
-    db,
-    uid,
-    id,
-    size,
-    (key) => (store.stream ? store.stream(key) : store.get(key)),
-    (body) => {
-      if (body instanceof ReadableStream) body.cancel().catch(() => {});
-    },
-  );
+  return streamChatImageIn(ctxFor(db, { chatObjects: store }), uid, id, size);
 }
-
-async function readChecked<T>(
-  db: Firestore,
-  uid: string,
-  id: string,
-  size: 'full' | 'thumb',
-  open: (key: string) => Promise<T | null>,
-  discard: (body: T) => void,
-): Promise<T | null> {
-  if (!PICTURE_ID.test(id) || isReservedId(id)) return null;
-  const picture = await chatImageRef(db, id).get();
-  const pair = picture.get('pair');
-  const messageId = picture.get('messageId');
-  if (!picture.exists || typeof pair !== 'string' || typeof messageId !== 'string' || !PICTURE_ID.test(messageId) || isReservedId(messageId)) {
-    return null;
-  }
-  // The file is fetched beside the checks below and handed out only once they pass (a refused request costs a
-  // read of the store, nothing more).
-  const key = picture.get(size === 'thumb' ? 'thumbKey' : 'key');
-  const bytes = typeof key === 'string' ? open(key) : null;
-  bytes?.catch(() => {});
-  // Refused: whatever was opened is let go unread.
-  const refuse = () => {
-    bytes?.then((b) => b && discard(b), () => {});
-    return null;
-  };
-  const [convo, message] = await Promise.all([
-    db.doc(`conversations/${pair}`).get(),
-    db.doc(`conversations/${pair}/messages/${messageId}`).get(),
-  ]).catch((e: unknown) => {
-    // A failed read lets the opened file go too, or its connection is held until it times out.
-    refuse();
-    throw e;
-  });
-  const participants = convo.get('participants');
-  if (!convo.exists || !Array.isArray(participants) || !participants.includes(uid)) return refuse();
-  if (!message.exists || messageImageOf(message.get('image'))?.id !== id) return refuse();
-  const sentAt = message.get('sentAt');
-  const since = convo.get('createdAt');
-  if (sentAt instanceof Timestamp && since instanceof Timestamp && sentAt.toMillis() < since.toMillis()) return refuse();
-  return bytes;
-}
-
-/** The files of the pictures these records name (both sizes). */
-export function chatImageFiles(docs: DocumentSnapshot[]): string[] {
-  return docs.flatMap((d) => [d.get('key'), d.get('thumbKey')].filter((k): k is string => typeof k === 'string' && k.length > 0));
-}
-
-export interface UnsentPurge {
-  deleted: number;
-  failed: number;
-}
-
-/** How many unsent pictures a page of the purge reads. */
-const UNSENT_PAGE = 100;
-/** How many of a page's pictures are deleted at once (each a transaction, then its two files). */
-export const UNSENT_CONCURRENCY = 4;
 
 /**
  * Deletes the pictures uploaded more than UNSENT_KEEP_MS ago that no message
@@ -174,44 +63,9 @@ export const UNSENT_CONCURRENCY = 4;
  * then its files. Starts none past `deadline`.
  */
 export async function purgeUnsentChatImages(
-  db: Firestore,
+  db: AdminDb,
   store: ChatImageStore,
-  { now = Date.now(), deadline = Infinity, clock = Date.now }: { now?: number; deadline?: number; clock?: () => number } = {},
+  opts: { now?: number; deadline?: number; clock?: () => number } = {},
 ): Promise<UnsentPurge> {
-  const cutoff = Timestamp.fromMillis(now - UNSENT_KEEP_MS);
-  let deleted = 0;
-  let failed = 0;
-  let after: DocumentSnapshot | null = null;
-  for (;;) {
-    let page = db.collection(CHAT_IMAGES).where('unsentAt', '<=', cutoff).orderBy('unsentAt').limit(UNSENT_PAGE);
-    // Past the ones that failed: one that keeps failing never pins the head.
-    if (after) page = page.startAfter(after);
-    const unsent = await page.get();
-    const late = () => clock() > deadline;
-    await runPool(
-      unsent.docs,
-      UNSENT_CONCURRENCY,
-      async (d) => {
-        try {
-          const gone = await db.runTransaction(async (tx) => {
-            const fresh = await tx.get(d.ref);
-            if (!fresh.exists || fresh.get('unsentAt') == null) return false;
-            tx.delete(d.ref);
-            return true;
-          });
-          if (!gone) return;
-          // The record went first, so no message can take the picture now; its files follow (best effort).
-          const results = await Promise.allSettled(chatImageFiles([d]).map((key) => store.delete(key)));
-          if (results.some((r) => r.status === 'rejected')) console.error(`[chatImages] files of ${d.id} not deleted`);
-          deleted++;
-        } catch (err) {
-          failed++;
-          console.error(`[chatImages] unsent ${d.id} not purged`, err);
-        }
-      },
-      { stop: late, tag: '[chatImages]' },
-    );
-    if (unsent.size < UNSENT_PAGE || late()) return { deleted, failed };
-    after = unsent.docs[unsent.docs.length - 1];
-  }
+  return purgeUnsentChatImagesIn(ctxFor(db, { chatObjects: store }), { now: opts.now ?? Date.now(), deadline: opts.deadline, clock: opts.clock ?? Date.now });
 }

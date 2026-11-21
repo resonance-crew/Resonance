@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
 import { ApiFailure, parse, withUser } from '@/lib/api/v1/http';
-import { sendMessage } from '@/lib/api/v1/conversations';
-import { afterMessageSent } from '@/lib/api/v1/afterMessage';
 import { SendMessageRequest } from '@/lib/api/v1/schemas';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { spend } from '@/lib/api/rateLimit';
+import { serverCtx } from '@/server/ctx';
+import { sendMessageIn } from '@/server/app/conversations';
+import { afterMessageSentIn } from '@/server/app/pushAfter';
 
 export const dynamic = 'force-dynamic';
 // The push and the link preview run after the response, within the function's time:
@@ -22,11 +21,11 @@ export const POST = withUser(async (user, req) => {
     throw new ApiFailure('invalid_request', 'The body must be JSON.');
   });
   const input = parse(SendMessageRequest, body);
-  const db = getAdminDb();
+  const server = serverCtx();
   // Spent beside the send's reads, and still before any refusal or write (sendMessage awaits it).
-  const spent = spend(db, user.id, 'message');
+  const spent = server.limits.spend(user.id, 'message');
   spent.catch(() => {});
-  const sent = await sendMessage(db, user.id, input, spent);
-  afterMessageSent(db, sent, input.text);
+  const sent = await sendMessageIn(server, user.id, input, spent);
+  afterMessageSentIn(server, sent, input.text);
   return NextResponse.json({ conversationId: sent.conversationId, id: sent.id }, { status: 201 });
 });

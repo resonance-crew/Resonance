@@ -73,6 +73,10 @@ export const Me = named(
      * Absent only from servers older than the field.
      */
     deletion: AccountDeletionStatus.nullable().optional(),
+    /** The languages the account reads stories translated into (PATCH /me `autoTranslateTo`). Absent when never set, and from older servers. */
+    autoTranslateTo: z.array(z.enum(['en', 'zh-TW'])).optional(),
+    /** How often each hint was shown, by its key (PATCH /me `hintsSeen`). Absent when none was, and from older servers. */
+    hintsSeen: z.record(z.string(), z.number().int()).optional(),
   }),
   'Me',
   'The signed-in account.',
@@ -339,6 +343,8 @@ export const CardDetail = named(
      * from servers older than the field.
      */
     tap: CardTap.nullable().optional(),
+    /** The viewer bookmarked this card (PUT /me/bookmarks/{cardId}). Absent from older servers. */
+    bookmarked: z.boolean().optional(),
     // The card page's lists, when asked for with `include` (absent otherwise):
     // each is exactly what its own endpoint answers this viewer.
     /** `include=resonances`: GET /cards/{id}/resonances. */
@@ -442,6 +448,15 @@ export const CreateProfileRequest = named(
   'Onboarding: the pen name, region and writing language of a new account.',
 );
 
+// The rules' limits on a client's own `users/{uid}` write (firestore.rules validProfileChanges), which PATCH /me
+// keeps too (2a-social): src/lib/api/v1/profileLimits.test.ts holds them equal.
+export const AUTO_TRANSLATE_MAX = 5;
+export const HINTS_SEEN_MAX = 50;
+export const HINT_COUNT_MAX = 10;
+export const AVATAR_URL_MAX = 2048;
+/** A hint's key (lib/hints): never a `.`, which would make it a path inside `hintsSeen`. */
+export const HintKey = z.string().regex(/^[A-Za-z0-9_:-]{1,64}$/, 'Not a valid hint key.');
+
 export const UpdateProfileRequest = named(
   z.object({
     handle: Handle.nullish(),
@@ -449,6 +464,17 @@ export const UpdateProfileRequest = named(
     bio: z.string().trim().max(BIO_MAX).nullish(),
     region: Region.nullish(),
     primaryLocale: Locale.nullish(),
+    /** A profile photo by its URL: one of our stored pictures (`/api/upload` `purpose=avatar` answers it). */
+    avatarUrl: z.string().max(AVATAR_URL_MAX).nullish(),
+    /** …or by its storage key (the same upload's `key`); with both, `avatarKey` wins. */
+    avatarKey: z.string().max(512).nullish(),
+    /** The languages to read stories translated into (replaces the list). */
+    autoTranslateTo: z.array(Locale).max(AUTO_TRANSLATE_MAX).nullish(),
+    /**
+     * How often hints were shown, by key: merged into the stored counts, each the larger of the two (a count never
+     * falls), at most 50 keys in all.
+     */
+    hintsSeen: z.record(HintKey, z.number().int().min(0).max(HINT_COUNT_MAX)).nullish(),
   }),
   'UpdateProfileRequest',
   'Only the fields sent change.',
@@ -971,6 +997,449 @@ export const MessageIdParam = DocId;
 /** Pen names may be any script (2–20 characters); never a path. */
 export const HandleParam = z.string().trim().min(1).max(40).regex(/^[^/?#]+$/, 'Not a valid handle.');
 
+// --- Phase 2 social (2a-social)
+// The client-config, the people lookups, bookmarks, blocks, connections and incoming invites the clients read and
+// wrote straight from Firestore until Phase 2 (src/server/app/social.ts, clientConfig).
+
+export const ClientBuilds = named(
+  z.object({ ios: z.number().int().min(0), android: z.number().int().min(0) }),
+  'ClientBuilds',
+  'A build number per app (iOS CFBundleVersion, Android versionCode).',
+);
+
+export const ClientFeatures = named(
+  z.object({
+    /** Listen to signals/{uid} and pull on its counters. */
+    signals: z.boolean(),
+    /** Bookmarks, blocks, connections, profile lookups and invites through /api/v1. */
+    apiSocial: z.boolean(),
+    /** Conversations and messages through /api/v1. */
+    apiInbox: z.boolean(),
+    /** The bell through /api/v1. */
+    apiBell: z.boolean(),
+    /** The thought map through /api/v1. */
+    apiThoughtMap: z.boolean(),
+    /** Drafts and pending edits through /api/v1. */
+    apiDrafts: z.boolean(),
+  }),
+  'ClientFeatures',
+  "Which paths an app build takes: the /api/v1 path when true, its older Firestore path when false (the server's rollback).",
+);
+
+export const ClientConfig = named(
+  z.object({
+    /** Builds below these must update before going on (the update screen). 0: none must. */
+    minBuild: ClientBuilds,
+    /** Builds below these are asked, not made, to update. 0: none is. */
+    recommendedBuild: ClientBuilds,
+    features: ClientFeatures,
+  }),
+  'ClientConfig',
+  'What the apps ask at launch (GET /client-config, no sign-in needed): the builds they need, and which paths to take.',
+);
+
+export const Person = named(
+  z.object({
+    id: z.string(),
+    /** No such account (deleted, or never was): `author` and the rest are null. */
+    gone: z.boolean(),
+    author: Author.nullable(),
+    bio: z.string().nullable(),
+    joinedAt: z.iso.datetime().nullable(),
+  }),
+  'Person',
+  'A profile by its id, as anyone may read it.',
+);
+
+/** GET /users?ids=: at most this many at once. */
+export const USERS_IDS_MAX = 30;
+export const UsersQuery = z.object({
+  ids: z
+    .string()
+    .transform((v) => [...new Set(v.split(',').map((k) => k.trim()).filter(Boolean))])
+    .pipe(z.array(DocId).min(1).max(USERS_IDS_MAX)),
+});
+
+export const PersonList = named(z.object({ users: z.array(Person) }), 'PersonList', 'The people asked for, in the order asked, each once.');
+
+export const BlockedPerson = named(
+  z.object({ userId: z.string(), blockedAt: z.iso.datetime().nullable(), person: Person }),
+  'BlockedPerson',
+);
+
+export const BlockList = named(z.object({ blocks: z.array(BlockedPerson) }), 'BlockList', 'Everyone you blocked, the latest first.');
+
+export const Connection = named(
+  z.object({ userId: z.string(), establishedAt: z.iso.datetime().nullable(), person: Person }),
+  'Connection',
+);
+
+export const ConnectionList = named(z.object({ connections: z.array(Connection) }), 'ConnectionList', 'The people you are connected with, the latest first.');
+
+export const IncomingInvite = named(
+  z.object({
+    id: z.string(),
+    fromUserId: z.string(),
+    message: z.string(),
+    referenceCardId: z.string().nullable(),
+    createdAt: z.iso.datetime().nullable(),
+    /** Answer before this (POST /invites/{id}/accept). */
+    expiresAt: z.iso.datetime(),
+    from: Person,
+  }),
+  'IncomingInvite',
+);
+
+export const InviteList = named(z.object({ invites: z.array(IncomingInvite) }), 'InviteList', 'Legacy invites waiting for your answer, the latest first.');
+
+export const InvitesQuery = z.object({ box: z.enum(['incoming']) });
+
+/** Another account's uid in a path (blocks). */
+export const UserIdParam = DocId;
+
+export type ClientConfigBody = z.infer<typeof ClientConfig>;
+export type ClientFeaturesBody = z.infer<typeof ClientFeatures>;
+export type PersonBody = z.infer<typeof Person>;
+export type PersonListBody = z.infer<typeof PersonList>;
+export type BlockListBody = z.infer<typeof BlockList>;
+export type ConnectionListBody = z.infer<typeof ConnectionList>;
+export type InviteListBody = z.infer<typeof InviteList>;
+// --- end Phase 2 social (2a-social)
+// --- Phase 2 writer (2a-writer) ---
+// The thought map, drafts and a published card's pending edit through the server (任務 #3 Phase 2): what the
+// clients wrote straight to Firestore, held to the same limits as firebase/firestore.rules
+// (src/server/domain/writer.test.ts pins every number to the rules' text).
+
+/** The rules' `shortId`: a card or group id on the map, 1–128 characters (never a path, nor an id Firestore keeps). */
+export const MAP_ID_MAX = 128;
+/** The rules' `optionalString(…, "label", 500)` on an arrow and `title.size() <= 500` on a group. */
+export const MAP_LABEL_MAX = 500;
+export const MAP_TITLE_MAX = 500;
+/** Ops in one `POST /me/thought-map/ops` batch (a group dragged with every card in it is one batch). */
+export const MAP_OPS_MAX = 200;
+/** A draft's id as the clients make one (Firestore's auto ids; the rules' `^[A-Za-z0-9]{20}$`). */
+export const DRAFT_ID_PATTERN = /^[A-Za-z0-9]{20}$/;
+/** The rules' `optionalString(…, "originalLocale", 10)` and `referenceCardId.size() <= 64`. */
+export const ORIGINAL_LOCALE_MAX = 10;
+export const REFERENCE_CARD_ID_MAX = 64;
+/** The rules' `storedFile`: at most 2048 characters. */
+export const MEDIA_URL_MAX = 2048;
+/** The rules' title, story, tags and cover label limits (lib/db/firestore/cardContent CARD_LIMITS). */
+export const DRAFT_TITLE_MAX = 200;
+export const DRAFT_STORY_MAX = 200_000;
+export const DRAFT_TAGS_MAX = 30;
+export const DRAFT_TAGS_JOINED_MAX = 1000;
+export const MEDIA_LABEL_MAX = 200;
+
+/** A string of `min`–`max` UTF-16 units, as the rules' `size()` and JavaScript's `length` count (Zod's own `max` counts code points: an emoji is two units, one code point). */
+const text = (max: number, min = 0) => z.string().min(min).max(max).refine((s) => s.length <= max, `At most ${max} characters.`);
+const notReserved = (id: string) => id !== '.' && id !== '..' && !/^__.*__$/.test(id);
+const MapId = text(MAP_ID_MAX, 1).regex(/^[^/]+$/, 'Not a valid id.').refine(notReserved, 'Not a valid id.');
+/** An arrow's id: `{sourceCardId}_{targetCardId}`. */
+const MapEdgeId = text(MAP_ID_MAX * 2 + 1, 3).regex(/^[^/]+$/, 'Not a valid id.').refine(notReserved, 'Not a valid id.');
+const Coord = z.number();
+
+export const MapNode = named(
+  z.object({
+    /** The node's id: the card's id (a card is on the map once). */
+    id: z.string(),
+    cardId: z.string(),
+    x: z.number(),
+    y: z.number(),
+    /** The group it is filed in; null when unfiled. */
+    groupId: z.string().nullable(),
+    /** ISO 8601; null when the stored node has none. */
+    createdAt: z.string().nullable(),
+    updatedAt: z.string().nullable(),
+  }),
+  'MapNode',
+  'A card placed on your thought map. Only its id: what the card is, `GET /cards?keys=` answers as for any card.',
+);
+
+export const MapEdge = named(
+  z.object({
+    /** `{sourceCardId}_{targetCardId}`. */
+    id: z.string(),
+    sourceCardId: z.string(),
+    targetCardId: z.string(),
+    label: z.string(),
+    createdAt: z.string().nullable(),
+  }),
+  'MapEdge',
+  'An arrow between two cards on your map, with its words.',
+);
+
+export const MapGroup = named(
+  z.object({
+    id: z.string(),
+    title: z.string(),
+    hue: z.number(),
+    x: z.number(),
+    y: z.number(),
+    w: z.number(),
+    h: z.number(),
+    createdAt: z.string().nullable(),
+  }),
+  'MapGroup',
+  'A titled region of your map that files the cards inside it.',
+);
+
+export const ThoughtMap = named(
+  z.object({ nodes: z.array(MapNode), edges: z.array(MapEdge), groups: z.array(MapGroup) }),
+  'ThoughtMap',
+  'Your whole thought map (yours alone: no one else can read it). Numbers a stored item lacks read as the clients ' +
+    "read them: x, y 0; a group's hue 55, w 320, h 240.",
+);
+
+const op = <K extends string, S extends z.ZodRawShape>(kind: K, shape: S) => z.strictObject({ op: z.literal(kind), ...shape });
+const MapLabel = text(MAP_LABEL_MAX);
+const MapTitle = text(MAP_TITLE_MAX);
+
+/** Each op's own fields (its null fields dropped first: a Kotlin client sends every field, null when unset). */
+const MapOpKinds = z.discriminatedUnion('op', [
+  /** Place a card (again): the node is written whole — unfiled, stamped now. */
+  op('addNode', { cardId: MapId, x: Coord, y: Coord }),
+  /** Move a card; `groupId` files it (absent leaves its group: unfile with setNodeGroup). */
+  op('moveNode', { cardId: MapId, x: Coord, y: Coord, groupId: MapId.optional() }),
+  /** File a card in a group, or unfile it (no `groupId`). */
+  op('setNodeGroup', { cardId: MapId, groupId: MapId.optional() }),
+  /** Take a card off the map with every arrow touching it (the card itself stays). */
+  op('removeNode', { cardId: MapId }),
+  /** Draw an arrow (again: written whole); never from a card to itself. Its id is `{source}_{target}`. */
+  op('addEdge', { sourceCardId: MapId, targetCardId: MapId, label: MapLabel.optional() }),
+  op('setEdgeLabel', { id: MapEdgeId, label: MapLabel }),
+  op('removeEdge', { id: MapEdgeId }),
+  /** Make a group under the id the client chose (an offline queue names it before it exists); written whole. */
+  op('addGroup', { groupId: MapId, title: MapTitle, hue: Coord, x: Coord, y: Coord, w: Coord, h: Coord }),
+  /** Change a group: only the fields sent. */
+  op('updateGroup', {
+    groupId: MapId,
+    title: MapTitle.optional(),
+    hue: Coord.optional(),
+    x: Coord.optional(),
+    y: Coord.optional(),
+    w: Coord.optional(),
+    h: Coord.optional(),
+  }),
+  /** Delete a group; the cards in it stay on the map, unfiled. */
+  op('removeGroup', { groupId: MapId }),
+]);
+
+/** One map op, its kind's fields only (what the server applies). */
+export type MapOpInput = z.infer<typeof MapOpKinds>;
+
+const withoutNulls = (value: unknown): unknown =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.fromEntries(Object.entries(value).filter(([, v]) => v !== null && v !== undefined))
+    : value;
+
+/** A flat op (as MapOp takes it) as its kind: its null fields dropped, every field its kind's (else it throws). */
+export function mapOpOf(flat: unknown): MapOpInput {
+  return MapOpKinds.parse(withoutNulls(flat));
+}
+
+export const MAP_OP_KINDS = MapOpKinds.options.map((o) => o.shape.op.value);
+
+export const MapOp = named(
+  z
+    .strictObject({
+      op: z.enum(['addNode', 'moveNode', 'setNodeGroup', 'removeNode', 'addEdge', 'setEdgeLabel', 'removeEdge', 'addGroup', 'updateGroup', 'removeGroup']),
+      /** addNode, moveNode, setNodeGroup, removeNode. */
+      cardId: z.string().nullish(),
+      x: z.number().nullish(),
+      y: z.number().nullish(),
+      /** moveNode (absent: its group kept), setNodeGroup (absent: unfiled), addGroup, updateGroup, removeGroup. */
+      groupId: z.string().nullish(),
+      /** addEdge. */
+      sourceCardId: z.string().nullish(),
+      targetCardId: z.string().nullish(),
+      /** addEdge, setEdgeLabel. */
+      label: z.string().nullish(),
+      /** An arrow's id (`{sourceCardId}_{targetCardId}`): setEdgeLabel, removeEdge. */
+      id: z.string().nullish(),
+      /** addGroup, updateGroup. */
+      title: z.string().nullish(),
+      hue: z.number().nullish(),
+      w: z.number().nullish(),
+      h: z.number().nullish(),
+    })
+    .superRefine((value, ctx) => {
+      const kind = MapOpKinds.safeParse(withoutNulls(value));
+      if (!kind.success) for (const issue of kind.error.issues) ctx.addIssue({ code: 'custom', path: issue.path, message: issue.message });
+    }),
+  'MapOp',
+  'One change to your thought map, named by `op`, with that op\'s fields only (a null field is absent): addNode ' +
+    '{cardId, x, y} places a card (again: written whole, unfiled); moveNode {cardId, x, y, groupId?} moves it (and files it ' +
+    'when groupId is sent); setNodeGroup {cardId, groupId?} files or unfiles it; removeNode {cardId} takes it off with every ' +
+    'arrow touching it; addEdge {sourceCardId, targetCardId, label?} draws an arrow (never to itself; id ' +
+    '`{source}_{target}`); setEdgeLabel {id, label}; removeEdge {id}; addGroup {groupId, title, hue, x, y, w, h} under the ' +
+    'id the client chose; updateGroup {groupId, …the fields that change}; removeGroup {groupId} (its cards stay, unfiled). ' +
+    `Ids are 1–${MAP_ID_MAX} characters, labels and titles at most ${MAP_LABEL_MAX}. A change to a node, arrow or group ` +
+    'that is not there (any more) is skipped.',
+);
+
+export const MapOpsRequest = named(
+  z.strictObject({ ops: z.array(MapOp).min(1).max(MAP_OPS_MAX) }),
+  'MapOpsRequest',
+  `Up to ${MAP_OPS_MAX} changes, applied in order and all together (none when one is refused).`,
+);
+
+export const MapOpsResponse = named(
+  z.object({
+    /** How many ops changed something. */
+    applied: z.number().int(),
+    /** The indexes of the ops skipped: what they change was not there. */
+    skipped: z.array(z.number().int()),
+  }),
+  'MapOpsResponse',
+);
+
+export const DraftMedia = named(
+  z.strictObject({
+    type: z.enum(['image', 'video']),
+    url: text(MEDIA_URL_MAX).regex(/^(https:\/\/\S+|http:\/\/localhost:[0-9]+\/\S+)$/, 'Not a stored picture.'),
+    /** The cover's ≤ 960 px copy the upload answered (`…-w960.webp`). */
+    thumbUrl: text(MEDIA_URL_MAX)
+      .regex(/^(https:\/\/\S+|http:\/\/localhost:[0-9]+\/\S+)-w960\.webp$/, "Not the cover's copy.")
+      .nullish(),
+    label: text(MEDIA_LABEL_MAX).nullish(),
+    frame: CoverFrame.nullish(),
+  }),
+  'DraftMedia',
+  'A cover as a draft or a pending edit keeps it. Sent, it replaces the cover whole: a field left out or null (a ' +
+    '`frame`, a `thumbUrl`) is gone from it.',
+);
+
+const DraftTags = z
+  .array(z.string())
+  .max(DRAFT_TAGS_MAX)
+  .refine((tags) => tags.join(' ').length <= DRAFT_TAGS_JOINED_MAX, `The tags take at most ${DRAFT_TAGS_JOINED_MAX} characters.`);
+const DraftVisibility = z.enum(['public', 'connections', 'private']);
+const DraftHue = z.number().min(0).max(360);
+const DraftRev = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
+
+export const CreateDraftRequest = named(
+  z.strictObject({
+    /** The id the client made (20 letters and digits, as Firestore's auto ids): never one in use or deleted for good. */
+    id: z.string().regex(DRAFT_ID_PATTERN, 'Not a valid draft id.'),
+    thoughtCore: text(DRAFT_TITLE_MAX),
+    story: text(DRAFT_STORY_MAX),
+    tags: DraftTags,
+    visibility: DraftVisibility,
+    originalLocale: text(ORIGINAL_LOCALE_MAX).nullish(),
+    media: DraftMedia.nullish(),
+    accentHue: DraftHue.nullish(),
+    /** The card this draft answers (用卡片回應): one you may read, never across a block unless it is anonymous. */
+    referenceCardId: text(REFERENCE_CARD_ID_MAX, 1).nullish(),
+    anonymous: z.boolean().nullish(),
+  }),
+  'CreateDraftRequest',
+  'A new draft under the id the client made. Anonymous and for connections only is refused (`400`).',
+);
+
+export const CreatedDraft = named(
+  z.object({
+    id: z.string(),
+    /** False when your draft was there already under this id (a create sent again): nothing was written. */
+    created: z.boolean(),
+    /** The draft's stored `rev` (0 for a new one): the next `PATCH …/draft` sends one above it. */
+    rev: z.number().int(),
+  }),
+  'CreatedDraft',
+);
+
+/** A field `PATCH …/draft` can remove (`clear`). */
+export const DraftField = z.enum(['media', 'accentHue']);
+
+export const UpdateDraftRequest = named(
+  z.strictObject({
+    /** The client's count of this draft's saves, one higher each save: applied only when above the stored `rev`. */
+    rev: DraftRev,
+    thoughtCore: text(DRAFT_TITLE_MAX).nullish(),
+    story: text(DRAFT_STORY_MAX).nullish(),
+    tags: DraftTags.nullish(),
+    visibility: DraftVisibility.nullish(),
+    anonymous: z.boolean().nullish(),
+    /** The cover, replaced whole (see DraftMedia). */
+    media: DraftMedia.nullish(),
+    accentHue: DraftHue.nullish(),
+    /** Fields to remove: `media` (no cover), `accentHue` (no hue). A null field removes nothing: it is absent. */
+    clear: z.array(DraftField).max(2).nullish(),
+  }),
+  'UpdateDraftRequest',
+  'Only the fields sent change; a field that is null or absent is left as it is.',
+);
+
+export const DraftSaved = named(
+  z.object({
+    /**
+     * False when the stored `rev` is already this one or higher (a save that arrived late, or one sent again):
+     * nothing was written, and `rev` is the stored one. A client holding newer words than the server's (its count
+     * fell behind another device's) sends them again with `rev` one above it.
+     */
+    applied: z.boolean(),
+    rev: z.number().int(),
+    /** When it was saved (ISO 8601); null when nothing was written. */
+    updatedAt: z.string().nullable(),
+  }),
+  'DraftSaved',
+);
+
+export const PendingEditRequest = named(
+  z.strictObject({
+    /** As a draft's: applied only when above the stored copy's `rev` (a copy saved without one counts as 0). */
+    rev: DraftRev,
+    thoughtCore: text(DRAFT_TITLE_MAX),
+    story: text(DRAFT_STORY_MAX),
+    tags: DraftTags,
+    visibility: DraftVisibility,
+    anonymous: z.boolean(),
+    /** The cover; absent or null: none. */
+    media: DraftMedia.nullish(),
+    accentHue: DraftHue.nullish(),
+  }),
+  'PendingEditRequest',
+  'The whole working copy of your published card, replacing the one kept (never merged).',
+);
+
+export const PendingEdit = named(
+  z.object({
+    thoughtCore: z.string(),
+    story: z.string(),
+    tags: z.array(z.string()),
+    visibility: z.enum(['public', 'connections', 'private']),
+    anonymous: z.boolean(),
+    media: DraftMedia.nullable(),
+    accentHue: z.number().nullable(),
+    /** ISO 8601; null when the kept copy has no time. */
+    updatedAt: z.string().nullable(),
+    /** The stored `rev` (0 for a copy an older app saved, without one). */
+    rev: z.number().int(),
+  }),
+  'PendingEdit',
+  'Your unsaved working copy of a published card (`edits/current`).',
+);
+
+export const PendingEditBox = named(
+  z.object({ edit: PendingEdit.nullable() }),
+  'PendingEditBox',
+  'Your pending edit of the card, or null when there is none.',
+);
+
+export const DeletedPendingEdit = named(z.object({ deleted: z.boolean() }), 'DeletedPendingEdit', 'False when there was none to delete.');
+
+export type ThoughtMapBody = z.infer<typeof ThoughtMap>;
+export type MapOpsResponseBody = z.infer<typeof MapOpsResponse>;
+export type DraftMediaInput = z.infer<typeof DraftMedia>;
+export type CreateDraftInput = z.infer<typeof CreateDraftRequest>;
+export type CreatedDraftBody = z.infer<typeof CreatedDraft>;
+export type UpdateDraftInput = z.infer<typeof UpdateDraftRequest>;
+export type DraftSavedBody = z.infer<typeof DraftSaved>;
+export type PendingEditInput = z.infer<typeof PendingEditRequest>;
+export type PendingEditBody = z.infer<typeof PendingEdit>;
+export type PendingEditBoxBody = z.infer<typeof PendingEditBox>;
+// --- end Phase 2 writer (2a-writer) ---
+
 export type ApiErrorBody = z.infer<typeof ApiError>;
 export type MeBody = z.infer<typeof Me>;
 export type FeedCardBody = z.infer<typeof FeedCard>;
@@ -1007,3 +1476,290 @@ export type EmptiedTrashBody = z.infer<typeof EmptiedTrash>;
 export type CardListBody = z.infer<typeof CardList>;
 export type CardInclude = (typeof CARD_INCLUDES)[number];
 export type ProfileInclude = (typeof PROFILE_INCLUDES)[number];
+
+// --- Phase 2 inbox (2a-inbox)
+// The conversation list, a thread's messages and the bell, read through the
+// server instead of the clients' Firestore listeners (phase2-spec, 2a-inbox):
+// the same rows, ordered as those listeners ordered them, each field as it is
+// stored today. A client refetches one of these when its `signals/{uid}`
+// topic moves (`inbox`, `threads.{pair}`, `bell`), with If-None-Match.
+// Times are ISO 8601 UTC strings to the microsecond
+// (`2026-11-20T03:04:05.123456Z`): plain strings, never decoded as dates by
+// the contract, so nothing between two messages sent in one millisecond is
+// lost. Cursors are opaque (`c1.`…): pass them back as they came.
+
+/** Conversations a page (the clients' listener's limit). */
+export const CONVERSATIONS_PAGE = 50;
+/** A thread's newest window (the clients' listener's), and the most one page answers. */
+export const THREAD_PAGE = 50;
+export const THREAD_PAGE_MAX = 100;
+/** Bell rows a page (the web's listener's), and the most one page answers (the apps listened to 50). */
+export const BELL_PAGE = 20;
+export const BELL_PAGE_MAX = 50;
+/** Bell rows one POST /notifications/read may name; how many of the newest rows up to `before` one call reads. */
+export const BELL_READ_IDS_MAX = 50;
+export const BELL_READ_BEFORE_SCAN = 100;
+
+const MicroTime = z.string().describe('ISO 8601 UTC to the microsecond (2026-11-20T03:04:05.123456Z).');
+
+export const ConversationLastMessage = named(
+  z.object({
+    /** The preview's words (a sticker's fallback words, a card's title when the message had none); '' when none. */
+    text: z.string(),
+    senderId: z.string(),
+    sentAt: MicroTime.nullable(),
+    /** A picture: drawn as 「傳送了圖片」 (or `albumCount` of them). */
+    image: z.boolean(),
+    sticker: z.boolean(),
+    /** How many pictures were sent together (2–10), else null. */
+    albumCount: z.number().int().nullable(),
+    /** The last message was unsent (only when nothing else is said beside it: the words win). */
+    unsent: z.boolean(),
+  }),
+  'ConversationLastMessage',
+  "The conversation list's preview of the last message.",
+);
+
+export const ConversationLetter = named(
+  z.object({
+    /** Who left the notes (a uid): the other person waits for your answer when it isn't you. */
+    from: z.string(),
+    cardId: z.string().nullable(),
+    count: z.number().int(),
+  }),
+  'ConversationLetter',
+  'The letter a conversation holds: notes left by someone not connected, waiting for an answer.',
+);
+
+export const Conversation = named(
+  z.object({
+    /** Its two participants' uids, sorted, joined by `_`. */
+    id: z.string(),
+    participants: z.array(z.string()),
+    /** The other participant's uid. */
+    otherId: z.string(),
+    /**
+     * The other participant as their profile is now; null when the account is gone (or never chose a pen name),
+     * drawn as today's clients draw a missing profile. A block changes nothing here: the list is yours to filter
+     * by your blocks, as before.
+     */
+    other: Author.nullable(),
+    /** Your unread messages in it. */
+    unread: z.number().int(),
+    lastMessage: ConversationLastMessage.nullable(),
+    request: ConversationLetter.nullable(),
+    createdAt: MicroTime.nullable(),
+    updatedAt: MicroTime.nullable(),
+    originCardId: z.string().nullable(),
+  }),
+  'Conversation',
+  'One of your conversations, as the list shows it.',
+);
+
+export const ConversationList = named(
+  z.object({
+    /** The most recently active first. */
+    conversations: z.array(Conversation),
+    /** Pass back as `pageToken` for the next page; null at the end. */
+    nextPageToken: z.string().nullable(),
+  }),
+  'ConversationList',
+  'Your conversations, the most recently active first, 50 a page.',
+);
+
+export const MessageQuote = named(
+  z.object({
+    id: z.string(),
+    senderId: z.string(),
+    /** '' for an unsent one. */
+    text: z.string(),
+    cardRef: z.string().optional(),
+    image: z.boolean().optional(),
+    sticker: StickerRef.optional(),
+    /** The quoted message was unsent since: only who sent it is kept. */
+    unsent: z.boolean().optional(),
+  }),
+  'MessageQuote',
+  "A reply's snapshot of the message it answers.",
+);
+
+export const MessagePicture = named(
+  z.object({
+    /** GET /chat-images/{id}. */
+    id: z.string(),
+    /** 0 when the server kept no size (drawn square). */
+    width: z.number(),
+    height: z.number(),
+  }),
+  'MessagePicture',
+);
+
+export const ThreadMessage = named(
+  z.object({
+    id: z.string(),
+    /** This message's place in the thread: pass it as `before` (older ones) or `after` (newer ones). */
+    cursor: z.string(),
+    senderId: z.string(),
+    /** '' for an unsent message. */
+    text: z.string(),
+    sentAt: MicroTime,
+    /** `note` for a 小紙條 in the thread; a kind this build doesn't know is a plain message. Absent: a plain one. */
+    kind: z.string().optional(),
+    cardRef: z.string().optional(),
+    noteRef: z.object({ cardId: z.string(), noteId: z.string() }).optional(),
+    replyTo: MessageQuote.optional(),
+    image: MessagePicture.optional(),
+    /** Only beside `image`. */
+    album: z.object({ id: z.string(), index: z.number().int(), count: z.number().int() }).optional(),
+    sticker: StickerRef.optional(),
+    /** Reactions by uid (a reaction this build doesn't know is drawn as nothing). Absent when none. */
+    reactions: z.record(z.string(), z.string()).optional(),
+    /** Unsent: then only `senderId`, `sentAt` and this are said. */
+    unsentAt: MicroTime.optional(),
+    /** A pass to the sender's 私人卡 `cardRef`, until 停止分享. */
+    privateShare: z.boolean().optional(),
+    preview: LinkPreview.optional(),
+  }),
+  'ThreadMessage',
+  'A message as the thread shows it, its fields as stored.',
+);
+
+export const MessagePage = named(
+  z.object({
+    /** Newest first. */
+    messages: z.array(ThreadMessage),
+    /** Pass as `before` for the page older than this one; null when there is none (and on an `after` page). */
+    olderCursor: z.string().nullable(),
+    /** The newest message's cursor here (or the `after` sent, when nothing came after it): the next `after`. */
+    newerCursor: z.string().nullable(),
+    /** An `after` page that came back full: ask again with `newerCursor` right away. */
+    hasNewer: z.boolean(),
+  }),
+  'MessagePage',
+  "A page of a thread's messages.",
+);
+
+export const BellPayload = named(
+  z.object({
+    fromUserId: z.string().optional(),
+    fromHandle: z.string().optional(),
+    /** `resonance_tap`: the day's readers, newest first. */
+    fromUserIds: z.array(z.string()).optional(),
+    cardId: z.string().optional(),
+    noteId: z.string().optional(),
+    /** A note's first words. */
+    preview: z.string().optional(),
+    count: z.number().optional(),
+    /** `read_summary`: how many read the card to its end this week, and whether some read it again. */
+    readers: z.number().optional(),
+    reread: z.boolean().optional(),
+    /** On one of your anonymous cards: open the card, never a thread. */
+    anonymous: z.boolean().optional(),
+    inviteId: z.string().optional(),
+  }),
+  'BellPayload',
+  'What a bell row says, as the server wrote it (the fields the clients draw).',
+);
+
+export const BellItem = named(
+  z.object({
+    id: z.string(),
+    /** `note`, `message`, `resonance`, `resonance_tap`, `read_summary`, `invite_accepted`, …: one a build doesn't know is drawn as before. */
+    type: z.string(),
+    payload: BellPayload,
+    readAt: MicroTime.nullable(),
+    createdAt: MicroTime,
+  }),
+  'BellItem',
+);
+
+export const BellPage = named(
+  z.object({
+    /** Newest first. */
+    items: z.array(BellItem),
+    /** The people these rows name (`fromUserId`, `fromUserIds`) whose profiles are there; a gone one is absent. */
+    people: z.array(Author),
+    /** Pass back as `pageToken` for the next page; null at the end. */
+    nextPageToken: z.string().nullable(),
+  }),
+  'BellPage',
+  'Your bell, newest first.',
+);
+
+export const MarkNotificationsReadRequest = named(
+  z
+    .object({
+      /** These rows of yours, read now (anyone else's, and unknown ids, are ignored). */
+      ids: z.array(DocId).min(1).max(BELL_READ_IDS_MAX).nullish(),
+      /** Or the rows of yours made at this time or earlier (ISO 8601), of the newest 100 such, read now. */
+      before: z.iso.datetime({ offset: true }).nullish(),
+    })
+    .refine((r) => (r.ids ? 1 : 0) + (r.before ? 1 : 0) === 1, { message: 'Send `ids` or `before`.', path: ['ids'] }),
+  'MarkNotificationsReadRequest',
+  'Mark bell rows read: by id, or everything up to a time.',
+);
+
+export const PageTokenQuery = z.object({ pageToken: z.string().min(1).max(512).nullish() });
+export const BellQuery = z.object({
+  pageToken: z.string().min(1).max(512).nullish(),
+  limit: z.coerce.number().int().min(1).max(BELL_PAGE_MAX).default(BELL_PAGE),
+});
+export const MessagesQuery = z
+  .object({
+    before: z.string().min(1).max(512).nullish(),
+    after: z.string().min(1).max(512).nullish(),
+    limit: z.coerce.number().int().min(1).max(THREAD_PAGE_MAX).default(THREAD_PAGE),
+  })
+  .refine((q) => !(q.before && q.after), { message: 'Send `before` or `after`, not both.', path: ['after'] });
+
+export type ConversationBody = z.infer<typeof Conversation>;
+export type ConversationListBody = z.infer<typeof ConversationList>;
+export type ThreadMessageBody = z.infer<typeof ThreadMessage>;
+export type MessagePageBody = z.infer<typeof MessagePage>;
+export type BellItemBody = z.infer<typeof BellItem>;
+export type BellPageBody = z.infer<typeof BellPage>;
+export type MarkNotificationsReadInput = z.infer<typeof MarkNotificationsReadRequest>;
+
+// --- Phase 3 sessions (ADR 0004)
+// Resonance's own short-lived access tokens and rotating refresh tokens, traded for a sign-in at the identity
+// provider (src/server/app/auth.ts). Firebase ID tokens keep working beside them (dual accept).
+
+export const AuthExchangeRequest = named(
+  z.object({
+    /** The identity provider whose token this is; `firebase` (the only one today) when absent. */
+    provider: z.enum(['firebase']).nullish(),
+    /** The provider's token: a Firebase ID token. */
+    token: z.string().min(1).max(8192),
+  }),
+  'AuthExchangeRequest',
+  "A sign-in at the identity provider, traded for Resonance's own tokens.",
+);
+
+export const AuthRefreshRequest = named(
+  z.object({ refreshToken: z.string().min(1).max(256) }),
+  'AuthRefreshRequest',
+  'A refresh token, traded (once) for the next pair — or, to log out, revoked.',
+);
+
+export const AuthSession = named(
+  z.object({
+    /** Send it as the bearer credential on every /api/v1 request. */
+    accessToken: z.string(),
+    tokenType: z.enum(['Bearer']),
+    /** Seconds the access token lives (at most 900): refresh before then. */
+    expiresIn: z.number().int(),
+    /** Good once: trade it for the next pair (POST /auth/refresh). Keep it as a password. */
+    refreshToken: z.string(),
+    /** When the refresh token stops being good, used or not. */
+    refreshExpiresAt: z.iso.datetime(),
+    /** The account: the same user id the identity provider's sign-in always had. */
+    userId: z.string(),
+  }),
+  'AuthSession',
+  "Resonance's own session: a short-lived access token and the refresh token for the next one.",
+);
+
+export type AuthExchangeInput = z.infer<typeof AuthExchangeRequest>;
+export type AuthRefreshInput = z.infer<typeof AuthRefreshRequest>;
+export type AuthSessionBody = z.infer<typeof AuthSession>;
+// --- end Phase 3 sessions

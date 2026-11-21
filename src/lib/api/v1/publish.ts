@@ -1,37 +1,9 @@
-import { FieldValue, type Firestore } from 'firebase-admin/firestore';
-import { assignSlug } from '@/lib/ai/assignSlug';
-import { ANONYMOUS_VISIBILITY_MESSAGE, BLANK_CARD_MESSAGE, anonymousForConnections, blankForReaders } from '@/lib/db/firestore/cardContent';
-import { isReservedId } from '@/lib/db/firestore/reservedId';
-import { ApiFailure } from './http';
-import { refuseInTrash } from './inTrash';
-import { reachable, tryReachResonance } from './resonate';
-import { listingFields, summaryFields } from './summary';
+import { titleToSlugBase } from '@/lib/ai/tasks';
+import { publishCardIn, type PublishResult } from '@/server/app/publish';
+import { ctxFor } from '@/server/infra/firestore/ctx';
+import type { AdminDb } from '@/server/infra/firestore/db';
 
-/** How long publishing waits for the slug (an LLM call) before answering without it. */
-export const SLUG_WAIT_MS = 8_000;
-
-export interface PublishResult {
-  id: string;
-  /** The English URL slug; null when generating it failed or is still under way (the card is live at its id). */
-  slug: string | null;
-  /** False when the card was already live — publishing again never re-dates it. */
-  firstPublish: boolean;
-  /** A resonance's bell row on the original author's side, for its push (never returned to the client). */
-  notificationId: string | null;
-  /** The slug still being made when the answer went out (never returned): the route awaits it after the response. */
-  pendingSlug: Promise<string | null> | null;
-}
-
-const LATE = Symbol('late');
-
-/** `p`'s value, or LATE when it takes longer than `ms` (p goes on). */
-function within<T>(p: Promise<T>, ms: number): Promise<T | typeof LATE> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const late = new Promise<typeof LATE>((resolve) => {
-    timer = setTimeout(() => resolve(LATE), ms);
-  });
-  return Promise.race([p, late]).finally(() => clearTimeout(timer));
-}
+export { SLUG_WAIT_MS, type PublishResult } from '@/server/app/publish';
 
 /**
  * Publish one of your own cards: what the web editor's submit() does from the
@@ -60,65 +32,20 @@ function within<T>(p: Promise<T>, ms: number): Promise<T | typeof LATE> {
  * working URL) and the slug is written when it comes (`pendingSlug`).
  *
  * The recommendation index and the page cache are the route's (after the
- * response); `slugBase` is injectable so tests need no LLM.
+ * response); `slugBase` is injectable so tests need no LLM, and defaults to
+ * the model's translation of the title (lib/ai/tasks), which is why the route
+ * is pinned away from Hong Kong (regions.test.ts follows this import).
+ *
+ * The service is src/server/app/publish.ts publishCardIn; this is its legacy
+ * facade on a given Firestore.
  */
-export async function publishCard(
-  db: Firestore,
+export function publishCard(
+  db: AdminDb,
   uid: string,
   id: string,
   slugBase?: (title: string) => Promise<string>,
   /** `spent`: the author's budget, spent beside this (budgetFirst, B7) — awaited before anything is written. */
   opts: { slugWaitMs?: number; spent?: Promise<void> } = {},
 ): Promise<PublishResult> {
-  // Someone else's card is as absent as a missing one; so is an id Firestore keeps for itself.
-  if (isReservedId(id)) throw new ApiFailure('not_found', 'No such card.');
-  const ref = db.doc(`cards/${id}`);
-  const card = await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    // The budget answers before anything is written (budgetFirst).
-    await opts.spent;
-    // Someone else's card is as absent as a missing one.
-    if (!snap.exists || snap.get('authorId') !== uid) throw new ApiFailure('not_found', 'No such card.');
-    // Restored first: published from the trash it would go out private, answering nothing.
-    refuseInTrash(snap);
-    if (!String(snap.get('thoughtCore') ?? '').trim()) throw new ApiFailure('invalid_request', 'A card needs a title before it is published.');
-    // Nothing published for others to read without words in its story (a 私人卡 may be blank).
-    if (blankForReaders(snap.data()!)) throw new ApiFailure('invalid_request', BLANK_CARD_MESSAGE);
-    const firstPublish = snap.get('publishedAt') == null;
-    // Never newly published anonymous and for connections only (a card published so before is left as it is).
-    if (firstPublish && anonymousForConnections(snap.data()!)) throw new ApiFailure('invalid_request', ANONYMOUS_VISIBILITY_MESSAGE);
-    tx.set(
-      ref,
-      {
-        ...(firstPublish ? { publishedAt: FieldValue.serverTimestamp() } : {}),
-        // Always a boolean once public: lists that may show a card to anyone
-        // filter on `anonymous == false` (an absent field would drop it).
-        anonymous: snap.get('anonymous') === true,
-        updatedAt: FieldValue.serverTimestamp(),
-        // What lists show of it, so they needn't read its story (./summary).
-        ...summaryFields(snap.get('story')),
-        // Whether lists may show it (lib/cards/blank: thin), judged here, as it is saved.
-        ...listingFields(snap.data()!),
-      },
-      { merge: true },
-    );
-    return { data: snap.data()!, firstPublish };
-  });
-
-  // Publishing never waits long on — or fails for — the AI step; the id is a working URL.
-  // The card as the transaction read it: its title, byline, author and slug are what publishing left them.
-  const slugP = assignSlug(db, id, slugBase, card.data).catch((e) => (console.error('[api/v1] slug', e), null));
-  const resonance = card.firstPublish && typeof card.data.referenceCardId === 'string' && reachable(card.data);
-  const [slug, notificationId] = await Promise.all([
-    within(slugP, opts.slugWaitMs ?? SLUG_WAIT_MS),
-    // Best effort: a resonance that can't reach anyone is still published.
-    resonance ? tryReachResonance(db, uid, id) : null,
-  ]);
-  return {
-    id,
-    slug: slug === LATE ? null : slug,
-    firstPublish: card.firstPublish,
-    notificationId,
-    pendingSlug: slug === LATE ? slugP : null,
-  };
+  return publishCardIn(ctxFor(db), uid, id, slugBase ?? titleToSlugBase, opts);
 }

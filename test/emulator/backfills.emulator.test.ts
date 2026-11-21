@@ -924,6 +924,28 @@ describe('cover-thumbs (B2)', () => {
     expect(await backfillCoverThumbs(db, storage, { apply: true, publicBases: [BASE], read, exists, log: quiet })).toMatchObject({ made: 0, present: 2, named: 0 });
     expect(put).toHaveLength(1);
   });
+
+  it('makes the copy of a cover stored as AVIF, as the older covers are (26 of production’s 35 read as unreadable before)', async () => {
+    const avif = new Uint8Array(await sharp({ create: { width: 1600, height: 1200, channels: 3, background: '#48c' } }).avif().toBuffer());
+    const files = new Map<string, Uint8Array>([[`${BASE}/image/2026-09/old.avif`, avif]]);
+    const read = async (url: string) => files.get(url) ?? null;
+    const exists = async (url: string) => files.has(url);
+    const put: { key: string; body: Uint8Array }[] = [];
+    const storage = {
+      putObject: async (key: string, _type: string, body: Uint8Array) => {
+        put.push({ key, body });
+        files.set(`${BASE}/${key}`, body);
+        return { key, publicUrl: `${BASE}/${key}` };
+      },
+    };
+    await db.doc('cards/old').set({ authorId: 'alice', media: { type: 'image', url: `${BASE}/image/2026-09/old.avif` } });
+
+    expect(await backfillCoverThumbs(db, storage, { apply: true, publicBases: [BASE], read, exists, log: quiet })).toMatchObject({ made: 1, unreadable: 0, named: 1, notWritten: 0 });
+    expect(put.map((p) => p.key)).toEqual(['image/2026-09/old-w960.webp']);
+    const meta = await sharp(put[0].body).metadata();
+    expect([meta.format, meta.width, meta.height]).toEqual(['webp', 960, 720]);
+    expect(await data('cards/old')).toMatchObject({ media: { thumbUrl: `${BASE}/image/2026-09/old-w960.webp` } });
+  });
 });
 
 describe('tap-passages (round 27)', () => {

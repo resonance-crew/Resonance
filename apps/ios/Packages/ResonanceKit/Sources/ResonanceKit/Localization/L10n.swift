@@ -490,6 +490,18 @@ public enum L10n {
         }
         /// In progress
         public static var busy: String { Strings.shared.string("app.busy") }
+        public enum Update {
+            /// Time to update
+            public static var title: String { Strings.shared.string("app.update.title") }
+            /// This version of Resonance no longer works with the service, update it to keep reading and writing
+            public static var body: String { Strings.shared.string("app.update.body") }
+            /// Update
+            public static var action: String { Strings.shared.string("app.update.action") }
+            /// A new version of Resonance is ready
+            public static var available: String { Strings.shared.string("app.update.available") }
+            /// Later
+            public static var later: String { Strings.shared.string("app.update.later") }
+        }
         public enum Notifications {
             /// No notifications yet
             public static var emptyTitle: String { Strings.shared.string("app.notifications.emptyTitle") }

@@ -1,6 +1,6 @@
 import { after } from 'next/server';
-import type { Firestore } from 'firebase-admin/firestore';
 import { getAdminMessaging } from '@/lib/db/firestore/admin';
+import type { AdminDb } from '@/server/infra/firestore/db';
 import { pushNotification } from './send';
 
 /**
@@ -17,7 +17,7 @@ export type Bell = string | null | undefined | (() => Promise<string | null>);
  * here as well, before its push; one that fails is logged and rings no one,
  * and the next still rings.
  */
-export function ringAfter(db: Firestore, ...bells: Bell[]) {
+export function ringAfter(db: AdminDb, ...bells: Bell[]) {
   const todo = bells.filter((b): b is NonNullable<Bell> => !!b);
   if (!todo.length) return;
   after(async () => {

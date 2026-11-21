@@ -15,7 +15,7 @@ vi.mock('@/lib/auth', () => ({ getCurrentUser: async () => viewer }));
 const admin = fakeAdminDb({});
 vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => admin.db }));
 const limited = vi.fn(async (..._a: unknown[]) => null as Response | null);
-vi.mock('@/lib/api/rateLimit', () => ({ limited: (...a: unknown[]) => limited(...a) }));
+vi.mock('@/server/infra/firestore/rateLimit', () => ({ firestoreRateLimiter: () => ({ limited: (...a: unknown[]) => limited(...a) }) }));
 const stored: { intent: UploadIntent; body: Uint8Array }[] = [];
 const thumbs: { key: string; contentType: string; body: Uint8Array }[] = [];
 const deleted: string[] = [];

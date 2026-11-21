@@ -1,8 +1,10 @@
 import { parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { listTaps } from '@/lib/api/v1/taps';
 import { CardIdParam, TapListQuery } from '@/lib/api/v1/schemas';
 import { OWN, cachedJson } from '@/lib/api/v1/cache';
-import { getAdminDb } from '@/lib/db/firestore/admin';
+import { serverCtx } from '@/server/ctx';
+import { shadowRead } from '@/server/app/shadow';
+import { shadowFromEnv } from '@/server/infra/shadow';
+import { listTapsIn } from '@/server/app/taps';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,5 +18,9 @@ export const dynamic = 'force-dynamic';
 export const GET = withUser(async (user, req, ctx: RouteContext<'key'>) => {
   const id = parse(CardIdParam, await routeParam(ctx, 'key'));
   const { pageToken } = parse(TapListQuery, Object.fromEntries(new URL(req.url).searchParams));
-  return cachedJson(req, await listTaps(getAdminDb(), user.id, id, pageToken), OWN);
+  const sctx = serverCtx();
+  const body = await listTapsIn(sctx, user.id, id, pageToken);
+  // Shadow-read when READ_BACKEND=shadow (app/shadow.ts): the log names the card by a hash only.
+  shadowRead(sctx, shadowFromEnv(), 'GET /api/v1/cards/{id}/taps', `${user.id}:${id}`, body, (s) => listTapsIn(s, user.id, id, pageToken));
+  return cachedJson(req, body, OWN);
 });

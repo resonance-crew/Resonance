@@ -32,11 +32,34 @@ vi.mock('@/lib/db/firestore/client/reads', () => ({
   resolveCardId: vi.fn(),
 }));
 vi.mock('@/lib/db/firestore/client/messages', () => ({
-  listenConversations: vi.fn(),
-  listenThread: vi.fn(),
+  listConversations: vi.fn(),
+  readConversation: vi.fn(),
 }));
 vi.mock('@/lib/db/firestore/client/notifications', () => ({
-  listenNotifications: vi.fn(),
+  getBell: vi.fn(),
+}));
+// The signal channel (signals/{uid}): who watches what, fired by the test as the server's counters would move.
+const signals = vi.hoisted(() => {
+  const watchers = new Map<string, Set<() => void>>();
+  return {
+    watchers,
+    fire: (key: string) => [...(watchers.get(key) ?? [])].forEach((fn) => fn()),
+  };
+});
+vi.mock('@/lib/db/firestore/client/signals', () => ({
+  watchSignal: (uid: string, topic: string, fn: () => void) => {
+    const key = `${uid}|${topic}`;
+    if (!signals.watchers.has(key)) signals.watchers.set(key, new Set());
+    signals.watchers.get(key)!.add(fn);
+    return () => signals.watchers.get(key)!.delete(fn);
+  },
+  pokeSignal: vi.fn(),
+}));
+// Phase 2b: what reads the server never reaches Firestore (a call to it throws).
+vi.mock('@/lib/db/firestore/client/init', () => ({
+  getClientDb: vi.fn(() => {
+    throw new Error('Firestore is not read here');
+  }),
 }));
 vi.mock('@/lib/db/firestore/client/api', () => ({
   callApi: vi.fn(),
@@ -81,11 +104,12 @@ import {
   listMyConnectionUids,
   resolveCardId,
 } from '@/lib/db/firestore/client/reads';
-import { listenConversations } from '@/lib/db/firestore/client/messages';
-import { listenNotifications } from '@/lib/db/firestore/client/notifications';
+import { listConversations } from '@/lib/db/firestore/client/messages';
+import { getBell } from '@/lib/db/firestore/client/notifications';
 import { resetLive } from './live';
 import { ApiError, callApi } from '@/lib/db/firestore/client/api';
 import { loadMyThoughtMap } from '@/lib/db/firestore/client/thoughtMap';
+import { getClientDb } from '@/lib/db/firestore/client/init';
 import type { CardDetailBody, CardListBody, FeedCardBody, FeedPageBody, RecommendedFeedBody } from '@/lib/api/v1/schemas';
 import { getMyBlockedIds } from '@/lib/db/firestore/client/blocks';
 import {
@@ -716,11 +740,21 @@ describe('useCard with the server render', () => {
 describe('useMyCardBox', () => {
   // The box read all six shelves (three of them the same query of the
   // viewer's cards, each whole) before showing any; it reads the one on screen.
-  it('reads only the shelf on screen, with its authors', async () => {
-    vi.mocked(getCardsByAuthor).mockImplementation(async (_uid, tab) => [card(`${tab}-card`, 'me')]);
-    // 草稿 holds the drafts and the cards kept private together (round 8 §1.1).
-    vi.mocked(getMyDrafts).mockResolvedValue([card('draft', 'me', { publishedAt: null })]);
-    vi.mocked(getUsersByIds).mockResolvedValue({ me: user('me') });
+  // Phase 2b: the viewer's own shelves are the server's (never forty whole stories through the rules).
+  it('reads only the shelf on screen, from the server, with its authors', async () => {
+    // 草稿 holds the drafts and the cards kept private together (round 8 §1.1), the latest changed first.
+    api({
+      '/api/v1/me/cardbox?shelves=draft,private': {
+        draft: { cards: [summary('draft-old', 'me', { publishedAt: null, editedAt: '2026-10-01T08:00:00.000Z' })] },
+        private: {
+          cards: [
+            summary('kept', 'me', { visibility: 'private', editedAt: '2026-10-03T08:00:00.000Z' }),
+            summary('binned', 'me', { visibility: 'private', trashedAt: '2026-10-04T08:00:00.000Z' }),
+          ],
+        },
+      },
+      '/api/v1/me/cards?tab=published': { cards: [summary('published-card', 'me')] },
+    });
 
     const { result, rerender } = renderHook(({ shelf }) => useMyCardBox(shelf).data, {
       wrapper,
@@ -728,16 +762,18 @@ describe('useMyCardBox', () => {
     });
     await waitFor(() => expect(result.current).toBeDefined());
 
-    expect(result.current!.cards.map((c) => c.id)).toEqual(['draft']);
+    expect(result.current!.cards.map((c) => c.id)).toEqual(['kept', 'draft-old']);
     expect(result.current!.authors).toHaveProperty('me');
-    expect(getMyDrafts).toHaveBeenCalledWith('me');
+    expect(vi.mocked(callApi).mock.calls.map((c) => c[0])).toEqual(['/api/v1/me/cardbox?shelves=draft,private']);
+    expect(getMyDrafts).not.toHaveBeenCalled();
     expect(getCardsByAuthor).not.toHaveBeenCalled();
-    expect(callApi).not.toHaveBeenCalled();
+    expect(getClientDb).not.toHaveBeenCalled();
 
     // Opening another shelf reads that one.
     rerender({ shelf: 'published' });
     await waitFor(() => expect(result.current?.cards.map((c) => c.id)).toEqual(['published-card']));
-    expect(vi.mocked(getCardsByAuthor).mock.calls.map((c) => c[1])).toEqual(['published']);
+    expect(callApi).toHaveBeenLastCalledWith('/api/v1/me/cards?tab=published');
+    expect(getCardsByAuthor).not.toHaveBeenCalled();
   });
 
   it("reads others' cards from the server, an anonymous original without its author", async () => {
@@ -1054,10 +1090,7 @@ describe('revalidation on tab focus', () => {
 
   // W21: the connections are mutated by what changes them here, and a new one comes as a conversation.
   it("still refreshes the block list, but neither the connections nor the conversations (live)", async () => {
-    vi.mocked(listenConversations).mockImplementation((_uid, emit) => {
-      emit([]);
-      return () => {};
-    });
+    vi.mocked(listConversations).mockResolvedValue([]);
     vi.mocked(listMyConnectionUids).mockResolvedValue([]);
     vi.mocked(getUsersByIds).mockResolvedValue({});
     const convos = renderHook(() => useConversations().data, { wrapper: appWrapper });
@@ -1070,7 +1103,21 @@ describe('revalidation on tab focus', () => {
     await focusTab();
     await waitFor(() => expect(getMyBlockedIds).toHaveBeenCalled());
     expect(listMyConnectionUids).not.toHaveBeenCalled();
-    expect(listenConversations).toHaveBeenCalledTimes(1);
+    expect(listConversations).toHaveBeenCalledTimes(1);
+  });
+
+  // The decouple's Phase 2: the viewer's connections change elsewhere (a block, a connection made) → `graph`.
+  it('reads the connections again when the graph signal moves, once however many lists hold them', async () => {
+    vi.mocked(listConversations).mockResolvedValue([]);
+    vi.mocked(listMyConnectionUids).mockResolvedValue([]);
+    vi.mocked(getUsersByIds).mockResolvedValue({});
+    const one = renderHook(() => useConversations().data, { wrapper: appWrapper });
+    await waitFor(() => expect(one.result.current).toBeDefined());
+    vi.mocked(listMyConnectionUids).mockClear();
+    act(() => signals.fire('me|graph'));
+    await waitFor(() => expect(listMyConnectionUids).toHaveBeenCalledTimes(1));
+    one.unmount();
+    expect(signals.watchers.get('me|graph')?.size ?? 0).toBe(0);
   });
 });
 
@@ -1087,14 +1134,24 @@ describe('the header badges', () => {
       unread: { me: unread, [other]: 0 },
     };
   }
-  /** The conversations listener: what it hears is pushed by the test. */
+  /**
+   * The conversation list as the server answers it (GET /api/v1/conversations): nothing until the test says,
+   * then each `emit` is the server's new answer and the viewer's `inbox` signal moving, which pulls it.
+   */
   function listenToConversations() {
-    const heard: { emit: (c: Conversation[]) => void } = { emit: () => {} };
-    vi.mocked(listenConversations).mockImplementation((_uid, emit) => {
-      heard.emit = emit;
-      return vi.fn();
-    });
-    return heard;
+    let answer: Conversation[] | null = null;
+    const waiting: ((c: Conversation[]) => void)[] = [];
+    vi.mocked(listConversations).mockImplementation(() =>
+      answer ? Promise.resolve(answer) : new Promise<Conversation[]>((resolve) => waiting.push(resolve)),
+    );
+    return {
+      emit: (c: Conversation[]) => {
+        const first = !answer;
+        answer = c;
+        if (first) waiting.splice(0).forEach((resolve) => resolve(c));
+        else signals.fire('me|inbox');
+      },
+    };
   }
 
   it('counts unread messages from one live list, reading no profiles or connections', async () => {
@@ -1102,13 +1159,14 @@ describe('the header badges', () => {
     vi.mocked(getMyBlockedIds).mockResolvedValue(new Set(['blocked']));
     const { result } = renderHook(() => useUnreadMessages(), { wrapper });
 
-    await waitFor(() => expect(listenConversations).toHaveBeenCalledWith('me', expect.any(Function), expect.any(Function)));
+    await waitFor(() => expect(listConversations).toHaveBeenCalledTimes(1));
     act(() => heard.emit([conversation('a_me', 'a', 2), conversation('blocked_me', 'blocked', 5)]));
     await waitFor(() => expect(result.current).toBe(2));
 
-    // A new message arrives: the count follows, without a read of its own.
+    // A new message arrives (its signal moves): the count follows, the list pulled again — no other read.
     act(() => heard.emit([conversation('a_me', 'a', 3), conversation('b_me', 'b', 1), conversation('blocked_me', 'blocked', 5)]));
-    expect(result.current).toBe(4);
+    await waitFor(() => expect(result.current).toBe(4));
+    expect(listConversations).toHaveBeenCalledTimes(2);
     expect(listMyConnectionUids).not.toHaveBeenCalled();
     expect(getUsersByIds).not.toHaveBeenCalled();
   });
@@ -1119,11 +1177,11 @@ describe('the header badges', () => {
     vi.mocked(getUsersByIds).mockResolvedValue({ a: user('a'), c: user('c') });
     const { result } = renderHook(() => ({ badge: useUnreadMessages(), list: useConversations().data }), { wrapper });
 
-    await waitFor(() => expect(listenConversations).toHaveBeenCalled());
+    await waitFor(() => expect(listConversations).toHaveBeenCalled());
     act(() => heard.emit([conversation('a_me', 'a', 1)]));
     await waitFor(() => expect(result.current.list).toBeDefined());
 
-    expect(listenConversations).toHaveBeenCalledTimes(1);
+    expect(listConversations).toHaveBeenCalledTimes(1);
     expect(result.current.badge).toBe(1);
     expect(result.current.list!.unreadTotal).toBe(1);
     expect(result.current.list!.conversations.map((c) => c.id)).toEqual(['a_me']);
@@ -1136,7 +1194,7 @@ describe('the header badges', () => {
     vi.mocked(listMyConnectionUids).mockResolvedValue(['a', 'b']);
     vi.mocked(getUsersByIds).mockResolvedValue({ a: user('a'), b: user('b') });
     const { result } = renderHook(() => ({ badge: useUnreadMessages(), list: useConversations().data }), { wrapper });
-    await waitFor(() => expect(listenConversations).toHaveBeenCalled());
+    await waitFor(() => expect(listConversations).toHaveBeenCalled());
     act(() => heard.emit([conversation('a_me', 'a', 2), conversation('b_me', 'b', 1)]));
     await waitFor(() => expect(result.current.list?.conversations).toHaveLength(2));
 
@@ -1153,11 +1211,15 @@ describe('the header badges', () => {
   });
 
   it('keeps the bell live: a new notification, or one read elsewhere, shows without a reload', async () => {
-    const heard: { emit: (n: Notification[]) => void } = { emit: () => {} };
-    vi.mocked(listenNotifications).mockImplementation((_uid, emit) => {
-      heard.emit = emit;
-      return vi.fn();
-    });
+    // The bell as GET /api/v1/me/bell answers it; each new answer comes with the viewer's `bell` signal moving.
+    let rows: Notification[] = [];
+    const heard = {
+      emit: (n: Notification[]) => {
+        rows = n;
+        signals.fire('me|bell');
+      },
+    };
+    vi.mocked(getBell).mockImplementation(async () => ({ items: rows, people: {} }));
     const note = (id: string, readAt: Date | null): Notification => ({
       id,
       userId: 'me',
@@ -1168,11 +1230,12 @@ describe('the header badges', () => {
     });
     const { result } = renderHook(() => useNotifications(20).data, { wrapper });
 
-    await waitFor(() => expect(listenNotifications).toHaveBeenCalledWith('me', expect.any(Function), expect.any(Function), 20));
+    await waitFor(() => expect(getBell).toHaveBeenCalledWith(20));
+    await waitFor(() => expect(result.current).toEqual([]));
     act(() => heard.emit([note('n1', null)]));
-    expect(result.current!.map((n) => n.id)).toEqual(['n1']);
+    await waitFor(() => expect(result.current!.map((n) => n.id)).toEqual(['n1']));
     act(() => heard.emit([note('n2', null), note('n1', new Date())]));
-    expect(result.current!.filter((n) => n.readAt === null).map((n) => n.id)).toEqual(['n2']);
+    await waitFor(() => expect(result.current!.filter((n) => n.readAt === null).map((n) => n.id)).toEqual(['n2']));
   });
 
   it('listens to nothing for a signed-out reader', async () => {
@@ -1180,7 +1243,7 @@ describe('the header badges', () => {
     const { result } = renderHook(() => useUnreadMessages(), { wrapper });
     await new Promise((r) => setTimeout(r, 10));
     expect(result.current).toBe(0);
-    expect(listenConversations).not.toHaveBeenCalled();
+    expect(listConversations).not.toHaveBeenCalled();
   });
 });
 

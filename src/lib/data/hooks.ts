@@ -8,8 +8,6 @@ import type { Card, CardBoxTab, User } from '@/lib/db';
 import {
   getCardById,
   getCardBySlugOrId,
-  getCardsByAuthor,
-  getMyDrafts,
   getCurrentUserProfile,
   getMyResonanceCard,
   getPublicCardView,
@@ -25,8 +23,10 @@ import {
   resolveCardId,
 } from '@/lib/db/firestore/client/reads';
 import { loadMyThoughtMap, type ThoughtMapData } from '@/lib/db/firestore/client/thoughtMap';
-import { listenConversations } from '@/lib/db/firestore/client/messages';
-import { listenNotifications } from '@/lib/db/firestore/client/notifications';
+import { listConversations } from '@/lib/db/firestore/client/messages';
+import { liveConversationsKey } from './thread';
+import { getBell } from '@/lib/db/firestore/client/notifications';
+import { watchSignal, type SignalTopic } from '@/lib/db/firestore/client/signals';
 import { getMyBlockedIds } from '@/lib/db/firestore/client/blocks';
 import { ApiError, callApi } from '@/lib/db/firestore/client/api';
 import { getFirebaseClientAuth, hasSessionMark, sessionMarkUid } from '@/lib/auth/firebase/client';
@@ -37,13 +37,14 @@ import type {
   CardBoxTabName,
   CardDetailBody,
   CardListBody,
+  FeedCardBody,
   CardTapBody,
   FeedPageBody,
   ProfileBody,
   RecommendedFeedBody,
 } from '@/lib/api/v1/schemas';
 import type { Conversation, Notification } from '@/lib/db/types';
-import { useLive, type LiveState } from './live';
+import { pulled, useLive, type LiveState } from './live';
 import { anonymousAuthor, cardKey } from './cardPrefill';
 import type { CardSeed, PublicCardView } from './cardSeed';
 import { profileUser, summaryAuthor, summaryCard, summaryList } from './summaries';
@@ -633,19 +634,29 @@ async function othersShelf(tab: Extract<CardBoxTabName, 'resonated' | 'linked' |
 }
 
 /**
- * A shelf: the viewer's own cards read through the rules, the others' from
- * the server — and the trash from the server too: its list summaries (never a
- * hundred whole stories through the rules), each saying when it went in and
- * what restoring brings back. A summary never prefills a card page.
+ * A shelf, from the server (phase 2b: GET /api/v1/me/cards?tab=, the 草稿
+ * shelf's two in one GET /api/v1/me/cardbox): list summaries — never forty
+ * whole stories — the viewer's own anonymous cards with their byline, the
+ * trash's saying when each went in and what restoring brings back. A summary
+ * never prefills a card page, nor an editor (readWriterCard reads it whole).
  */
-async function readShelf(uid: string, shelf: CardBoxShelf): Promise<CardBoxShelfData> {
+async function readShelf(shelf: CardBoxShelf): Promise<CardBoxShelfData> {
   // A bookmarked card that has since gone private simply drops out.
   if (shelf === 'resonated' || shelf === 'linked' || shelf === 'bookmarks') return othersShelf(shelf);
-  if (shelf === 'trash') return summaryList(await callApi<CardListBody>('/api/v1/me/cards?tab=trash'));
-  // 草稿: drafts and the cards kept private, together (round 8 §1.1).
-  const cards = shelf === 'draft' ? await getMyDrafts(uid) : await getCardsByAuthor(uid, shelf);
-  return { cards, authors: await getUsersByIds(bylineAuthorIds(cards, uid)) };
+  if (shelf !== 'draft') return summaryList(await callApi<CardListBody>(`/api/v1/me/cards?tab=${shelf}`));
+  // 草稿: drafts and the cards kept private, together (round 8 §1.1), the most recently changed first.
+  const box = await callApi<CardBoxBody>('/api/v1/me/cardbox?shelves=draft,private');
+  const seen = new Set<string>();
+  const edited = (c: FeedCardBody) => (c.editedAt ? Date.parse(c.editedAt) || 0 : 0);
+  const cards = [...(box.draft?.cards ?? []), ...(box.private?.cards ?? [])]
+    .filter((c) => !c.trashedAt && !seen.has(c.id) && seen.add(c.id))
+    .sort((a, b) => edited(b) - edited(a))
+    .slice(0, DRAFT_SHELF_LIMIT);
+  return summaryList(cards);
 }
+
+/** The 草稿 shelf's size (each of its two shelves is as long on the server). */
+const DRAFT_SHELF_LIMIT = 40;
 
 /**
  * One shelf of the signed-in viewer's card box — the one on screen, read when
@@ -655,7 +666,7 @@ async function readShelf(uid: string, shelf: CardBoxShelf): Promise<CardBoxShelf
 export function useMyCardBox(shelf: CardBoxShelf | null) {
   const { user } = useAuth();
   return useSWR<CardBoxShelfData>(user && shelf ? `cardbox:${user.id}:${shelf}` : null, async () => {
-    return readShelf(user!.id, shelf!);
+    return readShelf(shelf!);
   }, OWN_CONTENT);
 }
 
@@ -987,17 +998,43 @@ export interface ConversationsData {
 }
 
 /**
- * The viewer's newest 50 conversations, live: one listener (client/realtime,
- * loaded once the page is idle) shared by the header's badge and the messages
- * list, instead of reading every conversation again on a timer. Unfiltered —
- * see {@link visibleConversations}.
+ * SWR keys read again when a signal moves (client/signals): one watcher per
+ * key however many components read it, so one signal is one request.
+ */
+const signalWatches = new Map<string, { readers: number; stop: () => void }>();
+
+function useRevalidateOnSignal(uid: string | null, topic: SignalTopic, key: string | null): void {
+  const { mutate } = useSWRConfig();
+  useEffect(() => {
+    if (!uid || !key) return;
+    const id = `${uid}|${topic}|${key}`;
+    let watch = signalWatches.get(id);
+    if (!watch) {
+      watch = { readers: 0, stop: watchSignal(uid, topic, () => void mutate(key)) };
+      signalWatches.set(id, watch);
+    }
+    watch.readers++;
+    const w = watch;
+    return () => {
+      if (--w.readers > 0) return;
+      w.stop();
+      if (signalWatches.get(id) === w) signalWatches.delete(id);
+    };
+  }, [uid, topic, key, mutate]);
+}
+
+
+/**
+ * The viewer's newest 50 conversations, live: one GET /api/v1/conversations
+ * (started once the page is idle) shared by the header's badge and the
+ * messages list, pulled again when the viewer's `inbox` signal moves and on
+ * the minute's safety pull — an unchanged list a 304. Unfiltered — see
+ * {@link visibleConversations}.
  */
 function useLiveConversations(): LiveState<Conversation[]> {
   const { user, loading } = useAuth();
   const uid = user && !loading ? user.id : null;
-  return useLive<Conversation[]>(uid ? `conversations:live:${uid}` : null, (emit, fail) =>
-    listenConversations(uid!, emit, fail),
-  );
+  return useLive<Conversation[]>(uid ? liveConversationsKey(uid) : null, pulled(uid ?? '', ['inbox'], () => listConversations()));
 }
 
 /**
@@ -1084,6 +1121,8 @@ export function useConversations(): { data: ConversationsData | undefined; error
   // a delete — mutates this key (dependsOnConnections), and a new connection is a new conversation in the live
   // list, which this joins.
   const connections = useSWR<string[]>(uid ? `conversations:${uid}` : null, () => listMyConnectionUids());
+  // …and read again when the viewer's connections change elsewhere (their `graph` signal).
+  useRevalidateOnSignal(uid, 'graph', uid ? `conversations:${uid}` : null);
   const conversations = visibleConversations(live.data, blocked);
   const otherUids = conversations?.map((c) => c.participants.find((p) => p !== uid) ?? '');
   const ids =
@@ -1107,14 +1146,16 @@ export function useConversations(): { data: ConversationsData | undefined; error
 }
 
 /**
- * The viewer's newest notifications, live (the bell's badge and list): a new
+ * The viewer's newest notifications, live (the bell's badge and list): GET
+ * /api/v1/me/bell, pulled again when the viewer's `bell` signal moves — a new
  * row, or one marked read on another device, shows without a reload.
  */
 export function useNotifications(max = 20): LiveState<Notification[]> {
   const { user, loading } = useAuth();
   const uid = user && !loading ? user.id : null;
-  return useLive<Notification[]>(uid ? `notifications:live:${uid}:${max}` : null, (emit, fail) =>
-    listenNotifications(uid!, emit, fail, max),
+  return useLive<Notification[]>(
+    uid ? `notifications:live:${uid}:${max}` : null,
+    pulled(uid ?? '', ['bell'], () => getBell(max).then((bell) => bell.items)),
   );
 }
 

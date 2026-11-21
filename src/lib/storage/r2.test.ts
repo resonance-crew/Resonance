@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { DeleteObjectsCommand, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import type { DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const send = vi.fn();
 vi.mock('@aws-sdk/client-s3', async (importOriginal) => ({
@@ -78,5 +78,42 @@ describe('R2StorageProvider.deleteObjects', () => {
 
     send.mockReset().mockResolvedValue({ Errors: [{ Key: 'image/2026-10/0.webp', Code: 'InternalError' }] });
     await expect(new R2StorageProvider().deleteObjects(['image/2026-10/0.webp'])).rejects.toThrow('1 of 1 objects were not deleted');
+  });
+});
+
+// The storage move's checks (plan §3.8): a listing a page at a time, and an object's size and tag without its bytes.
+describe('R2StorageProvider.list and head', () => {
+  it('lists a prefix a thousand keys a page, handing on the continuation token, tags without quotes', async () => {
+    send.mockReset().mockResolvedValueOnce({
+      Contents: [{ Key: 'image/2026-11/a.webp', Size: 3, ETag: '"abc"' }, { Size: 1 }],
+      IsTruncated: true,
+      NextContinuationToken: 'next-page',
+    });
+    const r2 = new R2StorageProvider();
+    expect(await r2.list('image/')).toEqual({ objects: [{ key: 'image/2026-11/a.webp', size: 3, etag: 'abc' }], cursor: 'next-page' });
+    expect((send.mock.calls[0][0] as ListObjectsV2Command).input).toEqual({ Bucket: 'bucket', Prefix: 'image/', MaxKeys: 1000 });
+
+    send.mockResolvedValueOnce({ Contents: [], IsTruncated: false });
+    expect(await r2.list('image/', 'next-page')).toEqual({ objects: [], cursor: null });
+    expect((send.mock.calls[1][0] as ListObjectsV2Command).input).toMatchObject({ ContinuationToken: 'next-page' });
+  });
+
+  it('heads an object, null when there is none', async () => {
+    send.mockReset().mockResolvedValueOnce({ ContentLength: 12, ETag: '"d41d8"', ContentType: 'image/avif' });
+    const r2 = new R2StorageProvider();
+    expect(await r2.head('image/2026-11/a.avif')).toEqual({ size: 12, etag: 'd41d8', contentType: 'image/avif' });
+    expect((send.mock.calls[0][0] as HeadObjectCommand).input).toEqual({ Bucket: 'bucket', Key: 'image/2026-11/a.avif' });
+
+    send.mockRejectedValueOnce(Object.assign(new Error('nope'), { name: 'NotFound', $metadata: { httpStatusCode: 404 } }));
+    expect(await r2.head('image/2026-11/gone.avif')).toBeNull();
+    send.mockRejectedValueOnce(Object.assign(new Error('denied'), { name: 'AccessDenied', $metadata: { httpStatusCode: 403 } }));
+    await expect(r2.head('image/2026-11/x.avif')).rejects.toThrow('denied');
+  });
+
+  it('serves URLs at MEDIA_PUBLIC_BASE when it is set, before its alias R2_PUBLIC_BASE', () => {
+    vi.stubEnv('MEDIA_PUBLIC_BASE', 'https://media.example/');
+    expect(new R2StorageProvider().getPublicUrl('image/k.webp')).toBe('https://media.example/image/k.webp');
+    vi.stubEnv('MEDIA_PUBLIC_BASE', '');
+    expect(new R2StorageProvider().getPublicUrl('image/k.webp')).toBe('https://img.example/image/k.webp');
   });
 });

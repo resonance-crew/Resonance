@@ -492,6 +492,18 @@ object L10n {
         }
         /** In progress */
         val busy: String get() = Strings.string("app.busy")
+        object Update {
+            /** Time to update */
+            val title: String get() = Strings.string("app.update.title")
+            /** This version of Resonance no longer works with the service, update it to keep reading and writing */
+            val body: String get() = Strings.string("app.update.body")
+            /** Update */
+            val action: String get() = Strings.string("app.update.action")
+            /** A new version of Resonance is ready */
+            val available: String get() = Strings.string("app.update.available")
+            /** Later */
+            val later: String get() = Strings.string("app.update.later")
+        }
         object Notifications {
             /** No notifications yet */
             val emptyTitle: String get() = Strings.string("app.notifications.emptyTitle")

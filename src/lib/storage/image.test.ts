@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import sharp from 'sharp';
-import { convertToAvif, normalizeUpload, normalizeUploadWithThumb, UnsupportedImage } from './image';
+import { convertToAvif, normalizeStored, normalizeUpload, normalizeUploadWithThumb, UnsupportedImage } from './image';
 
 describe('convertToAvif', () => {
   it('should convert a PNG buffer to an AVIF buffer', async () => {
@@ -64,5 +64,26 @@ describe('normalizeUploadWithThumb', () => {
     await expect(normalizeUploadWithThumb(new TextEncoder().encode('<svg></svg>'))).rejects.toBeInstanceOf(UnsupportedImage);
     const bomb = await sharp({ create: { width: 10_000, height: 8_000, channels: 3, background: '#fff' } }).png({ compressionLevel: 9 }).toBuffer();
     await expect(normalizeUploadWithThumb(new Uint8Array(bomb))).rejects.toBeInstanceOf(UnsupportedImage);
+  });
+});
+
+describe('normalizeStored', () => {
+  it('reads a picture we stored as AVIF, which an upload never is, and writes the same ≤ 960 px WebP copy', async () => {
+    const png = await sharp({ create: { width: 2000, height: 1000, channels: 3, background: '#4a6' } }).png().toBuffer();
+    const avif = new Uint8Array(await convertToAvif(png));
+    // An upload in that format is still refused: only what our own storage holds is read this way.
+    await expect(normalizeUpload(avif, 'thumb')).rejects.toBeInstanceOf(UnsupportedImage);
+    const thumb = await normalizeStored(avif, 'thumb');
+    const meta = await sharp(thumb.data).metadata();
+    expect([thumb.contentType, meta.format, meta.width, meta.height]).toEqual(['image/webp', 'webp', 960, 480]);
+    // What an upload may be, it reads exactly as normalizeUpload does.
+    const fromPng = await normalizeStored(new Uint8Array(png), 'thumb');
+    expect(fromPng.data.equals((await normalizeUpload(new Uint8Array(png), 'thumb')).data)).toBe(true);
+  });
+
+  it('keeps an upload’s limits: not a picture, and a decompression bomb, are refused', async () => {
+    await expect(normalizeStored(new TextEncoder().encode('<svg></svg>'), 'thumb')).rejects.toBeInstanceOf(UnsupportedImage);
+    const bomb = await sharp({ create: { width: 10_000, height: 8_000, channels: 3, background: '#fff' } }).png({ compressionLevel: 9 }).toBuffer();
+    await expect(normalizeStored(new Uint8Array(bomb), 'thumb')).rejects.toBeInstanceOf(UnsupportedImage);
   });
 });

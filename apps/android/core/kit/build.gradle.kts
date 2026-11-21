@@ -48,6 +48,8 @@ dependencies {
     implementation("org.commonmark:commonmark-ext-gfm-tables:0.30.0")
     testImplementation(kotlin("test"))
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    // The signals' pulls on virtual time (a minute's safety pull without waiting a minute).
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
 }
 
 tasks.test {

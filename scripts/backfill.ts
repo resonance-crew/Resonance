@@ -37,6 +37,10 @@
  *   npx tsx scripts/backfill.ts avatar-colors [--apply] [--emulator]
  *       profiles still wearing the one avatar colour every profile was given (or none) → their own,
  *       picked by uid from lib/design/avatarColors as a new profile's is; any other colour stays
+ *   npx tsx scripts/backfill.ts media-keys    [--apply] [--emulator]
+ *       the storage key beside each stored picture URL (ADR 0005): `users.avatarKey`, `cards.media.key`,
+ *       where the URL is that key on the current base (MEDIA_PUBLIC_BASE / R2_PUBLIC_BASE); a key that no
+ *       longer goes with its URL is put right or removed. Only those fields are written
  *   npx tsx scripts/backfill.ts notes         [--apply] [--emulator]
  *       notes left before notes went into the thread → a `kind: 'note'` message in the two people's
  *       conversation (never on an anonymous card; no unread counted; opens a missing conversation,
@@ -232,6 +236,12 @@ async function main() {
       await backfillAvatarColors(db, { apply });
       return;
     }
+    case 'media-keys': {
+      const { backfillMediaKeys } = await import('./backfills/mediaKeys');
+      const { envMediaUrls } = await import('../src/server/infra/env/media');
+      await backfillMediaKeys(db, { apply, media: envMediaUrls() });
+      return;
+    }
     case 'notes': {
       const { backfillNotes } = await import('./backfills/notes');
       await backfillNotes(db, { apply });
@@ -277,11 +287,9 @@ async function main() {
     }
     case 'link-previews': {
       // The pictures' paths are signed by this process: with a key the deployment doesn't have, they 404.
-      const source = process.env.LINK_PREVIEW_SECRET?.trim()
-        ? 'LINK_PREVIEW_SECRET'
-        : process.env.FIREBASE_PRIVATE_KEY?.trim()
-          ? 'a key derived from FIREBASE_PRIVATE_KEY'
-          : null;
+      const { linkPreviewKeys } = await import('../src/lib/links/previewSecret');
+      const keys = linkPreviewKeys();
+      const source = !keys ? null : keys.source === 'env' ? 'LINK_PREVIEW_SECRET' : 'a key derived from FIREBASE_PRIVATE_KEY';
       if (apply && !useEmulator && !source) {
         throw new Error('Set LINK_PREVIEW_SECRET (or FIREBASE_PRIVATE_KEY) as the deployment has it: the pictures would be signed with a key it does not know.');
       }
@@ -291,7 +299,7 @@ async function main() {
       return;
     }
     default:
-      throw new Error(`Unknown task "${task ?? ''}" (anonymous | handles | edits | storage-host | rekey-images | rehost-images | square-avatars | reencode-legacy | cover-thumbs | avatar-colors | notes | anonymous-bells | orphan-notes | card-tombstones | link-previews | summary-translations | story-translations | tap-passages | recommend-index)`);
+      throw new Error(`Unknown task "${task ?? ''}" (anonymous | handles | edits | storage-host | rekey-images | rehost-images | square-avatars | reencode-legacy | cover-thumbs | avatar-colors | media-keys | notes | anonymous-bells | orphan-notes | card-tombstones | link-previews | summary-translations | story-translations | tap-passages | recommend-index)`);
   }
 }
 

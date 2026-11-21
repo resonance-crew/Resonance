@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { getPublicRelated } from '@/lib/api/v1/reads';
+import { getPublicRelated } from '@/server/app/cardsRead';
+import { serverCtx } from '@/server/ctx';
 
 export const runtime = 'nodejs';
 
@@ -21,7 +21,7 @@ const ID = /^[A-Za-z0-9_-]{1,160}$/;
  */
 export async function GET(req: Request) {
   const id = new URL(req.url).searchParams.get('id')?.trim() ?? '';
-  const body = ID.test(id) ? await getPublicRelated(getAdminDb(), id) : null;
+  const body = ID.test(id) ? await getPublicRelated(serverCtx(), id) : null;
   if (!body) return NextResponse.json({ cards: [] }, { headers: { 'Cache-Control': 'no-store' } });
   return NextResponse.json(body, { headers: { 'Cache-Control': RELATED_CACHE } });
 }

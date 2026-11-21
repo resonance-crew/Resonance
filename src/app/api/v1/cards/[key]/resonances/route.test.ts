@@ -9,7 +9,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
-vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
+const DB = {};
+vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => DB }));
 const revalidatePath = vi.fn();
 vi.mock('next/cache', () => ({ revalidatePath: (p: string) => revalidatePath(p) }));
 let afterWork: Promise<unknown>[] = [];
@@ -19,18 +20,25 @@ vi.mock('next/server', async (orig) => ({
 }));
 const resonateWith = vi.fn();
 const unresonate = vi.fn();
-vi.mock('@/lib/api/v1/resonate', () => ({
-  resonateWith: (...a: unknown[]) => resonateWith(...a),
-  unresonate: (...a: unknown[]) => unresonate(...a),
+vi.mock('@/server/app/resonate', async (orig) => ({
+  ...(await orig<object>()),
+  resonateWithIn: (...a: unknown[]) => resonateWith(...a),
+  unresonateIn: (...a: unknown[]) => unresonate(...a),
 }));
 const ringAfter = vi.fn();
-vi.mock('@/lib/push/ring', () => ({ ringAfter: (...a: unknown[]) => ringAfter(...a) }));
+vi.mock('@/server/app/pushAfter', () => ({ ringAfterIn: (...a: unknown[]) => ringAfter(...a) }));
 const spend = vi.fn();
-vi.mock('@/lib/api/rateLimit', () => ({ spend: (...a: unknown[]) => spend(...a) }));
+const spendAll = vi.fn();
+vi.mock('@/server/infra/firestore/rateLimit', () => ({
+  firestoreRateLimiter: () => ({ spend: (...a: unknown[]) => spend(...a), spendAll: (...a: unknown[]) => spendAll(...a), limited: async () => null }),
+}));
 
 const { POST } = await import('./route');
 const { DELETE } = await import('./[cardId]/route');
 const { ApiFailure } = await import('@/lib/api/v1/http');
+const { serverCtx } = await import('@/server/ctx');
+// The route's context: serverCtx() on the mocked database, built once per instance.
+const CTX = serverCtx();
 
 const settled = async () => {
   await Promise.all(afterWork);
@@ -64,9 +72,9 @@ describe('POST /api/v1/cards/{id}/resonances', () => {
     const res = await post({ cardId: 'mine' });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ card: CARD, changed: true });
-    expect(spend).toHaveBeenCalledWith({}, 'alice', 'resonate');
-    expect(resonateWith).toHaveBeenCalledWith({}, 'alice', 'orig', 'mine');
-    expect(ringAfter).toHaveBeenCalledWith({}, 'resonance_alice_orig');
+    expect(spend).toHaveBeenCalledWith('alice', 'resonate');
+    expect(resonateWith).toHaveBeenCalledWith(CTX, 'alice', 'orig', 'mine');
+    expect(ringAfter).toHaveBeenCalledWith(CTX, 'resonance_alice_orig');
     expect(await settled()).toEqual(LOCALIZED);
     // A write: Firebase Auth is asked whether the session still stands.
     expect(getCurrentUser).toHaveBeenCalledWith({ revocation: 'live' });
@@ -76,7 +84,7 @@ describe('POST /api/v1/cards/{id}/resonances', () => {
     resonateWith.mockResolvedValue({ card: CARD, changed: false, notificationId: null, stale: [] });
     const res = await post({ cardId: 'mine' });
     expect(await res.json()).toEqual({ card: CARD, changed: false });
-    expect(ringAfter).toHaveBeenCalledWith({}, null);
+    expect(ringAfter).toHaveBeenCalledWith(CTX, null);
     expect(await settled()).toEqual([]);
   });
 
@@ -130,7 +138,7 @@ describe('DELETE /api/v1/cards/{id}/resonances/{cardId}', () => {
   it("answers 204 and revalidates the card's pages", async () => {
     const res = await del('orig', 'mine');
     expect(res.status).toBe(204);
-    expect(unresonate).toHaveBeenCalledWith({}, 'alice', 'orig', 'mine');
+    expect(unresonate).toHaveBeenCalledWith(CTX, 'alice', 'orig', 'mine');
     expect(await settled()).toEqual(LOCALIZED);
     expect(spend).not.toHaveBeenCalled();
   });

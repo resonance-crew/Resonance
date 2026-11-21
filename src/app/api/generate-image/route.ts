@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
 import { crossOriginCookieWrite } from '@/lib/api/sameOrigin';
 import { getCurrentUser } from '@/lib/auth';
-import { limited } from '@/lib/api/rateLimit';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { getStorageProvider } from '@/lib/storage';
-import { storeOwnedWithThumb } from '@/lib/storage/uploads';
+import { storeOwnedWithThumbIn } from '@/server/app/uploads';
+import { serverCtx } from '@/server/ctx';
 import { generateStoryImageStream } from '@/lib/ai/tasks';
 import { normalizeUploadWithThumb } from '@/lib/storage/image';
 
@@ -44,7 +42,8 @@ export async function POST(req: Request) {
   }
   // The costliest call there is; counted before the stream starts, since
   // once it has, the status is already 200.
-  const refused = await limited(getAdminDb(), user.id, 'illustration');
+  const ctx = serverCtx();
+  const refused = await ctx.limits.limited(user.id, 'illustration');
   if (refused) return refused;
 
   const encoder = new TextEncoder();
@@ -60,9 +59,8 @@ export async function POST(req: Request) {
         // picture encoded as AVIF at the default effort cost seconds of CPU — with its ≤ 960 px copy (B2).
         const { full, thumb } = await normalizeUploadWithThumb(bytes);
         // The key names no one (an anonymous card's cover is public); whose it is goes on record.
-        const stored = await storeOwnedWithThumb(
-          getAdminDb(),
-          getStorageProvider(),
+        const stored = await storeOwnedWithThumbIn(
+          ctx,
           {
             filename: `generated.${full.extension}`,
             contentType: full.contentType,

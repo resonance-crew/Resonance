@@ -511,6 +511,15 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
     }
     val reducedMotion = LocalContext.current.prefersReducedMotion()
     val barLift = currentTabBarLift()
+    // client-config says a newer build is out (Phase 2): once a launch, in the shell's toast.
+    val updateNeed by session.updateNeed.collectAsStateWithLifecycle()
+    val storeContext = LocalContext.current
+    LaunchedEffect(updateNeed) {
+        if (updateNeed == com.resonance.kit.config.UpdateNeed.Recommended && !UpdateNote.said) {
+            UpdateNote.said = true
+            showUpdateAvailable(toasts, storeContext)
+        }
+    }
 
     CompositionLocalProvider(
         LocalWindowLayout provides WindowLayout(windowWidth), LocalRootTaps provides rootTaps, LocalToasts provides toasts, LocalTrash provides trash,

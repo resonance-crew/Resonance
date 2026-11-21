@@ -1,7 +1,7 @@
 import { parse, withUser } from '@/lib/api/v1/http';
-import { getCardBoxShelves } from '@/lib/api/v1/reads';
 import { CardBoxShelvesQuery } from '@/lib/api/v1/schemas';
-import { getAdminDb } from '@/lib/db/firestore/admin';
+import { serverCtx } from '@/server/ctx';
+import { getCardBoxShelves } from '@/server/app/cardsRead';
 import { OWN, cachedJson } from '@/lib/api/v1/cache';
 
 export const dynamic = 'force-dynamic';
@@ -13,5 +13,5 @@ export const dynamic = 'force-dynamic';
  */
 export const GET = withUser(async (user, req) => {
   const { shelves } = parse(CardBoxShelvesQuery, Object.fromEntries(new URL(req.url).searchParams));
-  return cachedJson(req, await getCardBoxShelves(getAdminDb(), user.id, shelves), OWN);
+  return cachedJson(req, await getCardBoxShelves(serverCtx(), user.id, shelves), OWN);
 });

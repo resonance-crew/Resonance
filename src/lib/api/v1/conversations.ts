@@ -1,35 +1,33 @@
-import { FieldValue, type DocumentSnapshot, type Firestore, type Transaction } from 'firebase-admin/firestore';
-import { mapCard } from '@/lib/db/firestore/mapper';
-import { isReservedId } from '@/lib/db/firestore/reservedId';
-import type { MessagePush } from '@/lib/push/chat';
-import { isSticker, stickerFallbackText } from '@/lib/stickers/catalog';
-import { chatImageRef, messageImageOf, pictureToSend } from './chatImages';
-import { ApiFailure } from './http';
-import { fallbackLocale, messageStickerOf, type MessageAlbum } from './messageParts';
-import { addReason, answeredBy, connect, letterReason, originsRef } from './origins';
-import { CARD_VISIBILITY_FIELDS, cardVisible } from './present';
-import { visibleCardById } from './reads';
-import { keptPrivate, privateShareRef } from './sharedCards';
+import type { AdminDb } from '@/server/infra/firestore/db';
+import { ctxFor } from '@/server/infra/firestore/ctx';
+import {
+  deleteConversationIn,
+  mayMessageIn,
+  sendMessageIn,
+  sendNoteIn,
+  type NoteInput,
+  type SendMessageInput,
+  type SentMessage,
+  type SentNote,
+} from '@/server/app/conversations';
 
-/** notes.ts / firestore.rules: a note's length, and the bell's preview of it. */
-export const NOTE_MAX_LENGTH = 2000;
-export const NOTE_PREVIEW_CHARS = 140;
-/** messages.ts / firestore.rules: a message's length, and the list's preview of the last one. */
-export const MESSAGE_MAX_LENGTH = 2000;
-export const LAST_MESSAGE_PREVIEW = 120;
+// Legacy facades: the services are src/server/app/conversations.ts, their
+// Firestore code src/server/infra/firestore/repos/conversations.ts. Every
+// export here keeps its name and signature (the emulator suites, the routes,
+// scripts and other modules import them); the comments say why each is as it is.
 
-/** The id of the conversation (and connection) between two people: their user ids, sorted, joined by "_". */
-export const pairOf = (a: string, b: string) => (a < b ? `${a}_${b}` : `${b}_${a}`);
-/** Cut by code points, so an emoji is never split in half. */
-export const cut = (text: string, n: number) => Array.from(text).slice(0, n).join('');
-/** How much of the message it answers a reply quotes (code points). */
-export const REPLY_QUOTE_CHARS = 140;
-
-/** What a message is, beyond words and a card: `note` — a note (小紙條) left on the recipient's card, carried into the thread. */
-export const NOTE_MESSAGE_KIND = 'note';
-
-/** How many notes someone may leave a person they aren't connected with before that person answers (`letters/*.count`). */
-export const NOTE_REQUEST_MAX = 3;
+export {
+  LAST_MESSAGE_PREVIEW,
+  MESSAGE_MAX_LENGTH,
+  NOTE_MAX_LENGTH,
+  NOTE_MESSAGE_KIND,
+  NOTE_PREVIEW_CHARS,
+  NOTE_REQUEST_MAX,
+  REPLY_QUOTE_CHARS,
+  cut,
+  pairOf,
+} from '@/server/domain/conversations';
+export type { SendMessageInput, SentMessage, SentNote } from '@/server/app/conversations';
 
 /**
  * `conversations/{pair}.request`: notes left by someone the other isn't
@@ -47,33 +45,14 @@ export const NOTE_REQUEST_MAX = 3;
  * recipient declining it. Gone, it can no longer be answered: the
  * recipient's reply connects no one.
  */
-export interface NoteRequest {
-  from: string;
-  count: number;
-}
+export type { NoteRequest } from '@/server/domain/conversations';
 
 /**
  * The refusal of a note past NOTE_REQUEST_MAX unanswered ones: a conflict,
  * "Wait for them to reply." Its own class so a build before letters, which
  * knows no 409 here, can be told the same in words it shows (./preLetter).
  */
-export class NoteLimitReached extends ApiFailure {
-  constructor() {
-    super('conflict', 'Wait for them to reply.');
-  }
-}
-
-/** A count the server can't read counts as full: the writer waits for an answer, as they would anyway. */
-const countOf = (count: unknown) => (typeof count === 'number' && Number.isInteger(count) && count >= 0 ? count : NOTE_REQUEST_MAX);
-
-/** The letter a conversation holds, if any. */
-export function openRequest(convo: DocumentSnapshot): NoteRequest | null {
-  const request: unknown = convo.exists ? convo.get('request') : null;
-  if (!request || typeof request !== 'object') return null;
-  const { from, count } = request as { from?: unknown; count?: unknown };
-  if (typeof from !== 'string' || !from) return null;
-  return { from, count: countOf(count) };
-}
+export { NoteLimitReached } from '@/server/app/conversations';
 
 /**
  * `letters/{writer}_{recipient}` = `{ from, to, count, at, cardId }`: how
@@ -87,22 +66,13 @@ export function openRequest(convo: DocumentSnapshot): NoteRequest | null {
  * or an invite accepted between them. The account purge takes it from
  * either side.
  */
-export const letterRef = (db: Firestore, from: string, to: string) => db.doc(`letters/${from}_${to}`);
-
-/** How many unanswered notes a letters/* record counts (none when there is none). */
-export const lettersLeft = (letter: DocumentSnapshot) => (letter.exists ? countOf(letter.get('count')) : 0);
+export { letterRef, lettersLeft, openRequest, holdsRequest } from '@/server/infra/firestore/repos/conversations';
 
 /**
  * A letter answered: the count of each one's unanswered notes to the other
  * goes (blind deletes — a record that isn't there deletes nothing).
  */
-export function clearLetters(tx: Transaction, db: Firestore, a: string, b: string): void {
-  tx.delete(letterRef(db, a, b));
-  tx.delete(letterRef(db, b, a));
-}
-
-/** Whether a conversation holds a `request` field at all (one to delete when it is answered). */
-export const holdsRequest = (convo: DocumentSnapshot | null | undefined) => convo?.exists === true && convo.get('request') !== undefined;
+export { clearLetters } from '@/server/infra/firestore/repos/conversations';
 
 /**
  * Whether a profile has a pen name — what reaching anyone takes: a note, a
@@ -111,13 +81,8 @@ export const holdsRequest = (convo: DocumentSnapshot | null | undefined) => conv
  * all carry the name), and an account that never chose one has no page they
  * could block or report it from.
  */
-export function hasPenName(me: DocumentSnapshot | null | undefined): boolean {
-  const handle = me?.exists ? me.get('handle') : null;
-  return typeof handle === 'string' && handle.trim().length > 0;
-}
-
-/** The refusal for someone without a pen name (see hasPenName). */
-export const noPenName = () => new ApiFailure('forbidden', 'Choose a pen name first.');
+export { hasPenName } from '@/server/infra/firestore/repos/conversations';
+export { noPenName } from '@/server/app/conversations';
 
 /**
  * The sender's budget for this send (rateLimit `spend`), which the route
@@ -127,45 +92,15 @@ export const noPenName = () => new ApiFailure('forbidden', 'Choose a pen name fi
  * after its reads), so over budget the answer is the 429 whatever else is
  * wrong with the request — exactly as when the budget was spent first.
  */
-export async function budgetFirst<T>(spent: Promise<void>, send: () => Promise<T>): Promise<T> {
-  // Handled from the start: refused while the send's reads run, it is awaited below all the same.
-  spent.catch(() => {});
-  let result: T;
-  try {
-    result = await send();
-  } catch (e) {
-    await spent;
-    throw e;
-  }
-  await spent;
-  return result;
-}
-
-/** What a note's card is read with: whose it is and who may read it (no story). */
-const NOTE_CARD_FIELDS = CARD_VISIBILITY_FIELDS;
-/** What a message's card is read with: who may read it, and its title for the conversation list's preview. */
-const MESSAGE_CARD_FIELDS = [...CARD_VISIBILITY_FIELDS, 'thoughtCore'] as const;
+export { budgetFirst } from '@/server/app/conversations';
 
 /**
  * Whether `uid` may message `other` now, as sendMessage asks it (outside a
  * transaction: the message's own send asks again). A pen name, no block
  * either way, and a connection — or a letter of theirs waiting for this answer.
  */
-export async function mayMessage(db: Firestore, uid: string, other: string): Promise<void> {
-  if (other === uid) throw new ApiFailure('invalid_request', 'You cannot message yourself.');
-  const pair = pairOf(uid, other);
-  const [me, blockOut, blockIn, connection, convo] = await Promise.all([
-    db.doc(`users/${uid}`).get(),
-    db.doc(`users/${uid}/blocks/${other}`).get(),
-    db.doc(`users/${other}/blocks/${uid}`).get(),
-    db.doc(`connections/${pair}`).get(),
-    db.doc(`conversations/${pair}`).get(),
-  ]);
-  if (!hasPenName(me)) throw noPenName();
-  if (blockOut.exists || blockIn.exists) throw new ApiFailure('blocked', 'You cannot message this person.');
-  if (!connection.exists && openRequest(convo)?.from !== other) {
-    throw new ApiFailure('forbidden', 'You can message people you are connected with.');
-  }
+export async function mayMessage(db: AdminDb, uid: string, other: string): Promise<void> {
+  return mayMessageIn(ctxFor(db), uid, other);
 }
 
 /**
@@ -234,216 +169,8 @@ export async function mayMessage(db: Firestore, uid: string, other: string): Pro
  * naming a message already in the two people's thread (the note's message
  * would overwrite it), asked only on a named card, where the thread is theirs.
  */
-export interface SentNote {
-  id: string;
-  /** The author's bell row, for its push (never returned to the client); null when nothing rings (withheld across a block, or a resend). */
-  notificationId: string | null;
-  /** What `pushMessage` needs, when the note went into the thread — null on an anonymous card (its bell row rings), or for a resend. */
-  push: MessagePush | null;
-  /** The sender had already left this note (same `clientId`): nothing was written, so nothing is to ring. */
-  duplicate: boolean;
-}
-
-/** A note found under the sender's clientId: theirs, answered as it was sent; anyone else's, refused. */
-function resentNote(existing: DocumentSnapshot, uid: string): SentNote {
-  if (existing.get('fromUserId') !== uid) throw new ApiFailure('invalid_request', 'Not a valid client id.');
-  return { id: existing.id, notificationId: null, push: null, duplicate: true };
-}
-
-export async function sendNote(
-  db: Firestore,
-  uid: string,
-  input: { cardId: string; text: string; clientId?: string | null },
-  spent: Promise<void> = Promise.resolve(),
-): Promise<SentNote> {
-  return budgetFirst(spent, () => leaveNote(db, uid, input, spent));
-}
-
-async function leaveNote(
-  db: Firestore,
-  uid: string,
-  input: { cardId: string; text: string; clientId?: string | null },
-  spent: Promise<void>,
-): Promise<SentNote> {
-  // Firestore's own ids (`__name__`, see isReservedId): a `clientId` is the document's id.
-  if (input.clientId && isReservedId(input.clientId)) throw new ApiFailure('invalid_request', 'Not a valid client id.');
-  const notes = db.collection('notes');
-  const sent = input.clientId ? notes.doc(input.clientId) : null;
-  // A resend first, before the card is asked: one hidden since must not turn the answer into a 404 (one deleted
-  // since took the note with it: that resend is the 404 of a missing card). Both are read at once.
-  const [resend, readable] = await Promise.allSettled([
-    sent ? sent.get() : null,
-    visibleCardById(db, uid, input.cardId, NOTE_CARD_FIELDS),
-  ]);
-  if (resend.status === 'rejected') throw resend.reason;
-  if (resend.value?.exists) return resentNote(resend.value, uid);
-  if (readable.status === 'rejected') throw readable.reason;
-  const card = readable.value;
-  if (!card.publishedAt) throw new ApiFailure('not_found', 'No such card.');
-  const author = card.authorId;
-  if (author === uid) throw new ApiFailure('invalid_request', 'You cannot send a note to yourself.');
-  const pair = pairOf(uid, author);
-  const connection = db.doc(`connections/${pair}`);
-  const conversation = db.doc(`conversations/${pair}`);
-
-  const letter = letterRef(db, uid, author);
-
-  return db.runTransaction(async (tx) => {
-    const [now, me, blockOut, blockIn, connected, convo, mine, origins, existing, inThread] = await Promise.all([
-      tx.getAll(db.doc(`cards/${card.id}`), { fieldMask: [...NOTE_CARD_FIELDS] }).then(([snap]) => snap),
-      tx.get(db.doc(`users/${uid}`)),
-      tx.get(db.doc(`users/${uid}/blocks/${author}`)),
-      tx.get(db.doc(`users/${author}/blocks/${uid}`)),
-      tx.get(connection),
-      tx.get(conversation),
-      tx.get(letter),
-      tx.get(originsRef(db, uid, author)),
-      sent ? tx.get(sent) : Promise.resolve(null),
-      sent ? tx.get(conversation.collection('messages').doc(sent.id)) : Promise.resolve(null),
-    ]);
-    // The budget answers before anything else, and before anything is written (see budgetFirst).
-    await spent;
-    // The same note again (two sends at once, the first just written): what the first send wrote is the answer.
-    if (existing?.exists) return resentNote(existing, uid);
-    // The card as it is now: one deleted or hidden from the sender since the read above takes no note.
-    const current = now.exists ? mapCard(now.id, now.data()!) : null;
-    if (!current || current.authorId !== author || !current.publishedAt || !cardVisible(current, uid, () => connected.exists)) {
-      throw new ApiFailure('not_found', 'No such card.');
-    }
-    // Before the blocks: whether they stand must change no answer about an anonymous card.
-    if (!hasPenName(me)) throw noPenName();
-    // Its byline as of this transaction: made anonymous a moment ago, it still keeps the note out of the thread.
-    const threaded = current.anonymous !== true;
-    if (blockOut.exists || blockIn.exists) {
-      // One answer for both directions: the sender must not learn they were blocked.
-      if (threaded) throw new ApiFailure('blocked', 'You cannot send a note to this person.');
-      // An anonymous card: answered as delivered, delivering nothing (see SentNote).
-      const withheld = sent ?? notes.doc();
-      tx.set(withheld, {
-        cardId: card.id,
-        fromUserId: uid,
-        toUserId: null,
-        withheldFor: author,
-        text: input.text,
-        readAt: null,
-        createdAt: FieldValue.serverTimestamp(),
-      });
-      return { id: withheld.id, notificationId: null, push: null, duplicate: false };
-    }
-    // Not connected, on a named card: a letter, waiting for its answer.
-    const writing = threaded && !connected.exists;
-    // Their letter to me is waiting, and this note — mine, its recipient's — answers it
-    // (crossing letters when we aren't connected; connected, it is a reason we are).
-    const answers = threaded && openRequest(convo)?.from === author;
-    const left = writing ? lettersLeft(mine) : 0;
-    if (writing && !answers && left >= NOTE_REQUEST_MAX) throw new NoteLimitReached();
-    // The note's message takes its id in the thread: one there already is not this note's to overwrite.
-    // Asked of a named card only — on an anonymous one, whether that thread holds it would name the author.
-    if (threaded && inThread?.exists) throw new ApiFailure('invalid_request', 'Not a valid client id.');
-
-    const note = sent ?? notes.doc();
-    tx.set(note, {
-      cardId: card.id,
-      fromUserId: uid,
-      toUserId: author,
-      text: input.text,
-      readAt: null,
-      createdAt: FieldValue.serverTimestamp(),
-    });
-    const bell = db.collection('notifications').doc();
-    tx.set(bell, {
-      userId: author,
-      type: 'note',
-      payload: {
-        noteId: note.id,
-        cardId: card.id,
-        fromUserId: uid,
-        fromHandle: String(me.get('handle') ?? ''),
-        preview: cut(input.text, NOTE_PREVIEW_CHARS),
-        // Its bell opens the card, not a thread with the writer (see above).
-        ...(threaded ? {} : { anonymous: true }),
-      },
-      readAt: null,
-      // In the thread, the chat push rings it (pushedAt marks the row's own push done).
-      ...(threaded ? { pushedAt: FieldValue.serverTimestamp() } : {}),
-      createdAt: FieldValue.serverTimestamp(),
-    });
-    if (!threaded) return { id: note.id, notificationId: bell.id, push: null, duplicate: false };
-
-    if (writing) {
-      // Their letter answered: the two connected by it. Else this one waits.
-      if (answers) connect(tx, db, [uid, author], letterReason(uid));
-      else tx.set(letter, { from: uid, to: author, count: left + 1, cardId: card.id, at: FieldValue.serverTimestamp() });
-    } else {
-      // Connected: the letter it answers, and a resonance of theirs on a card of mine
-      // it answers, are reasons they stay so (a take-back reads them).
-      addReason(tx, db, [uid, author], origins, answers ? letterReason(uid) : null, answeredBy(origins, uid, author));
-    }
-    if (answers) clearLetters(tx, db, uid, author);
-
-    if (!convo.exists) {
-      tx.set(conversation, {
-        participants: [uid, author].sort(),
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-        lastMessage: null,
-        unread: { [uid]: 0, [author]: 0 },
-      });
-    }
-    // The note's own id: one note, one message (and `?note=` finds it). No
-    // `noteRef` — on a message that means "answers a note".
-    tx.set(conversation.collection('messages').doc(note.id), {
-      senderId: uid,
-      text: input.text,
-      sentAt: FieldValue.serverTimestamp(),
-      cardRef: card.id,
-      kind: NOTE_MESSAGE_KIND,
-    });
-    tx.set(conversation, {
-      // `image`, `sticker` and `unsent` go: the preview is merged into the one before, which may have been a picture,
-      // a sticker or unsent.
-      lastMessage: {
-        text: cut(input.text, LAST_MESSAGE_PREVIEW),
-        senderId: uid,
-        sentAt: FieldValue.serverTimestamp(),
-        image: FieldValue.delete(),
-        sticker: FieldValue.delete(),
-        album: FieldValue.delete(),
-        unsent: FieldValue.delete(),
-      },
-      updatedAt: FieldValue.serverTimestamp(),
-      unread: { [author]: FieldValue.increment(1) },
-      // A letter waits for its answer; the answer leaves none waiting. Anything else leaves it as it is.
-      ...(writing && !answers
-        ? { request: { from: uid, cardId: card.id, at: FieldValue.serverTimestamp(), count: left + 1 } }
-        : answers && holdsRequest(convo) ? { request: FieldValue.delete() } : {}),
-    }, { merge: true });
-    return {
-      id: note.id,
-      notificationId: bell.id,
-      push: { conversationId: pair, messageId: note.id, from: uid, to: author },
-      duplicate: false,
-    };
-  });
-}
-
-export interface SentMessage {
-  conversationId: string;
-  id: string;
-  /** Always null: a message no longer rings a bell row of its own after the first (kept for older callers). */
-  notificationId: string | null;
-  /**
-   * The sender had already sent this message (same `clientId`): nothing was
-   * written, so there is nothing to push or unfurl either.
-   */
-  duplicate: boolean;
-  /** What `pushMessage` needs to ring the recipient — null for a duplicate. */
-  push: MessagePush | null;
-  /**
-   * An album's picture after its first: nothing rings for it (the first rang for them all). Only a hint that spares
-   * the push its reads — pushMessage asks the stored message again.
-   */
-  silent?: boolean;
+export async function sendNote(db: AdminDb, uid: string, input: NoteInput, spent: Promise<void> = Promise.resolve()): Promise<SentNote> {
+  return sendNoteIn(ctxFor(db), uid, input, spent);
 }
 
 /**
@@ -509,223 +236,8 @@ export interface SentMessage {
  * (`index` 0) rings the other person's phone (`silent` on the others; the
  * push asks again).
  */
-export interface SendMessageInput {
-  to: string;
-  text: string;
-  cardRef?: string | null;
-  noteRef?: { cardId: string; noteId: string } | null;
-  replyTo?: string | null;
-  clientId?: string | null;
-  image?: string | null;
-  sticker?: { pack: string; id: string } | null;
-  album?: MessageAlbum | null;
-}
-
-export async function sendMessage(db: Firestore, uid: string, input: SendMessageInput, spent: Promise<void> = Promise.resolve()): Promise<SentMessage> {
-  return budgetFirst(spent, () => writeMessage(db, uid, input, spent));
-}
-
-async function writeMessage(db: Firestore, uid: string, input: SendMessageInput, spent: Promise<void>): Promise<SentMessage> {
-  const other = input.to;
-  if (other === uid) throw new ApiFailure('invalid_request', 'You cannot message yourself.');
-  const sticker = input.sticker ? { pack: input.sticker.pack, id: input.sticker.id } : null;
-  if (sticker) {
-    if (!isSticker(sticker.pack, sticker.id)) throw new ApiFailure('invalid_request', 'That is not a sticker.');
-    if (input.text || input.cardRef || input.image || input.noteRef || input.album) {
-      throw new ApiFailure('invalid_request', 'A sticker is sent on its own.');
-    }
-  } else if (!input.text && !input.cardRef && !input.image) {
-    throw new ApiFailure('invalid_request', 'A message needs text, a card or a picture.');
-  }
-  if (input.cardRef && input.image) throw new ApiFailure('invalid_request', 'A message carries a card or a picture, not both.');
-  if (input.album && !input.image) throw new ApiFailure('invalid_request', 'An album holds pictures only.');
-  const album = input.album ? { id: input.album.id, index: input.album.index, count: input.album.count } : null;
-  // An id Firestore keeps for itself names no picture.
-  if (input.image && isReservedId(input.image)) throw new ApiFailure('invalid_request', 'That is not a picture you can send here.');
-  if (input.clientId && isReservedId(input.clientId)) throw new ApiFailure('invalid_request', 'Not a valid client id.');
-  // An id Firestore keeps for itself names no message (and would throw if asked for as a document).
-  if (input.replyTo && isReservedId(input.replyTo)) throw new ApiFailure('invalid_request', 'No such message to reply to.');
-  // The card it shares is read beside the transaction's reads, and asked first once they are in.
-  const cardRead = input.cardRef ? visibleCardById(db, uid, input.cardRef, MESSAGE_CARD_FIELDS) : null;
-  cardRead?.catch(() => {});
-  // A noteRef naming an id Firestore keeps for itself names no note: read as one that isn't there (one answer for all).
-  const noteRef = input.noteRef && !isReservedId(input.noteRef.noteId) && !isReservedId(input.noteRef.cardId) ? input.noteRef : null;
-  // A sticker's fallback words are in the recipient's language: their profile's, read beside the transaction (a
-  // language changed a moment ago changes no guarantee, so the transaction needn't hold the profile). Unread, the
-  // words are Chinese, as for a profile without a language.
-  const recipientRead = sticker
-    ? db
-        .getAll(db.doc(`users/${other}`), { fieldMask: ['primaryLocale'] })
-        .then(([snap]) => fallbackLocale(snap.get('primaryLocale')))
-        .catch(() => fallbackLocale(null))
-    : null;
-  const pair = pairOf(uid, other);
-  const conversation = db.doc(`conversations/${pair}`);
-  const messages = conversation.collection('messages');
-  const message = input.clientId ? messages.doc(input.clientId) : messages.doc();
-
-  return db.runTransaction(async (tx) => {
-    const [me, blockOut, blockIn, connection, convo, origins, note, noteCard, existing, replied, sentPicture] = await Promise.all([
-      tx.get(db.doc(`users/${uid}`)),
-      tx.get(db.doc(`users/${uid}/blocks/${other}`)),
-      tx.get(db.doc(`users/${other}/blocks/${uid}`)),
-      tx.get(db.doc(`connections/${pair}`)),
-      tx.get(conversation),
-      tx.get(originsRef(db, uid, other)),
-      noteRef ? tx.get(db.doc(`notes/${noteRef.noteId}`)) : Promise.resolve(null),
-      noteRef ? tx.get(db.doc(`cards/${noteRef.cardId}`)) : Promise.resolve(null),
-      input.clientId ? tx.get(message) : Promise.resolve(null),
-      input.replyTo ? tx.get(messages.doc(input.replyTo)) : Promise.resolve(null),
-      input.image ? tx.get(chatImageRef(db, input.image)) : Promise.resolve(null),
-    ]);
-    // The budget answers before anything else, and before anything is written (see budgetFirst).
-    await spent;
-    // The same message again: what the first send wrote is the answer, whatever has changed since (its card too).
-    if (existing?.exists) {
-      if (existing.get('senderId') !== uid) throw new ApiFailure('invalid_request', 'Not a valid client id.');
-      return { conversationId: pair, id: message.id, notificationId: null, duplicate: true, push: null };
-    }
-    const card = cardRead ? await cardRead : null;
-    // Your own card in the trash (no one else can read one) is no card to share; nor is someone else's draft,
-    // which you can't read. Your own 私人卡, published or never, is: the message lets them read it (./sharedCards).
-    if (card && (card.trashedAt != null || (!card.publishedAt && card.authorId !== uid))) throw new ApiFailure('not_found', 'No such card.');
-    // An anonymous card no one else may read would come with its author's name (the sender's): it isn't shared
-    // so (sharedCards reads none) — public, its link names no one.
-    if (card && card.authorId === uid && card.anonymous === true && !(card.publishedAt && card.visibility === 'public')) {
-      throw new ApiFailure('invalid_request', 'An anonymous card is shared only while it is public.');
-    }
-    // Your 私人卡 sent now: this message is their pass to read it (sharedCards reads only messages so marked —
-    // never a card sent while others could read it and made private later, nor an older message's card).
-    const privateShare = !!card && card.authorId === uid && keptPrivate(card);
-    if (!hasPenName(me)) throw noPenName();
-    if (blockOut.exists || blockIn.exists) throw new ApiFailure('blocked', 'You cannot message this person.');
-    // Answering their letter (I am its recipient): without a connection, this reply is what connects the two of you.
-    const answers = openRequest(convo)?.from === other;
-    // Connected first (a resonance, or an answered note, connects you); a block also ends the connection.
-    if (!connection.exists && !answers) throw new ApiFailure('forbidden', 'You can message people you are connected with.');
-    // A note gone with its card — deleting a card deletes its notes after it,
-    // and so does moving an anonymous one to the trash — is answered all the
-    // same, without saying which (as below). A card that isn't yours is as
-    // gone as a missing one, so the answer never says whether someone else's
-    // card is there; one of yours still there, out of the trash, means a
-    // note that never was.
-    const noteGone = !!noteRef && !note?.exists
-      && !(noteCard?.exists && noteCard.get('authorId') === uid && noteCard.get('trashedAt') == null);
-    // A message answers a note they left you, on the card it names — nothing
-    // else, one answer for all of it: a note of your own on an anonymous card
-    // would otherwise tell you, by which error came back, whether they wrote it.
-    if (input.noteRef && !noteGone && (!note?.exists || note.get('cardId') !== input.noteRef.cardId
-      || note.get('fromUserId') !== other || note.get('toUserId') !== uid)) {
-      throw new ApiFailure('invalid_request', 'That is not a note they left you.');
-    }
-    // A note they left you on a card under your name: the message says which.
-    // One left on your anonymous card, or gone with its card (which may have
-    // been one), is answered all the same, without saying so: the message is
-    // theirs to read too, and would tell them whose card it was.
-    const keptNoteRef = noteRef && note?.exists && noteCard?.exists && noteCard.get('anonymous') !== true ? noteRef : null;
-    // A reply answers a message of this conversation (the path alone keeps it from being anyone else's).
-    if (replied && !replied.exists) throw new ApiFailure('invalid_request', 'No such message to reply to.');
-    // A picture: this sender's own upload for this conversation, not sent in another message.
-    const picture = sentPicture ? pictureToSend(sentPicture, uid, pair, message.id) : null;
-
-    // Connected: the letter of theirs this answers, and a resonance of theirs
-    // on a card of yours it answers, are reasons you stay so (a take-back
-    // reads them). Not connected, their letter answered is what connects you.
-    if (connection.exists) addReason(tx, db, [uid, other], origins, answers ? letterReason(uid) : null, answeredBy(origins, uid, other));
-    else connect(tx, db, [uid, other], letterReason(uid));
-    if (answers) clearLetters(tx, db, uid, other);
-    // An answered letter has a conversation already: no "new conversation" bell for it.
-    const first = !convo.exists;
-    if (first) {
-      tx.set(conversation, {
-        participants: [uid, other].sort(),
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-        lastMessage: null,
-        unread: { [uid]: 0, [other]: 0 },
-      });
-    }
-    const quoted = replied?.exists ? replyQuote(replied) : null;
-    // A sticker's words are its fallback, for builds that can't draw it.
-    const text = sticker && recipientRead ? stickerFallbackText(sticker, await recipientRead) : input.text;
-    tx.set(message, {
-      senderId: uid,
-      text,
-      sentAt: FieldValue.serverTimestamp(),
-      ...(card ? { cardRef: card.id } : {}),
-      ...(privateShare ? { privateShare: true } : {}),
-      ...(keptNoteRef ? { noteRef: { cardId: keptNoteRef.cardId, noteId: keptNoteRef.noteId } } : {}),
-      ...(quoted ? { replyTo: quoted } : {}),
-      ...(picture ? { image: picture } : {}),
-      ...(picture && album ? { album } : {}),
-      ...(sticker ? { sticker } : {}),
-    });
-    // Its record, which outlives the message: whoever read the card knows whose it is (sharedCards PRIVATE_SHARES).
-    if (privateShare && card) tx.set(privateShareRef(db, card.id), { authorId: uid, at: FieldValue.serverTimestamp() });
-    // Sent: the picture is this message's from now on (and no longer one the unsent purge looks at).
-    if (picture) tx.update(chatImageRef(db, picture.id), { messageId: message.id, unsentAt: FieldValue.delete() });
-    // The list's preview: the text, or the attached card's title when there is none; a picture, an album and a sticker
-    // say so (`image`, `album`, `sticker`: written or taken away every time — the preview is merged into the one before,
-    // and so is the `unsent` an unsent last message left there). A sticker's text is its fallback words.
-    tx.set(conversation, {
-      lastMessage: {
-        // A card's title only when anyone may read the card: the list is the recipient's even when the card isn't.
-        text: cut(text || (card && card.publishedAt && card.visibility === 'public' ? card.thoughtCore : '') || '', LAST_MESSAGE_PREVIEW),
-        senderId: uid,
-        sentAt: FieldValue.serverTimestamp(),
-        image: picture ? true : FieldValue.delete(),
-        sticker: sticker ? true : FieldValue.delete(),
-        // An album's picture: the list says how many were sent together (「傳送了 3 張圖片」).
-        album: picture && album ? { count: album.count } : FieldValue.delete(),
-        unsent: FieldValue.delete(),
-      },
-      updatedAt: FieldValue.serverTimestamp(),
-      unread: { [other]: FieldValue.increment(1) },
-      // Their letter answered: it waits no more. One of yours waits on (only they answer it).
-      ...(answers && holdsRequest(convo) ? { request: FieldValue.delete() } : {}),
-    }, { merge: true });
-    if (first) {
-      // The bell lists a new conversation, but the push for it is the chat push's (pushedAt marks it done).
-      tx.set(db.collection('notifications').doc(), {
-        userId: other,
-        type: 'message',
-        payload: { fromUserId: uid, fromHandle: String(me.get('handle') ?? '') },
-        readAt: null,
-        pushedAt: FieldValue.serverTimestamp(),
-        createdAt: FieldValue.serverTimestamp(),
-      });
-    }
-    return {
-      conversationId: pair,
-      id: message.id,
-      notificationId: null,
-      duplicate: false,
-      push: { conversationId: pair, messageId: message.id, from: uid, to: other },
-      // An album's later pictures ring nothing (the first rang for them all).
-      ...(picture && album && album.index > 0 ? { silent: true } : {}),
-    };
-  });
-}
-
-/**
- * What a reply keeps of the message it answers (a picture only as `image: true`: the quote is words; a sticker as
- * its `sticker`, beside its fallback words). An unsent one is quoted as its quotes were emptied (`{ id, senderId,
- * unsent: true }`, ./messageActions).
- */
-function replyQuote(
-  original: DocumentSnapshot,
-): { id: string; senderId: string; text: string; cardRef?: string; image?: true; sticker?: { pack: string; id: string } } | { id: string; senderId: string; unsent: true } {
-  if (original.get('unsentAt') != null) return { id: original.id, senderId: String(original.get('senderId') ?? ''), unsent: true };
-  const cardRef = original.get('cardRef');
-  const sticker = messageStickerOf(original.get('sticker'));
-  return {
-    id: original.id,
-    senderId: String(original.get('senderId') ?? ''),
-    text: cut(String(original.get('text') ?? ''), REPLY_QUOTE_CHARS),
-    ...(typeof cardRef === 'string' && cardRef ? { cardRef } : {}),
-    ...(messageImageOf(original.get('image')) ? { image: true as const } : {}),
-    ...(sticker ? { sticker } : {}),
-  };
+export async function sendMessage(db: AdminDb, uid: string, input: SendMessageInput, spent: Promise<void> = Promise.resolve()): Promise<SentMessage> {
+  return sendMessageIn(ctxFor(db), uid, input, spent);
 }
 
 /**
@@ -738,17 +250,6 @@ function replyQuote(
  * nothing (a retry after a lost answer). The messages go before the
  * conversation, so one cut short is still listed and can be deleted again.
  */
-export async function deleteConversation(db: Firestore, uid: string, pair: string): Promise<void> {
-  const other = pair.startsWith(`${uid}_`) ? pair.slice(uid.length + 1) : pair.endsWith(`_${uid}`) ? pair.slice(0, -uid.length - 1) : '';
-  if (!other || other === uid || pairOf(uid, other) !== pair || isReservedId(pair)) {
-    throw new ApiFailure('not_found', 'No such conversation.');
-  }
-  const ref = db.doc(`conversations/${pair}`);
-  const snap = await ref.get();
-  if (snap.exists) {
-    const participants = snap.get('participants');
-    if (!Array.isArray(participants) || !participants.includes(uid)) throw new ApiFailure('not_found', 'No such conversation.');
-  }
-  // recursiveDelete takes what is under the conversation before the conversation itself.
-  await db.recursiveDelete(ref);
+export async function deleteConversation(db: AdminDb, uid: string, pair: string): Promise<void> {
+  return deleteConversationIn(ctxFor(db), uid, pair);
 }

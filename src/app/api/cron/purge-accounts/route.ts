@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getAdminAuth } from '@/lib/auth/firebase/server';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { getStorageProvider } from '@/lib/storage';
-import { getChatImageStore } from '@/lib/storage/chatImages';
-import { purgeDueAccounts } from '@/lib/account/deletion';
-import { revalidateLocalized } from '@/lib/api/revalidate';
 import { cronAuthorized } from '@/lib/api/cronAuth';
+import { purgeDueAccountsIn } from '@/server/app/account';
+import { serverCtx } from '@/server/ctx';
 
 export const maxDuration = 300;
 
@@ -24,17 +20,18 @@ const PURGE_BUDGET_MS = (maxDuration - 30) * 1000;
 export async function GET(req: Request) {
   if (!cronAuthorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const run = await purgeDueAccounts(
+  const ctx = serverCtx();
+  const run = await purgeDueAccountsIn(
+    ctx,
     {
-      db: getAdminDb(),
-      deleteAuthUser: (uid) => getAdminAuth().deleteUser(uid),
-      deleteStoragePrefix: (prefix) => getStorageProvider().deletePrefix(prefix),
-      deleteStorageObjects: (keys) => getStorageProvider().deleteObjects(keys),
+      deleteAuthUser: (uid) => ctx.identity.deleteUser(uid),
+      deleteStoragePrefix: (prefix) => ctx.objects.deletePrefix(prefix),
+      deleteStorageObjects: (keys) => ctx.objects.deleteObjects(keys),
       deleteChatImageFiles: async (keys) => {
-        await getChatImageStore()?.deleteMany(keys);
+        await ctx.chatObjects?.deleteMany(keys);
       },
       // The deleted writing must not live on in cached card and profile pages.
-      revalidate: revalidateLocalized,
+      revalidate: (paths) => ctx.pages.revalidate(paths),
     },
     { budgetMs: PURGE_BUDGET_MS },
   );

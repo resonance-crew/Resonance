@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import { SWRConfig } from 'swr';
 import { renderWithIntl, screen, userEvent } from '@/../test/render';
-import type { Card, User } from '@/lib/db/types';
+import type { User } from '@/lib/db/types';
 
 // The card box on the real data hooks; the client read layer, auth and
 // navigation are the boundary.
@@ -25,30 +25,38 @@ vi.mock('@/lib/db/firestore/client/reads', () => ({
   getCurrentUserProfile: vi.fn(),
   getUsersByIds: vi.fn(),
 }));
-// Others' cards (resonated, linked, bookmarks) come from the server.
-vi.mock('@/lib/db/firestore/client/api', () => ({ callApi: vi.fn(async () => ({ cards: [] })) }));
+// Every shelf comes from the server (phase 2b): the viewer's own as the others'.
+vi.mock('@/lib/db/firestore/client/api', () => ({ callApi: vi.fn() }));
 
 import { getCardsByAuthor, getCurrentUserProfile, getMyDrafts, getUsersByIds } from '@/lib/db/firestore/client/reads';
 import { callApi } from '@/lib/db/firestore/client/api';
+import type { FeedCardBody } from '@/lib/api/v1/schemas';
 import MyCardBoxPage from './page';
 
-function card(id: string, extra: Partial<Card> = {}): Card {
+/** One of the viewer's cards as their card box's shelves answer it. */
+function card(id: string, extra: Partial<FeedCardBody> = {}): FeedCardBody {
   return {
     id,
-    authorId: 'me',
-    thoughtCore: `Card ${id}`,
-    story: 'story',
+    slug: null,
+    title: `Card ${id}`,
+    excerpt: 'story',
     tags: [],
-    originalLocale: 'en',
-    translations: {},
+    publishedAt: '2026-01-01T00:00:00.000Z',
+    author: { id: 'me', handle: 'me', initials: 'ME', accentColor: 'c', avatarUrl: null, avatarSeed: '1', verified: false, region: null },
+    anonymous: false,
     visibility: 'public',
-    publishedAt: new Date('2026-01-01'),
-    readCount: 0,
-    resonanceCount: 0,
-    inviteCount: 0,
+    imageUrl: null,
+    imageLabel: null,
+    accentHue: null,
+    readMinutes: 1,
+    referenceCardId: null,
+    reason: null,
     ...extra,
   };
 }
+
+/** The paths the box asked the server for, in order. */
+const asked = () => vi.mocked(callApi).mock.calls.map((c) => c[0]);
 const me: User = {
   id: 'me',
   handle: 'me',
@@ -75,8 +83,11 @@ function renderPage() {
 beforeEach(() => {
   vi.mocked(getCurrentUserProfile).mockResolvedValue(me);
   vi.mocked(getUsersByIds).mockResolvedValue({ me });
-  vi.mocked(getCardsByAuthor).mockImplementation(async (_uid, tab) => [card(`${tab}-1`)]);
-  vi.mocked(getMyDrafts).mockResolvedValue([card('d1', { publishedAt: null })]);
+  vi.mocked(callApi).mockImplementation((async (path: string) => {
+    if (path === '/api/v1/me/cardbox?shelves=draft,private') return { draft: { cards: [card('d1', { publishedAt: null })] }, private: { cards: [] } };
+    const tab = /tab=(\w+)/.exec(path)?.[1];
+    return { cards: tab === 'published' ? [card(`${tab}-1`)] : [] };
+  }) as never);
 });
 afterEach(() => {
   vi.clearAllMocks();
@@ -89,9 +100,9 @@ describe('the card box', () => {
     renderPage();
 
     expect((await screen.findAllByText('Card d1')).length).toBeGreaterThan(0);
-    expect(getMyDrafts).toHaveBeenCalledTimes(1);
+    expect(asked()).toEqual(['/api/v1/me/cardbox?shelves=draft,private']);
+    expect(getMyDrafts).not.toHaveBeenCalled();
     expect(getCardsByAuthor).not.toHaveBeenCalled();
-    expect(callApi).not.toHaveBeenCalled();
   });
 
   // One 私人卡 shelf holds every card only its author sees — never published, or kept private (round 8 §1.1,
@@ -107,11 +118,11 @@ describe('the card box', () => {
   it('reads the next shelf when its tab is opened', async () => {
     renderPage();
     expect((await screen.findAllByText('Card published-1')).length).toBeGreaterThan(0);
-    expect(vi.mocked(getCardsByAuthor).mock.calls.map((c) => c[1])).toEqual(['published']);
+    expect(asked()).toEqual(['/api/v1/me/cards?tab=published']);
 
     await userEvent.setup().click(screen.getByRole('tab', { name: 'Private' }));
     expect((await screen.findAllByText('Card d1')).length).toBeGreaterThan(0);
-    expect(getMyDrafts).toHaveBeenCalledTimes(1);
+    expect(asked()).toEqual(['/api/v1/me/cards?tab=published', '/api/v1/me/cardbox?shelves=draft,private']);
   });
 
   // B5: wide, a labelled tonal button with the profile's lines; a phone keeps a bare glyph at the

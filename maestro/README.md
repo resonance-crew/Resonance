@@ -31,6 +31,9 @@ come, are Playwright's.
 | `trash-restore` | alice | her card `letter`: ⋯ → 刪除 → 這張卡片在垃圾桶裡 → 還原 → public again (its share back) |
 | `sticker-breath` | alice | `/messages/bob` with the system's animations on and battery saver on (the runner sets both for the `animations` tag and puts them back): ☺ opens the panel and, on Android, a cell is playing (`sticker-moving`, a debug build's name for it) — round 25 §D: the owner's phone in battery saver showed a picker that never moved. iOS has no such name yet, so there the flow only opens the panel |
 | `translate-story` | alice | carol's English card `bridge-rain`: 翻譯成中文 under the byline → 舊橋上的雨 with 已由 AI 翻譯 · 顯示原文 (the seed's kept translation: the emulators ask no model), then 顯示原文 brings the English back with 顯示翻譯 (round 25 §F2) |
+| `block-person` | alice | bob's profile `/u/bob`: 更多選項 → 封鎖 → 封鎖 bob？ → 封鎖 (`PUT /api/v1/me/blocks/bob`): 你已封鎖 bob, 0 篇公開卡片, his card, 已連結 and 傳訊息 gone; 我的卡片盒 → 編輯個人檔案 → 隱私與連結 → 管理封鎖名單 lists bob; 解除封鎖 (`DELETE …/bob`) → 你還沒有封鎖任何人 |
+| `live-message` | alice | `/messages/bob`, hands off: bob sends from outside the app (`common/send-as.js`: the Auth emulator's sign-in, then `POST /api/v1/messages`) and his words appear in the open thread within 10 s — `signals/alice` → the app's pull over `/api/v1`; back on the list, a second message from him turns his row to the new words the same way |
+| `update-gate` | alice | on the `update-gate` stack alone (Stacks, below): the server serves no build this old, so instead of her home she gets 請更新共振 with 前往更新, and nothing of the app behind it (我也在雨裡走過 never shows) |
 
 Each one ends with a `takeScreenshot` of its end state (the trash flow also of the trashed page).
 
@@ -55,12 +58,33 @@ VISUAL_SKIP_BUILD=1 npx tsx scripts/visual/flows.ts ios      # the last build, i
 | `animations` | sticker-breath | what moves by itself: before such a flow the runner turns the system's animations on (animator scale 1, which it otherwise holds at 0) and battery saver on, and puts both back after (`flowSettings` in `scripts/visual/flows.ts`, Android) |
 | `card` | leave-note, tap, tap-passage, reply-with-card, translate-story, trash-restore | the card page: its end row (共振, the note in place, 用卡片回應, 收藏), the translate line, the trash |
 | `translation` | translate-story | the translate line, the story translation's client, 自動翻譯 |
+| `safety` | block-person | blocks, the block list, the profile's ⋯ menu |
+| `social` | block-person | the social graph over `/api/v1` (`apiSocial`): blocks, connections |
+| `signals` | live-message | `signals/{uid}` and the pulls it starts: what arrives while a person only watches |
+| `update-gate` | update-gate | client-config's `minBuild`, the update page — `--stack update-gate`, never the usual stack |
 | `tablet` | sign-in, send-message, send-sticker, sticker-replies, open-notification | written to hold on two panes and popovers: `--device tablet` runs these alone |
 
 plus the older ones by area (`chat`, `stickers`, `reactions`, `letters`, `card`, `notifications`,
 `writer`, `trash`, `auth`). A tag no flow carries is refused, not run as nothing. `capture --flows
 --tags composer` takes the same filter; `capture --flows --variants extended` also runs the `tablet` flows
 on the iPad and the Android tablet (reports in `_flows/ios-tablet/`, `_flows/android-tablet/`).
+
+**Stacks** (`--stack <name>`, `STACKS` in `scripts/visual/flows.ts`). `GET /api/v1/client-config` answers from the
+server's environment, so what it decides can only be set where the stack starts, never by a flow. Two named
+stacks start the dev server with other settings and run the flows made for them:
+
+| Stack | The server says | Runs | Why |
+| --- | --- | --- | --- |
+| `update-gate` | no build is new enough (`CLIENT_MIN_BUILD_*` far above any) | the flows tagged `update-gate` (`update-gate`), which run nowhere else | the update page: the whole window, with the way to the store, nothing of the app behind it |
+| `writer-api` | `CLIENT_FEATURES` turns `apiDrafts` and `apiThoughtMap` on | the flows tagged `writer` (`publish-card`) | the apps' writer through `/api/v1` — off by default until checked on devices (docs/release/owed.md, flags); the usual stack runs the same journey over Firestore |
+
+```bash
+npx tsx scripts/visual/flows.ts android --stack update-gate
+npx tsx scripts/visual/flows.ts ios --stack writer-api
+```
+
+A release's `capture --flows` runs the usual stack only: run these two beside it when a change touches
+client-config, the update page or the writer's saves.
 
 The flows hold the same locks as a capture (scripts/visual/README.md, One run at a time): a second run
 on the same devices refuses, or queues with `--wait`.

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getAdminDb } from '@/lib/db/firestore/admin';
 import { cronAuthorized } from '@/lib/api/cronAuth';
-import { indexOwed } from '@/lib/recommend/indexOwed';
+import { indexOwedIn } from '@/server/app/recommendIndex';
+import { serverCtx } from '@/server/ctx';
 
 export const dynamic = 'force-dynamic';
 // Pinned to hnd1 in vercel.json: the readings call OpenAI, which refuses Hong Kong.
@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   const started = Date.now();
   // No reading starts once its deadline (100 s) and its passages' pick (20 s) would not fit before the function ends,
   // and no pick starts that would not (INDEX_OWED_RESERVE_MS, PASSAGES_RESERVE_MS): the card is marked owed instead.
-  const run = await indexOwed(getAdminDb(), { end: started + maxDuration * 1000 });
+  const run = await indexOwedIn(serverCtx(), { end: started + maxDuration * 1000 });
   console.log('[index-cards]', JSON.stringify(run));
   return NextResponse.json(run);
 }

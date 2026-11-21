@@ -1,9 +1,6 @@
 'use client';
 
-import { collection, getDocs, orderBy, query, Timestamp, where } from './sdk';
-import type { Note } from '@/lib/db/types';
 import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
-import { getClientDb } from './init';
 import { callApi } from './api';
 
 /** Hard cap mirrored in firestore.rules — keep the two in sync. */
@@ -13,24 +10,6 @@ function requireUid(): string {
   const uid = getFirebaseClientAuth().currentUser?.uid;
   if (!uid) throw new Error('Not signed in');
   return uid;
-}
-
-function tsToDate(value: unknown): Date | null {
-  if (value instanceof Timestamp) return value.toDate();
-  if (value instanceof Date) return value;
-  return null;
-}
-
-function mapNote(id: string, data: Record<string, unknown>): Note {
-  return {
-    id,
-    cardId: String(data.cardId ?? ''),
-    fromUserId: String(data.fromUserId),
-    toUserId: String(data.toUserId),
-    text: String(data.text ?? ''),
-    createdAt: tsToDate(data.createdAt) ?? new Date(0),
-    readAt: tsToDate(data.readAt),
-  };
 }
 
 /**
@@ -56,18 +35,4 @@ export async function sendNote(input: { cardId: string; text: string; clientId?:
   const body = { cardId: input.cardId, text, ...(input.clientId ? { clientId: input.clientId } : {}) };
   const { id } = await callApi<{ id: string }>('/api/v1/notes', { method: 'POST', body });
   return id;
-}
-
-/** Notes the signed-in viewer has received, newest first. */
-export async function listReceivedNotes(): Promise<Note[]> {
-  const uid = getFirebaseClientAuth().currentUser?.uid;
-  if (!uid) return [];
-  const snap = await getDocs(
-    query(
-      collection(getClientDb(), 'notes'),
-      where('toUserId', '==', uid),
-      orderBy('createdAt', 'desc'),
-    ),
-  );
-  return snap.docs.map((d) => mapNote(d.id, d.data()));
 }

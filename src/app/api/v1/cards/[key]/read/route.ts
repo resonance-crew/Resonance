@@ -1,8 +1,7 @@
-import { after } from 'next/server';
-import { countCardRead } from '@/lib/api/v1/cardReads';
 import { parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
 import { CardIdParam } from '@/lib/api/v1/schemas';
-import { getAdminDb } from '@/lib/db/firestore/admin';
+import { serverCtx } from '@/server/ctx';
+import { countCardReadIn } from '@/server/app/cardReads';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,8 +14,10 @@ export const dynamic = 'force-dynamic';
  */
 export const POST = withUser(async (user, _req, ctx: RouteContext<'key'>) => {
   const id = parse(CardIdParam, await routeParam(ctx, 'key'));
-  after(() =>
-    countCardRead(getAdminDb(), user.id, id).catch((err) => console.error(`Card read: counting ${id} failed`, err)),
+  const server = serverCtx();
+  server.later.later(
+    () => countCardReadIn(server, user.id, id).catch((err) => console.error(`Card read: counting ${id} failed`, err)),
+    'read',
   );
   return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
 }, { revocation: 'cached' });

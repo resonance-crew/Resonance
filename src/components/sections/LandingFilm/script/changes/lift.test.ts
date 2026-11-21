@@ -45,7 +45,8 @@ const INFOS: { info: ChangeInfo; tag: string }[] = SCREENS.flatMap(([w, h, lvh])
 });
 const PS = Array.from({ length: 201 }, (_, i) => i / 200);
 
-describe('lift (the curtain)', () => {
+// (every p on every screen: 60 s, as changes.test.ts says)
+describe('lift (the curtain)', { timeout: 60_000 }, () => {
   it('paints the whole new set behind the whole old one', () => {
     for (const { info, tag } of INFOS) {
       const o = lift.order(info);

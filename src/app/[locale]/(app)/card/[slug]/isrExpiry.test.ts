@@ -5,7 +5,7 @@ import { getCacheControlHeader } from 'next/dist/server/lib/cache-control';
 // expireTime against the routes' own `revalidate`, through the header Next
 // itself writes for them. The layouts' server reads aren't the subject.
 vi.mock('./cardPageData', () => ({ loadCard: vi.fn() }));
-vi.mock('@/lib/db/firestore/user', () => ({ FirestoreUserRepository: class {} }));
+vi.mock('@/server/ctx', () => ({ serverCtx: vi.fn() }));
 
 import nextConfig from '../../../../../../next.config';
 import { revalidate as cardRevalidate } from './layout';

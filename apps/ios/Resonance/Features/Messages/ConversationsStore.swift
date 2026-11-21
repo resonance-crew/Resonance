@@ -1,6 +1,7 @@
 import FirebaseFirestore
 import Foundation
 import Observation
+import ResonanceKit
 
 /// Someone in Messages: what a row or a thread header draws of them.
 nonisolated struct Person: Identifiable, Equatable, Sendable {
@@ -20,11 +21,27 @@ nonisolated struct Person: Identifiable, Equatable, Sendable {
         accentColor = data["accentColor"] as? String
         avatarSeed = data["avatarSeed"] as? String
     }
+
+    /// Someone as the API answers them (a conversation's `other`, a connection's or GET /users' `author`).
+    init?(author: InboxAPI.Author) {
+        guard !author.handle.isEmpty else { return nil }
+        id = author.id
+        handle = author.handle
+        initials = author.initials.isEmpty ? String(author.handle.prefix(2)).uppercased() : author.initials
+        avatarURL = author.avatarUrl.flatMap(URL.init(string:))
+        accentColor = author.accentColor
+        avatarSeed = author.avatarSeed
+    }
 }
 
 /// The signed-in person's conversations, live — the web's useConversations
-/// (listConversations + listMyConnectionUids + getMyBlockedIds), as snapshot
-/// listeners instead of a 30s poll. Drives the Messages tab and its badge.
+/// (listConversations + listMyConnectionUids + getMyBlockedIds). Drives the Messages tab and its badge.
+///
+/// Each of its sources takes one of two paths, chosen as it starts (Phase 2 of the middleware decouple): the
+/// conversations through GET /api/v1/conversations with `features.apiInbox`, the connections and the block list
+/// through GET /me/connections and /me/blocks with `features.apiSocial` — pulled again when `signals/{uid}` moves
+/// (`inbox`, `graph`) and on the 60 s foreground pull, each a 304 when nothing changed — or, the older path kept one
+/// release, as Firestore snapshot listeners.
 @Observable
 final class ConversationsStore {
     struct Conversation: Identifiable, Equatable {
@@ -75,7 +92,7 @@ final class ConversationsStore {
 
     @ObservationIgnored private var uid: String?
     @ObservationIgnored private let listeners = LiveListeners()
-    @ObservationIgnored private var rawConversations: [QueryDocumentSnapshot] = []
+    @ObservationIgnored private var rawConversations: [RawConversation] = []
     @ObservationIgnored private var connectionUids: [String] = []
     @ObservationIgnored private var blocked: Set<String> = []
     @ObservationIgnored private var people = PeopleBook()
@@ -98,33 +115,56 @@ final class ConversationsStore {
         Task { await rebuild() }
     }
 
-    func start(uid: String) {
+    /// The `/api/v1` paths this run takes (nil: that source listens to Firestore), and the signals that say when to pull.
+    @ObservationIgnored private var inbox: InboxAPI?
+    @ObservationIgnored private var social: SocialAPI?
+    @ObservationIgnored private var subscription: SignalSubscription?
+    @ObservationIgnored private var pulls = PullGate()
+    /// Someone's profile, by the path the session takes (GET /users with `apiSocial`, else Firestore).
+    @ObservationIgnored var readPeople: @Sendable (Set<String>) async -> [String: PeopleBook.Read] = { ids in
+        await PeopleBook.readEach(ids) { await ConversationsStore.read($0) }
+    }
+
+    /// Which path each source takes this run: the conversations, and the connections with the blocks (true: the API).
+    var paths: (conversations: Bool, graph: Bool) { (inbox != nil, social != nil) }
+
+    /// Starts reading `uid`'s lists: `inbox` / `social` non-nil take the API for the conversations / the
+    /// connections and blocks, pulled when `signals` says so; nil listens to Firestore as before.
+    func start(uid: String, inbox: InboxAPI? = nil, social: SocialAPI? = nil, signals: SignalListener? = nil) {
         stop()
         self.uid = uid
+        self.inbox = inbox
+        self.social = social
         let db = FirebaseBootstrap.db
-        listen("conversations") { [weak self] in
-            db.collection("conversations").whereField("participants", arrayContains: uid)
-                .order(by: "updatedAt", descending: true)
-                .addSnapshotListener { snap, error in
-                    MainActor.assumeIsolated {
-                        guard let self else { return }
-                        guard let snap else { return self.failed("conversations", error) }
-                        self.rawConversations = snap.documents
-                        self.arrived("conversations")
-                    }
-                }
+        if inbox != nil || social != nil {
+            var topics: Set<SignalTopic> = []
+            if inbox != nil { topics.insert(.inbox) }
+            if social != nil { topics.insert(.graph) }
+            subscription = signals?.observe(topics) { [weak self] moved in self?.pull(moved) }
+            pull([])
         }
+        if inbox == nil {
+            listen("conversations") { [weak self] in
+                db.collection("conversations").whereField("participants", arrayContains: uid)
+                    .order(by: "updatedAt", descending: true)
+                    .addSnapshotListener { snap, error in
+                        MainActor.assumeIsolated {
+                            guard let self else { return }
+                            guard let snap else { return self.failed("conversations", error) }
+                            self.rawConversations = snap.documents.map { RawConversation(doc: $0, me: uid) }
+                            self.arrived("conversations")
+                        }
+                    }
+            }
+        }
+        guard social == nil else { return }
         listen("connections") { [weak self] in
             db.collection("connections").whereField("userIds", arrayContains: uid)
                 .addSnapshotListener { snap, error in
                     MainActor.assumeIsolated {
                         guard let self else { return }
                         guard let snap else { return self.failed("connections", error) }
-                        let uids = snap.documents.compactMap { ($0.get("userIds") as? [String])?.first { $0 != uid } }
-                        let moved = Self.moved(from: self.connectionUids, to: uids)
-                        self.connectionUids = uids
-                        if self.ready.contains("connections"), !moved.isEmpty { self.onConnectionsChange?(moved) }
-                        self.arrived("connections")
+                        self.connectionsRead(snap.documents.compactMap { ($0.get("userIds") as? [String])?.first { $0 != uid } })
                     }
                 }
         }
@@ -134,15 +174,95 @@ final class ConversationsStore {
                     MainActor.assumeIsolated {
                         guard let self else { return }
                         guard let snap else { return self.failed("blocks", error) }
-                        let ids = Set(snap.documents.map(\.documentID))
-                        if self.ready.contains("blocks"), ids != self.blocked { self.onBlocksChange?() }
-                        self.blocked = ids
-                        if self.blockedIds != ids { self.blockedIds = ids }
-                        self.onBlocks?(ids)
-                        self.arrived("blocks")
+                        self.blocksRead(Set(snap.documents.map(\.documentID)))
                     }
                 }
         }
+    }
+
+    private func connectionsRead(_ uids: [String]) {
+        let moved = Self.moved(from: connectionUids, to: uids)
+        connectionUids = uids
+        if ready.contains("connections"), !moved.isEmpty { onConnectionsChange?(moved) }
+        arrived("connections")
+    }
+
+    private func blocksRead(_ ids: Set<String>) {
+        if ready.contains("blocks"), ids != blocked { onBlocksChange?() }
+        blocked = ids
+        if blockedIds != ids { blockedIds = ids }
+        onBlocks?(ids)
+        arrived("blocks")
+    }
+
+    /// A block or an unblock asked for through the API (`SafetyService`): the list follows at once, and the server's
+    /// list is asked for again (a block alone touches no signal of the blocker's).
+    func blockChanged(_ other: String, blocked isBlocked: Bool) {
+        guard uid != nil, social != nil else { return }
+        var ids = blocked
+        if isBlocked { ids.insert(other) } else { ids.remove(other) }
+        if ids != blocked { blocksRead(ids) }
+        pull([.graph])
+    }
+
+    /// Pulls what moved (`[]`: everything this run reads through the API). One pull of a kind at a time: one asked
+    /// for meanwhile runs once more after it.
+    private func pull(_ moved: Set<SignalTopic>) {
+        guard let uid else { return }
+        if let inbox, moved.isEmpty || moved.contains(.inbox) {
+            pulls.run("inbox") { [weak self] in await self?.pullConversations(inbox, uid: uid) }
+        }
+        if let social, moved.isEmpty || moved.contains(.graph) {
+            pulls.run("graph") { [weak self] in await self?.pullGraph(social, uid: uid) }
+        }
+    }
+
+    private func pullConversations(_ inbox: InboxAPI, uid: String) async {
+        do {
+            let list = try await inbox.conversations()
+            guard self.uid == uid else { return }
+            for conversation in list {
+                // Who it is with, as the server read them now (null: their account is gone).
+                if let author = conversation.other?.value1, let person = Person(author: author) {
+                    people.record(conversation.otherId, .found(person))
+                } else {
+                    people.record(conversation.otherId, .gone)
+                }
+            }
+            rawConversations = list.map { RawConversation(api: $0) }
+            pullSucceeded("conversations")
+        } catch {
+            guard self.uid == uid else { return }
+            failed = true
+        }
+    }
+
+    private func pullGraph(_ social: SocialAPI, uid: String) async {
+        do {
+            async let connections = social.connections()
+            async let blocks = social.blocks()
+            let (linked, blockList) = try await (connections, blocks)
+            guard self.uid == uid else { return }
+            for connection in linked {
+                let person = connection.person
+                if !person.gone, let author = person.author?.value1, let found = Person(author: author) {
+                    people.record(connection.userId, .found(found))
+                } else {
+                    people.record(connection.userId, .gone)
+                }
+            }
+            blocksRead(Set(blockList.map(\.userId)))
+            connectionsRead(linked.map(\.userId))
+            pullSucceeded(nil)
+        } catch {
+            guard self.uid == uid else { return }
+            failed = true
+        }
+    }
+
+    private func pullSucceeded(_ source: String?) {
+        if listeners.failed.isEmpty { failed = false }
+        if let source { arrived(source) }
     }
 
     private func listen(_ name: String, _ attach: @escaping () -> ListenerRegistration) {
@@ -164,11 +284,18 @@ final class ConversationsStore {
     func resume() {
         guard uid != nil else { return }
         if listeners.resume() { failed = false }
+        // The API's lists are asked for again.
+        if inbox != nil || social != nil { pull([]) }
         if people.hasRetries { Task { await rebuild() } }
     }
 
     func stop() {
         listeners.removeAll()
+        subscription?.cancel()
+        subscription = nil
+        inbox = nil
+        social = nil
+        pulls = PullGate()
         uid = nil
         rawConversations = []
         connectionUids = []
@@ -193,13 +320,10 @@ final class ConversationsStore {
 
     private func rebuild() async {
         guard let uid else { return }
-        let others = rawConversations.compactMap { Self.other(in: $0, me: uid) }
+        let others = rawConversations.compactMap(\.otherId)
         let wanted = people.toRead(Set(others + connectionUids))
-        await withTaskGroup(of: (String, PeopleBook.Read).self) { group in
-            for id in wanted {
-                group.addTask { (id, await Self.read(id)) }
-            }
-            for await (id, read) in group { people.record(id, read) }
+        if !wanted.isEmpty {
+            for (id, read) in await readPeople(wanted) { people.record(id, read) }
         }
         // Signed out, or someone else signed in, meanwhile.
         guard self.uid == uid else { return }
@@ -208,17 +332,13 @@ final class ConversationsStore {
         let found = people.found
         // A conversation deleted here stays out until the listener drops it too (then it is forgotten: the pair
         // may talk again, under the same id).
-        hidden.formIntersection(rawConversations.map(\.documentID))
-        publish(rawConversations.compactMap { doc in
-            guard !hidden.contains(doc.documentID) else { return nil }
-            guard let otherId = Self.other(in: doc, me: uid), !blocked.contains(otherId), let other = found[otherId] else { return nil }
-            let last = doc.get("lastMessage") as? [String: Any]
-            let unread = ((doc.get("unread") as? [String: Any])?[uid] as? NSNumber)?.intValue ?? 0
-            return Conversation(id: doc.documentID, other: other, lastText: last?["text"] as? String,
-                                lastFromMe: last?["senderId"] as? String == uid, lastImage: last?["image"] as? Bool == true,
-                                lastUnsent: Self.unsent(last), lastSticker: last?["sticker"] as? Bool == true,
-                                lastAlbum: ((last?["album"] as? [String: Any])?["count"] as? NSNumber)?.intValue,
-                                sentAt: (last?["sentAt"] as? Timestamp)?.dateValue(), unread: unread)
+        hidden.formIntersection(rawConversations.map(\.id))
+        publish(rawConversations.compactMap { raw in
+            guard !hidden.contains(raw.id) else { return nil }
+            guard let otherId = raw.otherId, !blocked.contains(otherId), let other = found[otherId] else { return nil }
+            return Conversation(id: raw.id, other: other, lastText: raw.lastText, lastFromMe: raw.lastSender == uid,
+                                lastImage: raw.lastImage, lastUnsent: raw.lastUnsent, lastSticker: raw.lastSticker,
+                                lastAlbum: raw.lastAlbum, sentAt: raw.sentAt, unread: raw.unread)
         })
         let talking = Set(conversations.map(\.other.id))
         starters = connectionUids.filter { !talking.contains($0) && !blocked.contains($0) }.compactMap { found[$0] }
@@ -258,8 +378,104 @@ final class ConversationsStore {
         return last["text"] == nil && last["image"] == nil && last["cardRef"] == nil
     }
 
-    private static func other(in doc: QueryDocumentSnapshot, me: String) -> String? {
+    nonisolated fileprivate static func other(in doc: QueryDocumentSnapshot, me: String) -> String? {
         (doc.get("participants") as? [String])?.first { $0 != me }
+    }
+
+    /// A conversation as either path reads it, before its person is known.
+    nonisolated struct RawConversation: Sendable {
+        let id: String
+        let otherId: String?
+        let lastText: String?
+        let lastSender: String?
+        let lastImage: Bool
+        let lastUnsent: Bool
+        let lastSticker: Bool
+        let lastAlbum: Int?
+        let sentAt: Date?
+        let unread: Int
+
+        init(doc: QueryDocumentSnapshot, me: String) {
+            id = doc.documentID
+            otherId = ConversationsStore.other(in: doc, me: me)
+            let last = doc.get("lastMessage") as? [String: Any]
+            lastText = last?["text"] as? String
+            lastSender = last?["senderId"] as? String
+            lastImage = last?["image"] as? Bool == true
+            lastUnsent = ConversationsStore.unsent(last)
+            lastSticker = last?["sticker"] as? Bool == true
+            lastAlbum = ((last?["album"] as? [String: Any])?["count"] as? NSNumber)?.intValue
+            sentAt = (last?["sentAt"] as? Timestamp)?.dateValue()
+            unread = ((doc.get("unread") as? [String: Any])?[me] as? NSNumber)?.intValue ?? 0
+        }
+
+        /// GET /conversations' row: the server read the document by the same rules (an unsent preview with words or
+        /// a picture beside it is the words).
+        init(api conversation: InboxAPI.Conversation) {
+            id = conversation.id
+            otherId = conversation.otherId.isEmpty ? nil : conversation.otherId
+            let last = conversation.lastMessage?.value1
+            lastText = last.map(\.text)
+            lastSender = last?.senderId
+            lastImage = last?.image == true
+            lastUnsent = last.map { $0.unsent && $0.text.isEmpty && !$0.image } ?? false
+            lastSticker = last?.sticker == true
+            lastAlbum = last?.albumCount
+            sentAt = last?.sentAt.flatMap(ISO8601.date)
+            unread = conversation.unread
+        }
+    }
+}
+
+/// One pull of a kind at a time: one asked for while it runs runs once more after it (never a queue of them).
+@MainActor
+struct PullGate {
+    private final class State {
+        var running: Set<String> = []
+        var again: Set<String> = []
+    }
+
+    private let state = State()
+
+    func run(_ kind: String, _ work: @escaping @MainActor () async -> Void) {
+        guard !state.running.contains(kind) else {
+            state.again.insert(kind)
+            return
+        }
+        state.running.insert(kind)
+        let state = state
+        Task { @MainActor in
+            repeat {
+                state.again.remove(kind)
+                await work()
+            } while state.again.contains(kind)
+            state.running.remove(kind)
+        }
+    }
+}
+
+extension PeopleBook {
+    /// Each of `ids` read on its own (the older path: one profile document each), all at once.
+    nonisolated static func readEach(_ ids: Set<String>, _ read: @escaping @Sendable (String) async -> Read) async -> [String: Read] {
+        await withTaskGroup(of: (String, Read).self) { group in
+            for id in ids { group.addTask { (id, await read(id)) } }
+            var out: [String: Read] = [:]
+            for await (id, found) in group { out[id] = found }
+            return out
+        }
+    }
+
+    /// GET /users' answer as the book records it: a profile that is gone, or has no pen name, is someone who's gone.
+    nonisolated static func reads(_ people: [SocialAPI.Person]) -> [String: Read] {
+        var out: [String: Read] = [:]
+        for person in people {
+            if !person.gone, let author = person.author?.value1, let found = Person(author: author) {
+                out[person.id] = .found(found)
+            } else {
+                out[person.id] = .gone
+            }
+        }
+        return out
     }
 }
 

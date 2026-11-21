@@ -1,21 +1,19 @@
-import { NextResponse, after } from 'next/server';
+import { NextResponse } from 'next/server';
 import { ApiFailure, parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { getResonances } from '@/lib/api/v1/reads';
-import { resonateWith } from '@/lib/api/v1/resonate';
 import { CardIdParam, ResonateRequest } from '@/lib/api/v1/schemas';
-import { getAdminDb } from '@/lib/db/firestore/admin';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { BRIEF, cachedJson } from '@/lib/api/v1/cache';
-import { revalidateLocalized } from '@/lib/api/revalidate';
-import { spend } from '@/lib/api/rateLimit';
-import { ringAfter } from '@/lib/push/ring';
+import { serverCtx } from '@/server/ctx';
+import { getResonances } from '@/server/app/cardsRead';
+import { ringAfterIn } from '@/server/app/pushAfter';
+import { resonateWithIn } from '@/server/app/resonate';
 
 export const dynamic = 'force-dynamic';
 
 /** GET /api/v1/cards/{id}/resonances — public cards written in response to this one. */
 export const GET = withUser(async (user, req, ctx: RouteContext<'key'>) => {
   const id = parse(CardIdParam, await routeParam(ctx, 'key'));
-  return cachedJson(req, await getResonances(getAdminDb(), user.id, id), BRIEF);
+  return cachedJson(req, await getResonances(serverCtx(), user.id, id), BRIEF);
 });
 
 /**
@@ -32,10 +30,10 @@ export const POST = withUser(async (user, req, ctx: RouteContext<'key'>) => {
   const { cardId } = parse(ResonateRequest, body);
   // An id Firestore keeps for itself names no card: answered as one, before it costs any of the budget.
   if (isReservedId(target) || isReservedId(cardId)) throw new ApiFailure('not_found', 'No such card.');
-  const db = getAdminDb();
-  await spend(db, user.id, 'resonate');
-  const { notificationId, stale, ...result } = await resonateWith(db, user.id, target, cardId);
-  ringAfter(db, notificationId);
-  if (stale.length) after(() => void revalidateLocalized(stale));
+  const server = serverCtx();
+  await server.limits.spend(user.id, 'resonate');
+  const { notificationId, stale, ...result } = await resonateWithIn(server, user.id, target, cardId);
+  ringAfterIn(server, notificationId);
+  if (stale.length) server.later.later(() => void server.pages.revalidate(stale), 'revalidate');
   return NextResponse.json(result);
 });

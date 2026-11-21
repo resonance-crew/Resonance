@@ -1,5 +1,15 @@
 import { z } from 'zod';
-import { apiRegistry, CARD_INCLUDES, CARD_KEYS_MAX, CardBoxTab, PROFILE_INCLUDES } from './schemas';
+import {
+  apiRegistry,
+  BELL_PAGE,
+  BELL_PAGE_MAX,
+  CARD_INCLUDES,
+  CARD_KEYS_MAX,
+  CardBoxTab,
+  PROFILE_INCLUDES,
+  THREAD_PAGE,
+  THREAD_PAGE_MAX,
+} from './schemas';
 
 type Json = Record<string, unknown>;
 
@@ -29,6 +39,8 @@ const get = (operationId: string, summary: string, schema: string, extra: Json =
   get: { operationId, summary, ...extra, responses: { '200': { description: 'OK', ...json(ref(schema)) }, ...errors(...errorCodes) } },
 });
 const cardId = pathParam('key', 'The card id');
+const conversationParam = pathParam('pair', "The conversation's id: its two participants' uids, sorted, joined by `_`");
+const pageTokenParam = (description: string) => ({ name: 'pageToken', in: 'query', required: false, description, schema: { type: 'string', maxLength: 512 } });
 const handle = pathParam('handle', 'Pen name (any script)');
 const include = (names: readonly string[], what: string) => ({
   name: 'include',
@@ -77,7 +89,8 @@ export function buildOpenApi(): Json {
       version: '1.0.0',
       description:
         'The versioned API for the native apps. Authenticate with `Authorization: Bearer <Firebase ID token>` ' +
-        '(the web uses its session cookie). Additive changes only within v1.',
+        '(the web uses its session cookie), or with an access token from POST /auth/exchange the same way. ' +
+        'Additive changes only within v1.',
     },
     servers: [{ url: '/api/v1' }],
     security: [{ firebaseIdToken: [] }],
@@ -104,7 +117,7 @@ export function buildOpenApi(): Json {
         },
         patch: {
           operationId: 'updateProfile',
-          summary: 'Change your pen name, bio, region or writing language',
+          summary: 'Change your pen name, bio, region, writing language, photo, translation languages or hint counts',
           requestBody: { required: true, ...json(ref('UpdateProfileRequest')) },
           responses: { '200': { description: 'OK', ...json(ref('Me')) }, ...errors(400, 401, 404, 409) },
         },
@@ -158,21 +171,41 @@ export function buildOpenApi(): Json {
           'Answers at once from the latest picks. While today\'s are being prepared `status` is `stale` ' +
           '(earlier picks, or a quick first pass without reasons); ask again a little later for `fresh` ones.',
       }, [401]),
-      '/cards': get('getCards', 'Several cards at once, by slug or id, as list summaries (no story)', 'CardList', {
-        description:
-          'In the order asked, each card once; cards you may not read, named cards by someone you blocked, and unknown keys are ' +
-          'left out. Anonymous cards come without a byline, and a block never leaves one out (nor any list or feed): that would ' +
-          'name its author.',
-        parameters: [
-          {
-            name: 'keys',
-            in: 'query',
-            required: true,
-            description: `Card slugs or ids, comma-separated (1–${CARD_KEYS_MAX})`,
-            schema: { type: 'string' },
+      '/cards': {
+        ...get('getCards', 'Several cards at once, by slug or id, as list summaries (no story)', 'CardList', {
+          description:
+            'In the order asked, each card once; cards you may not read, named cards by someone you blocked, and unknown keys are ' +
+            'left out. Anonymous cards come without a byline, and a block never leaves one out (nor any list or feed): that would ' +
+            'name its author.',
+          parameters: [
+            {
+              name: 'keys',
+              in: 'query',
+              required: true,
+              description: `Card slugs or ids, comma-separated (1–${CARD_KEYS_MAX})`,
+              schema: { type: 'string' },
+            },
+          ],
+        }, [400, 401]),
+        // --- Phase 2 writer (2a-writer) ---
+        post: {
+          operationId: 'createDraft',
+          summary: 'Start a draft under the id your client made',
+          description:
+            'The id is 20 letters and digits (as Firestore\'s auto ids), made by the client so an offline save can name the draft ' +
+            'before it exists. Unpublished, its counters zeroed. Sent again for your own draft: `200` with `created: false`, ' +
+            'nothing written. An id in use by another card, or one deleted for good, is `409 conflict`: make another. Anonymous ' +
+            'and for connections only is `400 invalid_request` ("An anonymous card is public or private."). With ' +
+            '`referenceCardId`, a card you may read (`404` otherwise), and not across a block unless it is anonymous (`403 blocked`). ' +
+            'A cover is one of ours. Autosaves go to `PATCH /cards/{key}/draft`; publishing to `POST /cards/{key}/publish`.',
+          requestBody: { required: true, ...json(ref('CreateDraftRequest')) },
+          responses: {
+            '200': { description: 'Your draft was there already', ...json(ref('CreatedDraft')) },
+            '201': { description: 'Created', ...json(ref('CreatedDraft')) },
+            ...errors(400, 401, 403, 404, 409, 429),
           },
-        ],
-      }, [400, 401]),
+        },
+      },
       '/cards/{key}': {
         ...get('getCard', 'A card you may read, by slug or id, with its story', 'CardDetail', {
           description:
@@ -436,6 +469,62 @@ export function buildOpenApi(): Json {
           responses: { '200': { description: 'OK', ...json(ref('ApplyEditResponse')) }, ...errors(400, 401, 404, 409) },
         },
       },
+      // --- Phase 2 writer (2a-writer) ---
+      '/cards/{key}/draft': {
+        patch: {
+          operationId: 'saveDraft',
+          summary: 'Autosave your draft: only the fields sent, ordered by `rev`',
+          description:
+            '`rev` counts the client\'s saves of this draft, one higher each time. A save applies only when its `rev` is above ' +
+            'the stored one (0 for a new draft); otherwise nothing changes and the answer is `200` with `applied: false` and the ' +
+            'stored `rev` — a save that arrived late, or was sent twice, never overwrites newer words. A sent cover replaces the ' +
+            'stored one whole (a `frame` left out is removed); `clear` removes the cover or the hue. The fields and limits are ' +
+            'the rules\' for a client writing its own card: anything else is `400`. A published card saves through its pending ' +
+            'edit (`PUT /cards/{key}/edits/current`): `409 conflict`; a card in the trash is `409 conflict` ("This card is in the ' +
+            'trash."); someone else\'s card is `404`. Each applied save is kept 7 days, to bring words back.',
+          parameters: [pathParam('key', 'The card id')],
+          requestBody: { required: true, ...json(ref('UpdateDraftRequest')) },
+          responses: { '200': { description: 'OK', ...json(ref('DraftSaved')) }, ...errors(400, 401, 404, 409, 429) },
+        },
+      },
+      '/cards/{key}/edits/current': {
+        ...get('getPendingEdit', 'Your working copy of your published card, or `edit: null`', 'PendingEditBox', {
+          description: 'Only yours: someone else\'s card is `404`. Checked each time (ETag → 304).',
+          parameters: [pathParam('key', 'The card id')],
+        }, [400, 401, 404]),
+        put: {
+          operationId: 'savePendingEdit',
+          summary: 'Autosave your published card\'s working copy, whole, ordered by `rev`',
+          description:
+            'Readers never see it until you apply it (`POST /cards/{key}/edits/apply`). Applied only when `rev` is above the ' +
+            'stored copy\'s (else `200` with `applied: false`, as `PATCH …/draft`). It may keep a card anonymous and for ' +
+            'connections only that already is, never make one so (`400 invalid_request`). A card in the trash is `409 conflict`.',
+          parameters: [pathParam('key', 'The card id')],
+          requestBody: { required: true, ...json(ref('PendingEditRequest')) },
+          responses: { '200': { description: 'OK', ...json(ref('DraftSaved')) }, ...errors(400, 401, 404, 409, 429) },
+        },
+        delete: {
+          operationId: 'discardPendingEdit',
+          summary: 'Throw your working copy away (the live card is left as it was)',
+          parameters: [pathParam('key', 'The card id')],
+          responses: { '200': { description: 'OK', ...json(ref('DeletedPendingEdit')) }, ...errors(400, 401, 404) },
+        },
+      },
+      '/me/thought-map': get('getThoughtMap', 'Your whole thought map: nodes, arrows and groups', 'ThoughtMap', {
+        description: 'Yours alone. Cards by id only: what each is, `GET /cards?keys=` answers. Checked each time (ETag → 304).',
+      }, [401]),
+      '/me/thought-map/ops': {
+        post: {
+          operationId: 'applyThoughtMapOps',
+          summary: 'Change your thought map: a batch of ops, in order, all together',
+          description:
+            'Every op applies, or none does: one the map never takes (an arrow from a card to itself) is `400` and changes ' +
+            'nothing. An op on a node, arrow or group that is not there is skipped (its index in `skipped`), so a queue sent ' +
+            'again or late does no harm. A group is made under the id the client chose.',
+          requestBody: { required: true, ...json(ref('MapOpsRequest')) },
+          responses: { '200': { description: 'OK', ...json(ref('MapOpsResponse')) }, ...errors(400, 401, 429) },
+        },
+      },
       '/cards/{key}/report': {
         post: {
           operationId: 'reportCard',
@@ -529,7 +618,63 @@ export function buildOpenApi(): Json {
           responses: { '201': { description: 'Created', ...json(ref('SendMessageResponse')) }, ...errors(400, 401, 403, 404) },
         },
       },
+      // --- Phase 2 inbox (2a-inbox)
+      '/conversations': get('listConversations', 'Your conversations, the most recently active first (50 a page)', 'ConversationList', {
+        description:
+          'What the `conversations` listener read: each with your unread count, the last message\'s preview, the letter it ' +
+          'holds and the other person as their profile is now (`other: null` when their account is gone). Conversations ' +
+          'with people you blocked are listed too, as before: filter them by your blocks. Ask again when `signals/{uid}` ' +
+          '`inbox` moves, with `If-None-Match`: an unchanged list is `304`.',
+        parameters: [pageTokenParam("A page's `nextPageToken`")],
+      }, [400, 401]),
+      '/conversations/{pair}/messages': get('listMessages', "A thread's messages, newest first", 'MessagePage', {
+        description:
+          'No cursor: the newest `limit` (the window to show, and to ask for again with `If-None-Match` when ' +
+          '`signals/{uid}` `threads.{pair}` moves: a reaction, an unsend or a link preview changes it too). `before`: the ' +
+          'page older than a message (`olderCursor`, or any message\'s `cursor`). `after`: the messages sent right after one ' +
+          '(`newerCursor`), oldest of them first in time but answered newest first; `hasNewer` says the page was full. ' +
+          'Ordered by send time to the microsecond, then id: two messages sent in one millisecond are never skipped. `404` ' +
+          'for anyone but its two participants, whether the conversation exists or not.',
+        parameters: [
+          conversationParam,
+          { name: 'before', in: 'query', required: false, description: 'A cursor: the page older than it', schema: { type: 'string', maxLength: 512 } },
+          { name: 'after', in: 'query', required: false, description: 'A cursor: what came after it (not with `before`)', schema: { type: 'string', maxLength: 512 } },
+          { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: THREAD_PAGE_MAX, default: THREAD_PAGE } },
+        ],
+      }),
+      '/conversations/{pair}/read': {
+        post: {
+          operationId: 'markConversationRead',
+          summary: 'You have read the thread: your unread count in it goes to 0',
+          description: 'Nothing changes for the other person. `404` for anyone but its two participants, whether it exists or not.',
+          parameters: [conversationParam],
+          responses: { '204': { description: 'Read' }, ...errors(400, 401, 404, 429) },
+        },
+      },
+      '/me/bell': get('getBell', 'Your bell, newest first (20 a page)', 'BellPage', {
+        description:
+          'What the `notifications` listener read, each row\'s payload as the server wrote it (`anonymous` on a note or a ' +
+          'resonance on one of your anonymous cards: open the card, never a thread), and the profiles of the people the rows ' +
+          'name (a tap row\'s first 3 readers). Ask again when `signals/{uid}` `bell` moves, with `If-None-Match`.',
+        parameters: [
+          pageTokenParam("A page's `nextPageToken`"),
+          { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: BELL_PAGE_MAX, default: BELL_PAGE } },
+        ],
+      }, [400, 401]),
+      '/notifications/read': {
+        post: {
+          operationId: 'markNotificationsRead',
+          summary: 'Mark bell rows of yours read: by id, or every one up to a time',
+          description: "Rows that aren't yours, and ids that name none, are ignored. A row read already keeps the time it was read.",
+          requestBody: { required: true, ...json(ref('MarkNotificationsReadRequest')) },
+          responses: { '204': { description: 'Read' }, ...errors(400, 401, 429) },
+        },
+      },
       '/conversations/{pair}': {
+        ...get('getConversation', 'One of your conversations, as the list shows it', 'Conversation', {
+          description: 'Its letter and your unread count, as the thread reads them. `404` for anyone but its two participants, whether it exists or not.',
+          parameters: [conversationParam],
+        }),
         delete: {
           operationId: 'deleteConversation',
           summary:
@@ -699,6 +844,109 @@ export function buildOpenApi(): Json {
           responses: { '204': { description: 'Removed (or it was not yours)' }, ...errors(400, 401) },
         },
       },
+      // --- Phase 2 social (2a-social)
+      '/client-config': {
+        get: {
+          operationId: 'getClientConfig',
+          summary: 'What an app asks at launch: the builds that must or should update, and which paths to take',
+          description:
+            'No sign-in needed; the same for everyone (`Cache-Control: public, s-maxage=60`, an `ETag`, `304` on a match). ' +
+            'A build below `minBuild` for its platform shows the update screen and goes no further; one below ' +
+            '`recommendedBuild` may say an update is waiting. `features`: each flag true takes the /api/v1 path, false the older one.',
+          security: [],
+          responses: { '200': { description: 'OK', ...json(ref('ClientConfig')) } },
+        },
+      },
+      '/users': get('getUsers', 'Profiles by id, at most 30, in the order asked', 'PersonList', {
+        description:
+          'Each id once, in the order asked; an account that is gone (deleted, or never was) comes back `gone` with nothing ' +
+          'else. A profile is public: a block changes nothing here. `429` past the hourly budget.',
+        parameters: [{ name: 'ids', in: 'query', required: true, description: 'User ids, comma-separated (1–30)', schema: { type: 'string' } }],
+      }, [400, 401, 429]),
+      '/me/bookmarks/{cardId}': {
+        put: {
+          operationId: 'putBookmark',
+          summary: 'Bookmark a card you may read (again: unchanged)',
+          description: '`404` for a card you may not read, exactly as GET /cards/{key} answers it. Your bookmarks are yours alone: no one is told.',
+          parameters: [pathParam('cardId', 'The card id')],
+          responses: { '204': { description: 'Bookmarked' }, ...errors(400, 401, 404, 429) },
+        },
+        delete: {
+          operationId: 'deleteBookmark',
+          summary: 'Take a bookmark back (whether or not there was one)',
+          parameters: [pathParam('cardId', 'The card id')],
+          responses: { '204': { description: 'Not bookmarked' }, ...errors(400, 401, 429) },
+        },
+      },
+      '/me/blocks': get('getBlocks', 'Everyone you blocked, the latest first', 'BlockList', {}, [401]),
+      '/me/blocks/{uid}': {
+        put: {
+          operationId: 'blockUser',
+          summary: 'Block someone: the connection ends and every pending invite between you is withdrawn, at once',
+          description: 'They are never told. Blocking again changes nothing; yourself is `400`.',
+          parameters: [pathParam('uid', 'Their user id')],
+          responses: { '204': { description: 'Blocked' }, ...errors(400, 401, 429) },
+        },
+        delete: {
+          operationId: 'unblockUser',
+          summary: 'Unblock someone: only the block goes (a connection it ended stays ended)',
+          parameters: [pathParam('uid', 'Their user id')],
+          responses: { '204': { description: 'Not blocked' }, ...errors(400, 401, 429) },
+        },
+      },
+      '/me/connections': get('getConnections', 'The people you are connected with, the latest first', 'ConnectionList', {}, [401]),
+      '/invites': get('getInvites', 'Legacy invites waiting for your answer (pending and before their date), the latest first', 'InviteList', {
+        parameters: [{ name: 'box', in: 'query', required: true, schema: { type: 'string', enum: ['incoming'] } }],
+      }, [400, 401]),
+      '/invites/{id}/decline': {
+        post: {
+          operationId: 'declineInvite',
+          summary: 'Say no to a legacy invite sent to you: it closes, and no one is told (again: unchanged)',
+          description: '`404` for an invite that is not yours to answer; `409` once it closed otherwise (accepted, withdrawn, expired).',
+          parameters: [pathParam('id', 'The invite id')],
+          responses: { '204': { description: 'Declined' }, ...errors(400, 401, 404, 409, 429) },
+        },
+      },
+      // --- end Phase 2 social (2a-social)
+      // --- Phase 3 sessions (ADR 0004)
+      '/auth/exchange': {
+        post: {
+          operationId: 'exchangeSession',
+          summary: "Trade a sign-in at the identity provider (a Firebase ID token) for Resonance's own tokens",
+          description:
+            'The token is checked as a write would check it (a disabled or revoked account is `401`). Answers a ' +
+            'short-lived access token — sent as the bearer credential, where a Firebase ID token is sent today; both ' +
+            'are accepted — and a refresh token. `userId` is the account id the sign-in always had. `503` where ' +
+            'sessions are not enabled: keep sending the Firebase ID token. `429` past the hourly budget.',
+          security: [],
+          requestBody: { required: true, ...json(ref('AuthExchangeRequest')) },
+          responses: { '200': { description: 'OK', ...json(ref('AuthSession')) }, ...errors(400, 401, 429, 503) },
+        },
+      },
+      '/auth/refresh': {
+        post: {
+          operationId: 'refreshSession',
+          summary: 'Trade a refresh token for the next access and refresh tokens (each refresh token is good once)',
+          description:
+            'A refresh token presented a second time is taken for stolen: every token of its session is revoked, and ' +
+            'this answers `401` (sign in again, then exchange). So does an account deleted, disabled or signed out ' +
+            'everywhere since. `503` where sessions are not enabled.',
+          security: [],
+          requestBody: { required: true, ...json(ref('AuthRefreshRequest')) },
+          responses: { '200': { description: 'OK', ...json(ref('AuthSession')) }, ...errors(400, 401, 429, 503) },
+        },
+      },
+      '/auth/logout': {
+        post: {
+          operationId: 'logoutSession',
+          summary: "End this device's session: its refresh token, and every one rotated from the same exchange, revoked",
+          description: 'The access token already handed out stands until it expires (at most 15 minutes). An unknown token answers the same.',
+          security: [],
+          requestBody: { required: true, ...json(ref('AuthRefreshRequest')) },
+          responses: { '204': { description: 'Logged out' }, ...errors(400) },
+        },
+      },
+      // --- end Phase 3 sessions
     },
     components: {
       securitySchemes: { firebaseIdToken: { type: 'http', scheme: 'bearer', bearerFormat: 'Firebase ID token' } },

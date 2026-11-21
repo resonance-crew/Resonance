@@ -10,7 +10,7 @@ import { fakeAdminDb, type FakeAdminDb } from '@/../test/fakeAdminDb';
 let fake: FakeAdminDb;
 vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => fake.db }));
 const dailyRecommendations = vi.fn();
-vi.mock('@/lib/recommend/daily', () => ({ dailyRecommendations: (...a: unknown[]) => dailyRecommendations(...a) }));
+vi.mock('@/server/app/recommendDaily', () => ({ dailyRecommendationsIn: (...a: unknown[]) => dailyRecommendations(...a) }));
 vi.mock('next/server', async (importOriginal) => ({ ...(await importOriginal<typeof import('next/server')>()), after: vi.fn() }));
 
 const { after } = await import('next/server');

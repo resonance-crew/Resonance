@@ -364,7 +364,11 @@ struct CardEndRow: View {
                 guard let bookmarks = session.bookmarks else { return }
                 let saving = bookmark.flip()
                 if saving { session.toasts.show(L10n.Card.saved) }
-                Task { bookmark.settled(saving: saving, result: try? await bookmarks.toggle(cardId)) }
+                Task {
+                    // The API path says what the reader wants (nothing read first); the older one flips the document.
+                    let result = bookmarks.usesAPI ? try? await bookmarks.set(cardId, saved: saving) : try? await bookmarks.toggle(cardId)
+                    bookmark.settled(saving: saving, result: result)
+                }
             }
             .sensoryFeedback(.selection, trigger: bookmark.active)
         }

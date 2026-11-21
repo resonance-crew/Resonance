@@ -762,6 +762,8 @@ class WriteModel(
         return working(BusyVerb.Publish, failed) {
             val id = saveNow()
             if (id == null || values != lastSaved) return@working failedSave(failed)
+            // The server publishes what it holds: everything written to the card is there first (a save a last launch left too).
+            drafts?.settle(id)
             val result = writing.publish(id)
             closed = true
             onWrote(id)
@@ -788,6 +790,7 @@ class WriteModel(
             saveJob?.cancel()
             save(force = true)
             if (values != lastSaved || lastFailure != null) return@working failedSave(failed)
+            drafts?.settle(id)
             val result = writing.applyEdit(id)
             if (!result.applied) {
                 // The buffer was gone by then (applied or dropped elsewhere): the words on screen may not be

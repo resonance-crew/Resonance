@@ -6,16 +6,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
-vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
+const DB = {};
+vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => DB }));
 const acceptInvite = vi.fn();
-vi.mock('@/lib/api/v1/invites', () => ({ acceptInvite: (...a: unknown[]) => acceptInvite(...a) }));
+vi.mock('@/server/app/invites', () => ({ acceptInviteIn: (...a: unknown[]) => acceptInvite(...a) }));
 const ringAfter = vi.fn();
-vi.mock('@/lib/push/ring', () => ({ ringAfter: (...a: unknown[]) => ringAfter(...a) }));
+vi.mock('@/server/app/pushAfter', () => ({ ringAfterIn: (...a: unknown[]) => ringAfter(...a) }));
 const spend = vi.fn();
-vi.mock('@/lib/api/rateLimit', () => ({ spend: (...a: unknown[]) => spend(...a) }));
+const spendAll = vi.fn();
+vi.mock('@/server/infra/firestore/rateLimit', () => ({
+  firestoreRateLimiter: () => ({ spend: (...a: unknown[]) => spend(...a), spendAll: (...a: unknown[]) => spendAll(...a), limited: async () => null }),
+}));
 
 const { POST } = await import('./route');
 const { ApiFailure } = await import('@/lib/api/v1/http');
+const { serverCtx } = await import('@/server/ctx');
+// The route's context: serverCtx() on the mocked database, built once per instance.
+const CTX = serverCtx();
 const accept = (id: string) =>
   POST(new Request(`http://localhost/api/v1/invites/${id}/accept`, { method: 'POST' }), { params: Promise.resolve({ id }) });
 
@@ -31,9 +38,9 @@ describe('POST /api/v1/invites/{id}/accept', () => {
     const res = await accept('i1');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ connectionId: 'alice_bob' });
-    expect(spend).toHaveBeenCalledWith({}, 'alice', 'invite');
-    expect(acceptInvite).toHaveBeenCalledWith({}, 'alice', 'i1');
-    expect(ringAfter).toHaveBeenCalledWith({}, 'n1');
+    expect(spend).toHaveBeenCalledWith('alice', 'invite');
+    expect(acceptInvite).toHaveBeenCalledWith(CTX, 'alice', 'i1');
+    expect(ringAfter).toHaveBeenCalledWith(CTX, 'n1');
   });
 
   it('is 429 over budget, accepting nothing', async () => {

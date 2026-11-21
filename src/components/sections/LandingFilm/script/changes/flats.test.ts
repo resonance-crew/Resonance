@@ -61,7 +61,8 @@ const oldSeen = (info: ChangeInfo, pl: ChangePlane, m: PlaneMove) => m.alpha > 0
 /** A new plane is on the stage: up out of the floor (a far one, and the headland, out of the sea's horizon). */
 const newSeen = (info: ChangeInfo, pl: ChangePlane, m: PlaneMove, horizon: number) => m.alpha > 0.05 && pl.top + m.y < (pl.backdrop ? horizon : LIP);
 
-describe('flats (the paper theatre)', () => {
+// (every p on every screen: 60 s, as changes.test.ts says)
+describe('flats (the paper theatre)', { timeout: 60_000 }, () => {
   it('swings each flat at most 1.5°, and never at rest', () => {
     for (const { info, tag } of INFOS) {
       for (const p of PS) {

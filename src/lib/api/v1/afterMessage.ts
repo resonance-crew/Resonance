@@ -1,10 +1,19 @@
-import { after } from 'next/server';
-import type { Firestore } from 'firebase-admin/firestore';
+import { nextAfter } from '@/server/infra/next/after';
+import type { AdminDb } from '@/server/infra/firestore/db';
+import type { AfterResponse } from '@/server/ports/after';
 import { getAdminMessaging } from '@/lib/db/firestore/admin';
 import { unfurlMessage } from '@/lib/links/preview';
 import { firstLink } from '@/lib/links/url';
 import { pushMessage, pushUnsend, type MessagePush } from '@/lib/push/chat';
 import type { SentMessage } from './conversations';
+
+type Firestore = AdminDb;
+
+/**
+ * Where the work after the response goes: ctx.later (src/server/ports/after),
+ * Next's `after()` unless a caller hands its own.
+ */
+const later = (work: () => Promise<void>, label: string, queue: AfterResponse) => queue.later(work, label);
 
 /** Ring a message's recipient; logs and gives up on any failure (it runs after the response). */
 function ring(db: Firestore, push: MessagePush): Promise<unknown> {
@@ -24,17 +33,21 @@ function ring(db: Firestore, push: MessagePush): Promise<unknown> {
  * are its fallback, never unfurled). An album's later pictures (`silent`)
  * ring nothing — the first rang for them all.
  */
-export function afterMessageSent(db: Firestore, sent: SentMessage, text: string) {
+export function afterMessageSent(db: Firestore, sent: SentMessage, text: string, queue: AfterResponse = nextAfter()) {
   const { push } = sent;
   if (sent.duplicate || !push) return;
   const unfurl = firstLink(text) !== null;
   if (sent.silent && !unfurl) return;
-  after(async () => {
-    await Promise.all([
-      sent.silent ? null : ring(db, push),
-      unfurl ? unfurlMessage(db, push.conversationId, push.messageId).catch((e) => console.error('[unfurl]', push.messageId, e)) : null,
-    ]);
-  });
+  later(
+    async () => {
+      await Promise.all([
+        sent.silent ? null : ring(db, push),
+        unfurl ? unfurlMessage(db, push.conversationId, push.messageId).catch((e) => console.error('[unfurl]', push.messageId, e)) : null,
+      ]);
+    },
+    'afterMessage',
+    queue,
+  );
 }
 
 /**
@@ -43,11 +56,15 @@ export function afterMessageSent(db: Firestore, sent: SentMessage, text: string)
  * links are not unfurled. Nothing for a note on an anonymous card — its bell
  * row rings instead (`ringAfter`).
  */
-export function afterNoteSent(db: Firestore, push: MessagePush | null) {
+export function afterNoteSent(db: Firestore, push: MessagePush | null, queue: AfterResponse = nextAfter()) {
   if (!push) return;
-  after(async () => {
-    await ring(db, push);
-  });
+  later(
+    async () => {
+      await ring(db, push);
+    },
+    'afterNote',
+    queue,
+  );
 }
 
 /**
@@ -55,11 +72,15 @@ export function afterNoteSent(db: Firestore, push: MessagePush | null) {
  * recipient's phone, so its notification stops showing what the message said
  * (pushUnsend). Nothing for a message that was unsent already.
  */
-export function afterMessageUnsent(db: Firestore, push: MessagePush | null) {
+export function afterMessageUnsent(db: Firestore, push: MessagePush | null, queue: AfterResponse = nextAfter()) {
   if (!push) return;
-  after(async () => {
-    await getAdminMessaging()
-      .then((messaging) => pushUnsend(db, push, messaging))
-      .catch((e) => console.error('[push] unsend', push.messageId, e));
-  });
+  later(
+    async () => {
+      await getAdminMessaging()
+        .then((messaging) => pushUnsend(db, push, messaging))
+        .catch((e) => console.error('[push] unsend', push.messageId, e));
+    },
+    'afterUnsend',
+    queue,
+  );
 }

@@ -20,6 +20,18 @@ public enum AppCheckHeader {
     public static var current: String? { token.withLock { $0 } }
 }
 
+extension URLRequest {
+    /// Adds `X-Firebase-AppCheck` when `token` is at hand (nil or empty: the request goes
+    /// without — App Check is only watched, so a call never waits for or fails on one). The
+    /// web's routes outside the contract (/api/upload, /api/generate-image, /api/cards/*,
+    /// /api/account/*) take it here as v1 takes it from `AppCheckMiddleware`, the way
+    /// Android's one OkHttp client gives it to every /api/ call.
+    mutating func attachAppCheck(_ token: String?) {
+        guard let token, !token.isEmpty else { return }
+        setValue(token, forHTTPHeaderField: AppCheckHeader.name.rawName)
+    }
+}
+
 /// Adds `X-Firebase-AppCheck` when the app has a token at hand.
 struct AppCheckMiddleware: ClientMiddleware {
     let token: @Sendable () -> String?

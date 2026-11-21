@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import { ApiFailure, parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
-import { removeReaction, setReaction } from '@/lib/api/v1/messageActions';
 import { ConversationIdParam, MessageIdParam, SetReactionRequest } from '@/lib/api/v1/schemas';
-import { getAdminDb } from '@/lib/db/firestore/admin';
-import { spend } from '@/lib/api/rateLimit';
+import { serverCtx } from '@/server/ctx';
+import { removeReactionIn, setReactionIn } from '@/server/app/messages';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,9 +20,9 @@ export const PUT = withUser(async (user, req, ctx: Ctx) => {
     throw new ApiFailure('invalid_request', 'The body must be JSON.');
   });
   const input = parse(SetReactionRequest, body);
-  const db = getAdminDb();
-  await spend(db, user.id, 'react');
-  await setReaction(db, user.id, pair, messageId, input);
+  const server = serverCtx();
+  await server.limits.spend(user.id, 'react');
+  await setReactionIn(server, user.id, pair, messageId, input);
   return new NextResponse(null, { status: 204 });
 });
 
@@ -31,6 +30,6 @@ export const PUT = withUser(async (user, req, ctx: Ctx) => {
 export const DELETE = withUser(async (user, _req, ctx: Ctx) => {
   const pair = parse(ConversationIdParam, await routeParam(ctx, 'pair'));
   const messageId = parse(MessageIdParam, await routeParam(ctx, 'messageId'));
-  await removeReaction(getAdminDb(), user.id, pair, messageId);
+  await removeReactionIn(serverCtx(), user.id, pair, messageId);
   return new NextResponse(null, { status: 204 });
 });

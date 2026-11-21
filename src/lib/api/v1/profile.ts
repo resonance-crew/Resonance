@@ -1,21 +1,17 @@
-import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import type { AuthUser } from '@/lib/auth/types';
-import { handleKey, handleRef, handleTakenByOther, holdHandle, reservable, reserveHandle } from '@/lib/db/firestore/handles';
-import { avatarColorFor } from '@/lib/design/avatarColors';
-import { hasPenName } from './conversations';
-import { ApiFailure } from './http';
-import { getMe } from './service';
+import { createProfileIn, handleAvailableIn, updateProfileIn } from '@/server/app/profile';
+import { ctxFor } from '@/server/infra/firestore/ctx';
+import type { AdminDb } from '@/server/infra/firestore/db';
 import type { CreateProfileInput, MeBody, UpdateProfileInput } from './schemas';
 
 // Profile writes, for the web and the apps alike. A pen name is reserved in
 // the same transaction as the profile that takes it (handles/{name}, see
 // lib/db/firestore/handles), so two people can't take the same name at once.
+// The services are src/server/app/profile.ts; these are their legacy facades
+// on a given Firestore.
 
-const taken = () => new ApiFailure('conflict', 'That pen name is taken.');
-
-export async function handleAvailable(db: Firestore, uid: string, handle: string): Promise<boolean> {
-  if (!reservable(handleKey(handle))) return false;
-  return !(await handleTakenByOther(db, uid, handle));
+export function handleAvailable(db: AdminDb, uid: string, handle: string): Promise<boolean> {
+  return handleAvailableIn(ctxFor(db), uid, handle);
 }
 
 /**
@@ -29,51 +25,8 @@ export async function handleAvailable(db: Firestore, uid: string, handle: string
  * Reaching anyone takes a pen name (hasPenName), so the web sends such a
  * profile back here to choose one. `named` says the profile has a new name.
  */
-export async function createProfile(
-  db: Firestore,
-  user: AuthUser,
-  input: CreateProfileInput,
-): Promise<{ me: MeBody; created: boolean; named: boolean }> {
-  const ref = db.doc(`users/${user.id}`);
-  const outcome = await db.runTransaction(async (tx): Promise<'kept' | 'named' | 'created'> => {
-    const [existing, isTaken] = await Promise.all([tx.get(ref), handleTakenByOther(db, user.id, input.handle, tx)]);
-    if (existing.exists && hasPenName(existing)) return 'kept';
-    if (isTaken) throw taken();
-    if (existing.exists) {
-      const initials = existing.get('initials');
-      tx.update(ref, {
-        handle: input.handle,
-        handleLower: handleKey(input.handle),
-        handleChangedAt: FieldValue.serverTimestamp(),
-        region: input.region,
-        primaryLocale: input.primaryLocale,
-        ...(typeof initials === 'string' && initials.trim() ? {} : { initials: input.handle.slice(0, 2).toUpperCase() }),
-      });
-      reserveHandle(db, tx, user.id, input.handle);
-      return 'named';
-    }
-    const avatarSeed = String(Math.abs([...user.id].reduce((sum, ch) => sum + ch.charCodeAt(0), 0)));
-    tx.set(ref, {
-      handle: input.handle,
-      handleLower: handleKey(input.handle),
-      bio: '',
-      region: input.region,
-      primaryLocale: input.primaryLocale,
-      autoTranslateTo: input.primaryLocale === 'zh-TW' ? ['en'] : ['zh-TW'],
-      // No one is verified yet: the badge waits for a real verification process (a verified sign-in email is not one).
-      verified: false,
-      phoneHash: '',
-      avatarSeed,
-      initials: input.handle.slice(0, 2).toUpperCase(),
-      // Their avatar's own colour until they upload a photo, one of a few, by uid (lib/design/avatarColors).
-      accentColor: avatarColorFor(user.id),
-      joinedAt: FieldValue.serverTimestamp(),
-      handleChangedAt: FieldValue.serverTimestamp(),
-    });
-    reserveHandle(db, tx, user.id, input.handle);
-    return 'created';
-  });
-  return { me: await getMe(db, user.id), created: outcome === 'created', named: outcome !== 'kept' };
+export function createProfile(db: AdminDb, user: AuthUser, input: CreateProfileInput): Promise<{ me: MeBody; created: boolean; named: boolean }> {
+  return createProfileIn(ctxFor(db), user, input);
 }
 
 /**
@@ -84,38 +37,6 @@ export async function createProfile(
  * the same reservation, with the name as now written). Returns the previous
  * pen name when it changed, so the caller can refresh the old profile page too.
  */
-export async function updateProfile(db: Firestore, uid: string, input: UpdateProfileInput): Promise<{ me: MeBody; previousHandle: string | null }> {
-  const ref = db.doc(`users/${uid}`);
-  const previousHandle = await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    if (!snap.exists) throw new ApiFailure('not_found', 'This account has no profile yet.');
-    const current = String(snap.get('handle') ?? '');
-    const patch: Record<string, unknown> = {};
-    let renamed: string | null = null;
-    if (input.handle != null && input.handle !== current) {
-      const oldKey = handleKey(current);
-      const [isTaken, oldReservation] = await Promise.all([
-        handleTakenByOther(db, uid, input.handle, tx),
-        oldKey && reservable(oldKey) && oldKey !== handleKey(input.handle) ? tx.get(handleRef(db, current)) : null,
-      ]);
-      if (isTaken) throw taken();
-      patch.handle = input.handle;
-      patch.handleLower = handleKey(input.handle);
-      patch.handleChangedAt = FieldValue.serverTimestamp();
-      renamed = current;
-      // Release the old name — only ever this account's own reservation — into a hold for this account: links
-      // that named it by the old name must not reach someone who took it at once (handles.ts).
-      if (oldReservation?.exists && oldReservation.get('uid') === uid) {
-        tx.delete(oldReservation.ref);
-        holdHandle(db, current, uid, tx);
-      }
-      reserveHandle(db, tx, uid, input.handle);
-    }
-    if (input.bio != null) patch.bio = input.bio;
-    if (input.region != null) patch.region = input.region;
-    if (input.primaryLocale != null) patch.primaryLocale = input.primaryLocale;
-    if (Object.keys(patch).length) tx.update(ref, patch);
-    return renamed;
-  });
-  return { me: await getMe(db, uid), previousHandle };
+export function updateProfile(db: AdminDb, uid: string, input: UpdateProfileInput): Promise<{ me: MeBody; previousHandle: string | null }> {
+  return updateProfileIn(ctxFor(db), uid, input);
 }

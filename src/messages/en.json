@@ -290,6 +290,13 @@
       "main": "Main navigation"
     },
     "busy": "In progress",
+    "update": {
+      "title": "Time to update",
+      "body": "This version of Resonance no longer works with the service, update it to keep reading and writing",
+      "action": "Update",
+      "available": "A new version of Resonance is ready",
+      "later": "Later"
+    },
     "notifications": {
       "emptyTitle": "No notifications yet",
       "empty": "When someone resonates with your card or leaves you a note, you'll see it here",

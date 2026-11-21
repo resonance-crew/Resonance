@@ -93,6 +93,19 @@ public struct MessageHistory<Cursor> {
         return upsert(page)
     }
 
+    /// Messages newer than the live window held (the API's `after=` catch-up, read when the thread moved on by
+    /// more than a window since it was last asked): they join what is held, and whether there is anything older
+    /// stays as it was. Returns whether anything new came in.
+    @discardableResult
+    public mutating func mergeNewer(_ entries: [Entry]) -> Bool {
+        upsert(entries)
+    }
+
+    /// Whether a window shares a message with what is held (else merging it starts the history afresh).
+    public func overlaps(_ window: [Entry]) -> Bool {
+        byId.isEmpty || window.isEmpty || window.contains { byId[$0.message.id] != nil }
+    }
+
     /// Forgets everything (the conversation is gone, or the listener lost track of it).
     public mutating func clear() {
         byId = [:]

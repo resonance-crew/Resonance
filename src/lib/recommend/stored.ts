@@ -1,5 +1,7 @@
-import { Timestamp, type DocumentData } from 'firebase-admin/firestore';
 import type { RecommendationItem } from '@/lib/db/types';
+
+/** A stored row, as a repository hands it over (a Firestore document's data, a memory row). */
+type Data = Record<string, unknown>;
 
 /**
  * What `recommendations/{uid}` holds, read without the recommender itself:
@@ -70,12 +72,17 @@ export function countShown(prev: ShownCounts, cardIds: string[], day: string): S
   return Object.fromEntries(kept);
 }
 
-const millis = (v: unknown) => (v instanceof Timestamp ? v.toMillis() : 0);
+/** A stored time in ms: a Firestore Timestamp (anything with `toMillis`) or a Date (a memory row); 0 otherwise. */
+const millis = (v: unknown): number => {
+  if (v instanceof Date) return v.getTime();
+  const toMillis = (v as { toMillis?: unknown } | null)?.toMillis;
+  return typeof toMillis === 'function' ? Number(toMillis.call(v)) : 0;
+};
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-export function readStored(data: DocumentData | undefined): StoredRecommendations | null {
+export function readStored(data: Data | undefined): StoredRecommendations | null {
   if (!data) return null;
-  const items = Array.isArray(data.items)
+  const items: RecommendationItem[] = Array.isArray(data.items)
     ? (data.items as unknown[]).filter(
         (i): i is RecommendationItem =>
           !!i && typeof (i as RecommendationItem).cardId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test((i as RecommendationItem).cardId),
@@ -91,4 +98,21 @@ export function readStored(data: DocumentData | undefined): StoredRecommendation
     warm: data.warm === true,
     coldStart: data.coldStart === true,
   };
+}
+
+const idOk = (id: unknown): id is string => typeof id === 'string' && id.length > 0 && !id.includes('/');
+const finite = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? n : 0);
+
+/** `recommendations/{uid}.shown`, read defensively: `{ [cardId]: { n, lastDay } }`. */
+export function shownCounts(data: Data | undefined): ShownCounts {
+  const raw = data?.shown;
+  if (!raw || typeof raw !== 'object') return {};
+  const out: ShownCounts = {};
+  for (const [cardId, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!idOk(cardId) || !v || typeof v !== 'object') continue;
+    const n = Math.floor(finite((v as Data).n));
+    const lastDay = (v as Data).lastDay;
+    if (n > 0 && typeof lastDay === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(lastDay)) out[cardId] = { n, lastDay };
+  }
+  return out;
 }

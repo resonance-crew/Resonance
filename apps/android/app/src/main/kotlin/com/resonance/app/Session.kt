@@ -53,6 +53,17 @@ import com.resonance.app.ui.share.ShareFiles
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import com.resonance.kit.api.InboxApi
+import com.resonance.kit.api.SocialApi
+import com.resonance.kit.config.ClientConfigApi
+import com.resonance.kit.config.ClientConfigStore
+import com.resonance.kit.config.Features
+import com.resonance.kit.config.UpdateNeed
+import com.resonance.kit.realtime.SignalHub
+import com.resonance.kit.writing.DraftOutbox
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -97,6 +108,10 @@ class Session(
     pictureLoader: ((OkHttpClient) -> ImageLoader)? = null,
     /** Reading reports not sent yet, per account (reading-reports.xml, round 26 §U7): emptied with the account. */
     private val readingReports: com.resonance.app.ui.ReadingReports? = null,
+    /** This build (versionCode), against client-config's `minBuild.android` / `recommendedBuild.android`. */
+    private val appBuild: Int = BuildConfig.VERSION_CODE,
+    /** The writer's words on their way through the contract, per account (draft-outbox.xml): emptied with the account. */
+    private val draftOutboxPrefs: SharedPreferences? = null,
 ) {
     enum class Phase { Restoring, SignedOut, SignedIn }
     sealed interface Profile {
@@ -154,8 +169,38 @@ class Session(
     private val notificationSettings = NotificationSettingsApi(api, http)
     val profiles = ProfileApi(api, http)
     private val safetyApi = SafetyApi(api, http)
-    val notifications = NotificationsStore()
-    val conversations = ConversationsStore()
+    /** Conversations, their messages and the bell through the contract (Phase 2, `apiInbox` / `apiBell`). */
+    val inbox = InboxApi(api, http)
+    /** People, bookmarks, blocks, connections, hints and the avatar through the contract (Phase 2, `apiSocial`). */
+    val social = SocialApi(api, http)
+    /** Drafts, pending edits and the thought map through the contract (Phase 2, `apiDrafts` / `apiThoughtMap`). */
+    val writer = com.resonance.kit.api.WriterApi(api, http)
+    /**
+     * client-config (GET /api/v1/client-config) as this install last read it — which paths go through
+     * /api/v1 instead of Firestore, and whether this build is still wanted ([updateNeed]). Asked at
+     * launch and back in the foreground ([enteredForeground], throttled); kept for the next cold start.
+     */
+    val clientConfig = ClientConfigStore(
+        fetch = ClientConfigApi(api, http)::fetch,
+        storage = object : ClientConfigStore.Storage {
+            override fun read(): String? = prefs.getString(CLIENT_CONFIG_KEY, null)
+            override fun write(json: String) = prefs.edit().putString(CLIENT_CONFIG_KEY, json).apply()
+        },
+    )
+    /** client-config's switches as they stand now (never read: every path as before). */
+    val features: Features get() = clientConfig.features
+    /** Whether this build may go on (below `minBuild.android`: only the way to the store). */
+    val updateNeed: StateFlow<UpdateNeed> = clientConfig.config.map { UpdateNeed.of(it, appBuild) }
+        .stateIn(MainScope(), SharingStarted.Eagerly, UpdateNeed.of(clientConfig.config.value, appBuild))
+    /** `signals/{uid}`'s counters, which the stores on the API path pull on. */
+    val signals = SignalHub()
+    private val signalListener = SignalListener(signals)
+    /** Whether the app is on screen: the stores' minute safety pull runs only then. */
+    private val _onScreen = MutableStateFlow(true)
+    /** The API path's clients and switches, for the live lists and the thread. */
+    val remote = LiveRemote(inbox, social, signals, _onScreen) { features }
+    val notifications = NotificationsStore().also { it.remote = remote }
+    val conversations = ConversationsStore().also { it.remote = remote }
     /**
      * Cards this account has seen, drawn at once when a page opens and then read again
      * (per account: emptied when someone signs in or out, after the person's own card
@@ -224,8 +269,13 @@ class Session(
      * The account's thought map, kept between visits so opening it again within a while shows it
      * at once without reading a hundred cards ([ThoughtMapStore.open]).
      */
-    var thoughtMap = ThoughtMapStore(reading)
+    var thoughtMap = newThoughtMap()
         private set
+
+    /** A thought map for the account now: its own changes' queue, on the path client-config says at each read. */
+    private fun newThoughtMap() = ThoughtMapStore(reading).also {
+        it.remote = ThoughtMapStore.Remote(writer, signals, _onScreen) { features }
+    }
 
     /** A write that goes straight to Firestore (a bookmark): what the API reads back is read afresh. */
     fun noteOwnWrite() = httpCaching.invalidate()
@@ -250,10 +300,40 @@ class Session(
     private val _signedInUid = MutableStateFlow<String?>(null)
     val signedInUid: StateFlow<String?> = _signedInUid
 
-    val safety: SafetyService? get() = uid?.let { SafetyService(it, safetyApi) }
-    val bookmarks: BookmarkService? get() = uid?.let(::BookmarkService)
-    val drafts: DraftService? get() = uid?.let(::DraftService)
-    val hints: HintService? get() = uid?.let { HintService(it, prefs) }
+    val safety: SafetyService? get() = uid?.let { SafetyService(it, safetyApi, social.takeIf { features.apiSocial }, conversations::graphChanged) }
+    val bookmarks: BookmarkService? get() = uid?.let { BookmarkService(it, if (features.apiSocial) BookmarkService.Api(social, reading) else null) }
+    val drafts: DraftService? get() = uid?.let { DraftService(it, draftOutbox?.takeIf { features.apiDrafts }?.let { o -> DraftService.Api(writer, o) }) }
+
+    /**
+     * The signed-in account's [DraftOutbox] (client-config's `apiDrafts`): started at sign-in whatever the
+     * switch says now, so words a last launch left on their way still go; stopped and emptied with the account.
+     */
+    private var draftOutbox: DraftOutbox? = null
+
+    private fun outboxFor(who: String): DraftOutbox = DraftOutbox(
+        storage = object : DraftOutbox.Storage {
+            private val key = outboxKey(who)
+            override fun read(): String? = (draftOutboxPrefs ?: prefs).getString(key, null)
+            override fun write(value: String?) {
+                (draftOutboxPrefs ?: prefs).edit().apply { if (value == null) remove(key) else putString(key, value) }.apply()
+            }
+        },
+        sender = DraftService.Sender(writer, writing),
+        scope = scope,
+        log = { if (BuildConfig.DEBUG) android.util.Log.d("DraftOutbox", it) },
+    )
+
+    private fun outboxKey(who: String) = "outbox:$who"
+
+    /**
+     * The device has a network again (ResonanceApp's default-network callback): what waits on its way —
+     * the drafts' outbox, the map's changes — goes now, not at the end of a retry wait of up to 30 s.
+     */
+    fun networkBack() {
+        draftOutbox?.kick()
+        thoughtMap.queue?.kick()
+    }
+    val hints: HintService? get() = uid?.let { HintService(it, prefs, if (features.apiSocial) HintService.Api(social, { me }, ::setMe) else null) }
     /** Notes on their way from the account (round 21): their client ids, and a failed one's 再寄一次. */
     val noteSends = NoteSends()
 
@@ -330,6 +410,14 @@ class Session(
         PushCenter.onToken = { scope.launch { registerPush() } }
         // A block (from any device) hides cards: the screens showing cards read them again, past the caches.
         conversations.onBlocksChanged = { noteCardChange() }
+        // client-config changed a switch (its first answer on this install, or the server sending the app back):
+        // the live lists start again on the path it says.
+        scope.launch {
+            clientConfig.config.map { Features.of(it) }.distinctUntilChanged().drop(1).collect {
+                val who = uid
+                if (who != null && _phase.value == Phase.SignedIn) startLive(who)
+            }
+        }
         // The block list as Firestore says it, kept for the next cold start's lists.
         scope.launch {
             conversations.blockedIds.collect { ids ->
@@ -347,12 +435,16 @@ class Session(
             uid = next
             _signedInUid.value = next
             cardCache.clear()
-            thoughtMap = ThoughtMapStore(reading)
+            thoughtMap.queue?.stop()
+            thoughtMap = newThoughtMap()
+            draftOutbox?.stop()
+            draftOutbox = next?.let(::outboxFor)?.also { it.start() }
             writerChange = null
             // Signed out (deletion signs out too) or someone else signed in: nothing of the account stays.
             // Its listeners stop first; the next account's start once Firestore's copy of it is gone.
             notifications.stop()
             conversations.stop()
+            signalListener.stop()
             outboxes.clear()
             noteSends.clear()
             val forgetting = previous?.let(::forget)
@@ -371,12 +463,7 @@ class Session(
             _phase.value = if (next == null) Phase.SignedOut else Phase.SignedIn
             if (next != null) {
                 _signedOutForDeletion.value = false
-                val listen = {
-                    if (uid == next) {
-                        notifications.start(next)
-                        conversations.start(next)
-                    }
-                }
+                val listen = { if (uid == next) startLive(next) }
                 if (forgetting == null) listen() else scope.launch { forgetting.join(); listen() }
                 scope.launch { restoreKept(next) }
                 scope.launch { runCatching { onSignedIn() } }
@@ -385,6 +472,13 @@ class Session(
                 scope.launch { sendPendingReadings(next) }
             }
         }
+    }
+
+    /** The live lists (and the one signal listener), on the paths client-config says now. */
+    private fun startLive(who: String) {
+        if (features.signals) signalListener.start(who) else signalListener.stop()
+        notifications.start(who)
+        conversations.start(who)
     }
 
     /** The ID token; a forced refresh that fails for good signs the person out. */
@@ -427,6 +521,9 @@ class Session(
         }
         // The notes it wrote and didn't send: words to someone, kept for this account alone.
         noteDraftStore?.forget(who)
+        // Its drafts' words not sent yet, as Firestore's own queue of them goes below — at once, not in a coroutine
+        // that could run after the same account signed in again and started its outbox from what was kept.
+        (draftOutboxPrefs ?: prefs).edit().remove(outboxKey(who)).apply()
         // How it read cards, not sent yet (round 26 §U7).
         readingReports?.forget(who)
         selfFace = null
@@ -448,7 +545,10 @@ class Session(
     private val reconnects = ForegroundReconnect(reconnect = AppFirebase::reconnect)
 
     /** The app left the screen (`at`: elapsed time, sleep counted); how long it stays away decides what [enteredForeground] does. */
-    fun enteredBackground(at: Long = SystemClock.elapsedRealtime()) = reconnects.left(at)
+    fun enteredBackground(at: Long = SystemClock.elapsedRealtime()) {
+        _onScreen.value = false
+        reconnects.left(at)
+    }
 
     /**
      * The app came back to the foreground: after a while away Firestore's streams start afresh, so the
@@ -457,9 +557,15 @@ class Session(
      */
     fun enteredForeground(now: Long = System.currentTimeMillis(), at: Long = SystemClock.elapsedRealtime()) {
         _foregrounded.value = now
+        _onScreen.value = true
+        // client-config: at launch (the first start), then at most every few minutes.
+        scope.launch { clientConfig.refresh() }
         reconnects.cameBack(at, signedIn = _phase.value == Phase.SignedIn)
         // Live lists whose listener failed (or whose people couldn't be read) listen again.
         if (_phase.value == Phase.SignedIn) {
+            // Words that waited offline go now rather than at their next retry.
+            draftOutbox?.kick()
+            signalListener.resume()
             notifications.resume()
             conversations.resume()
         }
@@ -531,6 +637,12 @@ class Session(
     suspend fun setAvatar(jpeg: ByteArray) {
         val who = uid ?: throw IllegalStateException("Signed out")
         val url = writing.upload(jpeg, "avatar.jpg", "image/jpeg", purpose = ProfilePhoto.PURPOSE)
+        if (features.apiSocial) {
+            // PATCH /me answers the profile as it now is.
+            val me = social.setAvatar(url)
+            if (uid == who) setMe(me)
+            return
+        }
         AppFirebase.db.collection("users").document(who).set(ProfilePhoto.fields(url), SetOptions.merge()).await()
         noteOwnWrite()
         loadMe()
@@ -747,6 +859,8 @@ class Session(
 
     companion object {
         const val LANGUAGE_KEY = "appLanguage"
+        /** Where the last client-config answer is kept (the device's, not the account's: it outlives a sign-out). */
+        private const val CLIENT_CONFIG_KEY = "clientConfig"
     }
 
     private suspend fun signIn(work: suspend () -> Unit) {

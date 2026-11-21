@@ -18,15 +18,15 @@ vi.mock('next/server', async (orig) => ({
   after: (fn: () => unknown) => void afterWork.push(Promise.resolve().then(fn)),
 }));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
-vi.mock('@/lib/api/rateLimit', () => ({ spend: async () => {} }));
-vi.mock('@/lib/push/ring', () => ({ ringAfter: () => {} }));
-vi.mock('@/lib/push/connectionCards', () => ({ announceNewCard: async () => {} }));
+vi.mock('@/server/infra/firestore/rateLimit', () => ({ firestoreRateLimiter: () => ({ spend: async () => {}, spendAll: async () => {}, limited: async () => null }) }));
+vi.mock('@/server/app/pushAfter', () => ({ ringAfterIn: () => {}, announceNewCardIn: async () => {} }));
 vi.mock('@/lib/recommend/indexCard', () => ({ indexCard: async () => ({ indexed: true }) }));
-vi.mock('@/lib/links/cardLinks', () => ({ unfurlCardLinks: async () => {} }));
+vi.mock('@/server/app/links', async (orig) => ({ ...(await orig<object>()), unfurlCardLinksIn: async () => {} }));
 /** Publishing itself is the publish suites' (apiV1Publish); here it stamps the card as the service would. */
-vi.mock('@/lib/api/v1/publish', () => ({
-  publishCard: async (db: FakeAdminDb['db'], _uid: string, id: string) => {
-    await db.doc(`cards/${id}`).update({ publishedAt: Timestamp.fromDate(new Date('2026-11-15T00:00:00Z')) });
+vi.mock('@/server/app/publish', async (orig) => ({
+  ...(await orig<object>()),
+  publishCardIn: async (_ctx: unknown, _uid: string, id: string) => {
+    await fake.db.doc(`cards/${id}`).update({ publishedAt: Timestamp.fromDate(new Date('2026-11-15T00:00:00Z')) });
     return { id, slug: 'grandmas-plums', firstPublish: false, notificationId: null, pendingSlug: null };
   },
 }));

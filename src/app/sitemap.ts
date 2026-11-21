@@ -1,52 +1,16 @@
 import type { MetadataRoute } from 'next';
-import { Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { routing } from '@/i18n/routing';
-import { properlyPublished } from '@/lib/api/v1/service';
-import { blankBySummary, LISTING_FIELDS, SUMMARY_FIELDS } from '@/lib/api/v1/summary';
-import { unlistedCard } from '@/lib/cards/blank';
-import { getAdminDb } from '@/lib/db/firestore/admin';
 import { POLICY_PAGES, SITE_PAGES, SITEMAP_MAX_CARDS } from '@/lib/seo';
 import { siteUrl } from '@/lib/site';
+import { serverCtx } from '@/server/ctx';
+import type { SitemapCard } from '@/server/ports/repos/cards';
 
 // Built with the deployment, then again at most once an hour (on the next
 // request after that, ISR). Paths that take a listable card out of public
 // view drop it sooner (revalidateLocalized).
 export const revalidate = 3600;
 
-interface Listed {
-  slug: string;
-  lastModified: Date;
-}
-
-/**
- * The newest public, published cards that name no one as anonymous — what a
- * signed-out reader's card page shows with its story. Nothing else is
- * listed: the query asks for exactly these and each document is checked
- * again, so a card that is private, connections-only, anonymous, a draft,
- * stamped by hand (properlyPublished), still without a slug or blank never is.
- */
-async function listedCards(db: Firestore): Promise<Listed[]> {
-  const snap = await db
-    .collection('cards')
-    .where('visibility', '==', 'public')
-    .where('anonymous', '==', false)
-    .where('publishedAt', '!=', null)
-    .orderBy('publishedAt', 'desc')
-    .select('slug', 'visibility', 'anonymous', 'publishedAt', ...SUMMARY_FIELDS, ...LISTING_FIELDS)
-    .limit(SITEMAP_MAX_CARDS)
-    .get();
-  const now = Date.now();
-  return snap.docs.flatMap((d) => {
-    const { slug, visibility, anonymous, publishedAt, updatedAt } = d.data();
-    if (visibility !== 'public' || anonymous !== false || !properlyPublished(publishedAt, now)) return [];
-    if (typeof slug !== 'string' || !slug) return [];
-    // A blank card (lib/cards/blank), by its stored summary: its page is there, nothing to read on it.
-    if (blankBySummary(d.data()) || unlistedCard(d.data())) return [];
-    // An edit's server stamp, when it is one; the author's own writes can put anything there.
-    const edited = updatedAt instanceof Timestamp && updatedAt.toMillis() > publishedAt.toMillis() && updatedAt.toMillis() <= now;
-    return [{ slug, lastModified: (edited ? updatedAt : publishedAt).toDate() }];
-  });
-}
+type Listed = SitemapCard;
 
 /** A logical path in every locale, each naming the others (hreflang). */
 function inEveryLocale(base: string, path: string, lastModified?: Date): MetadataRoute.Sitemap {
@@ -65,7 +29,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const pages = ['', ...SITE_PAGES, ...POLICY_PAGES].flatMap((path) => inEveryLocale(base, path));
   let cards: Listed[] = [];
   try {
-    cards = await listedCards(getAdminDb());
+    // The newest public, published cards that name no one as anonymous (the cards repository's sitemapCards: a
+    // private, connections-only, anonymous, draft, hand-stamped, slugless or blank card never is listed).
+    cards = await serverCtx().data.cards.sitemapCards(SITEMAP_MAX_CARDS, Date.now());
   } catch (e) {
     console.error('sitemap: card read failed', e);
   }

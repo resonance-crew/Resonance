@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const appCheck = vi.hoisted(() => ({ createToken: vi.fn(), verifyToken: vi.fn() }));
 vi.mock('firebase-admin/app-check', () => ({ getAppCheck: () => appCheck }));
-vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: vi.fn() }));
+vi.mock('@/server/infra/firebase/app', () => ({ ensureAdminApp: vi.fn() }));
 
 import { resetExchanges } from '@/lib/appCheck/server';
 import { POST } from './route';

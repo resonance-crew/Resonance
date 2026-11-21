@@ -1,4 +1,3 @@
-import type { DocumentSnapshot } from 'firebase-admin/firestore';
 import { ApiFailure } from './http';
 
 /**
@@ -12,6 +11,6 @@ import { ApiFailure } from './http';
 export const IN_TRASH_MESSAGE = 'This card is in the trash.';
 
 /** The card (read in the transaction, already known to be yours) is in the trash: throw the 409. */
-export function refuseInTrash(snap: DocumentSnapshot): void {
+export function refuseInTrash(snap: { get(field: string): unknown }): void {
   if (snap.get('trashedAt') != null) throw new ApiFailure('conflict', IN_TRASH_MESSAGE);
 }

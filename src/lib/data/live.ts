@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useSyncExternalStore } from 'react';
+import { watchSignal, type SignalTopic } from '@/lib/db/firestore/client/signals';
 
-/** What a live (onSnapshot) subscription has heard: its latest answer, and its error once it failed. */
+/** What a live subscription has heard: its latest answer, and its error once it failed. */
 export interface LiveState<T> {
   /** Undefined until the first answer. */
   data: T | undefined;
@@ -60,9 +61,8 @@ function begin(entry: Entry): void {
   };
 }
 
-// A listener that failed (the SDK drops it) starts again the next time the
-// reader comes back to the tab or back online. The SDK retries short outages
-// on its own; this is for one that ended the listener.
+// A listener that failed (a pull that failed) starts again the next time the
+// reader comes back to the tab or back online.
 function restartFailed(): void {
   if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
   for (const entry of entries.values()) {
@@ -111,6 +111,59 @@ export function useLive<T>(key: string | null, start: StartListener<T>): LiveSta
   const sub = useCallback((notify: () => void) => (key ? subscribe(key, start as StartListener<unknown>, notify) : () => {}), [key]);
   const read = () => ((key && entries.get(key)?.state) || NOTHING_YET) as LiveState<T>;
   return useSyncExternalStore(sub, read, () => NOTHING_YET);
+}
+
+/**
+ * A "listener" that pulls: `read` once at the start, and again whenever one of
+ * `topics` moves on the viewer's signal channel (client/signals) — and on its
+ * minute's safety pull. One read at a time: a signal heard while one is on its
+ * way reads once more after it. A failed read keeps what was heard (useLive)
+ * and says so; the next answer clears it.
+ */
+export function pulled<T>(uid: string, topics: SignalTopic[], read: () => Promise<T>): StartListener<T> {
+  return (emit, fail) => {
+    let stopped = false;
+    let running = false;
+    let again = false;
+    const pull = () => {
+      if (stopped) return;
+      if (running) {
+        again = true;
+        return;
+      }
+      running = true;
+      read()
+        .then(
+          (data) => !stopped && emit(data),
+          (err: unknown) => !stopped && fail(err instanceof Error ? err : new Error(String(err))),
+        )
+        .finally(() => {
+          running = false;
+          if (again) {
+            again = false;
+            pull();
+          }
+        });
+    };
+    pull();
+    const stops = topics.map((topic) => watchSignal(uid, topic, pull));
+    return () => {
+      stopped = true;
+      stops.forEach((stop) => stop());
+    };
+  };
+}
+
+/**
+ * Change what a live key holds here, at once — the optimistic half of a write
+ * this browser made (a conversation read): the next pull answers the server's
+ * word over it. Nothing while the key has heard nothing.
+ */
+export function patchLive<T>(key: string, change: (data: T) => T): void {
+  const entry = entries.get(key);
+  if (!entry || entry.state.data === undefined) return;
+  entry.state = { data: change(entry.state.data as T), error: entry.state.error };
+  entry.readers.forEach((notify) => notify());
 }
 
 /** Stop and forget every listener at once (tests). */

@@ -57,9 +57,24 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
         pictureLoader = { client -> ChatPictures.loader(this, File(cacheDir, "chat-pictures"), client) },
         // How cards were read and not reported yet (round 26 §U7): sent at the next launch.
         readingReports = com.resonance.app.ui.ReadingReports(ReadingReportPrefs(getSharedPreferences(com.resonance.app.ui.ReadingReports.FILE, MODE_PRIVATE))),
+        // The writer's words on their way through /api/v1 (Phase 2, `apiDrafts`): they outlive the app being killed.
+        draftOutboxPrefs = getSharedPreferences("draft-outbox", MODE_PRIVATE),
     ).also {
         session = it
         it.start { it.loadMe() }
+        watchNetwork(it)
+    }
+
+    /** A network that comes back sends at once what waited for it (Session.networkBack). */
+    private fun watchNetwork(session: Session) {
+        val connectivity = getSystemService(android.net.ConnectivityManager::class.java) ?: return
+        runCatching {
+            connectivity.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post { session.networkBack() }
+                }
+            })
+        }
     }
 
     /**

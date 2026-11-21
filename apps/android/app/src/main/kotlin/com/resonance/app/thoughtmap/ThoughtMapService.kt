@@ -8,9 +8,13 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Query
 import com.resonance.api.models.FeedCard
+import com.resonance.api.models.MapOp
+import com.resonance.api.models.ThoughtMap
 import com.resonance.app.AppFirebase
 import com.resonance.app.FirestoreFailure
 import com.resonance.kit.api.ReadingApi
+import com.resonance.kit.api.WriterApi
+import com.resonance.kit.writing.MapOpQueue
 import java.time.OffsetDateTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -57,8 +61,19 @@ data class MapCard(
  * batches the same way. Its cards are read under the rules too, except those
  * the rules keep from me (someone else's anonymous card I resonated with),
  * which the server answers for (`reading`). The twin of iOS's ThoughtMapService.
+ *
+ * With [api] (client-config's `apiThoughtMap`), the map itself is read whole from the contract
+ * (GET /me/thought-map) and every change goes into [Api.queue] as ops (POST /me/thought-map/ops) —
+ * returning at once, as the store has already drawn it; without, the Firestore path above, kept for
+ * one release.
  */
-class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
+class ThoughtMapService(val uid: String, private val reading: ReadingApi, private val api: Api? = null) {
+    /** The contract's path: the map's reads, and its changes' queue. */
+    class Api(val writer: WriterApi, val queue: MapOpQueue)
+
+    /** On the contract's path (the store follows the `map` signal then). */
+    val onApi: Boolean get() = api != null
+
     private val db get() = AppFirebase.db
     private val map: DocumentReference get() = db.collection("thoughtMaps").document(uid)
     private val nodesCol get() = map.collection("nodes")
@@ -68,7 +83,12 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
     data class Loaded(val nodes: List<MapNodeDoc>, val edges: List<MapEdgeDoc>, val groups: List<MapGroupDoc>)
 
     /** loadMyThoughtMap: the three collections in full (document-id order). */
-    suspend fun load(): Loaded = coroutineScope {
+    suspend fun load(): Loaded {
+        api?.let { return loaded(it.writer.thoughtMap()) }
+        return firestoreLoad()
+    }
+
+    private suspend fun firestoreLoad(): Loaded = coroutineScope {
         val n = async { nodesCol.get().await() }
         val e = async { edgesCol.get().await() }
         val g = async { groupsCol.get().await() }
@@ -89,6 +109,7 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
     }
 
     suspend fun addNode(cardId: String, x: Double, y: Double) {
+        api?.let { return it.queue.add(MapOp(MapOp.Op.addNode, cardId = cardId, x = x, y = y)) }
         nodesCol.document(cardId).set(
             mapOf(
                 "cardId" to cardId, "x" to x, "y" to y, "groupId" to null,
@@ -98,6 +119,7 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
     }
 
     suspend fun moveNode(cardId: String, x: Double, y: Double, groupId: String?) {
+        api?.let { return it.queue.place(cardId, placement(cardId, x, y, groupId)) }
         nodesCol.document(cardId).update(
             mapOf("x" to x, "y" to y, "groupId" to groupId, "updatedAt" to FieldValue.serverTimestamp()),
         ).await()
@@ -106,6 +128,7 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
     /** setNodeGroups: re-file cards in one batch. */
     suspend fun setNodeGroups(changes: List<Pair<String, String?>>) {
         if (changes.isEmpty()) return
+        api?.let { a -> return a.queue.add(changes.map { (cardId, groupId) -> MapOp(MapOp.Op.setNodeGroup, cardId = cardId, groupId = groupId) }) }
         val batch = db.batch()
         for ((cardId, groupId) in changes) {
             batch.update(nodesCol.document(cardId), mapOf("groupId" to groupId, "updatedAt" to FieldValue.serverTimestamp()))
@@ -114,7 +137,12 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
     }
 
     /** removeMapNode: the node and every arrow touching it (the card itself stays). */
-    suspend fun removeNode(cardId: String) = coroutineScope {
+    suspend fun removeNode(cardId: String) {
+        api?.let { return it.queue.add(MapOp(MapOp.Op.removeNode, cardId = cardId)) }
+        firestoreRemoveNode(cardId)
+    }
+
+    private suspend fun firestoreRemoveNode(cardId: String) = coroutineScope {
         val out = async { edgesCol.whereEqualTo("sourceCardId", cardId).get().await() }
         val inn = async { edgesCol.whereEqualTo("targetCardId", cardId).get().await() }
         val batch = db.batch()
@@ -125,31 +153,47 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
 
     suspend fun createEdge(source: String, target: String, label: String = "") {
         if (source == target) return
+        api?.let { return it.queue.add(MapOp(MapOp.Op.addEdge, sourceCardId = source, targetCardId = target, label = label.ifEmpty { null })) }
         edgesCol.document(edgeId(source, target)).set(
             mapOf("sourceCardId" to source, "targetCardId" to target, "label" to label, "createdAt" to FieldValue.serverTimestamp()),
         ).await()
     }
 
     suspend fun updateEdgeLabel(id: String, label: String) {
+        api?.let { return it.queue.add(MapOp(MapOp.Op.setEdgeLabel, id = id, label = label)) }
         edgesCol.document(id).update("label", label).await()
     }
 
     suspend fun removeEdge(id: String) {
+        api?.let { return it.queue.add(MapOp(MapOp.Op.removeEdge, id = id)) }
         edgesCol.document(id).delete().await()
     }
 
     suspend fun createGroup(title: String, hue: Double, x: Double, y: Double, w: Double, h: Double): String {
+        api?.let {
+            // The id is the device's (as a Firestore auto id): the region is drawn at once, its op on its way.
+            val id = newGroupId()
+            it.queue.add(MapOp(MapOp.Op.addGroup, groupId = id, title = title, hue = hue, x = x, y = y, w = w, h = h))
+            return id
+        }
         val ref = groupsCol.document()
         ref.set(mapOf("title" to title, "hue" to hue, "x" to x, "y" to y, "w" to w, "h" to h, "createdAt" to FieldValue.serverTimestamp())).await()
         return ref.id
     }
 
     suspend fun updateGroup(id: String, patch: Map<String, Any?>) {
+        api?.let { return it.queue.add(groupUpdate(id, patch)) }
         groupsCol.document(id).update(patch).await()
     }
 
     /** A region moved with its cards: the web's two writes, here in one batch so they land together. */
     suspend fun moveGroup(id: String, x: Double, y: Double, members: List<Triple<String, Double, Double>>) {
+        api?.let { a ->
+            a.queue.add(MapOp(MapOp.Op.updateGroup, groupId = id, x = x, y = y))
+            // Its cards stay filed in it: moved, never unfiled (a moveNode without a groupId keeps it).
+            for ((cardId, mx, my) in members) a.queue.place(cardId, listOf(MapOp(MapOp.Op.moveNode, cardId = cardId, x = mx, y = my, groupId = id)))
+            return
+        }
         val batch = db.batch()
         batch.update(groupsCol.document(id), mapOf("x" to x, "y" to y))
         for ((cardId, mx, my) in members) {
@@ -160,6 +204,7 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
 
     /** removeMapGroup: the region goes, its cards stay on the map, unfiled. */
     suspend fun removeGroup(id: String) {
+        api?.let { return it.queue.add(MapOp(MapOp.Op.removeGroup, groupId = id)) }
         val members = nodesCol.whereEqualTo("groupId", id).get().await()
         val batch = db.batch()
         batch.delete(groupsCol.document(id))
@@ -232,6 +277,34 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
 
     companion object {
         fun edgeId(source: String, target: String) = "${source}_$target"
+
+        private const val ID_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+        /** A region's id made on the device: 20 letters and digits, as Firestore's auto ids. */
+        fun newGroupId(random: java.util.Random = java.security.SecureRandom()): String =
+            String(CharArray(20) { ID_CHARS[random.nextInt(ID_CHARS.length)] })
+
+        /**
+         * A card dropped at (x, y), filed in [groupId] or in none: moveNode files it when a region is
+         * sent, and a null one keeps whatever it was in — so leaving every region is setNodeGroup too.
+         */
+        fun placement(cardId: String, x: Double, y: Double, groupId: String?): List<MapOp> {
+            val move = MapOp(MapOp.Op.moveNode, cardId = cardId, x = x, y = y, groupId = groupId)
+            return if (groupId != null) listOf(move) else listOf(move, MapOp(MapOp.Op.setNodeGroup, cardId = cardId, groupId = null))
+        }
+
+        /** A region's changed fields (the store's Firestore patch: title, or w and h) as one updateGroup. */
+        fun groupUpdate(id: String, patch: Map<String, Any?>): MapOp {
+            fun n(k: String) = (patch[k] as? Number)?.toDouble()
+            return MapOp(MapOp.Op.updateGroup, groupId = id, title = patch["title"] as? String, hue = n("hue"), x = n("x"), y = n("y"), w = n("w"), h = n("h"))
+        }
+
+        /** The contract's map as the store keeps it (numbers a stored item lacks come as the server reads them). */
+        fun loaded(map: ThoughtMap): Loaded = Loaded(
+            nodes = map.nodes.map { MapNodeDoc(it.cardId, it.x, it.y, it.groupId) },
+            edges = map.edges.map { MapEdgeDoc(it.id, it.sourceCardId, it.targetCardId, it.label) },
+            groups = map.groups.map { MapGroupDoc(it.id, it.title, it.hue, it.x, it.y, it.w, it.h) },
+        )
 
         /** The cards [docs] (my own cards' documents) answer — each once, in the order first met. */
         fun referenceIds(docs: List<Map<String, Any?>>): List<String> =

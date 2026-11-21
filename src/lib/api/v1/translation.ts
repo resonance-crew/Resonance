@@ -1,12 +1,11 @@
-import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { mirrorModel } from '@/lib/ai/openai';
 import { translateStory, type TranslatedStory } from '@/lib/ai/translate';
-import { modelsOffline, TRANSLATE_MAX_CHARS, translationTargets, type TranslationTarget } from '@/lib/text/translation';
+import { modelsOffline, type TranslationTarget } from '@/lib/text/translation';
+import * as app from '@/server/app/translation';
+import type { AdminDb } from '@/server/infra/firestore/db';
+import { ctxFor } from '@/server/infra/firestore/ctx';
+import type { ServerCtx } from '@/server/ctx';
 import { translationHash } from './translationHash';
-import { spend } from '@/lib/api/rateLimit';
-import { ApiFailure } from './http';
-import { trashedAtOf } from './present';
-import { visibleCard } from './reads';
 import type { TranslationResponseBody } from './schemas';
 
 /**
@@ -27,6 +26,10 @@ import type { TranslationResponseBody } from './schemas';
  * The kept translations are server-only (the rules let no client read or
  * write them); deleting a card deletes them (deleteCard), and the account
  * purge's tree delete takes them with its cards.
+ *
+ * The service is src/server/app/translation.ts (the kept translations
+ * src/server/infra/firestore/repos/translations.ts); this facade keeps the
+ * signature the route and the suites call, and hands it the model.
  */
 
 export interface TranslationDeps {
@@ -35,48 +38,27 @@ export interface TranslationDeps {
 
 export { translationHash };
 
-const notFound = () => new ApiFailure('not_found', 'No such card.');
-
-export async function translateCard(
-  db: Firestore,
+export function translateCard(
+  db: AdminDb,
   viewerId: string,
   key: string,
   to: TranslationTarget,
   deps: TranslationDeps = {},
 ): Promise<TranslationResponseBody> {
-  const card = await visibleCard(db, viewerId, key);
-  // Published and public only: a card for connections, a 私人卡 shared in a thread, a draft — none is translated.
-  if (!card.publishedAt || card.visibility !== 'public' || trashedAtOf(card) || card.trashedAt != null) throw notFound();
-  const title = typeof card.thoughtCore === 'string' ? card.thoughtCore : '';
-  const story = typeof card.story === 'string' ? card.story : '';
-  if (story.length > TRANSLATE_MAX_CHARS) {
-    throw new ApiFailure('invalid_request', 'This story is too long to translate.', undefined, 413);
-  }
-  if (!translationTargets(title, story).includes(to)) {
-    throw new ApiFailure('invalid_request', 'This story is not in another language.');
-  }
+  return translateCardIn(ctxFor(db), viewerId, key, to, deps);
+}
 
-  const hash = translationHash(title, story);
-  const ref = db.doc(`cards/${card.id}/translations/${to}`);
-  const kept = await ref.get();
-  if (kept.exists && kept.get('hash') === hash && typeof kept.get('title') === 'string' && typeof kept.get('story') === 'string') {
-    return { to, title: kept.get('title'), story: kept.get('story') };
-  }
-
-  // Against the emulators no model is asked: only the seed's kept translations answer (scripts/seed-emulator.ts).
-  const translate = deps.translate ?? (modelsOffline() ? null : translateStory);
-  if (!translate) throw new ApiFailure('internal', "The story couldn't be translated just now.", undefined, 503);
-  await spend(db, viewerId, 'translate');
-  let made: TranslatedStory;
-  try {
-    made = await translate({ title, story }, to);
-  } catch (e) {
-    console.error('[api/v1] translation', card.id, to, e);
-    throw new ApiFailure('internal', "The story couldn't be translated just now.", undefined, 503);
-  }
-  // Kept for the next reader; a failure to keep it never fails this one.
-  await ref
-    .set({ title: made.title, story: made.story, hash, model: mirrorModel(), createdAt: FieldValue.serverTimestamp() })
-    .catch((e: unknown) => console.error('[api/v1] translation keep', card.id, to, e));
-  return { to, title: made.title, story: made.story };
+/** translateCard on a ServerCtx (the route's serverCtx()), with the model handed in as above. */
+export function translateCardIn(
+  ctx: ServerCtx,
+  viewerId: string,
+  key: string,
+  to: TranslationTarget,
+  deps: TranslationDeps = {},
+): Promise<TranslationResponseBody> {
+  return app.translateCard(ctx, viewerId, key, to, {
+    // Against the emulators no model is asked: only the seed's kept translations answer (scripts/seed-emulator.ts).
+    translate: deps.translate ?? (modelsOffline() ? null : translateStory),
+    model: mirrorModel,
+  });
 }

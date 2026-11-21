@@ -1,6 +1,5 @@
-import { getAdminDb } from '@/lib/db/firestore/admin';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
-import { mapCard, mapUser } from '@/lib/db/firestore/mapper';
+import { serverCtx } from '@/server/ctx';
 import {
   readStoredPicture,
   serveShareImage,
@@ -43,9 +42,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   // An id Firestore keeps for itself (`__x__`) would make the read throw: it is no such card.
   if (!DOC_ID.test(id) || isReservedId(id)) return shareImageFallback();
   const path = `/api/og/card/${id}`;
-  const db = getAdminDb();
-  const [snap] = await db.getAll(db.doc(`cards/${id}`), { fieldMask: CARD_FIELDS });
-  const data = snap?.data();
+  const { cards, users } = serverCtx().data;
+  const data = await cards.get(id, CARD_FIELDS);
   if (!data || data.visibility !== 'public' || data.publishedAt == null) return shareImageFallback();
   // A cover is shared as itself (lib/og's cardImage names the same one).
   const media = data.media as { type?: unknown; url?: unknown; frame?: unknown } | undefined;
@@ -56,16 +54,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   }
 
   // Drawn from its words: the story (up to 30k characters) is read now, beside the author.
-  const storyP = db.getAll(db.doc(`cards/${id}`), { fieldMask: STORY_FIELD }).then(([s]) => s?.get('story'));
+  const storyP = cards.get(id, STORY_FIELD).then((s) => s?.story);
   storyP.catch(() => {});
   const authorId = typeof data.authorId === 'string' ? data.authorId : '';
   let author = null;
   if (data.anonymous !== true && DOC_ID.test(authorId) && !isReservedId(authorId)) {
-    const [user] = await db.getAll(db.doc(`users/${authorId}`), { fieldMask: AUTHOR_FIELDS });
-    if (user?.exists) author = mapUser(user.id, user.data() ?? {});
+    author = await users.getUser(authorId, AUTHOR_FIELDS);
   }
   const story = await storyP;
-  const card = mapCard(id, { ...data, story: typeof story === 'string' ? story : '' });
+  const card = { ...data, id, story: typeof story === 'string' ? story : '' };
   const drawn = drawnCard(card, author);
   const version = drawnCardVersion(drawn);
   const redirect = shareImageRedirect(req, path, version);

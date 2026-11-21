@@ -13,8 +13,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import com.resonance.api.models.ConversationLastMessage
+import com.resonance.kit.config.Features
+import com.resonance.kit.realtime.Signals
+import com.resonance.kit.realtime.launchPulls
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.Date
@@ -51,6 +56,12 @@ data class Person(
  * (listConversations + listMyConnectionUids + getMyBlockedIds), as snapshot
  * listeners instead of a 30s poll. Drives the Messages tab and its badge. The
  * twin of iOS's ConversationsStore.
+ *
+ * Phase 2: with client-config's `apiInbox` on, the conversations are pulled from GET
+ * /conversations instead (on the `inbox` signal, back in the foreground, and each minute on
+ * screen; an ETag makes an unchanged list a 304), and with `apiSocial` the connections and blocks
+ * from GET /me/connections and /me/blocks (on `graph`). Which path a list takes is read at
+ * [start]; the Firestore listeners stay for a release, for the server to send this build back.
  */
 class ConversationsStore {
     data class Conversation(
@@ -103,6 +114,9 @@ class ConversationsStore {
     private val _connected = MutableStateFlow<Set<String>?>(null)
     val connectedIds: StateFlow<Set<String>?> = _connected
 
+    /** The /api/v1 path's clients and switches (Phase 2); null: Firestore only (a test, a build without them). */
+    var remote: LiveRemote? = null
+
     /** Called when the person's blocks change after they were first read. */
     var onBlocksChanged: (() -> Unit)? = null
 
@@ -133,6 +147,19 @@ class ConversationsStore {
     private val ready = HashSet<String>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var rebuilding: Job? = null
+    /** The /api/v1 pulls running ([remote]'s path), stopped with the lists. */
+    private var pulls: List<Job> = emptyList()
+    /** Asks for a pull now (back in the foreground, after the person's own change). */
+    private val inboxKicks = MutableStateFlow(0)
+    private val graphKicks = MutableStateFlow(0)
+    /** Pulls whose last try failed (the list stays as last read; the next ask tries again). */
+    private val pullsFailed = HashSet<String>()
+    /**
+     * Conversations read here, drawn read at once (the API path: nothing local echoes the write as
+     * Firestore's cache did): `false` while the server is told, `true` once it has been — then the
+     * next pull to start says what the server has, and the mark goes.
+     */
+    private val readHere = HashMap<String, Boolean>()
 
     /**
      * Conversations deleted from their thread a moment ago (round 21), left out of the list before the
@@ -167,6 +194,99 @@ class ConversationsStore {
     fun start(uid: String) {
         stop()
         this.uid = uid
+        val remote = remote
+        val features = remote?.features?.invoke() ?: Features.LEGACY
+        if (remote != null && features.apiInbox) pullConversations(uid, remote) else listenToConversations(uid)
+        if (remote != null && features.apiSocial) pullGraph(uid, remote) else listenToGraph(uid)
+    }
+
+    /** The conversation [pair] was read here: drawn read at once; [done] once the server has it. */
+    fun readHere(pair: String, done: Boolean = false) {
+        if (uid == null) return
+        if (done) {
+            if (pair in readHere) readHere[pair] = true
+            inboxKicks.value++
+        } else {
+            readHere[pair] = false
+            rebuildSoon()
+        }
+    }
+
+    /** The person blocked or unblocked someone here: the graph is read again at once (a block alone may raise no signal). */
+    fun graphChanged() {
+        graphKicks.value++
+    }
+
+    private fun pullConversations(uid: String, remote: LiveRemote) {
+        pulls = pulls + scope.launchPulls(merge(remote.signals.topic(Signals.Topic.Inbox), inboxKicks), remote.onScreen) {
+            val settled = readHere.filterValues { it }.keys
+            val list = try {
+                remote.inbox.conversations()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (this.uid == uid) pullFailed("conversations")
+                return@launchPulls
+            }
+            if (this.uid != uid) return@launchPulls
+            pullsFailed.remove("conversations")
+            settled.forEach { readHere.remove(it) }
+            for (c in list) {
+                val person = c.other?.let { Person.of(it) }
+                if (person != null) people[person.id] = person else missing.add(c.otherId)
+            }
+            rawConversations = list.map { c -> RawConversation(c.id, c.participants, c.lastMessage?.let(::lastOf), mapOf(uid to c.unread)) }
+            _ids.value = list.map { it.id }.toSet()
+            arrived("conversations")
+        }
+    }
+
+    private fun pullGraph(uid: String, remote: LiveRemote) {
+        pulls = pulls + scope.launchPulls(merge(remote.signals.topic(Signals.Topic.Graph), graphKicks), remote.onScreen) {
+            val (connections, blocks) = try {
+                coroutineScope {
+                    val c = async { remote.social.connections() }
+                    val b = async { remote.social.blocks() }
+                    c.await() to b.await()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (this.uid == uid) pullFailed("graph")
+                return@launchPulls
+            }
+            if (this.uid != uid) return@launchPulls
+            pullsFailed.remove("graph")
+            for (c in connections) c.person.author?.let { Person.of(it) }?.let { people[it.id] = it }
+            connectionUids = connections.map { it.userId }
+            _connected.value = connectionUids.toSet()
+            val next = blocks.map { it.userId }.toSet()
+            val changed = "blocks" in ready && next != blocked
+            _blocked.value = next
+            if (changed) onBlocksChanged?.invoke()
+            ready.add("connections")
+            arrived("blocks")
+        }
+    }
+
+    /** A pull failed: the list stays as last read (with nothing read, the screen offers a retry) until one goes through. */
+    private fun pullFailed(name: String) {
+        pullsFailed.add(name)
+        _state.value = _state.value.copy(failed = true)
+    }
+
+    /** A conversation's `lastMessage` as the contract has it, in the shape the list reads a document's. */
+    private fun lastOf(m: ConversationLastMessage): Map<String, Any?> = mapOf(
+        "text" to m.text,
+        "senderId" to m.senderId,
+        "sentAt" to com.resonance.kit.chat.isoDate(m.sentAt),
+        "image" to m.image,
+        "unsent" to m.unsent,
+        "sticker" to m.sticker,
+        "album" to m.albumCount?.let { mapOf("count" to it) },
+    )
+
+    private fun listenToConversations(uid: String) {
         listen("conversations") {
             AppFirebase.db.collection("conversations").whereArrayContains("participants", uid)
                 .orderBy("updatedAt", Query.Direction.DESCENDING)
@@ -194,6 +314,9 @@ class ConversationsStore {
                     }
                 }
         }
+    }
+
+    private fun listenToGraph(uid: String) {
         listen("connections") {
             AppFirebase.db.collection("connections").whereArrayContains("userIds", uid)
                 .addSnapshotListener { snap, _ ->
@@ -233,6 +356,11 @@ class ConversationsStore {
     fun resume() {
         if (uid == null) return
         if (listeners.resume()) _state.value = _state.value.copy(failed = false)
+        // The API path reads at once (the minute's pull waits a minute).
+        if (pulls.isNotEmpty()) {
+            inboxKicks.value++
+            graphKicks.value++
+        }
         if (retry.isNotEmpty()) {
             rebuilding?.cancel()
             rebuilding = scope.launch { rebuild() }
@@ -241,6 +369,10 @@ class ConversationsStore {
 
     fun stop() {
         listeners.removeAll()
+        pulls.forEach { it.cancel() }
+        pulls = emptyList()
+        pullsFailed.clear()
+        readHere.clear()
         rebuilding?.cancel()
         people.clear()
         missing.clear()
@@ -269,8 +401,9 @@ class ConversationsStore {
         coroutineScope {
             wanted.map { id ->
                 async {
-                    val doc = try {
-                        AppFirebase.db.collection("users").document(id).get().await()
+                    val social = remote?.takeIf { it.features().apiSocial }?.social
+                    val person = try {
+                        if (social != null) social.person(id) else Person.from(id, AppFirebase.db.collection("users").document(id).get().await().data)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -279,7 +412,7 @@ class ConversationsStore {
                         return@async
                     }
                     retry.remove(id)
-                    Person.from(id, doc.data)?.let { people[id] = it } ?: missing.add(id)
+                    person?.let { people[id] = it } ?: missing.add(id)
                 }
             }.awaitAll()
         }
@@ -292,13 +425,17 @@ class ConversationsStore {
             val person = otherId?.let { people[it] }
             if (otherId == null || otherId in blocked || person == null) return@mapNotNull null
             val last = doc.last
-            val unread = (doc.unread?.get(uid) as? Number)?.toInt() ?: 0
+            val unread = if (doc.id in readHere) 0 else (doc.unread?.get(uid) as? Number)?.toInt() ?: 0
             Conversation(
                 id = doc.id,
                 other = person,
                 lastText = last?.get("text") as? String,
                 lastFromMe = last?.get("senderId") == uid,
-                sentAt = (last?.get("sentAt") as? Timestamp)?.toDate(),
+                sentAt = when (val at = last?.get("sentAt")) {
+                    is Timestamp -> at.toDate()
+                    is Date -> at
+                    else -> null
+                },
                 unread = unread,
                 lastImage = last?.get("image") == true,
                 lastUnsent = last?.get("unsent") == true,
@@ -308,7 +445,7 @@ class ConversationsStore {
         }
         val talking = conversations.map { it.other.id }.toSet()
         val starters = connectionUids.filter { it !in talking && it !in blocked }.mapNotNull { people[it] }
-        _state.value = State(conversations, starters, loaded = ready.containsAll(SOURCES), failed = listeners.failed.value.isNotEmpty())
+        _state.value = State(conversations, starters, loaded = ready.containsAll(SOURCES), failed = listeners.failed.value.isNotEmpty() || pullsFailed.isNotEmpty())
     }
 
     /** Someone this list has read (with their pen name as it is now), if it has. */

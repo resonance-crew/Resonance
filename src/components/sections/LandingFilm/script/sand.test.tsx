@@ -23,7 +23,8 @@ import { islandRegistry } from '../islands';
 
 const MODEL: FilmModel = { a: null, b: null, relation: 'drawn', sky: [], picks: [] } as unknown as FilmModel;
 
-describe("the paper's sand", () => {
+// (the whole world rendered: 60 s, as changes/changes.test.ts says)
+describe("the paper's sand", { timeout: 60_000 }, () => {
   it('reads a picture import either way a bundler gives it', () => {
     expect(pictureSrc('/a.png')).toBe('/a.png');
     expect(pictureSrc({ src: '/b.png' })).toBe('/b.png');

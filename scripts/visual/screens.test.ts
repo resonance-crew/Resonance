@@ -155,7 +155,7 @@ describe('the release screenshots’ screens', () => {
     expect(tapped.expect).toContain(`${newest[0]}'s face first, then ${newest.slice(1, TAP_FACES_MAX).map((u) => `${u}'s`).join(' and ')}`);
     expect(SCREENS.find((s) => s.id === 'taps-list')!.expect).toContain(`(${newest.join(', ')} `);
 
-    const max = Number(readFileSync(join(process.cwd(), 'src/lib/api/v1/conversations.ts'), 'utf8').match(/export const NOTE_REQUEST_MAX = (\d+);/)?.[1]);
+    const max = Number(readFileSync(join(process.cwd(), 'src/server/domain/conversations.ts'), 'utf8').match(/export const NOTE_REQUEST_MAX = (\d+);/)?.[1]);
     expect(max).toBeGreaterThan(0);
     const wait = SCREENS.find((s) => s.id === 'card-note-wait')!;
     expect([wait.route, wait.as]).toEqual(['/card/carol-note', 'dora']);
