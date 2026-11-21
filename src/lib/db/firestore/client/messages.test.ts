@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // --- Firebase boundary mocks ------------------------------------------------
-// The messages module is exercised against a mocked SDK: tests cover the pair
-// id conventions and the send, which is one call to the server (the rules
-// refuse conversation and message writes from the browser).
-vi.mock('./init', () => ({ getClientDb: vi.fn(() => ({})) }));
+// The messages module is exercised against a fake /api/v1 (fetch): the pair id
+// conventions, the send, the thread's reads and the list — every one a call
+// to the server since the decouple's Phase 2. Firestore is not read: its
+// handle throws if anything asks for it.
+vi.mock('./init', () => ({
+  getClientDb: vi.fn(() => {
+    throw new Error('Firestore is not read for messages');
+  }),
+}));
 
 type MockUser = { uid: string; getIdToken: () => Promise<string> };
 const mockAuth = { currentUser: { uid: 'bbb', getIdToken: async () => 'id-token' } as MockUser | null };
@@ -40,24 +45,31 @@ vi.mock('firebase/firestore/lite', () => ({
   writeBatch: vi.fn(() => batch),
 }));
 
-// The open thread's listener (the full SDK, loaded on demand).
-type Listened = { id: string; data: Record<string, unknown> };
-const listener = vi.hoisted(() => ({
-  onDocs: null as ((docs: Listened[], meta?: { fromCache: boolean }) => void) | null,
-  stop: vi.fn(),
-  listenNewest: vi.fn(),
+// The signal channel: who watches what, fired by hand; and what this browser poked.
+const signals = vi.hoisted(() => {
+  const watchers = new Map<string, () => void>();
+  const poked: string[] = [];
+  return { watchers, poked, fire: (key: string) => watchers.get(key)?.() };
+});
+vi.mock('./signals', () => ({
+  watchSignal: (uid: string, topic: string, fn: () => void) => {
+    signals.watchers.set(`${uid}|${topic}`, fn);
+    return () => signals.watchers.delete(`${uid}|${topic}`);
+  },
+  pokeSignal: (topic: string) => signals.poked.push(topic),
 }));
-vi.mock('./realtime', () => ({ listenNewest: listener.listenNewest }));
 
 import { getDoc, getDocs, writeBatch } from 'firebase/firestore/lite';
 import {
   conversationId,
   deleteConversation,
+  followThread,
   getConversation,
-  getOlderMessages,
-  listenConversations,
-  listenThread,
+  getMessagesBefore,
+  isGone,
+  listConversations,
   otherParticipant,
+  readConversation,
   reactToMessage,
   sendMessage,
   unsendMessage,
@@ -74,7 +86,9 @@ const sent = () => JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
 beforeEach(() => {
   vi.clearAllMocks();
   mockAuth.currentUser = { uid: 'bbb', getIdToken: async () => 'id-token' };
-  fetchMock.mockClear();
+  fetchMock.mockReset();
+  fetchMock.mockImplementation(async () => new Response(JSON.stringify({ conversationId: 'aaa_bbb', id: 'm1' }), { status: 201 }));
+  signals.poked.length = 0;
 });
 
 describe('pair id conventions', () => {
@@ -195,89 +209,114 @@ describe('sendMessage', () => {
   });
 });
 
-describe('the listeners (thread, conversations)', () => {
-  /** A Timestamp as the full SDK hands it over: not Lite's class, the same shape. */
-  const fullSdkTimestamp = (iso: string, nanoseconds = 0) => ({
-    seconds: Date.parse(iso) / 1000,
-    nanoseconds,
-    toDate: () => new Date(Date.parse(iso) + Math.floor(nanoseconds / 1e6)),
+describe('the thread and the list, through /api/v1', () => {
+  /** What GET …/messages answers next, by the query it was asked (`limit=50`, `before=c1.x&limit=100`, …). */
+  let pages: Record<string, unknown> = {};
+  const api = (url: string) => {
+    const u = new URL(url, 'https://x');
+    if (u.pathname.endsWith('/messages')) {
+      const key = [...u.searchParams].map(([k, v]) => `${k}=${v}`).join('&');
+      const page = pages[key] ?? { messages: [], olderCursor: null, newerCursor: null, hasNewer: false };
+      if (page instanceof Error) throw page;
+      return page;
+    }
+    return pages[u.pathname];
+  };
+  const page = (messages: Record<string, unknown>[], extra: Record<string, unknown> = {}) => ({
+    messages: messages.map((m) => ({ cursor: `c1.${m.id}`, senderId: 'aaa', text: '', sentAt: '2026-09-01T08:00:00.000000Z', ...m })),
+    olderCursor: null,
+    newerCursor: messages.length ? `c1.${messages[0].id}` : null,
+    hasNewer: false,
+    ...extra,
   });
-  /** The messages of the window the listener reported, as heard (newest first). */
+  /** The messages of the window followThread reported (newest first). */
   const heardMessages = (heard: ReturnType<typeof vi.fn>, call = 0) =>
     (heard.mock.calls[call][0] as ThreadWindow).entries.map((e) => e.message);
+  /** Follow the thread until its first window is heard. */
+  async function follow(max?: number) {
+    const heard = vi.fn();
+    const stop = followThread('aaa_bbb', heard, undefined, max);
+    await vi.waitFor(() => expect(heard).toHaveBeenCalled());
+    return { heard, stop };
+  }
 
   beforeEach(() => {
-    listener.listenNewest.mockImplementation(
-      (_path: string[], _field: string, _max: number, onDocs: (docs: Listened[], meta?: { fromCache: boolean }) => void) => {
-        // An answer from the server unless a test says otherwise.
-        listener.onDocs = (docs, meta = { fromCache: false }) => onDocs(docs, meta);
-        return listener.stop;
-      },
-    );
+    pages = {};
+    signals.watchers.clear();
+    fetchMock.mockImplementation(async (url: string) => {
+      try {
+        const body = api(url);
+        return new Response(body === undefined ? null : JSON.stringify(body), { status: body === undefined ? 404 : 200 });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: { code: 'unavailable', message: (e as Error).message } }), { status: 503 });
+      }
+    });
   });
 
-  it("hears a thread's newest messages at the times they were sent, each with where the page before it starts", async () => {
-    const heard = vi.fn();
-    listenThread('aaa_bbb', heard);
-    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalled());
-    expect(listener.listenNewest.mock.calls[0].slice(0, 3)).toEqual([['conversations', 'aaa_bbb', 'messages'], 'sentAt', 50]);
-
-    listener.onDocs!(
-      [
-        { id: 'm2', data: { senderId: 'aaa', text: 'and you?', sentAt: fullSdkTimestamp('2026-09-01T08:05:00Z', 123_456_789) } },
-        { id: 'm1', data: { senderId: 'bbb', text: 'hello', sentAt: fullSdkTimestamp('2026-09-01T08:00:00Z'), cardRef: 'walk' } },
-      ],
-      { fromCache: false },
-    );
+  it("reads a thread's newest messages at the times they were sent, each with its opaque cursor, never through Firestore", async () => {
+    pages['limit=50'] = page([
+      { id: 'm2', senderId: 'aaa', text: 'and you?', sentAt: '2026-09-01T08:05:00.123456Z' },
+      { id: 'm1', senderId: 'bbb', text: 'hello', sentAt: '2026-09-01T08:00:00.000000Z', cardRef: 'walk' },
+    ]);
+    const { heard } = await follow();
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/conversations/aaa_bbb/messages?limit=50');
     const window = heard.mock.calls[0][0] as ThreadWindow;
-    expect(window.fromCache).toBe(false);
+    expect(window).not.toHaveProperty('fromCache');
     const messages = heardMessages(heard);
     expect(messages.map((m) => m.id)).toEqual(['m2', 'm1']);
     expect(messages[1]).toMatchObject({ senderId: 'bbb', text: 'hello', cardRef: 'walk' });
     expect(messages[1].sentAt.toISOString()).toBe('2026-09-01T08:00:00.000Z');
     expect(messages[0].sentAt.toISOString()).toBe('2026-09-01T08:05:00.123Z');
-    // The cursor keeps the send time to the nanosecond, as Firestore orders by it.
-    expect(window.entries[0].cursor).toEqual({ seconds: Date.parse('2026-09-01T08:05:00Z') / 1000, nanoseconds: 123_456_789, id: 'm2' });
+    expect(window.entries[0].cursor).toBe('c1.m2');
+    expect(getDoc).not.toHaveBeenCalled();
+    expect(getDocs).not.toHaveBeenCalled();
+  });
 
-    listener.onDocs!([], { fromCache: true });
-    expect((heard.mock.calls[1][0] as ThreadWindow).fromCache).toBe(true);
+  it("reads the newest window again when the conversation's signal moves, and catches up with after= past a full window", async () => {
+    pages['limit=2'] = page([{ id: 'm2' }, { id: 'm1' }]);
+    const { heard, stop } = await follow(2);
+    expect([...signals.watchers.keys()]).toEqual(['bbb|thread:aaa_bbb']);
+
+    // Five came meanwhile: the newest two no longer meet what was held, so the ones between are read after m2.
+    pages['limit=2'] = page([{ id: 'm7' }, { id: 'm6' }]);
+    pages['after=c1.m2&limit=100'] = page([{ id: 'm5' }, { id: 'm4' }, { id: 'm3' }]);
+    signals.fire('bbb|thread:aaa_bbb');
+    await vi.waitFor(() => expect(heard).toHaveBeenCalledTimes(2));
+    expect(heardMessages(heard, 1).map((m) => m.id)).toEqual(['m7', 'm6', 'm5', 'm4', 'm3']);
+
+    // One more: the window meets what was held, no catch-up.
+    pages['limit=2'] = page([{ id: 'm8' }, { id: 'm7' }]);
+    fetchMock.mockClear();
+    signals.fire('bbb|thread:aaa_bbb');
+    await vi.waitFor(() => expect(heard).toHaveBeenCalledTimes(3));
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/conversations/aaa_bbb/messages?limit=2']);
+
+    stop();
+    expect(signals.watchers.size).toBe(0);
+  });
+
+  it('says a refusal (404: no such conversation for this viewer) as gone, and stops reading once stopped', async () => {
+    fetchMock.mockImplementationOnce(async () => new Response(JSON.stringify({ error: { code: 'not_found', message: 'No such conversation.' } }), { status: 404 }));
+    const failed = vi.fn();
+    followThread('aaa_bbb', vi.fn(), failed);
+    await vi.waitFor(() => expect(failed).toHaveBeenCalled());
+    expect(isGone(failed.mock.calls[0][0])).toBe(true);
+    expect(isGone(new Error('offline'))).toBe(false);
   });
 
   it('carries a reply quote and a link preview, and drops a preview that is not safe to show', async () => {
-    const heard = vi.fn();
-    listenThread('aaa_bbb', heard);
-    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalled());
-    const sentAt = fullSdkTimestamp('2026-09-01T08:00:00Z');
-    listener.onDocs!([
-      {
-        id: 'm3',
-        data: {
-          senderId: 'aaa',
-          text: 'bad',
-          sentAt,
-          preview: { url: 'javascript:alert(1)', title: 'x' },
-        },
-      },
-      {
-        id: 'm2',
-        data: {
-          senderId: 'aaa',
-          text: 'see https://example.com',
-          sentAt,
-          preview: { url: 'https://example.com/', title: 'Example', image: 'https://evil.test/p.png' },
-        },
-      },
+    pages['limit=50'] = page([
+      { id: 'm3', text: 'bad', preview: { url: 'javascript:alert(1)', title: 'x' } },
+      { id: 'm2', text: 'see https://example.com', preview: { url: 'https://example.com/', title: 'Example', image: 'https://evil.test/p.png' } },
       {
         id: 'm1',
-        data: {
-          senderId: 'bbb',
-          text: 'yes',
-          sentAt,
-          replyTo: { id: 'm0', senderId: 'aaa', text: 'hello', cardRef: 'walk' },
-          preview: { url: 'https://example.com/', title: 'Example', siteName: 'Ex', image: '/api/link-image?u=a&s=b' },
-        },
+        senderId: 'bbb',
+        text: 'yes',
+        replyTo: { id: 'm0', senderId: 'aaa', text: 'hello', cardRef: 'walk' },
+        preview: { url: 'https://example.com/', title: 'Example', siteName: 'Ex', image: '/api/link-image?u=a&s=b' },
       },
     ]);
+    const { heard } = await follow();
     const messages = heardMessages(heard).reverse();
     expect(messages[0].replyTo).toEqual({ id: 'm0', senderId: 'aaa', text: 'hello', cardRef: 'walk' });
     expect(messages[0].preview).toMatchObject({ title: 'Example', siteName: 'Ex', image: '/api/link-image?u=a&s=b' });
@@ -285,193 +324,122 @@ describe('the listeners (thread, conversations)', () => {
     expect(messages[2].preview).toBeUndefined();
   });
 
-  // A note left on a card lands in the thread as a message of its own kind; a kind this build doesn't know
-  // is a plain message (the server may add others).
-  it("hears a note as a note, and a kind it doesn't know as a plain message", async () => {
-    const heard = vi.fn();
-    listenThread('aaa_bbb', heard);
-    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalled());
-    const sentAt = fullSdkTimestamp('2026-09-01T08:00:00Z');
-    listener.onDocs!([
-      { id: 'later', data: { senderId: 'aaa', text: 'hm', sentAt, kind: 'sticker' } },
-      { id: 'note-1', data: { senderId: 'aaa', text: 'Your walk stayed with me.', sentAt, cardRef: 'walk', kind: 'note' } },
+  it("reads a note as a note, and a kind it doesn't know as a plain message", async () => {
+    pages['limit=50'] = page([
+      { id: 'later', text: 'hm', kind: 'sticker' },
+      { id: 'note-1', text: 'Your walk stayed with me.', cardRef: 'walk', kind: 'note' },
     ]);
+    const { heard } = await follow();
     const [later, note] = heardMessages(heard);
     expect(note).toMatchObject({ id: 'note-1', kind: 'note', cardRef: 'walk', text: 'Your walk stayed with me.' });
     expect(note.noteRef).toBeUndefined();
-    expect(later.kind).toBeUndefined();
     expect('kind' in later).toBe(false);
   });
 
-  // A picture a message carries is heard with its size (what its place is drawn from before it loads);
-  // a reply to one says so, as the list's preview does.
-  it('hears a picture with its size, a reply to one, and a list preview of one', async () => {
-    const heard = vi.fn();
-    listenThread('aaa_bbb', heard);
-    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalled());
-    const sentAt = fullSdkTimestamp('2026-09-01T08:00:00Z');
-    listener.onDocs!([
-      { id: 'r1', data: { senderId: 'bbb', text: 'wow', sentAt, replyTo: { id: 'p1', senderId: 'aaa', text: '', image: true } } },
-      { id: 'p1', data: { senderId: 'aaa', text: '', sentAt, image: { id: 'pic-1', width: 800, height: 1200 } } },
-      { id: 'p0', data: { senderId: 'aaa', text: 'odd', sentAt, image: { id: 'pic-0', width: 'wide' } } },
+  it('reads a picture with its size, a sticker, an album picture, and anything written oddly as none', async () => {
+    pages['limit=50'] = page([
+      { id: 'odd', text: '?', sticker: { pack: 'Twine!', id: 7 }, album: { id: 'a', index: 0, count: 2 } },
+      { id: 'a2', image: { id: 'p2', width: 0, height: 0 }, album: { id: 'alb', index: 5, count: 2 } },
+      { id: 'a1', text: 'two', image: { id: 'p1', width: 800, height: 1200 }, album: { id: 'alb', index: 0, count: 2 } },
+      { id: 'r1', senderId: 'bbb', text: 'ha', replyTo: { id: 's1', senderId: 'aaa', text: '〔貼圖：謝謝〕', sticker: { pack: 'twine', id: 'thanks' } } },
+      { id: 's1', text: '〔貼圖：謝謝〕', sticker: { pack: 'twine', id: 'thanks' } },
     ]);
-    const [reply, picture, odd] = heardMessages(heard);
-    expect(picture.image).toEqual({ id: 'pic-1', width: 800, height: 1200 });
-    expect(odd.image).toEqual({ id: 'pic-0', width: 0, height: 0 });
-    expect(reply.replyTo).toEqual({ id: 'p1', senderId: 'aaa', text: '', image: true });
-
-    const lists = vi.fn();
-    listenConversations('bbb', lists);
-    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalledTimes(2));
-    listener.onDocs!([
-      { id: 'aaa_bbb', data: { participants: ['aaa', 'bbb'], lastMessage: { text: '', senderId: 'aaa', sentAt, image: true }, unread: {} } },
-    ]);
-    expect(lists.mock.calls[0][0][0].lastMessage).toMatchObject({ text: '', image: true });
-  });
-
-  // Round 22: a sticker (its fallback words kept as its text), a reply to one, an album's picture, and the list's
-  // preview of a sticker — and anything written oddly read as none.
-  it('hears a sticker, a reply to one, an album picture, and a list preview of a sticker', async () => {
-    const heard = vi.fn();
-    listenThread('aaa_bbb', heard);
-    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalled());
-    const sentAt = fullSdkTimestamp('2026-09-01T08:00:00Z');
-    listener.onDocs!([
-      { id: 'odd', data: { senderId: 'aaa', text: '?', sentAt, sticker: { pack: 'Twine!', id: 7 }, album: { id: 'a', index: 0, count: 2 } } },
-      { id: 'a2', data: { senderId: 'aaa', text: '', sentAt, image: { id: 'p2' }, album: { id: 'alb', index: 5, count: 2 } } },
-      { id: 'a1', data: { senderId: 'aaa', text: 'two', sentAt, image: { id: 'p1' }, album: { id: 'alb', index: 0, count: 2 } } },
-      { id: 'r1', data: { senderId: 'bbb', text: 'ha', sentAt, replyTo: { id: 's1', senderId: 'aaa', text: '〔貼圖：謝謝〕', sticker: { pack: 'twine', id: 'thanks' } } } },
-      { id: 's1', data: { senderId: 'aaa', text: '〔貼圖：謝謝〕', sentAt, sticker: { pack: 'twine', id: 'thanks' } } },
-    ]);
+    const { heard } = await follow();
     const [odd, a2, a1, reply, sticker] = heardMessages(heard);
     expect(sticker).toMatchObject({ text: '〔貼圖：謝謝〕', sticker: { pack: 'twine', id: 'thanks' } });
     expect(reply.replyTo).toEqual({ id: 's1', senderId: 'aaa', text: '〔貼圖：謝謝〕', cardRef: undefined, sticker: { pack: 'twine', id: 'thanks' } });
+    expect(a1.image).toEqual({ id: 'p1', width: 800, height: 1200 });
     expect(a1.album).toEqual({ id: 'alb', index: 0, count: 2 });
     expect(a2.album).toBeUndefined();
     expect(odd.sticker).toBeUndefined();
     expect(odd.album).toBeUndefined();
-
-    const lists = vi.fn();
-    listenConversations('bbb', lists);
-    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalledTimes(2));
-    listener.onDocs!([
-      { id: 'aaa_bbb', data: { participants: ['aaa', 'bbb'], lastMessage: { text: '〔貼圖：謝謝〕', senderId: 'aaa', sentAt, sticker: true }, unread: {} } },
-    ]);
-    expect(lists.mock.calls[0][0][0].lastMessage).toMatchObject({ sticker: true });
   });
 
-  // Round 16: a message's reactions (the five this build knows), and one unsent — nothing of it but who and
-  // when, whatever the document still held; a quote of it and the list's preview say so too.
-  it('hears reactions it knows, an unsent message as nothing but its sender and time, and quotes and previews of one', async () => {
-    const heard = vi.fn();
-    listenThread('aaa_bbb', heard);
-    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalled());
-    const sentAt = fullSdkTimestamp('2026-09-01T08:00:00Z');
-    const unsentAt = fullSdkTimestamp('2026-09-01T08:05:00Z');
-    listener.onDocs!([
-      { id: 'r1', data: { senderId: 'bbb', text: 'what?', sentAt, replyTo: { id: 'u1', senderId: 'aaa', unsent: true, text: 'leaked' } } },
-      { id: 'u1', data: { senderId: 'aaa', sentAt, unsentAt, text: 'should not show', cardRef: 'walk', reactions: { bbb: 'heart' } } },
-      { id: 'm1', data: { senderId: 'aaa', text: 'hi', sentAt, reactions: { bbb: 'heart', aaa: 'angry', ccc: 7, ddd: 'thumbs' } } },
-      { id: 'm0', data: { senderId: 'aaa', text: 'plain', sentAt, reactions: { bbb: 'nope' } } },
+  it('reads reactions it knows, and an unsent message as nothing but its sender and time', async () => {
+    pages['limit=50'] = page([
+      { id: 'r1', senderId: 'bbb', text: 'what?', replyTo: { id: 'u1', senderId: 'aaa', unsent: true, text: '' } },
+      { id: 'u1', text: '', unsentAt: '2026-09-01T08:05:00.000000Z' },
+      { id: 'm1', text: 'hi', reactions: { bbb: 'heart', aaa: 'angry', ddd: 'thumbs' } },
+      { id: 'm0', text: 'plain', reactions: { bbb: 'nope' } },
     ]);
+    const { heard } = await follow();
     const [reply, unsent, reacted, plain] = heardMessages(heard);
     expect(reacted.reactions).toEqual({ bbb: 'heart', ddd: 'thumbs' });
     expect(plain.reactions).toBeUndefined();
     expect(unsent).toEqual({ id: 'u1', senderId: 'aaa', text: '', sentAt: unsent.sentAt, unsentAt: unsent.unsentAt });
     expect(unsent.unsentAt!.toISOString()).toBe('2026-09-01T08:05:00.000Z');
     expect(reply.replyTo).toEqual({ id: 'u1', senderId: 'aaa', text: '', unsent: true });
-
-    const lists = vi.fn();
-    listenConversations('bbb', lists);
-    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalledTimes(2));
-    listener.onDocs!([{ id: 'aaa_bbb', data: { participants: ['aaa', 'bbb'], lastMessage: { senderId: 'aaa', sentAt, unsent: true }, unread: {} } }]);
-    expect(lists.mock.calls[0][0][0].lastMessage).toMatchObject({ text: '', senderId: 'aaa', unsent: true });
   });
 
-  // The header's unread badge and the messages list: one listener on the
-  // viewer's own conversations (what the rules let them list), newest 50.
-  it("hears the viewer's newest conversations, most recently active first", async () => {
-    const heard = vi.fn();
-    listenConversations('bbb', heard);
-    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalled());
-    const [path, field, max, , , filters] = listener.listenNewest.mock.calls[0];
-    expect([path, field, max]).toEqual([['conversations'], 'updatedAt', 50]);
-    expect(filters).toEqual([{ field: 'participants', op: 'array-contains', value: 'bbb' }]);
-
-    listener.onDocs!([
-      {
-        id: 'aaa_bbb',
-        data: {
-          participants: ['aaa', 'bbb'],
-          updatedAt: fullSdkTimestamp('2026-09-01T08:05:00Z'),
-          lastMessage: { text: 'and you?', senderId: 'aaa', sentAt: fullSdkTimestamp('2026-09-01T08:05:00Z') },
-          unread: { bbb: 2 },
-        },
-      },
+  it('reads the page before a message by its cursor, newest first; a failed read throws', async () => {
+    pages['before=c1.m10&limit=100'] = page([
+      { id: 'm9', text: 'older' },
+      { id: 'm8', senderId: 'bbb', text: 'oldest' },
     ]);
-    const [conversations] = heard.mock.calls[0];
-    expect(conversations[0]).toMatchObject({ id: 'aaa_bbb', unread: { bbb: 2 }, lastMessage: { text: 'and you?' } });
-    expect(conversations[0].updatedAt.toISOString()).toBe('2026-09-01T08:05:00.000Z');
+    const older = await getMessagesBefore('aaa_bbb', 'c1.m10', 100);
+    expect(older.map((e) => [e.message.id, e.message.text, e.cursor])).toEqual([
+      ['m9', 'older', 'c1.m9'],
+      ['m8', 'oldest', 'c1.m8'],
+    ]);
+    pages['before=c1.m1&limit=50'] = new Error('offline');
+    await expect(getMessagesBefore('aaa_bbb', 'c1.m1', 50)).rejects.toMatchObject({ status: 503 });
   });
 
-  it('reads the page before a message by its send time to the nanosecond and its id, newest first', async () => {
-    vi.mocked(getDocs).mockResolvedValueOnce({
-      docs: [
-        { id: 'm9', data: () => ({ senderId: 'aaa', text: 'older', sentAt: fullSdkTimestamp('2026-08-31T10:00:00Z', 5) }) },
-        { id: 'm8', data: () => ({ senderId: 'bbb', text: 'oldest', sentAt: fullSdkTimestamp('2026-08-31T09:00:00Z') }) },
+  it("lists the viewer's newest conversations with their own unread count, previews of a picture, a sticker, an album, an unsent one", async () => {
+    const convo = (id: string, lastMessage: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
+      id,
+      participants: id.split('_'),
+      otherId: 'aaa',
+      other: null,
+      unread: 2,
+      lastMessage: { text: '', senderId: 'aaa', sentAt: '2026-09-01T08:05:00.000000Z', image: false, sticker: false, albumCount: null, unsent: false, ...lastMessage },
+      request: null,
+      createdAt: null,
+      updatedAt: '2026-09-01T08:05:00.000000Z',
+      originCardId: null,
+      ...extra,
+    });
+    pages['/api/v1/conversations'] = {
+      conversations: [
+        convo('aaa_bbb', { text: 'and you?' }, { originCardId: 'walk' }),
+        convo('bbb_ccc', { image: true, albumCount: 3 }),
+        convo('bbb_ddd', { text: '〔貼圖〕', sticker: true }),
+        convo('bbb_eee', { unsent: true }),
       ],
-    } as never);
-    const page = await getOlderMessages('aaa_bbb', { seconds: 1_788_000_000, nanoseconds: 42, id: 'm10' }, 100);
-
-    const q = vi.mocked(getDocs).mock.calls[0][0] as unknown as { ref: unknown; parts: unknown[] };
-    expect(q.ref).toEqual({ collection: 'conversations/aaa_bbb/messages' });
-    expect(q.parts).toEqual([
-      { orderBy: ['sentAt', 'desc'] },
-      { orderBy: ['__name__', 'desc'] },
-      { startAfter: [{ seconds: 1_788_000_000, nanoseconds: 42 }, 'm10'] },
-      { limit: 100 },
-    ]);
-    expect(page.map((e) => [e.message.id, e.message.text, e.cursor.nanoseconds])).toEqual([
-      ['m9', 'older', 5],
-      ['m8', 'oldest', 0],
-    ]);
+      nextPageToken: null,
+    };
+    const list = await listConversations();
+    expect(list[0]).toMatchObject({ id: 'aaa_bbb', participants: ['aaa', 'bbb'], unread: { bbb: 2 }, lastMessage: { text: 'and you?' }, originCardId: 'walk' });
+    expect(list[0].updatedAt.toISOString()).toBe('2026-09-01T08:05:00.000Z');
+    expect(list[0].request).toBeUndefined();
+    expect(list[1].lastMessage).toEqual({ text: '', senderId: 'aaa', sentAt: list[1].lastMessage!.sentAt, image: true, album: { count: 3 } });
+    expect(list[2].lastMessage).toMatchObject({ sticker: true });
+    expect(list[3].lastMessage).toMatchObject({ text: '', unsent: true });
   });
 
-  it('throws a page read that failed (it is not the beginning of the conversation)', async () => {
-    vi.mocked(getDocs).mockRejectedValueOnce(Object.assign(new Error('offline'), { code: 'unavailable' }));
-    await expect(getOlderMessages('aaa_bbb', { seconds: 1, nanoseconds: 0, id: 'm1' }, 50)).rejects.toThrow('offline');
-  });
-
-  it('stops the listener, and never starts one when stopped before it loaded', async () => {
-    const stop = listenThread('aaa_bbb', vi.fn());
-    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalledTimes(1));
-    stop();
-    expect(listener.stop).toHaveBeenCalledTimes(1);
-
-    listener.listenNewest.mockClear();
-    listenThread('aaa_bbb', vi.fn())();
-    await new Promise((r) => setTimeout(r, 10));
-    expect(listener.listenNewest).not.toHaveBeenCalled();
-  });
-});
-
-describe('a conversation read once', () => {
-  const snap = (data: Record<string, unknown>) => ({ exists: () => true, id: 'aaa_bbb', data: () => data });
-
-  // Whose turn it is in a thread between two people who aren't connected: the letter's writer waits, the other
-  // answers it.
-  it('carries the letter waiting in it, and reads one written oddly as none', async () => {
-    vi.mocked(getDoc).mockResolvedValueOnce(
-      snap({ participants: ['aaa', 'bbb'], unread: {}, request: { from: 'aaa', cardId: 'walk', count: 2, at: {} } }) as never,
-    );
+  it('carries the letter waiting in a conversation, and a conversation that is not there (404) as none', async () => {
+    pages['/api/v1/conversations/aaa_bbb'] = {
+      id: 'aaa_bbb',
+      participants: ['aaa', 'bbb'],
+      otherId: 'aaa',
+      other: null,
+      unread: 0,
+      lastMessage: null,
+      request: { from: 'aaa', cardId: 'walk', count: 2 },
+      createdAt: null,
+      updatedAt: null,
+      originCardId: null,
+    };
     expect((await getConversation('aaa_bbb'))?.request).toEqual({ from: 'aaa', cardId: 'walk', count: 2 });
+    await expect(getConversation('bbb_zzz')).resolves.toBeNull();
+  });
 
-    vi.mocked(getDoc).mockResolvedValueOnce(snap({ participants: ['aaa', 'bbb'], unread: {}, request: { from: '', count: 1 } }) as never);
-    expect((await getConversation('aaa_bbb'))?.request).toBeUndefined();
-    vi.mocked(getDoc).mockResolvedValueOnce(snap({ participants: ['aaa', 'bbb'], unread: {} }) as never);
-    expect((await getConversation('aaa_bbb'))?.request).toBeUndefined();
-    vi.mocked(getDoc).mockResolvedValueOnce(snap({ participants: ['aaa', 'bbb'], unread: {}, request: { from: 'bbb', count: 'x' } }) as never);
-    expect((await getConversation('aaa_bbb'))?.request).toEqual({ from: 'bbb', cardId: undefined, count: 0 });
+  it('marks a conversation read through the server and pulls the list again at once', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await readConversation('aaa_bbb');
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/conversations/aaa_bbb/read');
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST');
+    expect(signals.poked).toContain('inbox');
   });
 });
 

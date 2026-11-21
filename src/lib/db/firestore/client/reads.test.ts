@@ -6,8 +6,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // network. Only the named exports the code under test actually calls need real
 // behaviour; the rest are inert stubs so the module imports cleanly.
 vi.mock('./init', () => ({ getClientDb: vi.fn(() => ({})) }));
-vi.mock('@/lib/auth/firebase/client', () => ({
-  getFirebaseClientAuth: vi.fn(() => ({ currentUser: { uid: 'me' } })),
+// Who is signed in: a viewer reads people through /api/v1 (callApi, mocked below); signed out, through the rules.
+const auth = vi.hoisted(() => ({ currentUser: { uid: 'me' } as { uid: string } | null }));
+vi.mock('@/lib/auth/firebase/client', () => ({ getFirebaseClientAuth: vi.fn(() => auth) }));
+vi.mock('./api', () => ({
+  callApi: vi.fn(),
+  ApiError: class ApiError extends Error {
+    constructor(
+      readonly status: number,
+      readonly code: string,
+      message: string,
+    ) {
+      super(message);
+    }
+  },
 }));
 vi.mock('firebase/firestore/lite', () => ({
   collection: vi.fn((_db: unknown, name: string) => name),
@@ -28,13 +40,13 @@ vi.mock('firebase/firestore/lite', () => ({
 }));
 
 import { getDoc, getDocs, Timestamp } from 'firebase/firestore/lite';
+import { ApiError, callApi } from './api';
 import {
   forgetCachedUser,
   getCardById,
   getCardsByAuthor,
   getMyDrafts,
   getCurrentUserProfile,
-  getLatestPublishedFeed,
   getPublicCardsByAuthor,
   getResonanceCards,
   getUserByHandle,
@@ -64,38 +76,76 @@ describe('getCardById', () => {
   });
 });
 
-describe('isConnected', () => {
-  beforeEach(() => vi.clearAllMocks());
+/** A v1 Person, as GET /api/v1/users answers one. */
+const person = (id: string, handle = `h-${id}`) => ({
+  id,
+  gone: false,
+  author: { id, handle, initials: 'H', accentColor: 'oklch(70% 0.1 40)', avatarUrl: null, avatarSeed: `seed-${id}`, verified: false, region: 'TW' },
+  bio: `bio of ${id}`,
+  joinedAt: '2026-01-02T03:04:05.000Z',
+});
+const goneOne = (id: string) => ({ id, gone: true, author: null, bio: null, joinedAt: null });
 
-  it('returns true when the connection doc exists', async () => {
-    vi.mocked(getDoc).mockResolvedValue({ exists: () => true } as never);
-    await expect(isConnected('a', 'b')).resolves.toBe(true);
+/** The fake /api/v1: profiles by id (every id but `missing`), and whatever `over` answers by path. */
+function api(missing: string[] = [], over: Record<string, unknown> = {}) {
+  vi.mocked(callApi).mockImplementation((async (path: string) => {
+    if (path in over) {
+      const v = over[path];
+      if (v instanceof Error) throw v;
+      return v;
+    }
+    const url = new URL(path, 'https://x');
+    if (url.pathname === '/api/v1/users') {
+      const ids = url.searchParams.get('ids')!.split(',');
+      return { users: ids.map((id) => (missing.includes(id) ? goneOne(id) : person(id))) };
+    }
+    throw new Error(`unexpected ${path}`);
+  }) as never);
+}
+/** The uids each GET /api/v1/users asked for. */
+const apiReads = () =>
+  vi
+    .mocked(callApi)
+    .mock.calls.map(([path]) => new URL(path, 'https://x'))
+    .filter((u) => u.pathname === '/api/v1/users')
+    .map((u) => u.searchParams.get('ids')!.split(','));
+
+describe('isConnected / listMyConnectionUids (GET /api/v1/me/connections)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    auth.currentUser = { uid: 'me' };
+    forgetCachedUser();
+  });
+  const connections = { '/api/v1/me/connections': { connections: [{ userId: 'bob', establishedAt: null, person: person('bob') }] } };
+
+  it("answers from the viewer's connections — one read for everyone asking at once — and never touches Firestore", async () => {
+    api([], connections);
+    const [withBob, withCarol] = await Promise.all([isConnected('me', 'bob'), isConnected('carol', 'me')]);
+    expect([withBob, withCarol]).toEqual([true, false]);
+    expect(vi.mocked(callApi).mock.calls.filter(([p]) => p === '/api/v1/me/connections')).toHaveLength(1);
+    // The people it named are cached: their face needs no read.
+    await expect(getUserById('bob')).resolves.toMatchObject({ handle: 'h-bob', avatarSeed: 'seed-bob' });
+    expect(apiReads()).toEqual([]);
+    expect(getDoc).not.toHaveBeenCalled();
   });
 
-  it('returns false when the connection doc is absent', async () => {
-    vi.mocked(getDoc).mockResolvedValue({ exists: () => false } as never);
-    await expect(isConnected('a', 'b')).resolves.toBe(false);
+  it("is not connected for someone else's pair, or signed out, without asking", async () => {
+    api([], connections);
+    await expect(isConnected('bob', 'carol')).resolves.toBe(false);
+    auth.currentUser = null;
+    await expect(isConnected('me', 'bob')).resolves.toBe(false);
+    expect(callApi).not.toHaveBeenCalled();
   });
 
-  // Regression: the connections read rule references `resource.data.userIds`, so
-  // a `get` on a doc that doesn't exist (the common "not connected" case) is
-  // *denied* rather than returning an empty snapshot. The function must swallow
-  // that and report "not connected" — otherwise the whole profile fetch throws
-  // and the page falls through to its not-found state.
-  it('swallows a permission-denied error and reports not connected', async () => {
-    vi.mocked(getDoc).mockRejectedValue(denied());
-    await expect(isConnected('a', 'b')).resolves.toBe(false);
-  });
-
-  it('lets an offline read fail rather than answer "not connected"', async () => {
-    vi.mocked(getDoc).mockRejectedValue(offline());
-    await expect(isConnected('a', 'b')).rejects.toThrow('offline');
+  it('lets a failed read fail rather than answer "not connected"', async () => {
+    api([], { '/api/v1/me/connections': new Error('offline') });
+    await expect(isConnected('me', 'bob')).rejects.toThrow('offline');
   });
 });
 
-// --- profiles: one page-wide cache, a get each ------------------------------
+// --- profiles: one page-wide cache, 30 at a time ------------------------------
 
-/** What Firestore holds under users/*: every uid but the ones listed as missing. */
+/** What Firestore holds under users/*: every uid but the ones listed as missing (the signed-out reads). */
 function usersAnswer(missing: string[] = []) {
   vi.mocked(getDoc).mockImplementation((async (ref: { path: string }) => {
     const id = ref.path.replace(/^users\//, '');
@@ -103,96 +153,124 @@ function usersAnswer(missing: string[] = []) {
     return { id, exists: () => there, data: () => (there ? { handle: `h-${id}` } : undefined) };
   }) as never);
 }
-/** The uids read, in order. */
-const profileReads = () =>
-  vi.mocked(getDoc).mock.calls.map(([ref]) => {
-    const path = (ref as unknown as { path: string }).path;
-    expect(path).toMatch(/^users\//);
-    return path.replace(/^users\//, '');
-  });
 
 describe('profiles', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getDoc).mockReset();
+    auth.currentUser = { uid: 'me' };
     forgetCachedUser();
   });
 
-  it("reads a list's authors once each, a get per profile, never a list query", async () => {
-    usersAnswer();
+  it("signed in: reads a list's authors once each, thirty to a GET /api/v1/users, never Firestore", async () => {
+    api();
     const ids = Array.from({ length: 35 }, (_, i) => `u${i}`);
     const authors = await getUsersByIds([...ids, 'u0', 'u1']);
 
     expect(Object.keys(authors)).toHaveLength(35);
-    expect(authors.u34.handle).toBe('h-u34');
-    // The rules list no profiles: a list query, however small its pages, walks the whole directory.
+    expect(authors.u34).toMatchObject({ handle: 'h-u34', bio: 'bio of u34', avatarSeed: 'seed-u34' });
+    expect(authors.u34.joinedAt.toISOString()).toBe('2026-01-02T03:04:05.000Z');
+    expect(apiReads().map((chunk) => chunk.length)).toEqual([30, 5]);
+    expect(apiReads().flat().sort()).toEqual([...ids].sort());
+    expect(getDoc).not.toHaveBeenCalled();
     expect(getDocs).not.toHaveBeenCalled();
-    expect(profileReads().sort()).toEqual([...ids].sort());
+  });
+
+  it('signed out: a get each through the rules (profiles are public), never a list query', async () => {
+    auth.currentUser = null;
+    usersAnswer();
+    const authors = await getUsersByIds(['a', 'b']);
+    expect(authors.b.handle).toBe('h-b');
+    expect(getDoc).toHaveBeenCalledTimes(2);
+    expect(getDocs).not.toHaveBeenCalled();
+    expect(callApi).not.toHaveBeenCalled();
   });
 
   it('serves the next list from the cache, reading only the people it has not seen', async () => {
-    usersAnswer();
+    api();
     await getUsersByIds(['a', 'b']);
-    vi.mocked(getDoc).mockClear();
+    vi.mocked(callApi).mockClear();
 
     const authors = await getUsersByIds(['a', 'b', 'c']);
     expect(Object.keys(authors).sort()).toEqual(['a', 'b', 'c']);
-    expect(profileReads()).toEqual(['c']);
+    expect(apiReads()).toEqual([['c']]);
 
     // A single profile read (a card page's author) is a cache hit too.
-    vi.mocked(getDoc).mockClear();
+    vi.mocked(callApi).mockClear();
     await expect(getUserById('a')).resolves.toMatchObject({ handle: 'h-a' });
-    expect(getDoc).not.toHaveBeenCalled();
+    expect(callApi).not.toHaveBeenCalled();
   });
 
   it('shares a read already on its way instead of starting another', async () => {
-    usersAnswer();
+    api();
     const [first, second] = await Promise.all([getUsersByIds(['a', 'b']), getUsersByIds(['b', 'a'])]);
     expect(first.a.handle).toBe('h-a');
     expect(second.b.handle).toBe('h-b');
-    expect(getDoc).toHaveBeenCalledTimes(2);
+    expect(callApi).toHaveBeenCalledTimes(1);
   });
 
-  it('remembers who is missing, and leaves them out', async () => {
-    usersAnswer(['gone']);
+  it('remembers who is gone (the server says so, never stale data), and leaves them out', async () => {
+    api(['gone']);
     expect(await getUsersByIds(['a', 'gone'])).not.toHaveProperty('gone');
-    vi.mocked(getDoc).mockClear();
+    vi.mocked(callApi).mockClear();
     expect(await getUsersByIds(['gone'])).toEqual({});
-    expect(getDoc).not.toHaveBeenCalled();
+    await expect(getUserById('gone')).resolves.toBeNull();
+    expect(callApi).not.toHaveBeenCalled();
   });
 
   it('reads a profile again once it is a few minutes old', async () => {
-    usersAnswer();
+    api();
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     await getUsersByIds(['a']);
     now.mockReturnValue(1_000_000 + 6 * 60 * 1000);
-    vi.mocked(getDoc).mockClear();
+    vi.mocked(callApi).mockClear();
     await getUsersByIds(['a']);
-    expect(profileReads()).toEqual(['a']);
+    expect(apiReads()).toEqual([['a']]);
     now.mockRestore();
   });
 
-  it("always reads the viewer's own profile fresh, and forgets a profile its owner just edited", async () => {
-    usersAnswer();
+  it("always reads the viewer's own profile fresh (GET /me beside their public face), and forgets a profile its owner just edited", async () => {
+    api();
     await getUsersByIds(['me']);
-    vi.mocked(getDoc).mockResolvedValue({ id: 'me', exists: () => true, data: () => ({ handle: 'renamed' }) } as never);
+    api([], {
+      '/api/v1/me': {
+        id: 'me',
+        handle: 'renamed',
+        initials: 'R',
+        accentColor: 'oklch(70% 0.1 40)',
+        bio: null,
+        avatarUrl: null,
+        region: 'TW',
+        primaryLocale: 'en',
+        handleChangedAt: '2026-10-01T00:00:00.000Z',
+        autoTranslateTo: ['zh-TW'],
+        hintsSeen: { swipe: 2 },
+      },
+    });
 
-    await expect(getCurrentUserProfile()).resolves.toMatchObject({ handle: 'renamed' });
+    const me = await getCurrentUserProfile();
+    expect(me).toMatchObject({ handle: 'renamed', primaryLocale: 'en', autoTranslateTo: ['zh-TW'], hintsSeen: { swipe: 2 }, avatarSeed: 'seed-me' });
+    expect(me!.handleChangedAt.toISOString()).toBe('2026-10-01T00:00:00.000Z');
     // …and the lists pick up what it read.
-    vi.mocked(getDoc).mockClear();
+    vi.mocked(callApi).mockClear();
     expect((await getUsersByIds(['me'])).me.handle).toBe('renamed');
-    expect(getDoc).not.toHaveBeenCalled();
+    expect(callApi).not.toHaveBeenCalled();
 
     forgetCachedUser('me');
-    usersAnswer();
+    api();
     await getUsersByIds(['me']);
-    expect(profileReads()).toEqual(['me']);
+    expect(apiReads()).toEqual([['me']]);
+  });
+
+  it('answers no profile before onboarding (404 from /me)', async () => {
+    api([], { '/api/v1/me': new ApiError(404, 'not_found', 'No profile.') });
+    await expect(getCurrentUserProfile()).resolves.toBeNull();
   });
 
   it('lets a failed read fail, and caches nothing from it', async () => {
-    vi.mocked(getDoc).mockRejectedValueOnce(new Error('offline'));
+    vi.mocked(callApi).mockRejectedValueOnce(new Error('offline'));
     await expect(getUsersByIds(['a'])).rejects.toThrow('offline');
-    usersAnswer();
+    api();
     expect((await getUsersByIds(['a'])).a.handle).toBe('h-a');
   });
 });
@@ -207,11 +285,10 @@ describe('public card lists', () => {
   });
   const filtersOf = (call: number) => (vi.mocked(getDocs).mock.calls[call][0] as unknown as { filters: unknown[] }).filters;
 
-  it('ask only for attributed cards: the latest feed, a card\'s resonances, a profile\'s cards', async () => {
-    await getLatestPublishedFeed(12);
+  it('ask only for attributed cards: a card\'s resonances, a profile\'s cards', async () => {
     await getResonanceCards('c1');
     await getPublicCardsByAuthor('bob');
-    for (const call of [0, 1, 2]) {
+    for (const call of [0, 1]) {
       expect(filtersOf(call)).toContainEqual({ field: 'anonymous', op: '==', value: false });
       expect(filtersOf(call)).toContainEqual({ field: 'visibility', op: '==', value: 'public' });
     }
@@ -221,10 +298,29 @@ describe('public card lists', () => {
 describe('getUserByHandle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getDoc).mockReset();
+    auth.currentUser = { uid: 'me' };
     forgetCachedUser();
   });
 
-  it("goes by the pen name's reservation (handles/{name}), then the profile it names", async () => {
+  it('signed in: the profile head from GET /api/v1/users/{handle}, cached for the lists', async () => {
+    const nina = person('nina', '小夜');
+    api([], { [`/api/v1/users/${encodeURIComponent('小夜')}`]: { ...nina, isSelf: false, isConnected: false, isBlocked: false } });
+    await expect(getUserByHandle(' 小夜 ')).resolves.toMatchObject({ id: 'nina', handle: '小夜', bio: 'bio of nina' });
+    vi.mocked(callApi).mockClear();
+    await expect(getUserById('nina')).resolves.toMatchObject({ handle: '小夜' });
+    expect(callApi).not.toHaveBeenCalled();
+    expect(getDoc).not.toHaveBeenCalled();
+  });
+
+  it('signed in: nobody by that name (404) is no one; a failed read fails', async () => {
+    api([], { '/api/v1/users/bob': new ApiError(404, 'not_found', 'No such person.'), '/api/v1/users/eve': new Error('offline') });
+    await expect(getUserByHandle('bob')).resolves.toBeNull();
+    await expect(getUserByHandle('eve')).rejects.toThrow('offline');
+  });
+
+  it("signed out: goes by the pen name's reservation (handles/{name}), then the profile it names", async () => {
+    auth.currentUser = null;
     vi.mocked(getDoc).mockImplementation((async (ref: { path: string }) =>
       ref.path === 'handles/小夜'
         ? { exists: () => true, data: () => ({ uid: 'nina', handle: '小夜' }) }
@@ -234,13 +330,10 @@ describe('getUserByHandle', () => {
     expect(getDocs).not.toHaveBeenCalled();
   });
 
-  it('names no one for a name with no reservation, and never lists the profiles', async () => {
-    vi.mocked(getDoc).mockResolvedValue({ exists: () => false } as never);
+  it('signed out: names no one for a name with no reservation; an offline read fails', async () => {
+    auth.currentUser = null;
+    vi.mocked(getDoc).mockResolvedValueOnce({ exists: () => false } as never);
     await expect(getUserByHandle('BOB')).resolves.toBeNull();
-    expect(getDocs).not.toHaveBeenCalled();
-  });
-
-  it('lets an offline read fail rather than answer "no such person"', async () => {
     vi.mocked(getDoc).mockRejectedValue(offline());
     await expect(getUserByHandle('bob')).rejects.toThrow('offline');
   });

@@ -163,7 +163,7 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
   const onSave = useCallback(() => {
     if (!user) return;
     const saving = !saved;
-    void mutateSaved(async () => toggleBookmark(cardId), { optimisticData: saving, revalidate: false }).catch(() => {});
+    void mutateSaved(async () => toggleBookmark(cardId, saving), { optimisticData: saving, revalidate: false }).catch(() => {});
     if (saving) toast.show({ message: t('saved') });
   }, [user, saved, mutateSaved, cardId, toast, t]);
 

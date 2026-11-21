@@ -1,21 +1,10 @@
 'use client';
 
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  Timestamp,
-  updateDoc,
-  where,
-} from './sdk';
+import type { BlockListBody } from '@/lib/api/v1/schemas';
 import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
-import { isConnected } from './reads';
-import { getClientDb } from './init';
+import { callApi } from './api';
+import { rememberPeople } from './reads';
+import { pokeSignal } from './signals';
 
 /**
  * Blocking (封鎖). The block list lives at `users/{uid}/blocks/{blockedUid}`
@@ -26,7 +15,9 @@ import { getClientDb } from './init';
  *    connecting, messaging, invites, notes, notifications, card links
  *    (`blockedBetween()` in firestore.rules).
  *  - Blocking ends the connection and withdraws pending invites between the
- *    two people, so the existing conversation freezes.
+ *    two people, so the existing conversation freezes — one server
+ *    transaction (PUT /api/v1/me/blocks/{uid}), which the browser no longer
+ *    pieces together from three writes.
  *  - The blocker stops seeing the other person's cards and conversations
  *    (filtered client-side through {@link getMyBlockedIds}).
  * Unblocking removes the entry only — a connection is never restored.
@@ -43,14 +34,6 @@ function requireUid(): string {
   return uid;
 }
 
-function blocksCol(uid: string) {
-  return collection(getClientDb(), 'users', uid, 'blocks');
-}
-
-function connectionId(a: string, b: string): string {
-  return a < b ? `${a}_${b}` : `${b}_${a}`;
-}
-
 // One in-flight read of the viewer's block list, shared by every feed/list
 // fetcher; keyed by uid so switching accounts never reuses another's list.
 let cache: { uid: string; ids: Promise<Set<string>> } | null = null;
@@ -61,8 +44,8 @@ let cache: { uid: string; ids: Promise<Set<string>> } | null = null;
  * Waits for Auth to restore a returning reader first: until it has,
  * `currentUser` is null, and an empty list then would let a list that doesn't
  * itself wait for the viewer (the home feed, related cards) through unfiltered
- * — and cached that way. It costs no time: the Firestore reads beside it wait
- * for the same restore (see ./init).
+ * — and cached that way. Read once (GET /api/v1/me/blocks) for every list
+ * that asks: only the viewer's own block or unblock changes it.
  */
 export async function getMyBlockedIds(): Promise<Set<string>> {
   const auth = getFirebaseClientAuth();
@@ -70,8 +53,8 @@ export async function getMyBlockedIds(): Promise<Set<string>> {
   const uid = auth.currentUser?.uid;
   if (!uid) return new Set();
   if (cache?.uid !== uid) {
-    const ids = getDocs(blocksCol(uid))
-      .then((snap) => new Set(snap.docs.map((d) => d.id)))
+    const ids = readBlocks()
+      .then((blocks) => new Set(blocks.map((b) => b.uid)))
       .catch(() => {
         cache = null; // don't pin a transient failure
         return new Set<string>();
@@ -86,57 +69,41 @@ export function invalidateBlocks(): void {
   cache = null;
 }
 
+/** GET /api/v1/me/blocks, the people in it handed to the profile cache (the blocked list draws them). */
+async function readBlocks(): Promise<BlockedUser[]> {
+  const body = await callApi<BlockListBody>('/api/v1/me/blocks');
+  rememberPeople(body.blocks.map((b) => b.person));
+  return body.blocks.map((b) => ({ uid: b.userId, createdAt: b.blockedAt ? new Date(b.blockedAt) : null }));
+}
+
+/** Everyone the viewer blocked, the latest first. */
 export async function listMyBlocks(): Promise<BlockedUser[]> {
-  const uid = requireUid();
-  const snap = await getDocs(query(blocksCol(uid), orderBy('createdAt', 'desc')));
-  return snap.docs.map((d) => {
-    const at = d.data().createdAt;
-    return { uid: d.id, createdAt: at instanceof Timestamp ? at.toDate() : null };
-  });
+  requireUid();
+  return readBlocks();
 }
 
-/** Withdraw every pending invite between the viewer and `other`, either direction. */
-async function withdrawPendingInvites(uid: string, other: string): Promise<void> {
-  const invites = collection(getClientDb(), 'invites');
-  const pairs: [string, string][] = [
-    [uid, other],
-    [other, uid],
-  ];
-  const snaps = await Promise.all(
-    pairs.map(([from, to]) =>
-      getDocs(
-        query(
-          invites,
-          where('fromUserId', '==', from),
-          where('toUserId', '==', to),
-          where('status', '==', 'pending'),
-        ),
-      ),
-    ),
-  );
-  await Promise.all(
-    snaps.flatMap((s) => s.docs.map((d) => updateDoc(d.ref, { status: 'withdrawn' }))),
-  );
-}
-
+/**
+ * Block someone: one server transaction (PUT /api/v1/me/blocks/{uid}) blocks
+ * them, ends a connection and withdraws pending invites both ways.
+ */
 export async function blockUser(otherUid: string): Promise<void> {
   const uid = requireUid();
   if (otherUid === uid) throw new Error('Cannot block yourself');
-  // The block goes first: once it exists, rules already refuse any new
-  // contact, so the cleanup below can't race a fresh connection.
-  await setDoc(doc(blocksCol(uid), otherUid), {
-    blockedUid: otherUid,
-    createdAt: serverTimestamp(),
-  });
-  invalidateBlocks();
-  if (await isConnected(uid, otherUid)) {
-    await deleteDoc(doc(getClientDb(), 'connections', connectionId(uid, otherUid)));
+  try {
+    await callApi(`/api/v1/me/blocks/${encodeURIComponent(otherUid)}`, { method: 'PUT' });
+  } finally {
+    invalidateBlocks();
   }
-  await withdrawPendingInvites(uid, otherUid);
+  pokeSignal('graph');
 }
 
+/** Unblock: the block goes, nothing else — a connection is never restored (DELETE /api/v1/me/blocks/{uid}). */
 export async function unblockUser(otherUid: string): Promise<void> {
-  const uid = requireUid();
-  await deleteDoc(doc(blocksCol(uid), otherUid));
-  invalidateBlocks();
+  requireUid();
+  try {
+    await callApi(`/api/v1/me/blocks/${encodeURIComponent(otherUid)}`, { method: 'DELETE' });
+  } finally {
+    invalidateBlocks();
+  }
+  pokeSignal('graph');
 }

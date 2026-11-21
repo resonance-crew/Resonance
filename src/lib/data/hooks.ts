@@ -23,8 +23,10 @@ import {
   resolveCardId,
 } from '@/lib/db/firestore/client/reads';
 import { loadMyThoughtMap, type ThoughtMapData } from '@/lib/db/firestore/client/thoughtMap';
-import { listenConversations } from '@/lib/db/firestore/client/messages';
-import { listenNotifications } from '@/lib/db/firestore/client/notifications';
+import { listConversations } from '@/lib/db/firestore/client/messages';
+import { liveConversationsKey } from './thread';
+import { getBell } from '@/lib/db/firestore/client/notifications';
+import { watchSignal, type SignalTopic } from '@/lib/db/firestore/client/signals';
 import { getMyBlockedIds } from '@/lib/db/firestore/client/blocks';
 import { ApiError, callApi } from '@/lib/db/firestore/client/api';
 import { getFirebaseClientAuth, hasSessionMark, sessionMarkUid } from '@/lib/auth/firebase/client';
@@ -42,7 +44,7 @@ import type {
   RecommendedFeedBody,
 } from '@/lib/api/v1/schemas';
 import type { Conversation, Notification } from '@/lib/db/types';
-import { useLive, type LiveState } from './live';
+import { pulled, useLive, type LiveState } from './live';
 import { anonymousAuthor, cardKey } from './cardPrefill';
 import type { CardSeed, PublicCardView } from './cardSeed';
 import { profileUser, summaryAuthor, summaryCard, summaryList } from './summaries';
@@ -996,17 +998,43 @@ export interface ConversationsData {
 }
 
 /**
- * The viewer's newest 50 conversations, live: one listener (client/realtime,
- * loaded once the page is idle) shared by the header's badge and the messages
- * list, instead of reading every conversation again on a timer. Unfiltered —
- * see {@link visibleConversations}.
+ * SWR keys read again when a signal moves (client/signals): one watcher per
+ * key however many components read it, so one signal is one request.
+ */
+const signalWatches = new Map<string, { readers: number; stop: () => void }>();
+
+function useRevalidateOnSignal(uid: string | null, topic: SignalTopic, key: string | null): void {
+  const { mutate } = useSWRConfig();
+  useEffect(() => {
+    if (!uid || !key) return;
+    const id = `${uid}|${topic}|${key}`;
+    let watch = signalWatches.get(id);
+    if (!watch) {
+      watch = { readers: 0, stop: watchSignal(uid, topic, () => void mutate(key)) };
+      signalWatches.set(id, watch);
+    }
+    watch.readers++;
+    const w = watch;
+    return () => {
+      if (--w.readers > 0) return;
+      w.stop();
+      if (signalWatches.get(id) === w) signalWatches.delete(id);
+    };
+  }, [uid, topic, key, mutate]);
+}
+
+
+/**
+ * The viewer's newest 50 conversations, live: one GET /api/v1/conversations
+ * (started once the page is idle) shared by the header's badge and the
+ * messages list, pulled again when the viewer's `inbox` signal moves and on
+ * the minute's safety pull — an unchanged list a 304. Unfiltered — see
+ * {@link visibleConversations}.
  */
 function useLiveConversations(): LiveState<Conversation[]> {
   const { user, loading } = useAuth();
   const uid = user && !loading ? user.id : null;
-  return useLive<Conversation[]>(uid ? `conversations:live:${uid}` : null, (emit, fail) =>
-    listenConversations(uid!, emit, fail),
-  );
+  return useLive<Conversation[]>(uid ? liveConversationsKey(uid) : null, pulled(uid ?? '', ['inbox'], () => listConversations()));
 }
 
 /**
@@ -1093,6 +1121,8 @@ export function useConversations(): { data: ConversationsData | undefined; error
   // a delete — mutates this key (dependsOnConnections), and a new connection is a new conversation in the live
   // list, which this joins.
   const connections = useSWR<string[]>(uid ? `conversations:${uid}` : null, () => listMyConnectionUids());
+  // …and read again when the viewer's connections change elsewhere (their `graph` signal).
+  useRevalidateOnSignal(uid, 'graph', uid ? `conversations:${uid}` : null);
   const conversations = visibleConversations(live.data, blocked);
   const otherUids = conversations?.map((c) => c.participants.find((p) => p !== uid) ?? '');
   const ids =
@@ -1116,14 +1146,16 @@ export function useConversations(): { data: ConversationsData | undefined; error
 }
 
 /**
- * The viewer's newest notifications, live (the bell's badge and list): a new
+ * The viewer's newest notifications, live (the bell's badge and list): GET
+ * /api/v1/me/bell, pulled again when the viewer's `bell` signal moves — a new
  * row, or one marked read on another device, shows without a reload.
  */
 export function useNotifications(max = 20): LiveState<Notification[]> {
   const { user, loading } = useAuth();
   const uid = user && !loading ? user.id : null;
-  return useLive<Notification[]>(uid ? `notifications:live:${uid}:${max}` : null, (emit, fail) =>
-    listenNotifications(uid!, emit, fail, max),
+  return useLive<Notification[]>(
+    uid ? `notifications:live:${uid}:${max}` : null,
+    pulled(uid ?? '', ['bell'], () => getBell(max).then((bell) => bell.items)),
   );
 }
 

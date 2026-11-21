@@ -44,27 +44,29 @@ const server = vi.hoisted(() => ({
   messages: [] as Message[],
   emit: null as ((window: unknown) => void) | null,
   windowOf: (messages: Message[]) => ({
-    entries: [...messages].reverse().map((message) => ({ message, cursor: { seconds: 0, nanoseconds: 0, id: message.id } })),
-    fromCache: false,
+    entries: [...messages].reverse().map((message) => ({ message, cursor: message.id })),
   }),
 }));
+// The signal channel: nothing listens to Firestore here (watchers are kept, pokes do nothing).
+vi.mock('@/lib/db/firestore/client/signals', () => ({ watchSignal: () => () => {}, pokeSignal: () => {} }));
 vi.mock('@/lib/db/firestore/client/messages', () => ({
   MESSAGE_MAX_LENGTH: 2000,
   conversationId: (a: string, b: string) => [a, b].sort().join('_'),
   getConversation: vi.fn(),
   // The live list a thread starts on (W15): it has heard nothing here.
-  listenConversations: vi.fn(() => () => {}),
-  markConversationRead: vi.fn(async () => {}),
+  listConversations: vi.fn(() => new Promise(() => {})),
+  readConversation: vi.fn(async () => {}),
+  isGone: (e: unknown) => [403, 404].includes((e as { status?: number } | null)?.status ?? 0),
   sendMessage: vi.fn(),
   deleteConversation: vi.fn(),
   reactToMessage: vi.fn(async () => {}),
   unsendMessage: vi.fn(async () => {}),
-  listenThread: vi.fn((_pairId: string, onWindow: (window: unknown) => void) => {
+  followThread: vi.fn((_pairId: string, onWindow: (window: unknown) => void) => {
     server.emit = onWindow;
     onWindow(server.windowOf(server.messages));
     return () => {};
   }),
-  getOlderMessages: vi.fn(async () => []),
+  getMessagesBefore: vi.fn(async () => []),
 }));
 /** What the composer says to a screen reader (「回覆 alice」 as a reply is chosen) — not the row that shows it. */
 const SAID = 'script, style, [aria-live]';
@@ -76,7 +78,7 @@ vi.mock('@/components/molecules/MarkdownEditor/InsertCardModal', () => ({ Insert
 
 import { callApi } from '@/lib/db/firestore/client/api';
 import { getCardById, getCardBySlugOrId, getUserByHandle, getUserById, getUsersByIds, isConnected } from '@/lib/db/firestore/client/reads';
-import { getConversation, getOlderMessages, reactToMessage, sendMessage, unsendMessage } from '@/lib/db/firestore/client/messages';
+import { getConversation, getMessagesBefore, reactToMessage, sendMessage, unsendMessage } from '@/lib/db/firestore/client/messages';
 import { ApiError } from '@/lib/db/firestore/client/api';
 import { ToastProvider } from '@/components/providers/ToastProvider';
 import { blockUser, getMyBlockedIds, unblockUser } from '@/lib/db/firestore/client/blocks';
@@ -1294,17 +1296,17 @@ describe('a long conversation searched', () => {
   beforeEach(() => {
     // The listener holds the newest 50; older pages answer from the rest.
     server.messages = long.slice(-50);
-    vi.mocked(getOlderMessages).mockImplementation(async (_pair, before, max) => {
-      const end = long.findIndex((m) => m.id === before.id);
+    vi.mocked(getMessagesBefore).mockImplementation(async (_pair, before, max) => {
+      const end = long.findIndex((m) => m.id === before);
       return long
         .slice(Math.max(0, end - max), end)
         .reverse()
-        .map((message) => ({ message, cursor: { seconds: 0, nanoseconds: 0, id: message.id } }));
+        .map((message) => ({ message, cursor: message.id }));
     });
     vi.mocked(callApi).mockResolvedValue({ cards: [] });
     Element.prototype.scrollTo = vi.fn() as unknown as Element['scrollTo'];
   });
-  afterEach(() => vi.mocked(getOlderMessages).mockImplementation(async () => []));
+  afterEach(() => vi.mocked(getMessagesBefore).mockImplementation(async () => []));
 
   /**
    * The reader well down a thread of rows 100 tall in a 600 window (jsdom's scroller would otherwise sit at its

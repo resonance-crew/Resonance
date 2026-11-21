@@ -1,24 +1,10 @@
 'use client';
 
-import {
-  Timestamp,
-  collection,
-  doc,
-  documentId,
-  getDoc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  startAfter,
-  updateDoc,
-} from './sdk';
 import type { Conversation, Message } from '@/lib/db/types';
+import type { ConversationBody, ConversationListBody, MessagePageBody, ThreadMessageBody } from '@/lib/api/v1/schemas';
 import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
-import { getClientDb } from './init';
-import { callApi, callApiForm } from './api';
-import { isAbsent } from './errors';
-import { listenLazily } from './listen';
+import { ApiError, callApi, callApiForm } from './api';
+import { pokeSignal, watchSignal } from './signals';
 import { linkPreviewOf } from '@/lib/links/previewShape';
 import { isReactionId, type ReactionId } from '@/lib/design/reactions';
 
@@ -42,38 +28,44 @@ export function otherParticipant(pairId: string, uid: string): string {
   return a === uid ? b : a;
 }
 
-/**
- * A Timestamp from either SDK: Lite's for the conversation reads, the full
- * SDK's for an open thread's listener (two copies of the class, so no
- * `instanceof`).
- */
+/** A time as the API or a document carries it: a Date, an ISO string, or a Timestamp (by shape). */
 function tsToDate(value: unknown): Date | null {
   if (value instanceof Date) return value;
+  if (typeof value === 'string') {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
   if (value && typeof (value as { toDate?: unknown }).toDate === 'function') return (value as { toDate(): Date }).toDate();
   return null;
 }
 
-function mapConversation(id: string, data: Record<string, unknown>): Conversation {
-  const last = data.lastMessage as Record<string, unknown> | null | undefined;
+/**
+ * A conversation as GET /api/v1/conversations answers it, in the shape the
+ * list and the thread draw: the viewer's own unread count under their uid
+ * (the API says only theirs), the preview's picture count as an album.
+ */
+export function mapApiConversation(c: ConversationBody, viewerId: string): Conversation {
+  const last = c.lastMessage;
+  const count = last?.albumCount;
   return {
-    id,
-    participants: (data.participants as [string, string]) ?? ['', ''],
-    createdAt: tsToDate(data.createdAt) ?? new Date(0),
-    updatedAt: tsToDate(data.updatedAt) ?? new Date(0),
+    id: c.id,
+    participants: (c.participants.length === 2 ? c.participants : ['', '']) as [string, string],
+    createdAt: tsToDate(c.createdAt) ?? new Date(0),
+    updatedAt: tsToDate(c.updatedAt) ?? new Date(0),
     lastMessage: last
       ? {
-          text: String(last.text ?? ''),
-          senderId: String(last.senderId ?? ''),
+          text: last.text,
+          senderId: last.senderId,
           sentAt: tsToDate(last.sentAt) ?? new Date(0),
-          ...(last.image === true ? { image: true } : {}),
-          ...(last.sticker === true ? { sticker: true } : {}),
-          ...albumCount(last.album),
-          ...(last.unsent === true ? { unsent: true } : {}),
+          ...(last.image ? { image: true } : {}),
+          ...(last.sticker ? { sticker: true } : {}),
+          ...(typeof count === 'number' && Number.isInteger(count) && count >= 2 && count <= 10 ? { album: { count } } : {}),
+          ...(last.unsent ? { unsent: true } : {}),
         }
       : null,
-    unread: (data.unread as Record<string, number>) ?? {},
-    originCardId: data.originCardId ? String(data.originCardId) : undefined,
-    request: mapRequest(data.request),
+    unread: { [viewerId]: c.unread },
+    originCardId: c.originCardId ?? undefined,
+    request: mapRequest(c.request),
   };
 }
 
@@ -94,7 +86,8 @@ function mapRequest(v: unknown): Conversation['request'] {
   };
 }
 
-function mapMessage(id: string, data: Record<string, unknown>): Message {
+/** A message's fields (an API ThreadMessage, or a document's) as the thread draws it — each one checked again. */
+export function mapMessageFields(id: string, data: Record<string, unknown>): Message {
   const unsentAt = data.unsentAt != null ? (tsToDate(data.unsentAt) ?? new Date()) : null;
   // Unsent: who sent it and when is all there is (the server keeps nothing else on it either).
   if (unsentAt) {
@@ -158,12 +151,6 @@ function stickerField(v: unknown): { sticker?: { pack: string; id: string } } {
   const { pack, id } = v as Record<string, unknown>;
   const ok = (x: unknown, max: number): x is string => typeof x === 'string' && x.length <= max && /^[a-z0-9-]+$/.test(x);
   return ok(pack, 32) && ok(id, 40) ? { sticker: { pack, id } } : {};
-}
-
-/** How many pictures the list's last message was one of, when the server says so (2 to 10), else nothing. */
-function albumCount(v: unknown): { album?: { count: number } } {
-  const count = v && typeof v === 'object' ? (v as Record<string, unknown>).count : undefined;
-  return typeof count === 'number' && Number.isInteger(count) && count >= 2 && count <= 10 ? { album: { count } } : {};
 }
 
 /** One picture's place in an album (round 22): a sane id, index and count, else none (drawn as a picture alone). */
@@ -312,138 +299,158 @@ export function chatImageUrl(id: string, size: 'thumb' | 'full'): string {
   return `/api/v1/chat-images/${encodeURIComponent(id)}${size === 'thumb' ? '?size=thumb' : ''}`;
 }
 
-/** Zero the viewer's own unread counter on a conversation. */
-export async function markConversationRead(pairId: string): Promise<void> {
-  const uid = requireUid();
-  await updateDoc(doc(getClientDb(), 'conversations', pairId), {
-    [`unread.${uid}`]: 0,
-  });
+const pairPath = (pairId: string) => `/api/v1/conversations/${encodeURIComponent(pairId)}`;
+
+/**
+ * Zero the viewer's own unread counter on a conversation (POST
+ * /api/v1/conversations/{pair}/read). The server raises the viewer's own
+ * `inbox` signal, so the list and the header's badge pull it again; this
+ * browser pokes them at once besides.
+ */
+export async function readConversation(pairId: string): Promise<void> {
+  requireUid();
+  await callApi(`${pairPath(pairId)}/read`, { method: 'POST' });
+  pokeSignal('inbox');
 }
 
-/** A single conversation, or null when missing / not a participant (a failed read throws). */
+/** The answer that, for this viewer, there is no such thing (404), or it isn't theirs to read (403). */
+export function isGone(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 404 || err.status === 403);
+}
+
+/**
+ * A single conversation (GET /api/v1/conversations/{pair}), or null when
+ * there is none for this viewer — the server answers a conversation one isn't
+ * in exactly as one that doesn't exist (404). A failed read throws.
+ */
 export async function getConversation(pairId: string): Promise<Conversation | null> {
+  const uid = requireUid();
   try {
-    const snap = await getDoc(doc(getClientDb(), 'conversations', pairId));
-    return snap.exists() ? mapConversation(snap.id, snap.data()) : null;
+    return mapApiConversation(await callApi<ConversationBody>(pairPath(pairId)), uid);
   } catch (e) {
-    if (isAbsent(e)) return null;
+    if (isGone(e)) return null;
     throw e;
   }
 }
 
-/**
- * Where the page of messages before a message starts: its send time (to the
- * microsecond, as Firestore orders them) and its id (which orders messages
- * sent in the same instant). Plain numbers, so the full SDK's listener can
- * hand one to a Lite read.
- */
-export interface MessageCursor {
-  seconds: number;
-  nanoseconds: number;
-  id: string;
+/** How many conversations the list (and the header's badge) holds: the API's first page. */
+export const CONVERSATIONS_PAGE = 50;
+
+/** The viewer's newest conversations, the most recently active first (GET /api/v1/conversations: its first page). */
+export async function listConversations(): Promise<Conversation[]> {
+  const uid = requireUid();
+  const body = await callApi<ConversationListBody>('/api/v1/conversations');
+  return body.conversations.slice(0, CONVERSATIONS_PAGE).map((c) => mapApiConversation(c, uid));
 }
 
-/** A message with the cursor that starts the page before it. */
-export interface ThreadEntry {
+/** A message with its place in the thread: the API's opaque cursor (`before` for older ones, `after` for newer). */
+export interface ThreadEntry<C = string> {
   message: Message;
-  cursor: MessageCursor;
+  cursor: C;
 }
 
-/** One answer of an open thread's listener: its newest messages, newest first. */
+/** One answer of an open thread: its newest messages, newest first. */
 export interface ThreadWindow {
   entries: ThreadEntry[];
-  /** From the listener's memory rather than the server: may be only part of the newest messages. */
-  fromCache: boolean;
 }
 
-/** The newest messages an open thread listens to; older ones are read a page at a time. */
+/** The newest messages an open thread follows; older ones are read a page at a time. */
 export const THREAD_WINDOW = 50;
+/** The most one page of the API holds. */
+const PAGE_MAX = 100;
+/** How many `after` pages one catch-up reads at most. */
+const CATCH_UP_PAGES = 20;
 
-/** A send time to the microsecond, from either SDK's Timestamp (by shape) or, failing that, a Date. */
-function cursorOf(id: string, data: Record<string, unknown>, sentAt: Date): MessageCursor {
-  const ts = data.sentAt as { seconds?: unknown; nanoseconds?: unknown } | null | undefined;
-  if (ts && typeof ts.seconds === 'number' && typeof ts.nanoseconds === 'number') {
-    return { seconds: ts.seconds, nanoseconds: ts.nanoseconds, id };
-  }
-  const ms = sentAt.getTime();
-  return { seconds: Math.floor(ms / 1000), nanoseconds: (((ms % 1000) + 1000) % 1000) * 1e6, id };
+function apiEntry(m: ThreadMessageBody): ThreadEntry {
+  return { message: mapMessageFields(m.id, m as unknown as Record<string, unknown>), cursor: m.cursor };
 }
 
-function entryOf(id: string, data: Record<string, unknown>): ThreadEntry {
-  const message = mapMessage(id, data);
-  return { message, cursor: cursorOf(id, data, message.sentAt) };
+function messagesPath(pairId: string, q: Record<string, string>): string {
+  return `${pairPath(pairId)}/messages?${new URLSearchParams(q).toString()}`;
 }
 
 /**
- * Subscribe to the newest {@link THREAD_WINDOW} messages of an open thread
- * (newest first, each with its cursor) — scoped to the one thread the viewer
- * is looking at. A message that slides out of the window is not "gone": the
- * thread keeps what it has (lib/chat/history). A refusal (the conversation
- * was deleted, or isn't there yet) reaches `onError` with its
- * `permission-denied` code.
+ * Follow an open thread: its newest {@link THREAD_WINDOW} messages (newest
+ * first, each with its cursor), read again whenever the conversation's
+ * counter moves on the viewer's signal channel (`threads[pair]`: a message, a
+ * reaction, an unsend, a preview, 停止分享), on the minute's safety pull, and
+ * at once after this browser sent one ({@link pokeSignal}). Each read is the
+ * same GET, so one that changed nothing is a 304. When more came since the
+ * last read than the window holds, the messages between are caught up with
+ * `after=` pages, so nothing is skipped. A refusal (404: the conversation was
+ * deleted, or isn't there) reaches `onError` as an ApiError ({@link isGone}).
  */
-export function listenThread(
+export function followThread(
   pairId: string,
   onWindow: (window: ThreadWindow) => void,
   onError?: (err: Error) => void,
   max = THREAD_WINDOW,
 ): () => void {
-  return listenLazily(
-    ({ listenNewest }) =>
-      listenNewest(
-        ['conversations', pairId, 'messages'],
-        'sentAt',
-        max,
-        (docs, meta) => onWindow({ entries: docs.map((d) => entryOf(d.id, d.data)), fromCache: meta.fromCache }),
-        (err) => onError?.(err),
-      ),
-    onError,
-  );
+  let stopped = false;
+  let running = false;
+  let again = false;
+  let held = new Set<string>();
+  let newer: string | null = null;
+  const read = async () => {
+    const page = await callApi<MessagePageBody>(messagesPath(pairId, { limit: String(max) }));
+    let messages = page.messages;
+    if (newer && held.size && messages.length >= max && !messages.some((m) => held.has(m.id))) {
+      // More than a window came: catch up from where the last read ended, so the history keeps every one.
+      const between: ThreadMessageBody[] = [];
+      let after: string | null = newer;
+      for (let i = 0; after && i < CATCH_UP_PAGES; i++) {
+        const next: MessagePageBody = await callApi<MessagePageBody>(messagesPath(pairId, { after, limit: String(PAGE_MAX) }));
+        between.push(...next.messages);
+        after = next.hasNewer ? next.newerCursor : null;
+      }
+      const seen = new Set(messages.map((m) => m.id));
+      messages = [...messages, ...between.filter((m) => !seen.has(m.id))];
+    }
+    held = new Set(messages.map((m) => m.id));
+    newer = page.newerCursor;
+    return messages.map(apiEntry);
+  };
+  const pull = () => {
+    if (stopped) return;
+    if (running) {
+      again = true;
+      return;
+    }
+    running = true;
+    read()
+      .then(
+        (entries) => !stopped && onWindow({ entries }),
+        (err: unknown) => !stopped && onError?.(err instanceof Error ? err : new Error(String(err))),
+      )
+      .finally(() => {
+        running = false;
+        if (again) {
+          again = false;
+          pull();
+        }
+      });
+  };
+  pull();
+  const uid = getFirebaseClientAuth().currentUser?.uid;
+  const stop = uid ? watchSignal(uid, `thread:${pairId}`, pull) : () => {};
+  return () => {
+    stopped = true;
+    stop();
+  };
 }
 
 /**
- * The (at most `max`) messages sent before `before`, newest first — one
- * page further back than the thread holds. Read once through Lite (only the
- * newest messages are listened to); a failed read throws.
+ * The (at most `max`) messages sent before the one at `before`, newest first
+ * (GET …/messages?before=): one page further back than the thread holds. A
+ * failed read throws.
  */
-export async function getOlderMessages(pairId: string, before: MessageCursor, max: number): Promise<ThreadEntry[]> {
-  const snap = await getDocs(
-    query(
-      collection(getClientDb(), 'conversations', pairId, 'messages'),
-      orderBy('sentAt', 'desc'),
-      orderBy(documentId(), 'desc'),
-      startAfter(new Timestamp(before.seconds, before.nanoseconds), before.id),
-      limit(max),
-    ),
-  );
-  return snap.docs.map((d) => entryOf(d.id, d.data()));
+export async function getMessagesBefore(pairId: string, before: string, max: number): Promise<ThreadEntry[]> {
+  const page = await callApi<MessagePageBody>(messagesPath(pairId, { before, limit: String(Math.min(max, PAGE_MAX)) }));
+  return page.messages.map(apiEntry);
 }
 
-/**
- * Subscribe to the viewer's conversations, most recently active first (the
- * newest `max`): what the header's unread badge counts and the messages list
- * shows. One listener instead of reading the whole list again on a timer —
- * after its first answer, only a conversation that changed is read.
- */
-export function listenConversations(
-  uid: string,
-  onConversations: (conversations: Conversation[]) => void,
-  onError?: (err: Error) => void,
-  max = 50,
-): () => void {
-  return listenLazily(
-    ({ listenNewest }) =>
-      listenNewest(
-        ['conversations'],
-        'updatedAt',
-        max,
-        (docs) => onConversations(docs.map((d) => mapConversation(d.id, d.data))),
-        (err) => onError?.(err),
-        [{ field: 'participants', op: 'array-contains', value: uid }],
-      ),
-    onError,
-  );
-}
+// The Firestore reads of the thread as they were before the decouple, for the unchanged emulator suite only.
+export { getOlderMessages, listenThread, markConversationRead, type MessageCursor } from './messagesLegacy';
 
 /**
  * Delete a conversation and its messages, for both participants, through the

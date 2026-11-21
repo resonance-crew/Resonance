@@ -8,16 +8,18 @@ import { keepLocalPicture } from '@/lib/chat/localPictures';
 import { Outbox, isShown, newClientId, type Outgoing, type OutgoingImage } from '@/lib/chat/outbox';
 import { searchMessages, type SearchHit } from '@/lib/chat/search';
 import { ThreadMessages } from '@/lib/chat/threadMessages';
-import { isAbsent } from '@/lib/db/firestore/client/errors';
 import {
   MESSAGE_MAX_LENGTH,
-  getOlderMessages,
-  listenThread,
+  followThread,
+  getMessagesBefore,
+  isGone,
+  readConversation,
   sendMessage,
   uploadChatImage,
-  type MessageCursor,
 } from '@/lib/db/firestore/client/messages';
-import type { MessageReplyQuote } from '@/lib/db/types';
+import { pokeSignal } from '@/lib/db/firestore/client/signals';
+import type { Conversation, MessageReplyQuote } from '@/lib/db/types';
+import { patchLive } from './live';
 import type { StickerRef } from '@/lib/stickers/catalog';
 
 /** The page {@link ChatThread.loadOlder} reads. */
@@ -55,8 +57,7 @@ export function outboxOf(uid: string, pairId: string, to: string): Outbox {
     box = new Outbox(async (m) => {
       // A picture goes up first, under the message's own client id: a resend finds it kept, and the message names it.
       const image = m.image ? (await uploadChatImage(m.image.file, to, { clientId: m.clientId, as: uid })).id : undefined;
-      return (
-        await sendMessage(to, m.text, {
+      const sent = await sendMessage(to, m.text, {
           cardRef: m.cardRef,
           noteRef: m.noteRef,
           replyTo: m.replyTo?.id,
@@ -65,8 +66,12 @@ export function outboxOf(uid: string, pairId: string, to: string): Outbox {
           ...(image && m.album ? { album: m.album } : {}),
           ...(m.sticker ? { sticker: m.sticker } : {}),
           as: uid,
-        })
-      ).id;
+        });
+      // The thread (and the list) read it back at once, not a signal's round trip later: the bubble stops
+      // saying it is on its way as soon as the server has it.
+      pokeSignal(`thread:${pairId}`);
+      pokeSignal('inbox');
+      return sent.id;
     });
     outboxes.set(key, box);
   }
@@ -79,12 +84,29 @@ export function forgetOutboxes(): void {
   outboxes.clear();
 }
 
+// --- Read marks -------------------------------------------------------------
+
+/** The live key of the viewer's conversation list (lib/data/hooks' useLiveConversations). */
+export const liveConversationsKey = (uid: string) => `conversations:live:${uid}`;
+
+/**
+ * The viewer read a conversation: its unread count drops to 0 in the live
+ * list (and the header's badge) at once, then the server is told (POST …/read),
+ * after which the list pulls the server's word again.
+ */
+export function readConversationNow(uid: string, pairId: string): Promise<void> {
+  patchLive<Conversation[]>(liveConversationsKey(uid), (list) =>
+    list.map((c) => (c.id === pairId && (c.unread[uid] ?? 0) > 0 ? { ...c, unread: { ...c.unread, [uid]: 0 } } : c)),
+  );
+  return readConversation(pairId);
+}
+
 // --- History ----------------------------------------------------------------
 
 interface HistoryState {
   /** The first window of messages has arrived (or the listener failed). */
   ready: boolean;
-  /** The listener failed; a refusal (`permission-denied`) means the conversation is gone. */
+  /** The read failed; a refusal (404: {@link isGone}) means the conversation is gone. */
   error: Error | null;
   hasOlder: boolean;
   loadingOlder: boolean;
@@ -112,7 +134,7 @@ const NO_HISTORY: HistoryState = {
  * state is a snapshot for useSyncExternalStore.
  */
 class ThreadHistory {
-  readonly history = new MessageHistory<MessageCursor>();
+  readonly history = new MessageHistory<string>();
   readonly thread = new ThreadMessages();
   state: HistoryState = NO_HISTORY;
 
@@ -139,12 +161,13 @@ class ThreadHistory {
   listen(): () => void {
     this.stopListening();
     const run = ++this.listening;
-    this.stopListener = listenThread(
+    this.stopListener = followThread(
       this.pairId,
       (window) => {
         if (run !== this.listening) return;
-        // The newest join what is held; the ones that slid out of the window stay.
-        const merged = this.history.mergeWindow(window.entries, !window.fromCache);
+        // The newest join what is held; the ones that slid out of the window stay. Every window is the
+        // server's own answer (what this browser is still sending is its outbox's, outboxOf).
+        const merged = this.history.mergeWindow(window.entries, true);
         if (merged === 'restarted') this.forgetPaging();
         this.update({ ready: true, error: null }, merged !== 'unchanged');
       },
@@ -152,8 +175,8 @@ class ThreadHistory {
         if (run !== this.listening) return;
         // Refused: the conversation was deleted (or isn't there yet) — nothing of it is left to show.
         // Anything else (offline for good) keeps what was read; restartIfFailed listens again.
-        if (isAbsent(error)) this.reset();
-        this.update({ ready: true, error }, isAbsent(error));
+        if (isGone(error)) this.reset();
+        this.update({ ready: true, error }, isGone(error));
       },
     );
     return () => this.stopListening();
@@ -162,7 +185,7 @@ class ThreadHistory {
   /** Back in the tab or back online: a listener that failed for a reason that passes listens again. */
   restartIfFailed(): void {
     const { error } = this.state;
-    if (!error || isAbsent(error) || !this.stopListener) return;
+    if (!error || isGone(error) || !this.stopListener) return;
     this.listen();
   }
 
@@ -240,7 +263,7 @@ class ThreadHistory {
     const life = this.epoch;
     if (this.state.olderError) this.update({ olderError: false });
     try {
-      const page = await getOlderMessages(this.pairId, cursor, limit);
+      const page = await getMessagesBefore(this.pairId, cursor, limit);
       if (life !== this.epoch) return false;
       const changed = this.history.mergePage(page, limit);
       this.update({}, changed);
