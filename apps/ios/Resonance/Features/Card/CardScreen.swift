@@ -17,6 +17,8 @@ struct CardScreen: View {
     @Environment(\.openRoute) private var openRoute
     @Environment(\.openURL) private var openURL
     @State private var model: CardModel?
+    /// Whether the reader keeps the card: read once by the end row, drawn there (wide) or in a phone's tags row.
+    @State private var bookmark = CardBookmark()
     @State private var scrolled = false
     /// The byline has scrolled under the bar, which then names the author.
     @State private var bylineGone = false
@@ -487,13 +489,19 @@ struct CardScreen: View {
                 .transition(.opacity)
                 }
                 .padding(.bottom, story.endGap)
-                if !card.tags.isEmpty {
-                    // Tags are app furniture: the theme colour, not the card's hue.
-                    FlowRow(spacing: 8) {
-                        ForEach(card.tags, id: \.self) { TagPill($0, fill: Tokens.terracottaLight) }
+                // A phone's 收藏 ends the tags' row (round 28 §S3): the tags wrap in their own column, 收藏 on their
+                // first line — alone at the row's end when there are none. Wide, it ends the capsule's row instead.
+                let bookmarkInTags = Self.showsEndRow(detail, trashed: trashed)
+                    && EndRowPlacement.place(compact: window.layoutClass == .compact) == .tagsRow
+                if bookmarkInTags {
+                    EndRowTagsRow(hasTags: !card.tags.isEmpty) {
+                        tagList(card.tags)
+                    } end: {
+                        CardBookmarkButton(bookmark: bookmark, cardId: card.id)
                     }
-                    .readingMark(.ceiling)
                     .padding(.bottom, 40)
+                } else if !card.tags.isEmpty {
+                    tagList(card.tags).padding(.bottom, 40)
                 }
                 // The story's end (round 9 §3): the response bar alone — share and ⋯ are the bar's (a phone's) or
                 // the byline's (a tablet's) — and none on the author's own card. Someone else's 私人卡, shared in a
@@ -505,7 +513,7 @@ struct CardScreen: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.bottom, 40)
-                } else if !trashed, !detail.isOwner {
+                } else if Self.showsEndRow(detail, trashed: trashed) {
                     endRow(model, detail, script: type.script, translated: shown != nil).padding(.bottom, 40)
                 } else if !trashed, AuthorTaps.shows(detail), let tap = detail.tap?.value1 {
                     // The author's own card (§U3): who resonated, as faces after the wave — nothing when no one has.
@@ -559,6 +567,20 @@ struct CardScreen: View {
         .coordinateSpace(.named(Self.pageSpace))
     }
 
+    /// The card's tags: app furniture, the theme colour, not the card's hue.
+    private func tagList(_ tags: [String]) -> some View {
+        FlowRow(spacing: 8) {
+            ForEach(tags, id: \.self) { TagPill($0, fill: Tokens.terracottaLight).endRowTagLine() }
+        }
+        .readingMark(.ceiling)
+    }
+
+    /// The story's end row (the capsule, the faces, 收藏) is the reader's: someone else's card, not one shared privately
+    /// with them (only to read), never in the trash (round 28 §S5: exactly who sees 收藏).
+    static func showsEndRow(_ detail: CardDetail, trashed: Bool) -> Bool {
+        !trashed && !detail.isOwner && !isSharedPrivate(detail)
+    }
+
     /// The resonances shown (C1): the first three, all of them once 查看全部 is pressed.
     static let resonancesShownFirst = 3
 
@@ -571,11 +593,11 @@ struct CardScreen: View {
         !all && cards.count > resonancesShownFirst
     }
 
-    /// The story's end (round 26 §U1): the three kinds of feedback (共振 · 寄小紙條 · 用卡片回應), the faces and 收藏 under
-    /// them, and the note in place when it is open (``CardEndRow``) — the card's share and ⋯ are in the bar or the
-    /// byline already. It fades in once scrolled to; its coming into view is the story read through (§U7).
+    /// The story's end (round 26 §U1): the three kinds of feedback (共振 · 寄小紙條 · 用卡片回應) — 收藏 at their row's
+    /// end when wide (a phone's is in the tags' row above, round 28) — the faces under them, and the note in place when
+    /// it is open (``CardEndRow``); the card's share and ⋯ are in the bar or the byline already. It fades in once scrolled to; its coming into view is the story read through (§U7).
     private func endRow(_ model: CardModel, _ detail: CardDetail, script: StoryScript, translated: Bool) -> some View {
-        CardEndRow(detail: detail, script: script, translated: translated) { Task { await model.load() } }
+        CardEndRow(detail: detail, bookmark: bookmark, script: script, translated: translated) { Task { await model.load() } }
             .id(Self.pageEnd)
             .revealedOnScroll()
             .onScrollVisibilityChange(threshold: 0.3) { [reading] visible in if visible { reading.sawEnd() } }
