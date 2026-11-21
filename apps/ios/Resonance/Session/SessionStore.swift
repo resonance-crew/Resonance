@@ -108,6 +108,9 @@ final class SessionStore {
     let cardReads: CardReads
     /// How each page view of someone else's card was read (round 26 §U7), kept until the server has it.
     let readingReports: ReadingReports
+    /// The writer's saves on their way to `/api/v1` (`features.apiDrafts`), kept on the device until the server has
+    /// them — sent whatever the flag says now, so nothing written under it is lost.
+    let draftOutbox: DraftOutbox
     /// The app's one toast (「已移到垃圾桶 · 復原」, 「已還原」): shown over the tabs' foot by the shell
     /// (`MainTabView`'s ToastHost), so it outlives the page that asked for it.
     let toasts = ToastCenter()
@@ -145,6 +148,7 @@ final class SessionStore {
         api = client
         cardReads = CardReads { try await ReadingAPI(client: client).countRead($0) }
         readingReports = ReadingReports { id, report in try await ReadingAPI(client: client).reportReading(id, report) }
+        draftOutbox = DraftOutbox(send: .init(DraftsAPI(client: client)), file: DraftOutbox.standardFile())
         outboxes = ChatOutboxes(messaging: { MessagingAPI(client: client) }, sent: { PushCenter.shared.reachedOut(.reply) })
         chatImages = ChatImageStore { id, size in try await MessagingAPI(client: client).chatImage(id, thumb: size == .thumb) }
         account = AccountAPI(configuration)
@@ -199,6 +203,8 @@ final class SessionStore {
         conversations.readPeople = peopleReader ?? { ids in await PeopleBook.readEach(ids) { await ConversationsStore.read($0) } }
         conversations.start(uid: uid, inbox: paths.conversations ? inbox : nil,
                             social: paths.social ? SocialAPI(client: api) : nil, signals: signals)
+        // The thought map through GET /me/thought-map and op batches with `apiThoughtMap` (read again on `map`).
+        thoughtMap.use(paths.thoughtMap ? ThoughtMapAPI(client: api) : nil, signals: signals)
     }
 
     private func stopLive() {
@@ -253,7 +259,12 @@ final class SessionStore {
         let social = livePaths.social ? SocialAPI(client: api) : nil
         return uid.map { BookmarkService(uid: $0, onWrite: freshness.invalidate, social: social, reading: reading) }
     }
-    var drafts: DraftService? { uid.map(DraftService.init(uid:)) }
+    /// Drafts and pending edits: through `/api/v1` and the outbox with `features.apiDrafts`, else Firestore.
+    var drafts: DraftService? {
+        guard let uid else { return nil }
+        guard livePaths.drafts else { return DraftService(uid: uid) }
+        return DraftService(uid: uid, outbox: draftOutbox, api: DraftsAPI(client: api), reading: reading, writing: writing)
+    }
     var hints: HintService? {
         let social = livePaths.social ? SocialAPI(client: api) : nil
         return uid.map { HintService(uid: $0, social: social, profile: profiles) }
@@ -284,6 +295,7 @@ final class SessionStore {
         guard phase == .signedIn else { return false }
         signals.setForeground(true)
         readingReports.flush(uid: uid)
+        draftOutbox.sendNow()
         guard foreground.isStale(at: now) else { return false }
         foreground = ForegroundRefresh(last: now)
         awayRefreshes += 1
@@ -367,6 +379,7 @@ final class SessionStore {
         noteDrafts.retainOnly(nil)
         chatDrafts.retainOnly(nil)
         readingReports.retainOnly(nil)
+        draftOutbox.start(uid: nil)
         notifyAsks.use(account: nil)
         httpCache.use(account: nil)
         signedOutForDeletion = true
@@ -412,6 +425,8 @@ final class SessionStore {
         noteDrafts.retainOnly(newUID)
         chatDrafts.retainOnly(newUID)
         readingReports.retainOnly(newUID)
+        // The writer's saves kept on the device: only this account's, and what it left unsent goes now.
+        draftOutbox.start(uid: newUID)
         notifyAsks.use(account: newUID)
         StickerLibrary.shared.use(account: newUID)
         if previous != newUID { noteSends.reset() }
@@ -709,11 +724,17 @@ struct LivePaths: Equatable {
     let conversations: Bool
     /// Blocks, bookmarks, hints, the avatar, people by id, connections.
     let social: Bool
+    /// The thought map (GET /me/thought-map, POST /me/thought-map/ops).
+    let thoughtMap: Bool
+    /// Drafts and pending edits (POST /cards, PATCH …/draft, …/edits/current), through the outbox.
+    let drafts: Bool
 
     init(_ features: ClientFeatures) {
         signals = features.signals
         bell = features.apiBell
         conversations = features.apiInbox
         social = features.apiSocial
+        thoughtMap = features.apiThoughtMap
+        drafts = features.apiDrafts
     }
 }

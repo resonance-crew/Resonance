@@ -339,6 +339,8 @@ final class WriteModel {
     @discardableResult
     func saveNow() async -> String? {
         store()
+        // Publishing waits on this: what waits in the outbox goes now, not after its pause.
+        drafts?.sendNow()
         await chain?.value
         return draftId
     }
@@ -1045,6 +1047,7 @@ final class WriteModel {
             // Only the server's yes to this very write counts as the buffer holding what is on screen.
             lastSaved = nil
             store(force: true)
+            drafts?.sendNow()
             await chain?.value
             if values != lastSaved { throw APIFailure(code: "internal", message: L10n.Native.saveError, status: nil) }
             let result = try await calls.applyEdit(id)
@@ -1081,6 +1084,7 @@ final class WriteModel {
         defer { pending = false }
         saveTask?.cancel()
         // Behind any autosave in flight, so a straggling write can't re-create the buffer.
+        drafts.sendNow()
         await chain?.value
         do {
             try await drafts.discardEdit(id)
