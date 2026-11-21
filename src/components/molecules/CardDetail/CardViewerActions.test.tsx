@@ -8,12 +8,14 @@ import { act, renderWithIntl, screen, userEvent, waitFor, within } from '@/../te
 import zhMessages from '@/messages/zh-TW.json';
 import type { AuthorBody, CardTapBody } from '@/lib/api/v1/schemas';
 import { cardPageKey } from '@/lib/data/hooks';
+import { CardBookmark } from './CardBookmark';
 import { ReadAfterArea } from './ReadAfterArea';
 
 /**
  * Round 26 §U1: the end of a story for a reader — the capsule's three answers (共振 · 寄小紙條 · 用卡片回應), all
- * tonal at rest, then its second line (the faces, 收藏), the note in place under it. Rendered through ReadAfterArea
- * (the card page's host) with the card page's one signed-in answer in SWR, as the page has it.
+ * tonal at rest, its row ended by the card's passive actions (收藏, as the page hands them over wherever the capsule
+ * stands at its own width — the owner, 2026-11-21), then the faces' line, the note in place under it. Rendered
+ * through ReadAfterArea (the card page's host) with the card page's one signed-in answer in SWR, as the page has it.
  */
 
 const auth = vi.hoisted(() => ({ value: { user: { id: 'viewer' } as { id: string } | null, loading: false } }));
@@ -68,7 +70,7 @@ const NO_TAPS: CardTapBody = { mine: false, faces: [], more: false, mayNote: tru
 /** The card page as it holds the tap: its one signed-in answer in SWR, ReadAfterArea reading `tap` from it. */
 function Page({ tap, translated }: { tap: CardTapBody; translated?: boolean }) {
   const { data } = useSWR(cardPageKey('c1', 'viewer'), () => Promise.resolve({ resonances: { cards: [], authors: {} }, related: { cards: [], authors: {} }, links: { cards: [], authors: {} }, embeds: { cards: [], authors: {} }, tap }));
-  return <ReadAfterArea cardId="c1" cardTitle="Title" author={author} tap={data?.tap} translated={translated} />;
+  return <ReadAfterArea cardId="c1" cardTitle="Title" author={author} tap={data?.tap} translated={translated} trailing={<CardBookmark cardId="c1" />} />;
 }
 
 const pageTree = (tap: CardTapBody, cache = new Map(), translated?: boolean) => (
@@ -257,14 +259,29 @@ describe('the end row: three answers in one capsule (§U1)', () => {
     expect(push).toHaveBeenCalledWith('/card/my-answer');
   });
 
-  it('keeps the order 共振 → 寄小紙條 → 用卡片回應 → faces → 收藏 for the keyboard', async () => {
+  it('keeps the order 共振 → 寄小紙條 → 用卡片回應 → 收藏 → faces for the keyboard: the capsule’s row, then the line under it', async () => {
     renderPage({ ...NO_TAPS, faces: [face('dora'), face('eli')] });
     const faces = await screen.findByRole('button', { name: /who resonated/ });
     const order = [...document.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent);
-    expect(order.slice(0, 5)).toEqual(['Resonate', 'Note', 'Card', faces.getAttribute('aria-label'), 'Bookmark']);
+    expect(order.slice(0, 5)).toEqual(['Resonate', 'Note', 'Card', 'Bookmark', faces.getAttribute('aria-label')]);
   });
 
-  it('saves to the box from the second line’s end: a glyph alone, pressed while saved, and says so', async () => {
+  it('ends the capsule’s row with what the page hands it, and keeps the faces’ line for the faces alone', async () => {
+    renderPage({ ...NO_TAPS, faces: [face('dora')] });
+    const save = await screen.findByRole('button', { name: 'Bookmark' });
+    // In the capsule's own row, after it — never on the line under it.
+    expect(save.closest('[class*="ends"]')?.previousElementSibling).toContainElement(capsule());
+    const faces = await screen.findByRole('button', { name: /who resonated/ });
+    expect(faces.closest('[class*="second"]')?.querySelectorAll('button')).toHaveLength(1);
+  });
+
+  it('keeps the faces’ line for a signed-in reader with no face on it, so theirs slides in without moving the page', async () => {
+    renderPage();
+    await screen.findByRole('button', { name: 'Bookmark' });
+    expect(document.querySelector('[class*="second"]')).not.toBeNull();
+  });
+
+  it('saves to the box from the capsule row’s end: a glyph alone, pressed while saved, and says so', async () => {
     renderPage();
     const save = await screen.findByRole('button', { name: 'Bookmark' });
     expect(save).toHaveAttribute('aria-pressed', 'false');
@@ -274,7 +291,7 @@ describe('the end row: three answers in one capsule (§U1)', () => {
     expect(await screen.findByRole('button', { name: 'Remove bookmark' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('signed out: the three go to sign-in, and the second line keeps only what needs no account', async () => {
+  it('signed out: the three go to sign-in, with no 收藏 and no faces’ line', async () => {
     auth.value = { user: null, loading: false };
     renderPage();
     for (const name of ['Resonate', 'Note', 'Card']) {
@@ -282,6 +299,7 @@ describe('the end row: three answers in one capsule (§U1)', () => {
       expect(push).toHaveBeenLastCalledWith('/signin');
     }
     expect(screen.queryByRole('button', { name: 'Bookmark' })).toBeNull();
+    expect(document.querySelector('[class*="second"]')).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
   });
 

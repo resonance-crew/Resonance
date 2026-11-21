@@ -22,6 +22,7 @@ import { CardActionsMenu } from '@/components/molecules/CardActionsMenu/CardActi
 import { TrashedCardBanner } from '@/components/molecules/CardDetail/TrashedCardBanner';
 import { ReadingStage } from '@/components/sections/ReadingStage/ReadingStage';
 import { RestoredAloneNotice } from '@/components/molecules/TrashActionsMenu/RestoredAloneNotice';
+import { CardBookmark } from '@/components/molecules/CardDetail/CardBookmark';
 import { CardSafetyMenu } from '@/components/molecules/CardDetail/CardSafetyMenu';
 import { ReadAfterArea } from '@/components/molecules/CardDetail/ReadAfterArea';
 import { AuthorTaps } from '@/components/molecules/CardDetail/AuthorTaps';
@@ -50,6 +51,8 @@ import styles from './page.module.css';
 
 /** The end row the card's share · ⋯ would add under the tags (a bar button's height), counted when deciding. */
 const END_ROW_H = 44;
+/** Where the capsule spans the column (SegmentedActionBar spreads at 560): the passive actions end the tags' row there. */
+const END_ROW_PHONE_QUERY = '(max-width: 560px)';
 
 const wrapStyle = {
   maxWidth: 'var(--page-max-w-wide)',
@@ -201,10 +204,13 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   const shownType = useMemo(() => storyType(shownTitleNow, shownStoryNow), [shownTitleNow, shownStoryNow]);
 
   // The card's share · ⋯ come twice — under the title and at the story's end — only when the two can't be in
-  // view at once (round 12 §5–6): at ≥ 1200 at the end of the response row, below it at the end of the tags.
+  // view at once (round 12 §5–6). For a reader they follow 收藏, the three one group (the owner, 2026-11-21): at
+  // the end of the capsule's row, and on a phone — where the capsule spans the column — at the end of the tags.
+  // The author's own (no capsule): at ≥ 1200 at the end of their line, below it at the end of the tags.
   const [bylineEl, setBylineEl] = useState<HTMLDivElement | null>(null);
   const [tagsEl, setTagsEl] = useState<HTMLDivElement | null>(null);
   const wide = useMediaQuery('(min-width: 1200px)');
+  const phone = useMediaQuery(END_ROW_PHONE_QUERY);
   const endsApart = useEndsApart(bylineEl, tagsEl, { header: HEADER_TOTAL_H, extra: END_ROW_H });
   // How it is read (round 26 §U7): a signed-in reader's, never its author's — for their own picks, never by name.
   const readingReport = useReadingReport({
@@ -361,6 +367,16 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
       )}
     </>
   );
+  // A reader's passive actions at the story's end: 收藏 first (a signed-in reader's), then the card's share and ⋯
+  // after a long story.
+  const reader = !isOwner && !sharedPrivate;
+  const passive =
+    reader && (user || endsApart) ? (
+      <>
+        <CardBookmark cardId={card.id} />
+        {endsApart && cardActions}
+      </>
+    ) : undefined;
   const held = gate === 'hold';
   return (
     <div
@@ -424,8 +440,9 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               </CardEmbedSourceContext.Provider>
             </div>
 
-            {/* The tags; below 1200, when the story is long, the card's share · ⋯ again at their end (round 12 §6):
-                the tags wrap in their own column, the two stay at the row's end on the tags' first line. */}
+            {/* The tags, and at their end on a phone a reader's passive actions (收藏, then the card's share · ⋯ after
+                a long story) — for its author below 1200 those two alone (round 12 §6): the tags wrap in their own
+                column, the glyphs stay at the row's end on the tags' first line. */}
             <div ref={setTagsEl} className={styles.tagsRow}>
               {card.tags.length > 0 && (
                 <div className={styles.tagList}>
@@ -438,11 +455,13 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
                   ))}
                 </div>
               )}
-              {endsApart && wide === false && <div className={styles.tagsActions}>{cardActions}</div>}
+              {reader
+                ? phone === true && passive && <div className={styles.tagsActions}>{passive}</div>
+                : endsApart && wide === false && <div className={styles.tagsActions}>{cardActions}</div>}
             </div>
 
-            {/* The story's end: the response row, the card's share and ⋯ at its end — at ≥ 1200, and only when the
-                story is long enough that the byline's are out of view (round 12 §5); its author's alone. */}
+            {/* The story's end: a reader's capsule, its row ended by their passive actions wherever it stands at its
+                own width; its author's line, the card's share and ⋯ at its end at ≥ 1200 after a long story. */}
             {isOwner ? (
               // Who resonated with it, as faces (round 26 §U3) — its share and ⋯ at that line's end after a long story;
               // with no faces (no one tapped, or in the trash), those two alone.
@@ -468,7 +487,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
                   accentColor: author.accentColor,
                 }}
                 tap={lists.tap}
-                trailing={endsApart && wide === true ? cardActions : undefined}
+                trailing={phone === false ? passive : undefined}
                 translated={!!tr.shown}
                 script={type.script}
               />

@@ -65,8 +65,12 @@ vi.mock('@/lib/db/firestore/client/cards', async (orig) => ({
 }));
 // Leaf components with reads of their own (bookmarks, notes) aren't the subject.
 vi.mock('@/components/molecules/CardDetail/ReadAfterArea', () => ({
-  // It draws what the page hands it to end its row (the card's share and ⋯).
+  // It draws what the page hands it to end its row (收藏, the card's share and ⋯).
   ReadAfterArea: ({ trailing }: { trailing?: React.ReactNode }) => <div data-testid="read-after-area">{trailing}</div>,
+}));
+vi.mock('@/components/molecules/CardDetail/CardBookmark', () => ({
+  // 收藏 is a signed-in reader's.
+  CardBookmark: () => (mockUseAuth().user ? <button aria-label="Bookmark" /> : null),
 }));
 
 import {
@@ -815,8 +819,9 @@ describe('the head: title, byline and actions', () => {
   });
 
   // Round 12 §5–6: the card's share · ⋯ come again at the story's end only when the byline and the end can't
-  // be in view at once — at ≥ 1200 at the end of the response row (its owner's: a row of its own), below it at
-  // the end of the tags.
+  // be in view at once. A reader's follow 收藏, one group (the owner, 2026-11-21): at the end of the capsule's row
+  // wherever it stands at its own width, at the end of the tags on a phone. Its owner's: at ≥ 1200 a row of their
+  // own, below it at the end of the tags.
   describe('the share · ⋯ at the story’s end', () => {
     const realMatchMedia = window.matchMedia;
     const realRect = Element.prototype.getBoundingClientRect;
@@ -824,9 +829,9 @@ describe('the head: title, byline and actions', () => {
       window.matchMedia = realMatchMedia;
       Element.prototype.getBoundingClientRect = realRect;
     });
-    const wideIs = (wide: boolean) => {
+    const wideIs = (wide: boolean, phone = false) => {
       window.matchMedia = ((query: string) => ({
-        matches: query.includes('min-width: 1200px') ? wide : false,
+        matches: query.includes('min-width: 1200px') ? wide : query.includes('max-width: 560px') ? phone : false,
         media: query,
         onchange: null,
         addEventListener: () => {},
@@ -862,15 +867,72 @@ describe('the head: title, byline and actions', () => {
       expect(screen.getAllByRole('button', { name: 'Manage card' })).toHaveLength(1);
     });
 
+    const endLabels = () => within(screen.getByTestId('read-after-area')).queryAllByRole('button').map((b) => b.getAttribute('aria-label'));
+    const tagsLabels = () => within(tagsRow()).queryAllByRole('button').map((b) => b.getAttribute('aria-label'));
+    const asReader = () => {
+      signIn();
+      mockUseAuth.mockReturnValue({ user: { id: 'me' }, loading: false });
+      vi.mocked(callApi).mockResolvedValue(detail());
+    };
+
+    it('ends a reader’s capsule row with 收藏 — and the card’s share · ⋯ after a long story — at a tablet’s width as at the desktop’s', async () => {
+      for (const wide of [true, false]) {
+        wideIs(wide);
+        asReader();
+        const short = renderPage({ seed: seed() });
+        await waitFor(() => expect(endLabels()).toEqual(['Bookmark']));
+        expect(tagsLabels()).toEqual([]);
+        short.unmount();
+
+        longStory();
+        const long = renderPage({ seed: seed() });
+        await waitFor(() => expect(endLabels()).toEqual(['Bookmark', 'Share', 'Report or block']));
+        // One group, on one row: nothing of it at the end of the tags.
+        expect(tagsLabels()).toEqual([]);
+        long.unmount();
+        Element.prototype.getBoundingClientRect = realRect;
+      }
+    });
+
+    it('keeps them at the end of the tags on a phone, 收藏 first, where the capsule spans the column', async () => {
+      wideIs(false, true);
+      asReader();
+      const short = renderPage({ seed: seed() });
+      await waitFor(() => expect(tagsLabels()).toEqual(['Bookmark']));
+      expect(endLabels()).toEqual([]);
+      short.unmount();
+
+      longStory();
+      renderPage({ seed: seed() });
+      await waitFor(() => expect(tagsLabels()).toEqual(['Bookmark', 'Share', 'Report or block']));
+      expect(endLabels()).toEqual([]);
+    });
+
+    it('signed out: a long story’s share alone, at the capsule row’s end or a phone’s tags’, and nothing after a short one', async () => {
+      wideIs(false);
+      vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
+      const short = renderPage({ slug: 'c1' });
+      await screen.findByRole('heading', { level: 1 });
+      expect(endLabels()).toEqual([]);
+      expect(tagsLabels()).toEqual([]);
+      short.unmount();
+
+      wideIs(false, true);
+      longStory();
+      vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
+      renderPage({ slug: 'c1' });
+      await screen.findByRole('heading', { level: 1 });
+      await waitFor(() => expect(tagsLabels()).toEqual(['Share']));
+      expect(endLabels()).toEqual([]);
+    });
+
     it('ends a long story’s response row with them at ≥ 1200 — its owner’s with a row of their own', async () => {
       wideIs(true);
       longStory();
       vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
       const view = renderPage({ slug: 'c1' });
       await screen.findByRole('heading', { level: 1 });
-      await waitFor(() =>
-        expect(within(screen.getByTestId('read-after-area')).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Share']),
-      );
+      await waitFor(() => expect(endLabels()).toEqual(['Share']));
       expect(within(tagsRow()).queryAllByRole('button')).toHaveLength(0);
       view.unmount();
 

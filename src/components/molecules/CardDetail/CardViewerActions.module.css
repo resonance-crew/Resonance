@@ -5,37 +5,62 @@
   scroll-margin-top: 42vh;
 }
 
-/* The end row (round 26 §U1): the capsule, then right under it (0 between) its second line as wide as it — the
-   faces at its start, 收藏 (and after a long story at ≥ 1200 the card's share and ⋯) at its end. At its own width
-   wherever the capsule stands at its own; across the column on a phone, where the capsule spreads. */
+/* The end row (round 26 §U1; the owner, 2026-11-21): the capsule's row — the capsule at its own width, the card's
+   passive actions (收藏, and after a long story its share and ⋯) at the column's end, as the byline's are — then
+   right under it (0 between) the faces' line. On a phone the capsule spans the column and the page keeps the
+   passive actions at the end of its tags. */
 .end {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
-  max-width: 100%;
+  min-width: 0;
+}
+
+/* Too little room beside the capsule (large text in a narrow window): the passive actions take a line of their
+   own under it, still at the column's end. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 12px;
   min-width: 0;
 }
 
 .bars {
   display: flex;
+  flex: 0 1 auto;
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+  max-width: 100%;
 }
 
 .bar {
   min-width: 0;
 }
 
-/* Two lines when even the short words don't fit (§U1.3): 共振 alone on the first, 8 between them. */
+/* Two lines when even the short words don't fit (§U1.3): 共振 alone on the first, 8 between them; the passive
+   actions stay beside the first. */
+.end[data-fit='split'] .row {
+  align-items: flex-start;
+}
+
 .end[data-fit='split'] .bars > .bar:first-child {
   align-self: flex-start;
 }
 
+.ends {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  margin-left: auto;
+}
+
+/* The faces' line, a signed-in reader's: 44 tall with no face on it too, so theirs slides in without moving the page. */
 .second {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
   min-height: 44px;
 }
 
@@ -47,39 +72,16 @@
   padding-inline-start: 6px;
 }
 
-.ends {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-}
-
-.trailing {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
 @media (pointer: coarse) {
-  .ends,
-  .trailing {
+  .ends {
     gap: 0;
   }
 }
 
-/* Below 1200 the card's share and ⋯ are in its byline (and the header's), never repeated here (round 9 §3). */
-@media (max-width: 1199px) {
-  .trailing {
-    display: none;
-  }
-}
-
-/* A phone: the capsule spans the column (SegmentedActionBar spreads there at 560), and its second line with it. */
+/* A phone: the capsule spans the column (SegmentedActionBar spreads there at 560). */
 @media (max-width: 560px) {
-  .end {
-    display: flex;
-    width: 100%;
+  .bars {
+    flex: 1 1 100%;
   }
 
   .end[data-fit='split'] .bars > .bar:first-child {
