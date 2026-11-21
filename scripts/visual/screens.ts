@@ -180,7 +180,7 @@ export const SCREENS: Screen[] = [
     web: { query: 'visualTap=passages', scrollTo: '[data-end-row]' },
     app: { ios: ['-visualEnd', 'YES', '-visualTap', 'passages'], android: ['--es', 'cardEnd', 'passages'] },
     expect: "alice's rich story read by dora, who just pressed 共振 (on: the verb's solid face, two waves): a small centred dialog over the dimmed page — its title 悄悄告訴作者，哪一段讓你有共鳴, then three banded rows of alice's own sentences, each wrapped in full in the story's type (never cut, no 「…」), nothing drawn round a row at rest, and the small 略過 at the foot's end, no ✕ — a phone 400 or the column less 16 a side, tablet and desktop 480; never a bottom sheet, never a popover" },
-  { id: 'card-passage-picked', route: '/card/rich-story', as: 'dora', set: 'extended',
+  { id: 'card-passage-picked', route: '/card/rich-story', as: 'dora',
     web: { query: 'visualTap=picked', scrollTo: '[data-end-row]' },
     app: { ios: ['-visualEnd', 'YES', '-visualTap', 'picked'], android: ['--es', 'cardEnd', 'passage-picked'] },
     expect: "The same dialog with the second row chosen: that row's band in the press ink between its two hand-drawn curves, a small check at its end, the other two rows bare — no toast" },
