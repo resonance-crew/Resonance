@@ -25,6 +25,7 @@ import { RestoredAloneNotice } from '@/components/molecules/TrashActionsMenu/Res
 import { CardSafetyMenu } from '@/components/molecules/CardDetail/CardSafetyMenu';
 import { ReadAfterArea } from '@/components/molecules/CardDetail/ReadAfterArea';
 import { AuthorTaps } from '@/components/molecules/CardDetail/AuthorTaps';
+import { PassageMarks } from '@/components/molecules/CardDetail/PassageMarks';
 import { ResonanceCards } from '@/components/molecules/CardDetail/ResonanceCards';
 import { OrganicImage } from '@/components/atoms/OrganicImage/OrganicImage';
 import { StoryMarkdown } from '@/components/molecules/CardDetail/StoryMarkdown';
@@ -204,6 +205,8 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   // view at once (round 12 §5–6): at ≥ 1200 at the end of the response row, below it at the end of the tags.
   const [bylineEl, setBylineEl] = useState<HTMLDivElement | null>(null);
   const [tagsEl, setTagsEl] = useState<HTMLDivElement | null>(null);
+  // The contents rail, when the story has one: the white right of the column runs to it (round 29 §S1).
+  const [railEl, setRailEl] = useState<HTMLElement | null>(null);
   const wide = useMediaQuery('(min-width: 1200px)');
   const endsApart = useEndsApart(bylineEl, tagsEl, { header: HEADER_TOTAL_H, extra: END_ROW_H });
   // How it is read (round 26 §U7): a signed-in reader's, never its author's — for their own picks, never by name.
@@ -291,6 +294,12 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   // Someone else's 私人卡 the viewer reads at all was shared with them in a message (api/v1/sharedCards): theirs
   // to read, and only to read — no note, no resonance, no bookmark (the server would refuse each).
   const sharedPrivate = !isOwner && (!card.publishedAt || card.visibility === 'private');
+  // The sentences readers picked, on the author's own published card alone (round 29 §U1): never a draft, a private
+  // card, the trash or a translation (the server answers `picked` to the author only, too).
+  const ownPicked =
+    isOwner && !trashed && !!card.publishedAt && card.visibility !== 'private' && !tr.shown && lists.tap?.picked?.length
+      ? lists.tap.picked
+      : undefined;
 
   // The card's share and ⋯: under its title (the byline's end) and again at its story's end (round 8 §10.2).
   const cardActions = (
@@ -415,13 +424,22 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
 
             <TranslateLine tr={tr} />
 
-            <div ref={storyRef} key={`story-${tr.swaps}`} className={`${styles.story}${swapClass}`} data-mascot="story">
-              {/* Signed in, the embedded cards came with the lists; the link previews come with the card. */}
-              <CardEmbedSourceContext.Provider value={lists.embeds}>
-                <StoryLinkPreviewsContext.Provider value={card.linkPreviews ?? null}>
-                  <StoryMarkdown source={shownStory} script={type.script} lang={type.lang} />
-                </StoryLinkPreviewsContext.Provider>
-              </CardEmbedSourceContext.Provider>
+            <div
+              ref={storyRef}
+              key={`story-${tr.swaps}`}
+              className={`${styles.story}${swapClass}`}
+              data-mascot="story"
+              data-passages={ownPicked ? '' : undefined}
+            >
+              {/* The author's picked sentences: their washes and who picked them (round 29); nothing for anyone else. */}
+              <PassageMarks cardId={card.id} picked={ownPicked} script={type.script} storyRef={storyRef} rail={railEl}>
+                {/* Signed in, the embedded cards came with the lists; the link previews come with the card. */}
+                <CardEmbedSourceContext.Provider value={lists.embeds}>
+                  <StoryLinkPreviewsContext.Provider value={card.linkPreviews ?? null}>
+                    <StoryMarkdown source={shownStory} script={type.script} lang={type.lang} />
+                  </StoryLinkPreviewsContext.Provider>
+                </CardEmbedSourceContext.Provider>
+              </PassageMarks>
             </div>
 
             {/* The tags; below 1200, when the story is long, the card's share · ⋯ again at their end (round 12 §6):
@@ -485,7 +503,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
 
           {/* The rail holds the story's contents alone (the byline names the author): only a story with headings has one. */}
           {contents && (
-            <aside className={styles.aside}>
+            <aside ref={setRailEl} className={styles.aside}>
               <CardToc headings={headings} title={t('toc')} />
             </aside>
           )}
