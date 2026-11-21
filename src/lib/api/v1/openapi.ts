@@ -158,21 +158,41 @@ export function buildOpenApi(): Json {
           'Answers at once from the latest picks. While today\'s are being prepared `status` is `stale` ' +
           '(earlier picks, or a quick first pass without reasons); ask again a little later for `fresh` ones.',
       }, [401]),
-      '/cards': get('getCards', 'Several cards at once, by slug or id, as list summaries (no story)', 'CardList', {
-        description:
-          'In the order asked, each card once; cards you may not read, named cards by someone you blocked, and unknown keys are ' +
-          'left out. Anonymous cards come without a byline, and a block never leaves one out (nor any list or feed): that would ' +
-          'name its author.',
-        parameters: [
-          {
-            name: 'keys',
-            in: 'query',
-            required: true,
-            description: `Card slugs or ids, comma-separated (1–${CARD_KEYS_MAX})`,
-            schema: { type: 'string' },
+      '/cards': {
+        ...get('getCards', 'Several cards at once, by slug or id, as list summaries (no story)', 'CardList', {
+          description:
+            'In the order asked, each card once; cards you may not read, named cards by someone you blocked, and unknown keys are ' +
+            'left out. Anonymous cards come without a byline, and a block never leaves one out (nor any list or feed): that would ' +
+            'name its author.',
+          parameters: [
+            {
+              name: 'keys',
+              in: 'query',
+              required: true,
+              description: `Card slugs or ids, comma-separated (1–${CARD_KEYS_MAX})`,
+              schema: { type: 'string' },
+            },
+          ],
+        }, [400, 401]),
+        // --- Phase 2 writer (2a-writer) ---
+        post: {
+          operationId: 'createDraft',
+          summary: 'Start a draft under the id your client made',
+          description:
+            'The id is 20 letters and digits (as Firestore\'s auto ids), made by the client so an offline save can name the draft ' +
+            'before it exists. Unpublished, its counters zeroed. Sent again for your own draft: `200` with `created: false`, ' +
+            'nothing written. An id in use by another card, or one deleted for good, is `409 conflict`: make another. Anonymous ' +
+            'and for connections only is `400 invalid_request` ("An anonymous card is public or private."). With ' +
+            '`referenceCardId`, a card you may read (`404` otherwise), and not across a block unless it is anonymous (`403 blocked`). ' +
+            'A cover is one of ours. Autosaves go to `PATCH /cards/{key}/draft`; publishing to `POST /cards/{key}/publish`.',
+          requestBody: { required: true, ...json(ref('CreateDraftRequest')) },
+          responses: {
+            '200': { description: 'Your draft was there already', ...json(ref('CreatedDraft')) },
+            '201': { description: 'Created', ...json(ref('CreatedDraft')) },
+            ...errors(400, 401, 403, 404, 409, 429),
           },
-        ],
-      }, [400, 401]),
+        },
+      },
       '/cards/{key}': {
         ...get('getCard', 'A card you may read, by slug or id, with its story', 'CardDetail', {
           description:
@@ -417,6 +437,62 @@ export function buildOpenApi(): Json {
             'the card already is so and the edit keeps both. A card in the trash is `409 conflict` ("This card is in the trash.").',
           parameters: [pathParam('key', 'The card id')],
           responses: { '200': { description: 'OK', ...json(ref('ApplyEditResponse')) }, ...errors(400, 401, 404, 409) },
+        },
+      },
+      // --- Phase 2 writer (2a-writer) ---
+      '/cards/{key}/draft': {
+        patch: {
+          operationId: 'saveDraft',
+          summary: 'Autosave your draft: only the fields sent, ordered by `rev`',
+          description:
+            '`rev` counts the client\'s saves of this draft, one higher each time. A save applies only when its `rev` is above ' +
+            'the stored one (0 for a new draft); otherwise nothing changes and the answer is `200` with `applied: false` and the ' +
+            'stored `rev` — a save that arrived late, or was sent twice, never overwrites newer words. A sent cover replaces the ' +
+            'stored one whole (a `frame` left out is removed); `clear` removes the cover or the hue. The fields and limits are ' +
+            'the rules\' for a client writing its own card: anything else is `400`. A published card saves through its pending ' +
+            'edit (`PUT /cards/{key}/edits/current`): `409 conflict`; a card in the trash is `409 conflict` ("This card is in the ' +
+            'trash."); someone else\'s card is `404`. Each applied save is kept 7 days, to bring words back.',
+          parameters: [pathParam('key', 'The card id')],
+          requestBody: { required: true, ...json(ref('UpdateDraftRequest')) },
+          responses: { '200': { description: 'OK', ...json(ref('DraftSaved')) }, ...errors(400, 401, 404, 409, 429) },
+        },
+      },
+      '/cards/{key}/edits/current': {
+        ...get('getPendingEdit', 'Your working copy of your published card, or `edit: null`', 'PendingEditBox', {
+          description: 'Only yours: someone else\'s card is `404`. Checked each time (ETag → 304).',
+          parameters: [pathParam('key', 'The card id')],
+        }, [400, 401, 404]),
+        put: {
+          operationId: 'savePendingEdit',
+          summary: 'Autosave your published card\'s working copy, whole, ordered by `rev`',
+          description:
+            'Readers never see it until you apply it (`POST /cards/{key}/edits/apply`). Applied only when `rev` is above the ' +
+            'stored copy\'s (else `200` with `applied: false`, as `PATCH …/draft`). It may keep a card anonymous and for ' +
+            'connections only that already is, never make one so (`400 invalid_request`). A card in the trash is `409 conflict`.',
+          parameters: [pathParam('key', 'The card id')],
+          requestBody: { required: true, ...json(ref('PendingEditRequest')) },
+          responses: { '200': { description: 'OK', ...json(ref('DraftSaved')) }, ...errors(400, 401, 404, 409, 429) },
+        },
+        delete: {
+          operationId: 'discardPendingEdit',
+          summary: 'Throw your working copy away (the live card is left as it was)',
+          parameters: [pathParam('key', 'The card id')],
+          responses: { '200': { description: 'OK', ...json(ref('DeletedPendingEdit')) }, ...errors(400, 401, 404) },
+        },
+      },
+      '/me/thought-map': get('getThoughtMap', 'Your whole thought map: nodes, arrows and groups', 'ThoughtMap', {
+        description: 'Yours alone. Cards by id only: what each is, `GET /cards?keys=` answers. Checked each time (ETag → 304).',
+      }, [401]),
+      '/me/thought-map/ops': {
+        post: {
+          operationId: 'applyThoughtMapOps',
+          summary: 'Change your thought map: a batch of ops, in order, all together',
+          description:
+            'Every op applies, or none does: one the map never takes (an arrow from a card to itself) is `400` and changes ' +
+            'nothing. An op on a node, arrow or group that is not there is skipped (its index in `skipped`), so a queue sent ' +
+            'again or late does no harm. A group is made under the id the client chose.',
+          requestBody: { required: true, ...json(ref('MapOpsRequest')) },
+          responses: { '200': { description: 'OK', ...json(ref('MapOpsResponse')) }, ...errors(400, 401, 429) },
         },
       },
       '/cards/{key}/report': {

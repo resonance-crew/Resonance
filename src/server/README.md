@@ -85,6 +85,22 @@ called — never when the context is built. Pass a real one in `overrides`.
 - The chat push stays `lib/push/chat` (`afterMessage.ts` schedules it on
   `AfterResponse`, Next's `after()` by default).
 
+## The writer (Phase 2, lane 2a-writer)
+
+- The thought map, a draft's creation and autosaves, and a published card's
+  pending edit — what the clients wrote straight to Firestore — through
+  `app/writer.ts`, the `writer` aggregate (`ports/repos/writer.ts`, its
+  Firestore and memory repos) and the pure `domain/writer.ts` (a map batch's
+  plan, the `rev` rule). `contract/writer.contract.ts` runs on memory
+  (`app/writer.test.ts`) and the emulator (`test/emulator/ports.writer…`).
+- The request schemas carry the rules' limits; `domain/writer.test.ts` reads
+  each number out of `firebase/firestore.rules`, so the two move together.
+- A draft's autosave applies only when its `rev` is above the stored
+  `draftRev`; each applied one is kept in `cards/{id}/draftLog/{rev}` for 7
+  days (TTL `expireAt`), deleted with the card (`deleteCardIn`) and the
+  account (`authorId`). Every write that changed something touches its
+  author's `map` or `drafts` signal after the commit.
+
 ## Legacy facades
 
 Every export an emulator suite or a script imports keeps its path, name and

@@ -9,6 +9,7 @@ import type { RecommendData, RecommendTxRepo } from './repos/recommend';
 import type { TapsData, TapsTxRepo } from './repos/taps';
 import type { TranslationsData, TranslationsTxRepo } from './repos/translations';
 import type { UsersData, UsersTxRepo } from './repos/users';
+import type { WriterData, WriterTxRepo } from './repos/writer';
 
 /**
  * The repositories a transaction sees: one per aggregate. Every read comes
@@ -28,6 +29,7 @@ export interface TxRepos {
   account: AccountTxRepo;
   infra: InfraTxRepo;
   translations: TranslationsTxRepo;
+  writer: WriterTxRepo;
 }
 
 /** The same aggregates outside a transaction: reads, and writes that need none. */
@@ -43,6 +45,7 @@ export interface DataRepos {
   account: AccountData;
   infra: InfraData;
   translations: TranslationsData;
+  writer: WriterData;
 }
 
 export interface UowOptions {

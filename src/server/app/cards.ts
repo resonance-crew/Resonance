@@ -123,6 +123,8 @@ export async function deleteCardIn(ctx: ServerCtx, uid: string, id: string, opts
     // Who resonated with it (taps) and how it was read (reading): about this card alone, gone with it.
     ctx.data.taps.deleteTapsOn(id).catch((e) => ctx.log.error('[api/v1] taps', id, e)),
     ctx.data.taps.deleteSignalsOn(id).catch((e) => ctx.log.error('[api/v1] reading', id, e)),
+    // Its autosaves' patch log (draftLog, 7 days): its author's words, gone with it (a stray one expires).
+    ctx.data.writer.deleteDraftLog(id).catch((e) => ctx.log.error('[api/v1] draft log', id, e)),
     Promise.resolve()
       .then(() => ctx.vectors.deleteByCard(id))
       .catch((e) => ctx.log.error('[api/v1] vectors', id, e)),
