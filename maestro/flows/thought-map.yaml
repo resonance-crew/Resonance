@@ -1,0 +1,132 @@
+# alice works on her thought map as a person does, and every change is kept by the server: she puts 還沒寫完的清晨 on
+# it from the tray (＋ 卡片), renames the region 回憶, gives the arrow 後來 new words, takes 搬家後的第一個安靜夜晚 off
+# the map (its 移除), adds a region of her own (分類) and drags 一場雨後的散步 from under her region to the top of the
+# map (one finger, held and moved: the map's own touch handling, not a scroll). Then she leaves the map and
+# comes back from her card box (思想地圖), and opens the app again from nothing: the map's op queue lives in memory
+# only, so what a fresh launch shows is what the server holds.
+#
+# Runs on both stacks: the usual one writes Firestore's thoughtMaps/alice straight from the app; `--stack writer-api`
+# (apiThoughtMap on) sends the same changes as POST /api/v1/me/thought-map/ops and reads GET /api/v1/me/thought-map.
+#
+# The cards' titles are painted, not laid out, so a card is found by its flow id `map-node-<card id>` (the same
+# accessibilityIdentifier on iOS), and where it lies is asserted against another card (`above:` / `below:`).
+appId: com.resonance.stories
+name: thought-map
+tags:
+  - writer
+  - map
+  - tablet
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /me/thought-map
+# The seeded map: the region 回憶 holding two of her cards, bob's walk under it, the arrow 後來 from it to her letter.
+- extendedWaitUntil:
+    visible:
+      id: map-node-rain-walk
+    timeout: 30000
+- assertVisible: 回憶
+- assertVisible: 後來
+- assertVisible:
+    id: map-node-rain-walk
+    below:
+      id: map-node-letter
+# ＋ 卡片: the tray lists her cards not on the map yet; a tap places one.
+- tapOn: 卡片
+- extendedWaitUntil:
+    visible: 選一張卡片加入
+    timeout: 10000
+- tapOn: 還沒寫完的清晨
+- extendedWaitUntil:
+    visible:
+      id: map-node-alice-draft
+    timeout: 10000
+# The region's title: a first tap selects the region, a second opens its title for writing. Android (as the web)
+# selects the old words, iOS leaves the caret after them: emptied first, as a person on either would.
+- tapOn: 回憶
+- tapOn: 回憶
+- eraseText
+- inputText: 雨天的回憶 Maestro
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: 雨天的回憶 Maestro
+    timeout: 10000
+# The arrow's words: a tap on them opens them for writing.
+- tapOn: 後來
+- eraseText
+- inputText: 那年以後
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: 那年以後
+    timeout: 10000
+# A card off the map: a tap selects it, its 移除 (the trash inside its corner) takes it away.
+- tapOn:
+    id: map-node-rich-story
+- tapOn:
+    id: map-node-remove
+- extendedWaitUntil:
+    notVisible:
+      id: map-node-rich-story
+    timeout: 10000
+# A region of her own: 分類 adds 未命名分類 with its title open for writing (emptied first, as above).
+- tapOn: 分類
+- eraseText
+- inputText: 晴天 Maestro
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: 晴天 Maestro
+    timeout: 10000
+# A card held and dragged up past the region: it lands above her letter. Last of the changes, since on a tablet's
+# wider map it lands over the region's title row, where a tap would take the card instead of the title.
+- swipe:
+    from:
+      id: map-node-rain-walk
+    direction: UP
+    duration: 1500
+- assertVisible:
+    id: map-node-rain-walk
+    above:
+      id: map-node-letter
+- takeScreenshot: thought-map-changed
+# Away and back: 離開 (to her home, where the launch opened the map over), then 我的卡片盒 and its last shelf, 思想地圖,
+# past the edge of the shelves' row until the row is moved along.
+- tapOn: 離開
+# iOS keeps the other tabs' screens in the tree, 我的卡片盒's own title among them: the tab is the one right of the
+# bell (通知, with its count), as block-person.yaml finds it.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn: 我的卡片盒
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          text: 我的卡片盒
+          rightOf:
+            text: 通知(, \d+)?
+- extendedWaitUntil:
+    visible: 被連結
+    timeout: 15000
+- swipe:
+    from: 被連結
+    direction: LEFT
+- tapOn: 思想地圖
+- runFlow:
+    file: common/thought-map-kept.yaml
+# A fresh launch, nothing cleared (common/relaunch.yaml): the map is read from the server again, and the server's own
+# answer, asked from outside the app, holds every change.
+- stopApp
+- runFlow:
+    file: common/relaunch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /me/thought-map
+- runFlow:
+    file: common/thought-map-kept.yaml
+- runScript:
+    file: common/map-on-server.js
+- takeScreenshot: thought-map

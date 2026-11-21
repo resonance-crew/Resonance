@@ -360,6 +360,9 @@ export async function warmUp(ctx: CaptureContext) {
   const paths = [
     'me', 'feed', 'feed/recommended', 'cards/x', 'cards?keys=x', 'cards/x/private-shares', 'cards/x/resonances',
     'users/x', 'handles/x', 'me/cardbox', 'me/cards?tab=trash', 'me/notifications', 'me/devices/x',
+    // What every launch asks first (a slow first answer lets the app past the update page: update-gate), and the
+    // thought map's read — 20 s of compiling once showed 沒能載入 in its flow.
+    'client-config', 'me/thought-map',
   ];
   for (const path of paths) {
     await fetch(`${ctx.devUrl}/api/v1/${path}`).catch(() => {});
