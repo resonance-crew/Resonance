@@ -199,6 +199,15 @@ class DraftOutboxTest {
         assertEquals(listOf("d7", "d7"), server.calls)
     }
 
+    @Test fun aTokenThatCannotBeHadOfflineIsRetriedNotDropped() = runBlocking {
+        // Offline, the ID token's refresh fails inside the request's interceptor: no ApiFailure, no IOException.
+        val server = Server().apply { failNext = 2; failure = IllegalStateException("A network error (such as timeout, interrupted connection or unreachable host) has occurred.") }
+        val box = outbox(server = server, retry = listOf(10L))
+        withTimeout(5_000) { box.save("d1", save("w")) }
+        assertEquals(3, server.calls.size)
+        assertTrue(box.ops.isEmpty())
+    }
+
     @Test fun kickTriesAtOnceRatherThanAtTheNextRetry() = runBlocking {
         val server = Server().apply { failNext = 1 }
         val box = outbox(server = server, retry = listOf(60_000L))

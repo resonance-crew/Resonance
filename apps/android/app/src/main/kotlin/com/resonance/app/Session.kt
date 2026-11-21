@@ -312,7 +312,7 @@ class Session(
 
     private fun outboxFor(who: String): DraftOutbox = DraftOutbox(
         storage = object : DraftOutbox.Storage {
-            private val key = "outbox:$who"
+            private val key = outboxKey(who)
             override fun read(): String? = (draftOutboxPrefs ?: prefs).getString(key, null)
             override fun write(value: String?) {
                 (draftOutboxPrefs ?: prefs).edit().apply { if (value == null) remove(key) else putString(key, value) }.apply()
@@ -320,7 +320,19 @@ class Session(
         },
         sender = DraftService.Sender(writer, writing),
         scope = scope,
+        log = { if (BuildConfig.DEBUG) android.util.Log.d("DraftOutbox", it) },
     )
+
+    private fun outboxKey(who: String) = "outbox:$who"
+
+    /**
+     * The device has a network again (ResonanceApp's default-network callback): what waits on its way —
+     * the drafts' outbox, the map's changes — goes now, not at the end of a retry wait of up to 30 s.
+     */
+    fun networkBack() {
+        draftOutbox?.kick()
+        thoughtMap.queue?.kick()
+    }
     val hints: HintService? get() = uid?.let { HintService(it, prefs, if (features.apiSocial) HintService.Api(social, { me }, ::setMe) else null) }
     /** Notes on their way from the account (round 21): their client ids, and a failed one's 再寄一次. */
     val noteSends = NoteSends()
@@ -509,8 +521,9 @@ class Session(
         }
         // The notes it wrote and didn't send: words to someone, kept for this account alone.
         noteDraftStore?.forget(who)
-        // Its drafts' words not sent yet, as Firestore's own queue of them goes below.
-        scope.launch { outboxFor(who).forget() }
+        // Its drafts' words not sent yet, as Firestore's own queue of them goes below — at once, not in a coroutine
+        // that could run after the same account signed in again and started its outbox from what was kept.
+        (draftOutboxPrefs ?: prefs).edit().remove(outboxKey(who)).apply()
         // How it read cards, not sent yet (round 26 §U7).
         readingReports?.forget(who)
         selfFace = null

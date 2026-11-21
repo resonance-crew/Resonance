@@ -62,6 +62,19 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
     ).also {
         session = it
         it.start { it.loadMe() }
+        watchNetwork(it)
+    }
+
+    /** A network that comes back sends at once what waited for it (Session.networkBack). */
+    private fun watchNetwork(session: Session) {
+        val connectivity = getSystemService(android.net.ConnectivityManager::class.java) ?: return
+        runCatching {
+            connectivity.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post { session.networkBack() }
+                }
+            })
+        }
     }
 
     /**

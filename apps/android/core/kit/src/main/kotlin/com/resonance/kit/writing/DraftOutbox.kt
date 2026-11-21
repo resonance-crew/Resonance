@@ -47,6 +47,8 @@ class DraftOutbox(
     private val scope: CoroutineScope,
     private val retryDelaysMillis: List<Long> = RETRY_DELAYS_MILLIS,
     private val sendTimeoutMillis: Long = SEND_TIMEOUT_MILLIS,
+    /** What the queue does, one line at a time (the app: logcat under a debug tag). */
+    private val log: (String) -> Unit = {},
 ) {
     /** Where the queue lives between launches (the app: SharedPreferences, per account). */
     interface Storage {
@@ -98,6 +100,7 @@ class DraftOutbox(
     /** Starts sending (at sign-in: what a last launch left goes first). */
     fun start() {
         if (loop?.isActive == true) return
+        log("start: ${state.ops.size} queued")
         loop = scope.launch { drain() }
         wake.trySend(Unit)
     }
@@ -241,6 +244,7 @@ class DraftOutbox(
                 if (op.kind in GOING && (e as? ApiFailure)?.status == 404) Result.success(Unit) else Result.failure(e)
             }
             val error = outcome.exceptionOrNull()
+            log("sent ${op.kind} ${op.seq}: " + (error?.let { "failed " + it::class.java.simpleName + " " + it.message } ?: "ok"))
             if (error != null && !refused(error)) {
                 lock.withLock { inFlight = null }
                 val wait = retryDelaysMillis[failures.coerceAtMost(retryDelaysMillis.lastIndex)]

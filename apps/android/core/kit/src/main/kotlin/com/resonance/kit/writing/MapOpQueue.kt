@@ -80,6 +80,11 @@ class MapOpQueue(
         wait?.await()
     }
 
+    /** The network may be back: a batch waiting out its retry goes now. */
+    fun kick() {
+        wake.trySend(Unit)
+    }
+
     fun stop() {
         loop?.cancel()
         loop = null
