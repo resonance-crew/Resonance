@@ -303,8 +303,9 @@ to 2× (`TextScale.readingFactor`); the byline and the rest stay under 1.25×.
 
 The card page's head is measured from the bar's pen line (round 9 §2, `StoryTypography.headGap`,
 `PenLineGap`): the title's box 48 / 64 under it, a cover's top 56 / 72; a person's page and Me put the
-avatar 40 / 56 under it (`peopleHeadGap()`). The story's end row is the response bar alone (none on the
-author's own card), spread across a phone; its segments give way in steps (`SegmentSpec.collapsesAt`: the
+avatar 40 / 56 under it (`peopleHeadGap()`). The story's end row is the response bar (none on the
+author's own card), spread across a phone — 收藏 at the end of its row on a wide window, of the tags' row on a
+phone (round 28) —; its segments give way in steps (`SegmentSpec.collapsesAt`: the
 bookmark, then the note) and the row never runs wider than offered. 與此文共振 draws full story cards, three
 and then 查看全部.
 
@@ -733,7 +734,7 @@ The card page reads in the story's type (reading-type §5–§8): `StoryMarkdown
 from the `ProseSpacing` the type resolves), and sit inside `ReadingTextScale` — the cards a story embeds go back
 under `CappedTextScale`. The head is cover → title → byline (avatar and pen name over 「6 分鐘 · 日期」, at every
 width); share and the ⋯ end that byline under a tablet's header (`cardActionsSlot`) — the bar taking them while the
-byline is scrolled under it — and sit in a phone's bar; the story's end is the response bar alone (round 9 §3).
+byline is scrolled under it — and sit in a phone's bar; the story's end is the response bar and 收藏 (round 9 §3, round 28), never share or ⋯.
 `WindowLayout.cardPage(rail)` is §4's formula (the 680 measure, centred; on an expanded window with contents their
 rail `Tokens.StoryRailGap` — 80 — past it; without, the column centred).
 Sharing a card (share.spec, Owner revision; `ui/share`) is one glyph, shown only for a published, public card out
