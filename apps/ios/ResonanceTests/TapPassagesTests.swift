@@ -117,4 +117,35 @@ import Testing
         #expect(!L10n.Card.Tap.passageTitle.isEmpty && L10n.Card.Tap.passageTitle != "card.tap.passageTitle")
         #expect(!L10n.Card.Tap.passageSkip.isEmpty && L10n.Card.Tap.passageSkip != "card.tap.passageSkip")
     }
+    /// Post-merge review (round 27): the dialog takes one press, as the web's does. A double tap, or a second row
+    /// pressed inside the 300 ms before it closes, changes nothing and sends nothing more; opened again, it takes a
+    /// press again (and a press on the picked row then clears it). Each step is `CardEndRow.choosePassage`'s.
+    @Test func theDialogTakesOnePressUntilItOpensAgain() {
+        let viewer = Fixture.author("dora")
+        var state = TapState(tap(passages: three))
+        _ = state.flip(viewer: viewer)
+        state.settled(turningOn: true, result: true, viewer: viewer)
+        var gate = TapPassageRules.OnePress()
+        var sent: [String?] = []
+        func press(_ id: String) {
+            let choice = TapPassageRules.choice(pressing: id, current: state.passage)
+            guard gate.take() else { return }
+            state.pick(choice)
+            sent.append(choice)
+        }
+        // A double tap on the first row.
+        press(three[0].id)
+        press(three[0].id)
+        #expect(state.passage == three[0].id)
+        #expect(sent == [three[0].id])
+        // A second row straight after: still the first, still one request.
+        press(three[1].id)
+        #expect(state.passage == three[0].id)
+        #expect(sent == [three[0].id])
+        // The dialog opens again (the reader's own row in the list): one press counts, and on the pick it clears it.
+        gate.reopen()
+        press(three[0].id)
+        #expect(state.passage == nil)
+        #expect(sent == [three[0].id, nil])
+    }
 }

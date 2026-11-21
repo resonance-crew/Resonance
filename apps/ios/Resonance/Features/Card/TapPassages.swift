@@ -99,6 +99,20 @@ nonisolated enum TapPassageRules {
     /// What a press on a row makes the pick: that passage — or none, pressing the one already picked.
     static func choice(pressing id: String, current: String?) -> String? { id == current ? nil : id }
 
+    /// The dialog takes one press (the web's `if (chosen) return`): from the first to the close 300 ms later, every other
+    /// press is ignored — a double tap would otherwise clear the pick it just made, and two quick presses send two
+    /// unordered requests. Taken again when the dialog opens.
+    struct OnePress: Equatable {
+        private(set) var taken = false
+        /// Whether this press counts: the first since the dialog opened.
+        mutating func take() -> Bool {
+            if taken { return false }
+            taken = true
+            return true
+        }
+        mutating func reopen() { taken = false }
+    }
+
     /// How long a delay is under Reduce Motion: none.
     static func delay(_ delay: Duration, reduceMotion: Bool) -> Duration { reduceMotion ? .zero : delay }
 

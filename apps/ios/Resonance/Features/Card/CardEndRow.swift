@@ -51,6 +51,8 @@ struct CardEndRow: View {
     @State private var listOpen = false
     /// Which part stayed with the reader (round 27 §U1): the dialog of the card's passages.
     @State private var passagesOpen = false
+    /// The dialog's one press (``TapPassageRules/OnePress``), taken again each time it opens.
+    @State private var passagePress = TapPassageRules.OnePress()
     /// The tap's own request on its way, which a pick's waits for (`nil` once answered: failed).
     @State private var tapSend: Task<Bool?, Never>?
     /// The screenshots' `-visualTap picked`: the dialog held open on its pick, nothing sent.
@@ -125,6 +127,7 @@ struct CardEndRow: View {
             }
         }
         .onChange(of: translated) { _, now in if now { passagesOpen = false } }
+        .onChange(of: passagesOpen) { _, open in if open { passagePress.reopen() } }
         // The note field opens again, focused, on its words: the toast's 再寄一次, or a failure while the page is here.
         .onAppear {
             session.noteSends.host(cardId, true)
@@ -306,6 +309,8 @@ struct CardEndRow: View {
     /// once the tap's own has answered. Refused because the options changed or the tap went (400, 409): read the card
     /// again, quietly; any other failure: 「沒送出去，再試一次」, the tap still on, the pick as it was.
     private func choosePassage(_ choice: String?) {
+        // One press per opening: a second inside the close delay neither clears the pick nor sends again.
+        guard passagePress.take() else { return }
         let before = tap.passage
         tap.pick(choice)
         guard !passagesHeld else { return }
