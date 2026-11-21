@@ -36,6 +36,11 @@ export const AVATAR_EDGE = 256;
 export const THUMB_EDGE = 960;
 
 const ACCEPTED = new Set(['jpeg', 'png', 'webp', 'gif']);
+/**
+ * What a picture we stored ourselves may also be: AVIF, which uploads were kept as before they were WebP
+ * (26 of production's 35 covers on 2026-11-21) and which sharp names by its container, `heif`. Never an upload's.
+ */
+const STORED = new Set([...ACCEPTED, 'heif']);
 
 /** The bytes are not a picture we take (not decodable, another format, or too many pixels). */
 export class UnsupportedImage extends Error {}
@@ -74,8 +79,19 @@ export async function normalizeUploadWithThumb(input: Uint8Array): Promise<{ ful
   return { full, thumb };
 }
 
+/**
+ * A picture read back from our own storage, encoded as an upload would be for `purpose` — a cover's ≤ 960 px copy
+ * made after the fact (scripts/backfills/coverThumbs.ts). The same limits as an upload (pixels, frames) and the same
+ * output; the one difference is that it also reads AVIF, the format older uploads were stored in. A route never
+ * calls this with bytes a client sent: an upload stays JPEG, PNG, WebP or GIF (`normalizeUpload`).
+ */
+export async function normalizeStored(input: Uint8Array, purpose: UploadPurpose): Promise<NormalizedImage> {
+  const { image, animated } = await openUpload(input, STORED);
+  return encodeUpload(image, purpose, animated);
+}
+
 /** The upload checked (a format we take, not too many pixels) and opened upright: still photos turned by their EXIF orientation. */
-async function openUpload(input: Uint8Array): Promise<{ image: sharp.Sharp; animated: boolean }> {
+async function openUpload(input: Uint8Array, accepted: ReadonlySet<string> = ACCEPTED): Promise<{ image: sharp.Sharp; animated: boolean }> {
   const open = (animated: boolean) => sharp(input, { limitInputPixels: MAX_INPUT_PIXELS, animated, failOn: 'error' });
   let meta: sharp.Metadata;
   try {
@@ -83,7 +99,7 @@ async function openUpload(input: Uint8Array): Promise<{ image: sharp.Sharp; anim
   } catch (e) {
     throw new UnsupportedImage(e instanceof Error ? e.message : 'Unreadable image');
   }
-  if (!meta.format || !ACCEPTED.has(meta.format)) throw new UnsupportedImage(`Unsupported format: ${meta.format}`);
+  if (!meta.format || !accepted.has(meta.format)) throw new UnsupportedImage(`Unsupported format: ${meta.format}`);
 
   if ((meta.pages ?? 1) > MAX_FRAMES) throw new UnsupportedImage(`Too many frames: ${meta.pages}`);
   const animated = (meta.pages ?? 1) > 1;

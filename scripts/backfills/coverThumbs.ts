@@ -1,6 +1,6 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { coverThumbKey } from '../../src/lib/images/coverThumb';
-import { normalizeUpload } from '../../src/lib/storage/image';
+import { normalizeStored } from '../../src/lib/storage/image';
 import { storageKeyOf } from '../../src/lib/storage/publicUrl';
 import { recordUpload, UPLOADS, uploadId } from '../../src/lib/storage/uploads';
 import type { IStorageProvider } from '../../src/lib/storage/interfaces';
@@ -13,7 +13,8 @@ export type PictureExists = (url: string) => Promise<boolean>;
 /**
  * Covers stored before every `image` upload kept its ≤ 960 px copy (B2,
  * lib/images/coverThumb) get one: the cover read by its public URL, encoded
- * as an upload's copy is (normalizeUpload 'thumb': ≤ 960 px, WebP), stored
+ * as an upload's copy is (normalizeStored 'thumb': ≤ 960 px, WebP — also from
+ * the AVIF older covers were stored as, which an upload itself never is), stored
  * under the key made from the cover's, on record as the cover's owner's (its
  * `uploads/{uuid}` record, else the card's author) — so the account purge
  * finds it — and named on the card as `media.thumbUrl` (no updatedAt or
@@ -52,7 +53,7 @@ export async function backfillCoverThumbs(
       report.present++;
     } else {
       const bytes = await opts.read(url).catch(() => null);
-      const thumb = bytes ? await normalizeUpload(bytes, 'thumb').catch(() => null) : null;
+      const thumb = bytes ? await normalizeStored(bytes, 'thumb').catch(() => null) : null;
       if (!thumb) {
         report.unreadable++;
         log(`  ${doc.ref.path}: unreadable ${url}`);
