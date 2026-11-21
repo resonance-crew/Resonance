@@ -32,6 +32,24 @@ import Testing
         #expect(TapRowLine.of(person("gus", passage: "第一段"), authorList: false, viewer: nil, offersPassages: true) == nil)
     }
 
+    /// A pick just made is on the page before the list knows it (the list read while the request was on its way — the
+    /// tap-passage flow met it on the iPhone): the own row says the page's pick, and 選一段 once the page has none.
+    @Test func theReadersOwnRowSaysThePagesPickBeforeTheListKnowsIt() {
+        #expect(TapRowLine.of(person("dora"), authorList: false, viewer: "dora", offersPassages: true,
+                              pagePick: .init(text: "第二段")) == .quote("第二段"))
+        // Cleared on the page while the list still holds the old one.
+        #expect(TapRowLine.of(person("dora", passage: "第一段"), authorList: false, viewer: "dora", offersPassages: true,
+                              pagePick: .init(text: nil)) == .pick)
+        // A card that offers none any more (the story edited): the list's own word stands.
+        #expect(TapRowLine.of(person("dora", passage: "第一段"), authorList: false, viewer: "dora", offersPassages: false,
+                              pagePick: .init(text: nil)) == .quote("第一段"))
+        // Never another's row, nor the author's list.
+        #expect(TapRowLine.of(person("gus"), authorList: false, viewer: "dora", offersPassages: true,
+                              pagePick: .init(text: "第二段")) == nil)
+        #expect(TapRowLine.of(person("gus"), authorList: true, viewer: "gus", offersPassages: true,
+                              pagePick: .init(text: "第二段")) == nil)
+    }
+
     @Test func theirOwnRowOffersAPickOnlyWhenTheCardHasPassages() {
         #expect(TapRowLine.of(person("dora"), authorList: false, viewer: "dora", offersPassages: true) == .pick)
         #expect(TapRowLine.of(person("dora"), authorList: false, viewer: "dora", offersPassages: false) == nil)

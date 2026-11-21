@@ -115,7 +115,9 @@ struct CardEndRow: View {
         // The reader's list of who resonated: a centred dialog with no title (the reader sees only their connections),
         // a phone's, a tablet's and the Mac's alike.
         .organicModal(isPresented: $listOpen, seed: 29, maxWidth: TapListMetrics.readerWidth(compact: compact), closeLabel: L10n.Native.close) {
-            ReaderTapList(cardId: cardId, offersPassages: offersPassages, onPick: openPassagesFromList) { listOpen = false }
+            ReaderTapList(cardId: cardId, offersPassages: offersPassages,
+                          pagePick: .init(text: tap.passages.first { $0.id == tap.passage }?.text),
+                          onPick: openPassagesFromList) { listOpen = false }
                 .withSession(session)
         }
         // Which part stayed with the reader (round 27 §U1): centred, as wide as the reader's list; 略過, the backdrop and

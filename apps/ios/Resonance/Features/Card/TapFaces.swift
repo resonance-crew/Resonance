@@ -226,6 +226,8 @@ struct ReaderTapList: View {
     let cardId: String
     /// The card offers passages (round 27 §U3): the reader's own row says their pick or 選一段, and opens the dialog.
     var offersPassages = false
+    /// The reader's pick as the page holds it (a pick just made shows at once, before the list knows it).
+    var pagePick: TapRowLine.PagePick?
     var onPick: () -> Void = {}
     let onClose: () -> Void
     @Environment(SessionStore.self) private var session
@@ -238,7 +240,7 @@ struct ReaderTapList: View {
             if let people {
                 ScrollView {
                     TapRows(people: people.people) { person in
-                        TapRowLine.of(person, authorList: false, viewer: session.uid, offersPassages: offersPassages)
+                        TapRowLine.of(person, authorList: false, viewer: session.uid, offersPassages: offersPassages, pagePick: pagePick)
                     } press: { person in
                         onClose()
                         if offersPassages, person.author.id == session.uid { return onPick() }

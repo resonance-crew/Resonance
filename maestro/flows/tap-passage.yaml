@@ -19,11 +19,15 @@ tags:
 - extendedWaitUntil:
     visible: 搬家後的第一個安靜夜晚
     timeout: 30000
+# The story embeds bob's card, whose meta line also says 共振 (iOS reads it as a text of its own, and a press on it
+# opens bob's card): the end row is found by its note segment, and 共振 pressed as the one under the story's last line.
 - scrollUntilVisible:
-    element: 共振
+    element: 寄小紙條
     direction: DOWN
 # The first press: on, then the dialog.
-- tapOn: 共振
+- tapOn:
+    text: 共振
+    below: The quiet after moving out.*
 - extendedWaitUntil:
     visible:
       id: tap-passages
@@ -54,7 +58,9 @@ tags:
           text: 共振
           selected: true
 # Taken back: off, and nothing opens.
-- tapOn: 共振
+- tapOn:
+    text: 共振
+    below: The quiet after moving out.*
 - runFlow:
     when:
       platform: Android
@@ -76,7 +82,9 @@ tags:
 - assertNotVisible:
     id: tap-passages
 # On again: the dialog opens again.
-- tapOn: 共振
+- tapOn:
+    text: 共振
+    below: The quiet after moving out.*
 - extendedWaitUntil:
     visible:
       id: tap-passages
@@ -95,12 +103,23 @@ tags:
     visible: .*「.+」.*
     timeout: 15000
 - takeScreenshot: tap-passage
-- tapOn: 關閉
+# Her own row opens the dialog again with her pick marked (§U3); 略過 leaves it as it is. (Not 關閉: the dialog's
+# backdrop carries that name too, and a tap at its centre lands on the row.)
+- tapOn: .*「.+」.*
 - extendedWaitUntil:
-    notVisible: .*「.+」.*
+    visible:
+      id: tap-passages
+    timeout: 10000
+- tapOn:
+    id: tap-passage-skip
+- extendedWaitUntil:
+    notVisible:
+      id: tap-passages
     timeout: 10000
 # Taken back at the end: the pick goes with it, and the seed's dora has no tap on the story again.
-- tapOn: 共振
+- tapOn:
+    text: 共振
+    below: The quiet after moving out.*
 - runFlow:
     when:
       platform: iOS

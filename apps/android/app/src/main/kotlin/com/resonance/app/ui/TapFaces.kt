@@ -191,12 +191,25 @@ internal data class TapRowLines(val quote: String? = null, val pick: Boolean = f
  * anonymous card). A reader's list: their own row alone ([viewerId]) — their pick, or 選一段 when the card offers
  * passages ([offersPassages]) — and no other row ever a second line, on a named card or an anonymous one (M3).
  */
-internal fun tapRowLines(person: TapPerson, anonymous: Boolean, author: Boolean, viewerId: String?, offersPassages: Boolean): TapRowLines {
-    val quote = person.passage?.text?.takeIf { it.isNotBlank() }
-    if (author) return TapRowLines(quote = quote, excerpt = tapRowExcerpt(person, anonymous))
+internal fun tapRowLines(
+    person: TapPerson,
+    anonymous: Boolean,
+    author: Boolean,
+    viewerId: String?,
+    offersPassages: Boolean,
+    pagePick: PagePick? = null,
+): TapRowLines {
+    val listed = person.passage?.text?.takeIf { it.isNotBlank() }
+    if (author) return TapRowLines(quote = listed, excerpt = tapRowExcerpt(person, anonymous))
     if (viewerId == null || person.author.id != viewerId) return TapRowLines.NONE
+    // On a card offering passages the page knows the reader's pick before the list does (the list may have been read
+    // while the pick's request was still on its way): the own row says the page's, as the web's.
+    val quote = if (offersPassages && pagePick != null) pagePick.text?.takeIf { it.isNotBlank() } else listed
     return TapRowLines(quote = quote, pick = quote == null && offersPassages)
 }
+
+/** The reader's pick as the card page holds it now (its words, or null for none): what their own row says (§U3). */
+internal data class PagePick(val text: String?)
 
 /** The author's list shows 顯示更多 while there is a next page and it isn't being read. */
 internal fun showsMore(list: TapPeople): Boolean = list.next != null && !list.loading
@@ -215,11 +228,13 @@ internal fun ReaderTapList(
     /** The card offers passages (round 27 §U3): the reader's own row says their pick, or 選一段, and opens [onOwnRow]. */
     offersPassages: Boolean = false,
     onOwnRow: () -> Unit = {},
+    /** The reader's pick as the page holds it (a pick just made shows at once, before the list knows it). */
+    pagePick: PagePick? = null,
 ) {
     val list = remember(cardId) { TapPeople { token -> session.taps.taps(cardId, token) } }
     LaunchedEffect(list) { list.first() }
     val viewerId = session.uid
-    ReaderTapDialog(list, onDismiss, lines = { tapRowLines(it, anonymous = true, author = false, viewerId, offersPassages) }) { p ->
+    ReaderTapDialog(list, onDismiss, lines = { tapRowLines(it, anonymous = true, author = false, viewerId, offersPassages, pagePick) }) { p ->
         onDismiss()
         if (readerRowPicks(p, viewerId, offersPassages)) onOwnRow() else open(Route.Author(p.author.handle))
     }

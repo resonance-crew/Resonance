@@ -135,12 +135,21 @@ nonisolated enum TapRowLine: Equatable {
 
     /// The author's list: each person's pick. A reader's list: their own row only — every other row none, whatever
     /// the server sent (it sends none).
-    static func of(_ person: TapPerson, authorList: Bool, viewer: String?, offersPassages: Bool) -> TapRowLine? {
-        let text = person.passage?.value1.text
-        if authorList { return text.map(TapRowLine.quote) }
+    static func of(_ person: TapPerson, authorList: Bool, viewer: String?, offersPassages: Bool,
+                   pagePick: PagePick? = nil) -> TapRowLine? {
+        let listed = person.passage?.value1.text
+        if authorList { return listed.map(TapRowLine.quote) }
         guard let viewer, person.author.id == viewer else { return nil }
-        if let text { return .quote(text) }
+        // On a card offering passages the page knows the reader's pick before the list does (the list may have been
+        // read while the pick's request was still on its way): the own row says the page's, as the web's.
+        let text = offersPassages && pagePick != nil ? pagePick?.text : listed
+        if let text, !text.isEmpty { return .quote(text) }
         return offersPassages ? .pick : nil
+    }
+
+    /// The reader's pick as the card page holds it now (its words, or nil for none): what their own row says (§U3).
+    struct PagePick: Equatable {
+        let text: String?
     }
 
     /// The words drawn: 「{text}」 / “{text}”, or 選一段.

@@ -97,6 +97,36 @@ class TapPassageRowsTest {
         assertEquals(TapRowLines(quote = carol.passage!!.text), tapRowLines(carol, anonymous = true, author = true, viewerId = null, offersPassages = false))
     }
 
+    /**
+     * A pick just made is on the page before the list knows it (the list read while the request was on its way — the
+     * tap-passage flow met it on the iPhone): the own row says the page's pick, and 選一段 once the page has none.
+     */
+    @Test fun theReadersOwnRowSaysThePagesPickBeforeTheListKnowsIt() {
+        assertEquals(
+            TapRowLines(quote = "第二段"),
+            tapRowLines(hana, anonymous = true, author = false, viewerId = "hana", offersPassages = true, pagePick = PagePick("第二段")),
+        )
+        // Cleared on the page while the list still holds the old one.
+        assertEquals(
+            TapRowLines(pick = true),
+            tapRowLines(gus, anonymous = true, author = false, viewerId = "gus", offersPassages = true, pagePick = PagePick(null)),
+        )
+        // A card that offers none any more: the list's own word stands.
+        assertEquals(
+            TapRowLines(quote = gus.passage!!.text),
+            tapRowLines(gus, anonymous = true, author = false, viewerId = "gus", offersPassages = false, pagePick = PagePick(null)),
+        )
+        // Never another's row, nor the author's list.
+        assertEquals(
+            TapRowLines.NONE,
+            tapRowLines(carol, anonymous = true, author = false, viewerId = "hana", offersPassages = true, pagePick = PagePick("第二段")),
+        )
+        assertEquals(
+            TapRowLines.NONE,
+            tapRowLines(hana, anonymous = false, author = true, viewerId = "hana", offersPassages = true, pagePick = PagePick("第二段")),
+        )
+    }
+
     @Test fun aReadersListShowsTheirOwnRowAloneNeverAnothers() {
         // Their own pick.
         assertEquals(TapRowLines(quote = gus.passage!!.text), tapRowLines(gus, anonymous = true, author = false, viewerId = "gus", offersPassages = true))
