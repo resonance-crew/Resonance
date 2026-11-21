@@ -212,6 +212,11 @@ export const ENTITIES = {
   // id's segments and the account's entries go by it. Kept 7 days at most (TTL `expireAt`).
   changeLog: { ...S('changeLog'), uid: ['userIds[]'], purge: 'rows', export: 'none' },
 
+  // --- sessions (Phase 3, ADR 0004: server-only) ---
+  // Which provider's subject is which account (`firebase_<uid>` → the same uid), and the refresh tokens by their hash.
+  identities: { ...S('identities'), uid: ['userId'], purge: 'rows', export: 'none' },
+  refreshTokens: { ...S('refreshTokens'), uid: ['uid'], purge: 'rows', export: 'none' },
+
   // --- push ---
   devices: { ...S('devices'), uid: ['userId'], purge: 'rows', export: 'none' },
   notificationSettings: { ...S('notificationSettings'), uid: ['$id'], purge: 'root', export: 'none' },

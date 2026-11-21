@@ -22,6 +22,7 @@ import { trashExpired } from '@/lib/cards/trash';
 import type { Card, RecommendationItem, User } from '@/lib/db/types';
 import type { ServerCtx } from '@/server/ctx';
 import { anonymousBySlugCard } from '@/server/domain/cards';
+import { resolvedMediaUrl } from '@/server/domain/media';
 import { blockHides, inTrash, trashedAtOf } from '@/server/domain/visibility';
 import type { CardPage, PageStart } from '@/server/ports/repos/cards';
 import type { PersonRow } from '@/server/ports/repos/users';
@@ -557,7 +558,7 @@ export async function getMe(ctx: ServerCtx, uid: string): Promise<MeBody> {
     initials: String(u.initials ?? ''),
     accentColor: String(u.accentColor ?? ''),
     bio: str(u.bio),
-    avatarUrl: str(u.avatarUrl),
+    avatarUrl: resolvedMediaUrl(ctx.media, u.avatarUrl, u.avatarKey),
     region: str(u.region),
     primaryLocale: u.primaryLocale === 'en' || u.primaryLocale === 'zh-TW' ? u.primaryLocale : null,
     handleChangedAt: u.handleChangedAt instanceof Date ? u.handleChangedAt.toISOString() : null,

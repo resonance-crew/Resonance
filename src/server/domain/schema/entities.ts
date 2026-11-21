@@ -613,6 +613,21 @@ export const SCHEMAS = {
       userIds: f.rel('users'),
     },
   }),
+  // Phase 3 sessions (ADR 0004): which identity provider's subject is which account — today `firebase_<uid>` → the
+  // same uid, never renumbered.
+  identities: defineEntity({
+    version: 1,
+    id: '<provider>_<subject>',
+    complete: true,
+    fields: { userId: f.str(), provider: f.str(), subject: f.str(), createdAt: f.time() },
+  }),
+  // A refresh token, kept only as its SHA-256 (the id): single use, its family revoked on reuse; `expiresAt` is its TTL.
+  refreshTokens: defineEntity({
+    version: 1,
+    id: '<sha256 hex>',
+    complete: true,
+    fields: { uid: f.str(), family: f.str(), authTime: f.num(), createdAt: f.time(), expiresAt: f.time(), usedAt: f.time() },
+  }),
   quotas: passthrough(1, '<uid>_<yyyy-mm-dd> (legacy)', {
     userId: f.str(),
     inviteCount: f.int(),

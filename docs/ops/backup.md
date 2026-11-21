@@ -51,6 +51,11 @@ plan below closes those gaps until Phase 3's exporter replaces it.
    an account purge does not reach the copy — the copy's retention (e.g. 30 days, then delete) is
    what keeps a purge true; say so in the privacy policy if the copy is kept longer.
 
+The repository's own tool does the same as rclone's copy, with a manifest and a compare to prove it
+(`scripts/storage/{copy,compare}.ts`; docs/ops/storage-migration.md): a dry run by default, never a delete,
+an object already there with the same size and hash skipped —
+`npx tsx scripts/storage/copy.ts --from r2:public --to s3:BACKUP --manifest <outside the repo>/public.json --apply`.
+
 ### 3. A restore drill (agent can rehearse, owner runs the production half)
 
 - Into the emulator: `gcloud storage cp -r gs://resonance-stories-backups/<date> ./restore/` and
@@ -63,7 +68,9 @@ plan below closes those gaps until Phase 3's exporter replaces it.
   (never into `resonance-stories`; a restore into production replaces documents and is decided by the
   owner, with PITR the first choice for anything within 7 days).
 - Pictures: pick ten keys from the restored cards and check each is in the R2 copy
-  (`rclone lsf backup:resonance-public/<key>`).
+  (`rclone lsf backup:resonance-public/<key>`) — or check the whole copy at once, keys and bytes:
+  `npx tsx scripts/storage/compare.ts --from r2:public --to s3:BACKUP` (missing, extra and mismatched keys only;
+  SHA-256 computed by streaming, since R2's multipart ETags are not MD5s).
 - Note the date, the export used, how long it took and what failed in `Resonance-notes`; repeat
   after any change to the schedule.
 

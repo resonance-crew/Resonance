@@ -64,6 +64,20 @@ called — never when the context is built. Pass a real one in `overrides`.
 - **Attestation** — `infra/appcheck/appCheck.ts` (verify, mint); Turnstile,
   the exchange's brake and the tally stay in `lib/appCheck/server`.
 
+## Sessions (Phase 3, ADR 0004)
+
+- `app/auth.ts` — `exchangeIn` / `refreshIn` / `logoutIn` (POST /api/v1/auth/*) over
+  `ports/sessions.ts`: the `SessionStore` (`infra/{firestore,memory}/sessions.ts`:
+  `identities/{provider}_{subject}`, `refreshTokens/{sha256}`), the `SessionSigner`
+  (`infra/session/{jwt,signer}.ts`, ES256 by `node:crypto`, keys from `RESONANCE_JWT_KEYS`)
+  and `AccountStanding` (Firebase Auth's, with its revocation cache). Lifetimes and
+  claims are `domain/session.ts`.
+- `infra/session/verifier.ts` `resonanceJwtVerifier` is first in `requestVerifier()`;
+  it `owns` a token with one of our key ids, so the chain asks no one after it about
+  one (a forged one never reaches Firebase as something else).
+- `ctxFor`'s `identity.revokeSessions` also revokes the account's refresh families
+  (`infra/session/deps.ts` `withOwnSessions`).
+
 ## Conversations (Phase 1 wave 3)
 
 - Notes, letters, messages, reactions, unsending, private shares, chat

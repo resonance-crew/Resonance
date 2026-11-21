@@ -245,6 +245,9 @@ describe('the account registry', () => {
         'group blocks blockedUid ==',
         // Added since: the outbox's entries naming the account (domain/outbox.ts).
         'changeLog userIds array-contains',
+        // Phase 3 sessions (ADR 0004): the identity mapping and the refresh tokens go with the account.
+        'identities userId ==',
+        'refreshTokens uid ==',
       ].sort(),
     );
     expect(plan.byCard.map((b) => `${b.entity} ${b.field}`)).toEqual(['resonances cardId', 'notes cardId', 'cardReads cardId', 'resonanceTaps cardId', 'readerSignals cardId']);
@@ -264,8 +267,8 @@ describe('the account registry', () => {
     }
   });
 
-  it('counts its entities (48: 39 collections, 9 subcollections)', () => {
-    expect(Object.keys(ENTITIES)).toHaveLength(48);
+  it('counts its entities (50: 41 collections, 9 subcollections)', () => {
+    expect(Object.keys(ENTITIES)).toHaveLength(50);
     expect(ENTITY_NAMES.filter((n) => SPECS[n].parent)).toHaveLength(9);
   });
 });

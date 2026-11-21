@@ -99,6 +99,8 @@ export interface NewDraft {
 export interface DraftCover {
   type: string;
   url: string;
+  /** The picture's storage key, kept beside the URL when it is that key on the current base (domain/media.ts mediaKeyFor). */
+  key?: string;
   thumbUrl?: string;
   label?: string;
   frame?: { cx: number; cy: number; zoom: number; ar: number };

@@ -45,6 +45,8 @@ export function usersTx(tx: MemoryTx): UsersTxRepo {
       if (p.region != null) patch.region = p.region;
       if (p.primaryLocale != null) patch.primaryLocale = p.primaryLocale;
       if (p.avatarUrl != null) patch.avatarUrl = p.avatarUrl;
+      // Undefined is removed by the merge (MemoryState.merge), as Firestore's FieldValue.delete().
+      if (p.avatarKey !== undefined) patch.avatarKey = p.avatarKey ?? undefined;
       if (p.autoTranslateTo != null) patch.autoTranslateTo = [...p.autoTranslateTo];
       if (p.hintsSeen && Object.keys(p.hintsSeen).length) {
         const stored = tx.get<{ hintsSeen?: unknown }>('users', uid)?.hintsSeen;

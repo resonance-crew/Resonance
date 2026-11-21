@@ -15,6 +15,13 @@ export interface CardMedia {
   type: 'image' | 'video';
   url: string;
   /**
+   * The picture's storage key (ADR 0005), kept by the server beside `url`
+   * when `url` is that key on the current public base. Answers build the
+   * URL from it (src/server/domain/media.ts resolvedMediaUrl); older covers
+   * have none and keep their `url`.
+   */
+  key?: string;
+  /**
    * The cover's ≤ 960 px copy (lib/images/coverThumb, what lists draw): the
    * upload's `thumbUrl`, when the writer saved it. Absent on older covers and
    * those saved by builds before — the copy's URL follows from `url` anyway.

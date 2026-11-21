@@ -19,6 +19,12 @@ export interface IdentityVerifier {
   verifyBearer(authorization: string | null, opts?: { revocation?: RevocationCheck }): Promise<AuthUser | null>;
   /** The web's session cookie. */
   verifySessionCookie(cookie: string, opts?: { revocation?: RevocationCheck }): Promise<AuthSession | null>;
+  /**
+   * Whether a bearer credential is this verifier's own kind (Resonance's
+   * tokens: one of our key ids): a chain (infra/identityChain.ts) then takes
+   * its answer, null included, and asks no one after it.
+   */
+  owns?(authorization: string | null): boolean;
 }
 
 /** What the server does to accounts at the identity service. */

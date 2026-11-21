@@ -9,6 +9,8 @@ import type { PersonRow } from '@/server/ports/repos/users';
 import { coverFrameOf } from '@/lib/images/coverFrame';
 import { coverThumbKey, coverThumbUrl } from '@/lib/images/coverThumb';
 import { publicBases, storageKeyOf } from '@/lib/storage/publicUrl';
+import { resolvedMediaUrl } from '@/server/domain/media';
+import { envMediaUrls, mediaUrlsOver } from '@/server/infra/env/media';
 import type { AuthorBody, FeedCardBody, LinkPreviewBody } from './schemas';
 import { summaryOf, type ListCard } from './summary';
 import { presentSummaryTranslations } from './summaryTranslations';
@@ -65,7 +67,8 @@ export function toAuthor(id: string, u: PersonRow): AuthorBody {
     handle: String(u.handle ?? ''),
     initials: String(u.initials ?? ''),
     accentColor: String(u.accentColor ?? ''),
-    avatarUrl: str(u.avatarUrl),
+    // From its key on the current base when one is kept (ADR 0005), else as stored.
+    avatarUrl: resolvedMediaUrl(envMediaUrls(), u.avatarUrl, u.avatarKey),
     avatarSeed: u.avatarSeed == null ? null : String(u.avatarSeed),
     verified: u.verified === true,
     region: str(u.region),
@@ -128,7 +131,7 @@ export function toFeedCard(c: ListCard, author: PersonRow | undefined, opts: Fee
     author: (!anonymous || opts.deanonymize) && author ? toAuthor(c.authorId, author) : null,
     anonymous,
     visibility: visibilityOf(c.visibility),
-    imageUrl: str(c.media?.url),
+    imageUrl: coverUrlOf(c.media),
     imageThumbUrl: coverThumbOf(c.media),
     imageLabel: str(c.media?.label) ?? (title ? Array.from(title).slice(0, 24).join('') : null),
     // Only beside a picture: a frame left on a cover that is gone frames nothing.
@@ -151,12 +154,23 @@ export function toFeedCard(c: ListCard, author: PersonRow | undefined, opts: Fee
  * or none: the client draws `imageUrl`.
  */
 export function coverThumbOf(media: Card['media'], bases: readonly string[] = publicBases()): string | null {
-  const url = str(media?.url);
-  if (!url || media?.type === 'video') return null;
+  const stored = str(media?.url);
+  if (!stored || media?.type === 'video') return null;
+  const url = coverUrlOf(media, bases) ?? stored;
   const kept = str(media?.thumbUrl);
   // Only the copy of this cover: draft saves merge `media`, so a new cover can sit beside the old one's copy.
-  if (kept && storageKeyOf(kept, bases) === coverThumbKey(storageKeyOf(url, bases))) return kept;
+  // A cover rebuilt from its key takes its copy from the same base (the stored copy may name an older one).
+  if (url === stored && kept && storageKeyOf(kept, bases) === coverThumbKey(storageKeyOf(url, bases))) return kept;
   return coverThumbUrl(url, bases);
+}
+
+/**
+ * A cover's URL as answered (ADR 0005): built from its storage key
+ * (`media.key`) on the current base when one is kept, else as stored.
+ */
+export function coverUrlOf(media: Card['media'], bases?: readonly string[]): string | null {
+  const resolver = bases ? mediaUrlsOver(() => bases) : envMediaUrls();
+  return resolvedMediaUrl(resolver, media?.url, media?.key);
 }
 
 /* ───────────── who may see what: through the repositories (src/server/app/viewer.ts) ───────────── */

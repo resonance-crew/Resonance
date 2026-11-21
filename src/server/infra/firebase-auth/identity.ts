@@ -1,4 +1,5 @@
 import type { IdentityAdmin, IdentityVerifier, SessionIssuer } from '@/server/ports/identity';
+import type { AccountStanding } from '@/server/ports/sessions';
 import { lazyAsync } from '../wiring';
 
 /**
@@ -30,4 +31,9 @@ export function firebaseIdentityVerifier(): IdentityVerifier {
 /** Mints the web's session cookie from a Firebase ID token. */
 export function firebaseSessionIssuer(): SessionIssuer {
   return lazyAsync<SessionIssuer>(async () => ({ mintSessionCookie: (await auth()).createSessionCookie }));
+}
+
+/** Whether an account still stands at Firebase Auth (gone, disabled, revoked since), for Resonance's own tokens. */
+export function firebaseAccountStanding(): AccountStanding {
+  return lazyAsync<AccountStanding>(async () => ({ standing: (await auth()).accountStanding }));
 }

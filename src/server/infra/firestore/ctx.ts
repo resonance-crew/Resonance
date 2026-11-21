@@ -6,6 +6,7 @@ import { firebaseIdentityAdmin } from '../firebase-auth/identity';
 import { nextAfter } from '../next/after';
 import { nextPageCache } from '../next/pageCache';
 import { chatObjectStore, publicObjectStore } from '../s3/objects';
+import { withOwnSessions } from '../session/deps';
 import { systemClock } from '../system/clock';
 import { systemIds } from '../system/ids';
 import { consoleLogger } from '../system/log';
@@ -14,6 +15,7 @@ import type { AdminDb } from './db';
 import { firestoreLeaseStore } from './lease';
 import { firestoreRateLimiter } from './rateLimit';
 import { firestoreRealtime } from './realtime';
+import { firestoreSessionStore } from './sessions';
 import { buildDataRepos } from './repos';
 import { firestoreUow } from './uow';
 import { firestoreVectors } from './vectors';
@@ -43,7 +45,8 @@ export function ctxFor(db: AdminDb, overrides: Partial<ServerCtx> = {}): ServerC
   return {
     uow: firestoreUow(db),
     data: buildDataRepos(db),
-    identity: firebaseIdentityAdmin(),
+    // Signing an account out everywhere revokes Resonance's own refresh families too (ADR 0004).
+    identity: withOwnSessions(firebaseIdentityAdmin(), firestoreSessionStore(db)),
     media: envMediaUrls(),
     objects: publicObjectStore(),
     chatObjects: chatObjectStore(),

@@ -89,7 +89,8 @@ export function buildOpenApi(): Json {
       version: '1.0.0',
       description:
         'The versioned API for the native apps. Authenticate with `Authorization: Bearer <Firebase ID token>` ' +
-        '(the web uses its session cookie). Additive changes only within v1.',
+        '(the web uses its session cookie), or with an access token from POST /auth/exchange the same way. ' +
+        'Additive changes only within v1.',
     },
     servers: [{ url: '/api/v1' }],
     security: [{ firebaseIdToken: [] }],
@@ -890,6 +891,45 @@ export function buildOpenApi(): Json {
         },
       },
       // --- end Phase 2 social (2a-social)
+      // --- Phase 3 sessions (ADR 0004)
+      '/auth/exchange': {
+        post: {
+          operationId: 'exchangeSession',
+          summary: "Trade a sign-in at the identity provider (a Firebase ID token) for Resonance's own tokens",
+          description:
+            'The token is checked as a write would check it (a disabled or revoked account is `401`). Answers a ' +
+            'short-lived access token — sent as the bearer credential, where a Firebase ID token is sent today; both ' +
+            'are accepted — and a refresh token. `userId` is the account id the sign-in always had. `503` where ' +
+            'sessions are not enabled: keep sending the Firebase ID token. `429` past the hourly budget.',
+          security: [],
+          requestBody: { required: true, ...json(ref('AuthExchangeRequest')) },
+          responses: { '200': { description: 'OK', ...json(ref('AuthSession')) }, ...errors(400, 401, 429, 503) },
+        },
+      },
+      '/auth/refresh': {
+        post: {
+          operationId: 'refreshSession',
+          summary: 'Trade a refresh token for the next access and refresh tokens (each refresh token is good once)',
+          description:
+            'A refresh token presented a second time is taken for stolen: every token of its session is revoked, and ' +
+            'this answers `401` (sign in again, then exchange). So does an account deleted, disabled or signed out ' +
+            'everywhere since. `503` where sessions are not enabled.',
+          security: [],
+          requestBody: { required: true, ...json(ref('AuthRefreshRequest')) },
+          responses: { '200': { description: 'OK', ...json(ref('AuthSession')) }, ...errors(400, 401, 429, 503) },
+        },
+      },
+      '/auth/logout': {
+        post: {
+          operationId: 'logoutSession',
+          summary: "End this device's session: its refresh token, and every one rotated from the same exchange, revoked",
+          description: 'The access token already handed out stands until it expires (at most 15 minutes). An unknown token answers the same.',
+          security: [],
+          requestBody: { required: true, ...json(ref('AuthRefreshRequest')) },
+          responses: { '204': { description: 'Logged out' }, ...errors(400) },
+        },
+      },
+      // --- end Phase 3 sessions
     },
     components: {
       securitySchemes: { firebaseIdToken: { type: 'http', scheme: 'bearer', bearerFormat: 'Firebase ID token' } },

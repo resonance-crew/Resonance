@@ -4,6 +4,7 @@ import type { AuthUser } from '@/lib/auth/types';
 import { avatarColorFor } from '@/lib/design/avatarColors';
 import type { ServerCtx } from '@/server/ctx';
 import { hasPenNameRow } from '@/server/domain/cardsWrite';
+import { mediaKeyFor } from '@/server/domain/media';
 import type { ProfilePatch } from '@/server/ports/repos/users';
 import { getMe } from './cardsRead';
 
@@ -134,7 +135,11 @@ export async function updateProfileIn(ctx: ServerCtx, uid: string, input: Update
     if (input.region != null) patch.region = input.region;
     if (input.primaryLocale != null) patch.primaryLocale = input.primaryLocale;
     const avatarUrl = avatarOf(ctx, input);
-    if (avatarUrl != null) patch.avatarUrl = avatarUrl;
+    if (avatarUrl != null) {
+      patch.avatarUrl = avatarUrl;
+      // Its key beside it (ADR 0005), or none: a key left from an earlier photo must not outlive it.
+      patch.avatarKey = mediaKeyFor(ctx.media, avatarUrl);
+    }
     if (input.autoTranslateTo != null) patch.autoTranslateTo = [...new Set(input.autoTranslateTo)];
     if (input.hintsSeen != null) {
       const hints = mergedHints(row.hintsSeen, input.hintsSeen);

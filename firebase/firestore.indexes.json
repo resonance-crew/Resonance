@@ -341,6 +341,12 @@
       "indexes": []
     },
     {
+      "collectionGroup": "refreshTokens",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
       "collectionGroup": "readerSignals",
       "fieldPath": "expireAt",
       "ttl": true,

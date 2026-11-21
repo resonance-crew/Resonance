@@ -100,7 +100,10 @@ describe('the writer API holds the rules’ limits', () => {
       keysOf(UpdateDraftRequest).filter((k) => k !== 'rev' && k !== 'clear'),
     );
     expect(hasOnly('editId == "current"').filter((k) => k !== 'updatedAt' && k !== 'authorId')).toEqual(keysOf(PendingEditRequest).filter((k) => k !== 'rev'));
-    expect(hasOnly('function validMedia').sort()).toEqual(keysOf(DraftMedia));
+    // `key` (ADR 0005) is the server's: it makes it from the URL (domain/media.ts mediaKeyFor) and the API takes
+    // none; the rules take it only so a client saving back a cover it read is not refused, and only as the URL's key.
+    expect(hasOnly('function validMedia').filter((k) => k !== 'key').sort()).toEqual(keysOf(DraftMedia));
+    expect(hasOnly('function validMedia')).toContain('key');
   });
 
   it('the draft fields refuse what the rules refuse', () => {
