@@ -125,8 +125,14 @@ export function PassageMarks({ cardId, picked, script, storyRef, rail, children 
         const style = getComputedStyle(mark);
         const lineBox = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.6 || 0;
         const into = rects.get(id) ?? [];
+        // A sentence in a table that scrolls sideways (`.story-table`, overflow-x: auto) is cut to the table's box:
+        // client rects ignore that clip, and the washes' layer is the unclipped story.
+        const clip = mark.closest('.story-table')?.getBoundingClientRect() ?? null;
         for (const r of mark.getClientRects()) {
-          into.push({ left: r.left - base.left, top: r.top - base.top, right: r.right - base.left, bottom: r.bottom - base.top, lineBox });
+          const left = clip ? Math.max(r.left, clip.left) : r.left;
+          const right = clip ? Math.min(r.right, clip.right) : r.right;
+          if (right - left <= 0) continue;
+          into.push({ left: left - base.left, top: r.top - base.top, right: right - base.left, bottom: r.bottom - base.top, lineBox });
         }
         rects.set(id, into);
       }
@@ -143,11 +149,14 @@ export function PassageMarks({ cardId, picked, script, storyRef, rail, children 
     measure();
     const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
     ro?.observe(el);
+    // A table scrolled sideways moves its words, not the story's box: scroll doesn't bubble, so listen in capture.
+    el.addEventListener('scroll', measure, { capture: true, passive: true });
     let live = true;
     void document.fonts?.ready.then(() => live && measure());
     return () => {
       live = false;
       ro?.disconnect();
+      el.removeEventListener('scroll', measure, { capture: true });
     };
   }, [ctx, list, storyRef]);
 
