@@ -62,23 +62,31 @@ export function useTapToggle(cardId: string | undefined, uid: string | undefined
       const key = cardPageKey(cardId, uid);
       const turn = ++latest.current;
       let shown = false;
-      const flip = (to: boolean) =>
-        mutate<LoadedCardPageLists | null>(
-          key,
-          (cur) => {
-            shown = !!cur?.tap;
-            return cur?.tap ? { ...cur, tap: withMine(cur.tap, to, me) } : cur;
-          },
-          { revalidate: false },
-        );
-      await flip(on);
+      // The reader's pick before the flip: a refused take-back puts it back with the tap (the server still has it).
+      let before: string | null = null;
+      await mutate<LoadedCardPageLists | null>(
+        key,
+        (cur) => {
+          shown = !!cur?.tap;
+          before = cur?.tap?.passage ?? null;
+          return cur?.tap ? { ...cur, tap: withMine(cur.tap, on, me) } : cur;
+        },
+        { revalidate: false },
+      );
       try {
         await setTap(cardId, on);
         // Nothing here to flip (an older answer without the tap): the page reads the card again.
         if (!shown) void mutate(key);
         return null;
       } catch (err) {
-        if (turn === latest.current) await flip(!on);
+        if (turn === latest.current) {
+          const back = before;
+          await mutate<LoadedCardPageLists | null>(
+            key,
+            (cur) => (cur?.tap ? { ...cur, tap: { ...withMine(cur.tap, !on, me), passage: back } } : cur),
+            { revalidate: false },
+          );
+        }
         const status = (err as { status?: number }).status;
         const code = (err as { code?: string }).code;
         return status === 403 && code === 'forbidden' ? 'penName' : 'failed';

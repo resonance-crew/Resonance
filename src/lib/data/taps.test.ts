@@ -8,7 +8,7 @@ import zhMessages from '@/messages/zh-TW.json';
 import type { AuthorBody, CardTapBody } from '@/lib/api/v1/schemas';
 import { TapFaces } from '@/components/molecules/CardDetail/TapFaces';
 import { cardPageKey, type LoadedCardPageLists } from './hooks';
-import { useTapPassage, withMine } from './taps';
+import { useTapPassage, useTapToggle, withMine } from './taps';
 
 /**
  * Round 26 §U2.3: the viewer's tap flips at once on the card page, before the server answers (or puts it back). The
@@ -17,9 +17,10 @@ import { useTapPassage, withMine } from './taps';
  * and kept `more`, so off again showed dora, eli and a blank disc where fay had been.
  */
 
+const setTap = vi.fn((..._a: unknown[]): Promise<unknown> => Promise.resolve({}));
 const setTapPassage = vi.fn((..._a: unknown[]): Promise<{ passage: string | null }> => Promise.resolve({ passage: null }));
 vi.mock('@/lib/db/firestore/client/taps', () => ({
-  setTap: vi.fn(),
+  setTap: (...a: unknown[]) => setTap(...a),
   setTapPassage: (...a: unknown[]) => setTapPassage(...a),
   listTaps: vi.fn(() => new Promise(() => {})),
 }));
@@ -130,5 +131,23 @@ describe('the passages through a flip and a pick', () => {
       failed = await h.hook.result.current(null);
     });
     expect(failed).toBe('gone');
+  });
+
+  it('a refused take-back puts the tap back with the reader’s pick (the server still has it), as iOS does', async () => {
+    setTap.mockRejectedValueOnce(Object.assign(new Error('500'), { status: 500 }));
+    const h = harness(WITH);
+    await seed(h);
+    const toggle = renderHook(() => useTapToggle('c1', 'alice'), {
+      wrapper: ({ children }: { children: ReactNode }) => createElement(SWRConfig, { value: { provider: () => h.cache, dedupingInterval: 0 } }, children),
+    });
+    let failed: unknown;
+    await act(async () => {
+      failed = await toggle.result.current(false, alice);
+    });
+    expect(failed).toBe('failed');
+    expect(setTap).toHaveBeenCalledWith('c1', false);
+    expect(tapIn(h)?.mine).toBe(true);
+    expect(tapIn(h)?.faces.map((f) => f.id)).toEqual(['alice', 'dora', 'eli', 'fay']);
+    expect(tapIn(h)?.passage).toBe('8b3a1c4d');
   });
 });
