@@ -300,7 +300,7 @@ describe('the push', () => {
     expect(at['old-en'].notification).toEqual({ title: '小明', body: 'Sent a sticker: Thanks' });
     // The system's push is a message's as ever (with its sound); `kind` there has only ever meant a note.
     expect(at['iphone-zh'].data).toEqual({ type: 'message', route: expect.any(String), fromUserId: 'alice', conversationId: PAIR, messageId: sent.id });
-    expect(at['iphone-zh'].apns).toEqual({ headers: { 'apns-collapse-id': sent.id }, payload: { aps: { sound: 'default', threadId: PAIR } } });
+    expect(at['iphone-zh'].apns).toEqual({ headers: { 'apns-collapse-id': sent.id }, payload: { aps: { sound: 'default', threadId: PAIR, mutableContent: true } } });
     expect(at['old-en'].android).toEqual({ priority: 'high', notification: { channelId: MESSAGES_CHANNEL, tag: PAIR } });
   });
 
@@ -313,7 +313,7 @@ describe('the push', () => {
     expect(result).toEqual({ sent: 2, pruned: 0 });
     expect(Object.keys(at).sort()).toEqual(['iphone-zh', 'old-en']);
     expect(at['iphone-zh'].notification).toEqual({ title: '小明', body: '傳送了一張貼圖：嗨！' });
-    expect(at['iphone-zh'].apns).toEqual({ headers: { 'apns-collapse-id': next.id }, payload: { aps: { threadId: PAIR, 'interruption-level': 'passive' } } });
+    expect(at['iphone-zh'].apns).toEqual({ headers: { 'apns-collapse-id': next.id }, payload: { aps: { threadId: PAIR, 'interruption-level': 'passive', mutableContent: true } } });
     expect(at['old-en'].android).toEqual({ priority: 'normal', notification: { channelId: MESSAGES_CHANNEL, tag: PAIR, priority: 'low', defaultSound: false } });
   });
 

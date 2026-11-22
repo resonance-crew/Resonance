@@ -9,12 +9,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.content.ContextCompat
+import androidx.core.content.LocusIdCompat
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import com.google.firebase.messaging.FirebaseMessaging
 import com.resonance.kit.chat.ChatPush
@@ -35,7 +39,9 @@ import java.util.UUID
  * Chat messages are the exception: a build that registers [CAPABILITIES] gets them as data-only
  * pushes and draws the conversation's notification itself ([showChatMessage]) — one per
  * conversation, a stack of its latest lines, which a thread on screen suppresses
- * ([viewingConversation]) and clears when it opens.
+ * ([viewingConversation]) and clears when it opens. Each conversation that rang has a shortcut
+ * ([conversationShortcut]), which is what makes the shade draw it as a conversation: the sender's
+ * face large, the app's mark at its corner.
  */
 object PushCenter {
     /** The channel the server names in every bell row's push (`android.notification.channelId`). */
@@ -350,10 +356,13 @@ object PushCenter {
      * A chat message's notification: the conversation's latest lines ([MAX_LINES]) in one
      * `MessagingStyle` notification, tagged by the conversation so a new message replaces it (the
      * lines already in the shade are read back from it, which holds across a process restart), in
-     * the "messages" channel and group, under the sender's own avatar ([ChatAvatar]: their photo,
-     * else their initials on their colour — never the system's letter). Nothing when the person
-     * switched notifications off, or is looking at that conversation, or this very message is
-     * already in the shade (FCM delivered it twice).
+     * the "messages" channel, under the sender's own avatar ([ChatAvatar]: their photo, else their
+     * initials on their colour — never the system's letter). It names the conversation's shortcut
+     * ([conversationShortcut]), so Android 11 and later draw it as a conversation: that face in the
+     * app icon's place, the app's mark at its corner, among the shade's conversations — each on
+     * its own there; on Android 10 they stack under one "Messages" summary, as they always did.
+     * Nothing when the person switched notifications off, or is looking at that conversation, or
+     * this very message is already in the shade (FCM delivered it twice).
      */
     fun showChatMessage(context: Context, push: ChatPush) {
         if (!canNotify || viewingConversation == push.conversationId) return
@@ -364,11 +373,13 @@ object PushCenter {
         val lines = shown?.messages.orEmpty()
         if (push.messageId != null && lines.any { it.extras.getString(EXTRA_MESSAGE_ID) == push.messageId }) return
 
+        val faces = ChatAvatar.faces(context, push)
         val sender = Person.Builder()
             .setName(push.title)
             .setKey(push.fromUserId ?: push.conversationId)
-            .setIcon(IconCompat.createWithBitmap(ChatAvatar.draw(context, push)))
+            .setIcon(IconCompat.createWithBitmap(faces.round))
             .build()
+        val shortcut = conversationShortcut(context, push, sender, faces.icon)
         val style = NotificationCompat.MessagingStyle(Person.Builder().setName(L10n.Messages.you).build())
         // The sender's earlier lines take their name and face as they are now (the shade heads a run of lines with its first one's).
         lines.takeLast(MAX_LINES - 1).forEach { line ->
@@ -383,21 +394,35 @@ object PushCenter {
             },
         )
 
+        // Drawn as a conversation (Android 11+, its shortcut published), it stands in the shade on its own, face
+        // first: under a group's summary the shade folds two conversations into one row headed by the app.
+        val standsAlone = shortcut != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
         val builder = NotificationCompat.Builder(context, MESSAGES_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(ContextCompat.getColor(context, R.color.notification_accent))
             .setStyle(style)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setShortcutId(shortcut)
+            .setLocusId(LocusIdCompat(push.conversationId))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setGroup(MESSAGES_GROUP)
             .setWhen(push.sentAt)
             .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(tapIntent(context, push.route, null, push.fromUserId, push.conversationId))
+        if (!standsAlone) builder.setGroup(MESSAGES_GROUP)
         // canNotify covers the permission check the lint rule wants to see.
         @Suppress("MissingPermission")
         manager.notify(push.conversationId, CHAT_NOTIFICATION_ID, builder.build())
-        // One summary for the group, so several conversations stack under one heading; it never alerts itself.
+        if (standsAlone) {
+            // A summary an earlier build (or the path below) posted goes once this was the last conversation under
+            // it — never sooner: cancelling a summary takes its children with it.
+            val grouped = manager.activeNotifications.any {
+                it.id == CHAT_NOTIFICATION_ID && it.tag != push.conversationId && it.notification.group == MESSAGES_GROUP
+            }
+            if (!grouped) manager.cancel(MESSAGES_GROUP, SUMMARY_NOTIFICATION_ID)
+            return
+        }
+        // Android 10, or no shortcut: one summary for the group, so several conversations stack under one heading; it never alerts itself.
         val summary = NotificationCompat.Builder(context, MESSAGES_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(ContextCompat.getColor(context, R.color.notification_accent))
@@ -410,6 +435,42 @@ object PushCenter {
             .build()
         @Suppress("MissingPermission")
         manager.notify(MESSAGES_GROUP, SUMMARY_NOTIFICATION_ID, summary)
+    }
+
+    /**
+     * The conversation's shortcut, published (again, with the sender's name and face as they are
+     * now) and its id: a long-lived one for that person, which a `MessagingStyle` notification has
+     * to name before the shade treats it as a conversation. It opens their thread, as a tap on the
+     * notification does. The system also lists the latest few when the app's icon is held; they
+     * are in no share menu (no share target is declared). Null when the system refuses it (a
+     * locked profile, a launcher without shortcuts): the notification then shows as it did before.
+     */
+    private fun conversationShortcut(context: Context, push: ChatPush, sender: Person, icon: Bitmap): String? = runCatching {
+        val open = Intent(context, MainActivity::class.java)
+            .setAction(Intent.ACTION_VIEW)
+            .putExtra(EXTRA_ROUTE, push.route)
+            .putExtra(EXTRA_FROM_USER_ID, push.fromUserId)
+        val shortcut = ShortcutInfoCompat.Builder(context, push.conversationId)
+            .setLongLived(true)
+            .setIsConversation()
+            .setShortLabel(push.title.ifBlank { L10n.App.Nav.messages })
+            .setPerson(sender)
+            .setIcon(IconCompat.createWithAdaptiveBitmap(icon))
+            .setLocusId(LocusIdCompat(push.conversationId))
+            .setIntent(open)
+            .build()
+        ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
+        push.conversationId
+    }.getOrNull()
+
+    /**
+     * Forgets a conversation here: its notification and its shortcut (the person was blocked, so
+     * their name leaves the list under the app's icon too).
+     */
+    fun forgetConversation(pairId: String) {
+        if (!::context.isInitialized) return
+        cancelConversation(pairId)
+        forgetShortcuts(listOf(pairId))
     }
 
     /**
@@ -441,9 +502,27 @@ object PushCenter {
         manager.notify(conversationId, CHAT_NOTIFICATION_ID, builder.build())
     }
 
-    /** Signed out: the account's pushes still in the shade go (their words are its messages and notes). */
+    /**
+     * Signed out: the account's pushes still in the shade go (their words are its messages and
+     * notes), and its conversations' shortcuts with them (the names of the people it wrote with).
+     */
     fun clearDelivered() {
-        if (::context.isInitialized) NotificationManagerCompat.from(context).cancelAll()
+        if (!::context.isInitialized) return
+        NotificationManagerCompat.from(context).cancelAll()
+        runCatching {
+            val kept = ShortcutManagerCompat.FLAG_MATCH_DYNAMIC or ShortcutManagerCompat.FLAG_MATCH_CACHED or ShortcutManagerCompat.FLAG_MATCH_PINNED
+            ShortcutManagerCompat.getShortcuts(context, kept).map { it.id }
+        }.getOrNull()?.let(::forgetShortcuts)
+    }
+
+    /**
+     * Takes these conversations' shortcuts back: from the list under the app's icon, and from what
+     * the system keeps of a long-lived one after that (the shade's conversations).
+     */
+    private fun forgetShortcuts(ids: List<String>) {
+        if (ids.isEmpty()) return
+        runCatching { ShortcutManagerCompat.removeDynamicShortcuts(context, ids) }
+        runCatching { ShortcutManagerCompat.removeLongLivedShortcuts(context, ids) }
     }
 
     /**

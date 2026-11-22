@@ -249,9 +249,13 @@ final class SessionStore {
         let freshness = httpCache.freshness
         let social = livePaths.social ? SocialAPI(client: api) : nil
         let conversations = conversations
-        return uid.map {
-            SafetyService(uid: $0, api: SafetyAPI(client: api), onWrite: freshness.invalidate, social: social,
-                          onBlockChange: { conversations.blockChanged($0, blocked: $1) })
+        return uid.map { me in
+            SafetyService(uid: me, api: SafetyAPI(client: api), onWrite: freshness.invalidate, social: social,
+                          onBlockChange: { other, blocked in
+                              conversations.blockChanged(other, blocked: blocked)
+                              // Their pushes, and their name where the system keeps who wrote, go with them.
+                              if blocked { PushCenter.forgetConversation(ThreadModel.pairId(me, other)) }
+                          })
         }
     }
     var bookmarks: BookmarkService? {
@@ -475,7 +479,8 @@ final class SessionStore {
     /// What the device still holds of an account that signed out (or was
     /// switched from), beyond the API caches and the push registration's
     /// memo `apply` empties: Firestore's local cache (its messages,
-    /// notifications and drafts), the pushes still in Notification Center and
+    /// notifications and drafts), the pushes still in Notification Center, the
+    /// people the system was told wrote to it (`PushCenter.forgetPeople`) and
     /// the badge, a backup the account exported, and the mark that it has a
     /// profile.
     nonisolated static func forget(_ uid: String) async {
@@ -486,6 +491,7 @@ final class SessionStore {
         await SFSafariViewController.DataStore.default.clearWebsiteData()
         let center = UNUserNotificationCenter.current()
         center.removeAllDeliveredNotifications()
+        PushCenter.forgetPeople()
         try? await center.setBadgeCount(0)
         let tmp = FileManager.default.temporaryDirectory
         for name in (try? FileManager.default.contentsOfDirectory(atPath: tmp.path)) ?? [] where name.hasPrefix(exportPrefix) {

@@ -491,6 +491,20 @@ also names the phone's time zone (`TimeZone.current.identifier`; `PushAPI`
 sends none rather than one over the contract's 64 characters, as Android does),
 and a new one sends it again (`PushRegistration`).
 
+A chat message's push is redrawn before it shows by the notification service extension
+(`NotificationService/`, target `ResonanceNotifications`, bundle id `com.resonance.stories.notifications`;
+the server marks those pushes `mutable-content` and puts the sender's face beside the alert:
+`fromAvatarUrl`, `fromInitials`, `fromColor`): a communication notification, the sender's photo — or
+their initials on their colour, in the app's own type, read from the app's bundle — where the app's icon
+stood, the icon at its corner. It needs the Communication Notifications capability on the app
+(`com.apple.developer.usernotifications.communication` in both entitlements files) and
+`NSUserActivityTypes: [INSendMessageIntent]`; any other push, a failed redraw or a build without the
+extension shows as the server sent it. What it tells the system of a message (an `INInteraction` under
+the conversation's pair id) is deleted by a block and a sign-out (`PushCenter.forgetConversation`,
+`forgetPeople`). To see one on a simulator: `xcrun simctl push <udid> com.resonance.stories <file>.apns`
+with `"mutable-content": 1` in `aps` and the message's keys beside it (`ChatSenderTests` has a payload).
+The version is set once for both targets, at the top of `project.yml`.
+
 Settings → 通知 holds the two opt-in pushes ("a card for tonight" and new
 cards from connections; `GET/PATCH /api/v1/me/notifications` through
 `NotificationSettingsAPI`, both off until turned on). `NotificationSettingsModel`
@@ -546,8 +560,9 @@ over it is the title bar's, where the traffic lights are — no status bar's roo
 its page there (`EditorPage`'s `fill`, no tap area of the host's over it), and the editor reloads
 WebKit's input views as the story takes the focus — without it the first click into a fresh story put
 the caret there but no keys reached it. No QuickType strip either: that was the iPad app on a Mac.
-Entitlements are `Resonance/Resonance-Mac.entitlements` (the sandbox, network, photos, push, App
-Attest, Sign in with Apple).
+Entitlements are `Resonance/Resonance-Mac.entitlements` (the sandbox, network, photos, push,
+communication notifications, App Attest, Sign in with Apple); the notification service inside the app has
+its own, `NotificationService/NotificationService-Mac.entitlements` (the sandbox and the network).
 
 ```bash
 cd apps/ios && xcodegen generate
@@ -686,7 +701,12 @@ are found by `Linkify` (the server's `firstLink` rules, `src/lib/links/url.ts`) 
 number instead of a name, a punycode host, a port or userinfo asks first, anything but http(s) opens nothing, and the page
 is a Custom Tab. The build registers the `chat-push` capability, so the server sends chat messages as data-only pushes and
 `PushCenter.showChatMessage` draws the conversation's notification itself (one `MessagingStyle` per pair id on the
-"messages" channel, silent while that thread is resumed). Debug builds fake one:
+"messages" channel, silent while that thread is resumed). Each conversation that rang has a long-lived shortcut
+(`conversationShortcut`: its pair id, the sender's name and face as an adaptive icon, opening their thread) that the
+notification names, so Android 11 and later draw it as a conversation — the face in the app icon's place, the app's mark
+at its corner, among the shade's conversations; the system also lists the latest few when the app's icon is held (no
+share target is declared). A block takes that person's away (`forgetConversation`), a sign-out all of them. Debug builds
+fake one:
 `--es pushChatBody "…" --es pushChatConversation alice_bob --es pushChatId m1 --es pushFromUserId bob --es pushRoute /messages/bob`.
 
 Pictures in chat (round 7): the composer's 「＋」 opens 圖片 (the system's photo picker) · 卡片; a picture is made ready

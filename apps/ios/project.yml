@@ -23,6 +23,12 @@ packages:
   GoogleSignIn:
     url: https://github.com/google/GoogleSignIn-iOS
     from: 10.0.0
+# The version, for the app and the notification service inside it alike (an extension's must be
+# its app's): set here once — scripts/release/versions.ts reads and bumps these two lines.
+settings:
+  base:
+    MARKETING_VERSION: "2.5.0"
+    CURRENT_PROJECT_VERSION: "16"
 targets:
   Resonance:
     type: application
@@ -86,6 +92,8 @@ targets:
         product: FirebaseAppCheck
       - package: GoogleSignIn
         product: GoogleSignIn
+      # The notification service (below), embedded in the app's PlugIns.
+      - target: ResonanceNotifications
     settings:
       base:
         # RESONANCE_BUNDLE_SUFFIX (empty) and RESONANCE_MAC_ENTITLEMENTS let a local Mac run stand beside
@@ -94,8 +102,6 @@ targets:
         RESONANCE_BUNDLE_SUFFIX: ""
         PRODUCT_BUNDLE_IDENTIFIER: com.resonance.stories$(RESONANCE_BUNDLE_SUFFIX)
         PRODUCT_NAME: Resonance
-        MARKETING_VERSION: "2.5.0"
-        CURRENT_PROJECT_VERSION: "16"
         SWIFT_VERSION: "6.0"
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: "YES"
@@ -161,10 +167,55 @@ targets:
         NSPhotoLibraryAddUsageDescription: "Saves share images to your photo library"
         # Instagram Stories (InstagramStories.swift): asked whether instagram-stories:// opens.
         LSApplicationQueriesSchemes: [instagram-stories]
+        # Communication notifications (NotificationService): the app says it handles a message
+        # from a person, which the entitlement of the same name requires.
+        NSUserActivityTypes: [INSendMessageIntent]
+  # The notification service extension: redraws a chat message's push under its sender's face
+  # (NotificationService.swift; .claude/rules/push.md, Chat push). Its bundle id is the app's plus
+  # `.notifications`, with the same suffix a local Mac run gives the app.
+  ResonanceNotifications:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: NotificationService
+    dependencies:
+      - package: DesignSystem
+    settings:
+      base:
+        RESONANCE_BUNDLE_SUFFIX: ""
+        PRODUCT_BUNDLE_IDENTIFIER: com.resonance.stories$(RESONANCE_BUNDLE_SUFFIX).notifications
+        PRODUCT_NAME: ResonanceNotifications
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: "YES"
+        DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER: "NO"
+        # On the Mac an extension is sandboxed (and reads the photo from the network); on iOS it needs no entitlement.
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": NotificationService/NotificationService-Mac.entitlements
+        DEVELOPMENT_TEAM: V7H59QAJPL
+        CODE_SIGN_STYLE: Automatic
+        "CODE_SIGN_IDENTITY[sdk=iphonesimulator*]": "-"
+        ENABLE_USER_SCRIPT_SANDBOXING: "YES"
+    info:
+      path: NotificationService/Info.plist
+      properties:
+        CFBundleDisplayName: Resonance
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+        # The emulator stack's pictures are on this machine (as the app's own setting).
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
   ResonanceTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [ResonanceTests]
+    sources:
+      - path: ResonanceTests
+      # The notification service — its reading of a push, its drawing of a face, and the service
+      # itself — tested here as source (an extension is no module a test can import).
+      - path: NotificationService/ChatSender.swift
+      - path: NotificationService/NotificationService.swift
     dependencies:
       - target: Resonance
     settings:

@@ -115,12 +115,31 @@ describe('toMulticast, kind by kind, against the messages lib/push built before 
       notification: { title: '小明', body: 'hi there' },
       data: { type: 'message', route, fromUserId: 'bob', conversationId: 'alice_bob', messageId: 'm1' },
       android: { priority: 'high', notification: { channelId: 'messages', tag: 'alice_bob' } },
-      apns: { headers: { 'apns-collapse-id': 'm1' }, payload: { aps: { sound: 'default', threadId: 'alice_bob' } } },
+      apns: { headers: { 'apns-collapse-id': 'm1' }, payload: { aps: { sound: 'default', threadId: 'alice_bob', mutableContent: true } } },
     };
     const got = sent(push);
     expect(got).toHaveLength(2);
     same(got.find((m) => m.tokens[0] === 'tok-zh')!, own);
     same(got.find((m) => m.tokens[0] === 'tok-en')!, system);
+  });
+
+  it("the system's chat push carries the sender's face, for the iPhone's extension to redraw it under (mutable-content)", async () => {
+    const { ctx, push } = chatWorld();
+    ctx.state.seed('users', { bob: { handle: '小明', initials: '小明', accentColor: 'oklch(90% 0.06 140)' } });
+    ctx.state.seed('messages', { 'alice_bob/m1': { senderId: 'bob', text: 'hi', sentAt: at(NOW) } });
+    await pushMessageIn(ctx, { conversationId: 'alice_bob', messageId: 'm1', from: 'bob', to: 'alice' });
+    const face = { fromInitials: '小明', fromColor: 'oklch(90% 0.06 140)' };
+    const system = sent(push).find((m) => m.tokens[0] === 'tok-en')!;
+    same(system, {
+      tokens: ['tok-en'],
+      notification: { title: '小明', body: 'hi' },
+      data: { type: 'message', route: '/messages/%E5%B0%8F%E6%98%8E', fromUserId: 'bob', conversationId: 'alice_bob', messageId: 'm1', ...face },
+      android: { priority: 'high', notification: { channelId: 'messages', tag: 'alice_bob' } },
+      apns: { headers: { 'apns-collapse-id': 'm1' }, payload: { aps: { sound: 'default', threadId: 'alice_bob', mutableContent: true } } },
+    });
+    // Only a push that names `mutable` says so: a bell row's stays as the system draws it.
+    expect(toMulticast(['t'], { title: 'a', data: {}, threadId: 'x' }).apns?.payload?.aps).toEqual({ sound: 'default', threadId: 'x' });
+    expect(toMulticast(['t'], { title: 'a', data: {}, mutable: true }).apns?.payload?.aps).toEqual({ sound: 'default', mutableContent: true });
   });
 
   it('a sticker continuing a run rings quietly, and only where the system shows it', async () => {
@@ -135,7 +154,7 @@ describe('toMulticast, kind by kind, against the messages lib/push built before 
       notification: { title: '小明', body: 'Thanks' },
       data: { type: 'message', route: '/messages/%E5%B0%8F%E6%98%8E', fromUserId: 'bob', conversationId: 'alice_bob', messageId: 's2' },
       android: { priority: 'normal' as const, notification: { channelId: 'messages', tag: 'alice_bob', priority: 'low' as const, defaultSound: false } },
-      apns: { headers: { 'apns-collapse-id': 's2' }, payload: { aps: { threadId: 'alice_bob', 'interruption-level': 'passive' } } },
+      apns: { headers: { 'apns-collapse-id': 's2' }, payload: { aps: { threadId: 'alice_bob', 'interruption-level': 'passive', mutableContent: true } } },
     };
     const got = sent(push);
     expect(got).toHaveLength(1);
@@ -161,7 +180,7 @@ describe('toMulticast, kind by kind, against the messages lib/push built before 
       notification: { title: '小明', body: system.notification!.body! },
       data: { type: 'message', route: '/messages/%E5%B0%8F%E6%98%8E', fromUserId: 'bob', toUserId: 'alice', conversationId: 'alice_bob', messageId: 'm1' },
       android: { priority: 'normal', notification: { channelId: 'messages', tag: 'alice_bob', priority: 'min', defaultSound: false } },
-      apns: { headers: { 'apns-collapse-id': 'm1', 'apns-priority': '5' }, payload: { aps: { threadId: 'alice_bob', 'interruption-level': 'passive' } } },
+      apns: { headers: { 'apns-collapse-id': 'm1', 'apns-priority': '5' }, payload: { aps: { threadId: 'alice_bob', 'interruption-level': 'passive', mutableContent: true } } },
     });
     expect(system.notification!.body).toContain('小明');
   });

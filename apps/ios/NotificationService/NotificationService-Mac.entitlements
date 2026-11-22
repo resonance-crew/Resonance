@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The notification service on the Mac: sandboxed as every extension of a Mac App Store app is,
+     with the network it reads a sender's photo from. Nothing a profile has to grant, so the local
+     Mac run (apps/README.md, The Mac app) signs it as it is. -->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+</dict>
+</plist>

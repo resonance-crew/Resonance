@@ -73,8 +73,10 @@ async function continuesRun(ctx: ServerCtx, conversationId: string, messageId: s
 }
 
 /**
- * The sender's avatar as the app draws it, for a build that draws its own
- * notification: their photo when it is a picture on our own storage, else
+ * The sender's avatar as the app draws it, for whatever draws the
+ * notification under their face — an Android build that draws its own, and
+ * iOS's notification service extension, which redraws the system's push
+ * (`mutable`): their photo when it is a picture on our own storage, else
  * their initials on their colour. Only what the profile has.
  */
 function faceOf(author: PushProfile): Record<string, string> {
@@ -160,15 +162,16 @@ export async function pushMessageIn(ctx: ServerCtx, push: MessagePush): Promise<
     if (system.length) {
       // No `notificationId`: no bell row stands behind a message (an empty one crashed older Android builds).
       // (A sticker's kind travels only to the builds that draw their own: `kind` here has meant a note.)
-      const data = { type: 'message', route, fromUserId: from, conversationId, messageId, ...(sticker ? {} : kind) };
+      // The sender's face rides along and iOS may redraw the push under it (`mutable`); a build that can't ignores both.
+      const data = { type: 'message', route, fromUserId: from, conversationId, messageId, ...(sticker ? {} : kind), ...face };
       queue(
         system,
         quiet
           ? // A sticker continuing a run: shown, replacing the conversation's notification, without a sound.
-            { title, body, data, priority: 'normal', channel: MESSAGES_CHANNEL, tag: conversationId, display: 'low', silent: true, ...collapsing(messageId), threadId: conversationId, interruptionLevel: 'passive' }
+            { title, body, data, priority: 'normal', channel: MESSAGES_CHANNEL, tag: conversationId, display: 'low', silent: true, ...collapsing(messageId), threadId: conversationId, interruptionLevel: 'passive', mutable: true }
           : // The message's own collapse id: never merging two messages, but what an unsend replaces (pushUnsend).
             // A note riding a tap takes the tap's (a note is never unsent).
-            { title, body, data, priority: 'high', channel: MESSAGES_CHANNEL, tag: rides ?? conversationId, ...(rides ? { collapseId: rides } : collapsing(messageId)), threadId: conversationId },
+            { title, body, data, priority: 'high', channel: MESSAGES_CHANNEL, tag: rides ?? conversationId, ...(rides ? { collapseId: rides } : collapsing(messageId)), threadId: conversationId, mutable: true },
       );
     }
   }
@@ -219,7 +222,8 @@ export async function pushUnsendIn(ctx: ServerCtx, push: MessagePush): Promise<P
           title,
           body: notificationsText(locale)('messageUnsent', { handle: title }),
           // `type: 'message'`: a tap opens the thread, and an app showing that thread keeps it off screen, as for any message.
-          data: { type: 'message', route, fromUserId: from, toUserId: to, conversationId, messageId },
+          // Under the sender's face too, as the message it replaces was.
+          data: { type: 'message', route, fromUserId: from, toUserId: to, conversationId, messageId, ...faceOf(author) },
           priority: 'normal',
           channel: MESSAGES_CHANNEL,
           tag: conversationId,
@@ -229,6 +233,7 @@ export async function pushUnsendIn(ctx: ServerCtx, push: MessagePush): Promise<P
           applePriority: 5,
           threadId: conversationId,
           interruptionLevel: 'passive',
+          mutable: true,
         },
       });
     }

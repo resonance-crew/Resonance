@@ -6,6 +6,7 @@ import android.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.pm.ShortcutManagerCompat
 import coil3.ImageLoader
 import coil3.disk.DiskCache
 import coil3.disk.directory
@@ -119,5 +120,70 @@ class ChatAvatarTest {
             // The earlier line takes the sender's name as it is now.
             assertEquals("小明二號", line.person?.name.toString())
         }
+    }
+
+    @Test fun theShortcutsIconIsTheFaceInTheMiddleOfItsColour() {
+        server.enqueue(photo(Color.BLUE))
+        val faces = ChatAvatar.faces(app, push.copy(fromAvatarUrl = server.url("/avatars/a.png").toString(), fromColor = sage), px = 96, loader = loader())
+        // One read of the photo for both.
+        assertEquals(1, server.requestCount)
+        assertEquals(96, faces.round.width)
+        // An adaptive icon: half again as wide, the system's shape cut from its middle two thirds.
+        val icon = faces.icon
+        assertEquals(144, icon.width)
+        assertEquals(144, icon.height)
+        val fill = OklchColor.parse(sage)!!.toArgb()
+        // The photo fills the part that shows, edge to edge of it; the sender's colour is everything outside.
+        for ((x, y) in listOf(72 to 72, 26 to 26, 117 to 117, 26 to 117)) near(Color.BLUE, icon.getPixel(x, y))
+        for ((x, y) in listOf(0 to 0, 143 to 143, 12 to 72, 72 to 132)) near(fill, icon.getPixel(x, y))
+
+        // Without a photo: the initials' ink in the middle, the colour to every corner — no transparent pixel for a launcher to plate.
+        val drawn = ChatAvatar.faces(app, push.copy(fromInitials = "小明", fromColor = sage), px = 96, loader = loader()).icon
+        for ((x, y) in listOf(0 to 0, 143 to 0, 0 to 143, 143 to 143)) assertEquals(fill, drawn.getPixel(x, y))
+        assertTrue("the initials are drawn", (40 until 104).any { x -> drawn.getPixel(x, 72) != fill })
+    }
+
+    @Test fun aChatNotificationNamesItsConversationsShortcutSoTheShadeDrawsTheFaceLarge() {
+        PushCenter.init(app)
+        PushCenter.showChatMessage(app, push.copy(fromInitials = "小明", fromColor = sage))
+        val shown = NotificationManagerCompat.from(app).activeNotifications.single { it.tag == "alice_bob" }
+        // What Android 11+ asks before it draws a conversation: MessagingStyle, and a long-lived shortcut it names.
+        assertEquals("alice_bob", NotificationCompat.getShortcutId(shown.notification))
+        // On its own in the shade, with no summary over it: a group folds two conversations into one row headed by the app.
+        assertEquals(null, shown.notification.group)
+        assertEquals(listOf("alice_bob"), NotificationManagerCompat.from(app).activeNotifications.map { it.tag })
+        val shortcut = ShortcutManagerCompat.getDynamicShortcuts(app).single()
+        assertEquals("alice_bob", shortcut.id)
+        assertEquals("小明", shortcut.shortLabel.toString())
+        // It opens that thread, by the sender's id (their pen name may change), as a tap on the notification does.
+        assertEquals(MainActivity::class.java.name, shortcut.intent.component?.className)
+        assertEquals("/messages/小明", shortcut.intent.getStringExtra(PushCenter.EXTRA_ROUTE))
+        assertEquals("alice", shortcut.intent.getStringExtra(PushCenter.EXTRA_FROM_USER_ID))
+
+        // The next message, under a new pen name: the same shortcut, renamed — never a second one.
+        PushCenter.showChatMessage(app, push.copy(messageId = "m2", title = "小明二號", body = "again", sentAt = push.sentAt + 1))
+        assertEquals(listOf("小明二號"), ShortcutManagerCompat.getDynamicShortcuts(app).map { it.shortLabel.toString() })
+
+        // An unsend redraws the notification without that line: still the conversation's.
+        PushCenter.removeChatLine(app, "alice_bob", "m2")
+        val redrawn = NotificationManagerCompat.from(app).activeNotifications.single { it.tag == "alice_bob" }
+        assertEquals("alice_bob", NotificationCompat.getShortcutId(redrawn.notification))
+    }
+
+    @Test fun aBlockAndASignOutTakeTheShortcutsAway() {
+        PushCenter.init(app)
+        PushCenter.showChatMessage(app, push)
+        PushCenter.showChatMessage(app, ChatPush("bob_carol", "m9", "carol", "bob", "Carol", "hey", "/messages/Carol", push.sentAt))
+        assertEquals(setOf("alice_bob", "bob_carol"), ShortcutManagerCompat.getDynamicShortcuts(app).map { it.id }.toSet())
+
+        // Blocking 小明: their notification and their name under the app's icon go; Carol's stay.
+        PushCenter.forgetConversation("alice_bob")
+        assertEquals(listOf("bob_carol"), ShortcutManagerCompat.getDynamicShortcuts(app).map { it.id })
+        assertEquals(listOf("bob_carol"), NotificationManagerCompat.from(app).activeNotifications.filter { it.id == 0 }.map { it.tag })
+
+        // Signing out: nobody's name is left behind.
+        PushCenter.clearDelivered()
+        assertTrue(ShortcutManagerCompat.getDynamicShortcuts(app).isEmpty())
+        assertTrue(NotificationManagerCompat.from(app).activeNotifications.isEmpty())
     }
 }

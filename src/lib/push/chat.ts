@@ -29,7 +29,10 @@ export { CHAT_PUSH_CAPABILITY, PUSH_BODY_CHARS, type MessagePush } from '@/serve
  *   their profile has one (`fromAvatarUrl`, `fromInitials`, `fromColor`).
  * - Every other device gets a notification message — the sender's pen name
  *   and the words — that the system shows on its own: Android replaces a
- *   conversation's earlier one (`tag`), iOS groups them (`threadId`).
+ *   conversation's earlier one (`tag`), iOS groups them (`threadId`). Its
+ *   data carries the same face, and it is `mutable` (`mutable-content`): an
+ *   iPhone's notification service extension redraws it under the sender's
+ *   face before it shows; a build without one shows it as sent.
  * - The title is the sender's pen name as it is now; the body is the
  *   message's text (140 code points), or "Shared a card" when it has none.
  * - A note carried into the thread (sendNote) rings here too, like any

@@ -43,6 +43,10 @@ internal object ChatAvatar {
     /** How long the photo may take before the notification shows the initials instead (it is usually in Coil's caches already). */
     const val PHOTO_MILLIS = 4_000L
 
+    /** An adaptive icon's canvas (108 dp) and the part of it a shape is cut from (72 dp). */
+    private const val ICON_CANVAS = 108
+    private const val ICON_VIEWPORT = 72
+
     /** The face's side in pixels for [density]: the shade scales it down, never up. */
     fun sidePx(density: Float): Int = (SIZE_DP * density).roundToInt().coerceIn(96, 256)
 
@@ -55,35 +59,87 @@ internal object ChatAvatar {
         push: ChatPush,
         px: Int = sidePx(context.resources.displayMetrics.density),
         loader: ImageLoader = SingletonImageLoader.get(context),
-    ): Bitmap {
+    ): Bitmap = round(push, px, push.fromAvatarUrl?.let { photo(context, loader, it, px) })
+
+    /**
+     * [push]'s sender twice, from one read of the photo: [Faces.round] for a line of the
+     * notification, and [Faces.icon] for the conversation's shortcut ([PushCenter.showChatMessage]),
+     * which the shade draws large with the app's mark at its corner. Blocks as [draw] does.
+     */
+    fun faces(
+        context: Context,
+        push: ChatPush,
+        px: Int = sidePx(context.resources.displayMetrics.density),
+        loader: ImageLoader = SingletonImageLoader.get(context),
+    ): Faces {
         val photo = push.fromAvatarUrl?.let { photo(context, loader, it, px) }
+        return Faces(round(push, px, photo), icon(push, px, photo))
+    }
+
+    class Faces(val round: Bitmap, val icon: Bitmap)
+
+    /**
+     * An adaptive icon's canvas is half again as wide as what shows of it: the system cuts its own
+     * shape (a circle on a Pixel) out of the middle two thirds.
+     */
+    fun iconSidePx(px: Int): Int = px * ICON_CANVAS / ICON_VIEWPORT
+
+    private fun round(push: ChatPush, px: Int, photo: Bitmap?): Bitmap {
         val face = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(face)
         val r = px / 2f
-        val light = ResonanceColors.LightTerracotta
-        val fill = push.fromColor?.let(OklchColor::parse) ?: light.TerracottaLight
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { color = fill.toArgb() }
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { color = fillOf(push) }
         canvas.drawCircle(r, r, r, paint)
         if (photo != null) {
             // Its middle square, only where the disc is: a transparent photo sits on the colour, as in the app.
-            val side = min(photo.width, photo.height)
-            val x = (photo.width - side) / 2
-            val y = (photo.height - side) / 2
             paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_ATOP)
-            canvas.drawBitmap(photo, Rect(x, y, x + side, y + side), RectF(0f, 0f, px.toFloat(), px.toFloat()), paint)
+            canvas.drawBitmap(photo, middleSquare(photo), RectF(0f, 0f, px.toFloat(), px.toFloat()), paint)
         } else {
-            val initials = push.fromInitials ?: initialsOf(push.title)
-            val text = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
-                // The avatar's own face (AppFonts is set up with the app, before any push reaches it).
-                typeface = runCatching { AppFonts.typeface(AppFonts.Family.Body, 700) }.getOrNull() ?: Typeface.DEFAULT_BOLD
-                textSize = px * initialsScale(initials)
-                textAlign = Paint.Align.CENTER
-                color = light.Text.toArgb()
-            }
-            val m = text.fontMetrics
-            canvas.drawText(initials, r, r - (m.ascent + m.descent) / 2, text)
+            drawInitials(canvas, push, px, r)
         }
         return face
+    }
+
+    /**
+     * The same face as an adaptive icon's bitmap ([iconSidePx] of [px]): the sender's colour to
+     * every edge, and the photo's middle square — or the initials — in the middle two thirds, [px]
+     * wide, so whatever shape the system cuts shows the face whole and never an edge of the photo.
+     */
+    private fun icon(push: ChatPush, px: Int, photo: Bitmap?): Bitmap {
+        val side = iconSidePx(px)
+        val face = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(face)
+        canvas.drawColor(fillOf(push))
+        val inset = (side - px) / 2f
+        if (photo != null) {
+            canvas.drawBitmap(photo, middleSquare(photo), RectF(inset, inset, inset + px, inset + px), Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+        } else {
+            drawInitials(canvas, push, px, side / 2f)
+        }
+        return face
+    }
+
+    private fun fillOf(push: ChatPush): Int = (push.fromColor?.let(OklchColor::parse) ?: ResonanceColors.LightTerracotta.TerracottaLight).toArgb()
+
+    private fun middleSquare(photo: Bitmap): Rect {
+        val side = min(photo.width, photo.height)
+        val x = (photo.width - side) / 2
+        val y = (photo.height - side) / 2
+        return Rect(x, y, x + side, y + side)
+    }
+
+    /** The initials as on a face [px] wide, centred on ([centre], [centre]). */
+    private fun drawInitials(canvas: Canvas, push: ChatPush, px: Int, centre: Float) {
+        val initials = push.fromInitials ?: initialsOf(push.title)
+        val text = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
+            // The avatar's own face (AppFonts is set up with the app, before any push reaches it).
+            typeface = runCatching { AppFonts.typeface(AppFonts.Family.Body, 700) }.getOrNull() ?: Typeface.DEFAULT_BOLD
+            textSize = px * initialsScale(initials)
+            textAlign = Paint.Align.CENTER
+            color = ResonanceColors.LightTerracotta.Text.toArgb()
+        }
+        val m = text.fontMetrics
+        canvas.drawText(initials, centre, centre - (m.ascent + m.descent) / 2, text)
     }
 
     /** What an avatar without a photo shows, from a pen name, as the server makes it for a profile: its first two letters, upper case. */

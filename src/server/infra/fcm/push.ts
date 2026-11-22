@@ -26,9 +26,10 @@ const DEAD_TOKEN = new Set(['messaging/registration-token-not-registered', 'mess
  *   display priority is set — `channelId`, `tag`, `priority` (display),
  *   `defaultSound: false` when silent.
  * - `apns` when any Apple field is set (`threadId`, `collapseId`,
- *   `applePriority`, `interruptionLevel`, `badge`): headers
+ *   `applePriority`, `interruptionLevel`, `badge`, `mutable`): headers
  *   `apns-collapse-id` / `apns-priority`, and `aps` with `sound: 'default'`
- *   unless silent, `threadId`, `interruption-level`, `badge`.
+ *   unless silent, `threadId`, `interruption-level`, `badge`, `mutableContent`
+ *   (the admin SDK writes it as `mutable-content: 1`).
  */
 export function toMulticast(tokens: string[], m: PushMessage): MulticastMessage {
   const out: MulticastMessage = { tokens };
@@ -50,7 +51,7 @@ export function toMulticast(tokens: string[], m: PushMessage): MulticastMessage 
     out.android = { ...(m.priority !== undefined ? { priority: m.priority } : {}), ...(androidNotification ? { notification: androidNotification } : {}) };
   }
 
-  const apple = m.threadId !== undefined || m.collapseId !== undefined || m.applePriority !== undefined || m.interruptionLevel !== undefined || m.badge !== undefined;
+  const apple = m.threadId !== undefined || m.collapseId !== undefined || m.applePriority !== undefined || m.interruptionLevel !== undefined || m.badge !== undefined || m.mutable === true;
   if (apple) {
     const headers: Record<string, string> = {
       ...(m.collapseId !== undefined ? { 'apns-collapse-id': m.collapseId } : {}),
@@ -64,6 +65,7 @@ export function toMulticast(tokens: string[], m: PushMessage): MulticastMessage 
           ...(m.threadId !== undefined ? { threadId: m.threadId } : {}),
           ...(m.interruptionLevel !== undefined ? { 'interruption-level': m.interruptionLevel } : {}),
           ...(m.badge !== undefined ? { badge: m.badge } : {}),
+          ...(m.mutable ? { mutableContent: true } : {}),
         },
       },
     };

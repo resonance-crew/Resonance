@@ -1,5 +1,6 @@
 import FirebaseMessaging
 import Foundation
+import Intents
 import Observation
 import ResonanceKit
 import UIKit
@@ -16,7 +17,10 @@ import UserNotifications
 /// system under their conversation (`threadId`, its pair id). The conversation
 /// on screen (`viewingConversation`) gets no banner while the app is open, and
 /// opening it takes its pushes out of Notification Center: its messages are
-/// being read.
+/// being read. Before one shows, the notification service extension redraws
+/// it under its sender's face (`NotificationService`, a communication
+/// notification), telling the system of the message as it does; what it told
+/// goes with a block (`forgetConversation`) and a sign-out (`forgetPeople`).
 @Observable
 final class PushCenter {
     static let shared = PushCenter()
@@ -223,6 +227,19 @@ final class PushCenter {
             let ids = delivered.filter { isOf(conversation: pairId, $0.request.content) }.map(\.request.identifier)
             if !ids.isEmpty { UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids) }
         }
+    }
+
+    /// Forgets a conversation here: its pushes in Notification Center, and what the notification
+    /// service told the system of its messages (the person was blocked).
+    nonisolated static func forgetConversation(_ pairId: String) {
+        removeDelivered(conversation: pairId)
+        INInteraction.delete(with: pairId) { _ in }
+    }
+
+    /// Signed out: what the notification service told the system of the account's messages —
+    /// the people who wrote to it — goes with its pushes.
+    nonisolated static func forgetPeople() {
+        INInteraction.deleteAll { _ in }
     }
 
     /// Whether a delivered push belongs to the conversation `pairId`.

@@ -73,8 +73,11 @@ class SafetyService(
 
     suspend fun block(other: String) {
         if (other == uid) return
+        val pair = if (uid < other) "${uid}_$other" else "${other}_$uid"
         social?.let {
             it.block(other)
+            // Their messages' notification, and their name under the app's icon (the conversation's shortcut), go with them.
+            PushCenter.forgetConversation(pair)
             onGraphChanged()
             return
         }
@@ -82,7 +85,7 @@ class SafetyService(
         // so the cleanup below can't race a fresh connection.
         db.collection("users").document(uid).collection("blocks").document(other)
             .set(mapOf("blockedUid" to other, "createdAt" to FieldValue.serverTimestamp())).await()
-        val pair = if (uid < other) "${uid}_$other" else "${other}_$uid"
+        PushCenter.forgetConversation(pair)
         val connection = db.collection("connections").document(pair)
         if (connection.get().await().exists()) connection.delete().await()
         val pending = db.collection("invites")

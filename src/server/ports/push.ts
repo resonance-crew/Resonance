@@ -33,6 +33,11 @@ export interface PushMessage {
   /** iOS interruption level (`passive` never lights the screen). */
   interruptionLevel?: 'passive' | 'active' | 'time-sensitive';
   badge?: number;
+  /**
+   * iOS `mutable-content`: the app's notification service extension may redraw it before it shows
+   * (a chat message under its sender's face). A build without the extension shows it as sent.
+   */
+  mutable?: boolean;
   /** A picture shown with it (absolute https URL). */
   image?: string;
 }

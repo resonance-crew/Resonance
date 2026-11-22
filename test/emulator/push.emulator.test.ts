@@ -365,13 +365,13 @@ describe('pushMessage', () => {
         data: { type: 'message', route, fromUserId: 'alice', conversationId: 'alice_bob', messageId: push.messageId },
         android: { priority: 'high', notification: { channelId: MESSAGES_CHANNEL, tag: 'alice_bob' } },
         // The message's own collapse id: no two messages merge, and an unsend replaces just this one (pushUnsend).
-        apns: { headers: { 'apns-collapse-id': push.messageId }, payload: { aps: { sound: 'default', threadId: 'alice_bob' } } },
+        apns: { headers: { 'apns-collapse-id': push.messageId }, payload: { aps: { sound: 'default', threadId: 'alice_bob', mutableContent: true } } },
       });
     }
     expect(MESSAGES_CHANNEL).toBe('messages');
   });
 
-  it("gives a build that draws its own notification the sender's avatar — a photo only from our own storage — and the system's push none of it", async () => {
+  it("gives the sender's avatar to whatever draws the notification under it — a photo only from our own storage — and lets iOS redraw the system's push", async () => {
     const base = process.env.R2_PUBLIC_BASE;
     process.env.R2_PUBLIC_BASE = 'https://img.resonance.test';
     try {
@@ -380,11 +380,16 @@ describe('pushMessage', () => {
       const fcm = fakeFcm();
       await pushMessage(db, await send('看看我的新頭貼'), fcm.sender);
       let at = deliveries(fcm.sent);
-      expect(at['pixel-en'].data).toMatchObject({ fromAvatarUrl: photo, fromInitials: '小明', fromColor: 'oklch(90% 0.06 140)' });
-      for (const token of ['old-en', 'iphone-zh']) {
-        expect(at[token].data).not.toHaveProperty('fromAvatarUrl');
-        expect(at[token].data).not.toHaveProperty('fromInitials');
+      const face = { fromAvatarUrl: photo, fromInitials: '小明', fromColor: 'oklch(90% 0.06 140)' };
+      expect(at['pixel-en'].data).toMatchObject(face);
+      // The system's push carries the same face, and `mutable-content` so the iPhone's extension may draw it
+      // (an older build ignores both); never the words twice, nor the sender's name as data.
+      for (const token of ['old-en', 'iphone-zh', 'ipad-en']) {
+        expect(at[token].data).toMatchObject(face);
+        expect(at[token].data).not.toHaveProperty('body');
+        expect(at[token].apns?.payload?.aps?.mutableContent).toBe(true);
       }
+      expect(at['pixel-en'].apns).toBeUndefined();
 
       // A picture anywhere else, or a colour that isn't one, stays off the push; the initials still go.
       await db.doc('users/alice').set({ avatarUrl: 'https://elsewhere.example/me.png', accentColor: 'url(javascript:x)' }, { merge: true });
@@ -392,8 +397,11 @@ describe('pushMessage', () => {
       await pushMessage(db, await send('換回來了'), again.sender);
       at = deliveries(again.sent);
       expect(at['pixel-en'].data).toMatchObject({ fromInitials: '小明' });
-      expect(at['pixel-en'].data).not.toHaveProperty('fromAvatarUrl');
-      expect(at['pixel-en'].data).not.toHaveProperty('fromColor');
+      for (const token of ['pixel-en', 'iphone-zh']) {
+        expect(at[token].data).toMatchObject({ fromInitials: '小明' });
+        expect(at[token].data).not.toHaveProperty('fromAvatarUrl');
+        expect(at[token].data).not.toHaveProperty('fromColor');
+      }
     } finally {
       if (base === undefined) delete process.env.R2_PUBLIC_BASE;
       else process.env.R2_PUBLIC_BASE = base;
@@ -567,7 +575,7 @@ describe('pushMessage', () => {
         notification: { title: '小明', body: '謝謝你寫下這段散步' },
         data: { type: 'message', route, fromUserId: 'alice', conversationId: 'alice_bob', messageId: sent.id, kind: 'note' },
         android: { priority: 'high', notification: { channelId: MESSAGES_CHANNEL, tag: 'alice_bob' } },
-        apns: { headers: { 'apns-collapse-id': sent.id }, payload: { aps: { sound: 'default', threadId: 'alice_bob' } } },
+        apns: { headers: { 'apns-collapse-id': sent.id }, payload: { aps: { sound: 'default', threadId: 'alice_bob', mutableContent: true } } },
       });
     });
 
@@ -663,7 +671,7 @@ describe('pushUnsend (round 16: a message unsent after its push went out)', () =
       data: { type: 'message', route, fromUserId: 'alice', toUserId: 'bob', conversationId: 'alice_bob', messageId: push.messageId },
       android: { priority: 'normal', notification: { channelId: MESSAGES_CHANNEL, tag: 'alice_bob', priority: 'min', defaultSound: false } },
       // The chat push's own collapse id and thread: it replaces that notification, without a sound or lighting the screen.
-      apns: { headers: { 'apns-collapse-id': push.messageId, 'apns-priority': '5' }, payload: { aps: { threadId: 'alice_bob', 'interruption-level': 'passive' } } },
+      apns: { headers: { 'apns-collapse-id': push.messageId, 'apns-priority': '5' }, payload: { aps: { threadId: 'alice_bob', 'interruption-level': 'passive', mutableContent: true } } },
     });
     expect(at['old-en'].notification).toEqual({ title: '小明', body: '小明 unsent a message' });
     // Never the words it said.
