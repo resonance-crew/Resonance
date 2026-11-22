@@ -68,8 +68,9 @@ describe('first-times hints in the captures', () => {
   it.each([
     ['web.ts', /open\(page, ctx,/],
     ['android.ts', /await launch\(serial, ctx, screen\.as/],
-    ['ios.ts', /launch\(udid, launchArgs\(ctx, account, screen\.route/],
-    ['mac.ts', /await launch\(launchArgs\(ctx, account, screen\.route/],
+    // Launched with its ready token (ready.ts) or without.
+    ['ios.ts', /launch(?:Ready)?\(udid, launchArgs\(ctx, account, screen\.route/],
+    ['mac.ts', /await launch\((?:\[\.\.\.)?launchArgs\(ctx, account, screen\.route/],
   ])('%s resets a screen’s hints before it opens the screen', (file, opens) => {
     const text = source(file);
     const reset = text.indexOf('await unspendHints(ctx, screen);');

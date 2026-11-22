@@ -17,6 +17,7 @@ import { PNG } from 'pngjs';
 import { unspendHints } from './hints';
 import { BUNDLE_ID, ensureIslands, inXcodeLine, launchArgs, prepareProject, runLogged, xcodeInputs } from './ios';
 import { buildIfChanged, stampFile } from './buildStamp';
+import { LOG_STREAM_ARGS, logStream, readyNote, readyOn, readyToken, restOfWait, waitReady, type LogStream, type Ready } from './ready';
 import { lookNote, secondLook, type Look } from './secondLook';
 import { shotName } from './screens';
 import { ROOT, run, settle, shotPath, sleep, type Capture, type CaptureContext } from './util';
@@ -114,15 +115,28 @@ function cut(png: Buffer, size: Size = WINDOW): Buffer {
   return PNG.sync.write(out);
 }
 
-async function shoot(window: MacWindow, ctx: CaptureContext, key: string, size: Size): Promise<Look> {
+/**
+ * A launch's ready token (ready.ts) and how to wait for its word in the Mac's unified log (`stream`); null when the
+ * signal is off. (Not a file: the app's sandbox keeps every other process out of its container.)
+ */
+function readyArgs(stream: LogStream | null): { args: string[]; wait: () => Promise<Ready> } | null {
+  if (!stream) return null;
+  const token = readyToken();
+  return { args: ['-visualReadyToken', token], wait: () => waitReady(() => stream.says(token)) };
+}
+
+async function shoot(window: MacWindow, ctx: CaptureContext, key: string, size: Size, ready: (() => Promise<Ready>) | null): Promise<Look & { ready: Ready | null }> {
   const file = join(ctx.runDir, '_logs', 'mac-window.png');
   const frame = () => {
     run('screencapture', ['-o', '-x', '-t', 'png', '-l', String(window.id), file]);
     return Promise.resolve(cut(readFileSync(file), size));
   };
-  const take = () => settle(frame, { timeoutMs: 40_000, intervalMs: 1000 });
-  await sleep(4000);
-  return secondLook(await take(), take, { key, glance: frame });
+  // Its ready signal (ready.ts), or the 4 s it always waited.
+  const said = ready ? await ready() : null;
+  if (said) await restOfWait(said, 4000);
+  else await sleep(4000);
+  const take = (fast: boolean) => settle(frame, { timeoutMs: 40_000, intervalMs: fast ? 500 : 1000 });
+  return { ...(await secondLook(await take(!!said?.ready), () => take(false), { key, glance: frame })), ready: said };
 }
 
 export const captureMac: Capture = async (ctx) => {
@@ -132,6 +146,9 @@ export const captureMac: Capture = async (ctx) => {
   if (!ids.length) return unsettled;
   mkdirSync(join(ctx.runDir, '_logs'), { recursive: true });
   await build(ctx);
+  // The unified log, read from before the first launch to the last (ready.ts).
+  const stream = readyOn() ? await logStream('log', LOG_STREAM_ARGS) : null;
+  try {
   for (const id of ids) {
     // The window's size: the store's 1440 × 900, or a state's own (a narrow window, variants.ts).
     const state = stateOf('mac', id);
@@ -139,27 +156,32 @@ export const captureMac: Capture = async (ctx) => {
     if (state) ctx.log(`  ${id}: ${state.why}`);
     for (const { variant: v, account, screens } of groups(plan('mac', id, set, ctx.only))) {
       // The account signs in on a launch of its own; a screen's launch only restores it.
+      // Its full 10 s, as ever, not cut short by the ready signal (ios.ts says why).
       const signIn = await launch(launchArgs(ctx, account, null, v), size);
       await sleep(10_000);
       quit(signIn.pid);
       for (const screen of screens) {
         // Its hints unspent for its account on the stack (hints.ts), before the app reads the profile.
         await unspendHints(ctx, screen);
-        const window = await launch(launchArgs(ctx, account, screen.route, v, screen.app?.mac ?? screen.app?.ios), size);
+        const screenReady = readyArgs(stream);
+        const window = await launch([...launchArgs(ctx, account, screen.route, v, screen.app?.mac ?? screen.app?.ios), ...(screenReady?.args ?? [])], size);
         try {
           const name = shotName(screen, v);
           const key = `mac/${id}/${name}`;
-          const look = await shoot(window, ctx, key, size);
+          const look = await shoot(window, ctx, key, size, screenReady?.wait ?? null);
           writeFileSync(shotPath(ctx.runDir, 'mac', id, name), look.png);
           if (!look.settled) unsettled.push(key);
           if (look.retaken) ctx.retaken.push(key);
-          ctx.log(`  ${key}${lookNote(look)}`);
+          ctx.log(`  ${key}${lookNote(look)}${readyNote(look.ready)}`);
         } finally {
           quit(window.pid);
           await sleep(1000);
         }
       }
     }
+  }
+  } finally {
+    stream?.stop();
   }
   return unsettled;
 };

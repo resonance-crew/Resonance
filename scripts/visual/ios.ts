@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { HARNESS_SIMULATORS, mayShutDown, noteBooted } from './devices';
 import { withRestart } from './retry';
+import { LOG_STREAM_ARGS, logStream, readyNote, readyOn, readyToken, restOfWait, waitReady, type LogStream, type Ready } from './ready';
 import { buildIfChanged, stampFile, toolVersion, type BuildInputs } from './buildStamp';
 import { unspendHints } from './hints';
 import { lookNote, secondLook, type Look } from './secondLook';
@@ -240,16 +241,33 @@ export async function turn(udid: string, landscape: boolean, ctx: CaptureContext
   if (isLandscape(udid, file) !== landscape) throw new Error(`the simulator ${udid} did not turn ${orientation.toLowerCase()} (see _logs/ios-turn.log)`);
 }
 
-async function shoot(udid: string, ctx: CaptureContext, key: string): Promise<Look> {
+/**
+ * Launches the app with `args` and a ready token of its own (ready.ts); answers how to wait for this launch's word in
+ * the simulator's unified log (`stream`), or null when the signal is off.
+ */
+function launchReady(udid: string, args: string[], stream: LogStream | null): (() => Promise<Ready>) | null {
+  if (!stream) {
+    launch(udid, args);
+    return null;
+  }
+  const token = readyToken();
+  launch(udid, [...args, '-visualReadyToken', token]);
+  return () => waitReady(() => stream.says(token));
+}
+
+async function shoot(udid: string, ctx: CaptureContext, key: string, ready: (() => Promise<Ready>) | null): Promise<Look & { ready: Ready | null }> {
   const file = join(ctx.runDir, '_logs', `ios-${udid}.png`);
   const frame = () => {
     run('xcrun', ['simctl', 'io', udid, 'screenshot', '--type=png', file], {}, SIMCTL_TIMEOUT_MS);
     return Promise.resolve(readFileSync(file));
   };
-  const take = () => settle(frame, { timeoutMs: 40_000, intervalMs: 1000 });
-  // A launch draws its cover, restores the account and asks the stack: never judged before this.
-  await sleep(4000);
-  return secondLook(await take(), take, { key, glance: frame });
+  // A launch draws its cover, restores the account and asks the stack: never judged before its ready signal, or
+  // else the 4 s it always waited (ready.ts).
+  const said = ready ? await ready() : null;
+  if (said) await restOfWait(said, 4000);
+  else await sleep(4000);
+  const take = (fast: boolean) => settle(frame, { timeoutMs: 40_000, intervalMs: fast ? 500 : 1000 });
+  return { ...(await secondLook(await take(!!said?.ready), () => take(false), { key, glance: frame })), ready: said };
 }
 
 export const captureIos: Capture = async (ctx) => {
@@ -267,6 +285,9 @@ export const captureIos: Capture = async (ctx) => {
     const { udid, booted } = await simulator(device, ctx);
     spawnSync('xcrun', ['simctl', 'terminate', udid, BUNDLE_ID], { stdio: 'ignore', timeout: SIMCTL_TIMEOUT_MS });
     simctl('install', udid, APP);
+    // The simulator's unified log, read from before the first launch to the last (ready.ts).
+    const stream = readyOn() ? await logStream('xcrun', ['simctl', 'spawn', udid, 'log', ...LOG_STREAM_ARGS]) : null;
+    try {
     // Upright to begin with: a run cut off while the iPad was turned leaves it turned.
     if (!device.phone) await turn(udid, false, ctx);
     for (const id of ids) {
@@ -282,25 +303,31 @@ export const captureIos: Capture = async (ctx) => {
           theme = v.theme;
           // The account signs in on a launch of its own (switching from whoever was there), so a
           // screen's launch only restores it.
+          // Its full 10 s, as ever, not cut short by the ready signal (ready.ts): this launch isn't captured, it
+          // settles the account on the device — the sign-in and what the app keeps after it — and nothing yet shows
+          // that the app is done with that when its screen first goes quiet.
           launch(udid, launchArgs(ctx, account, null, v));
           await sleep(10_000);
           for (const screen of screens) {
             // Its hints unspent for its account on the stack (hints.ts), before the app reads the profile.
             await unspendHints(ctx, screen);
-            launch(udid, launchArgs(ctx, account, screen.route, v, screen.app?.ios));
+            const ready = launchReady(udid, launchArgs(ctx, account, screen.route, v, screen.app?.ios), stream);
             const name = shotName(screen, v);
             const key = `ios/${id}/${name}`;
-            const look = await shoot(udid, ctx, key);
+            const look = await shoot(udid, ctx, key, ready);
             writeFileSync(shotPath(ctx.runDir, 'ios', id, name), look.png);
             if (!look.settled) unsettled.push(key);
             if (look.retaken) ctx.retaken.push(key);
-            ctx.log(`  ${key}${lookNote(look)}`);
+            ctx.log(`  ${key}${lookNote(look)}${readyNote(look.ready)}`);
           }
         }
       } finally {
         // Upright again whatever happened, before the next state or the shutdown.
         if (landscape) await turn(udid, false, ctx);
       }
+    }
+    } finally {
+      stream?.stop();
     }
     spawnSync('xcrun', ['simctl', 'terminate', udid, BUNDLE_ID], { stdio: 'ignore', timeout: SIMCTL_TIMEOUT_MS });
     if (booted) shutDown(udid, device.name, ctx.log);

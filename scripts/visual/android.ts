@@ -38,6 +38,7 @@ import { unspendHints } from './hints';
 import { lookNote, secondLook, type Look, type Shot } from './secondLook';
 import { shotName, type Account, type Screen, type Variant } from './screens';
 import { withRestart } from './retry';
+import { logSays, readyNote, readyOn, readyToken, restOfWait, waitReady, type Ready } from './ready';
 import { buildIfChanged, stampFile, type BuildInputs } from './buildStamp';
 import { CommandTimeout, ROOT, SEED_PASSWORD, execTimed, ignorePath, pixelsApart, settle, shotPath, sleep, type Capture, type CaptureContext, type Rect } from './util';
 import { devicesFor, groups, plan, stateOf, type DeviceState } from './variants';
@@ -372,7 +373,7 @@ export function caretBlink(box: Rect | null, fields: Rect[]): Rect | null {
  * a keyboard screen held still only when two looks met the caret in the same phase (run
  * 20261118-235458: the tablet's thread-keyboard and dark card-note-open never did).
  */
-async function steady(serial: string, ignore: Rect[] = []): Promise<Shot> {
+async function steady(serial: string, ignore: Rect[] = [], ready = false): Promise<Shot> {
   const same = async (a: Buffer, b: Buffer) => {
     if (a.equals(b) || pixelsApart(a, b) === 0) return true;
     const box = apartBox(a, b, ignore);
@@ -384,8 +385,10 @@ async function steady(serial: string, ignore: Rect[] = []): Promise<Shot> {
   };
   const end = Date.now() + 90_000;
   for (;;) {
-    const shot = await settle(() => screencap(serial), { intervalMs: 1000, timeoutMs: 45_000, same });
-    await sleep(3500);
+    // After the app's ready signal (ready.ts) the frames are looked at closer together and held 1 s, not 3.5:
+    // the skeleton check below is the same either way.
+    const shot = await settle(() => screencap(serial), { intervalMs: ready ? 500 : 1000, timeoutMs: 45_000, same });
+    await sleep(ready ? 1000 : 3500);
     const again = await screencap(serial);
     const still = await same(again, shot.png);
     const loading = still && stillLoading((await hierarchy(serial)) ?? '');
@@ -394,17 +397,24 @@ async function steady(serial: string, ignore: Rect[] = []): Promise<Shot> {
   }
 }
 
-async function shoot(serial: string, ctx: CaptureContext, screen: Screen, first: boolean, key: string): Promise<Look & { ignore: Rect[] }> {
+async function shoot(serial: string, ctx: CaptureContext, screen: Screen, first: boolean, key: string): Promise<Look & { ignore: Rect[]; ready: Ready | null }> {
   // Its hints unspent for its account on the stack (hints.ts), before the app reads the profile.
   await unspendHints(ctx, screen);
-  await launch(serial, ctx, screen.as, screen.route, screen.app?.android);
-  // A cold start reads the account and the page over the network (an account's first launch also signs in).
-  await sleep(first ? 8000 : 4000);
+  // The launch says when its screen is quiet (ready.ts): a token of its own, logcat emptied of the last launch's.
+  const token = readyOn() ? readyToken() : null;
+  if (token) await adb(serial, 'logcat', '-c').catch(() => '');
+  await launch(serial, ctx, screen.as, screen.route, [...(screen.app?.android ?? []), ...(token ? ['--es', 'visualReadyToken', token] : [])]);
+  // A cold start reads the account and the page over the network (an account's first launch also signs in): the
+  // signal, or else the fixed wait as before.
+  const fixed = first ? 8000 : 4000;
+  const ready = token ? await waitReady(async () => logSays(await adb(serial, 'logcat', '-d', '-s', 'VisualReady:I', '-v', 'raw').catch(() => ''), token)) : null;
+  if (ready) await restOfWait(ready, fixed);
+  else await sleep(fixed);
   await demoBar(serial);
   // A caret's box found by either look is skipped by both, and by the comparison with the baseline.
   const ignore: Rect[] = [];
-  const look = await secondLook(await steady(serial, ignore), () => steady(serial, ignore), { key, ignore, glance: () => screencap(serial) });
-  return { ...look, ignore };
+  const look = await secondLook(await steady(serial, ignore, !!ready?.ready), () => steady(serial, ignore), { key, ignore, glance: () => screencap(serial) });
+  return { ...look, ignore, ready };
 }
 
 /**
@@ -486,7 +496,7 @@ async function captureDevice(id: string, serial: string, ctx: CaptureContext): P
       const name = shotName(screen, v);
       const key = `android/${id}/${name}`;
       if (screen.keyboard) await softKeyboard(serial, true);
-      let look: Look & { ignore: Rect[] };
+      let look: Look & { ignore: Rect[]; ready: Ready | null };
       try {
         look = await shoot(serial, ctx, screen, first, key);
       } finally {
@@ -499,7 +509,7 @@ async function captureDevice(id: string, serial: string, ctx: CaptureContext): P
       if (look.ignore.length) writeFileSync(ignorePath(file), JSON.stringify(look.ignore));
       if (!look.settled) unsettled.push(key);
       if (look.retaken) ctx.retaken.push(key);
-      ctx.log(`  ${key}${lookNote(look)}`);
+      ctx.log(`  ${key}${lookNote(look)}${readyNote(look.ready)}`);
     }
   }
   return unsettled;

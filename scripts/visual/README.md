@@ -474,6 +474,18 @@ change near one of those states (`capture android --device phone-large --only se
   since card-note-open's privacy line went, 2026-11-19) starts every capture with them unspent (`hints.ts`).
 - **No picks**: the stack seeds with `SEED_PICKS=none` (`noPicks.ts`), so home is the latest cards on every
   platform and run, never picks that one capture built and a later one found.
+- **The apps say when a screen is drawn** (`ready.ts`): each launch carries a token of its own, and a debug build
+  launched with one (`--es visualReadyToken` / `-visualReadyToken`) says it back once its screen is quiet — at
+  least one request answered, none on its way, no skeleton block or picture placeholder on screen, for 0.8 s
+  (`VisualReady`: Android in logcat, iOS and the Mac in the unified log, subsystem `com.resonance.visual`, read with `log stream` / `simctl spawn … log stream` — the Mac app's sandbox container is closed to every other process). The harness then goes
+  on at once to a closer settle (frames 0.5 s apart; Android holds 1 s, not 3.5) instead of the fixed waits
+  (Android's 4 s, 8 s on an account's first launch; iOS's and the Mac's 4 s). The sign-in launch iOS and the Mac make
+  for each account keeps its full 10 s: it isn't captured, it settles the account on the device, and nothing yet
+  shows the app is done with that at its first quiet moment.
+  Everything that judges the frame stays as it was — the settle, Android's skeleton names, the second look. A
+  launch that says nothing within `VISUAL_READY_TIMEOUT_S` (12) waits out the rest of the old fixed wait and goes
+  on exactly as before; each capture's log line says which (`ready in 1.9 s`, `no ready signal`).
+  `VISUAL_READY=0` turns it off. Release builds have none of it.
 - **Waiting for the real page**: a capture is taken again and again until two in a row match
   (`settle` in `util.ts`). A page waiting for a compile or a read holds still too, so the web first
   waits for its requests to drain (bar the realtime channels), and Android checks a settled frame
