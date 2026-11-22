@@ -9,6 +9,9 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Looper
+import android.os.Handler
+import android.util.Log
+import com.resonance.kit.visual.VisualReady
 import android.webkit.WebSettings
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
@@ -112,6 +115,12 @@ class MainActivity : ComponentActivity() {
             }
         }
         if (BuildConfig.DEBUG) {
+            // The release screenshots' ready signal (scripts/visual/android.ts): `--es visualReadyToken <t>` makes this
+            // launch say `VisualReady: ready <t>` in logcat once the screen is quiet (VisualReady). Debug builds only.
+            intent.getStringExtra("visualReadyToken")?.takeIf { it.isNotBlank() }?.let { token ->
+                val main = Handler(Looper.getMainLooper())
+                VisualReady.start(token, schedule = { ms, run -> main.postDelayed(run, ms) }, say = { Log.i(VisualReady.TAG, it) })
+            }
             DebugLaunch.writeTitle = intent.getStringExtra("writeTitle")
             DebugLaunch.writeStory = intent.getStringExtra("writeStory")
             DebugLaunch.writeCover = intent.getStringExtra("writeCover")

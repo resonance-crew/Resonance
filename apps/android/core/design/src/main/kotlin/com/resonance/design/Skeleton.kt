@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import com.resonance.kit.visual.VisualReady
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.State
 import androidx.compose.runtime.compositionLocalOf
@@ -241,6 +243,12 @@ fun SharedShimmer(content: @Composable () -> Unit) {
 
 @Composable
 private fun Modifier.shimmer(): Modifier {
+    // Every skeleton block and picture placeholder on screen keeps the release screenshots' ready signal waiting
+    // (VisualReady; nothing at all unless a debug build was launched for a capture).
+    DisposableEffect(Unit) {
+        VisualReady.placeholder(1)
+        onDispose { VisualReady.placeholder(-1) }
+    }
     val highlight = LocalSkeletonHighlight.current ?: Mixes.skeletonHighlight()
     val base = Mixes.SkeletonBase
     val shared = LocalShimmerClock.current
