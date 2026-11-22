@@ -633,8 +633,11 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                             }
                             // 收藏, a reader's of someone else's card (round 28 §S5): one state, at the tags' row's end on a phone,
                             // the capsule's row's end wide (§S2, §S3).
-                            val bookmark = if (!trashedOwn && !d.isOwner && !isSharedPrivateCard(d)) rememberCardBookmark(session, card.id) else null
-                            StoryTagsRow(card.tags, bookmark, Modifier.padding(top = type.endGap.dp, bottom = 40.dp), tagsModifier = Modifier.mascotMark("tags"))
+                            val readerEnd = !trashedOwn && !d.isOwner && !isSharedPrivateCard(d)
+                            val bookmark = if (readerEnd) rememberCardBookmark(session, card.id) else null
+                            // A reader's end row starts 16 under the tags (or the story) with the faces' line, the capsule
+                            // under it (round 30 §S1: the capsule stood 40 under them); every other end keeps its 40.
+                            StoryTagsRow(card.tags, bookmark, Modifier.padding(top = type.endGap.dp, bottom = endRowAir(readerEnd).dp), tagsModifier = Modifier.mascotMark("tags"))
                             // The story's end is the response bar alone (round 9 §3: share and ⋯ are in the bar,
                             // or the byline); the author's own card has no end row. Someone else's 私人卡 is theirs
                             // to read and only to read (the server refuses a note, a resonance, a bookmark): a quiet
