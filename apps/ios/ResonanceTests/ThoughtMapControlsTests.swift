@@ -196,4 +196,16 @@ import Testing
         tap(store, g.x + 38, g.y + 34)
         #expect(store.editingGroupId == "g")
     }
+
+    /// 2026-11-22 (found by the map's Maestro flow): a title or a label opens with its words selected, as
+    /// Android's and the web's do, so the first key replaces them — 回憶 never becomes 回憶雨天的回憶.
+    @Test func aTitleOpensWithItsWordsSelected() {
+        for words in ["回憶", "Walks in the rain", "後來"] {
+            guard case let .selection(range) = MapEditors.wholeWords(words).indices else {
+                Issue.record("not a range")
+                continue
+            }
+            #expect(range == words.startIndex..<words.endIndex)
+        }
+    }
 }

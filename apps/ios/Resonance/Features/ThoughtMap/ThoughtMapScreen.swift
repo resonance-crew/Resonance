@@ -353,6 +353,10 @@ struct MapTray: View {
 struct MapEditors: View {
     let store: ThoughtMapStore
     @FocusState private var focus: Field?
+    /// Each field's own selection: the words there already are selected through it once the field has the
+    /// focus, so typing replaces them, as Android's and the web's editors do (`selectWords`).
+    @State private var groupSelection: TextSelection?
+    @State private var edgeSelection: TextSelection?
 
     enum Field: Hashable { case group, edge }
 
@@ -369,7 +373,36 @@ struct MapEditors: View {
             // Leaving a field commits it, as the web's blur does.
             if new != .group, store.editingGroupId != nil { store.commitGroupTitle() }
             if new != .edge, store.editingEdgeId != nil { store.commitEdgeLabel() }
+            if let new { selectWords(new) }
         }
+        // Another title or label opened while one was being written: the field keeps the focus, its words change.
+        .onChange(of: store.editingGroupId) { _, id in if id != nil, focus == .group { selectWords(.group) } }
+        .onChange(of: store.editingEdgeId) { _, id in if id != nil, focus == .edge { selectWords(.edge) } }
+    }
+
+    /// The words a title or a label opens with, selected: the first key replaces them (the web's
+    /// `onFocus={select}`, Android's `TextRange(0, length)`). Through the field's own selection, never a
+    /// select-all sent to the first responder; once more a moment later, in case the field took the focus
+    /// before its text view did (the selection then lands on nothing) — and only while nothing was typed.
+    private func selectWords(_ field: Field) {
+        let words = field == .group ? store.groupDraft : store.labelDraft
+        guard !words.isEmpty else { return }
+        setSelection(field, Self.wholeWords(words))
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard focus == field, (field == .group ? store.groupDraft : store.labelDraft) == words else { return }
+            let now = field == .group ? groupSelection : edgeSelection
+            if now == nil || now == TextSelection(insertionPoint: words.endIndex) { setSelection(field, Self.wholeWords(words)) }
+        }
+    }
+
+    private func setSelection(_ field: Field, _ selection: TextSelection?) {
+        if field == .group { groupSelection = selection } else { edgeSelection = selection }
+    }
+
+    /// The whole of the words, as a field's selection.
+    static func wholeWords(_ words: String) -> TextSelection {
+        TextSelection(range: words.startIndex..<words.endIndex)
     }
 
     /// GroupTitleEditor: the title in its heading type over a wavy underline in the region's hue.
@@ -383,7 +416,7 @@ struct MapEditors: View {
         let x = (g.x + ThoughtMapStore.regionTitleX - 4) * store.camera.s + store.camera.x
         let y = (g.y + ThoughtMapStore.regionTitleY - 4) * store.camera.s + store.camera.y
         return VStack(alignment: .leading, spacing: 0) {
-            TextField(L10n.Me.ThoughtMap.groupTitlePlaceholder, text: $store.groupDraft)
+            TextField(L10n.Me.ThoughtMap.groupTitlePlaceholder, text: $store.groupDraft, selection: $groupSelection)
                 .font(AppFonts.heading(16, weight: .bold))
                 .foregroundStyle(Tokens.text)
                 .focused($focus, equals: .group)
@@ -411,7 +444,7 @@ struct MapEditors: View {
         let textW = (shown as NSString).size(withAttributes: [.font: font, .kern: 0.46]).width
         let w = max(72, textW + 16) + 26 + 12
         return HStack(spacing: 0) {
-            TextField(L10n.Me.ThoughtMap.edgeLabelPlaceholder, text: $store.labelDraft)
+            TextField(L10n.Me.ThoughtMap.edgeLabelPlaceholder, text: $store.labelDraft, selection: $edgeSelection)
                 .font(AppFonts.body(11.5, weight: .semibold))
                 .tracking(0.46)
                 .multilineTextAlignment(.center)
