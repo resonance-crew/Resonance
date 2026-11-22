@@ -24,7 +24,7 @@ import { cardnessChanges, standaloneLinks, type CardnessChange } from '../../src
  * the paragraph starts, its link), for the owner to read before the run
  * that drops their cards. Pictures are signed with the running
  * process's key (imageSigning `signingKey`): run it with the deployment's own
- * LINK_PREVIEW_SECRET / FIREBASE_PRIVATE_KEY, or the pictures 404.
+ * LINK_PREVIEW_SECRET, or the pictures 404.
  */
 export async function backfillLinkPreviews(
   db: Firestore,
