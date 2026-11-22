@@ -5,7 +5,8 @@ import { AuthUnavailableError } from '@/server/domain/identity';
 import type { IdentityVerifier } from '@/server/ports/identity';
 import type { AccountStanding } from '@/server/ports/sessions';
 import { verifierChain } from '../identityChain';
-import { JwtKeysError, ourHeader, parseJwtKeys, signAccessToken, verifyAccessToken, type SigningKey } from './jwt';
+import { envJwtKeys, JwtKeysError, ourHeader, parseJwtKeys, signAccessToken, verifyAccessToken, type SigningKey } from './jwt';
+import { jwtSessionSigner } from './signer';
 import { resonanceJwtVerifier } from './verifier';
 
 // Resonance's own access tokens (ADR 0004): ES256 by node:crypto, a `kid`
@@ -182,5 +183,35 @@ describe('resonanceJwtVerifier, first in the request chain', () => {
     expect(firebase.verifyBearer).toHaveBeenCalledWith('Bearer firebase-token', { revocation: 'cached' });
     const down = verifierChain([make({ standing: async () => { throw new AuthUnavailableError(new Error('down')); } }), firebase]);
     await expect(down.verifyBearer(bearer())).rejects.toBeInstanceOf(AuthUnavailableError);
+  });
+});
+
+describe('envJwtKeys', () => {
+  it('remembers an unusable value as no keys, says so once, and parses again only when the value changes', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const env = { RESONANCE_JWT_KEYS: '[{"kid":"k1","jwk":{"kty":"EC"' };
+      const standing: AccountStanding = { standing: async () => ({ disabled: false, validSince: 0 }) };
+      const verifier = resonanceJwtVerifier({ standing, keys: () => envJwtKeys(env) });
+      const signer = jwtSessionSigner(() => envJwtKeys(env));
+      const bearer = 'Bearer eyJhbGciOiJFUzI1NiIsImtpZCI6ImsxIn0.e30.c2ln';
+      for (let i = 0; i < 50; i++) {
+        expect(verifier.owns?.(bearer)).toBe(false);
+        expect(await verifier.verifyBearer(bearer)).toBeNull();
+        expect(signer.enabled()).toBe(false);
+      }
+      expect(errors).toHaveBeenCalledTimes(1);
+      expect(String(errors.mock.calls[0])).toContain('not JSON');
+      // A new value is parsed: a good one is used, a bad one said once more.
+      const good = ecJwk('k2');
+      env.RESONANCE_JWT_KEYS = JSON.stringify([good]);
+      expect(envJwtKeys(env).map((k) => k.kid)).toEqual(['k2']);
+      expect(signer.enabled()).toBe(true);
+      env.RESONANCE_JWT_KEYS = '[]';
+      for (let i = 0; i < 10; i++) expect(envJwtKeys(env)).toEqual([]);
+      expect(errors).toHaveBeenCalledTimes(2);
+    } finally {
+      errors.mockRestore();
+    }
   });
 });
