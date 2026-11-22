@@ -57,7 +57,22 @@ export function planPromote(
  */
 export function applyPromote(
   plan: PromotePlan,
-  { root, reason, only = [], logFile = ACCEPT_LOG, now = () => new Date() }: { root: string; reason: string; only?: string[]; logFile?: string; now?: () => Date },
+  {
+    root,
+    reason,
+    only = [],
+    logFile = ACCEPT_LOG,
+    now = () => new Date(),
+    age,
+  }: {
+    root: string;
+    reason: string;
+    only?: string[];
+    logFile?: string;
+    now?: () => Date;
+    /** A commit's time in seconds, or null when unknown (default: this checkout's git, baselineMeta `commitTime`). */
+    age?: (commit: string) => number | null;
+  },
 ): { run: string; commit: string; count: number }[] {
   const main = baselineFolder(MAIN, root);
   const runs = new Map<string, Pick[]>();
@@ -82,7 +97,7 @@ export function applyPromote(
     for (const platform of new Set(keys.map((k) => k.split('/')[0]))) {
       const file = join(main, platform, 'meta.json');
       const mine = (k: string) => k.startsWith(`${platform}/`);
-      writeJson(file, nextMeta(readJson<BaselineMeta>(file), keys.filter(mine), inMain.filter(mine), { commit, run, acceptedAt, reason }));
+      writeJson(file, nextMeta(readJson<BaselineMeta>(file), keys.filter(mine), inMain.filter(mine), { commit, run, acceptedAt, reason }, age));
     }
     appendAcceptLog({ at: now(), run, commit, dirty: false, keys, only, reason: `${reason} (promoted from ${plan.branch})` }, logFile);
     done.push({ run, commit, count: keys.length });

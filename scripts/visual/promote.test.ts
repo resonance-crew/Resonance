@@ -14,6 +14,13 @@ const HOME = 'web/phone/home@light-zh-TW.png';
 const CARD = 'web/phone/card@light-zh-TW.png';
 const IOS_CARD = 'ios/iphone/card@light-zh-TW.png';
 
+/**
+ * The commits' times, so the test never asks this checkout's git: CI's `checks` job clones one
+ * commit deep, where none of these can be dated (and the oldest then fell back to the first one).
+ */
+const COMMIT_TIMES: Record<string, number> = { '00ad099e': 1_795_000_000, '1dee3e0c': 1_795_007_000, da6aaa2a: 1_795_008_000 };
+const age = (commit: string) => COMMIT_TIMES[commit] ?? null;
+
 /** A machine: main's baseline with home and card (accepted at 00ad099e, older than the round's commits), a round cloned from it, a log. */
 function machine() {
   const root = mkdtempSync(join(tmpdir(), 'visual-promote-'));
@@ -60,7 +67,7 @@ describe('promote', () => {
     ]);
     // main moved on meanwhile: its home is newer than the round's copy and stays so.
     writeFileSync(join(m.main, HOME), 'main home, newer');
-    const done = applyPromote(plan, { root: m.root, reason: '好，搬到 main', logFile: m.logFile, now: m.now });
+    const done = applyPromote(plan, { root: m.root, reason: '好，搬到 main', logFile: m.logFile, now: m.now, age });
     expect(done).toEqual([
       { run: 'a1', commit: '1dee3e0c', count: 1 },
       { run: 'a2', commit: 'da6aaa2a', count: 1 },
