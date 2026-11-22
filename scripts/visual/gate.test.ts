@@ -37,6 +37,12 @@ const input = (over: Partial<GateInput> = {}): GateInput => ({
 const verdict = (key: string, v: Verdict['verdict'], note = ''): [string, Verdict] => [key, { key, verdict: v, note } as Verdict];
 
 describe('the gate', () => {
+  it('fails a run its watchdog ended, whatever it took before then', () => {
+    const s = judge(input({ info: info({ aborted: 'nothing moved for 31 min (VISUAL_STALL_MIN is 30 min)' }) }));
+    expect(s.pass).toBe(false);
+    expect(s.problems).toEqual([{ kind: 'aborted', key: '20261113-020000', detail: 'nothing moved for 31 min (VISUAL_STALL_MIN is 30 min)' }]);
+  });
+
   it('passes a run with nothing changed', () => {
     const s = judge(input());
     expect(s.pass).toBe(true);

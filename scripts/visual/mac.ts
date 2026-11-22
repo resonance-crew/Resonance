@@ -15,7 +15,8 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { PNG } from 'pngjs';
 import { unspendHints } from './hints';
-import { BUNDLE_ID, inXcodeLine, launchArgs, prepareProject, runLogged } from './ios';
+import { BUNDLE_ID, ensureIslands, inXcodeLine, launchArgs, prepareProject, runLogged, xcodeInputs } from './ios';
+import { buildIfChanged, stampFile } from './buildStamp';
 import { lookNote, secondLook, type Look } from './secondLook';
 import { shotName } from './screens';
 import { ROOT, run, settle, shotPath, sleep, type Capture, type CaptureContext } from './util';
@@ -40,15 +41,27 @@ function build(ctx: CaptureContext): Promise<void> {
   }
   return inXcodeLine(async () => {
     if (process.env.VISUAL_SKIP_BUILD === '1' && existsSync(APP)) return ctx.log('  reusing the last Mac build');
-    ctx.log('  building the Debug Mac app (apps/ios/build/visual-mac)…');
-    await prepareProject(ctx);
-    await runLogged('xcodebuild', [
+    const args = [
       '-project', 'Resonance.xcodeproj', '-scheme', 'Resonance', '-configuration', 'Debug',
       '-destination', 'platform=macOS,variant=Mac Catalyst', '-derivedDataPath', DERIVED,
       '-allowProvisioningUpdates', '-allowProvisioningDeviceRegistration',
       '-skipPackagePluginValidation', '-skipMacroValidation', 'build',
       'RESONANCE_BUNDLE_SUFFIX=.macdev', `RESONANCE_MAC_ENTITLEMENTS=${join(ROOT, 'scripts/visual/mac-dev.entitlements')}`,
-    ], join(ctx.runDir, '_logs', 'mac-build.log'), IOS_DIR);
+    ];
+    // Skipped when its inputs are as at the last build (buildStamp.ts; --force-build builds anyway).
+    await ensureIslands(ctx);
+    await buildIfChanged({
+      name: 'the Mac app',
+      stamp: stampFile(DERIVED),
+      product: join(APP, 'Contents/MacOS/Resonance.debug.dylib'),
+      inputs: xcodeInputs(['mac-catalyst', ...args]),
+      log: ctx.log,
+      build: async () => {
+        ctx.log('  building the Debug Mac app (apps/ios/build/visual-mac)…');
+        await prepareProject(ctx);
+        await runLogged('xcodebuild', args, join(ctx.runDir, '_logs', 'mac-build.log'), IOS_DIR);
+      },
+    });
   });
 }
 

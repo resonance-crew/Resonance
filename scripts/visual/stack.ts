@@ -52,6 +52,15 @@ export async function seed(log: (line: string) => void, attempts = 2, pause = 2_
   }
 }
 
+/**
+ * The stack's `next dev`: its own build folder and tsconfig, the emulators' ports, and every page it compiles kept
+ * for the whole run (`VISUAL_KEEP_PAGES`, next.config.ts `onDemandEntries`) — the devices ask for the same pages
+ * one after another, and a page dropped meanwhile is compiled again.
+ */
+export function devServerEnv(distDir: string, tsconfig: string): Record<string, string> {
+  return { ...emulatorPorts(), NEXT_DIST_DIR: distDir, NEXT_TSCONFIG_PATH: tsconfig, VISUAL_KEEP_PAGES: '1' };
+}
+
 export async function startStack(logDir: string, log: (line: string) => void): Promise<Stack> {
   const children: ChildProcess[] = [];
   // `next dev` rewrites the tracked next-env.d.ts to name its distDir: point it
@@ -81,7 +90,7 @@ export async function startStack(logDir: string, log: (line: string) => void): P
     const tsconfig = join(ROOT, `.next-visual/tsconfig.${PORTS.dev}.json`);
     mkdirSync(join(ROOT, '.next-visual'), { recursive: true });
     writeFileSync(tsconfig, JSON.stringify({ extends: '../tsconfig.json', compilerOptions: { baseUrl: '..', paths: { '@/*': ['./src/*'] } } }, null, 2) + '\n');
-    const env = { ...emulatorPorts(), NEXT_DIST_DIR: distDir, NEXT_TSCONFIG_PATH: relative(ROOT, tsconfig) };
+    const env = devServerEnv(distDir, relative(ROOT, tsconfig));
     children.push(startGroup('node', ['scripts/dev-emulator.mjs', '--port', String(PORTS.dev)], env, join(logDir, 'dev.log')));
     await waitForPort(PORTS.dev, 120_000);
     const devUrl = `http://localhost:${PORTS.dev}`;

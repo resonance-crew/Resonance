@@ -113,6 +113,7 @@ the report, and exit code 1 on a FAIL. So an agent can stop on it: the run passe
 | `unexplained` | a capture changed and no `Visual:` trailer since the baseline names its screen |
 | `flow` | a Maestro flow failed (`--flows`) |
 | `check` | a web check at `fail` found something (below: `blank`, `overflow`, `wrapped-label`) |
+| `aborted` | the run was ended before its end: nothing moved for `VISUAL_STALL_MIN` (30), it passed `VISUAL_RUN_TIMEOUT_MIN` (300), or another run took over its lock (One run at a time, below) |
 
 Warnings are said and never fail: a capture *taken again* because its first look was early, a
 baseline capture the run didn't take (*missing*), a web check still at `warn`. A changed capture a
@@ -206,6 +207,22 @@ A web slice on its own ports takes only those ports, so two of them run side by 
 run was killed outright is taken over (its pid is gone). `scripts/visual/flows.ts` takes the same
 locks.
 
+A run never holds them for ever (2026-11-22: one sat 2 h 16 min on `simctl bootstatus`, a second
+queued behind it the whole time):
+
+- **Every device command has a time.** `simctl bootstatus` 5 min (`VISUAL_BOOT_TIMEOUT_S`), then the
+  harness's own simulator is shut down and booted once more; an AVD that doesn't boot in that time is
+  stopped and started once more; an adb call 2 min (`VISUAL_ADB_TIMEOUT_S`; an install 5), then
+  `adb reconnect` and once more; any other blocking command 10 min (`VISUAL_CMD_TIMEOUT_S`). A second
+  timeout fails the run (`retry.ts`).
+- **The lock beats.** Its holder writes the time into its lock files every 30 s; a holder still alive
+  whose beat is older than 10 min (`VISUAL_LOCK_STALE_MIN`) is stuck, and its locks are taken over —
+  said, never killed. A lock from an older harness, without a beat, is judged by its pid alone (`lock.ts`).
+- **The watchdog.** A capture with nothing said for 30 min (`VISUAL_STALL_MIN`; a cold Mac build, the
+  longest quiet step, takes 17) or running past 300 min (`VISUAL_RUN_TIMEOUT_MIN`) ends: its stack
+  stops, its locks go free, and its last line is `Visual FAIL <id>: aborted — why` (exit 1; `watchdog.ts`).
+  So does one that finds its lock taken over.
+
 The harness shuts down only what it booted, and only its own (`devices.ts`: `Visual iPhone`,
 `Visual iPad`, `emulator-5600`, `emulator-5602`); every shutdown goes through that check, and anything
 else is left running and said. A run with an app in it lists everyone else's simulators and
@@ -261,7 +278,12 @@ npm run visual -- accept --run <id> --only card,home --reason "owner, in chat: t
   is in git (`visual/` isn't): the time (UTC), the run and the commit it captured (`(dirty)` when the
   tree had changes), the platforms, what `--only` named (*all* for the whole run), how many captures
   and the reason. Commit that row with the work it accepts: `git commit -- docs/visual-accept-log.md`.
-  The platform's `meta.json` keeps the reason of its latest accept too.
+- The platform's `meta.json` keeps the run, time and reason of its latest accept, the commit each
+  capture was accepted at (`captures`), and as `commit` the oldest of those: where the review starts
+  reading `Visual:` trailers, so an `--only` accept never hides the trailers of the platform's other,
+  older pictures (`baselineMeta.ts`).
+- An accept compares the run again only where it copied: every other capture's result is reused
+  (the comparison keeps each result with what it was judged from, `_compare.json`).
 - The report's per-capture command (`index.html`) carries a `--reason "<the owner's words>"` to fill in.
 
 ## The review with Antigravity (`--agy`)
@@ -414,7 +436,7 @@ change near one of those states (`capture android --device phone-large --only se
 - **Things that move by themselves**: the landing film is held still (`?rest=1`: every act stands at
   its moment, no idle life) with its cast on stage — the paper puppets load (`/mascots/`) and a capture
   waits until every one is live; the reading puppets are off by default.
-- **The comparison** (`diff.ts`): not a share of the page's pixels, which a window drawn a pixel
+- **The comparison** (`diff.ts`; two files with the very same bytes are the same page without it, and each result is kept with the stamps of what it was judged from, `_compare.json`, so `compare`, the verdict, a review and an accept judge only what changed under them): not a share of the page's pixels, which a window drawn a pixel
   lower fills with red edges while a heading moved across the page hardly registers. A pixel
   differs past pixelmatch's threshold (YIQ 0.1). The page is cut into 16 px cells; a cell with
   pixels apart is only *moved*, and forgiven, when one shift of at most 2 px lines the whole cell up
@@ -464,7 +486,12 @@ The apps' debug-only launch routes for the tabs and the writer (`/home`, `/messa
 and links route as before.
 
 Each app capture builds its Debug app first (`apps/ios/build/visual-sim`, `visual-mac`,
-`./gradlew :app:assembleDebug`); `VISUAL_SKIP_BUILD=1` reuses the last build. The builds run beside
+`./gradlew :app:assembleDebug`) — unless its inputs are as at the last build: the fingerprint of the
+app's sources, the files it takes from the rest of the repository (fonts, strings, stickers, both
+islands, native/), its build arguments and Xcode's version is kept beside the product, and a match
+with the product untouched since reuses it (`buildStamp.ts`; about 0.3 s against 30–200 s of xcodegen
+and xcodebuild). `--force-build` (or `VISUAL_FORCE_BUILD=1`) builds anyway; `VISUAL_SKIP_BUILD=1`
+reuses the last build without looking. The builds run beside
 the captures, never blocking them: the APK and the simulator app start building as the run starts,
 while the web and the Mac app are captured, and the two Xcode builds (Mac, simulator) take turns, as
 they share the project and Swift's package caches. Phases (`PHASES` in `run.ts`): web + Mac, then
@@ -474,7 +501,9 @@ booted is shut down when its screens are done (`VISUAL_KEEP_DEVICES=1` keeps the
 nothing else ever is (One run at a time, and the owner's devices).
 The flows still run one platform at a time after the captures: each reseeds (and so empties) the
 stack's database, which would pull the data from under the other platform's flow. The stack's `next dev` builds into `.next-visual/<port>` with its own
-tsconfig, so it never meets another dev server's `.next` and never rewrites `tsconfig.json`.
+tsconfig, so it never meets another dev server's `.next` and never rewrites `tsconfig.json`, and keeps
+every page it compiled for the whole run (`VISUAL_KEEP_PAGES` → next.config's `onDemandEntries`): by
+default it drops a page left unasked for a while, and a full web run compiled `/[locale]/home` ten times.
 
 ## Adding a screen
 

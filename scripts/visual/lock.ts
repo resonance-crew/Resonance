@@ -11,15 +11,28 @@
  * the devices belong to the Mac, not to a checkout, and every worktree's run must see every other's.
  * A lock is made with `wx` (only one maker can win), names its holder's pid, and is taken over when
  * that process is gone (a run killed outright leaves its files behind).
+ *
+ * A holder also beats: every HEARTBEAT_MS it writes the time into its files (`heartbeatAt`). A holder
+ * still alive whose beat is older than STALE_MS (`VISUAL_LOCK_STALE_MIN`, default 10) is stuck — its
+ * event loop held by a command that never returned, or the process stopped — and its locks are taken
+ * over too, said as such; it is never killed (it isn't the taker's to stop). A holder that finds its
+ * file taken over says so (`onLost`) and stops. A lock with no `heartbeatAt` (a run of an older harness)
+ * is judged by its pid alone. A run that is alive and beating but makes no progress is the watchdog's
+ * (watchdog.ts), which ends it and so frees its locks.
  */
-import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Platform } from './screens';
 
 export const LOCK_DIR = process.env.VISUAL_LOCK_DIR || join(tmpdir(), 'resonance-visual-locks');
 
-export type LockHolder = { pid: number; startedAt: string; cwd: string; command: string };
+export type LockHolder = { pid: number; startedAt: string; cwd: string; command: string; heartbeatAt?: string };
+
+/** How often a holder writes its beat into its lock files. */
+export const HEARTBEAT_MS = 30_000;
+/** A beat older than this means a stuck holder, whose locks are taken over (`VISUAL_LOCK_STALE_MIN`, default 10). */
+export const STALE_MS = Number(process.env.VISUAL_LOCK_STALE_MIN || 10) * 60_000;
 
 /** What a run uses: the device platforms it captures, and its stack's ports unless it runs on someone else's. */
 export function resourcesFor(platforms: readonly Platform[], ports: { auth: number; firestore: number; dev: number } | null): string[] {
@@ -38,6 +51,11 @@ export type LockDeps = {
   log?: (line: string) => void;
   cwd?: string;
   command?: string;
+  /** How often to beat (0: never — a test that wants no timer). */
+  heartbeatMs?: number;
+  staleMs?: number;
+  /** Said when another run took over one of this run's locks (its beat was stale): the run should stop. */
+  onLost?: (resource: string, holder: LockHolder | null) => void;
 };
 
 const processAlive = (pid: number) => {
@@ -81,8 +99,17 @@ export function busyMessage(resource: string, holder: LockHolder, now: Date): st
   ].join('\n');
 }
 
-/** Tries to take one resource: true when this process holds it now. A holder that is gone loses it. */
-function tryTake(dir: string, resource: string, me: LockHolder, alive: (pid: number) => boolean): { taken: true } | { taken: false; holder: LockHolder } {
+/** Whether a live holder's beat is too old: stuck (a lock without a beat, from an older harness, never is). */
+export function stale(holder: LockHolder, now: Date, staleMs: number): boolean {
+  if (!holder.heartbeatAt) return false;
+  const at = new Date(holder.heartbeatAt).getTime();
+  return Number.isFinite(at) && now.getTime() - at > staleMs;
+}
+
+type Judge = { alive: (pid: number) => boolean; now: () => Date; staleMs: number; log: (line: string) => void };
+
+/** Tries to take one resource: true when this process holds it now. A holder that is gone, or stuck, loses it. */
+function tryTake(dir: string, resource: string, me: LockHolder, { alive, now, staleMs, log }: Judge): { taken: true } | { taken: false; holder: LockHolder } {
   const file = fileOf(dir, resource);
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -93,7 +120,13 @@ function tryTake(dir: string, resource: string, me: LockHolder, alive: (pid: num
     }
     const holder = readHolder(file);
     if (holder?.pid === me.pid) return { taken: true };
-    if (holder && alive(holder.pid)) return { taken: false, holder };
+    if (holder && alive(holder.pid)) {
+      if (!stale(holder, now(), staleMs)) return { taken: false, holder };
+      log(
+        `Visual: ${resource} is held by pid ${holder.pid} (\`${holder.command}\` in ${holder.cwd}), whose last beat was ${holder.heartbeatAt}: ` +
+          'stuck, so its lock is taken over (the process itself is left running: stop it by its PID if it is yours)',
+      );
+    }
     // Gone (or a file half written by a run killed while making it): take it over.
     try {
       unlinkSync(file);
@@ -105,7 +138,7 @@ function tryTake(dir: string, resource: string, me: LockHolder, alive: (pid: num
   return holder ? { taken: false, holder } : { taken: false, holder: { pid: -1, startedAt: '?', cwd: '?', command: '?' } };
 }
 
-export type Lock = { resources: string[]; release: () => void };
+export type Lock = { resources: string[]; release: () => void; /** One beat now (the timer does it every HEARTBEAT_MS). */ beat?: () => void };
 
 /**
  * Takes every resource or none. Without `wait`, a held one throws [LockBusy] (with [busyMessage]);
@@ -119,15 +152,41 @@ export async function acquire(resources: string[], { wait = false, ...deps }: Lo
   const now = deps.now ?? (() => new Date());
   const sleep = deps.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
   const log = deps.log ?? ((line: string) => console.log(line));
+  const startedAt = now().toISOString();
   const me: LockHolder = {
     pid,
-    startedAt: now().toISOString(),
+    startedAt,
     cwd: deps.cwd ?? process.cwd(),
     command: deps.command ?? `visual ${process.argv.slice(2).join(' ')}`.trim(),
+    heartbeatAt: startedAt,
   };
+  const judge: Judge = { alive, now, staleMs: deps.staleMs ?? STALE_MS, log };
+  const heartbeatMs = deps.heartbeatMs ?? HEARTBEAT_MS;
   mkdirSync(dir, { recursive: true });
   const held: string[] = [];
+  let beating: ReturnType<typeof setInterval> | null = null;
+  /** The beat: the time written into every file this run holds, through a rename so a reader never meets half a file. */
+  const beat = () => {
+    for (const resource of [...held]) {
+      const file = fileOf(dir, resource);
+      const holder = readHolder(file);
+      if (holder?.pid !== pid) {
+        held.splice(held.indexOf(resource), 1);
+        deps.onLost?.(resource, holder);
+        continue;
+      }
+      const tmp = `${file}.${pid}.tmp`;
+      try {
+        writeFileSync(tmp, JSON.stringify({ ...holder, heartbeatAt: now().toISOString() }, null, 2) + '\n');
+        renameSync(tmp, file);
+      } catch {
+        // the folder went away (a test's): the next beat says so
+      }
+    }
+  };
   const release = () => {
+    if (beating) clearInterval(beating);
+    beating = null;
     for (const resource of held.splice(0)) {
       const file = fileOf(dir, resource);
       if (readHolder(file)?.pid === pid) {
@@ -145,7 +204,7 @@ export async function acquire(resources: string[], { wait = false, ...deps }: Lo
     let busy: { resource: string; holder: LockHolder } | null = null;
     for (const resource of [...resources].sort()) {
       if (held.includes(resource)) continue;
-      const got = tryTake(dir, resource, me, alive);
+      const got = tryTake(dir, resource, { ...me, heartbeatAt: now().toISOString() }, judge);
       if (got.taken) held.push(resource);
       else {
         busy = { resource, holder: got.holder };
@@ -154,7 +213,11 @@ export async function acquire(resources: string[], { wait = false, ...deps }: Lo
     }
     if (!busy) {
       if (pid === process.pid) process.once('exit', release);
-      return { resources: [...held], release };
+      if (heartbeatMs > 0) {
+        beating = setInterval(beat, heartbeatMs);
+        beating.unref();
+      }
+      return { resources: [...held], release, beat };
     }
     // All or none: what was taken goes back while waiting, so two waiting runs never hold half each.
     release();

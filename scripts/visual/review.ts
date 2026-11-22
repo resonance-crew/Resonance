@@ -25,6 +25,7 @@
  * screen that changed with no trailer naming it stands out.
  */
 import { spawnSync } from 'node:child_process';
+import { oldestCommit } from './baselineMeta';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { BASELINE_DIR, GLANCE_DIR, ROOT, git, listPngs, readJson, writeJson } from './util';
@@ -65,10 +66,14 @@ For a changed screen, compare it with the baseline and say what moved. Call it "
 "intended change" line for that screen explains what you see; a change nothing explains is "unsure"
 (or "broken" if it is a defect), even when it looks fine.`;
 
-/** The commit the captured platforms' baseline was accepted at (the first one found). */
+/**
+ * Where the captured platforms' baseline starts: the oldest of their commits (baselineMeta.ts), so the trailers
+ * read cover every picture any of them holds (it was the first platform's, which could be the newest).
+ */
 function baselineCommit(runDir: string): string | undefined {
   const info = readJson<RunInfo>(join(runDir, 'run.json'));
-  return (info?.platforms ?? []).map((p) => readJson<{ commit: string }>(join(BASELINE_DIR, p, 'meta.json'))?.commit).find(Boolean);
+  const commits = (info?.platforms ?? []).map((p) => readJson<{ commit: string }>(join(BASELINE_DIR, p, 'meta.json'))?.commit ?? '');
+  return oldestCommit(commits) ?? undefined;
 }
 
 /**

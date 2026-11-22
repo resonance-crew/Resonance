@@ -10,6 +10,8 @@
  *            --tags a,b: only the flows tagged so; with --variants extended the `tablet` flows on the tablets too
  *            --review: the agy review straight after (what a release runs, with --flows)
  *            --wait: queue behind another run holding the same devices or ports (lock.ts), instead of refusing
+ *            --force-build: build the apps even when their inputs match the last build's (buildStamp.ts)
+ *            a run that stops moving (VISUAL_STALL_MIN) or runs too long (VISUAL_RUN_TIMEOUT_MIN) ends (watchdog.ts)
  *   compare  [--run <id>]          recompute the comparison and the report
  *   review   [--run <id>] [--agy | --gemini] [--all]   --all: unchanged captures too
  *   plan     [--variants release|extended]   how many captures each set takes, by platform, and roughly how long
@@ -25,13 +27,16 @@ import { acceptReason, appendAcceptLog, REASON_REQUIRED } from './acceptLog';
 import { compareRun, type RunInfo } from './compare';
 import { describe, foreign, lostDevices, runningDevices, type RunningDevice } from './devices';
 import { gateLines, judgeRun } from './gate';
-import { LockBusy, acquire, resourcesFor, type Lock } from './lock';
+import { LockBusy, acquire, resourcesFor, type Lock, type LockHolder } from './lock';
 import { writeReport } from './report';
 import { reviewWithAgy, reviewWithGemini, writeReviewPack } from './review';
 import { startStack, type Stack } from './stack';
 import { BASELINE_DIR, PORTS, RUNS_DIR, VISUAL_DIR, git, ignorePath, listPngs, readJson, writeJson, type Capture } from './util';
 import type { Platform } from './screens';
 import { DEVICE_STATES, EXTRA_VARIANTS, VARIANT_SETS, estimate, variantSetOf } from './variants';
+import { watchdog } from './watchdog';
+import { nextMeta, type BaselineMeta } from './baselineMeta';
+import type { Result } from './compare';
 
 /** Every platform, in the order the report lists them. */
 const PLATFORMS: Platform[] = ['web', 'android', 'ios', 'mac'];
@@ -71,7 +76,8 @@ function runDirOf(args: string[]): string {
   return join(RUNS_DIR, id);
 }
 
-function finish(runDir: string) {
+/** The comparison, the review brief and the report; answers the comparison, for the verdict after it. */
+function finish(runDir: string): Result[] {
   const results = compareRun(runDir);
   // A brief written by `review --all` stays as it was.
   if (!existsSync(join(runDir, 'review', 'REVIEW.md'))) writeReviewPack(runDir, results);
@@ -80,6 +86,7 @@ function finish(runDir: string) {
   log(`\nRun ${runDir.split('/').pop()}: ${count('changed')} changed · ${count('new')} new · ${count('missing')} missing · ${count('unchanged')} unchanged`);
   log(`Report: ${report}`);
   log(`Review brief for an agent: ${join(runDir, 'review', 'REVIEW.md')}`);
+  return results;
 }
 
 async function capture(args: string[]) {
@@ -87,8 +94,15 @@ async function capture(args: string[]) {
   const named = args.filter((a): a is Platform => PLATFORMS.includes(a as Platform));
   const platforms = PLATFORMS.filter((p) => !named.length || named.includes(p));
   const set = variantSetOf(flag(args, 'variants'));
+  // The apps built even when their inputs match the last build's (buildStamp.ts).
+  if (args.includes('--force-build')) process.env.VISUAL_FORCE_BUILD = '1';
+  // A run that stops moving or runs too long ends (watchdog.ts), and so does one whose lock another run took over
+  // (its beat had stopped: lock.ts). Set once the run has begun.
+  let abort: (why: string) => void = () => {};
   // One run at a time on these devices and these ports (lock.ts): refused, or queued with --wait, before anything starts.
-  const lock = await lockFor(platforms, !args.includes('--no-stack'), args.includes('--wait'));
+  const lock = await lockFor(platforms, !args.includes('--no-stack'), args.includes('--wait'), (resource, holder) =>
+    abort(`another run (pid ${holder?.pid ?? '?'}) took over its ${resource} lock: this one's beat had stopped`),
+  );
   if (!lock) return;
   const id = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
   const runDir = join(RUNS_DIR, id);
@@ -107,18 +121,36 @@ async function capture(args: string[]) {
     variants: set,
   };
   writeJson(join(runDir, 'run.json'), info);
+  let stack: Stack | undefined;
+  const dog = watchdog((why) => abort(why));
+  // Every line the run says is progress (each capture, build, boot and phase says one).
+  const say = (line: string) => {
+    dog.progress();
+    log(line);
+  };
+  abort = (why) => {
+    dog.stop();
+    info.aborted = why;
+    writeJson(join(runDir, 'run.json'), info);
+    try {
+      stack?.stop();
+    } finally {
+      lock.release();
+    }
+    log(`\nVisual FAIL ${id}: aborted — ${why}. The devices it booted may still run; its locks are free. → ${join(runDir, 'run.json')}`);
+    process.exit(1);
+  };
   if (set !== 'release') log(`Variants: ${set} (${estimate(set).captures} captures in all, about ${estimate(set).minutes} min; npm run visual -- plan)`);
 
   // The others' devices as the run starts: the harness never shuts one down, and says if one went down anyway (devices.ts).
   const apps = platforms.some((p) => p !== 'web');
   const before: RunningDevice[] = apps ? runningDevices() : [];
   if (foreign(before).length) log(`Left alone while this runs: ${foreign(before).map(describe).join(', ')}`);
-  let stack: Stack | undefined;
   try {
     stack = args.includes('--no-stack')
       ? { devUrl: process.env.VISUAL_DEV_URL || `http://localhost:${PORTS.dev}`, stop: () => {} }
-      : await startStack(join(runDir, '_logs'), log);
-    const ctx = { runDir, devUrl: stack.devUrl, ports: PORTS, only: info.only, devices: info.devices, log, retaken: info.retaken!, set };
+      : await startStack(join(runDir, '_logs'), say);
+    const ctx = { runDir, devUrl: stack.devUrl, ports: PORTS, only: info.only, devices: info.devices, log: say, retaken: info.retaken!, set };
     // The apps' builds start now, beside the first phase's captures, so a later phase finds its app
     // ready (each build is made once; the Xcode ones take turns). A failed one fails its phase.
     const headStart: Promise<unknown>[] = [];
@@ -128,16 +160,17 @@ async function capture(args: string[]) {
     for (const phase of PHASES) {
       const here = phase.filter((p) => platforms.includes(p));
       if (!here.length) continue;
-      log(`\n== ${here.join(' + ')}`);
+      say(`\n== ${here.join(' + ')}`);
       const unsettled = await Promise.all(here.map(async (platform) => (await capturer(platform))(ctx)));
       info.unsettled.push(...unsettled.flat());
       writeJson(join(runDir, 'run.json'), info);
     }
     if (args.includes('--flows')) {
-      info.flowsFailed = await flows(runDir, platforms, stack.devUrl, list(flag(args, 'tags')), set === 'extended');
+      info.flowsFailed = await flows(runDir, platforms, stack.devUrl, list(flag(args, 'tags')), set === 'extended', say);
       writeJson(join(runDir, 'run.json'), info);
     }
   } finally {
+    dog.stop();
     stack?.stop();
     if (apps) {
       const lost = lostDevices(before, runningDevices());
@@ -148,15 +181,15 @@ async function capture(args: string[]) {
     }
     lock.release();
   }
-  finish(runDir);
-  if (args.includes('--review')) await review(runDir, ['--agy']);
-  gate(runDir);
+  let results = finish(runDir);
+  if (args.includes('--review')) results = await review(runDir, ['--agy'], results);
+  gate(runDir, results);
 }
 
 /** The run's locks (lock.ts), or null after saying why it doesn't start (exit code 1). */
-async function lockFor(platforms: Platform[], ownStack: boolean, wait: boolean): Promise<Lock | null> {
+async function lockFor(platforms: Platform[], ownStack: boolean, wait: boolean, onLost?: (resource: string, holder: LockHolder | null) => void): Promise<Lock | null> {
   try {
-    return await acquire(resourcesFor(platforms, ownStack ? PORTS : null), { wait, log });
+    return await acquire(resourcesFor(platforms, ownStack ? PORTS : null), { wait, log, onLost });
   } catch (error) {
     if (!(error instanceof LockBusy)) throw error;
     console.error(error.message);
@@ -169,8 +202,8 @@ async function lockFor(platforms: Platform[], ownStack: boolean, wait: boolean):
  * The run's verdict, last on the console: the problems, then one `Visual PASS|FAIL` line naming
  * summary.json — and exit code 1 on a FAIL (gate.ts says what fails a run).
  */
-function gate(runDir: string) {
-  const { summary, file } = judgeRun(runDir, compareRun(runDir));
+function gate(runDir: string, results: Result[] = compareRun(runDir)) {
+  const { summary, file } = judgeRun(runDir, results);
   log('');
   for (const line of gateLines(summary, file)) log(line);
   if (!summary.pass) process.exitCode = 1;
@@ -182,7 +215,7 @@ function gate(runDir: string) {
  * `tablet`-tagged flows on the iPad and the Android tablet). Reports in `<run>/_flows/` (out of the
  * captures' way); the failed ones are answered, kept in run.json, and fail the run (gate.ts).
  */
-async function flows(runDir: string, platforms: Platform[], devUrl: string, tags: string[], tablets: boolean): Promise<string[]> {
+async function flows(runDir: string, platforms: Platform[], devUrl: string, tags: string[], tablets: boolean, log: (line: string) => void): Promise<string[]> {
   const { runFlows } = await import('./flows');
   const failed: string[] = [];
   for (const platform of (['android', 'ios'] as const).filter((p) => platforms.includes(p))) {
@@ -197,13 +230,13 @@ async function flows(runDir: string, platforms: Platform[], devUrl: string, tags
   return failed;
 }
 
-async function review(runDir: string, args: string[]) {
-  const results = compareRun(runDir);
+async function review(runDir: string, args: string[], results: Result[] = compareRun(runDir)): Promise<Result[]> {
   const all = args.includes('--all');
   if (args.includes('--agy')) await reviewWithAgy(runDir, results, log, all);
   else if (args.includes('--gemini')) await reviewWithGemini(runDir, results, log, all);
   log(`Review brief: ${writeReviewPack(runDir, results, all)}`);
   log(`Report: ${writeReport(runDir, results)}`);
+  return results;
 }
 
 /**
@@ -235,8 +268,14 @@ function accept(args: string[]) {
     if (existsSync(ignore)) writeFileSync(ignorePath(to), readFileSync(ignore));
     else rmSync(ignorePath(to), { force: true });
   }
+  // Each capture keeps the commit it was accepted at, and the platform's commit is the oldest of them (baselineMeta.ts):
+  // an accept of a few screens no longer moves the start of the other screens' trailers.
+  const acceptedAt = new Date().toISOString();
+  const inBaseline = listPngs(BASELINE_DIR);
   for (const platform of new Set(keys.map((k) => k.split('/')[0]))) {
-    writeJson(join(BASELINE_DIR, platform, 'meta.json'), { commit: info.commit, run: info.id, acceptedAt: new Date().toISOString(), reason });
+    const file = join(BASELINE_DIR, platform, 'meta.json');
+    const mine = (k: string) => k.startsWith(`${platform}/`);
+    writeJson(file, nextMeta(readJson<BaselineMeta>(file), keys.filter(mine), inBaseline.filter(mine), { commit: info.commit, run: info.id, acceptedAt, reason }));
   }
   appendAcceptLog({ at: new Date(), run: info.id, commit: info.commit, dirty: info.dirty, keys, only, reason });
   log(`Accepted ${keys.length} capture(s) from ${info.id} into ${BASELINE_DIR}`);
@@ -269,13 +308,11 @@ async function main() {
       return capture(args);
     case 'compare': {
       const runDir = runDirOf(args);
-      finish(runDir);
-      return gate(runDir);
+      return gate(runDir, finish(runDir));
     }
     case 'review': {
       const runDir = runDirOf(args);
-      await review(runDir, args);
-      return gate(runDir);
+      return gate(runDir, await review(runDir, args));
     }
     case 'accept':
       return accept(args);

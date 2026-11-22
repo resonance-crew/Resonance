@@ -13,6 +13,11 @@ const nextConfig: NextConfig = {
   // …and its own tsconfig, which `next dev` adds that folder's types to, so the
   // tracked tsconfig.json is never rewritten.
   typescript: { tsconfigPath: process.env.NEXT_TSCONFIG_PATH || 'tsconfig.json' },
+  // …and keeps every page it compiled: by default `next dev` drops a page left unasked for a while,
+  // and the screenshots ask for the same pages again on each device — a full web run compiled
+  // /[locale]/home ten times, 316 s of compiling in all (run 20261122-011120). Only that stack sets
+  // VISUAL_KEEP_PAGES (scripts/visual/stack.ts); a build, production and `npm run dev` never see it.
+  ...(process.env.VISUAL_KEEP_PAGES === '1' ? { onDemandEntries: { maxInactiveAge: 24 * 60 * 60 * 1000, pagesBufferLength: 1000 } } : {}),
 
   // ── Prevent Webpack from vendor-chunking Firebase on the server ──────
   // Next.js 15 (Webpack) generates vendor chunks named after the package

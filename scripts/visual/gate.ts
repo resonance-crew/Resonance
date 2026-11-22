@@ -25,7 +25,7 @@ import { intendedChanges, names, readVerdicts, type Verdict } from './review';
 import { GLANCE_DIR, ROOT, listPngs, readJson, writeJson } from './util';
 import { checksPath, type Finding } from './webChecks';
 
-export type ProblemKind = 'broken' | 'unsettled' | 'unexplained' | 'flow' | 'check';
+export type ProblemKind = 'broken' | 'unsettled' | 'unexplained' | 'flow' | 'check' | 'aborted';
 export type WarningKind = 'retaken' | 'missing' | 'check' | 'device';
 export type Note<K> = { kind: K; key: string; detail: string };
 
@@ -87,6 +87,8 @@ export function judge({ info, results, glances = [], verdicts, intendedFor, find
   for (const device of info?.devicesLost ?? []) {
     warnings.push({ kind: 'device', key: device, detail: 'running when the run began, gone by its end — not shut down by the harness (memory, or CoreSimulator restarting?): boot it again' });
   }
+  // Ended by its watchdog (watchdog.ts): whatever it took is a part, never a pass.
+  if (info?.aborted) problems.push({ kind: 'aborted', key: info.id, detail: info.aborted });
   for (const flow of info?.flowsFailed ?? []) problems.push({ kind: 'flow', key: flow, detail: 'the Maestro flow failed (its report is in _flows/)' });
   const count = (s: string) => results.filter((r) => r.status === s).length;
   return {
