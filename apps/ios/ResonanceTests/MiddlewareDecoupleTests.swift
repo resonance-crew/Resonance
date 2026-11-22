@@ -22,6 +22,22 @@ struct MiddlewareDecoupleTests {
         return ClientConfigStore(file: file, defaults: defaults, build: build, fetch: answer)
     }
 
+    /// The release screenshots' `-visualUpdate required` (`update-required`): the page whatever the server answered,
+    /// and nothing else read as it.
+    @Test func theScreenshotsSwitchShowsTheUpdatePageWhateverTheServerSays() {
+        #expect(ClientConfigStore.visualNeed("required", build: 16) == .required)
+        #expect(ClientConfigStore.visualNeed("recommended", build: 16) == .recommended(17))
+        #expect(ClientConfigStore.visualNeed(nil, build: 16) == nil)
+        #expect(ClientConfigStore.visualNeed("YES", build: 16) == nil)
+
+        let file = ClientSettingsFile(url: FileManager.default.temporaryDirectory.appending(path: "cc-\(UUID().uuidString)/c.json"))
+        let defaults = UserDefaults(suiteName: "cc-\(UUID().uuidString)")!
+        let config = ClientConfigStore(file: file, defaults: defaults, build: 16) { ClientSettings() }
+        #expect(!config.updateRequired)
+        defaults.set("required", forKey: "visualUpdate")
+        #expect(config.updateRequired)
+    }
+
     @Test func neverFetchedTakesTheOldPaths() {
         let config = store { throw URLError(.notConnectedToInternet) }
         #expect(config.features == .oldPaths)

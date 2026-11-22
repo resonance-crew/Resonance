@@ -9,6 +9,7 @@ appId: com.resonance.stories
 name: update-gate
 tags:
   - update-gate
+  - tablet
 ---
 - runFlow:
     file: common/launch.yaml

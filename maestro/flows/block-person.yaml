@@ -9,6 +9,7 @@ name: block-person
 tags:
   - safety
   - social
+  - tablet
 ---
 - runFlow:
     file: common/launch.yaml

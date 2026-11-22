@@ -135,8 +135,8 @@ public struct HandDrawnImage<Overlay: View>: View {
     }
 }
 
-/// A shape drawn in a rect `inset` smaller on every side (a clip for an overscanned view).
-private nonisolated struct InsetShape<Base: Shape>: Shape {
+/// A shape drawn in a rect `inset` smaller on every side (a clip for an overscanned view; the modal's paper too).
+nonisolated struct InsetShape<Base: Shape>: Shape {
     let base: Base
     let inset: CGFloat
     func path(in rect: CGRect) -> Path { base.path(in: rect.insetBy(dx: inset, dy: inset)) }

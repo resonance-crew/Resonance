@@ -4,8 +4,9 @@ The release screenshots (`scripts/visual/`) open every screen by its address. Th
 layer above: a person's journey through the apps — taps, typing, sending — written as
 [Maestro](https://docs.maestro.dev) YAML and run on the iOS simulator and the Android emulator
 against the same private stack (Firebase emulators + `next dev`, seeded fresh before every flow).
-Maestro doesn't drive macOS apps: the Mac app stays screenshots-only. The web's flows, when they
-come, are Playwright's.
+Maestro doesn't drive macOS apps: the Mac app stays screenshots-only. The web's flows are Playwright's:
+`scripts/visual/webflows/`, run with `npx tsx scripts/visual/webFlows.ts` (scripts/visual/README.md, The web's
+interaction flows).
 
 ## The flows
 
@@ -32,8 +33,10 @@ come, are Playwright's.
 | `sticker-breath` | alice | `/messages/bob` with the system's animations on and battery saver on (the runner sets both for the `animations` tag and puts them back): ☺ opens the panel and, on Android, a cell is playing (`sticker-moving`, a debug build's name for it) — round 25 §D: the owner's phone in battery saver showed a picker that never moved. iOS has no such name yet, so there the flow only opens the panel |
 | `translate-story` | alice | carol's English card `bridge-rain`: 翻譯成中文 under the byline → 舊橋上的雨 with 已由 AI 翻譯 · 顯示原文 (the seed's kept translation: the emulators ask no model), then 顯示原文 brings the English back with 顯示翻譯 (round 25 §F2) |
 | `block-person` | alice | bob's profile `/u/bob`: 更多選項 → 封鎖 → 封鎖 bob？ → 封鎖 (`PUT /api/v1/me/blocks/bob`): 你已封鎖 bob, 0 篇公開卡片, his card, 已連結 and 傳訊息 gone; 我的卡片盒 → 編輯個人檔案 → 隱私與連結 → 管理封鎖名單 lists bob; 解除封鎖 (`DELETE …/bob`) → 你還沒有封鎖任何人 |
-| `live-message` | alice | `/messages/bob`, hands off: bob sends from outside the app (`common/send-as.js`: the Auth emulator's sign-in, then `POST /api/v1/messages`) and his words appear in the open thread within 10 s — `signals/alice` → the app's pull over `/api/v1`; back on the list, a second message from him turns his row to the new words the same way |
+| `live-message` | alice | `/messages/bob`, hands off: bob sends from outside the app (`common/send-as.js`: the Auth emulator's sign-in, then `POST /api/v1/messages`) and his words appear in the open thread within 10 s — `signals/alice` → the app's pull over `/api/v1`; back on the list, a second message from him turns his row to the new words the same way. A wide tablet shows the list beside the thread (carol's row on screen): no back there, and his row is told apart from the thread's bubble as the one above carol's |
 | `update-gate` | alice | on the `update-gate` stack alone (Stacks, below): the server serves no build this old, so instead of her home she gets 請更新共振 with 前往更新, and nothing of the app behind it (我也在雨裡走過 never shows) |
+| `thought-map` | alice | `/me/thought-map`: drags 一場雨後的散步 (`map-node-rain-walk`) from under her letter to above it — `swipe` `from:` the card, `direction: UP`, `duration: 1500`: a held finger, which the map's own touch handling moves — puts 還沒寫完的清晨 on the map from the tray (卡片), renames 回憶 (two taps on its title), rewrites the arrow 後來, takes 搬家後的第一個安靜夜晚 off (a tap, then its `map-node-remove`), adds a region (分類); all of it is there after 離開 → 我的卡片盒 → 思想地圖, after a relaunch that clears nothing (`common/relaunch.yaml`), and in the server's own answer (`common/map-on-server.js`: `GET /api/v1/me/thought-map` from outside the app). Not driven: drawing an arrow from a link handle, moving or resizing a region, a pinch — a drag can't end on another element |
+| `draft-offline` | alice | Android only (`android-only`: the iOS simulator can't cut its network): `/write`, a title and a line → 已儲存; airplane mode, more words → 儲存中⋯; the app stopped while offline, the network back, opened again without clearing anything: the card in 我的卡片盒 → 私人卡 with the later words, on its page and on the server (`common/draft-on-server.js`). On the `writer-api` stack alone (the draft outbox): on the usual one the words are left to Firestore's offline queue, which a store build keeps on disk and an emulator build doesn't (`AppFirebase.kt`: a memory cache), so the flow would lose them every time there |
 
 Each one ends with a `takeScreenshot` of its end state (the trash flow also of the trashed page).
 
@@ -62,10 +65,15 @@ VISUAL_SKIP_BUILD=1 npx tsx scripts/visual/flows.ts ios      # the last build, i
 | `social` | block-person | the social graph over `/api/v1` (`apiSocial`): blocks, connections |
 | `signals` | live-message | `signals/{uid}` and the pulls it starts: what arrives while a person only watches |
 | `update-gate` | update-gate | client-config's `minBuild`, the update page — `--stack update-gate`, never the usual stack |
-| `tablet` | sign-in, send-message, send-sticker, sticker-replies, open-notification | written to hold on two panes and popovers: `--device tablet` runs these alone |
+| `writer` | publish-card, thought-map, draft-offline | the writer's saves and the thought map — on both stacks (`--stack writer-api`, Stacks below) |
+| `writer-api` | draft-offline | a writer's flow that runs on `--stack writer-api` and never on the usual stack |
+| `map` | thought-map | the thought map: its touch handling, tray, regions, arrows, its op queue |
+| `offline` | draft-offline | what is kept with no network: the draft outbox |
+| `android-only` / `ios-only` | draft-offline / — | a flow one app alone can run: the runner leaves it out on the other platform, says so in the log (`skip`), and never counts it as a failure (`forPlatform` in `scripts/visual/flows.ts`) |
+| `tablet` | sign-in, send-message, send-sticker, sticker-replies, open-notification, block-person, live-message, thought-map, update-gate (`--stack update-gate --device tablet`) | written to hold on two panes and popovers: `--device tablet` runs these alone |
 
 plus the older ones by area (`chat`, `stickers`, `reactions`, `letters`, `card`, `notifications`,
-`writer`, `trash`, `auth`). A tag no flow carries is refused, not run as nothing. `capture --flows
+`trash`, `auth`). A tag no flow carries is refused, not run as nothing. `capture --flows
 --tags composer` takes the same filter; `capture --flows --variants extended` also runs the `tablet` flows
 on the iPad and the Android tablet (reports in `_flows/ios-tablet/`, `_flows/android-tablet/`).
 
@@ -76,7 +84,7 @@ stacks start the dev server with other settings and run the flows made for them:
 | Stack | The server says | Runs | Why |
 | --- | --- | --- | --- |
 | `update-gate` | no build is new enough (`CLIENT_MIN_BUILD_*` far above any) | the flows tagged `update-gate` (`update-gate`), which run nowhere else | the update page: the whole window, with the way to the store, nothing of the app behind it |
-| `writer-api` | `CLIENT_FEATURES` turns `apiDrafts` and `apiThoughtMap` on | the flows tagged `writer` (`publish-card`) | the apps' writer through `/api/v1` — off by default until checked on devices (docs/release/owed.md, flags); the usual stack runs the same journey over Firestore |
+| `writer-api` | `CLIENT_FEATURES` turns `apiDrafts` and `apiThoughtMap` on | the flows tagged `writer` (`publish-card`, `thought-map`, `draft-offline`) | the apps' writer through `/api/v1` — off by default until checked on devices (docs/release/owed.md, flags); the usual stack runs the same journeys over Firestore, but for `draft-offline` (tagged `writer-api`: this stack alone) |
 
 ```bash
 npx tsx scripts/visual/flows.ts android --stack update-gate
@@ -159,7 +167,8 @@ name); add it to `ORDER` in `scripts/visual/flows.ts` to place it.
 
 - **One file per journey**, at the top of `maestro/flows/`; shared steps in `maestro/flows/common/`
   (not run on their own). Each flow starts from nothing: `common/launch.yaml` clears the app and
-  launches it signed in as `ACCOUNT` at `ROUTE`; the runner has reseeded the world.
+  launches it signed in as `ACCOUNT` at `ROUTE`; the runner has reseeded the world. `common/relaunch.yaml` opens it
+  again clearing nothing (what a fresh launch finds on the device: the account, the draft outbox, Firestore's queue).
 - **The same YAML for both apps.** Where they differ, `runFlow` with `when: platform: iOS` /
   `Android` (the launch arguments, Return to put iOS's keyboard away, iOS's save-password sheet).
 - **Selectors**: the words on screen, in zh-TW (a regex when the two apps word it differently:
@@ -167,7 +176,8 @@ name); add it to `ORDER` in `scripts/visual/flows.ts` to place it.
   said gets an id — `accessibilityIdentifier` on iOS, `Modifier.flowTag("…")` on Android (a test tag
   shown as the resource id in debug builds, `apps/android/.../ui/FlowTag.kt`). Ids so far:
   `emulator-email`, `emulator-password`, `note-field`, `tap-faces` (a reader's faces under the end row), `author-taps`
-  (the author's line of who resonated) — the same `accessibilityIdentifier` on iOS. A selector's words are checked against
+  (the author's line of who resonated), `map-node-<card id>` (a thought map's card: its title is painted) and
+  `map-node-remove` (the selected card's 移除) — the same `accessibilityIdentifier` on iOS. A selector's words are checked against
   `src/messages` and the seed by `scripts/visual/flows.test.ts`, so a renamed string fails in `npm test`.
 - **Tags**: every flow has some; a new one joins a group above, and `tablet` only once it has passed on
   a tablet.

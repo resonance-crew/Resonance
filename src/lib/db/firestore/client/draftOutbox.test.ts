@@ -16,7 +16,7 @@ vi.mock('@/lib/auth/firebase/appCheck', () => ({ appCheckHeaders: vi.fn(async ()
 
 import { createCardDraft, deleteCardForever, publishCard, updateCardDraft } from './cards';
 import { applyPendingCardEdit, discardPendingCardEdit, getPendingCardEdit, savePendingCardEdit } from './cardEdits';
-import { knownRev, resetOutboxForTests, RETRY_BASE_MS } from './draftOutbox';
+import { knownRev, onOutboxCaughtUp, resetOutboxForTests, RETRY_BASE_MS } from './draftOutbox';
 import { getClientDb } from './init';
 
 interface Sent {
@@ -199,6 +199,39 @@ describe('the outbox', () => {
     await vi.advanceTimersByTimeAsync(RETRY_BASE_MS);
     expect(server.draft.fields.story).toBe('typed offline');
     expect(server.to('/draft')).toHaveLength(2);
+  });
+
+  it('tells whoever listens once a save kept after a failure is stored: nobody waits on that send, and the writer said 未儲存', async () => {
+    vi.useFakeTimers();
+    const caughtUp: string[] = [];
+    const stop = onOutboxCaughtUp((kind, id, saved) => caughtUp.push(`${kind}:${id}:${saved.rev}`));
+    server.state.offline = 1;
+    await expect(updateCardDraft('card-1', { story: 'typed offline' })).rejects.toThrow('Failed to fetch');
+    // Failed and kept: nothing is stored yet, so nothing is said.
+    expect(caughtUp).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(RETRY_BASE_MS);
+    expect(server.draft.fields.story).toBe('typed offline');
+    expect(caughtUp).toEqual(['draft:card-1:2']);
+
+    // A save that goes through at once says so too (the writer's own promise is what it goes by then), once per
+    // caught-up outbox — not once per save folded into it.
+    server.state.hold = true;
+    const first = updateCardDraft('card-1', { story: 'one' });
+    const second = updateCardDraft('card-1', { story: 'two' });
+    await vi.advanceTimersByTimeAsync(0);
+    server.release();
+    await vi.advanceTimersByTimeAsync(0);
+    server.release();
+    await Promise.all([first, second]);
+    expect(caughtUp).toHaveLength(2);
+    expect(server.draft.fields.story).toBe('two');
+
+    // No longer listening: nothing more is heard.
+    stop();
+    server.state.hold = false;
+    await updateCardDraft('card-1', { story: 'three' });
+    expect(caughtUp).toHaveLength(2);
   });
 
   it('drops a save the server refuses (a 4xx), and says so', async () => {

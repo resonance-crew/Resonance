@@ -47,7 +47,12 @@ final class ClientConfigStore {
     var features: ClientFeatures { settings.features }
 
     /// What this build is asked to do about its age.
-    var need: UpdateNeed { settings.update(forBuild: build) }
+    var need: UpdateNeed {
+        #if DEBUG
+        if let shown = Self.visualNeed(defaults.string(forKey: "visualUpdate"), build: build) { return shown }
+        #endif
+        return settings.update(forBuild: build)
+    }
 
     /// Below `minBuild`: nothing but the update screen.
     var updateRequired: Bool { need == .required }
@@ -93,6 +98,17 @@ final class ClientConfigStore {
     }
 
     #if DEBUG
+    /// The release screenshots' `-visualUpdate required` (scripts/visual/screens.ts, `update-required`): the update
+    /// page whatever the server says — its answer is the stack's, set where the stack starts, and no capture's stack
+    /// retires a build. `recommended` shows the note instead. A debug build only.
+    nonisolated static func visualNeed(_ value: String?, build: Int?) -> UpdateNeed? {
+        switch value {
+        case "required": .required
+        case "recommended": .recommended((build ?? 0) + 1)
+        default: nil
+        }
+    }
+
     /// Tests and screen checks: an answer as if the server had given it.
     func adopt(_ answer: ClientSettings) {
         fetched = true

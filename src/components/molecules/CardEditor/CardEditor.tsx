@@ -28,6 +28,7 @@ import { getCardById } from '@/lib/db/firestore/client/reads';
 import type { CardMedia, LinkPreview, Visibility, Locale } from '@/lib/db/types';
 import { useRouter } from '@/i18n/navigation';
 import { ApiError } from '@/lib/db/firestore/client/api';
+import { onOutboxCaughtUp } from '@/lib/db/firestore/client/draftOutbox';
 import { useOpenedOnce } from '@/lib/hooks/useOpenedOnce';
 import { useConnectionRefresh } from '@/lib/data/resonate';
 import { useSharedPrivately } from '@/lib/data/privateShares';
@@ -279,6 +280,10 @@ export function CardEditor({
   // A write on its way past SAVING_SHOWN_MS, and whether the last one failed (the bar's 儲存中⋯ and 未儲存).
   const [savingShown, setSavingShown] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  const saveFailedRef = useRef(saveFailed);
+  saveFailedRef.current = saveFailed;
+  /** What the last write tried to store (draftSnapshot): when it failed, the words the outbox kept to send again. */
+  const attemptRef = useRef<string | null>(null);
   const [pending, setPending] = useState(false);
   // Which action `pending` is for: its button shows the loader (B6), the other rests.
   const [busyVerb, setBusyVerb] = useState<'publish' | 'leave'>('publish');
@@ -500,6 +505,7 @@ export function CardEditor({
   async function writeDraft(): Promise<SavedDraft | null> {
     const v = latest();
     const payload = payloadFrom(v);
+    attemptRef.current = draftSnapshot(v);
     if (isPublished && draftIdRef.current) {
       await savePendingCardEdit(draftIdRef.current, payload);
       setHasPendingEdit(true);
@@ -574,6 +580,27 @@ export function CardEditor({
   emptiedRef.current = emptiedHere;
   const dropEmptiedRef = useRef(dropEmptied);
   dropEmptiedRef.current = dropEmptied;
+
+  // A save that failed says 未儲存, and its words are not lost: the outbox keeps them and sends them again, after a
+  // pause or as the browser comes back online. That send has nobody waiting on it, so the outbox says when the card
+  // has caught up, and the bar says 已儲存 for the words that were tried — typing more is no longer what it takes.
+  // A first save that failed (the card not made yet) never reached the outbox: back online, it is simply tried again.
+  useEffect(() => {
+    const stop = onOutboxCaughtUp((kind, id) => {
+      if (!saveFailedRef.current || attemptRef.current == null) return;
+      if (id !== draftIdRef.current || kind !== (isPublished ? 'edit' : 'draft')) return;
+      lastSavedRef.current = attemptRef.current;
+      if (isPublished) setHasPendingEdit(true);
+      setSavedAt(new Date());
+      setSaveFailed(false);
+    });
+    const backOnline = () => autosaveNowRef.current();
+    window.addEventListener('online', backOnline);
+    return () => {
+      stop();
+      window.removeEventListener('online', backOnline);
+    };
+  }, [isPublished]);
 
   // Debounce: save AUTOSAVE_DELAY_MS after the last edit.
   useEffect(() => {

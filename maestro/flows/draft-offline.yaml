@@ -1,0 +1,88 @@
+# alice's words typed with no network are not lost: she starts a card in the writer (a title, a line), the bar says
+# 已儲存; the network goes (airplane mode — Maestro's own connection to the emulator stays), she writes on and the bar
+# says 儲存中⋯ (and stays so: nothing can be sent); the app is stopped while still offline; the network comes back and
+# she opens the app again WITHOUT its data cleared (common/relaunch.yaml). Her card is in 我的卡片盒's 私人卡 shelf, and
+# its page and the server's own answer (common/draft-on-server.js, asked from outside the app) hold the words written
+# offline.
+#
+# Runs on `--stack writer-api` alone (the tag `writer-api`; apiDrafts on): the words wait in the draft outbox, kept
+# on the device and sent at the next launch (PATCH /api/v1/cards/{id}/draft). On the usual stack they are left to
+# Firestore's own offline queue, which a store build keeps on disk and an emulator build does not (its cache is
+# memory only: AppFirebase.kt) — there the flow loses the words every time, which says nothing about a real phone.
+# Android only (`android-only`): the iOS simulator cannot cut its network.
+appId: com.resonance.stories
+name: draft-offline
+tags:
+  - writer
+  - writer-api
+  - offline
+  - android-only
+# A failure halfway must not leave the emulator offline for the flows after this one.
+onFlowComplete:
+  - setAirplaneMode: disabled
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /write
+- extendedWaitUntil:
+    visible: 一句話標題
+    timeout: 30000
+- tapOn: 一句話標題
+- inputText: 斷線前的晚上 Maestro
+# Return in the title goes on to the story.
+- pressKey: Enter
+- inputText: 窗外開始下雨。
+# The card is made and its words kept: the bar under 新卡片 says so. It says 已儲存 for the card's creation already,
+# before the line is sent, so the server is asked until it holds the line: what follows is words typed offline after
+# everything before them was kept. (A save still on its way when the network goes holds back every later one: the
+# writer sends one at a time, and a save offline never finishes — that case is not this flow's.)
+- extendedWaitUntil:
+    visible: 已儲存
+    timeout: 30000
+- runScript:
+    file: common/draft-on-server.js
+    env:
+      TITLE: 斷線前的晚上 Maestro
+      WORDS: 窗外開始下雨。
+      TRIES: '300'
+# No network: what she writes now can't be sent.
+- setAirplaneMode: enabled
+- tapOn:
+    id: editor
+- inputText: 燈一盞一盞熄了 Maestro
+# The save is on its way (handed to the outbox, or to Firestore's queue) and can't finish: the bar says so and stays.
+- extendedWaitUntil:
+    visible: 儲存中⋯
+    timeout: 10000
+- assertVisible: 窗外開始下雨。燈一盞一盞熄了 Maestro
+- takeScreenshot: draft-offline-offline
+# Gone while offline, then the network comes back with the app closed.
+- stopApp
+- setAirplaneMode: disabled
+- runFlow:
+    file: common/relaunch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /me
+- extendedWaitUntil:
+    visible: 私人卡
+    timeout: 30000
+- tapOn: 私人卡
+- extendedWaitUntil:
+    visible: 斷線前的晚上 Maestro
+    timeout: 30000
+# Its page, read from the server, with the words written offline.
+- tapOn:
+    text: 斷線前的晚上 Maestro
+    index: 0
+- extendedWaitUntil:
+    visible: .*燈一盞一盞熄了 Maestro.*
+    timeout: 30000
+- runScript:
+    file: common/draft-on-server.js
+    env:
+      TITLE: 斷線前的晚上 Maestro
+      WORDS: 燈一盞一盞熄了 Maestro
+- takeScreenshot: draft-offline

@@ -1,0 +1,20 @@
+# alice's thought map as thought-map.yaml leaves it, on screen: 一場雨後的散步 above her letter, 還沒寫完的清晨 on the
+# map, 搬家後的第一個安靜夜晚 off it, the region 雨天的回憶 Maestro (no longer 回憶), her own 晴天 Maestro, and the
+# arrow's words 那年以後 (no longer 後來). Run after the map was left and opened again, and after a fresh launch.
+appId: com.resonance.stories
+---
+- extendedWaitUntil:
+    visible: 雨天的回憶 Maestro
+    timeout: 30000
+- assertVisible: 晴天 Maestro
+- assertVisible: 那年以後
+- assertNotVisible: 後來
+- assertNotVisible: 回憶
+- assertVisible:
+    id: map-node-alice-draft
+- assertNotVisible:
+    id: map-node-rich-story
+- assertVisible:
+    id: map-node-rain-walk
+    above:
+      id: map-node-letter

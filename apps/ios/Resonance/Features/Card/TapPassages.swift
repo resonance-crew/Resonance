@@ -17,17 +17,20 @@ struct TapPassages: View {
     let onChoose: (String?) -> Void
     let onSkip: () -> Void
     @Environment(\.window) private var window
+    /// The dialog clips to its paper (CardEndRow opens it so): the rows' ink runs to the paper's edges.
+    @Environment(\.modalPaperClips) private var paperClips
     @AccessibilityFocusState private var focused: String?
 
     var body: some View {
         let ids = passages.map { "passage:\($0.id)" }
         let below = ListBands.below(ids, after: ListBands.endKey)
+        let reach = TapPassageRules.reach(clipped: paperClips)
         VStack(alignment: .leading, spacing: 0) {
             ModalTitle(L10n.Card.Tap.passageTitle).padding(.bottom, 10)
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(Array(passages.prefix(TapPassageRules.most).enumerated()), id: \.element.id) { i, passage in
-                        row(passage, index: i, top: ids[i], bottom: below[i])
+                        row(passage, index: i, top: ids[i], bottom: below[i], reach: reach)
                     }
                 }
             }
@@ -36,8 +39,9 @@ struct TapPassages: View {
             .scrollEdgeFades()
             .frame(maxHeight: TapPassageRules.listHeight(window: window.height))
             .fixedSize(horizontal: false, vertical: true)
-            // The rows' 12 a side, pulled back to the dialog's own padding (the taps list's).
-            .padding(.horizontal, -12)
+            // Out to the paper's edges and past them by the wobble's swing (``TapPassageRules/reach(clipped:)``): the
+            // rows' bands run edge to edge, clipped to the paper; their words keep the dialog's own inset.
+            .padding(.horizontal, -reach)
             ModalCloseButton(L10n.Card.Tap.passageSkip, action: onSkip)
                 .accessibilityIdentifier("tap-passage-skip")
         }
@@ -46,7 +50,7 @@ struct TapPassages: View {
         .onAppear { focused = picked ?? passages.first?.id }
     }
 
-    private func row(_ passage: TapPassage, index: Int, top: String, bottom: String) -> some View {
+    private func row(_ passage: TapPassage, index: Int, top: String, bottom: String, reach: CGFloat) -> some View {
         let chosen = passage.id == picked
         let story = StoryTypography(script: script, compact: true)
         return Button { onChoose(TapPassageRules.choice(pressing: passage.id, current: picked)) } label: {
@@ -61,16 +65,24 @@ struct TapPassages: View {
                         .transition(.opacity)
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, reach)
             .padding(.vertical, ListBands.rowPad)
-            .contentShape(Rectangle())
+            // Pressed on the paper only: what reaches past its frame is clipped from sight, and is the backdrop's.
+            .contentShape(SidesIn(by: TapPassageRules.overhang(reach: reach)))
         }
-        .buttonStyle(BandWashStyle(top: top, bottom: bottom, cut: true, held: chosen))
+        .buttonStyle(BandWashStyle(top: top, bottom: bottom, cut: TapPassageRules.bandCut(clipped: paperClips),
+                                   held: chosen))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(chosen ? .isSelected : [])
         .accessibilityIdentifier("tap-passage-\(index)")
         .accessibilityFocused($focused, equals: passage.id)
     }
+}
+
+/// A row's frame less `by` on the left and the right: the part of it on the paper.
+private nonisolated struct SidesIn: Shape {
+    let by: CGFloat
+    func path(in rect: CGRect) -> Path { Path(rect.insetBy(dx: min(by, rect.width / 2), dy: 0)) }
 }
 
 /// The dialog's rules (§U1), kept apart from the views so the tests can hold them.
@@ -115,6 +127,16 @@ nonisolated enum TapPassageRules {
 
     /// How long a delay is under Reduce Motion: none.
     static func delay(_ delay: Duration, reduceMotion: Bool) -> Duration { reduceMotion ? .zero : delay }
+
+    /// How far a row reaches past the dialog's content on each side. In a dialog clipped to its paper (round 27, the
+    /// owner: 「这个选中的区块是延伸到这个 pop up 这个卡片的最左边和最右边的」): the paper's frame (``ModalPaper/inset``)
+    /// and the wobble's swing past it (``ModalPaper/bleed``) — the band edge to edge, as the web's. Anywhere else the
+    /// first captures' 12, its band cut and rounded inside the paper.
+    static func reach(clipped: Bool) -> CGFloat { clipped ? ModalPaper.inset + ModalPaper.bleed : 12 }
+    /// A row's band is cut at its frame's sides only where it cannot reach the paper's edges.
+    static func bandCut(clipped: Bool) -> Bool { !clipped }
+    /// What of a row stands past the paper's frame, a side (none when it stays inside).
+    static func overhang(reach: CGFloat) -> CGFloat { max(0, reach - ModalPaper.inset) }
 
     /// The list scrolls inside at most min(420, 55 % of the window's height) — the reader list's cap.
     static func listHeight(window: CGFloat) -> CGFloat { min(420, window * 0.55) }

@@ -7,6 +7,7 @@ name: live-message
 tags:
   - chat
   - signals
+  - tablet
 ---
 - runFlow:
     file: common/launch.yaml
@@ -30,10 +31,13 @@ tags:
     timeout: 10000
 - takeScreenshot: live-message-thread
 # Back to the conversation list, where she again only watches: bob writes once more and his row turns to the new
-# words by itself (the same signal, the list's pull).
+# words by itself (the same signal, the list's pull). A wide tablet shows the list beside the thread already (carol's
+# row is on screen): there back would leave the app, and the thread shows bob's words too, so the list's row is told
+# apart as the one above carol's.
 - runFlow:
     when:
       platform: Android
+      notVisible: carol
     commands:
       - back
 - runFlow:
@@ -51,8 +55,26 @@ tags:
       FROM: bob
       TO: alice
       TEXT: 帶傘了嗎 Maestro
-- extendedWaitUntil:
-    visible: 帶傘了嗎 Maestro
-    timeout: 10000
-- assertNotVisible: 剛下班，路上又下雨了 Maestro
+- runFlow:
+    when:
+      notVisible: 與 bob 的對話|想說的話⋯
+    commands:
+      - extendedWaitUntil:
+          visible: 帶傘了嗎 Maestro
+          timeout: 10000
+      - assertNotVisible: 剛下班，路上又下雨了 Maestro
+- runFlow:
+    when:
+      visible: 與 bob 的對話|想說的話⋯
+    commands:
+      - extendedWaitUntil:
+          visible:
+            text: 帶傘了嗎 Maestro
+            above:
+              text: carol
+          timeout: 10000
+      - assertNotVisible:
+          text: 剛下班，路上又下雨了 Maestro
+          above:
+            text: carol
 - takeScreenshot: live-message

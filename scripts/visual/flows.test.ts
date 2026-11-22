@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import zhTW from '../../src/messages/zh-TW.json';
 import { STICKER_PACKS } from '../../src/lib/stickers/catalog';
-import { STACKS, flowSettings, flowTags, flowsToRun, forStack, withTags } from './flows';
+import { STACKS, flowSettings, flowTags, flowsToRun, forPlatform, forStack, withTags } from './flows';
 
 const FLOWS = join(process.cwd(), 'maestro/flows');
 const read = (flow: string) => readFileSync(join(FLOWS, `${flow}.yaml`), 'utf8');
@@ -52,6 +52,24 @@ describe('the flows’ tags', () => {
     expect(() => forStack(['home'], 'no-such', of)).toThrow(/No such stack: no-such/);
   });
 
+  it('leaves a flow one app alone can run out on the other, as skipped rather than failed', () => {
+    const tags: Record<string, string[]> = { home: ['smoke'], offline: ['writer', 'android-only'], sheet: ['ios-only'] };
+    const of = (f: string) => tags[f];
+    expect(forPlatform(['home', 'offline', 'sheet'], 'ios', of)).toEqual({ run: ['home', 'sheet'], skipped: ['offline'] });
+    expect(forPlatform(['home', 'offline', 'sheet'], 'android', of)).toEqual({ run: ['home', 'offline'], skipped: ['sheet'] });
+    // The iOS simulator cannot cut its network: the offline draft is Android's alone.
+    expect(forPlatform(all, 'ios').skipped).toContain('draft-offline');
+    expect(forPlatform(all, 'android').run).toContain('draft-offline');
+  });
+
+  it('runs the flows that passed on both tablets there, the update page on its own stack alone', () => {
+    const tablet = withTags(all, [], 'tablet');
+    expect(tablet).toEqual(expect.arrayContaining(['block-person', 'live-message', 'thought-map', 'update-gate']));
+    expect(forStack(tablet, undefined)).not.toContain('update-gate');
+    expect(forStack(tablet, 'update-gate')).toEqual(['update-gate']);
+    expect(forStack(tablet, 'writer-api')).toEqual(['thought-map']);
+  });
+
   it('names each stack’s settings as client-config reads them, and gives each a flow to run', () => {
     expect(Number(STACKS['update-gate'].env.CLIENT_MIN_BUILD_IOS)).toBeGreaterThan(100_000);
     expect(Number(STACKS['update-gate'].env.CLIENT_MIN_BUILD_ANDROID)).toBeGreaterThan(100_000);
@@ -60,6 +78,12 @@ describe('the flows’ tags', () => {
     expect(forStack(all, undefined)).not.toContain('update-gate');
     expect(forStack(all, 'update-gate')).toEqual(['update-gate']);
     expect(forStack(all, 'writer-api')).toContain('publish-card');
+    // draft-offline is the writer-api stack's alone: an emulator build's Firestore keeps no queue on disk, so on the
+    // usual stack the flow would lose its words every time (and so in the release run's flows too).
+    expect(forStack(all, 'writer-api')).toContain('draft-offline');
+    expect(forStack(all, undefined)).not.toContain('draft-offline');
+    expect(forStack(all, 'update-gate')).not.toContain('draft-offline');
+    expect(forStack(all, undefined)).toContain('thought-map');
   });
 
   it('places every flow in the run’s order', () => {
@@ -151,6 +175,45 @@ describe('the flows’ words are the apps’ words', () => {
     const script = readFileSync(join(FLOWS, 'common/send-as.js'), 'utf8');
     expect(script).toContain('/api/v1/messages');
     expect(script).toContain('accounts:signInWithPassword');
+  });
+
+  it('thought-map: the map’s controls and tray, the seeded region, arrow and cards, the card box’s way back to it', () => {
+    const flow = read('thought-map');
+    const kept = readFileSync(join(FLOWS, 'common/thought-map-kept.yaml'), 'utf8');
+    const t = zhTW.me.thoughtMap;
+    for (const word of [t.addCardShort, t.addGroupShort, t.leave]) expect(flow).toContain(`tapOn: ${word}`);
+    expect(flow).toContain(`visible: ${t.trayTitle}`);
+    for (const word of [zhTW.app.nav.me, zhTW.me.tabs.linked, zhTW.me.tabs.thoughtMap]) expect(flow).toContain(word);
+    // The seeded map (scripts/seed-emulator.ts): the region 回憶, the arrow 後來, the cards by their ids.
+    expect(seed).toContain("title: '回憶'");
+    expect(seed).toContain("label: '後來'");
+    for (const id of ['letter', 'rich-story', 'rain-walk']) expect(seed).toContain(`await node('${id}'`);
+    expect(seed).toContain("db.doc('cards/alice-draft')");
+    expect(seed).toContain("thoughtCore: '還沒寫完的清晨'");
+    for (const id of ['rain-walk', 'letter', 'rich-story', 'alice-draft']) expect(flow + kept).toContain(`id: map-node-${id}`);
+    expect(flow).toContain('id: map-node-remove');
+    for (const words of ['回憶', '後來', '還沒寫完的清晨']) expect(flow).toContain(words);
+    // What the server is asked afterwards names the same cards and words.
+    const script = readFileSync(join(FLOWS, 'common/map-on-server.js'), 'utf8');
+    expect(script).toContain('/api/v1/me/thought-map');
+    for (const words of ['雨天的回憶 Maestro', '晴天 Maestro', '那年以後']) {
+      expect(flow).toContain(words);
+      expect(kept).toContain(words);
+      expect(script).toContain(words);
+    }
+  });
+
+  it('draft-offline: the writer’s title, its save states, the card box’s 私人卡 shelf, and the server asked for the words', () => {
+    const flow = read('draft-offline');
+    const s = zhTW.write.status;
+    for (const word of [zhTW.write.titlePlaceholder, s.saved, s.saving, zhTW.me.tabs.draft]) expect(flow).toContain(word);
+    expect(flowTags(flow)).toEqual(expect.arrayContaining(['writer', 'offline', 'android-only']));
+    // Nothing clears the app before it opens again: the relaunch keeps what the last launch left on the device.
+    const relaunch = readFileSync(join(FLOWS, 'common/relaunch.yaml'), 'utf8');
+    expect(relaunch).not.toContain('clearState: true');
+    expect(relaunch).not.toContain('clearKeychain');
+    expect(flow).toContain('file: common/relaunch.yaml');
+    expect(readFileSync(join(FLOWS, 'common/draft-on-server.js'), 'utf8')).toContain('/api/v1/me/cards?tab=draft');
   });
 
   it('sticker-breath: 貼圖 and the panel’s first sticker, the playing cell by its flow name', () => {

@@ -4,27 +4,36 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import com.resonance.design.AuthShell
-import com.resonance.design.ButtonVariant
-import com.resonance.design.OrganicButton
+import com.resonance.design.OrganicEmptyState
 import com.resonance.design.Toasts
+import com.resonance.design.generated.IconName
 import com.resonance.kit.l10n.L10n
 
 /**
  * This build is below client-config's `minBuild.android` (Phase 2): the service no longer takes
- * it, so the app shows only this — the pen-name step's shell (the lockup, the sheet), the reason,
- * and the way to the store. No way past it: what is behind it would fail. The twin of iOS's
- * UpdateRequiredView.
+ * it, so the app shows only this — the empty state's pieces on the paper (its mark, the title, the
+ * line saying why, the solid button to the store), nothing behind it to reach: what is behind it
+ * would fail. Drawn as iOS's UpdateRequiredScreen is (the same mark, seed and words; the owner,
+ * 2026-11-21, on the two apps' first screenshots side by side: 「使用 ios 好了」) — it was the
+ * pen-name step's shell before, with the lockup and a full-width button.
  */
 @Composable
 fun UpdateScreen() {
     val context = LocalContext.current
-    AuthShell {
-        SheetHeading(L10n.App.Update.title, L10n.App.Update.body)
-        OrganicButton(L10n.App.Update.action, variant = ButtonVariant.Solid, block = true) { openStoreListing(context) }
-    }
+    OrganicEmptyState(
+        message = L10n.App.Update.body,
+        actionTitle = L10n.App.Update.action,
+        onAction = { openStoreListing(context) },
+        title = L10n.App.Update.title,
+        icon = IconName.ArrowUp,
+        seed = 41.0,
+        fill = true,
+        modifier = Modifier.fillMaxSize(),
+    )
 }
 
 /**
