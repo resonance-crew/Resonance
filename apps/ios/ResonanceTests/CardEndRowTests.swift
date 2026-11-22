@@ -28,8 +28,8 @@ extension Fixture {
 }
 
 /// The end of someone else's story (round 26 §U1): the three kinds of feedback in one capsule — 共振 · 寄小紙條 · 用卡片回應
-/// — every one tonal at rest; the tap a switch that fills once on and flips back when the server says no; row 2
-/// under it, always 44 tall, so the reader's face comes in without moving the page.
+/// — every one tonal at rest; the tap a switch that fills once on and flips back when the server says no; the faces'
+/// line over it (round 30), always 44 tall, so the reader's face comes in without moving the capsule.
 @MainActor @Suite(.serialized) struct CardEndRowTests {
     @Test func theCapsuleSaysTheThreeKindsOfFeedbackShorterWhenItMust() {
         let zh = EndRowLabels.candidates(language: .zhTW, reply: .answer, column: 350)
@@ -121,6 +121,47 @@ extension Fixture {
             .sizeThatFits(in: CGSize(width: 400, height: 400))
         #expect(abs(empty.height - 44) < 0.5)
         #expect(abs(three.height - 44) < 0.5)
+    }
+
+    /// Round 30 §S1 (the owner: 「把共振这个地方已经共振的这些使用者头像，把它移到共振按钮的上方」, 「照 C 做」): the faces' line
+    /// stands directly on the capsule's row — 0 between them — and the note opens 12 under the capsule; signed out there
+    /// is no faces' line and the capsule is the row's top.
+    @Test func theFacesLineStandsDirectlyOverTheCapsuleAndTheNoteTwelveUnderIt() throws {
+        func stack(facesLine: Bool) -> some View {
+            EndRowStack(facesLine: facesLine) {
+                EndRowTwo { Color(red: 1, green: 0, blue: 0).frame(width: 60, height: FaceStack.size) }
+            } capsuleRow: {
+                Color(red: 0, green: 0, blue: 1).frame(width: 300, height: 44)
+            } below: {
+                Color(red: 0, green: 1, blue: 0).frame(width: 300, height: 48).padding(.top, NoteInPlace.gapAbove)
+            }
+            .frame(width: 360)
+            .background(Tokens.cream)
+        }
+        func rows(_ drawn: DrawnPixels, _ matches: ([Int]) -> Bool) -> ClosedRange<CGFloat>? {
+            let ys = (0 ..< drawn.height).filter { y in (0 ..< drawn.width).contains { matches(drawn.rgb($0, y)) } }
+            guard let first = ys.first, let last = ys.last else { return nil }
+            return CGFloat(first) / 2 ... CGFloat(last + 1) / 2
+        }
+        let red = { (c: [Int]) in c[0] > 200 && c[1] < 60 && c[2] < 60 }
+        let blue = { (c: [Int]) in c[2] > 200 && c[0] < 60 && c[1] < 60 }
+        let green = { (c: [Int]) in c[1] > 200 && c[0] < 60 && c[2] < 60 }
+        let signedIn = try DrawnPixels(stack(facesLine: true))
+        let faces = try #require(rows(signedIn, red)), capsule = try #require(rows(signedIn, blue)),
+            note = try #require(rows(signedIn, green))
+        // The faces centred in their 44 line, the line's foot the capsule's top: tags → 16 → faces 28 centred → capsule.
+        #expect(abs(faces.lowerBound - (TapFaces.rowHeight - FaceStack.size) / 2) < 0.5, "\(faces)")
+        #expect(abs(capsule.lowerBound - TapFaces.rowHeight) < 0.5, "\(capsule)")
+        #expect(abs(capsule.lowerBound - faces.upperBound - 8) < 0.5, "8 from the faces to the capsule: \(faces) \(capsule)")
+        #expect(abs(note.lowerBound - capsule.upperBound - 12) < 0.5, "\(capsule) \(note)")
+        // Signed out: no faces' line, the capsule at the top.
+        let signedOut = try DrawnPixels(stack(facesLine: false))
+        #expect(rows(signedOut, red) == nil)
+        #expect(rows(signedOut, blue)?.lowerBound == 0)
+        // The air: the faces' line 16 under the tags (or the story), the capsule 40 when signed out, 40 to what follows.
+        #expect(EndRowAir.above(facesLine: true) == 16 && EndRowAir.above(facesLine: false) == 40 && EndRowAir.below == 40)
+        // So with no face yet the capsule stands 16 + 44 = 60 under the tags; the end row starts 24 higher than it did.
+        #expect(EndRowAir.above(facesLine: true) + TapFaces.rowHeight == 60)
     }
 
     /// A window too narrow for one line splits the capsule: its second line (寄小紙條 · 寫卡片) wears the web's and

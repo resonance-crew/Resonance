@@ -74,6 +74,16 @@ import Testing
         // No tags: the story's foot is the ceiling.
         let bare = ReadingSceneBuilder.scene(marks.filter { $0.role != .ceiling }, width: 402, height: 874)
         #expect(bare.respondCeiling == 1340)
+        // Round 30: the faces' line over the bar. At its start, far from a one-line capsule's peek (362 − 48 = 334 in):
+        // the tags stay the ceiling.
+        let faces = ReadingMark(.respondFaces, CGRect(x: 26, y: 1386, width: 96, height: 44))
+        #expect(ReadingSceneBuilder.scene(marks + [faces], width: 402, height: 874).respondCeiling == 1390)
+        // A capsule in two lines: its first bar is 共振 alone (90 wide), whose peek (at 20 + 90 − 22.5) would rise in
+        // front of the faces — the faces' foot (the bar's top) is the ceiling, so none rises there.
+        let short = marks.filter { $0.role != .respond } + [ReadingMark(.respond, CGRect(x: 20, y: 1430, width: 90, height: 44)), faces]
+        #expect(ReadingSceneBuilder.scene(short, width: 402, height: 874).respondCeiling == 1430)
+        // No faces yet on that line: the tags', as before.
+        #expect(ReadingSceneBuilder.scene(short.filter { $0.role != .respondFaces }, width: 402, height: 874).respondCeiling == 1390)
         // A rail beside the story: said, so its margin has no places.
         let railed = ReadingSceneBuilder.scene(marks, width: 1180, height: 820, rail: CGRect(x: 900, y: 0, width: 220, height: 1))
         #expect(railed.rail != nil)

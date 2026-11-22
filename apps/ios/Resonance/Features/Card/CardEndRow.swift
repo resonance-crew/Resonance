@@ -6,18 +6,19 @@ import SwiftUI
 /// The end of someone else's story (round 26 §U1, the web's CardViewerActions; the owner: 「三種回饋的操作，第一種是按共振的
 /// 按鈕…第二種是用小紙條回應它，第三種是用自己的卡片跟它連接…那其他被動的就包括分享和收藏」):
 ///
-/// 1. **The capsule**, the three kinds of feedback, all tonal at rest — 共振 (the tap: a switch, solid with
-///    `wave-pair` once on, its words unchanged), 寄小紙條 (opens the note in place under row 2, its wash held while open, never
-///    a dialog), 用卡片回應 (the picker: write a card in answer or pick one; 修改 with a draft, 已回應 once published).
-///    The puppets measure this bar alone (`.readingMark(.respond)`): row 2 and the field never move their ground.
-///    Wide (the capsule at its own width: iPad, the Mac), 收藏 ends the capsule's row at the column's end, the
-///    byline's ⋯'s right edge (round 28 §S2; ``EndRowCapsuleRow``); a phone's 收藏 ends the tags' row above it
+/// 1. **The faces' line** (round 30 §S1: it stood under the capsule until then), directly above the capsule's row, 44
+///    tall: the faces of who resonated (the reader first, then their connections — no words, no number) at its start,
+///    over 共振, and nothing at its end. For a signed-in reader it is always there, so their face slides in without
+///    moving the capsule; it starts ``EndRowAir/facesLineAbove`` under the tags' row (or the story).
+/// 2. **The capsule**, the three kinds of feedback, all tonal at rest — 共振 (the tap: a switch, solid with
+///    `wave-pair` once on, its words unchanged), 寄小紙條 (opens the note in place 12 under the capsule, its wash held
+///    while open, never a dialog), 用卡片回應 (the picker: write a card in answer or pick one; 修改 with a draft, 已回應
+///    once published). The puppets measure this bar alone (`.readingMark(.respond)`): the faces and the field never
+///    move their ground. Wide (the capsule at its own width: iPad, the Mac), 收藏 ends the capsule's row at the column's
+///    end, the byline's ⋯'s right edge (round 28 §S2; ``EndRowCapsuleRow``); a phone's 收藏 ends the tags' row above
 ///    instead (§S3: ``EndRowTagsRow``, drawn by the page). Share and ⋯ stay the bar's or the byline's.
-/// 2. **Row 2**, directly under it, 44 tall: the faces of who resonated (the reader first, then their connections —
-///    no words, no number) at its start, under 共振, and nothing at its end (§S4). The row is always there, so the
-///    reader's face slides in without moving the page.
-/// 3. **The note field** when 寄小紙條 opened it (``NoteField``) — or, while three notes wait for the author's answer,
-///    one muted line in its place.
+/// 3. **The note field** when 寄小紙條 opened it (``NoteField``), spanning the story's column — or, while three notes
+///    wait for the author's answer, one muted line in its place.
 ///
 /// Tapping 共振 fills the segment and slides the face in; a failure flips it back with 「沒送出去，再試一次」. On a card
 /// that offers passages (round 27 §U1), a press that turned it on opens ``TapPassages`` 240 ms later — the tap never
@@ -62,7 +63,7 @@ struct CardEndRow: View {
     @State private var tapSend: Task<Bool?, Never>?
     /// The screenshots' `-visualTap picked`: the dialog held open on its pick, nothing sent.
     @State private var passagesHeld = false
-    /// The story's column, which a wide window's note field spans up to 680.
+    /// The story's column, which the capsule's words are weighed in (the note field spans it at every width).
     @State private var column: CGFloat = 0
 
     init(detail: CardDetail, bookmark: CardBookmark, script: StoryScript = .cjk, translated: Bool = false,
@@ -84,7 +85,10 @@ struct CardEndRow: View {
     static let secondLineSeed: Double = 73
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        // The faces' line directly on the capsule's row (round 30 §S1: it stood under it), the note 12 under the capsule.
+        EndRowStack(facesLine: session.uid != nil) {
+            rowTwo
+        } capsuleRow: {
             // A phone spreads the capsule across the column; wider, it keeps its own width and 收藏 ends its row.
             switch EndRowPlacement.place(compact: compact) {
             case .tagsRow:
@@ -96,7 +100,7 @@ struct CardEndRow: View {
                     CardBookmarkButton(bookmark: bookmark, cardId: cardId)
                 }
             }
-            rowTwo
+        } below: {
             if lookup.tapFailed {
                 Text(L10n.Native.loadError).font(AppFonts.body(13)).foregroundStyle(Tokens.textMuted)
             }
@@ -374,6 +378,8 @@ struct CardEndRow: View {
                 // With passages on offer, the reader's own face alone is a button too: their row picks one (§U3).
                 TapFaces(faces: tap.shownFaces, more: tap.showsMore, spoken: tap.spoken(viewer: session.uid),
                          isButton: !tap.onlyMine(viewer: session.uid) || (tap.on && offersPassages)) { listOpen = true }
+                    // Over the capsule now: a puppet peeking over a short bar near them never rises in front of them.
+                    .readingMark(.respondFaces)
             }
         }
     }
@@ -395,7 +401,9 @@ struct CardEndRow: View {
                 NoteWaitLine()
             }
         }
-        .frame(maxWidth: NoteInPlace.width(compact: compact, column: column) ?? .infinity, alignment: .leading)
+        // The story's column at every width (round 30 §S3: no 680 cap): wide, its send ends on the column's edge, where
+        // 收藏's glyph box and the byline's ⋯ end.
+        .frame(maxWidth: .infinity, alignment: .leading)
         // 12 above the keyboard once it has risen under the field (the page scrolls; nothing floats), with nothing added
         // under it in the layout: the page's 40 is all there is to the next section.
         .noteScrollTarget(Self.noteBlock)
@@ -444,8 +452,42 @@ nonisolated enum RowTwo {
     static var glyphEnd: CGFloat { (touch - glyph) / 2 }
 }
 
-/// Row 2 (§U1.2, round 28 §S4), laid out alone: 44 tall, `faces` at its start on their line ``RowTwo/facesLine`` in,
-/// nothing at its end. Always there, faces or none, so a face coming in never moves the page.
+/// The story's end row in its order (round 30 §S1, §S2; the owner: 「把共振这个地方已经共振的这些使用者头像，把它移到共振按钮的
+/// 上方」): the faces' line (``EndRowTwo``) for a signed-in reader, directly on the capsule's row (0 between them), then
+/// what stands under the capsule — the note's block, 12 under it (``NoteInPlace/gapAbove``). The eye's order is the
+/// keyboard's and VoiceOver's: the faces, 共振 · 寄小紙條 · 用卡片回應, (wide) 收藏, the field.
+struct EndRowStack<Faces: View, CapsuleRow: View, Below: View>: View {
+    /// Signed in: the line is there, faces or none, so a face coming in never moves the capsule. Signed out it isn't.
+    let facesLine: Bool
+    @ViewBuilder let faces: Faces
+    @ViewBuilder let capsuleRow: CapsuleRow
+    @ViewBuilder let below: Below
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if facesLine { faces }
+            capsuleRow
+            below
+        }
+    }
+}
+
+/// The air around the end row (round 30 §S1): its faces' line starts 16 under what stands above it (the tags' row, or
+/// the story when there is none) where the capsule stood 40 under it — so with no face yet the capsule is 16 + 44 = 60
+/// under the tags; signed out (no faces' line) the capsule keeps its 40. The next section follows 40 under the capsule
+/// (or the open note).
+nonisolated enum EndRowAir {
+    static let facesLineAbove: CGFloat = 16
+    static let capsuleAbove: CGFloat = 40
+    static let below: CGFloat = 40
+
+    /// What stands between the row above and the end row.
+    static func above(facesLine: Bool) -> CGFloat { facesLine ? facesLineAbove : capsuleAbove }
+}
+
+/// Row 2 (§U1.2, round 28 §S4) — since round 30 the faces' line above the capsule — laid out alone: 44 tall, `faces`
+/// at its start on their line ``RowTwo/facesLine`` in, nothing at its end. Always there for a signed-in reader, faces or
+/// none, so a face coming in never moves the page.
 struct EndRowTwo<Faces: View>: View {
     @ViewBuilder let faces: Faces
 

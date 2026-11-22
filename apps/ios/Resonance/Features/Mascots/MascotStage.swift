@@ -663,7 +663,7 @@ enum ReadingSceneBuilder {
 
         let column = rects(.column).first
         let respond = rects(.respond).first
-        let ceiling = rects(.ceiling).map(\.maxY).max() ?? column?.maxY
+        let ceiling = respondCeiling(over: respond, ceilings: rects(.ceiling), faces: rects(.respondFaces)) ?? column?.maxY
         return ReadingScene(
             width: Double(width), height: Double(height),
             cards: cards.isEmpty ? nil : cards,
@@ -676,6 +676,23 @@ enum ReadingSceneBuilder {
             respondCeiling: respond == nil ? nil : ceiling.map { Double($0) },
             more: rects(.more).first.map(SceneRect.init),
             end: rects(.end).first.map(SceneRect.init))
+    }
+
+    /// How far a puppet's body reaches either side of where it peeks over the response bar, at most (a generous half
+    /// width: the scene's peek stands 48 in from the bar's end).
+    static let peekReach: CGFloat = 48
+
+    /// The response bar's ceiling: the foot of what stands above it (its tags), and — since round 30 put the faces'
+    /// line right over the bar — the faces' foot when they stand within ``peekReach`` of where the scene's peek rises
+    /// (`right(bar) − min(48, w / 4)`, scene.ts): the bar's top then, so no peek rises in front of them. Only a short
+    /// bar brings them that near — 共振 alone, the first line of a capsule in two; a capsule's one line ends far from them.
+    static func respondCeiling(over bar: CGRect?, ceilings: [CGRect], faces: [CGRect]) -> CGFloat? {
+        var feet = ceilings.map(\.maxY)
+        if let bar {
+            let peek = bar.maxX - min(48, bar.width / 4)
+            feet += faces.filter { $0.minX < peek + peekReach && $0.maxX > peek - peekReach }.map(\.maxY)
+        }
+        return feet.max()
     }
 
     /// A card laid out at `frame` as its line is drawn: the drawn line's extent across (its wobble swings past
