@@ -148,27 +148,43 @@ describe('round-build against stub agents', () => {
 });
 
 describe('round-verify against stub agents', () => {
-  it('captures one platform at a time, reviews what changed, fixes, retakes, records', async () => {
+  it('takes every platform in one run, reviews each platform’s changes, fixes, retakes in one run, records', async () => {
     const order: string[] = [];
     const { result, calls } = await walk(
       'round-verify.js',
-      { ...ARGS, slices: { web: { only: 'thread', device: 'phone' }, android: { only: 'thread' } } },
+      { ...ARGS, slices: { web: { only: 'thread', device: 'phone' }, android: { only: 'thread,card', device: 'phone,tablet' }, ios: { only: 'card' } } },
       (label) => {
         order.push(label);
         if (label === 'preflight') return { ok: true, reason: '', worktree: '/d/Resonance-r25', branch: 'r25/base', head: 'h', visualEnv: 'VISUAL_AUTH_PORT=9459' };
-        if (label === 'capture:web') return { run: 'r1', exit: 1, verdictLine: 'Visual FAIL r1', summaryPath: 's', changed: ['web/phone/thread@light-zh-TW.png'], newCaptures: [], problems: [], awaiting: [] };
-        if (label === 'capture:android') return { run: 'r2', exit: 0, verdictLine: 'Visual PASS r2', summaryPath: 's', changed: [], newCaptures: [], problems: [], awaiting: [] };
+        if (label === 'capture')
+          return {
+            run: 'r1', exit: 1, verdictLine: 'Visual FAIL r1', summaryPath: 's',
+            changed: ['web/phone/thread@light-zh-TW.png', 'android/tablet/card@light-zh-TW.png'], newCaptures: [], problems: [], awaiting: [],
+          };
         if (label === 'look:web') return { looked: [], issues: [{ capture: 'c', verdict: 'broken', what: 'w', where: '1,1', likely_cause: 'x', layer: 'app' }], fine: [], summary: '' };
         if (label === 'look:web:refute') return { looked: [], issues: [{ capture: 'c', verdict: 'broken', what: 'w', where: '1,1', likely_cause: 'x', layer: 'app' }], fine: [], summary: '' };
+        if (label === 'look:android') return { looked: [], issues: [{ capture: 'd', verdict: 'off-spec', what: 'w', where: '2,2', likely_cause: 'y', layer: 'app' }], fine: [], summary: '' };
+        if (label === 'look:android:refute') return { looked: [], issues: [{ capture: 'd', verdict: 'off-spec', what: 'w', where: '2,2', likely_cause: 'y', layer: 'app' }], fine: [], summary: '' };
         if (label === 'fix:web') return { commits: [{ hash: 'f', subject: 'fix' }], notReal: [], tests: [], screens: ['thread'], notes: '' };
-        if (label === 'retake:web') return { run: 'r3', exit: 0, verdictLine: 'Visual PASS r3', summaryPath: 's', changed: [], newCaptures: [], problems: [], awaiting: [] };
+        if (label === 'fix:android') return { commits: [{ hash: 'g', subject: 'fix' }], notReal: [], tests: [], screens: ['card'], notes: '' };
+        if (label === 'retake') return { run: 'r2', exit: 0, verdictLine: 'Visual PASS r2', summaryPath: 's', changed: [], newCaptures: [], problems: [], awaiting: [] };
         if (label === 'record') return 'written';
         throw new Error(`unexpected agent ${label}`);
       },
     );
-    expect(order.indexOf('capture:web')).toBeLessThan(order.indexOf('capture:android'));
+    // One capture for the three platforms, each with its own slice, and nothing for a platform that had no change.
+    expect(order.filter((l) => l === 'capture')).toHaveLength(1);
+    const cmd = calls.find((c) => c.opts.label === 'capture')!.prompt;
+    expect(cmd).toContain('npm run visual -- capture web ios android --web-only thread --web-device phone --ios-only card --android-only thread,card --android-device phone,tablet');
+    expect(order).not.toContain('look:ios');
+    // Both fixers before one retake of both platforms' screens.
+    expect(order.indexOf('fix:android')).toBeLessThan(order.indexOf('retake'));
+    expect(order.filter((l) => l.startsWith('retake'))).toEqual(['retake']);
+    expect(calls.find((c) => c.opts.label === 'retake')!.prompt).toContain('capture web android --web-only thread --web-device phone --android-only card --android-device phone,tablet');
     expect(result.openIssues).toEqual([]);
     expect(calls.find((c) => c.opts.label === 'look:web')!.opts.agentType).toBe('ui-reviewer');
-    expect(calls.find((c) => c.opts.label === 'record')!.prompt).toContain('accept --run <id>');
+    expect(calls.find((c) => c.opts.label === 'look:android')!.prompt).toContain('android/tablet/card@light-zh-TW.png');
+    expect(calls.find((c) => c.opts.label === 'look:android')!.prompt).not.toContain('web/phone/thread');
+    expect(calls.find((c) => c.opts.label === 'record')!.prompt).toContain('accept --runs <id>,<id>');
   });
 });

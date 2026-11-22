@@ -54,7 +54,7 @@ there, 24 locally); nobody read CI until the next day (`6534ba4c`).
 it is fixed and the run passes (`scripts/visual/README.md`, What fails a run). The owner looks at what
 it flagged and at the changes waiting for their OK. It closes the simulators and emulators it uses, so only one runs at a time and never while
 the owner is using one. A new picture becomes the baseline only on the owner's word
-(`npm run visual -- accept --run <id> --only … --reason "<their words>"`), never unasked; each accept
+(`npm run visual -- accept --run <id> --only … --reason "<their words>"`, or `--runs <id>,<id>` for several), never unasked; each accept
 is a row of [visual-accept-log.md](visual-accept-log.md), committed with it.
 
 ## 4. Builds

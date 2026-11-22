@@ -21,6 +21,8 @@ npm run visual -- review --run <id> --gemini # the Gemini API instead (GEMINI_AP
 npm run visual -- compare --run <id>         # redraw the report (after verdicts came in another way)
 npm run visual -- accept --run <id> --reason "<the owner's words>"   # the run becomes the baseline
 npm run visual -- accept --run <id> --only card,web/phone/home@dark-zh-TW.png --reason "…"   # only these screens / captures
+npm run visual -- accept --runs <id>,<id> --only card --reason "…"   # several runs at once (a retake named after the run it retakes)
+npm run visual -- capture web ios android --web-only card --web-device phone --ios-only card,thread --android-device phone   # one run, each platform its own slice
 ```
 
 Every command prints `Run <id>: …`; pass that id with `--run` (the default, `visual/latest`, is
@@ -274,6 +276,10 @@ npm run visual -- accept --run <id> --only card,home --reason "owner, in chat: t
   re-rendered, owner's OK in chat`).
 - An `--only` that matches no capture of the run accepts nothing either (exit code 1), rather than
   quietly doing nothing.
+- `--runs a,b,c` accepts several runs as one (accept.ts): all are checked first — each exists and gives
+  at least one capture — or nothing is accepted. A capture two of them took comes from the one named
+  last (a retake after the run it retakes), and the other is said. Each run gets its own log row and
+  each capture its own run's commit in `meta.json`. `--run <id>` (or none: the latest) works as before.
 - Each accept appends one row to [docs/visual-accept-log.md](../../docs/visual-accept-log.md), which
   is in git (`visual/` isn't): the time (UTC), the run and the commit it captured (`(dirty)` when the
   tree had changes), the platforms, what `--only` named (*all* for the whole run), how many captures
@@ -495,7 +501,10 @@ reuses the last build without looking. The builds run beside
 the captures, never blocking them: the APK and the simulator app start building as the run starts,
 while the web and the Mac app are captured, and the two Xcode builds (Mac, simulator) take turns, as
 they share the project and Swift's package caches. Phases (`PHASES` in `run.ts`): web + Mac, then
-Android's phone and tablet together, then the iPhone and iPad together (`VISUAL_PARALLEL=0` runs a
+Android's phone and tablet together, then the iPhone and iPad together — in one run whatever slices the
+platforms take: `--<platform>-only a,b` and `--<platform>-device x,y` give a platform its own screens and
+devices (`--only` / `--device` are the others'), so a slice of four platforms starts one stack, builds the
+apps beside the first phase and leaves no gap between platforms (round-verify takes its slices this way) (`VISUAL_PARALLEL=0` runs a
 platform's devices one at a time, for a machine short of memory); an AVD or simulator this run
 booted is shut down when its screens are done (`VISUAL_KEEP_DEVICES=1` keeps the simulators up), and
 nothing else ever is (One run at a time, and the owner's devices).

@@ -108,7 +108,7 @@ it), the record writer and capture runner (already sonnet; haiku likely enough),
 | captures per reviewer | 40, the rest listed in the record | round-verify `MAX_CAPTURES_PER_REVIEW` |
 | nits | 3 per review | the reviewers' definitions and the workflows |
 | turns | lanes 300, critic and post-merge reviewer 80, ui-reviewer 60 | each agent's `maxTurns` |
-| captures | one platform at a time; round-verify stops if another run is going | round-verify |
+| captures | every platform's slice in one run (`--<platform>-only` / `--<platform>-device`), a fix round's retake in one more; round-verify stops if another run is going | round-verify |
 
 Before trusting the defaults, look at `/usage` after the first round: how much went to reviewers versus lanes.
 

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { PNG } from 'pngjs';
 import { afterEach, describe, expect, it } from 'vitest';
-import { compareCachePath, compareRun, type Result } from './compare';
+import { compareCachePath, compareRun, sliceOf, slicesOf, type Result } from './compare';
 import { compareImages } from './diff';
 import { decodePng } from './judge';
 import { ignorePath, listPngs, readJson, type Rect } from './util';
@@ -191,3 +191,27 @@ describe('the comparison is the same judgement as before (libvips, worker thread
   });
 });
 
+describe('one run, each platform its own slice', () => {
+  it('reads --<platform>-only and --<platform>-device, and refuses one for a platform the run doesn’t take', () => {
+    const args = ['web', 'android', '--only', 'home', '--web-device', 'phone,desktop', '--android-only', 'card,thread', '--android-device', 'phone,tablet'];
+    expect(slicesOf(args, ['web', 'android'])).toEqual({ web: { only: [], devices: ['phone', 'desktop'] }, android: { only: ['card', 'thread'], devices: ['phone', 'tablet'] } });
+    expect(() => slicesOf(['--ios-only', 'card'], ['web'])).toThrow(/--ios-only/);
+    const info = { only: ['home'], devices: [], slices: slicesOf(args, ['web', 'android']) };
+    expect(sliceOf(info, 'web')).toEqual({ only: ['home'], devices: ['phone', 'desktop'] });
+    expect(sliceOf(info, 'android')).toEqual({ only: ['card', 'thread'], devices: ['phone', 'tablet'] });
+    expect(sliceOf({ only: [], devices: [] }, 'ios')).toEqual({ only: [], devices: [] });
+  });
+
+  it('counts a baseline capture missing only inside the slice of its own platform', async () => {
+    const { runDir, baselineDir } = world();
+    writeFileSync(
+      join(runDir, 'run.json'),
+      JSON.stringify({ id: 'r', commit: 'c', dirty: false, startedAt: '', platforms: ['web', 'android'], only: [], devices: [], unsettled: [], slices: { web: { only: ['home'], devices: ['phone'] }, android: { only: ['card'], devices: ['tablet'] } } }),
+    );
+    for (const key of ['web/phone/home@light-zh-TW.png', 'web/desktop/home@light-zh-TW.png', 'web/phone/card@light-zh-TW.png', 'android/tablet/card@light-zh-TW.png', 'android/phone/card@light-zh-TW.png', 'android/tablet/home@light-zh-TW.png']) {
+      put(baselineDir, key, page(4));
+    }
+    const missing = (await cmp(runDir, baselineDir)).filter((r) => r.status === 'missing').map((r) => r.key);
+    expect(missing.sort()).toEqual(['android/tablet/card@light-zh-TW.png', 'web/phone/home@light-zh-TW.png']);
+  });
+});

@@ -48,7 +48,43 @@ export type RunInfo = {
   devicesLost?: string[];
   /** Why the run was ended before its end (watchdog.ts, or its lock taken over): it fails. */
   aborted?: string;
+  /**
+   * A platform's own screens and devices, where the run named them (`--ios-only card --android-device phone,tablet`):
+   * one run takes each platform's slice, and `only` / `devices` are the rest's.
+   */
+  slices?: Partial<Record<Platform, Slice>>;
 };
+
+export type Slice = { only: string[]; devices: string[] };
+
+const PLATFORM_IDS: Platform[] = ['web', 'android', 'ios', 'mac'];
+
+/**
+ * The platforms' own slices a command line names (`--ios-only card`, `--android-device phone,tablet`); one naming a
+ * platform the run doesn't take is an error (a slice that would silently be skipped).
+ */
+export function slicesOf(args: readonly string[], platforms: readonly Platform[]): Partial<Record<Platform, Slice>> {
+  const value = (name: string) => {
+    const i = args.indexOf(`--${name}`);
+    const v = i >= 0 ? args[i + 1] : undefined;
+    return v && !v.startsWith('--') ? v.split(',').map((s) => s.trim()).filter(Boolean) : [];
+  };
+  const out: Partial<Record<Platform, Slice>> = {};
+  for (const p of PLATFORM_IDS) {
+    const only = value(`${p}-only`);
+    const devices = value(`${p}-device`);
+    if (!only.length && !devices.length) continue;
+    if (!platforms.includes(p)) throw new Error(`--${p}-only / --${p}-device name a platform this run doesn't take (${platforms.join(', ')})`);
+    out[p] = { only, devices };
+  }
+  return out;
+}
+
+/** The screens and devices a run took on `platform`: its own slice where it had one, else the run's. */
+export function sliceOf(info: Pick<RunInfo, 'only' | 'devices' | 'slices'> | null | undefined, platform: Platform): Slice {
+  const own = info?.slices?.[platform];
+  return { only: own?.only?.length ? own.only : (info?.only ?? []), devices: own?.devices?.length ? own.devices : (info?.devices ?? []) };
+}
 
 /** The comparison's own code: a change to how pictures are judged judges every kept result again. */
 let codeStamp: string | null = null;
@@ -117,13 +153,14 @@ export async function compareRun(runDir: string, { baselineDir = BASELINE_DIR, w
   const taken = new Set(captured);
   const inScope = (key: string) => {
     const [platform, device, name] = key.split('/');
+    const { only, devices } = sliceOf(info, platform as Platform);
     return (
       platforms.has(platform as Platform) &&
-      (!info?.devices?.length || info.devices.includes(device)) &&
-      (!info?.only?.length || info.only.includes(name.split('@')[0])) &&
+      (!devices.length || devices.includes(device)) &&
+      (!only.length || only.includes(name.split('@')[0])) &&
       // An extended run's captures in the baseline aren't missing from a release run (variants.ts), and a device
       // named on its own (--device phone-large) is in scope whatever the set.
-      (inSet(key, info?.variants ?? 'release') || !!info?.devices?.includes(device))
+      (inSet(key, info?.variants ?? 'release') || devices.includes(device))
     );
   };
   for (const key of baseline) {

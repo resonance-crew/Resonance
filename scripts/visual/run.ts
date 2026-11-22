@@ -4,6 +4,8 @@
  * See scripts/visual/README.md.
  *
  *   capture [web android ios mac] [--only home,card] [--device phone] [--variants release|extended] [--no-stack] [--flows] [--review] [--wait]
+ *            --<platform>-only a,b / --<platform>-device x,y: that platform's own slice in the same run (round-verify takes
+ *            every platform's slice in one run: one stack, the builds beside the first phase, no gaps between runs)
  *            --variants extended: the release set plus the device states and variants of variants.ts (large text,
  *            the tablets turned and in the dark, a narrow Mac window, the composer's extra states)
  *            --flows: the Maestro flows on Android then iOS once the captures are done (stack still up);
@@ -15,16 +17,18 @@
  *   compare  [--run <id>]          recompute the comparison and the report
  *   review   [--run <id>] [--agy | --gemini] [--all]   --all: unchanged captures too
  *   plan     [--variants release|extended]   how many captures each set takes, by platform, and roughly how long
- *   accept   --reason "<the owner's words>" [--run <id>] [--only <key|screen>,…]
- *            refused without --reason; each accept is a row of docs/visual-accept-log.md (acceptLog.ts)
+ *   accept   --reason "<the owner's words>" [--run <id> | --runs <id>,<id>,…] [--only <key|screen>,…]
+ *            refused without --reason; each run accepted is a row of docs/visual-accept-log.md (acceptLog.ts);
+ *            with --runs, a capture several runs took comes from the one named last (accept.ts)
  *
  * capture, compare and review end with the run's verdict — `Visual PASS|FAIL <id>: …` as the last
  * line, summary.json beside the report, exit code 1 on a FAIL (gate.ts says what fails a run).
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { acceptReason, appendAcceptLog, REASON_REQUIRED } from './acceptLog';
-import { compareRun, type RunInfo } from './compare';
+import { acceptReason, REASON_REQUIRED } from './acceptLog';
+import { applyAccept, planAccept } from './accept';
+import { compareRun, sliceOf, slicesOf, type RunInfo } from './compare';
 import { describe, foreign, lostDevices, runningDevices, type RunningDevice } from './devices';
 import { gateLines, judgeRun } from './gate';
 import { LockBusy, acquire, resourcesFor, type Lock, type LockHolder } from './lock';
@@ -35,7 +39,6 @@ import { BASELINE_DIR, PORTS, RUNS_DIR, VISUAL_DIR, git, ignorePath, listPngs, r
 import type { Platform } from './screens';
 import { DEVICE_STATES, EXTRA_VARIANTS, VARIANT_SETS, estimate, variantSetOf } from './variants';
 import { watchdog } from './watchdog';
-import { nextMeta, type BaselineMeta } from './baselineMeta';
 import type { Result } from './compare';
 
 /** Every platform, in the order the report lists them. */
@@ -120,6 +123,8 @@ async function capture(args: string[]) {
     retaken: [],
     variants: set,
   };
+  const slices = slicesOf(args, platforms);
+  if (Object.keys(slices).length) info.slices = slices;
   writeJson(join(runDir, 'run.json'), info);
   let stack: Stack | undefined;
   const dog = watchdog((why) => abort(why));
@@ -161,7 +166,8 @@ async function capture(args: string[]) {
       const here = phase.filter((p) => platforms.includes(p));
       if (!here.length) continue;
       say(`\n== ${here.join(' + ')}`);
-      const unsettled = await Promise.all(here.map(async (platform) => (await capturer(platform))(ctx)));
+      // Each platform with its own slice (--ios-only …), else the run's.
+      const unsettled = await Promise.all(here.map(async (platform) => (await capturer(platform))({ ...ctx, ...sliceOf(info, platform) })));
       info.unsettled.push(...unsettled.flat());
       writeJson(join(runDir, 'run.json'), info);
     }
@@ -241,8 +247,9 @@ async function review(runDir: string, args: string[], given?: Result[]): Promise
 }
 
 /**
- * Copies a run's captures into the baseline: all of them, or the keys / screen ids given — only with
- * a `--reason` (the owner's words, or what the accept rests on), recorded in docs/visual-accept-log.md.
+ * Copies one run's captures, or several runs' (`--runs a,b`), into the baseline: all of them, or the keys / screen ids
+ * given — only with a `--reason` (the owner's words, or what the accept rests on), recorded in
+ * docs/visual-accept-log.md, one row per run (accept.ts). Each run's comparison is then judged again where it changed.
  */
 async function accept(args: string[]) {
   const reason = acceptReason(args);
@@ -251,37 +258,22 @@ async function accept(args: string[]) {
     process.exitCode = 1;
     return;
   }
-  const runDir = runDirOf(args);
-  const info = readJson<RunInfo>(join(runDir, 'run.json'))!;
   const only = list(flag(args, 'only'));
-  const keys = listPngs(runDir).filter((k) => !only.length || only.some((o) => k === o || k.split('/').pop()!.startsWith(`${o}@`)));
-  if (!keys.length) {
-    console.error(`Nothing in ${info.id} matches ${only.length ? `--only ${only.join(',')}` : 'the run'}: nothing was accepted.`);
+  const runs = list(flag(args, 'runs'));
+  const runDirs = runs.length ? runs.map((id) => join(RUNS_DIR, id)) : [runDirOf(args)];
+  const planned = planAccept(runDirs, only);
+  if ('error' in planned) {
+    console.error(planned.error);
     process.exitCode = 1;
     return;
   }
-  for (const key of keys) {
-    const to = join(BASELINE_DIR, key);
-    mkdirSync(join(to, '..'), { recursive: true });
-    writeFileSync(to, readFileSync(join(runDir, key)));
-    // The regions it asked the comparison to skip go with it (or a stale list goes).
-    const ignore = ignorePath(join(runDir, key));
-    if (existsSync(ignore)) writeFileSync(ignorePath(to), readFileSync(ignore));
-    else rmSync(ignorePath(to), { force: true });
+  for (const line of planned.replaced) log(`  not taken: ${line}`);
+  for (const { run, count } of applyAccept(planned.plans, { reason, only, baselineDir: BASELINE_DIR })) {
+    log(`Accepted ${count} capture(s) from ${run} into ${BASELINE_DIR}`);
   }
-  // Each capture keeps the commit it was accepted at, and the platform's commit is the oldest of them (baselineMeta.ts):
-  // an accept of a few screens no longer moves the start of the other screens' trailers.
-  const acceptedAt = new Date().toISOString();
-  const inBaseline = listPngs(BASELINE_DIR);
-  for (const platform of new Set(keys.map((k) => k.split('/')[0]))) {
-    const file = join(BASELINE_DIR, platform, 'meta.json');
-    const mine = (k: string) => k.startsWith(`${platform}/`);
-    writeJson(file, nextMeta(readJson<BaselineMeta>(file), keys.filter(mine), inBaseline.filter(mine), { commit: info.commit, run: info.id, acceptedAt, reason }));
-  }
-  appendAcceptLog({ at: new Date(), run: info.id, commit: info.commit, dirty: info.dirty, keys, only, reason });
-  log(`Accepted ${keys.length} capture(s) from ${info.id} into ${BASELINE_DIR}`);
   log(`Recorded in docs/visual-accept-log.md — commit it with the accept: git commit -- docs/visual-accept-log.md`);
-  await finish(runDir);
+  // Every named run compared again (only what the copies changed is judged again: compare.ts).
+  for (const dir of runDirs) await finish(dir);
 }
 
 /** What each variant set takes and costs (variants.ts), without taking anything. */
@@ -320,7 +312,7 @@ async function main() {
     case 'plan':
       return planOf(args);
     default:
-      log('Usage: npm run visual -- capture [web android ios mac] [--only ids] [--device ids] [--variants release|extended] [--no-stack] [--flows] [--review] [--wait] | compare | review [--agy | --gemini] [--all] | accept --reason "<the owner\'s words>" [--only keys]  (each with --run <id>) | plan [--variants …]');
+      log('Usage: npm run visual -- capture [web android ios mac] [--only ids] [--device ids] [--variants release|extended] [--no-stack] [--flows] [--review] [--wait] | compare | review [--agy | --gemini] [--all] | accept --reason "<the owner\'s words>" [--only keys] [--runs a,b]  (each with --run <id>) | plan [--variants …]');
       process.exit(command ? 1 : 0);
   }
 }
