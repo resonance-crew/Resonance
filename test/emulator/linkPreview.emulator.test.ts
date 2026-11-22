@@ -79,7 +79,9 @@ describe('unfurlMessage', () => {
     expect(image.searchParams.get('u')).toBe('https://cdn.example.com/cover.jpg');
     expect(verifyImageSignature(image.searchParams.get('u')!, image.searchParams.get('s')!)).toBe(true);
 
-    const { preview: _written, ...rest } = after;
+    // Besides the preview only its change time (editedAt), which an open thread's incremental read follows.
+    const { preview: _written, editedAt, ...rest } = after;
+    expect(editedAt).toBeInstanceOf(Timestamp);
     expect(rest).toEqual(before);
     expect((await db.doc('conversations/alice_bob').get()).data()).toEqual(conversationBefore);
   });
