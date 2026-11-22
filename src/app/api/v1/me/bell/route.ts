@@ -11,12 +11,13 @@ export const dynamic = 'force-dynamic';
  * the clients' `notifications` listener read), with the profiles of the
  * people they name. An unchanged page answers 304 to its ETag — before the
  * page is read, while the viewer's `bell` counter stands and the ETag is
- * under ten minutes old (lib/api/v1/signalTag).
+ * under ten minutes old (lib/api/v1/signalTag). `updatedAfter`: only the rows
+ * changed since an answer's `updatedCursor` (app/inbox listBellIn).
  */
 export const GET = withUser(async (user, req) => {
   const q = parse(BellQuery, Object.fromEntries(new URL(req.url).searchParams));
   const ctx = serverCtx();
   return signalledJson(req, { uid: user.id, topic: 'bell', realtime: ctx.realtime, now: ctx.clock.now() }, () =>
-    listBellIn(ctx, user.id, q.limit, q.pageToken),
+    listBellIn(ctx, user.id, q.limit, q.pageToken, { changes: q.changes === '1', updatedAfter: q.updatedAfter }),
   );
 });

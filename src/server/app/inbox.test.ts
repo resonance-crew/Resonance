@@ -140,6 +140,79 @@ describe('the touches every inbox write makes', () => {
   });
 });
 
+describe('the bell read by what changed (updatedAfter)', () => {
+  const seedBell = () =>
+    ctx.state.seed('notifications', {
+      n1: { userId: 'bob', type: 'note', payload: { fromUserId: 'alice' }, readAt: null, createdAt: Date.parse('2026-11-20T01:00:00Z') },
+      n2: { userId: 'bob', type: 'message', payload: { fromUserId: 'carol' }, readAt: null, createdAt: Date.parse('2026-11-20T02:00:00Z') },
+      n3: { userId: 'alice', type: 'message', payload: {}, readAt: null, createdAt: Date.parse('2026-11-20T02:00:00Z') },
+    });
+
+  it('a row read: that row alone, without its person; a new row: it and its person; nothing: nothing', async () => {
+    seedBell();
+    const first = await listBellIn(ctx, 'bob', 20, null, { changes: true });
+    expect(first.items.map((i) => i.id)).toEqual(['n2', 'n1']);
+    expect(first.updatedCursor).toBeTruthy();
+    expect(first.delta).toBeUndefined();
+
+    await markBellReadIn(ctx, 'bob', { ids: ['n1'] });
+    const read = await listBellIn(ctx, 'bob', 20, null, { updatedAfter: first.updatedCursor });
+    expect(read).toMatchObject({ delta: true, nextPageToken: null, people: [] });
+    expect(read.items.map((i) => [i.id, i.readAt !== null])).toEqual([['n1', true]]);
+
+    await sendNoteIn(ctx, 'alice', { cardId: 'named', text: 'This stayed with me', clientId: 'note7' });
+    const came = await listBellIn(ctx, 'bob', 20, null, { updatedAfter: read.updatedCursor });
+    expect(came.delta).toBe(true);
+    expect(came.items.map((i) => [i.type, i.payload.fromUserId])).toEqual([['note', 'alice']]);
+    expect(came.people.map((p) => p.handle)).toEqual(['Alice']);
+
+    const quiet = await listBellIn(ctx, 'bob', 20, null, { updatedAfter: came.updatedCursor });
+    expect(quiet).toMatchObject({ delta: true, items: [], people: [] });
+    // Only theirs: alice's own row never shows in bob's changes.
+    expect(quiet.items.some((i) => i.id === 'n3')).toBe(false);
+  });
+
+  it('a row that went, more changes than the page, a cursor ten minutes old: the newest page whole', async () => {
+    seedBell();
+    const first = await listBellIn(ctx, 'bob', 20, null, { changes: true });
+    // A row gone (an untapped reader's last row, a purged account's): the count says so.
+    ctx.state.delete('notifications', 'n2');
+    const gone = await listBellIn(ctx, 'bob', 20, null, { updatedAfter: first.updatedCursor });
+    expect(gone.delta).toBeUndefined();
+    expect(gone.items.map((i) => i.id)).toEqual(['n1']);
+    expect(gone.updatedCursor).toBeTruthy();
+
+    // Gone and one made since: the count alone would match, the new row tells the server one went.
+    const again = await listBellIn(ctx, 'bob', 20, null, { changes: true });
+    ctx.state.delete('notifications', 'n1');
+    await sendNoteIn(ctx, 'alice', { cardId: 'named', text: 'Hello again', clientId: 'note8' });
+    const swapped = await listBellIn(ctx, 'bob', 20, null, { updatedAfter: again.updatedCursor });
+    expect(swapped.delta).toBeUndefined();
+    expect(swapped.items).toHaveLength(1);
+
+    // Two read with a page of one: more may have changed.
+    const small = await listBellIn(ctx, 'bob', 1, null, { changes: true });
+    await sendNoteIn(ctx, 'alice', { cardId: 'named', text: 'A third', clientId: 'note9' });
+    await sendNoteIn(ctx, 'alice', { cardId: 'named', text: 'A fourth', clientId: 'note10' });
+    expect((await listBellIn(ctx, 'bob', 1, null, { updatedAfter: small.updatedCursor })).delta).toBeUndefined();
+
+    const old = await listBellIn(ctx, 'bob', 20, null, { changes: true });
+    ctx.clock.advance(10 * 60_000);
+    expect((await listBellIn(ctx, 'bob', 20, null, { updatedAfter: old.updatedCursor })).delta).toBeUndefined();
+    await expect(listBellIn(ctx, 'bob', 20, null, { updatedAfter: 'x' })).rejects.toMatchObject({ code: 'invalid_request' });
+  });
+
+  it("a read mark hands the reader's own bell counter on, touched before the answer", async () => {
+    seedBell();
+    const own = vi.fn();
+    await markBellReadIn(ctx, 'bob', { ids: ['n1'] }, own);
+    expect(own).toHaveBeenCalledWith({ bell: 1 });
+    const none = vi.fn();
+    await markBellReadIn(ctx, 'bob', { ids: ['n1'] }, none);
+    expect(none).not.toHaveBeenCalled();
+  });
+});
+
 describe('what the inbox reads', () => {
   it('lists the conversation for both, the other person as they are now, and 404s anyone else', async () => {
     connect();

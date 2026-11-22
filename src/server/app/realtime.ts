@@ -1,4 +1,5 @@
 import type { ServerCtx } from '@/server/ctx';
+import { otherInPair } from '@/server/domain/conversations';
 import { touchesFor, type SignalEvent } from '@/server/domain/realtime';
 
 /**
@@ -22,4 +23,16 @@ export async function signal(ctx: Pick<ServerCtx, 'realtime' | 'log' | 'later'>,
       ),
     'realtime',
   );
+}
+
+/**
+ * Both people of each of `uid`'s pairs (`connections/{pair}` ids) a committed write connected or disconnected:
+ * their connections lists changed (`graph`). After the commit, as {@link signal}.
+ */
+export function signalConnections(ctx: Pick<ServerCtx, 'realtime' | 'log' | 'later'>, uid: string, pairs: readonly string[]): Promise<void> {
+  const uids = pairs.flatMap((pair) => {
+    const other = otherInPair(pair, uid);
+    return other ? [uid, other] : [];
+  });
+  return uids.length ? signal(ctx, { kind: 'graph', uids }) : Promise.resolve();
 }

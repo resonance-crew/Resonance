@@ -1715,6 +1715,14 @@ export const BellPage = named(
     people: z.array(Author),
     /** Pass back as `pageToken` for the next page; null at the end. */
     nextPageToken: z.string().nullable(),
+    /**
+     * Asked with `updatedAfter`, and true: `items` are only the rows changed since that answer — made, read, rung
+     * again — of any age, each as it is now, and `people` those of the rows made since and of tap rows: merge them
+     * into the rows you hold. Absent: `items` are the newest page whole (the server couldn't say only what changed).
+     */
+    delta: z.boolean().optional(),
+    /** Asked for (`changes=1` or `updatedAfter`): pass as `updatedAfter` to hear only what changed after this answer. Null: read the newest page again. */
+    updatedCursor: z.string().nullable().optional(),
   }),
   'BellPage',
   'Your bell, newest first.',
@@ -1747,10 +1755,16 @@ export const ConversationsQuery = PageTokenQuery.extend({
     .pipe(z.array(z.string().regex(/^[A-Za-z0-9_-]{3,257}$/, 'Not a valid id.')).min(1).max(CONVERSATION_PAIRS_MAX))
     .optional(),
 });
-export const BellQuery = z.object({
-  pageToken: z.string().min(1).max(512).nullish(),
-  limit: z.coerce.number().int().min(1).max(BELL_PAGE_MAX).default(BELL_PAGE),
-});
+export const BellQuery = z
+  .object({
+    pageToken: z.string().min(1).max(512).nullish(),
+    limit: z.coerce.number().int().min(1).max(BELL_PAGE_MAX).default(BELL_PAGE),
+    /** An answer's `updatedCursor`: only the rows changed since it (`delta`), when the server can tell them all. Not with `pageToken`. */
+    updatedAfter: z.string().min(1).max(512).nullish(),
+    /** `1`: answer an `updatedCursor` (implied by `updatedAfter`). */
+    changes: z.enum(['0', '1']).nullish(),
+  })
+  .refine((q) => !(q.pageToken && q.updatedAfter), { message: 'Send `pageToken` or `updatedAfter`, not both.', path: ['updatedAfter'] });
 export const MessagesQuery = z
   .object({
     before: z.string().min(1).max(512).nullish(),

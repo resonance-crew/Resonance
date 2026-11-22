@@ -20,6 +20,7 @@ import { summaryAuthor } from '@/lib/data/summaries';
 import { getClientDb } from './init';
 import { isAbsent } from './errors';
 import { ApiError, callApi } from './api';
+import { heardCounters, watchSignal } from './signals';
 import { mapCard, mapUser } from './map';
 
 /*
@@ -535,13 +536,27 @@ export async function getCurrentUserProfile(): Promise<User | null> {
 // (a thread asks whether it is connected while the messages list asks for all).
 let connectionsRead: { uid: string; ids: Promise<string[]> } | null = null;
 
+/**
+ * How long a safety pull may skip reading the connections while their `graph` counter stands before they are
+ * read whole again — as long as the server's early 304 trusts a list (signalTag EARLY_MAX_AGE_S): a renamed
+ * person, or a connection deleted by an older app's own write (which no signal tells of), shows that late at most.
+ */
+export const CONNECTIONS_FULL_READ_MS = 10 * 60_000;
+
+/** Where the viewer's `graph` counter stood when their connections were last read, and when. */
+let connectionsHeard: { uid: string; graph: number | null; beforeFirst: boolean; at: number } | null = null;
+
 /** The uids the signed-in viewer is connected with (GET /api/v1/me/connections), their profiles into the cache. */
 export async function listMyConnectionUids(): Promise<string[]> {
   const uid = getFirebaseClientAuth().currentUser?.uid;
   if (!uid) return [];
   if (connectionsRead?.uid === uid) return connectionsRead.ids;
+  // Taken before the read: a touch heard while it is on its way moves the counter past this, so it is read again.
+  const counters = heardCounters(uid);
+  const heard = { uid, graph: counters && counters !== 'waiting' ? (counters.now.get('graph') ?? 0) : null, beforeFirst: counters === 'waiting', at: Date.now() };
   const ids = callApi<ConnectionListBody>('/api/v1/me/connections').then((body) => {
     rememberPeople(body.connections.map((c) => c.person));
+    connectionsHeard = heard;
     return body.connections.map((c) => c.userId);
   });
   const entry = { uid, ids };
@@ -551,6 +566,40 @@ export async function listMyConnectionUids(): Promise<string[]> {
     if (connectionsRead === entry) connectionsRead = null;
   });
   return ids;
+}
+
+/**
+ * Whether the viewer's connections are as they were last read: their `graph` counter hasn't moved since (every
+ * write that makes or ends a connection moves both people's), and they were read under
+ * {@link CONNECTIONS_FULL_READ_MS} ago. False whenever no one can say (no listener, one that failed).
+ */
+export function connectionsUnmoved(uid: string): boolean {
+  const last = connectionsHeard;
+  if (!last || last.uid !== uid || Date.now() - last.at >= CONNECTIONS_FULL_READ_MS) return false;
+  const counters = heardCounters(uid);
+  if (!counters || counters === 'waiting') return false;
+  // A read made before the listener first answered stands for that answer (client/signals).
+  const was = last.graph ?? (last.beforeFirst ? (counters.first.get('graph') ?? 0) : null);
+  return was !== null && (counters.now.get('graph') ?? 0) <= was;
+}
+
+/**
+ * Call `revalidate` whenever the viewer's connections may have changed: their `graph` counter moved, this browser
+ * changed them (pokeSignal), the listener heard again after failing — and on the safety pulls only when
+ * {@link connectionsUnmoved} can't say they are as read: the messages page open for an hour with nothing moved
+ * reads them every ten minutes, not every five (each a whole read: two documents a connection). Returns the stop.
+ */
+export function watchConnections(uid: string, revalidate: () => void): () => void {
+  return watchSignal(uid, 'graph', (why) => {
+    if (why === 'safety' && connectionsUnmoved(uid)) return;
+    revalidate();
+  });
+}
+
+/** Forget what the connections were read at (sign-out, tests). */
+export function resetConnectionsHeard(): void {
+  connectionsHeard = null;
+  connectionsRead = null;
 }
 
 /** Whether the viewer (`a` or `b`) is connected with the other: their connections say. Signed out, or someone else's pair: no. */

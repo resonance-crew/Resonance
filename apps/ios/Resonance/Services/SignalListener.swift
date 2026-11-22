@@ -43,6 +43,18 @@ final class SignalListener {
     private(set) var failed = false
     /// Whose document is listened to.
     private(set) var uid: String?
+    /// The counters as first read since `start` (they stand for the reads the stores made before it).
+    private var first: SignalCounters?
+    /// The listener failed since it last heard: until it hears again, what moved meanwhile is unknown.
+    private var missed = false
+
+    /// What a pull can compare with its last read to ask only for what moved (``ConversationsReader``): live
+    /// counters, `waiting` for the first answer of a listener that never failed, else unknown.
+    var heard: SignalsHeard {
+        guard listens, uid != nil, !failed, !missed else { return .unknown }
+        guard let counters, let first else { return .waiting }
+        return .live(now: counters, first: first)
+    }
 
     private let source: any SignalSource
     private let interval: Duration
@@ -73,6 +85,8 @@ final class SignalListener {
         ticking?.cancel()
         ticking = nil
         counters = nil
+        first = nil
+        missed = false
         failed = false
         uid = nil
     }
@@ -107,7 +121,8 @@ final class SignalListener {
         }
     }
 
-    /// Every subscriber pulls everything it reads (the safety pull, or a retry the screen asked for).
+    /// Every subscriber pulls everything it reads (the safety pull, or a retry the screen asked for); one that reads
+    /// only what moved (the conversations list) asks nothing when nothing did and the listener is live.
     func pullAll() {
         for subscriber in Array(subscribers.values) { subscriber.pull([]) }
     }
@@ -116,6 +131,8 @@ final class SignalListener {
     func received(_ next: SignalCounters) {
         let moved = next.changes(since: counters)
         counters = next
+        if first == nil { first = next }
+        missed = false
         guard !moved.isEmpty else { return }
         for subscriber in Array(subscribers.values) {
             let mine = moved.filter(subscriber.topics)
@@ -136,6 +153,7 @@ final class SignalListener {
             self.detach?()
             self.detach = nil
             self.failed = true
+            self.missed = true
         })
     }
 

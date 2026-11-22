@@ -692,10 +692,27 @@ export function buildOpenApi(): Json {
         description:
           'What the `notifications` listener read, each row\'s payload as the server wrote it (`anonymous` on a note or a ' +
           'resonance on one of your anonymous cards: open the card, never a thread), and the profiles of the people the rows ' +
-          'name (a tap row\'s first 3 readers). Ask again when `signals/{uid}` `bell` moves, with `If-None-Match`.',
+          'name (a tap row\'s first 3 readers). Ask again when `signals/{uid}` `bell` moves, with `If-None-Match`. ' +
+          'An open bell may ask the newest page once with `changes=1`, then `updatedAfter` its last answer\'s `updatedCursor`: ' +
+          'only the rows changed since (`delta: true`: made, read, rung again), not the page again — or, when the server ' +
+          'can\'t tell them all (a row went, too many changed, a cursor ten minutes old), the newest page whole.',
         parameters: [
           pageTokenParam("A page's `nextPageToken`"),
           { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: BELL_PAGE_MAX, default: BELL_PAGE } },
+          {
+            name: 'updatedAfter',
+            in: 'query',
+            required: false,
+            description: 'An answer\'s `updatedCursor`: only the rows changed since it, when the server can tell them all (not with `pageToken`)',
+            schema: { type: 'string', maxLength: 512 },
+          },
+          {
+            name: 'changes',
+            in: 'query',
+            required: false,
+            description: '`1`: answer an `updatedCursor` (implied by `updatedAfter`)',
+            schema: { type: 'string', enum: ['0', '1'] },
+          },
         ],
       }, [400, 401]),
       '/notifications/read': {
@@ -931,7 +948,9 @@ export function buildOpenApi(): Json {
           responses: { '204': { description: 'Not blocked' }, ...errors(400, 401, 429) },
         },
       },
-      '/me/connections': get('getConnections', 'The people you are connected with, the latest first', 'ConnectionList', {}, [401]),
+      '/me/connections': get('getConnections', 'The people you are connected with, the latest first', 'ConnectionList', {
+        description: 'Ask again when `signals/{uid}` `graph` moves (every connection made or ended moves both people\'s), with `If-None-Match`.',
+      }, [401]),
       '/invites': get('getInvites', 'Legacy invites waiting for your answer (pending and before their date), the latest first', 'InviteList', {
         parameters: [{ name: 'box', in: 'query', required: true, schema: { type: 'string', enum: ['incoming'] } }],
       }, [400, 401]),

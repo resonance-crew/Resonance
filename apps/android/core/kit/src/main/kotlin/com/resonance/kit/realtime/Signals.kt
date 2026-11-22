@@ -61,9 +61,26 @@ class SignalHub {
     /** The document as last read; null before the listener has answered (or with no listener: the flag off). */
     val state: StateFlow<Signals?> = _state
 
+    /** The listener reported an error and is over until it answers again: no one can say what moved meanwhile. */
+    @Volatile private var failed = false
+
     fun publish(signals: Signals?) {
+        failed = false
         _state.value = signals
     }
+
+    /** The listener failed ([live] says nothing until its next answer); the counters as last heard stay in [state]. */
+    fun fail() {
+        failed = true
+    }
+
+    /**
+     * The counters as last heard while the listener is live — what a pull compares with the counters
+     * at its last read to read only what moved (the conversation list's `?pairs=`, the web's
+     * `heardCounters`). Null while no one can say what moved: no listener (the flag off, signed
+     * out), one that hasn't answered yet, or one that failed and hasn't answered since.
+     */
+    fun live(): Signals? = if (failed) null else _state.value
 
     fun topic(topic: Signals.Topic): Flow<Long> = _state.filterNotNull().map { it[topic] }.distinctUntilChanged()
     fun thread(pair: String): Flow<Long> = _state.filterNotNull().map { it.thread(pair) }.distinctUntilChanged()

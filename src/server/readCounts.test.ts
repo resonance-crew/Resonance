@@ -1,9 +1,16 @@
 import { Timestamp } from 'firebase-admin/firestore';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fakeAdminDb } from '../../test/fakeAdminDb';
+
+// The routes themselves, for the lists whose early 304 is the route's own choice: the viewer is ME, the server's
+// context the seeded one.
+const route = vi.hoisted(() => ({ ctx: null as unknown }));
+vi.mock('@/lib/auth', () => ({ getCurrentUser: async () => ({ id: 'me' }) }));
+vi.mock('@/server/ctx', () => ({ serverCtx: () => route.ctx }));
+import { GET as getConnections } from '@/app/api/v1/me/connections/route';
 import { signalledJson } from '@/lib/api/v1/signalTag';
 import { getCardDetail } from '@/server/app/cardsRead';
-import { listBellIn, listConversationsByIdIn, listConversationsIn, listThreadIn } from '@/server/app/inbox';
+import { listBellIn, listConversationsByIdIn, listConversationsIn, listThreadIn, markBellReadIn } from '@/server/app/inbox';
 import { ctxFor } from '@/server/infra/firestore/ctx';
 import { memoryRealtime } from '@/server/infra/memory/adapters';
 
@@ -25,8 +32,19 @@ const MAX = {
    * moved and its person (the whole page, 100, before the delta; client/messages conversationsReader).
    */
   conversationsDelta: 2,
+  /** GET /me/connections, 20 connections: the list and each person's profile. */
+  connections: 40,
+  /** …asked again while the viewer's `graph` counter stands: the signal document alone (40 before the early 304). */
+  connectionsUnchanged: 1,
   /** GET /me/bell, 20 rows naming 20 people. */
   bell: 40,
+  /** …asked for its changes (`changes=1`, the web's whole read): the page, its people, and the rows' count. */
+  bellWhole: 41,
+  /**
+   * …then the open bell's pull after one row was marked read (`updatedAfter`): the rows' count and the row (41
+   * before: the page and its people again; client/notifications bellReader).
+   */
+  bellDelta: 2,
   /** GET …/messages, the newest window of 50. */
   threadWindow: 51,
   /** …then an open thread's pull after one message came and one changed: the conversation, a new one, a changed one (51 before). */
@@ -71,9 +89,10 @@ function seeded() {
     thoughtCore: 'A walk after rain',
     story: 'It rained, and then it stopped.',
   };
-  const fake = fakeAdminDb(docs);
+  const fake = fakeAdminDb(docs, { serverTime: true });
   const realtime = memoryRealtime();
   const ctx = ctxFor(fake.db, { realtime });
+  route.ctx = ctx;
   return { fake, ctx, realtime, pair };
 }
 
@@ -112,9 +131,45 @@ describe('read-count ratchets', () => {
     expect(one).toBeLessThanOrEqual(MAX.conversationsDelta);
   });
 
+  it('the connections list, and the list asked again while nothing moved', async () => {
+    const { fake } = seeded();
+    others.slice(0, 20).forEach((o, i) => (fake.docs[`connections/${pairWith(o)}`] = { userIds: [ME, o].sort(), establishedAt: ts(T0 + i * 1000) }));
+    const req = (etag?: string) => new Request('https://resonance.test/api/v1/me/connections', { headers: etag ? { 'If-None-Match': etag } : {} });
+    let etag = '';
+    const whole = await cost(fake, async () => {
+      const res = await getConnections(req());
+      expect(((await res.json()) as { connections: unknown[] }).connections).toHaveLength(20);
+      etag = res.headers.get('ETag')!;
+    });
+    expect(whole).toBeLessThanOrEqual(MAX.connections);
+    const unchanged = await cost(fake, async () => {
+      expect((await getConnections(req(etag))).status).toBe(304);
+    });
+    // (memoryRealtime reads no Firestore: the signal document costs one read on Firestore, firestoreRealtime.read.)
+    expect(unchanged + 1).toBeLessThanOrEqual(MAX.connectionsUnchanged);
+  });
+
   it('the bell', async () => {
     const { fake, ctx } = seeded();
     expect(await cost(fake, () => listBellIn(ctx, ME, 20))).toBeLessThanOrEqual(MAX.bell);
+  });
+
+  it('an open bell: the page once, then only the row that changed', async () => {
+    const { fake, ctx } = seeded();
+    let page = await listBellIn(ctx, ME, 20, null, { changes: true });
+    const whole = await cost(fake, async () => {
+      page = await listBellIn(ctx, ME, 20, null, { changes: true });
+    });
+    expect(page.items).toHaveLength(20);
+    expect(whole).toBeLessThanOrEqual(MAX.bellWhole);
+    await markBellReadIn(ctx, ME, { ids: [page.items[3].id] });
+    let since = page;
+    const delta = await cost(fake, async () => {
+      since = await listBellIn(ctx, ME, 20, null, { updatedAfter: page.updatedCursor });
+    });
+    expect(since.delta).toBe(true);
+    expect(since.items.map((i) => [i.id, i.readAt !== null])).toEqual([[page.items[3].id, true]]);
+    expect(delta).toBeLessThanOrEqual(MAX.bellDelta);
   });
 
   it('an open thread: the window once, then only what came and what changed', async () => {

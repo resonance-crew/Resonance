@@ -1,6 +1,8 @@
 import type { ServerCtx } from '@/server/ctx';
 import { purgePlan, type EntityName } from '@/server/domain/schema/registry';
 import type { AccountDeletion, PurgeSession } from '@/server/ports/repos/account';
+import { otherInPair } from '@/server/domain/conversations';
+import { signal } from './realtime';
 import { restoreCardIn, trashCardIn } from './trash';
 
 /**
@@ -123,6 +125,11 @@ export async function purgeAccountDataIn(ctx: ServerCtx, uid: string, opts: Purg
       const writes = singles.map((path) => session.deleteDoc(path).catch(() => void failed++));
       await session.flush();
       await Promise.all(writes);
+      // Their connections went with them: each other person's connections list changed (`graph`) — never the
+      // purged account's own signal, which would write a document of theirs back after its roots go.
+      const others = singles.flatMap((path) => (path.startsWith('connections/') ? [otherInPair(path.slice('connections/'.length), uid)] : []));
+      const touched = others.filter((o): o is string => !!o && o !== uid);
+      if (touched.length) await signal(ctx, { kind: 'graph', uids: touched });
       // Others' bell rows of resonance taps naming them among several (lib/push/tapBell): out of each, and a row
       // left with no one goes (a row of their own went with the singles above).
       if (plan.steps.has('tapRows')) {

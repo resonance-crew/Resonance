@@ -32,13 +32,13 @@ vi.mock('./init', () => ({
   },
 }));
 vi.mock('./reads', () => ({ rememberPeople: vi.fn() }));
-vi.mock('./signals', () => ({ pokeSignal: vi.fn() }));
-vi.mock('./api', () => ({ callApi: vi.fn() }));
+vi.mock('./signals', () => ({ pokeOwn: vi.fn() }));
+vi.mock('./api', () => ({ callApi: vi.fn(), ownSignalsOf: () => null }));
 vi.mock('@/lib/auth/firebase/client', () => ({ getFirebaseClientAuth: () => auth }));
 
 import { callApi } from './api';
 import { rememberPeople } from './reads';
-import { pokeSignal } from './signals';
+import { pokeOwn } from './signals';
 import { blockUser, getMyBlockedIds, invalidateBlocks, listMyBlocks, unblockUser } from './blocks';
 
 const bob = { id: 'blocked-author', gone: false, author: null, bio: null, joinedAt: null };
@@ -99,15 +99,17 @@ describe('blocking', () => {
   it('blocks in ONE server call (block, connection and invites in one transaction), then reads the list again', async () => {
     await getMyBlockedIds();
     await blockUser('carol');
-    expect(vi.mocked(callApi).mock.calls.filter(([, init]) => init)).toEqual([['/api/v1/me/blocks/carol', { method: 'PUT' }]]);
-    expect(pokeSignal).toHaveBeenCalledWith('graph');
+    expect(vi.mocked(callApi).mock.calls.filter(([, init]) => init)).toEqual([['/api/v1/me/blocks/carol', { method: 'PUT', onHeaders: expect.any(Function) }]]);
+    // The answer's own counters (none here) taken as heard: the connections pulled once, now (client/signals pokeOwn).
+    expect(pokeOwn).toHaveBeenCalledWith(['graph'], null);
     await getMyBlockedIds();
     expect(reads()).toHaveLength(2);
   });
 
   it('unblocks with a DELETE, and never blocks oneself', async () => {
     await unblockUser('carol');
-    expect(vi.mocked(callApi).mock.calls).toEqual([['/api/v1/me/blocks/carol', { method: 'DELETE' }]]);
+    expect(vi.mocked(callApi).mock.calls).toEqual([['/api/v1/me/blocks/carol', { method: 'DELETE', onHeaders: expect.any(Function) }]]);
+    expect(pokeOwn).toHaveBeenCalledWith(['graph'], null);
     await expect(blockUser('me')).rejects.toThrow('Cannot block yourself');
   });
 

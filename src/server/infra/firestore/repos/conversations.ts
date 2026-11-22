@@ -42,6 +42,7 @@ import type {
 import { conversationRowOf } from '@/server/domain/inboxRows';
 import { decodeCursor, encodeCursor, instantFromParts, instantParts, type CursorPosition, type Instant } from '@/server/ports/time';
 import type { AdminDb } from '../db';
+import { bellMade } from './bell';
 
 // Today's queries, transactions and batches of src/lib/api/v1/{conversations,
 // messageActions,sharedCards,chatImages,chatImageUpload,safety}.ts and
@@ -240,6 +241,7 @@ const bellRow = (bell: NewBell) => ({
   // Rung by another push: its own push is marked done.
   ...(bell.pushed ? { pushedAt: FieldValue.serverTimestamp() } : {}),
   createdAt: FieldValue.serverTimestamp(),
+  ...bellMade(),
 });
 
 function messageRow(m: NewMessage) {

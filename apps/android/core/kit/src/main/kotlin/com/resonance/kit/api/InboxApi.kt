@@ -20,16 +20,36 @@ class InboxApi(private val api: DefaultApi) {
     )
 
     /** Every conversation of the viewer's, newest first (pages of 50 followed, up to [maxPages]). */
-    suspend fun conversations(maxPages: Int = 10): List<Conversation> {
+    suspend fun conversations(maxPages: Int = 10): List<Conversation> = conversationList(maxPages).conversations
+
+    /** A whole read of the list: the conversations, and whether they are all of them (false: [maxPages] ended it with more to come). */
+    data class Listed(val conversations: List<Conversation>, val complete: Boolean)
+
+    /** [conversations], saying whether the pages ran out before [maxPages] did. */
+    suspend fun conversationList(maxPages: Int = 10): Listed {
         val all = ArrayList<Conversation>()
         var token: String? = null
         var pages = 0
         do {
-            val page = call { api.listConversations(token) }
+            val page = call { api.listConversations(pageToken = token) }
             all += page.conversations
             token = page.nextPageToken
         } while (token != null && ++pages < maxPages)
-        return all
+        return Listed(all, complete = token == null)
+    }
+
+    /**
+     * Only these conversations (GET /conversations?pairs=, 1–[PAIRS_MAX] ids): the viewer's of them,
+     * most recently active first, each with its person; one deleted, or not theirs, is left out.
+     */
+    suspend fun conversations(pairs: Collection<String>): List<Conversation> {
+        require(pairs.size in 1..PAIRS_MAX) { "1–$PAIRS_MAX pairs a request" }
+        return call { api.listConversations(pairs = pairs.joinToString(",")) }.conversations
+    }
+
+    companion object {
+        /** The most conversations one `?pairs=` asks for (the API's cap). */
+        const val PAIRS_MAX = 20
     }
 
     /** One conversation; null when there is none the viewer is in (the server says the same 404 either way). */
@@ -45,7 +65,7 @@ class InboxApi(private val api: DefaultApi) {
      * `newerCursor`). A conversation the viewer isn't in (or none) is a 404 [ApiFailure].
      */
     suspend fun messages(pair: String, before: String? = null, after: String? = null, limit: Int = 50): MessagePage =
-        call { api.listMessages(pair, before, after, limit) }
+        call { api.listMessages(pair, before = before, after = after, limit = limit) }
 
     /** The viewer read [pair] (their unread count there goes to 0). */
     suspend fun markRead(pair: String) = call { api.markConversationRead(pair) }

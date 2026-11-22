@@ -34,11 +34,19 @@ export const SAFETY_PULL_MS = 5 * 60_000;
 /** …and while the listener has failed (the signals are not heard: the pulls are all there is). */
 export const FAILED_PULL_MS = 60_000;
 
+/**
+ * Why a watcher is called: its counter moved (`signal`), this browser wrote (`poke`), the listener heard again
+ * after failing (`missed`), or the safety pull (`safety`) — the one a watcher may skip when it can tell nothing it
+ * reads moved (client/reads `watchConnections`).
+ */
+export type PullReason = 'signal' | 'poke' | 'missed' | 'safety';
+
 type Counters = Map<SignalTopic, number>;
+type Watcher = (why: PullReason) => void;
 
 interface Hub {
   uid: string;
-  watchers: Map<SignalTopic, Set<() => void>>;
+  watchers: Map<SignalTopic, Set<Watcher>>;
   /** The counters last heard; null until the first answer. */
   last: Counters | null;
   /** The listener's first answer since it (last) started: where the counters stood as the watchers' first reads were made. */
@@ -68,13 +76,13 @@ function countersOf(data: Record<string, unknown> | null): Counters {
   return out;
 }
 
-function fire(hub: Hub, topic: SignalTopic): void {
-  for (const fn of [...(hub.watchers.get(topic) ?? [])]) fn();
+function fire(hub: Hub, topic: SignalTopic, why: PullReason): void {
+  for (const fn of [...(hub.watchers.get(topic) ?? [])]) fn(why);
 }
 
-function fireAll(hub: Hub): void {
+function fireAll(hub: Hub, why: PullReason): void {
   hub.lastAll = Date.now();
-  for (const topic of [...hub.watchers.keys()]) fire(hub, topic);
+  for (const topic of [...hub.watchers.keys()]) fire(hub, topic, why);
 }
 
 function listen(hub: Hub): void {
@@ -99,7 +107,7 @@ function listen(hub: Hub): void {
             hub.first = new Map(next);
             if (hub.missed) {
               hub.missed = false;
-              fireAll(hub);
+              fireAll(hub, 'missed');
             }
             return;
           }
@@ -108,7 +116,7 @@ function listen(hub: Hub): void {
           for (const [topic, n] of next) {
             const was = before.get(topic) ?? 0;
             if (n < was) next.set(topic, was);
-            else if (n !== was) fire(hub, topic);
+            else if (n !== was) fire(hub, topic, 'signal');
           }
         },
         failed,
@@ -129,7 +137,7 @@ function onReturn(): void {
       hub.last = null;
       listen(hub);
     }
-    if (Date.now() - hub.lastAll >= (hub.failed ? FAILED_PULL_MS : SAFETY_PULL_MS)) fireAll(hub);
+    if (Date.now() - hub.lastAll >= (hub.failed ? FAILED_PULL_MS : SAFETY_PULL_MS)) fireAll(hub, 'safety');
   }
 }
 
@@ -148,7 +156,7 @@ function hubOf(uid: string): Hub {
   listen(made);
   // Ticks at the shorter interval; pulls when the one that applies has passed.
   made.timer = setInterval(() => {
-    if (visible() && Date.now() - made.lastAll >= (made.failed ? FAILED_PULL_MS : SAFETY_PULL_MS) - TICK_SLACK_MS) fireAll(made);
+    if (visible() && Date.now() - made.lastAll >= (made.failed ? FAILED_PULL_MS : SAFETY_PULL_MS) - TICK_SLACK_MS) fireAll(made, 'safety');
   }, FAILED_PULL_MS);
   return made;
 }
@@ -161,10 +169,10 @@ function stopHub(hub: Hub): void {
 
 /**
  * Call `fn` whenever `topic` moves for the viewer `uid` (and on the safety
- * pulls). The first watcher starts the one listener; the last one to leave
- * stops it. Returns the stop.
+ * pulls), told why. The first watcher starts the one listener; the last one
+ * to leave stops it. Returns the stop.
  */
-export function watchSignal(uid: string, topic: SignalTopic, fn: () => void): () => void {
+export function watchSignal(uid: string, topic: SignalTopic, fn: (why: PullReason) => void): () => void {
   const hub = hubOf(uid);
   let set = hub.watchers.get(topic);
   if (!set) hub.watchers.set(topic, (set = new Set()));
@@ -178,7 +186,7 @@ export function watchSignal(uid: string, topic: SignalTopic, fn: () => void): ()
 
 /** This browser just changed `topic` itself: pull it again now rather than wait for the signal's round trip. */
 export function pokeSignal(topic: SignalTopic): void {
-  for (const hub of hubs.values()) fire(hub, topic);
+  for (const hub of hubs.values()) fire(hub, topic, 'poke');
 }
 
 /**
@@ -208,7 +216,7 @@ export function pokeOwn(topics: SignalTopic[], heard: Record<string, number> | n
       hub.last.set(topic, n);
       pull.push(topic);
     }
-    for (const topic of pull) fire(hub, topic);
+    for (const topic of pull) fire(hub, topic, 'poke');
   }
 }
 
