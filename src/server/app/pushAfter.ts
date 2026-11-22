@@ -59,7 +59,7 @@ export function afterMessageSentIn(ctx: ServerCtx, sent: SentMessage, text: stri
   ctx.later.later(async () => {
     await Promise.all([
       sent.silent ? null : ring(ctx, push),
-      unfurl ? unfurlMessageIn(ctx, push.conversationId, push.messageId).catch((e) => console.error('[unfurl]', push.messageId, e)) : null,
+      unfurl ? unfurlMessageIn(ctx, push.conversationId, push.messageId, { participants: { from: push.from, to: push.to } }).catch((e) => console.error('[unfurl]', push.messageId, e)) : null,
     ]);
   }, 'afterMessage');
 }

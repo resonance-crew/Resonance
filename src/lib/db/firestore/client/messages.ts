@@ -379,21 +379,6 @@ function messagesPath(pairId: string, q: Record<string, string>): string {
 /** How long an open thread goes on incremental reads before it reads its whole window again. */
 export const THREAD_FULL_READ_MS = 10 * 60_000;
 
-/** How long after its sending a message with a link may still get its preview (the unfurl runs after the send, ≤ 8 s). */
-const PREVIEW_WAIT_MS = 2 * 60_000;
-const LINKISH = /https?:\/\/|www\./i;
-
-/**
- * Whether a message held may still get its link preview: the preview's write
- * sets no `editedAt` (server repos/conversations EDITED_AT), so only a whole
- * read brings it — the thread reads whole while one of these is held.
- */
-function awaitsPreview(m: ThreadMessageBody, now: number): boolean {
-  if (m.preview || m.unsentAt || !LINKISH.test(m.text)) return false;
-  const sent = Date.parse(m.sentAt);
-  return Number.isFinite(sent) && now - sent < PREVIEW_WAIT_MS;
-}
-
 /** Newest first: send time (to the microsecond, as the API writes it), then id. */
 const newestFirst = (a: ThreadMessageBody, b: ThreadMessageBody) =>
   a.sentAt === b.sentAt ? (a.id < b.id ? 1 : a.id > b.id ? -1 : 0) : a.sentAt < b.sentAt ? 1 : -1;
@@ -414,9 +399,10 @@ const newestFirst = (a: ThreadMessageBody, b: ThreadMessageBody) =>
  * came on top, so the history keeps every message). The whole window is read
  * again only when the incremental answer can't vouch for itself — no
  * `updatedCursor` (an older server), as many changes as it could hold, more
- * new messages than the catch-up pages read —, while a new message with a
- * link may still get its preview (`awaitsPreview`), and every
- * {@link THREAD_FULL_READ_MS} besides (a change no `editedAt` tells of).
+ * new messages than the catch-up pages read —, and every
+ * {@link THREAD_FULL_READ_MS} besides (a change no `editedAt` tells of). A
+ * link's preview, written after the send, is one of the changes: it sets
+ * `editedAt` and touches the thread (server app/links `unfurlMessageIn`).
  * When a whole read finds more came since the last read than the window
  * holds, the messages between are caught up with `after=` pages, so nothing
  * is skipped. A refusal (404: the conversation was deleted, or isn't there)
@@ -492,8 +478,7 @@ export function followThread(
 
   const read = async (): Promise<ThreadEntry[]> => {
     const now = Date.now();
-    const incremental =
-      held.length > 0 && newer && changesFrom && now - fullAt < THREAD_FULL_READ_MS && !held.some((m) => awaitsPreview(m, now));
+    const incremental = held.length > 0 && newer && changesFrom && now - fullAt < THREAD_FULL_READ_MS;
     const messages = (incremental ? await since() : null) ?? (await whole());
     return messages.map(apiEntry);
   };

@@ -5,6 +5,7 @@ import { linkPreviewsOf } from '@/lib/links/previewShape';
 import { standaloneLinks, STORY_PREVIEW_LIMIT } from '@/lib/links/storyLinks';
 import { firstLink } from '@/lib/links/url';
 import type { ServerCtx } from '@/server/ctx';
+import { reactionChanged } from '@/server/domain/realtimeInbox';
 
 // Link previews, written after the response: a card's (its story's
 // standalone links) and a message's (its first link). src/lib/links/cardLinks
@@ -128,7 +129,13 @@ export async function unfurlMessageIn(
   ctx: ServerCtx,
   conversationId: string,
   messageId: string,
-  deps: { fetch?: PreviewFetch; signal?: AbortSignal; memo?: PreviewMemo } = {},
+  deps: {
+    fetch?: PreviewFetch;
+    signal?: AbortSignal;
+    memo?: PreviewMemo;
+    /** The two in the conversation: told (their thread's signal) once the preview is written, so an open thread pulls it. */
+    participants?: { from: string; to: string };
+  } = {},
 ): Promise<LinkPreview | null> {
   if (!DOC_ID.test(conversationId) || !DOC_ID.test(messageId)) return null;
   const message = await ctx.data.infra.getMessageForPreview(conversationId, messageId);
@@ -151,7 +158,18 @@ export async function unfurlMessageIn(
     },
     { label: 'unfurl message' },
   );
-  return written ? preview : null;
+  if (!written) return null;
+  // Runs after the response already (pushAfter): the thread's touch is made here, best effort. Only the thread
+  // moves, as for a reaction — the conversation list shows no preview.
+  if (deps.participants) {
+    const { from, to } = deps.participants;
+    await Promise.all(
+      reactionChanged(conversationId, from, to).map((t) =>
+        ctx.realtime.touch(t.uid, t.topics).catch((e: unknown) => ctx.log.warn('[signals] touch', t.uid, e)),
+      ),
+    );
+  }
+  return preview;
 }
 
 function byUrl(previews: LinkPreview[]): Map<string, LinkPreview> {

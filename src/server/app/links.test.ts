@@ -132,6 +132,25 @@ describe('unfurlMessageIn (memory)', () => {
     expect(await unfurlMessageIn(ctx, 'alice_bob', 'gone', { fetch, memo })).toBeNull();
     expect(asked).toEqual(['https://example.com/song']); // m2 came from the memory
   });
+
+  it('stamps the preview as a change (editedAt) and tells both their thread moved, only when it wrote one', async () => {
+    const ctx = memoryCtx();
+    const table = 'conversations/alice_bob/messages';
+    ctx.state.seed(table, { m1: { senderId: 'alice', text: 'look https://example.com/song' }, m3: { senderId: 'alice', text: 'no link' } });
+    const { fetch } = sites();
+    const participants = { from: 'alice', to: 'bob' };
+    expect(await unfurlMessageIn(ctx, 'alice_bob', 'm1', { fetch, memo: createPreviewMemo(), participants })).toEqual(preview('song'));
+    // An open thread's incremental read (updatedAfter) finds the preview by its editedAt, after the signal.
+    expect(ctx.state.get(table, 'm1')?.editedAt).toBeDefined();
+    expect(ctx.realtime.touches).toEqual([
+      { uid: 'alice', topics: [{ thread: 'alice_bob' }] },
+      { uid: 'bob', topics: [{ thread: 'alice_bob' }] },
+    ]);
+    // Nothing written, no one told.
+    expect(await unfurlMessageIn(ctx, 'alice_bob', 'm1', { fetch, memo: createPreviewMemo(), participants })).toBeNull();
+    expect(await unfurlMessageIn(ctx, 'alice_bob', 'm3', { fetch, participants })).toBeNull();
+    expect(ctx.realtime.touches).toHaveLength(2);
+  });
 });
 
 describe('assignSlugIn (memory)', () => {

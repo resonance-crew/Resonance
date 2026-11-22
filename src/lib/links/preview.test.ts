@@ -221,7 +221,8 @@ describe('unfurlMessage', () => {
     expect(preview).toMatchObject({ url: 'https://example.com/post', title: 'A rainy walk' });
     expect(updates).toHaveLength(1);
     expect(updates[0].path).toBe(MESSAGE);
-    expect(Object.keys(updates[0].data)).toEqual(['preview']);
+    // The preview and its change time (editedAt), which an open thread's incremental read follows.
+    expect(Object.keys(updates[0].data).sort()).toEqual(['editedAt', 'preview']);
     expect(docs[MESSAGE].preview).toEqual(preview);
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch.mock.calls[0][0]).toBe('https://example.com/post');

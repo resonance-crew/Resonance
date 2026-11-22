@@ -3,6 +3,7 @@ import { slugHolder } from '@/lib/db/firestore/cardKey';
 import { retirable, retiredSlugRef } from '@/lib/db/firestore/tombstones';
 import type { CardLinksRow, InfraData, InfraTxRepo, MessagePreviewRow } from '@/server/ports/repos/infra';
 import type { AdminDb } from '../db';
+import { EDITED_AT } from './conversations';
 
 // Link previews (cards/{id}.linkPreviews, a message's preview) and slug
 // collisions: the queries and transactions of src/lib/links/{cardLinks,preview}
@@ -44,7 +45,9 @@ export function infraTx(db: AdminDb, tx: Transaction): InfraTxRepo {
       return messagePreviewOf(await tx.get(messageRef(db, conversationId, messageId)));
     },
     setMessagePreview(conversationId, messageId, preview) {
-      tx.update(messageRef(db, conversationId, messageId), { preview });
+      // A change to a message already sent: its `editedAt` lets an open thread's incremental read
+      // (`updatedAfter`, repos/conversations) bring the preview without reading the window again.
+      tx.update(messageRef(db, conversationId, messageId), { preview, [EDITED_AT]: FieldValue.serverTimestamp() });
     },
   };
 }

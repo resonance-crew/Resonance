@@ -1,6 +1,7 @@
 import type { CardLinksRow, InfraData, InfraTxRepo, MessagePreviewRow, SlugCardRow } from '@/server/ports/repos/infra';
 import type { MemoryState, Row } from '../state';
 import type { MemoryTx } from '../uow';
+import { EDITED_AT, editStamp } from './conversations';
 
 // Tables named after the collections: `cards`, `users`, `retiredSlugs`, and
 // `conversations/{pair}/messages` (one table per conversation, as the path).
@@ -42,7 +43,8 @@ export function infraTx(tx: MemoryTx): InfraTxRepo {
     },
     getMessageForPreview: async (conversationId, messageId) => messagePreviewOf(tx.get(messages(conversationId), messageId)),
     setMessagePreview(conversationId, messageId, preview) {
-      tx.merge(messages(conversationId), messageId, { preview });
+      // As Firestore's: a preview is a change to a message already sent, so it sets `editedAt`.
+      tx.merge(messages(conversationId), messageId, { preview, [EDITED_AT]: editStamp(tx.state) });
     },
   };
 }
