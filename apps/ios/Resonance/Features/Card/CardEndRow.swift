@@ -492,8 +492,12 @@ struct EndRowTwo<Faces: View>: View {
     @ViewBuilder let faces: Faces
 
     var body: some View {
-        faces.padding(.leading, RowTwo.facesLine)
-            .frame(maxWidth: .infinity, minHeight: TapFaces.rowHeight, maxHeight: TapFaces.rowHeight, alignment: .leading)
+        // The line is a clear strip of its own height with the faces laid on it: with no face yet the builder is empty,
+        // an empty view lays out as nothing and a frame on nothing is nothing — the line would fold away and the
+        // capsule under it drop 44 when the reader's own face arrived (round 30: the line stands above the capsule).
+        Color.clear
+            .frame(maxWidth: .infinity, minHeight: TapFaces.rowHeight, maxHeight: TapFaces.rowHeight)
+            .overlay(alignment: .leading) { faces.padding(.leading, RowTwo.facesLine) }
     }
 }
 

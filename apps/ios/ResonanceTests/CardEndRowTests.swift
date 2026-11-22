@@ -123,6 +123,26 @@ extension Fixture {
         #expect(abs(three.height - 44) < 0.5)
     }
 
+    /// Round 30 §S1: the faces' line stands with no face on it — the screen hands it an empty builder then — so the
+    /// capsule under it never moves when the reader's own face arrives. Measured in the end row's own stack: there an
+    /// empty view under a frame is nothing at all, and the line folded away on a card nobody had resonated with (the
+    /// capsule 16 under the tags instead of 60 — the release screenshots' ios/card-note-wait showed it).
+    @Test func theFacesLineStandsWithNoFaceOnItSoTheCapsuleNeverMoves() {
+        func height(faces: Bool) -> CGFloat {
+            UIHostingController(rootView: EndRowStack(facesLine: true) {
+                EndRowTwo {
+                    if faces { TapFaces(faces: [Fixture.author("dora")], more: false, spoken: "", isButton: true) {} }
+                }
+            } capsuleRow: {
+                Color.blue.frame(width: 300, height: 44)
+            } below: {
+                EmptyView()
+            }.frame(width: 300)).sizeThatFits(in: CGSize(width: 300, height: 400)).height
+        }
+        #expect(abs(height(faces: false) - (TapFaces.rowHeight + 44)) < 0.5, "\(height(faces: false))")
+        #expect(abs(height(faces: true) - (TapFaces.rowHeight + 44)) < 0.5, "\(height(faces: true))")
+    }
+
     /// Round 30 §S1 (the owner: 「把共振这个地方已经共振的这些使用者头像，把它移到共振按钮的上方」, 「照 C 做」): the faces' line
     /// stands directly on the capsule's row — 0 between them — and the note opens 12 under the capsule; signed out there
     /// is no faces' line and the capsule is the row's top.
