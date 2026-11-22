@@ -75,6 +75,44 @@ describe('ctxFor', () => {
     expect(() => ctx.llm.chat({} as never, {} as never)).toThrow(NotWiredError);
   });
 
+  it('is built once per database, overrides laid over it in a fresh object that leaves it alone', () => {
+    const ctx = ctxFor(db);
+    expect(ctxFor(db)).toBe(ctx);
+    expect(ctxFor(db).data).toBe(ctx.data);
+    // Another database (another test's emulator, a fake): its own.
+    const other = { ...db } as typeof db;
+    expect(ctxFor(other)).not.toBe(ctx);
+    expect(ctxFor(other).limits).not.toBe(ctx.limits);
+
+    const push = { send: vi.fn(async () => ({ sent: 1, dead: [] })) };
+    const pushed = ctxFor(db, { push });
+    expect(pushed).not.toBe(ctx);
+    expect(pushed.push).toBe(push);
+    expect(pushed.data).toBe(ctx.data);
+    expect(ctxFor(db).push).not.toBe(push);
+    // Nobody can change the shared one for the next caller.
+    expect(Object.isFrozen(ctx)).toBe(true);
+
+    // A logger of the caller's own: realtime and the after-response work log through it, so it is built whole.
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logged = ctxFor(db, { log });
+    expect(logged.log).toBe(log);
+    expect(logged.realtime).not.toBe(ctx.realtime);
+  });
+
+  it('keeps the context with a chat store apart from the one without (the environment, when it was built)', () => {
+    vi.stubEnv('R2_CHAT_BUCKET', '');
+    vi.stubEnv('R2_ENDPOINT', '');
+    vi.stubEnv('FIRESTORE_EMULATOR_HOST', '');
+    vi.stubEnv('NEXT_PUBLIC_FIREBASE_EMULATOR', '');
+    const fresh = { ...db } as typeof db;
+    expect(ctxFor(fresh).chatObjects).toBeNull();
+    vi.stubEnv('R2_CHAT_BUCKET', 'chat');
+    vi.stubEnv('R2_ENDPOINT', 'https://r2.example');
+    expect(ctxFor(fresh).chatObjects).not.toBeNull();
+    vi.unstubAllEnvs();
+  });
+
   it('wires leases on the database (infra/firestore/lease.ts): a key is a document path', async () => {
     await expect(ctxFor(db).leases.release('k')).rejects.toThrow(/document path/);
   });
