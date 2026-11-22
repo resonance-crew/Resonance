@@ -1,3 +1,4 @@
+import { replayOf } from '@/server/domain/session';
 import type { RefreshRow, RotateOutcome, SessionStore } from '@/server/ports/sessions';
 
 /** Sessions in memory, for unit tests: the same outcomes as the Firestore store (infra/firestore/sessions.ts). */
@@ -34,15 +35,20 @@ export function memorySessionStore(): MemorySessionStore {
       const row = refresh.get(hash);
       if (!row) return { kind: 'unknown' };
       if (row.usedAt) {
+        const successor = row.nextHash ? refresh.get(row.nextHash) : undefined;
+        if (replayOf({ usedAtMs: row.usedAt.getTime(), atMs: at.getTime(), successorUnused: !!successor && !successor.usedAt }) === 'superseded') {
+          return { kind: 'superseded' };
+        }
         deleteWhere((r) => r.family === row.family);
-        return { kind: 'reused', uid: row.uid };
+        return { kind: 'reused', uid: row.uid, family: row.family };
       }
       if (row.expiresAt.getTime() <= at.getTime()) {
         refresh.delete(hash);
         return { kind: 'expired' };
       }
       row.usedAt = at;
-      refresh.set(nextHash, next({ ...row, usedAt: null }));
+      row.nextHash = nextHash;
+      refresh.set(nextHash, next({ ...row, usedAt: null, nextHash: null }));
       return { kind: 'rotated', row: { ...row } };
     },
     async revokeFamily(family) {

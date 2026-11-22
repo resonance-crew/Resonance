@@ -4,9 +4,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 // Phase 3's own sessions (ADR 0004) on the Auth and Firestore emulators, end
 // to end through the routes: a real emulator Firebase ID token exchanged for
 // Resonance's tokens, the access token used on /api/v1/me (a read and a
-// write), the refresh token rotated once per use — a second use revoking its
-// whole family — logout, signing out everywhere, a disabled account and a
-// purged one, whose tokens all fail. And the Firebase token on its own,
+// write), the refresh token rotated once per use — a replay within the grace
+// a quiet 409, a stolen copy's use signing the account out everywhere —
+// logout, signing out everywhere, a disabled account and a purged one, whose tokens all fail. And the Firebase token on its own,
 // exactly as installed builds send it, still works beside them (dual accept).
 
 const PROJECT = 'demo-resonance';
@@ -135,17 +135,29 @@ describe('POST /api/v1/auth/exchange', () => {
 });
 
 describe('POST /api/v1/auth/refresh and /logout', () => {
-  it('rotates once per use; a second use of a refresh token revokes its family — the token rotated from it too', async () => {
+  it('rotates once per use; the same token again at once is the client\'s own retry (409, nothing revoked); a token two generations old is theft: every session and the Firebase sign-in revoked', async () => {
     const { uid, idToken } = await signUp();
     const first = await exchanged(idToken);
+    const tablet = await exchanged(idToken);
     const res = await post(refresh, { refreshToken: first.refreshToken });
     expect(res.status).toBe(200);
     const second = (await res.json()) as Session;
     expect(second.refreshToken).not.toBe(first.refreshToken);
     expect(await asBearer(second.accessToken)).toMatchObject({ read: 200, id: uid });
+    // Within the grace, while `second` is unused: a quiet 409 that hands out no tokens and revokes nothing.
+    const retry = await post(refresh, { refreshToken: first.refreshToken });
+    expect(retry.status).toBe(409);
+    expect(((await retry.json()) as { error: { code: string } }).error.code).toBe('conflict');
+    expect(await refreshRows(uid)).toHaveLength(3);
+    const third = (await (await post(refresh, { refreshToken: second.refreshToken })).json()) as Session;
+    // Firebase keeps revocation to the second: a sign-in from the second before is revoked, not one from the same second.
+    await new Promise((r) => setTimeout(r, 1100));
+    // `second` was used already: `first` again is a stolen copy's.
     expect((await post(refresh, { refreshToken: first.refreshToken })).status).toBe(401);
-    expect((await post(refresh, { refreshToken: second.refreshToken })).status).toBe(401);
     expect(await refreshRows(uid)).toHaveLength(0);
+    for (const token of [third.refreshToken, tablet.refreshToken]) expect((await post(refresh, { refreshToken: token })).status).toBe(401);
+    // The Firebase sign-in went too (revokeSessions): its ID token exchanges no more.
+    expect((await post(exchange, { token: idToken })).status).toBe(401);
   });
 
   it("logs out: the family goes, the same answer again, and another device's session stands", async () => {

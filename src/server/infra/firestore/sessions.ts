@@ -1,4 +1,5 @@
 import { Timestamp, type DocumentData } from 'firebase-admin/firestore';
+import { replayOf } from '@/server/domain/session';
 import type { RefreshRow, RotateOutcome, SessionStore } from '@/server/ports/sessions';
 import type { AdminDb } from './db';
 
@@ -9,7 +10,7 @@ import type { AdminDb } from './db';
  * - `identities/{provider}_{subject}` → `{ userId, provider, subject, createdAt }`:
  *   today `firebase_<uid>` → the same uid, made at the first exchange.
  * - `refreshTokens/{sha256 of the token}` → `{ uid, family, authTime, createdAt,
- *   expiresAt, usedAt }`; `expiresAt` is the collection's TTL field
+ *   expiresAt, usedAt, nextHash }`; `expiresAt` is the collection's TTL field
  *   (firestore.indexes.json), so used and expired rows go by themselves.
  */
 const IDENTITIES = 'identities';
@@ -38,6 +39,7 @@ function rowOf(d: DocumentData | undefined): RefreshRow | null {
     createdAt: date(d.createdAt) ?? new Date(0),
     expiresAt,
     usedAt: date(d.usedAt),
+    nextHash: typeof d.nextHash === 'string' ? d.nextHash : null,
   };
 }
 
@@ -48,6 +50,7 @@ const stored = (row: RefreshRow) => ({
   createdAt: Timestamp.fromDate(row.createdAt),
   expiresAt: Timestamp.fromDate(row.expiresAt),
   usedAt: row.usedAt ? Timestamp.fromDate(row.usedAt) : null,
+  ...(row.nextHash ? { nextHash: row.nextHash } : {}),
 });
 
 export function firestoreSessionStore(db: AdminDb): SessionStore {
@@ -89,18 +92,23 @@ export function firestoreSessionStore(db: AdminDb): SessionStore {
         const row = rowOf((await tx.get(ref)).data());
         if (!row) return { kind: 'unknown' };
         if (row.usedAt) {
+          // The client's own second try (a race, a lost answer) while the token it was traded for is the newest.
+          const successor = row.nextHash ? rowOf((await tx.get(refresh(row.nextHash))).data()) : null;
+          if (replayOf({ usedAtMs: row.usedAt.getTime(), atMs: at.getTime(), successorUnused: !!successor && !successor.usedAt }) === 'superseded') {
+            return { kind: 'superseded' };
+          }
           reusedFamily = row.family;
-          return { kind: 'reused', uid: row.uid };
+          return { kind: 'reused', uid: row.uid, family: row.family };
         }
         if (row.expiresAt.getTime() <= at.getTime()) {
           tx.delete(ref);
           return { kind: 'expired' };
         }
-        tx.update(ref, { usedAt: Timestamp.fromDate(at) });
+        tx.update(ref, { usedAt: Timestamp.fromDate(at), nextHash });
         tx.create(refresh(nextHash), stored(next(row)));
-        return { kind: 'rotated', row: { ...row, usedAt: at } };
+        return { kind: 'rotated', row: { ...row, usedAt: at, nextHash } };
       });
-      // A used token presented again is a stolen one (or its thief's copy): the whole family goes.
+      // A used token presented again, not the client's own replay, is a stolen one (or its thief's copy): the whole family goes.
       if (reusedFamily) await deleteWhere('family', reusedFamily);
       return outcome;
     },

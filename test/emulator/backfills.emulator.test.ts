@@ -16,6 +16,7 @@ import { sendNote } from '@/lib/api/v1/conversations';
 import { backfillLinkPreviews } from '../../scripts/backfills/linkPreviews';
 import { backfillAnonymousBells } from '../../scripts/backfills/anonymousBells';
 import { backfillAvatarColors } from '../../scripts/backfills/avatarColors';
+import { removeEmptyPhoneHashes } from '../../scripts/backfills/phoneHash';
 import { backfillCardTombstones } from '../../scripts/backfills/cardTombstones';
 import { backfillRecommendIndex } from '../../scripts/backfills/recommendIndex';
 import { backfillCoverThumbs } from '../../scripts/backfills/coverThumbs';
@@ -119,6 +120,35 @@ describe('avatar-colors', () => {
     expect((await data('users/dawn'))!.accentColor).toBe(avatarColorFor('dawn'));
     expect((await data('users/kept'))!.accentColor).toBe('oklch(80% 0.1 200)');
     expect(await backfillAvatarColors(db, { apply: true, log: quiet })).toMatchObject({ missing: 0 });
+  });
+});
+
+describe('phone-hash', () => {
+  it("removes only an empty phoneHash: a dry run changes nothing and counts; --apply leaves every other value", async () => {
+    const at = joined('2026-03-01');
+    await Promise.all([
+      db.doc('users/a').set({ handle: 'a', phoneHash: '', joinedAt: at }),
+      db.doc('users/b').set({ handle: 'b', phoneHash: '' }),
+      db.doc('users/c').set({ handle: 'c', phoneHash: 'f'.repeat(64) }),
+      db.doc('users/d').set({ handle: 'd', phoneHash: ' ' }),
+      db.doc('users/e').set({ handle: 'e', phoneHash: null }),
+      db.doc('users/f').set({ handle: 'f' }),
+    ]);
+
+    expect(await removeEmptyPhoneHashes(db, { apply: false, log: quiet })).toEqual({ empty: 2, kept: 2, removed: 0, skipped: 0 });
+    expect(await data('users/a')).toEqual({ handle: 'a', phoneHash: '', joinedAt: at });
+    expect((await data('users/b'))!.phoneHash).toBe('');
+
+    expect(await removeEmptyPhoneHashes(db, { apply: true, log: quiet })).toEqual({ empty: 2, kept: 2, removed: 2, skipped: 0 });
+    // Only the field went: the rest of the profile as it was.
+    expect(await data('users/a')).toEqual({ handle: 'a', joinedAt: at });
+    expect(await data('users/b')).toEqual({ handle: 'b' });
+    expect((await data('users/c'))!.phoneHash).toBe('f'.repeat(64));
+    expect((await data('users/d'))!.phoneHash).toBe(' ');
+    // null is no value (not counted, as Firestore's != leaves it out), and not '' either: kept.
+    expect(await data('users/e')).toEqual({ handle: 'e', phoneHash: null });
+    expect(await data('users/f')).toEqual({ handle: 'f' });
+    expect(await removeEmptyPhoneHashes(db, { apply: true, log: quiet })).toEqual({ empty: 0, kept: 2, removed: 0, skipped: 0 });
   });
 });
 

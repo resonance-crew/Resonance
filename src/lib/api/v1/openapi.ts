@@ -953,12 +953,16 @@ export function buildOpenApi(): Json {
           operationId: 'refreshSession',
           summary: 'Trade a refresh token for the next access and refresh tokens (each refresh token is good once)',
           description:
-            'A refresh token presented a second time is taken for stolen: every token of its session is revoked, and ' +
-            'this answers `401` (sign in again, then exchange). So does an account deleted, disabled or signed out ' +
-            'everywhere since. `503` where sessions are not enabled.',
+            'A refresh token presented again within 30 seconds of its use, while the token it was traded for is still ' +
+            'unused, is the client\'s own second try (two refreshes racing, a retry after a lost answer): `409` ' +
+            '`conflict`, nothing revoked and no tokens handed out — use the pair the other request got, or, holding ' +
+            'none, log this token out and exchange again. Presented again otherwise it is taken for stolen: the ' +
+            'account is signed out everywhere (every session, the Firebase sign-in too) and this answers `401` (sign ' +
+            'in again, then exchange). So does an account deleted, disabled or signed out everywhere since. `503` ' +
+            'where sessions are not enabled.',
           security: [],
           requestBody: { required: true, ...json(ref('AuthRefreshRequest')) },
-          responses: { '200': { description: 'OK', ...json(ref('AuthSession')) }, ...errors(400, 401, 429, 503) },
+          responses: { '200': { description: 'OK', ...json(ref('AuthSession')) }, ...errors(400, 401, 409, 429, 503) },
         },
       },
       '/auth/logout': {
