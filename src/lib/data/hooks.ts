@@ -19,6 +19,7 @@ import {
   getUserByHandle,
   getUsersByIds,
   isConnected,
+  isConnectedTo,
   listMyConnectionUids,
   resolveCardId,
 } from '@/lib/db/firestore/client/reads';
@@ -1259,7 +1260,8 @@ export function useProfileByHandle(handle: string | undefined) {
   const uid = person.data?.id;
   const relation = useSWR<typeof strangers>(uid && !loading ? `relation:${uid}:${viewer?.id ?? 'anon'}` : null, async () => {
     if (!viewer || viewer.id === uid) return strangers;
-    const [blocked, connected] = await Promise.all([getMyBlockedIds(), isConnected(viewer.id, uid!)]);
+    // Whether they're connected, as their profile says (one connection read, shared with the pen name's own read), not the whole list.
+    const [blocked, connected] = await Promise.all([getMyBlockedIds(), handle ? isConnectedTo(handle, uid!) : isConnected(viewer.id, uid!)]);
     return { isBlocked: blocked.has(uid!), isConnected: connected };
   });
   const personData = person.data;

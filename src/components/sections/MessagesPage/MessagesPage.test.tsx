@@ -70,6 +70,7 @@ const mockIsConnected = vi.fn();
 vi.mock('@/lib/db/firestore/client/reads', () => ({
   getUserByHandle: (h: string) => mockGetUserByHandle(h),
   isConnected: () => mockIsConnected(),
+  isConnectedTo: () => mockIsConnected(),
 }));
 
 const mockSendMessage = vi.fn();

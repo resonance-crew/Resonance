@@ -35,7 +35,7 @@ import { localPicture } from '@/lib/chat/localPictures';
 import { chatImageUrl } from '@/lib/db/firestore/client/messages';
 import { ApiError } from '@/lib/db/firestore/client/api';
 import type { TextRange } from '@/lib/chat/search';
-import { getUserByHandle, getUsersByIds, isConnected } from '@/lib/db/firestore/client/reads';
+import { getUserByHandle, getUsersByIds, isConnectedTo } from '@/lib/db/firestore/client/reads';
 import {
   conversationId,
   deleteConversation,
@@ -134,9 +134,10 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
   );
   // Read again on coming back to the tab, as the conversation is: the other may have taken back the
   // resonance that connected the two meanwhile (this browser's own take-backs read it again themselves).
+  // Asked of their profile (one connection read, shared with the pen name's lookup), not the whole list.
   const { data: connected } = useSWR(
     user && otherId && user.id !== otherId ? `connected:${pairId}` : null,
-    () => isConnected(user!.id, otherId!),
+    () => isConnectedTo(handle, otherId!),
     { revalidateOnFocus: true },
   );
 

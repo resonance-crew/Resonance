@@ -25,15 +25,20 @@ vi.mock('@/i18n/navigation', () => ({
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
 }));
 vi.mock('@/lib/db/firestore/client/api', () => ({ callApi: vi.fn(), ApiError: class extends Error {} }));
-vi.mock('@/lib/db/firestore/client/reads', () => ({
-  getUserByHandle: vi.fn(),
-  getUsersByIds: vi.fn(async () => ({})),
-  isConnected: vi.fn(async () => true),
-  getCardById: vi.fn(),
-  getCardBySlugOrId: vi.fn(),
-  getUserById: vi.fn(),
-  resolveCardId: vi.fn(),
-}));
+vi.mock('@/lib/db/firestore/client/reads', () => {
+  const isConnected = vi.fn(async (..._: string[]) => true);
+  return {
+    getUserByHandle: vi.fn(),
+    getUsersByIds: vi.fn(async () => ({})),
+    isConnected,
+    // The thread asks its person's profile (reads.test covers how); here it answers as the connections would.
+    isConnectedTo: (_handle: string, other: string) => isConnected('me', other),
+    getCardById: vi.fn(),
+    getCardBySlugOrId: vi.fn(),
+    getUserById: vi.fn(),
+    resolveCardId: vi.fn(),
+  };
+});
 vi.mock('@/lib/db/firestore/client/blocks', () => ({
   getMyBlockedIds: vi.fn(async () => new Set()),
   blockUser: vi.fn(),
