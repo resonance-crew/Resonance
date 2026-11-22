@@ -4,6 +4,7 @@ import type { IdentityAdmin } from '@/server/ports/identity';
 import type { SessionStore } from '@/server/ports/sessions';
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import { firestoreSessionStore } from '../firestore/sessions';
+import { instanceAddressLimiter } from '../memory/addressBudget';
 import { firebaseAccountStanding, firebaseIdentityVerifier } from '../firebase-auth/identity';
 import { jwtSessionSigner } from './signer';
 
@@ -11,8 +12,8 @@ import { jwtSessionSigner } from './signer';
  * What the /api/v1/auth routes need, on the server's Firestore (through
  * '@/lib/db/firestore/admin', which the emulator suites mock, as serverCtx's): the session store,
  * the signer over RESONANCE_JWT_KEYS, Firebase Auth as the identity provider
- * (its tokens, and whether an account still stands), and the context's
- * budgets and clock.
+ * (its tokens, and whether an account still stands), the context's
+ * budgets and clock, and this instance's per-address budgets.
  */
 export function sessionDeps(ctx: Pick<ServerCtx, 'limits' | 'clock'>, overrides: Partial<SessionDeps> = {}): SessionDeps {
   return {
@@ -21,6 +22,7 @@ export function sessionDeps(ctx: Pick<ServerCtx, 'limits' | 'clock'>, overrides:
     idp: firebaseIdentityVerifier(),
     standing: firebaseAccountStanding(),
     limits: ctx.limits,
+    addresses: instanceAddressLimiter(),
     now: () => ctx.clock.date(),
     ...overrides,
   };
