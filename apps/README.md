@@ -738,6 +738,8 @@ from the `ProseSpacing` the type resolves), and sit inside `ReadingTextScale` �
 under `CappedTextScale`. The head is cover → title → byline (avatar and pen name over 「6 分鐘 · 日期」, at every
 width); share and the ⋯ end that byline under a tablet's header (`cardActionsSlot`) — the bar taking them while the
 byline is scrolled under it — and sit in a phone's bar; the story's end is the response bar and 收藏 (round 9 §3, round 28), never share or ⋯.
+Since round 30 the faces' line stands above that bar (always there for a signed-in reader, 16 under the tags) and the
+note opens 12 under it, as wide as the story's column, with no envelope in its field.
 `WindowLayout.cardPage(rail)` is §4's formula (the 680 measure, centred; on an expanded window with contents their
 rail `Tokens.StoryRailGap` — 80 — past it; without, the column centred).
 Sharing a card (share.spec, Owner revision; `ui/share`) is one glyph, shown only for a published, public card out
