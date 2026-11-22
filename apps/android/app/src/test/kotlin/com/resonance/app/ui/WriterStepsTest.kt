@@ -792,8 +792,12 @@ class WriterStepsTest {
         val updates = mutableListOf<Pair<String, DraftValues>>()
         val edits = mutableListOf<Pair<String, DraftValues>>()
         var discarded = 0
+        /** Every write as it is handed over (on the device from then), answered or not: C(reate), U(pdate), E(dit). */
+        val handed = mutableListOf<Triple<Char, String, DraftValues>>()
         var createGate: CompletableDeferred<Unit>? = null
         var updateGate: CompletableDeferred<Unit>? = null
+        var editGate: CompletableDeferred<Unit>? = null
+        var discardGate: CompletableDeferred<Unit>? = null
         var failWith: Exception? = null
         var trashed = false
         var readFails = false
@@ -801,6 +805,7 @@ class WriterStepsTest {
         override fun newDraftId() = "d-new"
 
         override suspend fun create(id: String, v: DraftValues, locale: String, referenceCardId: String?) {
+            handed += Triple('C', id, v)
             createGate?.await()
             failWith?.let { throw it }
             created += v
@@ -808,17 +813,21 @@ class WriterStepsTest {
         }
 
         override suspend fun update(id: String, v: DraftValues) {
+            handed += Triple('U', id, v)
             updateGate?.await()
             failWith?.let { throw it }
             updates += id to v
         }
 
         override suspend fun saveEdit(id: String, v: DraftValues) {
+            handed += Triple('E', id, v)
+            editGate?.await()
             failWith?.let { throw it }
             edits += id to v
         }
 
         override suspend fun discardEdit(id: String) {
+            discardGate?.await()
             discarded++
         }
 

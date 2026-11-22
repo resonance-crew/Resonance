@@ -1,9 +1,14 @@
 # alice's words typed with no network are not lost: she starts a card in the writer (a title, a line), the bar says
 # 已儲存; the network goes (airplane mode — Maestro's own connection to the emulator stays), she writes on and the bar
-# says 儲存中⋯ (and stays so: nothing can be sent); the app is stopped while still offline; the network comes back and
-# she opens the app again WITHOUT its data cleared (common/relaunch.yaml). Her card is in 我的卡片盒's 私人卡 shelf, and
-# its page and the server's own answer (common/draft-on-server.js, asked from outside the app) hold the words written
-# offline.
+# says 儲存中⋯ (and stays so: nothing can be sent); she writes on AGAIN, that first offline save still unanswered, and
+# pauses; the app is stopped while still offline; the network comes back and she opens the app again WITHOUT its data
+# cleared (common/relaunch.yaml). Her card is in 我的卡片盒's 私人卡 shelf, and its page and the server's own answer
+# (common/draft-on-server.js, asked from outside the app) hold the words written offline — the later ones too.
+#
+# The second typing is the bug this flow found on a phone: Android's writer saved one at a time and waited for each
+# answer, which offline never comes, so only the first autosave after the network went reached the device and
+# everything typed after it was lost with the app (WriteModel.kt: every save is now handed over at once, and only the
+# answers are waited on in turn — WriterOfflineSavesTest).
 #
 # Runs on `--stack writer-api` alone (the tag `writer-api`; apiDrafts on): the words wait in the draft outbox, kept
 # on the device and sent at the next launch (PATCH /api/v1/cards/{id}/draft). On the usual stack they are left to
@@ -36,8 +41,7 @@ onFlowComplete:
 - inputText: 窗外開始下雨。
 # The card is made and its words kept: the bar under 新卡片 says so. It says 已儲存 for the card's creation already,
 # before the line is sent, so the server is asked until it holds the line: what follows is words typed offline after
-# everything before them was kept. (A save still on its way when the network goes holds back every later one: the
-# writer sends one at a time, and a save offline never finishes — that case is not this flow's.)
+# everything before them was kept.
 - extendedWaitUntil:
     visible: 已儲存
     timeout: 30000
@@ -57,6 +61,17 @@ onFlowComplete:
     visible: 儲存中⋯
     timeout: 10000
 - assertVisible: 窗外開始下雨。燈一盞一盞熄了 Maestro
+# She writes on: that save is still unanswered (it stays so until the network is back), and these words came a pause
+# after it — 儲存中⋯ shows only once the autosave's 1.5 s and 0.4 s more have passed. They are handed over at their own
+# pause all the same; the bar says nothing new for it, so that pause is waited out as time (common/pause.js: the
+# app's 1.5 s, and room for a slow emulator).
+- inputText: 只剩一扇窗亮著 Maestro
+- assertVisible: 窗外開始下雨。燈一盞一盞熄了 Maestro只剩一扇窗亮著 Maestro
+- runScript:
+    file: common/pause.js
+    env:
+      MS: '4000'
+- assertVisible: 儲存中⋯
 - takeScreenshot: draft-offline-offline
 # Gone while offline, then the network comes back with the app closed.
 - stopApp
@@ -73,16 +88,16 @@ onFlowComplete:
 - extendedWaitUntil:
     visible: 斷線前的晚上 Maestro
     timeout: 30000
-# Its page, read from the server, with the words written offline.
+# Its page, read from the server, with the words written offline: the first and the ones after them.
 - tapOn:
     text: 斷線前的晚上 Maestro
     index: 0
 - extendedWaitUntil:
-    visible: .*燈一盞一盞熄了 Maestro.*
+    visible: .*燈一盞一盞熄了 Maestro只剩一扇窗亮著 Maestro.*
     timeout: 30000
 - runScript:
     file: common/draft-on-server.js
     env:
       TITLE: 斷線前的晚上 Maestro
-      WORDS: 燈一盞一盞熄了 Maestro
+      WORDS: 燈一盞一盞熄了 Maestro只剩一扇窗亮著 Maestro
 - takeScreenshot: draft-offline
