@@ -127,6 +127,8 @@ internal fun MascotOverlay(
     insetBottom: Dp,
     /** The contents rail beside the story (a tablet's card page): no places in that margin. */
     rail: Boolean = false,
+    /** The author's picked sentences' faces in the left margin (round 29 §S10): no places in that margin. */
+    leftTaken: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -154,6 +156,7 @@ internal fun MascotOverlay(
         snapshotFlow { list.layoutInfo.visibleItemsInfo.map { it.key to it.offset } }.collect { tracker.moved(it, density.density) }
     }
     val railNow by rememberUpdatedState(rail)
+    val leftTakenNow by rememberUpdatedState(leftTaken)
     // At rest (a scroll ended, or the marks changed and stayed so a moment): where the island's layer is, and its scene.
     LaunchedEffect(list, marks) {
         @OptIn(FlowPreview::class)
@@ -170,7 +173,7 @@ internal fun MascotOverlay(
                     val overlay = frame?.takeIf { it.isAttached } ?: return@collectLatest
                     val anchor = list.layoutInfo.visibleItemsInfo.firstOrNull() ?: return@collectLatest
                     val y = tracker.y
-                    val scene = MascotScene.of(sceneParts(overlay, marks, density.density), s.width / density.density, s.height / density.density, railNow)
+                    val scene = MascotScene.of(sceneParts(overlay, marks, density.density), s.width / density.density, s.height / density.density, railNow, leftTakenNow)
                     val text = scene.toString()
                     if (text == last) return@collectLatest
                     last = text
@@ -724,7 +727,7 @@ internal object MascotScene {
     /** The marks read: rects by key, a card's edge ([MascotMarks.BandRule] / [MascotMarks.CardOutline]) by its key, the story title's first line (in its own dp). */
     class Parts(val rects: Map<String, Rect>, val edges: Map<String, Any> = emptyMap(), val titleLine: Rect? = null)
 
-    fun of(parts: Parts, width: Float, height: Float, rail: Boolean): JsonObject = buildJsonObject {
+    fun of(parts: Parts, width: Float, height: Float, rail: Boolean, leftTaken: Boolean = false): JsonObject = buildJsonObject {
         put("width", width.r())
         put("height", height.r())
         val r = parts.rects
@@ -781,6 +784,8 @@ internal object MascotScene {
         val blocks = r.filterKeys { it.startsWith("block:") }.entries.sortedBy { it.key }.map { it.value }
         if (blocks.isNotEmpty()) put("paragraphs", JsonArray(blocks.map { it.json() }))
         if (rail) r["column"]?.let { col -> put("rail", Rect(col.right, col.top, width, col.bottom).json()) }
+        // The faces in the left margin (round 29 §S10): the window's left edge to the column's, the column's height.
+        if (leftTaken) r["column"]?.let { col -> put("leftTaken", Rect(0f, col.top, col.left, col.bottom).json()) }
         val respond = r["respond"]
         put("respond", respond.json())
         if (respond != null) {

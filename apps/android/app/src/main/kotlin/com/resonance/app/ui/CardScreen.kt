@@ -475,10 +475,10 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     val columns = LocalWindowLayout.current.cardPage(rail = phase == "loaded" && headings.isNotEmpty())
     val railed = columns.railStart != null
     // The author's own published page, the story as written (round 29 §U1): the sentences readers picked, washed, with
-    // their faces — in the right margin where the white right of the column is 70 or more (§S1.1), else in the line.
+    // their faces — in the left margin where the white left of the column is 70 or more (§S10), else in the line.
     val ownPicked = detail?.let { d -> ownPickedPassages(d, original = shownBlocks === blocks) }
     val passageMarks = remember(shownBlocks, ownPicked) { passageMarks(shownBlocks, ownPicked) }
-    val passageRoom = passageRoom(railed, columns.end)
+    val passageRoom = passageRoom(columns.start)
     val passagesInMargin = passageMarks.isNotEmpty() && passageInMargin(passageRoom)
     var pickedOpen by remember(key) { mutableStateOf<String?>(null) }
     var listCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -734,7 +734,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     }
     // 外觀's 小紙團 (round 19): the paper puppets' island over the page once it has loaded — never on a card in the trash.
     if (marks != null && phase == "loaded" && detail?.let(::ownTrashed) == false) {
-        MascotOverlay(list, marks, insetTop = top, insetBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(), rail = railed || passagesInMargin, modifier = Modifier.fillMaxSize())
+        MascotOverlay(list, marks, insetTop = top, insetBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(), rail = railed, leftTaken = passagesInMargin, modifier = Modifier.fillMaxSize())
     }
     // The contents' rail beside the article (an expanded window, a story with headings): pinned under the bar
     // while the article scrolls, leaving with its end. The author is under the title at every width (round 8 §10.1).

@@ -36,7 +36,6 @@ import com.resonance.design.LocalWindowLayout
 import com.resonance.design.StoryMarkdown
 import com.resonance.design.StoryType
 import com.resonance.design.WindowLayout
-import com.resonance.design.generated.Tokens
 import com.resonance.kit.l10n.Strings
 import com.resonance.kit.story.StoryBlock
 import com.resonance.kit.story.StoryParser
@@ -68,8 +67,8 @@ import java.io.File
 /**
  * The author's picked sentences on their own page (round 29 §P3, §S1, §S2): the one finder the web and iOS share, run
  * on the very cases file they run (test/vectors/passageMarks.json); the sentences found in the story's leaves in its
- * order; the faces' size by the reading scale and the room; the place by the white right of the column — the right
- * margin from 70 (a rail's 80, an 820 window), else in the line glued after the sentence — drawn for real.
+ * order; the faces' size by the reading scale and the room; the place by the white left of the column — the left
+ * margin from 70 (an 820 window; §S10), else in the line glued after the sentence — drawn for real.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
@@ -216,7 +215,7 @@ class PassageMarksTest {
         // A Latin story on a phone: 22.
         assertEquals(22f, passageFaceSize(1f, latin = true, compact = true).value, 0.01f)
         assertEquals(24f, passageFaceSize(1f, latin = true, compact = false).value, 0.01f)
-        // Beside a rail (80) at 1×: 24, and three faces end 16 short of it; at 1.5 capped to (80 − 14) ÷ 2.32.
+        // With 80 of white left of the column at 1×: 24, three faces 16 from the window's edge; at 1.5 capped to (80 − 14) ÷ 2.32.
         assertEquals(24f, passageFaceSize(1f, latin = false, compact = false, room = 80.dp).value, 0.01f)
         val big = passageFaceSize(1.5f, latin = false, compact = false, room = 80.dp)
         assertEquals(28.45f, big.value, 0.01f)
@@ -224,32 +223,32 @@ class PassageMarksTest {
         assertTrue(8f + AvatarGroup.width(3, big).value <= 80f - 6f + 0.01f)
     }
 
-    @Test fun theMarginFromSeventyElseTheLine() {
-        fun room(width: Dp, rail: Boolean): Dp {
-            val w = WindowLayout(width)
-            val c = w.cardPage(rail)
-            return passageRoom(c.railStart != null, c.end)
-        }
+    @Test fun theLeftMarginFromSeventyOfWhiteLeftOfTheColumnElseTheLine() {
+        fun room(width: Dp, rail: Boolean): Dp = passageRoom(WindowLayout(width).cardPage(rail).start)
         // Every phone: the line.
         assertTrue(!passageInMargin(room(390.dp, rail = false)))
         assertTrue(!passageInMargin(room(390.dp, rail = true)))
-        // A tablet upright at 820 with no rail: (820 − 680) ÷ 2 = 70, the margin.
+        // A tablet upright at 820 with no contents: (820 − 680) ÷ 2 = 70 on the left, the margin.
         assertEquals(70f, room(820.dp, rail = false).value, 0.5f)
         assertTrue(passageInMargin(room(820.dp, rail = false)))
-        // Beside a rail, always its 80.
-        assertEquals(Tokens.StoryRailGap, room(1280.dp, rail = true).value, 0f)
-        assertTrue(passageInMargin(room(1024.dp, rail = true)))
-        // A narrower window with no rail: the line.
+        // §S10: the contents rail on the right no longer is the room — it only shifts the column. A turned 1024 tablet
+        // whose story has contents keeps under 70 on the left: the line (beside its rail's 80 it stood in the margin).
+        assertTrue(room(1024.dp, rail = true).value < 70f)
+        assertTrue(!passageInMargin(room(1024.dp, rail = true)))
+        // A wide window with contents: what is left of the column, the margin.
+        assertEquals(WindowLayout(1280.dp).cardPage(true).start.value, room(1280.dp, rail = true).value, 0f)
+        assertTrue(passageInMargin(room(1280.dp, rail = true)))
+        // A narrower window with no contents: (768 − 680) ÷ 2 = 44, the line.
         assertTrue(!passageInMargin(room(768.dp, rail = false)))
     }
 
     private val opened = mutableListOf<String>()
 
-    private fun draw(width: Dp, inMargin: Boolean, blocks: List<StoryBlock>, picked: List<TapPicked>) = compose.setContent {
+    private fun draw(width: Dp, inMargin: Boolean, blocks: List<StoryBlock>, picked: List<TapPicked>, start: Dp = 20.dp) = compose.setContent {
         CompositionLocalProvider(LocalWindowLayout provides WindowLayout(width)) {
             val marks = passageMarks(blocks, picked)
             val passages = rememberStoryPassages(marks, blocks, inMargin, 24.dp, reducedMotion = true) { opened += it }
-            Box(Modifier.padding(start = 20.dp).width(300.dp).testTag("story")) {
+            Box(Modifier.padding(start = start).width(300.dp).testTag("story")) {
                 StoryMarkdown(blocks, StoryType.of(StoryScript.Cjk, LayoutClass.of(width.value)), "zh-TW", {}, passages = passages) { _, _, _ -> }
             }
         }
@@ -275,16 +274,22 @@ class PassageMarksTest {
         assertEquals(listOf("a", "a"), opened)
     }
 
-    @Test fun inTheMarginTheFacesStand8RightOfTheColumnAndTheWashOpensThemToo() {
+    @Config(qualifiers = "w1280dp-h800dp")
+    @Test fun inTheLeftMarginTheFacesEnd8LeftOfTheColumnOnTheLineTheWashBeginsAndTheWashOpensThemToo() {
         val blocks = StoryParser.parse(story)
-        draw(1280.dp, inMargin = true, blocks, one)
+        draw(1280.dp, inMargin = true, blocks, one, start = 120.dp)
         compose.waitForIdle()
         val story = compose.onNodeWithTag("story").getBoundsInRoot()
         val b = compose.onNodeWithTag(passageFacesTag(0), useUnmergedTree = true).getBoundsInRoot()
-        // Its hit area is at least 48, centred on the group: the faces' left edge 8 past the column.
+        // Its hit area is at least 48, centred on the group: the faces' right edge 8 short of the column's left (§S10).
         val faces = AvatarGroup.width(2, 24.dp).value
-        val left = b.left.value + ((b.right - b.left).value - faces) / 2
-        assertEquals(story.right.value + 8f, left, 1f)
+        val right = b.right.value - ((b.right - b.left).value - faces) / 2
+        assertEquals(story.left.value - 8f, right, 1f)
+        // Centred on the line box of the line the wash begins on — 「我坐在地上」 starts on the first line and the
+        // sentence ends on the second: the group stands on the first.
+        val type = StoryType.of(StoryScript.Cjk, LayoutClass.of(1280f))
+        val lineBox = type.bodySize * type.bodyLeading
+        assertEquals(story.top.value + lineBox / 2, (b.top.value + b.bottom.value) / 2, 1.5f)
         compose.onNodeWithTag(passageFacesTag(0), useUnmergedTree = true).performClick()
         assertEquals(listOf("a"), opened)
         // The wash under 「我坐在地上…」 (the first line's ninth character on): a press there opens the same people.

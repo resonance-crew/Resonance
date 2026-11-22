@@ -16,7 +16,8 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * A picked sentence in a laid-out line of the story (round 29 §U2, §S1): its wash one piece a line, the line box less 6;
  * in the line, its group's room right after its last character and glued to it — at every width the two stand on one
- * line, and no line grows taller; in the margin, past the column, a later group sharing a line moved down a line box.
+ * line, and no line grows taller; in the left margin (§S10), ending 8 short of the column's left edge, on the line the
+ * wash begins on, a later group sharing a line moved down a line box.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -71,7 +72,7 @@ class StoryPassagesTest {
         assertTrue(links.all { it.url == "https://example.com/" })
     }
 
-    @Test fun inTheMarginNothingMovesAndAGroupSharingALineMovesDownOne() {
+    @Test fun inTheLeftMarginNothingMovesAndAGroupSharingALineMovesDownOne() {
         val (plain, _) = buildRichLayout(runs, style, 300, one)
         val two = listOf(LeafPassage("a", 0, 8), LeafPassage("b", 8, 14))
         val (layout, spanned) = laid(300, inLine = false, leaf = two)
@@ -79,12 +80,28 @@ class StoryPassagesTest {
         assertEquals(words, spanned.toString())
         assertEquals(plain.lineCount, layout.lineCount)
         assertEquals(plain.height, layout.height)
-        val (_, spots) = passagePlaces(layout, spanned, inLine = false, reachPx = 2f, shortPx = 6f, gapPx = 4f, marginPx = 8f)
+        val widths = mapOf("a" to 42f, "b" to 61f)
+        val (_, spots) = passagePlaces(layout, spanned, inLine = false, reachPx = 2f, shortPx = 6f, gapPx = 4f, marginPx = 8f) { widths.getValue(it) }
         assertEquals(listOf("a", "b"), spots.map { it.id })
-        spots.forEach { assertEquals(300f + 8f, it.left, 0f) }
+        // Left of the column, each group's right edge 8 short of its left edge (§S10): aligned on the right.
+        spots.forEach { assertEquals(-8f, it.left + widths.getValue(it.id), 0f) }
         assertEquals(lineBox / 2f, spots[0].centre, 1f)
-        // Both end on the first line: the later one stands a line box below.
+        // Both begin on the first line: the later one stands a line box below.
         assertEquals(spots[0].centre + lineBox, spots[1].centre, 1f)
+    }
+
+    @Test fun inTheLeftMarginAGroupStandsOnTheLineItsWashBeginsOnByTheColumnsEdgeNotTheLeafs() {
+        // 「我坐在地上，…自己的。」 at 200 wide: it begins on the first line and ends lines later.
+        val (layout, spanned) = laid(200, inLine = false)
+        val first = layout.getLineForOffset(sentence.start)
+        assertTrue(layout.getLineForOffset(sentence.end - 1) > first)
+        // A quote's leaf, 30 in from the column: the group still ends 8 short of the column's edge, not the leaf's.
+        val (washes, spots) = passagePlaces(layout, spanned, inLine = false, reachPx = 2f, shortPx = 6f, gapPx = 4f, marginPx = 8f, indentPx = 30f) { 50f }
+        val spot = spots.single()
+        assertEquals(-30f - 8f - 50f, spot.left, 0f)
+        assertEquals((layout.getLineTop(first) + layout.getLineBottom(first)) / 2f, spot.centre, 0.5f)
+        // The same height as the wash's first piece.
+        assertEquals(washes.first().rect.center.y, spot.centre, 0.5f)
     }
 
     @Test fun aRangeOutsideTheLeafIsLeftAlone() {

@@ -89,6 +89,9 @@ internal fun PickedPeopleDialog(
             }
         }
         // The flow closes it by this id: the backdrop is named 關閉 too (maestro/flows/tap-picked.yaml).
-        ModalCloseButton(L10n.Native.close, onDismiss, buttonModifier = Modifier.flowTag("tap-picked-close"))
+        ModalCloseButton(L10n.Native.close, onDismiss, buttonModifier = Modifier.flowTag(PICKED_CLOSE_TAG))
     }
 }
+
+/** The flows' name of the pop-up's 關閉 (maestro/flows/tap-picked.yaml; iOS sets the same id). */
+internal const val PICKED_CLOSE_TAG = "tap-picked-close"

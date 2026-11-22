@@ -5,7 +5,6 @@ import androidx.compose.ui.unit.dp
 import com.resonance.api.models.CardDetail
 import com.resonance.api.models.FeedCard
 import com.resonance.api.models.TapPicked
-import com.resonance.design.generated.Tokens
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
 import com.resonance.kit.story.InlineRun
@@ -165,22 +164,23 @@ internal fun passageMarks(blocks: List<StoryBlock>, picked: List<TapPicked>?): L
     }.sortedWith(compareBy({ it.leaf }, { it.start }))
 }
 
-/** The white right of the column needed for the faces to stand in it (§S1.1). */
+/** The white left of the column needed for the faces to stand in it (§S10, §S1.1). */
 internal val PassageMarginMin: Dp = 70.dp
 
 /**
- * The white right of the story's column (§S1.1): to the contents rail when one stands — always its gap,
- * [Tokens.StoryRailGap] — else to the window's edge ([columnEnd], the column's inset at its end).
+ * The white left of the story's column (§S10): from the column's left edge to the content area's ([columnStart], the
+ * column's inset at its start — the side rail, where the window has one, stands outside the content area). The contents
+ * rail on the right only matters by where it puts the column.
  */
-internal fun passageRoom(railed: Boolean, columnEnd: Dp): Dp = if (railed) Tokens.StoryRailGap.dp else columnEnd
+internal fun passageRoom(columnStart: Dp): Dp = columnStart
 
-/** Whether the faces stand in the right margin ([room] ≥ 70), or in the line after their sentence. */
+/** Whether the faces stand in the left margin ([room] ≥ 70), or in the line after their sentence. */
 internal fun passageInMargin(room: Dp): Boolean = room >= PassageMarginMin
 
 /**
  * A face's size (§S2): 24 × the story's reading scale ([readingScale], [com.resonance.design.readingTextScale]: 36 at the
  * owner's 1.5) — 22 × it for a Latin-script story on a compact window, whose line box is shorter; in the margin
- * ([room]) never more than (room − 14) ÷ 2.32, so the widest group keeps 6 from the rail or the window's edge.
+ * ([room], the white left of the column) never more than (room − 14) ÷ 2.32, so the widest group keeps 6 from the window's edge.
  */
 internal fun passageFaceSize(readingScale: Float, latin: Boolean, compact: Boolean, room: Dp? = null): Dp {
     val base = (if (latin && compact) 22f else 24f) * readingScale

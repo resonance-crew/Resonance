@@ -31,8 +31,8 @@ data class LeafPassage(val id: String, val start: Int, val end: Int)
 /**
  * The author's picked sentences on their own page (round 29 §S1–§S4), handed to [StoryMarkdown] by the card page alone:
  * each sentence's leaf (found by the very list of runs the story draws: [leaves]), its faces ([faces], at most three,
- * nothing after them), where the groups stand — [inLine] after their sentence, else in the right margin, 8 right of
- * the column — and at what [face] size; what a screen reader says of a group ([label]), its flows' name ([tag]), and
+ * nothing after them), where the groups stand — [inLine] after their sentence, else in the left margin, their right
+ * edge 8 left of the column (§S10) — and at what [face] size; what a screen reader says of a group ([label]), its flows' name ([tag]), and
  * what a press on a group or on its sentence's wash opens ([onOpen]). [alpha] is the washes' and groups' fade in
  * (§S3), read while drawing.
  */
@@ -65,7 +65,7 @@ class StoryPassages(
         /** From a sentence's last character to its group in the line, and from the group to the next character (§S1.2). */
         val InLineGap = 4.dp
 
-        /** From the column's right edge to a group in the margin (§S1.1). */
+        /** From a group's right edge in the margin to the column's left edge (§S10). */
         val MarginGap = 8.dp
 
         /** How far the wash runs past a piece's first and last glyph (§U2.1). */
@@ -92,7 +92,7 @@ class StoryPassages(
 /** A piece of a sentence's wash: one line's, in layout pixels. */
 internal data class WashPiece(val id: String, val rect: Rect)
 
-/** Where a sentence's group stands, in layout pixels: its [left] edge and the [centre] of its height. */
+/** Where a sentence's group stands, in layout pixels: its faces' [left] edge and the [centre] of its height. */
 internal data class GroupSpot(val id: String, val left: Float, val centre: Float)
 
 /** Marks a sentence's range in the text while placeholders go in after others (the spans move with the text). */
@@ -147,10 +147,14 @@ internal fun markPassages(text: SpannableStringBuilder, leaf: List<LeafPassage>,
 /**
  * Where [spanned]'s marked sentences are drawn in [layout] (§U2, §S1): the wash's pieces, one a line — from the first
  * glyph to the last of the line and [reachPx] past each, the line box less [shortPx] — and each group's spot: in the line,
- * [gapPx] into its room; in the margin, [marginPx] right of the column, centred on the line box of the line its wash ends
- * on, a later group sharing that line moving down a line box.
+ * [gapPx] into its room; in the left margin (§S10), its right edge ([widthPx], the group's width) [marginPx] left of the
+ * column's left edge — [indentPx] left of the leaf's own (a quote's or a list item's) — centred on the line box of the
+ * line its wash begins on, a later group sharing that line moving down a line box.
  */
-internal fun passagePlaces(layout: Layout, spanned: Spanned, inLine: Boolean, reachPx: Float, shortPx: Float, gapPx: Float, marginPx: Float): Pair<List<WashPiece>, List<GroupSpot>> {
+internal fun passagePlaces(
+    layout: Layout, spanned: Spanned, inLine: Boolean, reachPx: Float, shortPx: Float, gapPx: Float, marginPx: Float,
+    indentPx: Float = 0f, widthPx: (String) -> Float = { 0f },
+): Pair<List<WashPiece>, List<GroupSpot>> {
     val ranges = spanned.getSpans(0, spanned.length, PassageRangeSpan::class.java).sortedBy { spanned.getSpanStart(it) }
     val washes = ranges.flatMap { r ->
         linkFragments(
@@ -178,11 +182,11 @@ internal fun passagePlaces(layout: Layout, spanned: Spanned, inLine: Boolean, re
     } else {
         var below = Float.NEGATIVE_INFINITY
         ranges.map { r ->
-            val line = layout.getLineForOffset(max(spanned.getSpanStart(r), spanned.getSpanEnd(r) - 1))
+            val line = layout.getLineForOffset(spanned.getSpanStart(r))
             val box = (layout.getLineBottom(line) - layout.getLineTop(line)).toFloat()
             val centre = max((layout.getLineTop(line) + layout.getLineBottom(line)) / 2f, below + box)
             below = centre
-            GroupSpot(r.id, layout.width + marginPx, centre)
+            GroupSpot(r.id, -indentPx - marginPx - widthPx(r.id), centre)
         }
     }
     return washes to spots

@@ -393,7 +393,7 @@ private const val TABULAR_FIGURES = "tnum"
 /**
  * Rich story text in exact CSS line boxes, with tappable links. On the author's own page ([passages], round 29) the
  * sentences readers picked in it wear their wash under the words, and each its group of faces — in the line right
- * after it, or in the margin past the column's right edge; a press on a group or on its wash opens who picked it (a
+ * after it, or in the left margin, 8 short of the column's left edge (§S10); a press on a group or on its wash opens who picked it (a
  * link inside the wash keeps its own press).
  */
 @Composable
@@ -416,11 +416,13 @@ fun RichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl: (String) ->
         if (!m.inLine) m.face else min(m.face.value, scaled.cssFontPx(style.size) * style.lineHeight / density).dp
     }
     val wash = Tokens.PassageWash
+    // How far this leaf starts in from the column's left (a quote's, a list item's): a group in the margin stands by the column's edge.
+    val indent = if (marks == null || marks.inLine) 0.dp else LocalPassageIndent.current
     val marksNow by rememberUpdatedState(marks)
     val faceNow by rememberUpdatedState(face)
     val text = Modifier
         .builtForWidth(
-            key = RichTextKey(runs, style, density, scaled.fontScale, marks?.keyFor(leaf)),
+            key = RichTextKey(runs, style, density, scaled.fontScale, marks?.keyFor(leaf)?.let { it to indent }),
             built = built,
             build = { widthPx ->
                 val prepare: ((SpannableStringBuilder) -> Unit)? = if (marks == null || face == null) null else { t ->
@@ -433,6 +435,7 @@ fun RichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl: (String) ->
                     val (washes, spots) = passagePlaces(
                         layout, spanned, marks.inLine,
                         StoryPassages.WashReach.toPx(), StoryPassages.WashShort.toPx(), StoryPassages.InLineGap.toPx(), StoryPassages.MarginGap.toPx(),
+                        indentPx = indent.toPx(), widthPx = { id -> marks.groupWidth(id, face ?: marks.face).toPx() },
                     )
                     RichTextLayout(layout, spanned, strokes, washes, spots)
                 }
@@ -493,7 +496,7 @@ fun RichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl: (String) ->
         Box(modifier.fillMaxWidth()) { Box(text) }
         return
     }
-    // The groups over the text, where its layout put them (in the line, or past the column's edge in the margin).
+    // The groups over the text, where its layout put them (in the line, or left of the column's edge in the margin).
     androidx.compose.ui.layout.Layout(
         content = {
             Box(text)
@@ -514,6 +517,19 @@ fun RichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl: (String) ->
             }
         }
     }
+}
+
+/**
+ * How far the leaf drawn here starts in from the story column's left edge — a quote's rail and gap, a list item's
+ * gutter, added up when nested: a picked sentence's group in the left margin stands by the column's edge (§S10).
+ */
+private val LocalPassageIndent = androidx.compose.runtime.staticCompositionLocalOf { 0.dp }
+
+/** Adds [by] to [LocalPassageIndent] for [content] on the author's own page ([story] has passages); else just [content]. */
+@Composable
+private fun Indented(story: Story, by: Dp, content: @Composable () -> Unit) {
+    if (story.passages == null || story.passages.inLine) content()
+    else androidx.compose.runtime.CompositionLocalProvider(LocalPassageIndent provides LocalPassageIndent.current + by, content = content)
 }
 
 /** A run of story text laid out for a width: the layout, its spanned text, its links' strokes and its picked sentences' washes and groups. */
@@ -793,7 +809,7 @@ private fun Block(block: StoryBlock, style: ProseStyle, story: Story) {
                     drawPath(path, it, style = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round))
                 }
                 .padding(start = QuoteRailWidth + em),
-        ) { BlockColumn(block.children, style.quoted, story, nested = true) }
+        ) { Indented(story, QuoteRailWidth + em) { BlockColumn(block.children, style.quoted, story, nested = true) } }
         // Each item's marker in the muted ink at the start of the 1.6em gutter, the items 0.3em apart.
         is StoryBlock.ListBlock -> {
             val itemGaps = remember(block, story) { ProseMetrics.itemGaps(block.items, story.spacing, story::drawnAsCard) }
@@ -805,7 +821,7 @@ private fun Block(block: StoryBlock, style: ProseStyle, story: Story) {
                         Box(Modifier.width((story.type.listIndent * grown).dp)) {
                             RichCssText(listOf(InlineRun(if (block.ordered) "${block.start + i}." else "•")), marker, onOpenUrl, Modifier.clearAndSetSemantics { })
                         }
-                        Box(Modifier.weight(1f)) { BlockColumn(item, style, story, nested = false) }
+                        Box(Modifier.weight(1f)) { Indented(story, (story.type.listIndent * grown).dp) { BlockColumn(item, style, story, nested = false) } }
                     }
                 }
             }
