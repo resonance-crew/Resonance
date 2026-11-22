@@ -661,6 +661,8 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                 },
                                 launch = launchEnd,
                                 onNoteRoom = { barAside = it },
+                                translated = { model.translator?.takeIf { it.isFor(card.title, d.story) }?.showing == true },
+                                onStale = { model.refresh(changes, session.lastCardChange, retry = true) },
                             )
                             // The author's own published card: who resonated, where a reader's row would be (§U3).
                             else if (!trashedOwn && card.publishedAt != null) {

@@ -1,3 +1,4 @@
+import { storedPick } from '@/lib/api/v1/tapPassages';
 import type { ServerCtx } from '@/server/ctx';
 import { exportSection, type ExportSection } from '@/server/domain/schema/registry';
 import type { ExportRow } from '@/server/ports/repos/account';
@@ -47,12 +48,20 @@ async function* rows(ctx: ServerCtx, section: ExportSection, uid: string, treeId
   }
 }
 
-/** The cards the account resonated with (on only), a page at a time: `{ cardId, title, link, at }`. */
+/**
+ * The cards the account resonated with (on only), a page at a time: `{ cardId, title, link, at }`, and `passage` —
+ * the words they picked (round 27) — on a tap with a pick, on the condition `title` has: null once they may no
+ * longer read the card.
+ */
 async function* tapRows(ctx: ServerCtx, section: ExportSection, uid: string): AsyncGenerator<Row[]> {
   for await (const page of ctx.data.account.exportRows(section, uid)) {
     const on = page.filter((r) => r.data.on === true && typeof r.data.cardId === 'string');
     const lines = await ctx.data.account.cardLines(uid, on.map((r) => r.data.cardId as string));
-    yield on.map((r) => ({ ...lines.get(r.data.cardId as string), at: r.data.at ?? null }));
+    yield on.map((r) => {
+      const line = lines.get(r.data.cardId as string);
+      const pick = storedPick(r.data.passage);
+      return { ...line, at: r.data.at ?? null, ...(pick ? { passage: line?.title != null ? pick.text : null } : {}) };
+    });
   }
 }
 

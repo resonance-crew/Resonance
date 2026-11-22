@@ -1,4 +1,5 @@
-import { INDEX_DEADLINE_MS, readCard, type CardReadingResult } from '@/lib/ai/tasks';
+import { INDEX_DEADLINE_MS, PASSAGES_TIMEOUT_MS, readCard, type CardReadingResult, type pickPassages } from '@/lib/ai/tasks';
+import { makeTapPassagesIn } from '@/lib/api/v1/tapPassagesMake';
 import { ChatIncomplete, embed, embedModel, signatureModel, type TokenUsage } from '@/lib/ai/openai';
 import { costOf } from '@/lib/ai/prices';
 import { blankCard, thinCard } from '@/lib/cards/blank';
@@ -337,6 +338,14 @@ const EXAMINED_MAX = 200;
 /** How many cards are read at once. */
 export const INDEX_OWED_CONCURRENCY = 3;
 
+/** Kept at a run's end for the passages' pick after a reading: its timeout, and its writes and the run's log line. */
+export const PASSAGES_RESERVE_MS = PASSAGES_TIMEOUT_MS + 10_000;
+/**
+ * Kept at a run's end when a reading starts: the reading's own deadline (INDEX_DEADLINE_MS) and then its passages'
+ * pick — a function killed between the two loses the card's retry (the reading has cleared its mark).
+ */
+export const INDEX_OWED_RESERVE_MS = INDEX_DEADLINE_MS + PASSAGES_RESERVE_MS;
+
 /** The results that asked no model. */
 const NO_CALL = new Set<IndexResult['reason']>(['unchanged', 'blank', 'thin', 'not-published', 'not-found', 'over-budget']);
 
@@ -344,6 +353,8 @@ export interface IndexOwedRun {
   examined: number;
   read: number;
   outcomes: Record<string, number>;
+  /** The tap passages' outcomes (round 27), one per card examined. */
+  passages: Record<string, number>;
   /** Cards left for the next run (the limit or the deadline). */
   left: number;
   tokens: { input: number; output: number; reasoning: number; embed: number };
@@ -351,15 +362,28 @@ export interface IndexOwedRun {
   cost: number | null;
 }
 
-export async function indexOwedIn(ctx: ServerCtx, opts: { limit?: number; deadline?: number; now?: () => number } = {}): Promise<IndexOwedRun> {
+export interface IndexOwedOptions {
+  limit?: number;
+  /** When the function ends (ms since epoch, the cron's maxDuration): no reading starts past `end - INDEX_OWED_RESERVE_MS`, no pick past `end - PASSAGES_RESERVE_MS` (the card is marked owed instead). */
+  end?: number;
+  /** No reading starts past this (ms since epoch); `end - INDEX_OWED_RESERVE_MS` by default when `end` is given. */
+  deadline?: number;
+  now?: () => number;
+  /** The passages' model call (tests). */
+  pick?: typeof pickPassages;
+}
+
+export async function indexOwedIn(ctx: ServerCtx, opts: IndexOwedOptions = {}): Promise<IndexOwedRun> {
   const limit = opts.limit ?? INDEX_OWED_LIMIT;
   const now = opts.now ?? Date.now;
+  const { end } = opts;
+  const deadline = opts.deadline ?? (end === undefined ? undefined : end - INDEX_OWED_RESERVE_MS);
   const [pending, templated] = await Promise.all([ctx.data.recommend.listIndexPending(EXAMINED_MAX), ctx.data.recommend.listTemplated(EXAMINED_MAX)]);
   const owed = [
     ...pending.map((id) => ({ id, rewrite: false })),
     ...templated.filter((d) => !d.rewritten).map((d) => ({ id: d.cardId, rewrite: true })),
   ].filter((x, i, all) => all.findIndex((y) => y.id === x.id) === i);
-  const run: IndexOwedRun = { examined: 0, read: 0, outcomes: {}, left: 0, tokens: { input: 0, output: 0, reasoning: 0, embed: 0 }, cost: 0 };
+  const run: IndexOwedRun = { examined: 0, read: 0, outcomes: {}, passages: {}, left: 0, tokens: { input: 0, output: 0, reasoning: 0, embed: 0 }, cost: 0 };
   // Three at a time (B16): each reading takes 20–60 s, and one after another twenty overran the cron's 300 s.
   // None is started past the deadline, nor once those read and still reading could reach the limit.
   let reading = 0;
@@ -384,6 +408,17 @@ export async function indexOwedIn(ctx: ServerCtx, opts: { limit?: number; deadli
         const outcome = result.reason ?? 'indexed';
         run.outcomes[outcome] = (run.outcomes[outcome] ?? 0) + 1;
         if (!NO_CALL.has(result.reason)) run.read++;
+        // Its tap passages (round 27 §P2.4) after the reading, which cleared the mark: free when they are current,
+        // and a failure marks the card again for tomorrow (until PASSAGES_TRIES_MAX for one text).
+        // Too near the function's end for the pick: owed (marked again), never cut off between the reading and the mark.
+        const passages = await makeTapPassagesIn(ctx, card.id, {
+          pick: opts.pick,
+          mayCall: end === undefined ? undefined : async () => now() + PASSAGES_RESERVE_MS <= end,
+        }).catch((e: unknown) => {
+          ctx.log.error('[index-cards] passages', card.id, e);
+          return 'failed' as const;
+        });
+        run.passages[passages] = (run.passages[passages] ?? 0) + 1;
       } catch (e) {
         run.read++;
         run.outcomes.error = (run.outcomes.error ?? 0) + 1;
@@ -392,7 +427,7 @@ export async function indexOwedIn(ctx: ServerCtx, opts: { limit?: number; deadli
         reading--;
       }
     },
-    { tag: '[index-cards]', stop: () => run.read + reading >= limit || (opts.deadline !== undefined && now() >= opts.deadline) },
+    { tag: '[index-cards]', stop: () => run.read + reading >= limit || (deadline !== undefined && now() >= deadline) },
   );
   run.left = notStarted;
   const readCost = costOf(signatureModel(), run.tokens);

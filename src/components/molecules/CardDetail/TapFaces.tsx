@@ -9,7 +9,7 @@ import { DialogScroll } from '@/components/sections/AppHeader/BellList';
 import { TAP_FACES_MAX, type AuthorBody, type CardTapBody } from '@/lib/api/v1/schemas';
 import { listTaps } from '@/lib/db/firestore/client/taps';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
-import { TapPeople, TapPeopleSkeleton } from './TapPeople';
+import { TapPeople, TapPeopleSkeleton, type TapOwnRow } from './TapPeople';
 import styles from './TapFaces.module.css';
 
 /** A face as AvatarGroup draws it. */
@@ -69,6 +69,12 @@ export interface TapFacesProps {
   arriving?: string;
   /** The viewer's face, just turned off: drawn once more as it slides out. */
   leaving?: AuthorBody;
+  /**
+   * The card offers passages and the viewer's tap is on (round 27 §U3): their own row in the list quotes their pick
+   * (or says 選一段) and opens the passages' dialog through this — and the faces are a button even when theirs is the
+   * only one.
+   */
+  onOwnRow?: () => void;
 }
 
 /**
@@ -78,7 +84,7 @@ export interface TapFacesProps {
  * 「我在想这个直接做成这个 model 会不会好一点呢」; on a wide screen it was a popover under the faces) — except when
  * the only face is the viewer's own: then it is a picture that says 你共振了, not in the tab order.
  */
-export function TapFaces({ cardId, tap, viewerId, arriving, leaving }: TapFacesProps) {
+export function TapFaces({ cardId, tap, viewerId, arriving, leaving, onOwnRow }: TapFacesProps) {
   const t = useTranslations('card.tap');
   const locale = useLocale();
   const [open, setOpen] = useState(false);
@@ -91,7 +97,7 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving }: TapFacesP
     <AvatarGroup members={shown.faces.map(memberOf)} more={shown.more} size={28} arriving={arriving} leaving={leaving ? memberOf(leaving) : undefined} />
   );
   if (!faces.length && !leaving) return null;
-  const onlyMine = !shown.more && faces.length === 1 && faces[0].id === viewerId;
+  const onlyMine = !shown.more && faces.length === 1 && faces[0].id === viewerId && !onOwnRow;
   if (onlyMine || !faces.length) {
     return (
       <span className={styles.faces} role="img" aria-label={faces.length ? t('selfOnly') : undefined} aria-hidden={faces.length ? undefined : true}>
@@ -99,7 +105,9 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving }: TapFacesP
       </span>
     );
   }
-  const label = readerFacesLabel(shown, tap.mine, viewerId, locale, {
+  // Theirs alone, a button only for their own row (§U3): it says 你共振了, as the picture would.
+  const selfAlone = !shown.more && faces.length === 1 && faces[0].id === viewerId;
+  const label = selfAlone ? t('selfOnly') : readerFacesLabel(shown, tap.mine, viewerId, locale, {
     selfOnly: t('selfOnly'),
     more: t('more'),
     reader: (names) => t('facesReader', { names }),
@@ -134,7 +142,7 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving }: TapFacesP
           closeButton
         >
           <DialogScroll>
-            <ReaderList cardId={cardId} viewerId={viewerId} onPick={() => close(false)} />
+            <ReaderList cardId={cardId} viewerId={viewerId} own={ownRow(tap, viewerId, onOwnRow)} onPick={() => close(false)} />
           </DialogScroll>
         </Modal>
       )}
@@ -147,8 +155,19 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving }: TapFacesP
  * too, as every answer about who someone is connected with: another account in this tab (signed in from another
  * one) never sees the last one's people.
  */
-function ReaderList({ cardId, viewerId, onPick }: { cardId: string; viewerId: string; onPick: () => void }) {
+function ReaderList({ cardId, viewerId, own, onPick }: { cardId: string; viewerId: string; own: TapOwnRow; onPick: () => void }) {
   const { data } = useSWR(['taps', cardId, viewerId], () => listTaps(cardId), { revalidateOnFocus: false });
   if (!data) return <TapPeopleSkeleton />;
-  return <TapPeople people={data.people} onPick={onPick} />;
+  return <TapPeople people={data.people} own={own} onPick={onPick} />;
+}
+
+/**
+ * The reader's own row (round 27 §U3): on a card with passages its quote is the card page's pick, which a pick
+ * changes at once (lib/data/taps); without passages, whatever the list says it was.
+ */
+export function ownRow(tap: CardTapBody, viewerId: string, onPress?: () => void): TapOwnRow {
+  const passages = tap.passages ?? [];
+  if (!passages.length) return { id: viewerId, offer: false };
+  const quote = passages.find((p) => p.id === tap.passage)?.text ?? null;
+  return { id: viewerId, quote, offer: !!onPress, onPress };
 }

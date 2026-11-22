@@ -1,11 +1,12 @@
 import { NOTE_REQUEST_MAX, noPenName } from '@/lib/api/v1/conversations';
 import { ApiFailure } from '@/lib/api/v1/http';
 import { cardVisible, trashedAtOf } from '@/lib/api/v1/present';
-import { TAP_FACES_MAX, type AuthorBody, type CardTapBody, type TapListBody, type TapPersonBody } from '@/lib/api/v1/schemas';
+import { TAP_FACES_MAX, type AuthorBody, type CardTapBody, type TapListBody, type TapPassageResponseBody, type TapPersonBody } from '@/lib/api/v1/schemas';
+import { presentTapPassages } from '@/lib/api/v1/tapPassages';
 import type { Card } from '@/lib/db/types';
 import type { ServerCtx } from '@/server/ctx';
 import { TAP_PAGE, noteExcerpt, type TapOutcome } from '@/server/domain/taps';
-import type { Tapper } from '@/server/ports/repos/taps';
+import type { TapPick, Tapper } from '@/server/ports/repos/taps';
 import type { PageCursor } from '@/server/ports/time';
 
 // The resonance tap (共振, round 26) as an application service: what each
@@ -80,9 +81,15 @@ async function authorPeople(ctx: ServerCtx, card: Card, limit: number, after: Pa
  * card, anyone with a block between them and the reader is left out; on an
  * anonymous card nothing here turns on a block.
  */
-async function readerPeople(ctx: ServerCtx, viewerId: string, card: Card, viewerBlocks?: Promise<ReadonlySet<string>>): Promise<{ mine: boolean; people: Tapper[] }> {
+async function readerPeople(
+  ctx: ServerCtx,
+  viewerId: string,
+  card: Card,
+  viewerBlocks?: Promise<ReadonlySet<string>>,
+): Promise<{ mine: boolean; pick: TapPick | null; people: Tapper[] }> {
   const taps = ctx.data.taps;
-  const [mine, links] = await Promise.all([taps.tapIsOn(card.id, viewerId), taps.connectionsOf(viewerId)]);
+  const [own, links] = await Promise.all([taps.ownTap(card.id, viewerId), taps.connectionsOf(viewerId)]);
+  const { on: mine, passage: pick } = own;
   const others = links.filter((id) => id !== card.authorId);
   const found = await taps.tapsOnBy(card.id, others);
   found.sort((a, b) => b.at - a.at || (a.uid < b.uid ? -1 : 1));
@@ -91,7 +98,7 @@ async function readerPeople(ctx: ServerCtx, viewerId: string, card: Card, viewer
     const [blocked, blockers] = await Promise.all([viewerBlocks ?? taps.blockedBy(viewerId), taps.blockersOf(found.map((t) => t.uid), viewerId)]);
     people = found.filter((t) => !blocked.has(t.uid) && !blockers.has(t.uid));
   }
-  return { mine, people: mine ? [{ uid: viewerId, at: Number.MAX_SAFE_INTEGER }, ...people] : people };
+  return { mine, pick, people: mine ? [{ uid: viewerId, at: Number.MAX_SAFE_INTEGER, passage: pick }, ...people] : people };
 }
 
 /** On a named card: whether a block stands between reader and author, and whether POST /notes would take a note now. */
@@ -143,13 +150,19 @@ export async function cardTapIn(
   }
   // A reader: on a named card, the blocks either way and whether a note would be taken in one read, beside their people.
   const named = card.anonymous !== true;
-  const [standing, { mine, people }] = await Promise.all([
+  const [standing, { mine, pick, people }] = await Promise.all([
     named ? readerStanding(ctx, viewerId, card) : { blocked: false, mayNote: true },
     readerPeople(ctx, viewerId, card, opts.blocked),
   ]);
   if (standing.blocked) return null;
+  const mayNote = standing.mayNote;
   const { faces, more } = await firstFaces(ctx, people, TAP_FACES_MAX);
-  return { mine, faces, more, mayNote: standing.mayNote };
+  // The card's passages (round 27): the same for every reader, on the story alone; their own pick while it is one.
+  // Both absent while the card offers none: a short card's answer is as it was before passages.
+  const passages = presentTapPassages(card);
+  if (!passages.length) return { mine, faces, more, mayNote };
+  const passage = pick && passages.some((p) => p.id === pick.id) ? pick.id : null;
+  return { mine, faces, more, mayNote, passages, passage };
 }
 
 /** The excerpt of the latest note each of `uids` left the author on the card; notes with no words left out. */
@@ -167,7 +180,13 @@ export async function listTapsIn(ctx: ServerCtx, viewerId: string, cardId: strin
   if (view === 'reader') {
     const { people } = await readerPeople(ctx, viewerId, card);
     const found = await taps.profiles(people.map((p) => p.uid));
-    return { people: people.filter((p) => found.has(p.uid)).map((p) => ({ author: found.get(p.uid)!, note: null })), nextPageToken: null };
+    // Only their own row carries a pick (round 27): no one else's is a reader's to learn, on any card.
+    return {
+      people: people
+        .filter((p) => found.has(p.uid))
+        .map((p) => ({ author: found.get(p.uid)!, note: null, ...(p.uid === viewerId && p.passage ? { passage: { text: p.passage.text } } : {}) })),
+      nextPageToken: null,
+    };
   }
   const page = await authorPeople(ctx, card, TAP_PAGE, pageToken || undefined, await taps.blockedBy(card.authorId));
   const uids = page.people.map((p) => p.uid);
@@ -177,6 +196,35 @@ export async function listTapsIn(ctx: ServerCtx, viewerId: string, cardId: strin
   ]);
   const people: TapPersonBody[] = page.people
     .filter((p) => found.has(p.uid))
-    .map((p) => ({ author: found.get(p.uid)!, note: notes.has(p.uid) ? { excerpt: notes.get(p.uid)! } : null }));
+    .map((p) => ({
+      author: found.get(p.uid)!,
+      note: notes.has(p.uid) ? { excerpt: notes.get(p.uid)! } : null,
+      // A pick only where there is one (absent reads as null).
+      ...(p.passage ? { passage: { text: p.passage.text } } : {}),
+    }));
   return { people, nextPageToken: page.full ? page.next : null };
+}
+
+// --- the passage a reader picked (round 27) --------------------------------------------------------------------------
+
+/** See src/lib/api/v1/taps.ts `setTapPassage`. */
+export async function setTapPassageIn(ctx: ServerCtx, uid: string, cardId: string, passage: string | null): Promise<TapPassageResponseBody> {
+  const card = await ctx.data.taps.visibleCard(uid, cardId);
+  if ((await tapViewOf(ctx, uid, card)) !== 'reader') throw notFound();
+  return ctx.uow.run(
+    async (tx) => {
+      const [tap, fresh, linked] = await Promise.all([tx.taps.getTap(card.id, uid), tx.taps.getPassageCard(card.id), tx.taps.connected(uid, card.authorId)]);
+      if (!tappable(fresh, uid) || fresh.authorId !== card.authorId || !cardVisible(fresh, uid, () => linked)) throw notFound();
+      if (tap?.on !== true) throw new ApiFailure('conflict', 'Resonate with this card first.');
+      if (passage === null) {
+        tx.taps.setTapPassage(card.id, uid, null);
+        return { passage: null };
+      }
+      const chosen = presentTapPassages(fresh).find((p) => p.id === passage);
+      if (!chosen) throw new ApiFailure('invalid_request', 'Not a passage this card offers.');
+      tx.taps.setTapPassage(card.id, uid, { id: chosen.id, text: chosen.text });
+      return { passage: chosen.id };
+    },
+    { label: 'setTapPassage' },
+  );
 }

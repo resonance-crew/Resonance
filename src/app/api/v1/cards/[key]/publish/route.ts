@@ -4,6 +4,7 @@ import { titleToSlugBase } from '@/lib/ai/tasks';
 import { CardIdParam } from '@/lib/api/v1/schemas';
 import { indexCard } from '@/lib/recommend/indexCard';
 import { makeSummaryTranslationsIn } from '@/lib/api/v1/summaryTranslationsMake';
+import { makeTapPassagesIn } from '@/lib/api/v1/tapPassagesMake';
 import { cardPagePaths } from '@/lib/api/revalidate';
 import { serverCtx } from '@/server/ctx';
 import { budgetFirst } from '@/server/app/conversations';
@@ -37,9 +38,9 @@ export const POST = withUser(async (user, req, ctx: RouteContext<'key'>) => {
   );
   ringAfterIn(server, notificationId);
   // Same grace notes as the web editor: never awaited by the writer, never failing the publish.
-  server.later.later(
-    () =>
-    Promise.all([
+  server.later.later(() => {
+    const indexed = indexCard(id).catch((e) => console.error('[api/v1] index', e));
+    return Promise.all([
       (async () => {
         const [slug] = await Promise.all([
           // A slug that came late (the answer said null) is written once this resolves.
@@ -49,13 +50,14 @@ export const POST = withUser(async (user, req, ctx: RouteContext<'key'>) => {
         // After both, so the cached page is rendered with its slug and its link previews.
         server.pages.revalidate(cardPagePaths({ id, slug }));
       })(),
-      indexCard(id).catch((e) => console.error('[api/v1] index', e)),
+      indexed,
+      // Its tap passages (round 27): a reader's 選一段 after 共振 — a failure is marked owed once the reading settled.
+      makeTapPassagesIn(server, id, { markAfter: indexed }).catch((e) => console.error('[api/v1] tap passages', e)),
       // Its title and excerpt in the other interface language, for readers who turned auto-translate on (one small call).
       makeSummaryTranslationsIn(server, id).catch((e) => console.error('[api/v1] summary translations', e)),
       // The first time only: the author's connections who asked hear of it, once its slug is settled.
       result.firstPublish ? announceNewCardIn(server, id, result.slug ?? pendingSlug) : null,
-    ]),
-    'publish',
-  );
+    ]);
+  }, 'publish');
   return NextResponse.json(result);
 });

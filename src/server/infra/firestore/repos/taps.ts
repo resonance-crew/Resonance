@@ -4,6 +4,7 @@ import { decodePageToken, encodePageToken } from '@/lib/api/v1/paging';
 import { CARD_VISIBILITY_FIELDS, blockedByViewer, canView, toAuthor } from '@/lib/api/v1/present';
 import { visibleCardById } from '@/lib/api/v1/reads';
 import type { AuthorBody } from '@/lib/api/v1/schemas';
+import { storedPick } from '@/lib/api/v1/tapPassages';
 import { mapCard } from '@/lib/db/firestore/mapper';
 import { READER_SIGNALS, SIGNAL_KEEP_DAYS, DAY_MS, clamp, finite, type SessionState, type SignalState } from '@/server/domain/reading';
 import { CARD_READS, TAPS, docIdOk } from '@/server/domain/taps';
@@ -28,7 +29,7 @@ const dateOf = (v: unknown): Date | null => (v instanceof Timestamp ? v.toDate()
 
 const tapperOf = (d: QueryDocumentSnapshot | DocumentSnapshot): Tapper | null => {
   const uid = d.get('userId');
-  return docIdOk(uid) ? { uid, at: millisOf(d.get('at')) } : null;
+  return docIdOk(uid) ? { uid, at: millisOf(d.get('at')), passage: storedPick(d.get('passage')) } : null;
 };
 
 const ms = (v: unknown): number | null => (v instanceof Timestamp ? v.toMillis() : typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -120,7 +121,15 @@ export function tapsTx(db: AdminDb, tx: Transaction): TapsTxRepo {
       tx.set(tapRef(db, cardId, uid), { cardId, userId: uid, on: true, at: Timestamp.fromDate(at), rangAt: rangAt ? Timestamp.fromDate(rangAt) : null });
     },
     turnTapOff(cardId, uid) {
-      tx.update(tapRef(db, cardId, uid), { on: false });
+      // Taking it back takes the pick with it (round 27): turning it on again starts without one.
+      tx.update(tapRef(db, cardId, uid), { on: false, passage: null });
+    },
+    async getPassageCard(cardId) {
+      const [current] = await tx.getAll(db.doc(`cards/${cardId}`), { fieldMask: [...CARD_VISIBILITY_FIELDS, 'story', 'tapPassages'] });
+      return current.exists ? mapCard(current.id, current.data()!) : null;
+    },
+    setTapPassage(cardId, uid, passage) {
+      tx.update(tapRef(db, cardId, uid), { passage: passage ? { id: passage.id, text: passage.text } : null });
     },
 
     async getSignal(uid, cardId) {
@@ -191,6 +200,11 @@ export function tapsData(db: AdminDb): TapsData {
     async tapIsOn(cardId, uid) {
       const own = await tapRef(db, cardId, uid).get();
       return own.exists && own.get('on') === true;
+    },
+    async ownTap(cardId, uid) {
+      const own = await tapRef(db, cardId, uid).get();
+      const on = own.exists && own.get('on') === true;
+      return { on, passage: on ? storedPick(own.get('passage')) : null };
     },
     async connectionsOf(uid) {
       const links = await db.collection('connections').where('userIds', 'array-contains', uid).select('userIds').get();

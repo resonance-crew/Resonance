@@ -13,15 +13,23 @@ import { useRouter } from '@/i18n/navigation';
 import type { AuthorBody, CardTapBody } from '@/lib/api/v1/schemas';
 import { usePrefillCard } from '@/lib/data/cardPrefill';
 import { useMyProfile, useMyResonance } from '@/lib/data/hooks';
-import { faceOf, useTapToggle } from '@/lib/data/taps';
+import { faceOf, useTapPassage, useTapToggle, type TapFailure } from '@/lib/data/taps';
 import { isBookmarked, toggleBookmark } from '@/lib/db/firestore/client/bookmarks';
 import { cardShareKey } from '@/lib/share/links';
+import type { StoryScript } from '@/lib/text/script';
 import { NoteInPlace, useNoteInPlace } from './NoteInPlace';
 import { TapFaces } from './TapFaces';
+import { reducedMotion } from './tapMotion';
+import { useVisualTap } from './visualTap';
 import styles from './CardViewerActions.module.css';
 
 // Loaded on the first 用卡片回應: most readers never open it.
 const ResonatePicker = dynamic(() => import('./ResonatePicker').then((m) => m.ResonatePicker));
+// Loaded on the first press that turns 共振 on over a card with passages (round 27 §U1).
+const TapPassages = dynamic(() => import('./TapPassages').then((m) => m.TapPassages));
+
+/** How long after a press that turns 共振 on the passages' dialog opens (§U1.1): the segment has filled, the face slid in. */
+export const PASSAGES_AFTER_TAP_MS = 240;
 
 /** The note's block id (the 寄小紙條 segment's `aria-controls`). */
 export const NOTE_FIELD_ID = 'card-note';
@@ -37,6 +45,10 @@ export interface CardViewerActionsProps {
   tap?: CardTapBody | null;
   /** What ends the second line (round 8 §10.2, round 26 §U1.2): the card's share and ⋯ after a long story at ≥ 1200. */
   trailing?: ReactNode;
+  /** The story is on screen in translation (round 25 §F): the passages, the author's own words, are not offered then. */
+  translated?: boolean;
+  /** The story's script (src/lib/text/script.ts): the passages' dialog sets its rows in the story's own type (§U1.3). */
+  script?: StoryScript;
 }
 
 /** How the capsule's words fit (§U1.3): in full, short (寫卡片 / Card), or the short ones on two lines (共振 alone first). */
@@ -52,9 +64,11 @@ export const NARROW_ROW = 340;
  * place under the row, never in a dialog) and 用卡片回應 (a card of one's own; 修改 with a draft, 已回應 once
  * published) — then, right under it and as wide, the second line: the faces of who resonated at its start, 收藏 at
  * its end (and, after a long story at the desktop's width, the card's share and ⋯). The note opens 12 under that.
- * Tapping 共振 opens nothing: the segment fills and the viewer's face slides in. Nothing here is the author's.
+ * Tapping 共振 fills the segment and slides the viewer's face in; on a card with passages (round 27 §U1) a press that
+ * turns it on also asks, 240 ms later, which part stayed with them — a small centred dialog the tap never waits on.
+ * Nothing here is the author's.
  */
-export function CardViewerActions({ cardId, referenceCardId, author, tap, trailing }: CardViewerActionsProps) {
+export function CardViewerActions({ cardId, referenceCardId, author, tap, trailing, translated = false, script = 'cjk' }: CardViewerActionsProps) {
   const t = useTranslations('card');
   const locale = useLocale();
   const router = useRouter();
@@ -65,6 +79,34 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
   const prefill = usePrefillCard();
   const [picking, setPicking] = useState(false);
   const toggleTap = useTapToggle(cardId, user?.id);
+  const pickPassage = useTapPassage(cardId, user?.id);
+  // The passages' dialog (§U1), the timer that opens it after a press, and the tap's own PUT the pick waits for.
+  const [passagesOpen, setPassagesOpen] = useState(false);
+  const passagesTimer = useRef<number | undefined>(undefined);
+  const tapAnswer = useRef<Promise<TapFailure | null>>(Promise.resolve(null));
+  useEffect(() => () => window.clearTimeout(passagesTimer.current), []);
+  const passages = tap?.passages ?? [];
+  const offersPassages = passages.length >= 2 && !translated;
+  const openPassages = useCallback(() => setPassagesOpen(true), []);
+  // The dialog can't be offered any more (a translation arrived — the auto-translate one included — or the tap went
+  // off): it closes for good and its timer stops, so it never comes back on its own once the original is on screen
+  // again (§U1.1: it opens only from a press that turns 共振 on, or from the reader's own row).
+  const offerable = offersPassages && !!tap?.mine;
+  const wasOfferable = useRef(offerable);
+  useEffect(() => {
+    if (wasOfferable.current && !offerable) {
+      window.clearTimeout(passagesTimer.current);
+      setPassagesOpen(false);
+    }
+    wasOfferable.current = offerable;
+  }, [offerable]);
+  // The screenshots' hold opened it (no press came before): the dialog then rings no row (TapPassages `focusRow`).
+  const [heldOpen, setHeldOpen] = useState(false);
+  const openHeld = useCallback(() => {
+    setHeldOpen(true);
+    openPassages();
+  }, [openPassages]);
+  useVisualTap(cardId, user?.id, tap, me?.handle ? faceOf(me) : null, openHeld);
   // Still being read (undefined): a kept draft waits for it before it opens anything.
   const note = useNoteInPlace({ cardId, uid: user?.id, mayNote: tap === undefined ? undefined : (tap?.mayNote ?? true) });
   // The viewer's face as it slides in (their id) or out (their face, drawn once more).
@@ -132,10 +174,34 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
       setLeaving(face);
       leaveTimer.current = window.setTimeout(() => setLeaving(undefined), 160);
     }
-    const failed = await toggleTap(on, face);
+    window.clearTimeout(passagesTimer.current);
+    // On, over a card with passages and its own words on screen: which part, a moment after the press (§U1.1).
+    if (on && offersPassages) {
+      if (reducedMotion()) setPassagesOpen(true);
+      else passagesTimer.current = window.setTimeout(() => setPassagesOpen(true), PASSAGES_AFTER_TAP_MS);
+    } else setPassagesOpen(false);
+    const answer = toggleTap(on, face);
+    tapAnswer.current = answer;
+    const failed = await answer;
+    if (failed) {
+      // The tap was put back: nothing to pick on (§U1.6).
+      window.clearTimeout(passagesTimer.current);
+      setPassagesOpen(false);
+    }
     if (failed === 'penName') router.push('/signup');
     else if (failed) toast.show({ message: t('tap.failed') });
-  }, [user, tap, me, router, toggleTap, toast, t]);
+  }, [user, tap, me, router, toggleTap, toast, t, offersPassages]);
+
+  // A row of the dialog: sent once the tap's own PUT has answered (§U1.5), the row shown chosen at once. A 400 or 409
+  // (the passages or the tap changed) reads the card again and says nothing (S12); anything else says so.
+  const onPickPassage = useCallback(
+    async (passage: string | null) => {
+      if (await tapAnswer.current) return;
+      const failed = await pickPassage(passage);
+      if (failed === 'failed') toast.show({ message: t('tap.failed') });
+    },
+    [pickPassage, toast, t],
+  );
 
   const onNote = useCallback(() => {
     if (!user) return router.push('/signin');
@@ -204,7 +270,18 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
   };
 
   // The second line holds only what needs no account for someone signed out (§U1.4): their faces and 收藏 need one.
-  const faces = user && tap ? <TapFaces cardId={cardId} tap={tap} viewerId={user.id} arriving={arriving} leaving={leaving} /> : null;
+  const faces =
+    user && tap ? (
+      <TapFaces
+        cardId={cardId}
+        tap={tap}
+        viewerId={user.id}
+        arriving={arriving}
+        leaving={leaving}
+        // The reader's own row reopens the dialog with their pick marked (§U3), while the tap is on.
+        onOwnRow={offersPassages && tapOn ? () => setPassagesOpen(true) : undefined}
+      />
+    ) : null;
   const save = user ? (
     <BareIconButton
       icon="bookmark"
@@ -254,6 +331,10 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
           note={note}
           onClosedByKey={() => containerRef.current?.querySelector<HTMLButtonElement>(`button[aria-controls="${NOTE_FIELD_ID}"]`)?.focus()}
         />
+      )}
+
+      {passagesOpen && offersPassages && tapOn && (
+        <TapPassages passages={passages} script={script} picked={tap?.passage ?? null} onPick={(p) => void onPickPassage(p)} onClose={() => { setPassagesOpen(false); setHeldOpen(false); }} focusRow={!heldOpen} />
       )}
 
       {picking && <ResonatePicker open onClose={() => setPicking(false)} targetId={cardId} targetReferenceId={referenceCardId} />}

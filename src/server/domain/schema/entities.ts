@@ -148,6 +148,8 @@ export const SCHEMAS = {
       linkPreviews: f.list(linkPreview),
       linkPreviewsFor: f.strs(),
       summaryTranslations: f.json(),
+      // Round 27: the passages a reader may pick after 共振 ({ of, items: [{ id, text }], model, at, failed? }), server-written.
+      tapPassages: f.json(),
       signature: f.obj({
         coreInsight: f.str(),
         placeholder: f.bool(),
@@ -420,6 +422,8 @@ export const SCHEMAS = {
       on: f.bool(),
       at: f.instant(),
       rangAt: f.time(),
+      // Round 27: which of the card's passages stayed with the reader ({ id, text }), null for none; gone with the tap.
+      passage: f.json(),
     },
   }),
   readerSignals: defineEntity({

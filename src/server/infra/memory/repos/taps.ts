@@ -2,6 +2,7 @@ import { NOTE_REQUEST_MAX } from '@/lib/api/v1/conversations';
 import { ApiFailure } from '@/lib/api/v1/http';
 import { cardVisible, toAuthor } from '@/lib/api/v1/present';
 import type { AuthorBody } from '@/lib/api/v1/schemas';
+import { storedPick } from '@/lib/api/v1/tapPassages';
 import { mapCard } from '@/lib/db/firestore/mapper';
 import type { Card } from '@/lib/db/types';
 import { READER_SIGNALS, type SignalState } from '@/server/domain/reading';
@@ -31,7 +32,7 @@ const notAToken = () =>
   new ApiFailure('invalid_request', 'The request does not match the contract.', [{ path: 'pageToken', message: 'Not a valid page token.' }]);
 const time = (v: unknown): number => (v instanceof Date ? v.getTime() : 0);
 const asCard = (id: string, row: Row | null): Card | null => (row ? mapCard(id, row) : null);
-const tapperOf = (row: Row): Tapper | null => (docIdOk(row.userId) ? { uid: row.userId, at: time(row.at) } : null);
+const tapperOf = (row: Row): Tapper | null => (docIdOk(row.userId) ? { uid: row.userId, at: time(row.at), passage: storedPick(row.passage) } : null);
 const live = (row: Row | null) => !!row && row.trashedAt == null && row.publishedAt != null;
 
 type Read = <T extends Row = Row>(table: string, id: string) => T | null;
@@ -58,7 +59,14 @@ export function tapsTx(tx: MemoryTx): TapsTxRepo {
       tx.put(TAPS, `${cardId}_${uid}`, { cardId, userId: uid, on: true, at, rangAt });
     },
     turnTapOff(cardId, uid) {
-      tx.merge(TAPS, `${cardId}_${uid}`, { on: false });
+      // Taking it back takes the pick with it (round 27): turning it on again starts without one.
+      tx.merge(TAPS, `${cardId}_${uid}`, { on: false, passage: null });
+    },
+    async getPassageCard(cardId) {
+      return asCard(cardId, tx.get('cards', cardId));
+    },
+    setTapPassage(cardId, uid, passage) {
+      tx.merge(TAPS, `${cardId}_${uid}`, { passage: passage ? { id: passage.id, text: passage.text } : null });
     },
 
     async getSignal(uid, cardId) {
@@ -131,6 +139,11 @@ export function tapsData(state: MemoryState): TapsData {
     },
     async tapIsOn(cardId, uid) {
       return get(TAPS, `${cardId}_${uid}`)?.on === true;
+    },
+    async ownTap(cardId, uid) {
+      const own = get(TAPS, `${cardId}_${uid}`);
+      const on = own?.on === true;
+      return { on, passage: on ? storedPick(own?.passage) : null };
     },
     async connectionsOf(uid) {
       const ids = state.rows('connections').flatMap(({ row }) => (Array.isArray(row.userIds) && row.userIds.includes(uid) ? (row.userIds as unknown[]) : []));

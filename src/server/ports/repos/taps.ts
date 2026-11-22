@@ -22,6 +22,14 @@ import type { PageCursor } from '../time';
 export interface Tapper {
   uid: string;
   at: number;
+  /** Their pick among the card's tap passages, as stored (round 27); null or absent when none. */
+  passage?: TapPick | null;
+}
+
+/** A reader's pick among a card's tap passages as the tap document keeps it (round 27): the words themselves. */
+export interface TapPick {
+  id: string;
+  text: string;
 }
 
 /** A reader's tap on a card as stored. */
@@ -80,8 +88,12 @@ export interface TapsTxRepo {
   connected(a: string, b: string): Promise<boolean>;
   /** Turn the tap on at `at`, keeping when it rang (the whole document written). */
   putTapOn(cardId: string, uid: string, at: Date, rangAt: Date | null): void;
-  /** Take the tap back: `on: false`, the document kept (its `rangAt` is the one ring ever). */
+  /** Take the tap back: `on: false` and its pick cleared (`passage: null`, round 27), the document kept (its `rangAt` is the one ring ever). */
   turnTapOff(cardId: string, uid: string): void;
+  /** The card, its visibility fields with its `story` and `tapPassages` (a pick's check, round 27); null when it is gone. */
+  getPassageCard(cardId: string): Promise<Card | null>;
+  /** Write the reader's pick on their tap (`passage`), and nothing else: no `at`, no `rangAt` (round 27). */
+  setTapPassage(cardId: string, uid: string, passage: TapPick | null): void;
 
   /** The reader's record of the card (anything odd read as absent); null when there is none. */
   getSignal(uid: string, cardId: string): Promise<SignalState | null>;
@@ -120,6 +132,8 @@ export interface TapsData {
   blockersOf(uids: string[], of: string): Promise<Set<string>>;
   /** Whether the reader's tap on the card is on. */
   tapIsOn(cardId: string, uid: string): Promise<boolean>;
+  /** Whether the reader's tap on the card is on, and their pick while it is (round 27), in one read. */
+  ownTap(cardId: string, uid: string): Promise<{ on: boolean; passage: TapPick | null }>;
   /** Everyone `uid` is connected with (valid ids, once each, never `uid`). */
   connectionsOf(uid: string): Promise<string[]>;
   /** The taps of `uids` on the card that are on, in no order (a query per 30 of them, side by side). */

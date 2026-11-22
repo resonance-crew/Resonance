@@ -1,5 +1,5 @@
 import type { StorySummary } from '@/server/domain/summary';
-import type { SummarySource, SummaryWriter, TranslationsData, TranslationsTxRepo } from '@/server/ports/repos/translations';
+import type { PassageSource, SummarySource, SummaryWriter, TranslationsData, TranslationsTxRepo } from '@/server/ports/repos/translations';
 import type { MemoryState, Row } from '../state';
 import type { MemoryTx } from '../uow';
 
@@ -33,6 +33,15 @@ function sourceOf(row: Row): SummarySource {
   };
 }
 
+function passageSourceOf(row: Row): PassageSource {
+  return {
+    title: typeof row.thoughtCore === 'string' ? row.thoughtCore : '',
+    story: typeof row.story === 'string' ? row.story : '',
+    fields: row,
+    tapPassages: row.tapPassages,
+  };
+}
+
 /** A row's version: its whole content (memory keeps no update times). */
 const versionOf = (row: Row | null) => (row ? JSON.stringify(row) : '');
 
@@ -44,6 +53,13 @@ export function translationsTx(tx: MemoryTx): TranslationsTxRepo {
     },
     putSummaryTranslations(id, value) {
       tx.merge('cards', id, { summaryTranslations: value });
+    },
+    async getPassageSource(id) {
+      const row = tx.get('cards', id);
+      return row ? passageSourceOf(row) : null;
+    },
+    putTapPassages(id, value) {
+      tx.merge('cards', id, { tapPassages: { ...value, at: new Date() } });
     },
   };
 }
@@ -57,6 +73,20 @@ export function translationsData(state: MemoryState): TranslationsData {
     async removeSummaryTranslations(id) {
       if (!state.get('cards', id)) throw new Error(`No card ${id} to update`);
       state.merge('cards', id, { summaryTranslations: undefined });
+    },
+    async getPassageSource(id) {
+      const row = state.get('cards', id);
+      return row ? passageSourceOf(row) : null;
+    },
+    async removeTapPassages(id) {
+      if (!state.get('cards', id)) throw new Error(`No card ${id} to update`);
+      state.merge('cards', id, { tapPassages: undefined });
+    },
+    async putTapPassagesFailed(id, failed) {
+      const row = state.get('cards', id);
+      if (!row) throw new Error(`No card ${id} to update`);
+      const stored = row.tapPassages && typeof row.tapPassages === 'object' ? (row.tapPassages as Record<string, unknown>) : {};
+      state.merge('cards', id, { tapPassages: { ...stored, failed: { ...failed } } });
     },
 
     async getKeptTranslation(cardId, to) {

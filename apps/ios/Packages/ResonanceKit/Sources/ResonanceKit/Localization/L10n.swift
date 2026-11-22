@@ -825,6 +825,14 @@ public enum L10n {
             public static var send: String { Strings.shared.string("card.tap.send") }
             /// Didn't go through, try again
             public static var failed: String { Strings.shared.string("card.tap.failed") }
+            /// Quietly tell the author which part stayed with you
+            public static var passageTitle: String { Strings.shared.string("card.tap.passageTitle") }
+            /// Skip
+            public static var passageSkip: String { Strings.shared.string("card.tap.passageSkip") }
+            /// Pick a part
+            public static var passagePick: String { Strings.shared.string("card.tap.passagePick") }
+            /// “{text}”
+            public static func passageQuote(text: String) -> String { Strings.shared.format("card.tap.passageQuote", ["text": text]) }
         }
         public enum Reply {
             /// Reply with a card

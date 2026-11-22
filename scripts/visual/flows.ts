@@ -32,7 +32,7 @@ const FLOWS_DIR = join(ROOT, 'maestro/flows');
 /** The flows in the order a run takes them; any other top-level flow follows, by name. */
 const ORDER = [
   'sign-in', 'send-message', 'send-sticker', 'react-reply', 'unsend-message', 'chat-draft', 'composer-toggle',
-  'sticker-replies', 'send-picture', 'answer-letter', 'leave-note', 'tap', 'reply-with-card', 'open-notification', 'open-link',
+  'sticker-replies', 'send-picture', 'answer-letter', 'leave-note', 'tap', 'tap-passage', 'reply-with-card', 'open-notification', 'open-link',
   'publish-card', 'trash-restore', 'sticker-breath', 'translate-story', 'block-person', 'live-message', 'thought-map',
   'draft-offline',
 ];

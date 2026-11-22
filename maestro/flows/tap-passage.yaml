@@ -1,0 +1,140 @@
+# dora reads alice's 搬家後的第一個安靜夜晚 (the seed's one story long enough for passages, round 27 §V3) and resonates:
+# 共振 turns on and, a moment later, the centred dialog asks which part stayed with her (tap-passages: alice's own
+# sentences, word for word). She skips it — the tap stays on — then takes the tap back and resonates again: the dialog
+# opens again (M1: the app's copy of the tap kept its passages through the take-back). This time she picks the second
+# passage; the row holds its ink and check and the dialog closes by itself. Her own row in the faces' list then quotes
+# it 「…」 (only she and alice ever see it). At the end she takes the tap back, which clears the pick, so the seed's
+# state is as it was. tap.yaml stays as it is: a short card opens nothing.
+appId: com.resonance.stories
+name: tap-passage
+tags:
+  - card
+  - smoke
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: dora
+      ROUTE: /card/rich-story
+- extendedWaitUntil:
+    visible: 搬家後的第一個安靜夜晚
+    timeout: 30000
+# The story embeds bob's card, whose meta line also says 共振 (iOS reads it as a text of its own, and a press on it
+# opens bob's card): the end row is found by its note segment, and 共振 pressed as the one under the story's last line.
+- scrollUntilVisible:
+    element: 寄小紙條
+    direction: DOWN
+# The first press: on, then the dialog.
+- tapOn:
+    text: 共振
+    below: The quiet after moving out.*
+- extendedWaitUntil:
+    visible:
+      id: tap-passages
+    timeout: 10000
+- assertVisible:
+    id: tap-passage-0
+- assertVisible:
+    id: tap-passage-1
+# 略過: the dialog goes, the tap stays on.
+- tapOn:
+    id: tap-passage-skip
+- extendedWaitUntil:
+    notVisible:
+      id: tap-passages
+    timeout: 10000
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - assertVisible:
+          checked: true
+          containsChild: 共振
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - assertVisible:
+          text: 共振
+          selected: true
+# Taken back: off, and nothing opens.
+- tapOn:
+    text: 共振
+    below: The quiet after moving out.*
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          notVisible:
+            checked: true
+            containsChild: 共振
+          timeout: 10000
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          notVisible:
+            text: 共振
+            selected: true
+          timeout: 10000
+- assertNotVisible:
+    id: tap-passages
+# On again: the dialog opens again.
+- tapOn:
+    text: 共振
+    below: The quiet after moving out.*
+- extendedWaitUntil:
+    visible:
+      id: tap-passages
+    timeout: 10000
+- tapOn:
+    id: tap-passage-1
+# It closes by itself 300 ms after the pick.
+- extendedWaitUntil:
+    notVisible:
+      id: tap-passages
+    timeout: 10000
+# Her own row quotes the passage she picked.
+- tapOn:
+    id: tap-faces
+- extendedWaitUntil:
+    visible: .*「.+」.*
+    timeout: 15000
+- takeScreenshot: tap-passage
+# Her own row opens the dialog again with her pick marked (§U3); 略過 leaves it as it is. (Not 關閉: the dialog's
+# backdrop carries that name too, and a tap at its centre lands on the row.)
+- tapOn: .*「.+」.*
+- extendedWaitUntil:
+    visible:
+      id: tap-passages
+    timeout: 10000
+- tapOn:
+    id: tap-passage-skip
+- extendedWaitUntil:
+    notVisible:
+      id: tap-passages
+    timeout: 10000
+# Taken back at the end: the pick goes with it, and the seed's dora has no tap on the story again.
+- tapOn:
+    text: 共振
+    below: The quiet after moving out.*
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          notVisible:
+            text: 共振
+            selected: true
+          timeout: 10000
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          notVisible:
+            checked: true
+            containsChild: 共振
+          timeout: 10000

@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.resonance.api.models.Author
 import com.resonance.api.models.CardTap
+import com.resonance.api.models.TapPassage
 import com.resonance.api.models.Me
 import com.resonance.design.SegmentedLayout
 import com.resonance.design.generated.IconName
@@ -96,12 +97,29 @@ internal fun tapIcon(on: Boolean): IconName = if (on) IconName.WavePair else Ico
  * Only the drawing cuts them to [MAX] ([shown], then the blank disc: [showsMore]) — kept whole, a tap turned on and
  * off again gives back the face it pushed out (iOS's TapState keeps them so too).
  */
-internal data class TapFaces(val mine: Boolean, val faces: List<Author>, val more: Boolean) {
+internal data class TapFaces(
+    val mine: Boolean,
+    val faces: List<Author>,
+    val more: Boolean,
+    /** The card's tap passages (round 27 §P3), the same whatever the faces: none (empty) on a short card or the author's. */
+    val passages: List<TapPassage> = emptyList(),
+    /** The viewer's own pick among [passages] (its id), or none. */
+    val passage: String? = null,
+) {
     /** After the viewer's tap went [on]: their face first, or gone — the others keep their order. [viewer] is who they are. */
     fun withViewer(viewer: Author, on: Boolean): TapFaces {
         val others = faces.filter { it.id != viewer.id }
-        return if (on) TapFaces(true, listOf(viewer) + others, more) else TapFaces(false, others, more)
+        // A tap taken back takes its pick with it, and one turned on again starts without one (§P4.4): the server's.
+        return if (on) copy(mine = true, faces = listOf(viewer) + others, passage = passage.takeIf { mine })
+        else copy(mine = false, faces = others, passage = null)
     }
+
+    /** The dialog of §U1 has something to offer: two passages at least (fewer is none). */
+    val offersPassages: Boolean get() = passages.size >= 2
+
+    /** The tap as the page keeps it: these faces and the card's [mayNote] — and the passages and the pick (§P7). */
+    fun toCardTap(mayNote: Boolean): CardTap =
+        CardTap(mine = mine, faces = faces, more = more, mayNote = mayNote, passages = passages.takeIf { it.isNotEmpty() }, passage = passage)
 
     /** The faces drawn: [MAX] at most. */
     val shown: List<Author> get() = faces.take(MAX)
@@ -118,7 +136,8 @@ internal data class TapFaces(val mine: Boolean, val faces: List<Author>, val mor
         const val MAX = 3
         val NONE = TapFaces(false, emptyList(), false)
 
-        fun of(tap: CardTap?): TapFaces = tap?.let { TapFaces(it.mine, it.faces, it.more) } ?: NONE
+        fun of(tap: CardTap?): TapFaces =
+            tap?.let { TapFaces(it.mine, it.faces, it.more, it.passages.orEmpty(), it.passage?.takeIf { id -> it.mine && it.passages.orEmpty().any { p -> p.id == id } }) } ?: NONE
     }
 }
 
@@ -171,6 +190,18 @@ internal class TapSwitch(
             server = now
             on = now
         }
+    }
+
+    /**
+     * The screenshots' `cardEnd passages|passage-picked` (round 27 §V2): drawn on, and nothing sent — the web's
+     * `visualTap` writes nothing either. A real press would store the tap on the run's seeded stack, and the later
+     * variants' author's list (`taps-author-list`) would then show the capture's reader among the seeded people.
+     * Says whether it was off: the dialog then marks no pick, as after a press.
+     */
+    fun showOnForCapture(): Boolean {
+        val was = on
+        if (!lock.isLocked) on = true
+        return !was
     }
 
     fun flip(): Job {

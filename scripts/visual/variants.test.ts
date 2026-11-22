@@ -21,10 +21,10 @@ describe('the variant sets', () => {
     // round 25: six screens (settings-language, card-translated, profile-translated, card-framed, publish-cover,
     // cover-frame) × the web's five, the iPhone's three, the iPad, the Mac, the Android phone's three and the tablet
     // round 26: six more (card-tapped, card-note-open, card-note-wait, card-own-taps, taps-list, taps-author-list) on
-    // the same fourteen devices and variants: 387 + 6 × 14
+    // the same fourteen devices and variants: 387 + 6 × 14; round 27: card-passages on the same fourteen
     // 任務 #3: update-required, the apps alone — the iPhone's three, the iPad, the Mac, the Android phone's three and
-    // the tablet: 471 + 9
-    expect(estimate('release').captures).toBe(480);
+    // the tablet: 485 + 9
+    expect(estimate('release').captures).toBe(494);
   });
 
   it('adds the device states after the device they run on, and only in the extended set', () => {
@@ -54,7 +54,8 @@ describe('the variant sets', () => {
     expect(keys('android', 'phone', 'extended').filter((k) => k.startsWith('thread-keyboard'))).toEqual(['thread-keyboard@light-zh-TW.png']);
     // 50, and round 26's note in place: 2 large fonts + the phone sideways + 5 in the dark, and its three lines on
     // each of the 8 release devices (the owner, 2026-11-20: Android's 寄出 filled the capsule's end)
-    expect(estimate('extended').captures - estimate('release').captures).toBe(66);
+    // round 27: card-passage-picked on each of the 8 release devices, as the note's three lines
+    expect(estimate('extended').captures - estimate('release').captures).toBe(74);
     for (const [platform, device] of [['web', 'phone'], ['web', 'desktop'], ['ios', 'iphone'], ['android', 'phone'], ['mac', 'mac']] as const) {
       expect(keys(platform, device, 'extended'), `${platform}/${device}`).toContain('card-note-lines@light-zh-TW.png');
       expect(keys(platform, device, 'release'), `${platform}/${device}`).not.toContain('card-note-lines@light-zh-TW.png');

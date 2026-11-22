@@ -20,3 +20,5 @@ what says on whose word they changed. Commit the new row with the accept
 | 2026-11-19T16:15:54Z | 20261119-063118 | d05f87ac | android, ios, mac, web | all | 148 | 你帮我 push，然后把截图设成基准 |
 | 2026-11-19T20:02:09Z | 20261119-195529 | 22103904 | android | thread-attach | 4 | 你帮我 push，然后把截图设成基准 |
 | 2026-11-21T12:34:07Z | 20261121-095831 | 4d186439 | web | landing | 5 | 收為基準 |
+| 2026-11-21T18:04:10Z | 20261121-161711 | 4afae1ba | android, ios, mac, web | card-passages, taps-author-list, taps-list, card-tapped | 56 | 收為基準 |
+| 2026-11-21T18:04:48Z | 20261121-163239 | 4afae1ba | android, ios, mac, web | card-passage-picked | 8 | 收為基準 |

@@ -2,6 +2,7 @@ import { NOTE_REQUEST_MAX } from '@/lib/api/v1/conversations';
 import { ApiFailure } from '@/lib/api/v1/http';
 import { cardVisible, toAuthor } from '@/lib/api/v1/present';
 import type { AuthorBody } from '@/lib/api/v1/schemas';
+import { storedPick } from '@/lib/api/v1/tapPassages';
 import { mapCard } from '@/lib/db/firestore/mapper';
 import type { Card } from '@/lib/db/types';
 import { READER_SIGNALS, type SignalState } from '@/server/domain/reading';
@@ -25,7 +26,7 @@ const notAToken = () =>
   new ApiFailure('invalid_request', 'The request does not match the contract.', [{ path: 'pageToken', message: 'Not a valid page token.' }]);
 const time = (v: unknown): number => (v instanceof Date ? v.getTime() : 0);
 const asCard = (id: string, row: Doc | null): Card | null => (row ? mapCard(id, row) : null);
-const tapperOf = (row: Doc): Tapper | null => (docIdOk(row.userId) ? { uid: row.userId, at: time(row.at) } : null);
+const tapperOf = (row: Doc): Tapper | null => (docIdOk(row.userId) ? { uid: row.userId, at: time(row.at), passage: storedPick(row.passage) } : null);
 const live = (row: Doc | null) => !!row && row.trashedAt == null && row.publishedAt != null;
 
 type Read = (table: string, id: string) => Promise<Doc | null>;
@@ -51,7 +52,14 @@ export function pgTapsTx(tx: PgTx): TapsTxRepo {
       tx.put(TAPS, `${cardId}_${uid}`, { cardId, userId: uid, on: true, at, rangAt });
     },
     turnTapOff(cardId, uid) {
-      tx.merge(TAPS, `${cardId}_${uid}`, { on: false });
+      // Taking it back takes the pick with it (round 27): turning it on again starts without one.
+      tx.merge(TAPS, `${cardId}_${uid}`, { on: false, passage: null });
+    },
+    async getPassageCard(cardId) {
+      return asCard(cardId, await tx.get('cards', cardId));
+    },
+    setTapPassage(cardId, uid, passage) {
+      tx.merge(TAPS, `${cardId}_${uid}`, { passage: passage ? { id: passage.id, text: passage.text } : null });
     },
 
     async getSignal(uid, cardId) {
@@ -131,6 +139,11 @@ export function pgTapsData(docs: PgDocs): TapsData {
     async tapIsOn(cardId, uid) {
       return (await get(TAPS, `${cardId}_${uid}`))?.on === true;
     },
+    async ownTap(cardId, uid) {
+      const own = await get(TAPS, `${cardId}_${uid}`);
+      const on = own?.on === true;
+      return { on, passage: on ? storedPick(own?.passage) : null };
+    },
     async connectionsOf(uid) {
       const rows = await docs.rows('connections', { contains: { userIds: uid } });
       const ids = rows.flatMap(({ row }) => (Array.isArray(row.userIds) ? (row.userIds as unknown[]) : []));
@@ -151,15 +164,15 @@ export function pgTapsData(docs: PgDocs): TapsData {
         keyset = `and (at, (card_id || '_' || user_id) collate "C") < ($3::timestamptz, $4::text collate "C")`;
       }
       const { rows } = await docs.db.query<Doc>(
-        `select card_id, user_id, at, to_char(at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as at_us
+        `select card_id, user_id, at, extra->'passage' as passage, to_char(at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as at_us
          from resonance_taps where card_id = $1 and "on" is true and at is not null ${keyset}
          order by at desc, user_id collate "C" desc limit $2`,
         params,
       );
-      const page = rows.map((r) => ({ id: `${r.card_id}_${r.user_id}`, uid: String(r.user_id), at: r.at as Date, t: toInstantUs(String(r.at_us), r.at as Date) }));
+      const page = rows.map((r) => ({ id: `${r.card_id}_${r.user_id}`, uid: String(r.user_id), at: r.at as Date, passage: storedPick(r.passage), t: toInstantUs(String(r.at_us), r.at as Date) }));
       const last = page.at(-1);
       return {
-        tappers: page.filter((r) => docIdOk(r.uid)).map((r) => ({ uid: r.uid, at: time(r.at) })),
+        tappers: page.filter((r) => docIdOk(r.uid)).map((r) => ({ uid: r.uid, at: time(r.at), passage: r.passage })),
         next: last ? encodeCursor({ t: last.t, id: last.id }) : null,
         full: page.length === limit,
       };

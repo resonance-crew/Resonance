@@ -2,6 +2,7 @@ package com.resonance.kit.api
 
 import com.resonance.api.apis.DefaultApi
 import com.resonance.api.models.TapList
+import com.resonance.api.models.TapPassageRequest
 import okhttp3.OkHttpClient
 
 /**
@@ -19,6 +20,14 @@ class TapApi(private val api: DefaultApi) {
 
     /** Turns the viewer's tap on card [id] on ([on]) or takes it back; answers whether it is on now. */
     suspend fun set(id: String, on: Boolean): Boolean = call { if (on) api.tapCard(id) else api.untapCard(id) }.on
+
+    /**
+     * Says which of card [id]'s passages stayed with the viewer (round 27 §P4, `PUT …/tap/passage`, setTapPassage): one
+     * of `CardTap.passages`' ids, or null to clear it; answers the pick as it stands now. Only the author learns it;
+     * nothing rings. 409 when the viewer's tap is off, 400 when [passage] is not one the card offers now (its story
+     * changed: read the card again), 404 wherever the card's `tap` is null — each an [ApiFailure].
+     */
+    suspend fun setPassage(id: String, passage: String?): String? = call { api.setTapPassage(id, TapPassageRequest(passage)) }.passage
 
     /** A page of the people behind the faces ([pageToken]: the last page's `nextPageToken`). */
     suspend fun taps(id: String, pageToken: String? = null): TapList = call { api.getCardTaps(id, pageToken) }

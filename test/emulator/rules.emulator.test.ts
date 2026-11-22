@@ -492,6 +492,8 @@ describe("resonanceTaps/* and readerSignals/* are the server's alone", () => {
       await assertFails(getDocs(query(collection(db, 'resonanceTaps'), where('cardId', '==', 'alice-card'))));
       await assertFails(getDocs(query(collection(db, 'resonanceTaps'), where('userId', '==', uid))));
       await assertFails(updateDoc(doc(db, 'resonanceTaps', 'alice-card_bob'), { on: false }));
+      // The passage a reader picked (round 27) is the server's to write too.
+      await assertFails(updateDoc(doc(db, 'resonanceTaps', 'alice-card_bob'), { passage: { id: '0a1b2c3d', text: 'a sentence of hers' } }));
       await assertFails(deleteDoc(doc(db, 'resonanceTaps', 'alice-card_bob')));
       await assertFails(setDoc(doc(db, 'resonanceTaps', `alice-card_${uid}`), { cardId: 'alice-card', userId: uid, on: true, at: new Date(), rangAt: null }));
     }
@@ -865,6 +867,27 @@ describe('cards: what the author may write', () => {
       await assertFails(setDoc(doc(who, 'cards', ID, 'translations', 'zh-TW'), { title: 'x', story: 'y', hash: 'h' }));
     }
     await assertFails(deleteDoc(doc(db, 'cards', ID, 'translations', 'en')));
+  });
+
+  it("takes no tap passages from a client: not on a new card, not on an update, not through an edit's working copy (round 27)", async () => {
+    const ID = 'pppppppppppppppppppp';
+    const made = { of: 'h', items: [{ id: '0a1b2c3d', text: '箱子堆滿了客廳，我坐在地上' }, { id: '1a1b2c3d', text: '你是多了一個可以回去的地方' }], model: 'm' };
+    await seed(async (db) => {
+      await setDoc(doc(db, 'cards', ID), publishedCard('alice', { tapPassages: made }));
+    });
+    const db = as('alice');
+    await assertFails(setDoc(doc(collection(db, 'cards')), draft('alice', { tapPassages: made })));
+    const ref = doc(db, 'cards', ID);
+    await assertFails(setDoc(ref, { tapPassages: { ...made, items: [{ id: 'ffffffff', text: 'words I wrote for it' }] }, updatedAt: serverTimestamp() }, { merge: true }));
+    await assertFails(setDoc(ref, { tapPassages: deleteField(), updatedAt: serverTimestamp() }, { merge: true }));
+    await assertFails(setDoc(ref, { 'tapPassages.of': 'x', updatedAt: serverTimestamp() }, { merge: true }));
+    // The edit's working copy (applied by the server) takes none either.
+    const edit = doc(db, 'cards', ID, 'edits', 'current');
+    const working = { thoughtCore: 't', story: 's', tags: [], visibility: 'public', anonymous: false, updatedAt: serverTimestamp(), authorId: 'alice' };
+    await assertSucceeds(setDoc(edit, working));
+    await assertFails(setDoc(edit, { ...working, tapPassages: made }));
+    // An ordinary save of the card still goes through, the passages untouched.
+    await assertSucceeds(setDoc(ref, { story: 'a new story', updatedAt: serverTimestamp() }, { merge: true }));
   });
 
   it('counts a title as JavaScript does (UTF-16 units, not bytes): 200 Chinese characters fit, 101 emoji do not', async () => {

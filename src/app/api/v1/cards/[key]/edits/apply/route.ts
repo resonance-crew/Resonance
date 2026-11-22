@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
 import { CardIdParam } from '@/lib/api/v1/schemas';
 import { makeSummaryTranslationsIn } from '@/lib/api/v1/summaryTranslationsMake';
+import { makeTapPassagesIn } from '@/lib/api/v1/tapPassagesMake';
 import { ApiFailure } from '@/lib/api/v1/http';
 import { getVectorStore } from '@/lib/recommend/vectorStore';
 import { serverCtx, type ServerCtx } from '@/server/ctx';
@@ -36,6 +37,9 @@ export const POST = withUser(async (user, _req, ctx: RouteContext<'key'>) => {
       .catch((e) => console.error('[api/v1] vectors', id, e));
   }
   if (result.applied) {
+    // One spend of the reindex budget for whichever of the two asks a model first, shared by both.
+    let allowed: Promise<boolean> | null = null;
+    const mayCall = () => (allowed ??= reindexAllowed(server, user.id));
     server.later.later(
       () =>
       // After "save changes", side by side as publishing does: the story's link previews (new links fetched,
@@ -49,9 +53,9 @@ export const POST = withUser(async (user, _req, ctx: RouteContext<'key'>) => {
         })(),
         markIndexOwedIn(server, id).catch((e) => console.error('[api/v1] index owed', e)),
         // The title's and excerpt's translations, made again only when either changed (the same budget as the index).
-        makeSummaryTranslationsIn(server, id, { mayCall: () => reindexAllowed(server, user.id) }).catch((e) =>
-          console.error('[api/v1] summary translations', e),
-        ),
+        makeSummaryTranslationsIn(server, id, { mayCall }).catch((e) => console.error('[api/v1] summary translations', e)),
+        // Its tap passages (round 27), made again only when the story's words changed; out of budget, owed to the cron.
+        makeTapPassagesIn(server, id, { mayCall }).catch((e) => console.error('[api/v1] tap passages', e)),
       ]),
       'edits/apply',
     );

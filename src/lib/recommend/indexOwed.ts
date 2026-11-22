@@ -1,4 +1,4 @@
-import { indexOwedIn, markIndexOwedIn, type IndexOwedRun } from '@/server/app/recommendIndex';
+import { indexOwedIn, markIndexOwedIn, type IndexOwedOptions, type IndexOwedRun } from '@/server/app/recommendIndex';
 import type { AdminDb } from '@/server/infra/firestore/db';
 import { ctxFor } from '@/server/infra/firestore/ctx';
 import { getVectorStore } from './vectorStore';
@@ -8,10 +8,19 @@ import { getVectorStore } from './vectorStore';
  * src/server/app/recommendIndex.ts. These are its legacy facades, on the
  * database they are handed (the readings too: indexCard took the app's admin
  * database, which in production and under the emulator suites is that one).
+ * After each reading, the card's tap passages (round 27: lib/api/v1/
+ * tapPassagesMake), free when current; their outcomes in `passages`.
  */
-export { INDEX_OWED_CONCURRENCY, INDEX_OWED_LIMIT, type IndexOwedRun } from '@/server/app/recommendIndex';
+export {
+  INDEX_OWED_CONCURRENCY,
+  INDEX_OWED_LIMIT,
+  INDEX_OWED_RESERVE_MS,
+  PASSAGES_RESERVE_MS,
+  type IndexOwedOptions,
+  type IndexOwedRun,
+} from '@/server/app/recommendIndex';
 
-export function indexOwed(db: AdminDb, opts: { limit?: number; deadline?: number; now?: () => number } = {}): Promise<IndexOwedRun> {
+export function indexOwed(db: AdminDb, opts: IndexOwedOptions = {}): Promise<IndexOwedRun> {
   return indexOwedIn(ctxFor(db, { vectors: getVectorStore() }), opts);
 }
 

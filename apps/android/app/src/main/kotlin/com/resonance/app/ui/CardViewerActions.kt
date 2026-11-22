@@ -94,6 +94,10 @@ fun CardViewerActions(
     launch: Set<DebugLaunch.CardEnd> = emptySet(),
     /** The note's field asks the page's bar to step aside (true) — no room under it over the keyboard — or come back. */
     onNoteRoom: (Boolean) -> Unit = {},
+    /** The story shows in translation now (round 25 §F): the passages, the author's own words, are not offered then (§U1.9). */
+    translated: () -> Boolean = { false },
+    /** The card is to be read again (round 27 §U1.6: a pick refused because the passages or the tap changed). */
+    onStale: () -> Unit = {},
 ) {
     val cardId = detail.card.id
     val toasts = LocalToasts.current
@@ -134,8 +138,10 @@ fun CardViewerActions(
                 session.noteOwnWrite()
                 val me = session.me
                 val base = TapFaces.of(latestDetail.tap)
-                val after = if (me == null) base else base.withViewer(viewerFace(me, session.selfFace), now)
-                onTapChanged(CardTap(mine = now, faces = after.faces, more = after.more, mayNote = latestDetail.tap?.mayNote ?: true))
+                // A tap sent was off before or goes off now: either way it has no pick on the server (§P4.4).
+                val after = (if (me == null) base.copy(mine = now) else base.withViewer(viewerFace(me, session.selfFace), now)).copy(passage = null)
+                // The card's passages and the pick ride along (§P7): the page and its kept copy lose neither.
+                onTapChanged(after.toCardTap(latestDetail.tap?.mayNote ?: true))
                 now
             },
             onFailed = { toasts.show(L10n.Card.Tap.failed) },
@@ -144,6 +150,39 @@ fun CardViewerActions(
     LaunchedEffect(detail.tap?.mine) { detail.tap?.let { switch.read(it.mine) } }
     val me = session.me
     val faces = if (me == null || switch.on == served.mine) served else served.withViewer(viewerFace(me, session.selfFace), switch.on)
+
+    // Round 27 §U1: which part stayed with the reader — the dialog after a press that turned 共振 on, or from their own row.
+    var passagesOpen by remember(cardId) { mutableStateOf(false) }
+    // The tap's request the pick waits for (the press that opened the dialog), and the pick drawn before the server has it.
+    var tapJob by remember(cardId) { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var pickShown by remember(cardId) { mutableStateOf<String?>(null) }
+    var holdPicked by remember(cardId) { mutableStateOf(false) }
+    // Opened by the press that turned 共振 on: that tap starts with no pick on the server (§P4.4), whatever the page's
+    // copy still says while the off flip before it is in flight — so the dialog marks none (only the own row shows one).
+    var fromPress by remember(cardId) { mutableStateOf(false) }
+    val currentPick = if (switch.on) faces.passage else null
+    val pick = remember(cardId) {
+        PassagePick(
+            launch = { work -> session.launch(work) },
+            send = { id -> session.taps.setPassage(cardId, id) },
+            tapOn = { switch.on },
+            // The pick as the page's copy has it, which is the server's (written back only once a request answered).
+            held = { latestDetail.tap?.let { TapFaces.of(it).passage } },
+            onPicked = { now ->
+                val tap = latestDetail.tap ?: return@PassagePick
+                // The page's copy and its kept page hold the pick as the server now has it (§P7).
+                onTapChanged(TapFaces.of(tap).copy(passage = now).toCardTap(tap.mayNote))
+            },
+            onStale = {
+                passagesOpen = false
+                onStale()
+            },
+            onFailed = { toasts.show(L10n.Card.Tap.failed) },
+        )
+    }
+    // The tap's PUT failed (it is off again), or it was taken back: the dialog goes with it.
+    LaunchedEffect(switch.on) { if (!switch.on) passagesOpen = false }
+    val script = remember(detail.card.title, detail.story) { com.resonance.kit.story.StoryScripts.storyType(detail.card.title, detail.story).script }
 
     // The note in place.
     val note = remember(cardId) { NoteFieldState(session.noteDrafts?.text(cardId).orEmpty(), mayNote) }
@@ -179,6 +218,18 @@ fun CardViewerActions(
             note.edit(VISUAL_NOTE_LINES)
         }
         if (DebugLaunch.CardEnd.Taps in launch) openList = true
+        // `passages`: 共振 pressed, the dialog open; `passage-picked`: held open on the second row pressed (§V2).
+        val picked = DebugLaunch.CardEnd.PassagePicked in launch
+        if ((DebugLaunch.CardEnd.Passages in launch || picked) && faces.offersPassages) {
+            // Shown on, never sent: a stored tap would stay on the run's stack for the next variants (§V2).
+            fromPress = switch.showOnForCapture()
+            tapJob = null
+            if (picked) {
+                holdPicked = true
+                pickShown = faces.passages[1].id
+            }
+            passagesOpen = true
+        }
     }
 
     var bookmarked by remember(cardId) { mutableStateOf(false) }
@@ -212,7 +263,20 @@ fun CardViewerActions(
             toggled = switch.on,
         ) {
             haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-            switch.flip()
+            val job = switch.flip()
+            if (passagesOpenOnPress(switch.on, faces, translated())) {
+                tapJob = job
+                scope.launch {
+                    delay(TapPassagesTiming.openDelay(reduced))
+                    // Still on, and still offered, once the segment has filled.
+                    if (switch.on && !translated()) {
+                        pickShown = null
+                        holdPicked = false
+                        fromPress = true
+                        passagesOpen = true
+                    }
+                }
+            }
         }
         val noteSegment = Segment(
             "note", L10n.Card.Note.short, IconName.Note,
@@ -248,7 +312,7 @@ fun CardViewerActions(
             // Row 2: the faces at its start, under 共振; 收藏 at its end. Always there, so nothing moves as faces come.
             EndRowTwo(
                 Modifier.width(capsule.dp),
-                faces = { TapFacesButton(faces, session.uid, author = false, onOpen = { openList = true }) },
+                faces = { TapFacesButton(faces, session.uid, author = false, onOpen = { openList = true }, selfOpens = faces.offersPassages && !translated()) },
             ) {
                 BookmarkButton(bookmarked) {
                     val bookmarks = session.bookmarks ?: return@BookmarkButton
@@ -283,9 +347,37 @@ fun CardViewerActions(
         }
     }
     // Who resonated, behind the faces: the phone's dialog on every device (the owner's look, 2026-11-19).
-    if (openList && !faces.isEmpty && !faces.selfOnly(session.uid)) {
-        ReaderTapList(session, cardId, onDismiss = { openList = false }, open = open)
+    val offers = faces.offersPassages && !translated()
+    if (openList && !faces.isEmpty && (offers || !faces.selfOnly(session.uid))) {
+        ReaderTapList(
+            session, cardId, onDismiss = { openList = false }, open = open,
+            offersPassages = offers,
+            pagePick = PagePick(faces.passages.firstOrNull { it.id == (pickShown ?: currentPick) }?.text),
+            // The reader's own row: the dialog again, the current pick marked (§U3); the tap is on, nothing to wait for.
+            onOwnRow = {
+                tapJob = null
+                pickShown = null
+                holdPicked = false
+                fromPress = false
+                passagesOpen = true
+            },
+        )
     }
+    if (passagesOpen && switch.on && faces.offersPassages) TapPassages(
+        faces.passages,
+        picked = passagesMarked(pickShown, currentPick, fromPress),
+        script = script,
+        reducedMotion = reduced,
+        hold = holdPicked,
+        onPick = { id ->
+            pickShown = id
+            pick.pick(id, after = tapJob)
+        },
+        onDismiss = {
+            passagesOpen = false
+            pickShown = null
+        },
+    )
     if (picking) ResonatePicker(
         session, cardId, detail.card.referenceCardId,
         onWriteNew = onWriteNew,

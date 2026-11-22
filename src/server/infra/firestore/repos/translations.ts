@@ -1,5 +1,5 @@
 import { FieldPath, FieldValue, GrpcStatus, Timestamp, type DocumentData, type Transaction } from 'firebase-admin/firestore';
-import type { SummarySource, SummaryWriter, TranslationsData, TranslationsTxRepo } from '@/server/ports/repos/translations';
+import type { PassageSource, SummarySource, SummaryWriter, TranslationsData, TranslationsTxRepo } from '@/server/ports/repos/translations';
 import type { AdminDb } from '../db';
 import { storedSummary } from '../summary';
 
@@ -12,6 +12,18 @@ import { storedSummary } from '../summary';
 const SOURCE_FIELDS = ['thoughtCore', 'story', 'excerpt', 'readMinutes', 'excerptAt', 'updatedAt', 'publishedAt', 'visibility', 'trashedAt', 'summaryTranslations'];
 
 const cardRef = (db: AdminDb, id: string) => db.doc(`cards/${id}`);
+
+/** What making a card's tap passages reads of it (round 27: lib/api/v1/tapPassagesMake's mask, offersPassages' fields). */
+const PASSAGE_FIELDS = ['thoughtCore', 'story', 'publishedAt', 'trashedAt', 'tapPassages'];
+
+function passageSourceOf(data: DocumentData): PassageSource {
+  return {
+    title: typeof data.thoughtCore === 'string' ? data.thoughtCore : '',
+    story: typeof data.story === 'string' ? data.story : '',
+    fields: data,
+    tapPassages: data.tapPassages,
+  };
+}
 
 function sourceOf(data: DocumentData): SummarySource {
   return {
@@ -43,6 +55,14 @@ export function translationsTx(db: AdminDb, tx: Transaction): TranslationsTxRepo
       // Never `updatedAt`: nothing the author wrote changed (and the stored summary stays current).
       tx.update(cardRef(db, id), { summaryTranslations: value });
     },
+    async getPassageSource(id) {
+      const [now] = await tx.getAll(cardRef(db, id), { fieldMask: PASSAGE_FIELDS });
+      return now.exists ? passageSourceOf(now.data()!) : null;
+    },
+    putTapPassages(id, value) {
+      // Never `updatedAt`: nothing the author wrote changed. The whole value, so a failure count goes with it.
+      tx.update(cardRef(db, id), { tapPassages: { of: value.of, items: value.items, model: value.model, at: FieldValue.serverTimestamp() } });
+    },
   };
 }
 
@@ -55,6 +75,16 @@ export function translationsData(db: AdminDb): TranslationsData {
     },
     async removeSummaryTranslations(id) {
       await cardRef(db, id).update({ summaryTranslations: FieldValue.delete() });
+    },
+    async getPassageSource(id) {
+      const [snap] = await db.getAll(cardRef(db, id), { fieldMask: PASSAGE_FIELDS });
+      return snap?.exists ? passageSourceOf(snap.data()!) : null;
+    },
+    async removeTapPassages(id) {
+      await cardRef(db, id).update({ tapPassages: FieldValue.delete() });
+    },
+    async putTapPassagesFailed(id, failed) {
+      await cardRef(db, id).update({ 'tapPassages.failed': { of: failed.of, tries: failed.tries } });
     },
 
     async getKeptTranslation(cardId, to) {

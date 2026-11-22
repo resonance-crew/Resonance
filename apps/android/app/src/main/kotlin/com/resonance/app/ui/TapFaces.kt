@@ -85,11 +85,13 @@ internal fun TapFacesButton(
     author: Boolean,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The reader's own face alone still opens the list: the card offers passages, and their row picks one (round 27 §U3). */
+    selfOpens: Boolean = false,
 ) {
     val reduced = LocalContext.current.prefersReducedMotion()
     // No faces: nothing to say or open — but the group stays composed, so a face taken back slides out.
     val none = faces.isEmpty
-    val self = !author && faces.selfOnly(viewerId)
+    val self = !author && !selfOpens && faces.selfOnly(viewerId)
     val label = facesLabel(faces, viewerId, author)
     val group: @Composable () -> Unit = {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -173,6 +175,42 @@ internal fun tapRowRoute(person: TapPerson, anonymous: Boolean): Route =
 internal fun tapRowExcerpt(person: TapPerson, anonymous: Boolean): String? =
     if (anonymous) null else person.note?.excerpt?.takeIf { it.isNotBlank() }
 
+/**
+ * What a row of who resonated says under the pen name (round 27 §U2, §U3): the [quote] of the passage that person
+ * picked (「…」, muted, 2 lines), or — the reader's own row on a card offering passages, with none picked — [pick]
+ * (選一段, in the tonal label's ink); then the note's [excerpt] (2 lines). Nothing: the row is as before, 60 tall.
+ */
+internal data class TapRowLines(val quote: String? = null, val pick: Boolean = false, val excerpt: String? = null) {
+    companion object {
+        val NONE = TapRowLines()
+    }
+}
+
+/**
+ * The lines for [person]'s row. The author's list ([author]): every row's pick, then its note's first line (none on an
+ * anonymous card). A reader's list: their own row alone ([viewerId]) — their pick, or 選一段 when the card offers
+ * passages ([offersPassages]) — and no other row ever a second line, on a named card or an anonymous one (M3).
+ */
+internal fun tapRowLines(
+    person: TapPerson,
+    anonymous: Boolean,
+    author: Boolean,
+    viewerId: String?,
+    offersPassages: Boolean,
+    pagePick: PagePick? = null,
+): TapRowLines {
+    val listed = person.passage?.text?.takeIf { it.isNotBlank() }
+    if (author) return TapRowLines(quote = listed, excerpt = tapRowExcerpt(person, anonymous))
+    if (viewerId == null || person.author.id != viewerId) return TapRowLines.NONE
+    // On a card offering passages the page knows the reader's pick before the list does (the list may have been read
+    // while the pick's request was still on its way): the own row says the page's, as the web's.
+    val quote = if (offersPassages && pagePick != null) pagePick.text?.takeIf { it.isNotBlank() } else listed
+    return TapRowLines(quote = quote, pick = quote == null && offersPassages)
+}
+
+/** The reader's pick as the card page holds it now (its words, or null for none): what their own row says (§U3). */
+internal data class PagePick(val text: String?)
+
 /** The author's list shows 顯示更多 while there is a next page and it isn't being read. */
 internal fun showsMore(list: TapPeople): Boolean = list.next != null && !list.loading
 
@@ -182,14 +220,29 @@ internal fun showsMore(list: TapPeople): Boolean = list.next != null && !list.lo
  * dialog on every device ([ReaderTapDialog]). Never a bottom sheet, never a popover.
  */
 @Composable
-internal fun ReaderTapList(session: Session, cardId: String, onDismiss: () -> Unit, open: (Route) -> Unit) {
+internal fun ReaderTapList(
+    session: Session,
+    cardId: String,
+    onDismiss: () -> Unit,
+    open: (Route) -> Unit,
+    /** The card offers passages (round 27 §U3): the reader's own row says their pick, or 選一段, and opens [onOwnRow]. */
+    offersPassages: Boolean = false,
+    onOwnRow: () -> Unit = {},
+    /** The reader's pick as the page holds it (a pick just made shows at once, before the list knows it). */
+    pagePick: PagePick? = null,
+) {
     val list = remember(cardId) { TapPeople { token -> session.taps.taps(cardId, token) } }
     LaunchedEffect(list) { list.first() }
-    ReaderTapDialog(list, onDismiss) { p ->
+    val viewerId = session.uid
+    ReaderTapDialog(list, onDismiss, lines = { tapRowLines(it, anonymous = true, author = false, viewerId, offersPassages, pagePick) }) { p ->
         onDismiss()
-        open(Route.Author(p.author.handle))
+        if (readerRowPicks(p, viewerId, offersPassages)) onOwnRow() else open(Route.Author(p.author.handle))
     }
 }
+
+/** Where a row of the reader's list leads (§U3): their own, on a card offering passages, to the dialog; any other, the profile. */
+internal fun readerRowPicks(person: TapPerson, viewerId: String?, offersPassages: Boolean): Boolean =
+    offersPassages && viewerId != null && person.author.id == viewerId
 
 /**
  * The reader's list as it is drawn: a centred dialog [readerListWidth] wide — **no visible title** (the reader sees only
@@ -197,10 +250,15 @@ internal fun ReaderTapList(session: Session, cardId: String, onDismiss: () -> Un
  * profile), and 關閉 at the foot's end, as every one-exit dialog.
  */
 @Composable
-internal fun ReaderTapDialog(list: TapPeople, onDismiss: () -> Unit, onRow: (TapPerson) -> Unit) {
+internal fun ReaderTapDialog(
+    list: TapPeople,
+    onDismiss: () -> Unit,
+    lines: (TapPerson) -> TapRowLines = { TapRowLines.NONE },
+    onRow: (TapPerson) -> Unit,
+) {
     val width = readerListWidth(LocalWindowLayout.current.cls)
     OrganicModal(onDismiss, L10n.Card.Tap.label, seed = 41.0, closeLabel = L10n.Native.close, maxWidth = width) {
-        TapRows(list, TapRowMeasure.Dialog, anonymous = true, onRow = onRow)
+        TapRows(list, TapRowMeasure.Dialog, lines = lines, onRow = onRow)
         ModalCloseButton(L10n.Native.close, onDismiss)
     }
 }
@@ -237,7 +295,7 @@ internal fun AuthorTapList(session: Session, cardId: String, anonymous: Boolean,
     LaunchedEffect(list) { list.first() }
     OrganicModal(onDismiss, L10n.Card.ResonatorsModal.title, seed = 43.0, closeLabel = L10n.Native.close, maxWidth = 480.dp) {
         ModalTitle(L10n.Card.ResonatorsModal.title)
-        TapRows(list, TapRowMeasure.Dialog, anonymous = anonymous) { p ->
+        TapRows(list, TapRowMeasure.Dialog, lines = { tapRowLines(it, anonymous, author = true, viewerId = null, offersPassages = false) }) { p ->
             onDismiss()
             open(tapRowRoute(p, anonymous))
         }
@@ -263,7 +321,7 @@ internal data class TapRowMeasure(val height: Dp, val face: Dp, val inset: Dp, v
 
 /** The list's rows: banded, each the face, the pen name and the excerpt; the rows' shapes while read. */
 @Composable
-private fun TapRows(list: TapPeople, measure: TapRowMeasure, anonymous: Boolean, onRow: (TapPerson) -> Unit) {
+private fun TapRows(list: TapPeople, measure: TapRowMeasure, lines: (TapPerson) -> TapRowLines, onRow: (TapPerson) -> Unit) {
     val rowHeight = measure.height
     val face = measure.face
     val people = list.people
@@ -289,7 +347,7 @@ private fun TapRows(list: TapPeople, measure: TapRowMeasure, anonymous: Boolean,
             val below = bandsBelow(keys, ListBands.EndKey)
             people.forEachIndexed { i, p ->
                 val source = remember(p.author.id) { MutableInteractionSource() }
-                val excerpt = tapRowExcerpt(p, anonymous)
+                val said = lines(p)
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -303,8 +361,19 @@ private fun TapRows(list: TapPeople, measure: TapRowMeasure, anonymous: Boolean,
                     HandDrawnAvatar(p.author.initials, p.author.avatarUrl, p.author.accent(), face, p.author.avatarSeedValue())
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         BasicText(p.author.handle, style = AppFonts.body(measure.handle, 600, lineHeight = 1.4f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (excerpt != null) BasicText(
-                            excerpt,
+                        // The pick (the author's own sentence: here it may be cut), or 選一段; then the note's first line.
+                        if (said.quote != null) BasicText(
+                            L10n.Card.Tap.passageQuote(said.quote),
+                            style = AppFonts.body(13f, lineHeight = 1.45f, color = Tokens.TextMuted),
+                            maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        )
+                        else if (said.pick) BasicText(
+                            L10n.Card.Tap.passagePick,
+                            style = AppFonts.body(13f, lineHeight = 1.45f, color = Tokens.ButtonOnTonal),
+                            maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        )
+                        if (said.excerpt != null) BasicText(
+                            said.excerpt,
                             style = AppFonts.body(13f, lineHeight = 1.45f, color = Tokens.TextMuted),
                             maxLines = 2, overflow = TextOverflow.Ellipsis,
                         )

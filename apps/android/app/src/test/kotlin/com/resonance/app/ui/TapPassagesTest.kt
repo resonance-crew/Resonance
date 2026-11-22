@@ -1,0 +1,345 @@
+package com.resonance.app.ui
+
+import android.app.Application
+import android.content.ComponentName
+import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
+import com.resonance.api.models.Author
+import com.resonance.api.models.CardTap
+import com.resonance.api.models.TapPassage
+import com.resonance.design.AppFonts
+import com.resonance.design.Grain
+import com.resonance.design.LocalWindowLayout
+import com.resonance.design.WindowLayout
+import com.resonance.kit.api.ApiFailure
+import com.resonance.kit.l10n.L10n
+import com.resonance.kit.l10n.Strings
+import com.resonance.kit.story.StoryScript
+import java.io.File
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.RuleChain
+import org.junit.runner.RunWith
+import org.junit.runners.model.Statement
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+/**
+ * Round 27 §U1 and §P7 — after a reader turns 共振 on, a centred dialog offers the author's own sentences (the owner:
+ * 「在点击共振之后呢，还可以出现一个可能一个 pop ups」): when it opens, what it draws, how a pick goes (after the tap's own
+ * PUT, never once the tap is off), how a refusal ends, and the page's copy of the tap keeping the passages and the pick.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class TapPassagesTest {
+    private val compose = createComposeRule()
+
+    @get:Rule val rules: RuleChain = RuleChain.outerRule { base, _ ->
+        object : Statement() {
+            override fun evaluate() {
+                val app = RuntimeEnvironment.getApplication()
+                shadowOf(app.packageManager).addActivityIfNotPresent(ComponentName(app, ComponentActivity::class.java))
+                base.evaluate()
+            }
+        }
+    }.around(compose)
+
+    private val language = Strings.language
+
+    @Before fun setUp() {
+        AppFonts.init(RuntimeEnvironment.getApplication())
+        Grain.init(RuntimeEnvironment.getApplication())
+        Strings.load { File("../../../src/messages/${it.tag}.json").readText() }
+        Strings.language = Strings.Language.ZhTW
+    }
+
+    @After fun restore() {
+        Strings.language = language
+    }
+
+    private fun face(id: String) = Author(id, id, id.take(2).uppercase(), "oklch(88% 0.08 55)", null, "7", false, null)
+
+    // Long on purpose: a sentence wraps in full, never cut.
+    private val passages = listOf(
+        TapPassage("14fecaaf", "清晨六點的城市還沒醒，我站在陽台上，看著對面的窗一扇一扇亮起來，像有人在替這一天慢慢點燈，而我只是剛好醒著，替它數著。"),
+        TapPassage("8b3a1c4d", "原來一個人的早晨，也可以不急。"),
+        TapPassage("85007cbf", "咖啡涼了也沒關係。"),
+    )
+
+    private fun tap(mine: Boolean, passage: String? = null, options: List<TapPassage>? = passages) =
+        CardTap(mine = mine, faces = if (mine) listOf(face("dora")) else emptyList(), more = false, mayNote = true, passages = options, passage = passage)
+
+    // When it opens (§U1.1, §U1.9)
+
+    @Test fun onlyAPressThatTurnsTheTapOnOnACardOfferingTwoOpensIt() {
+        val offered = TapFaces.of(tap(mine = false))
+        assertTrue(passagesOpenOnPress(turnedOn = true, offered, translated = false))
+        // Taking it back opens nothing.
+        assertFalse(passagesOpenOnPress(turnedOn = false, offered, translated = false))
+        // One passage is none; none at all (a short card: the field absent) is none.
+        assertFalse(passagesOpenOnPress(true, TapFaces.of(tap(false, options = passages.take(1))), false))
+        assertFalse(passagesOpenOnPress(true, TapFaces.of(tap(false, options = null)), false))
+        // The story in translation on screen: the author's words are not offered.
+        assertFalse(passagesOpenOnPress(true, offered, translated = true))
+        // 240 after the press; at once under reduced motion. A pick closes 300 later, or at once.
+        assertEquals(240L, TapPassagesTiming.openDelay(reduced = false))
+        assertEquals(0L, TapPassagesTiming.openDelay(reduced = true))
+        assertEquals(300L, TapPassagesTiming.closeDelay(reduced = false))
+        assertEquals(0L, TapPassagesTiming.closeDelay(reduced = true))
+    }
+
+    // §P7: the tap written back to the page keeps both fields
+
+    @Test fun thePagesTapKeepsThePassagesAndThePickThroughEveryFlip() {
+        val served = TapFaces.of(tap(mine = true, passage = "8b3a1c4d"))
+        assertEquals(passages, served.passages)
+        assertEquals("8b3a1c4d", served.passage)
+        // Round trip: what CardViewerActions hands the page (and the card cache) carries both.
+        val kept = served.toCardTap(mayNote = true)
+        assertEquals(passages, kept.passages)
+        assertEquals("8b3a1c4d", kept.passage)
+        // Taken back: the passages stay, the pick goes (the server clears it in the same write).
+        val off = served.withViewer(face("dora"), on = false)
+        assertEquals(passages, off.passages)
+        assertNull(off.passage)
+        assertNull(off.toCardTap(true).passage)
+        // On again: still offered — the dialog opens again (M1) — and starts with no pick.
+        val again = off.withViewer(face("dora"), on = true)
+        assertTrue(again.offersPassages)
+        assertNull(again.passage)
+        assertTrue(passagesOpenOnPress(true, TapFaces.of(again.toCardTap(true)), false))
+        // A short card answers as round 26: the fields absent, not [] or null.
+        assertNull(TapFaces.of(tap(true, options = null)).toCardTap(true).passages)
+        // A pick that is not one of the options now is none.
+        assertNull(TapFaces.of(tap(true, passage = "gone")).passage)
+    }
+
+    @Test fun aRowPressedPicksItAndPressedAgainClearsIt() {
+        assertEquals("14fecaaf", nextPick(null, "14fecaaf"))
+        assertEquals("85007cbf", nextPick("14fecaaf", "85007cbf"))
+        assertNull(nextPick("14fecaaf", "14fecaaf"))
+    }
+
+    // §U1.5–6: the pick's request
+
+    private class Sent {
+        val asked = mutableListOf<String?>()
+        val picked = mutableListOf<String?>()
+        var stale = 0
+        var failed = 0
+    }
+
+    private fun CoroutineScope.picker(
+        sent: Sent,
+        on: () -> Boolean,
+        held: () -> String? = { null },
+        answer: suspend (String?) -> String?,
+    ) = PassagePick(
+        launch = { work -> launch(block = work) },
+        send = { id -> sent.asked += id; answer(id) },
+        tapOn = on,
+        held = held,
+        onPicked = { sent.picked += it },
+        onStale = { sent.stale++ },
+        onFailed = { sent.failed++ },
+    )
+
+    @Test fun thePickGoesOnlyAfterTheTapsOwnPutHasAnswered() = runBlocking {
+        val sent = Sent()
+        val tapAnswered = CompletableDeferred<Unit>()
+        val tapJob: Job = launch(Dispatchers.Unconfined) { tapAnswered.await() }
+        val job = picker(sent, on = { true }) { it }.pick("8b3a1c4d", after = tapJob)
+        repeat(5) { yield() }
+        assertTrue("nothing sent before the tap answered", sent.asked.isEmpty())
+        tapAnswered.complete(Unit)
+        job.join()
+        assertEquals(listOf<String?>("8b3a1c4d"), sent.asked)
+        assertEquals(listOf<String?>("8b3a1c4d"), sent.picked)
+        assertEquals(0, sent.failed + sent.stale)
+    }
+
+    @Test fun aTapThatWentByThenSendsNoPick() = runBlocking {
+        val sent = Sent()
+        picker(sent, on = { false }) { it }.pick("8b3a1c4d").join()
+        assertTrue(sent.asked.isEmpty())
+        assertTrue(sent.picked.isEmpty())
+    }
+
+    @Test fun a400Or409ClosesQuietlyAndReadsTheCardAgainAnythingElseSaysSo() = runBlocking {
+        for (status in listOf(400, 409)) {
+            val sent = Sent()
+            picker(sent, on = { true }) { throw ApiFailure("conflict", "no", status) }.pick("8b3a1c4d").join()
+            assertEquals("$status reads the card again", 1, sent.stale)
+            assertEquals("$status: no toast", 0, sent.failed)
+            assertEquals(listOf<String?>(null), sent.picked)
+        }
+        val sent = Sent()
+        picker(sent, on = { true }) { throw ApiFailure("unexpected", "down", 500) }.pick("8b3a1c4d").join()
+        assertEquals(1, sent.failed)
+        assertEquals(0, sent.stale)
+        // The tap stays on (nothing here touches it), with no passage.
+        assertEquals(listOf<String?>(null), sent.picked)
+        assertEquals(PickFailure.Failed, pickFailure(IllegalStateException("offline")))
+    }
+
+    @Test fun aChangeThatFailsPutsBackThePickTheServerStillHolds() = runBlocking {
+        // Picked A before; reopened from the own row, B pressed; the PUT fails: A stays, as on the web and iOS.
+        for (failure in listOf<Exception>(ApiFailure("unexpected", "down", 500), IllegalStateException("offline"))) {
+            val sent = Sent()
+            picker(sent, on = { true }, held = { "14fecaaf" }) { throw failure }.pick("8b3a1c4d").join()
+            assertEquals(listOf<String?>("8b3a1c4d"), sent.asked)
+            assertEquals(listOf<String?>("14fecaaf"), sent.picked)
+            assertEquals(1, sent.failed)
+        }
+        // A 409 still ends with none: the options or the tap changed, and the card is read again.
+        val sent = Sent()
+        picker(sent, on = { true }, held = { "14fecaaf" }) { throw ApiFailure("conflict", "no", 409) }.pick("8b3a1c4d").join()
+        assertEquals(listOf<String?>(null), sent.picked)
+        assertEquals(1, sent.stale)
+    }
+
+    // §U1.3–8: the dialog
+
+    private var picks = mutableListOf<String?>()
+    private var closed = 0
+
+    private fun show(picked: String? = null, hold: Boolean = false) = compose.setContent {
+        CompositionLocalProvider(LocalWindowLayout provides WindowLayout(390.dp)) {
+            var open by mutableStateOf(true)
+            if (open) TapPassages(
+                passages, picked, StoryScript.Cjk, reducedMotion = true, hold = hold,
+                onPick = { picks += it },
+                onDismiss = { closed++; open = false },
+            )
+        }
+    }
+
+    @Test fun aCentredDialogTitledWithEveryPassageInFullAndSkipAtItsFoot() {
+        show()
+        compose.waitForIdle()
+        compose.onNode(isDialog()).assertExists()
+        compose.onNodeWithTag("tap-passages", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText(L10n.Card.Tap.passageTitle).assertExists()
+        // Each row its sentence, whole (never 「…」), tagged for the flows, none picked yet.
+        passages.forEachIndexed { i, p ->
+            compose.onNodeWithText(p.text).assertExists()
+            compose.onNodeWithTag("tap-passage-$i", useUnmergedTree = true).assertIsNotSelected()
+        }
+        val long = compose.onNodeWithText(passages[0].text).getBoundsInRoot()
+        val short = compose.onNodeWithText(passages[2].text).getBoundsInRoot()
+        assertTrue("the long sentence wraps onto more lines", (long.bottom - long.top) > (short.bottom - short.top) * 1.5f)
+        // A phone's 400 at most: the row inside the card's padding.
+        val row = compose.onNodeWithTag("tap-passage-0", useUnmergedTree = true).getBoundsInRoot()
+        assertTrue((row.right - row.left).value <= 400f)
+        // 略過 closes, with no pick.
+        compose.onNodeWithTag("tap-passage-skip", useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        assertEquals(1, closed)
+        assertTrue(picks.isEmpty())
+    }
+
+    @Test fun eachRowsBandRunsFromThePapersLeftEdgeToItsRightTheWordsWhereTheyWere() {
+        // The owner, 2026-11-21: the chosen band reaches the dialog card's left and right edges, as the web's.
+        assertFalse("never the tablet's rounded cut", PassageBand.cut)
+        assertEquals(40f, PassageBand.wordsInset.value)
+        show(picked = "8b3a1c4d")
+        compose.waitForIdle()
+        val paper = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.PaneTitle), useUnmergedTree = true).getBoundsInRoot()
+        for (i in passages.indices) {
+            val row = compose.onNodeWithTag("tap-passage-$i", useUnmergedTree = true).getBoundsInRoot()
+            assertEquals(paper.left.value, row.left.value, 0.5f)
+            assertEquals(paper.right.value, row.right.value, 0.5f)
+        }
+        // The words keep their 28 + 12 from the paper's edge; the title its 28.
+        // (Their left by position: a clipped bounds box reads zero for text under a merged button.)
+        val words = compose.onNodeWithText(passages[2].text, useUnmergedTree = true).fetchSemanticsNode().positionInRoot.x / compose.density.density
+        assertEquals(paper.left.value + 40f, words, 0.5f)
+        val title = compose.onNodeWithText(L10n.Card.Tap.passageTitle, useUnmergedTree = true).fetchSemanticsNode().positionInRoot.x / compose.density.density
+        assertEquals(paper.left.value + 28f, title, 0.5f)
+        compose.onNodeWithTag("tap-passage-1", useUnmergedTree = true).assertIsSelected()
+    }
+
+    @Test fun aRowPressedIsPickedThenTheDialogCloses() {
+        show()
+        compose.onNodeWithTag("tap-passage-1", useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf<String?>("8b3a1c4d"), picks)
+        assertEquals(1, closed)
+    }
+
+    @Test fun reopenedWithAPickItRestsSelectedAndPressedAgainClears() {
+        show(picked = "8b3a1c4d")
+        compose.waitForIdle()
+        compose.onNodeWithTag("tap-passage-1", useUnmergedTree = true).assertIsSelected()
+        compose.onNodeWithTag("tap-passage-0", useUnmergedTree = true).assertIsNotSelected()
+        compose.onNodeWithTag("tap-passage-1", useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf<String?>(null), picks)
+    }
+
+    @Test fun opensFromThePressThatTurnedItOnMarkingNoneEvenWhileThePageStillHoldsTheOldPick() {
+        // Off sent with A picked, on again before the off PUT answered: the page's copy still says A.
+        val current = TapFaces.of(tap(mine = true, passage = "14fecaaf")).passage
+        assertEquals("14fecaaf", current)
+        assertNull(passagesMarked(shown = null, current = current, fromPress = true))
+        // From the reader's own row the current pick is marked (§U3); a row just pressed wins either way.
+        assertEquals("14fecaaf", passagesMarked(null, current, fromPress = false))
+        assertEquals("8b3a1c4d", passagesMarked("8b3a1c4d", current, fromPress = true))
+        // So pressing A picks A (not none, as it would with A marked).
+        show(picked = passagesMarked(null, current, fromPress = true))
+        compose.waitForIdle()
+        passages.indices.forEach { compose.onNodeWithTag("tap-passage-$it", useUnmergedTree = true).assertIsNotSelected() }
+        compose.onNodeWithTag("tap-passage-0", useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf<String?>("14fecaaf"), picks)
+    }
+
+    @Test fun theScreenshotsPickedStateHoldsTheDialogOpenOnTheRow() {
+        show(hold = true)
+        compose.onNodeWithTag("tap-passage-1", useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        assertEquals(0, closed)
+        compose.onNodeWithTag("tap-passage-1", useUnmergedTree = true).assertIsSelected()
+        // Launch words reach the end row.
+        assertEquals(
+            setOf(com.resonance.app.DebugLaunch.CardEnd.Passages, com.resonance.app.DebugLaunch.CardEnd.PassagePicked),
+            com.resonance.app.DebugLaunch.cardEndOf("passages,passage-picked"),
+        )
+    }
+
+    @Test fun theListScrollsInsideAtMostFourHundredTwentyOrMoreThanHalfTheWindow() {
+        assertEquals(420f, passagesListMax(900.dp).value)
+        assertEquals(330f, passagesListMax(600.dp).value, 0.01f)
+    }
+}

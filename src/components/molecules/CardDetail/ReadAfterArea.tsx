@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { CardViewerActions } from './CardViewerActions';
 import { useAuth } from '@/components/providers/AuthProvider';
 import type { CardTapBody } from '@/lib/api/v1/schemas';
+import type { StoryScript } from '@/lib/text/script';
 
 export interface ReadAfterAreaProps {
   cardId: string;
@@ -15,6 +16,10 @@ export interface ReadAfterAreaProps {
   tap?: CardTapBody | null;
   /** What ends the second line, aligned right: the card's share and ⋯ after a long story at ≥ 1200 (round 8 §10.2). */
   trailing?: ReactNode;
+  /** The story is on screen in translation: the passages' dialog is not offered (round 27 §U1.1). */
+  translated?: boolean;
+  /** The story's script on screen (src/lib/text/script.ts): the passages' rows are set in its type. */
+  script?: StoryScript;
 }
 
 /**
@@ -24,7 +29,7 @@ export interface ReadAfterAreaProps {
  * when scrolled to, so reading itself carries no pressure. The paper puppets stand on the capsule alone (its
  * `role="group"`, lib/mascots/reading): the second line and the note never move their ground.
  */
-export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author, tap, trailing }: ReadAfterAreaProps) {
+export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author, tap, trailing, translated, script }: ReadAfterAreaProps) {
   const { user, loading } = useAuth();
 
   // Fade in on first viewport entry (IntersectionObserver; shows immediately
@@ -74,6 +79,8 @@ export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author, tap,
         author={author}
         tap={tap}
         trailing={trailing}
+        translated={translated}
+        script={script}
       />
     </div>
   );

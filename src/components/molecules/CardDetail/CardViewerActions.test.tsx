@@ -46,7 +46,13 @@ vi.mock('@/lib/data/hooks', async (original) => ({
 }));
 vi.mock('@/lib/data/cardPrefill', async (original) => ({ ...(await original<typeof import('@/lib/data/cardPrefill')>()), usePrefillCard: () => vi.fn() }));
 const setTap = vi.fn((..._a: unknown[]) => Promise.resolve({ on: true, changed: true }));
-vi.mock('@/lib/db/firestore/client/taps', () => ({ setTap: (...a: unknown[]) => setTap(...a), listTaps: vi.fn(() => new Promise(() => {})) }));
+const setTapPassage = vi.fn((..._a: unknown[]): Promise<{ passage: string | null }> => Promise.resolve({ passage: null }));
+const listTaps = vi.fn((..._a: unknown[]): Promise<unknown> => new Promise(() => {}));
+vi.mock('@/lib/db/firestore/client/taps', () => ({
+  setTap: (...a: unknown[]) => setTap(...a),
+  setTapPassage: (...a: unknown[]) => setTapPassage(...a),
+  listTaps: (...a: unknown[]) => listTaps(...a),
+}));
 vi.mock('@/lib/db/firestore/client/notes', () => ({ sendNote: vi.fn(), NOTE_MAX_LENGTH: 2000 }));
 const bookmarks = vi.hoisted(() => ({ saved: false }));
 vi.mock('@/lib/db/firestore/client/bookmarks', () => ({
@@ -60,19 +66,19 @@ const face = (id: string): AuthorBody => ({ id, handle: id, initials: id.slice(0
 const NO_TAPS: CardTapBody = { mine: false, faces: [], more: false, mayNote: true };
 
 /** The card page as it holds the tap: its one signed-in answer in SWR, ReadAfterArea reading `tap` from it. */
-function Page({ tap }: { tap: CardTapBody }) {
+function Page({ tap, translated }: { tap: CardTapBody; translated?: boolean }) {
   const { data } = useSWR(cardPageKey('c1', 'viewer'), () => Promise.resolve({ resonances: { cards: [], authors: {} }, related: { cards: [], authors: {} }, links: { cards: [], authors: {} }, embeds: { cards: [], authors: {} }, tap }));
-  return <ReadAfterArea cardId="c1" cardTitle="Title" author={author} tap={data?.tap} />;
+  return <ReadAfterArea cardId="c1" cardTitle="Title" author={author} tap={data?.tap} translated={translated} />;
 }
 
-const pageTree = (tap: CardTapBody, cache = new Map()) => (
+const pageTree = (tap: CardTapBody, cache = new Map(), translated?: boolean) => (
   <SWRConfig value={{ provider: () => cache, dedupingInterval: 60_000, revalidateOnFocus: false }}>
-    <Page tap={tap} />
+    <Page tap={tap} translated={translated} />
   </SWRConfig>
 );
 
-function renderPage(tap: CardTapBody = NO_TAPS, opts: { locale?: 'en' | 'zh-TW' } = {}) {
-  return renderWithIntl(pageTree(tap), opts.locale === 'zh-TW' ? { locale: 'zh-TW', messages: zhMessages } : {});
+function renderPage(tap: CardTapBody = NO_TAPS, opts: { locale?: 'en' | 'zh-TW'; translated?: boolean } = {}) {
+  return renderWithIntl(pageTree(tap, new Map(), opts.translated), opts.locale === 'zh-TW' ? { locale: 'zh-TW', messages: zhMessages } : {});
 }
 
 const user = () => userEvent.setup({ pointerEventsCheck: 0 });
@@ -292,5 +298,161 @@ describe('the end row: three answers in one capsule (§U1)', () => {
     // lib/mascots/reading measures the first group in the mark: the capsule.
     expect(mark.querySelector('[role="group"]')).toBe(capsule());
     await act(async () => {});
+  });
+});
+
+describe('which part (round 27 §U1): the passages’ dialog after a press that turns 共振 on', () => {
+  const PASSAGES = [
+    { id: '14fecaaf', text: 'The rain stopped and the lamp at the corner came on first.' },
+    { id: '8b3a1c4d', text: 'I gave the old keys back and wiped every window anyway.' },
+    { id: '85007cbf', text: 'I wanted to walk this part of the road more slowly.' },
+  ];
+  const WITH: CardTapBody = { ...NO_TAPS, passages: PASSAGES, passage: null };
+  const dialog = () => screen.findByRole('dialog', { name: 'Quietly tell the author which part stayed with you' });
+  const press = async () => {
+    await act(async () => {});
+    await user().click(within(capsule()).getByRole('button', { name: 'Resonate' }));
+  };
+  const row = (d: HTMLElement, id: string) => d.querySelector<HTMLButtonElement>(`[data-passage="${id}"]`)!;
+
+  it('opens a moment after the press that turns it on — the tap on from the press — and not when it is taken back', async () => {
+    renderPage(WITH);
+    await press();
+    // The tap is on at once; the dialog waits for the segment to fill.
+    expect(within(capsule()).getByRole('button', { name: 'Resonate' })).toHaveAttribute('aria-pressed', 'true');
+    expect(setTap).toHaveBeenCalledWith('c1', true);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    const d = await dialog();
+    expect([...d.querySelectorAll('[data-passage]')].map((r) => r.textContent)).toEqual(PASSAGES.map((p) => p.text));
+
+    // 略過: the tap stays on, no passage sent.
+    await user().click(within(d).getByRole('button', { name: 'Skip' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(within(capsule()).getByRole('button', { name: 'Resonate' })).toHaveAttribute('aria-pressed', 'true');
+    expect(setTapPassage).not.toHaveBeenCalled();
+
+    // Taken back: nothing opens.
+    setTap.mockResolvedValueOnce({ on: false, changed: true });
+    await user().click(within(capsule()).getByRole('button', { name: 'Resonate' }));
+    await new Promise((r) => setTimeout(r, 400));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // On again: it asks again (every press that turns it on, SETTLED 2).
+    await user().click(within(capsule()).getByRole('button', { name: 'Resonate' }));
+    await dialog();
+  });
+
+  it('never opens with fewer than two passages, nor while the story is shown in translation', async () => {
+    const one = renderPage({ ...NO_TAPS, passages: [PASSAGES[0]] });
+    await press();
+    await new Promise((r) => setTimeout(r, 400));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    one.unmount();
+
+    const none = renderPage(NO_TAPS);
+    await press();
+    await new Promise((r) => setTimeout(r, 400));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    none.unmount();
+
+    renderPage(WITH, { translated: true });
+    await press();
+    await new Promise((r) => setTimeout(r, 400));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(setTap).toHaveBeenLastCalledWith('c1', true);
+  });
+
+  it('loads the dialog only on its first open: nothing of TapPassages is imported up front (its dynamic split kept)', () => {
+    const source = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/CardViewerActions.tsx'), 'utf8');
+    expect(source).not.toMatch(/^import[^;]*from '\.\/TapPassages';/m);
+    expect(source).toMatch(/dynamic\(\(\) => import\('\.\/TapPassages'\)/);
+  });
+
+  it('a translation arriving while it is open closes it for good: the original on screen again opens nothing unpressed', async () => {
+    // The auto-translation lands after the press (TranslateLine starts it on mount): the dialog leaves, and going back
+    // to the original must not bring it back (§U1.1: only a press that turns 共振 on, or the reader's own row).
+    const cache = new Map();
+    const page = renderWithIntl(pageTree(WITH, cache));
+    await press();
+    await dialog();
+    page.rerender(pageTree(WITH, cache, true));
+    await waitFor(() => expect(document.querySelector('[data-tap-passages]')).toBeNull());
+    page.rerender(pageTree(WITH, cache, false));
+    await new Promise((r) => setTimeout(r, 400));
+    expect(document.querySelector('[data-tap-passages]')).toBeNull();
+    expect(within(capsule()).getByRole('button', { name: 'Resonate' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('a translation arriving inside the 240 ms after the press stops its timer: nothing opens once the original is back', async () => {
+    const cache = new Map();
+    const page = renderWithIntl(pageTree(WITH, cache));
+    await press();
+    page.rerender(pageTree(WITH, cache, true));
+    await new Promise((r) => setTimeout(r, 400));
+    page.rerender(pageTree(WITH, cache, false));
+    await new Promise((r) => setTimeout(r, 400));
+    expect(document.querySelector('[data-tap-passages]')).toBeNull();
+  });
+
+  it('sends the pick only after the tap’s own PUT has answered, the row chosen at once', async () => {
+    let answer: (v: { on: boolean; changed: boolean }) => void = () => {};
+    setTap.mockImplementationOnce(() => new Promise((r) => (answer = r)));
+    renderPage(WITH);
+    await press();
+    const d = await dialog();
+    await user().click(row(d, '8b3a1c4d'));
+    expect(row(d, '8b3a1c4d')).toHaveAttribute('aria-pressed', 'true');
+    expect(setTapPassage).not.toHaveBeenCalled();
+    await act(async () => answer({ on: true, changed: true }));
+    await waitFor(() => expect(setTapPassage).toHaveBeenCalledWith('c1', '8b3a1c4d'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(toast.show).not.toHaveBeenCalled();
+  });
+
+  it('a 400 or 409 on the pick closes quietly — no toast; anything else says so and the tap stays on', async () => {
+    setTapPassage.mockRejectedValueOnce(Object.assign(new Error('400'), { status: 400, code: 'invalid_request' }));
+    const first = renderPage(WITH);
+    await press();
+    await user().click(row(await dialog(), '14fecaaf'));
+    await waitFor(() => expect(setTapPassage).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(toast.show).not.toHaveBeenCalled();
+    first.unmount();
+
+    setTapPassage.mockRejectedValueOnce(Object.assign(new Error('500'), { status: 500, code: 'internal' }));
+    renderPage(WITH);
+    await press();
+    await user().click(row(await dialog(), '14fecaaf'));
+    await waitFor(() => expect(toast.show).toHaveBeenCalledWith({ message: "Didn't go through, try again" }));
+    expect(within(capsule()).getByRole('button', { name: 'Resonate' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('the tap’s PUT failing closes the dialog and puts the tap back, as today', async () => {
+    let fail: (e: unknown) => void = () => {};
+    setTap.mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)));
+    renderPage(WITH);
+    await press();
+    await dialog();
+    await act(async () => fail(Object.assign(new Error('500'), { status: 500, code: 'internal' })));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(toast.show).toHaveBeenCalledWith({ message: "Didn't go through, try again" });
+    expect(within(capsule()).getByRole('button', { name: 'Resonate' })).toHaveAttribute('aria-pressed', 'false');
+    expect(setTapPassage).not.toHaveBeenCalled();
+  });
+
+  it('reopens from the reader’s own row with their pick marked; the faces are a button even when theirs is alone', async () => {
+    listTaps.mockResolvedValue({ people: [{ author: face('viewer'), note: null, passage: { text: PASSAGES[1].text } }], nextPageToken: null });
+    renderPage({ ...WITH, mine: true, faces: [face('viewer')], passage: '8b3a1c4d' });
+    await act(async () => {});
+    await user().click(screen.getByRole('button', { name: 'You resonated' }));
+    const list = await screen.findByRole('dialog');
+    const own = await within(list).findByText(`“${PASSAGES[1].text}”`);
+    await user().click(own.closest('button')!);
+    const d = await dialog();
+    expect(row(d, '8b3a1c4d')).toHaveAttribute('aria-pressed', 'true');
+    // Pressing it again clears the pick.
+    await user().click(row(d, '8b3a1c4d'));
+    await waitFor(() => expect(setTapPassage).toHaveBeenCalledWith('c1', null));
+    listTaps.mockReset();
+    listTaps.mockImplementation(() => new Promise(() => {}));
   });
 });

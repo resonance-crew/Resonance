@@ -1,8 +1,8 @@
-import type { CardTapBody, TapListBody } from './schemas';
+import type { CardTapBody, TapListBody, TapPassageResponseBody } from './schemas';
 import type { Card } from '@/lib/db/types';
 import type { AdminDb } from '@/server/infra/firestore/db';
 import { ctxFor } from '@/server/infra/firestore/ctx';
-import { cardTapIn, deleteTapsOnIn, listTapsIn, setTapIn } from '@/server/app/taps';
+import { cardTapIn, deleteTapsOnIn, listTapsIn, setTapIn, setTapPassageIn } from '@/server/app/taps';
 
 /**
  * The resonance tap (共振, round 26): the first of the three answers under a
@@ -11,13 +11,16 @@ import { cardTapIn, deleteTapsOnIn, listTapsIn, setTapIn } from '@/server/app/ta
  * `/resonances`, `referenceCardId`). Hence the names here: the collection
  * `resonanceTaps`, the endpoint `/tap`, the bell `resonance_tap`.
  *
- * `resonanceTaps/{cardId}_{uid}` = `{ cardId, userId, on, at, rangAt }`, one
+ * `resonanceTaps/{cardId}_{uid}` = `{ cardId, userId, on, at, rangAt, passage? }`, one
  * per reader and card, server-only (the rules refuse every client read and
  * write). Taking a tap back sets `on: false` and keeps the document: its
  * `rangAt` — when the tap rang the card's author — is what keeps a reader
  * from ringing them again by tapping, taking back and tapping again (one ring
  * per reader and card, ever). `at` is when it last turned on (the lists'
- * order, newest first).
+ * order, newest first). `passage` (round 27) is the reader's pick among the
+ * card's tap passages — `{ id, text }`, the words themselves, so the author's
+ * list keeps what they chose after an edit — or null; taking the tap back
+ * clears it (setTapPassage).
  *
  * A tap connects no one, opens no conversation and gives the author no way to
  * write to the reader (their list of who resonated opens a profile, never a
@@ -103,4 +106,21 @@ export function cardTap(
  */
 export function listTaps(db: AdminDb, viewerId: string, cardId: string, pageToken?: string | null): Promise<TapListBody> {
   return listTapsIn(ctxFor(db), viewerId, cardId, pageToken);
+}
+
+/**
+ * PUT /cards/{id}/tap/passage — which part of the story stayed with the
+ * reader (round 27): one of the card's passages (`presentTapPassages`), or
+ * null to clear it. Checked in this order: the card as the tap reads it (one
+ * they may read, by id, published, out of the trash, not their own) and the
+ * reader's `tap` not null — a named card across a block either way is
+ * not_found, as GET …/taps; an anonymous card across one is answered exactly
+ * as with none —; their tap is on, else `conflict`; a passage that is not one
+ * the card offers now, `invalid_request`. One transaction writes
+ * `passage: { id, text } | null` on their tap document and nothing else: no
+ * bell, no push, no `at`, no `rangAt`. Only the card's author ever reads it
+ * (their list), and the reader their own row.
+ */
+export function setTapPassage(db: AdminDb, uid: string, cardId: string, passage: string | null): Promise<TapPassageResponseBody> {
+  return setTapPassageIn(ctxFor(db), uid, cardId, passage);
 }

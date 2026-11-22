@@ -100,6 +100,9 @@ describe('function regions', () => {
       'src/app/api/cron/read-summary/route.ts',
       'src/app/api/v1/cards/[key]/tap/route.ts',
       'src/app/api/v1/cards/[key]/taps/route.ts',
+      // Round 27: the pick among a card's passages, and the card itself (which carries them), read what was stored.
+      'src/app/api/v1/cards/[key]/tap/passage/route.ts',
+      'src/app/api/v1/cards/[key]/route.ts',
       'src/app/api/v1/cards/[key]/reading/route.ts',
     ]) {
       expect(entries.map((f) => relative(ROOT, f)), route).toContain(route);

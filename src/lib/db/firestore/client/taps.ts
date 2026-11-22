@@ -1,6 +1,6 @@
 'use client';
 
-import type { TapListBody } from '@/lib/api/v1/schemas';
+import type { TapListBody, TapPassageResponseBody } from '@/lib/api/v1/schemas';
 import { callApi } from './api';
 
 /**
@@ -13,6 +13,16 @@ import { callApi } from './api';
  */
 export function setTap(cardId: string, on: boolean): Promise<{ on: boolean; changed: boolean }> {
   return callApi(`/api/v1/cards/${encodeURIComponent(cardId)}/tap`, { method: on ? 'PUT' : 'DELETE' });
+}
+
+/**
+ * The passage a reader picked on a tap that is on (round 27 §P4, `PUT /api/v1/cards/{id}/tap/passage`): one of
+ * `CardDetail.tap.passages`' ids, or null to clear it. Only the card's author learns it, and nothing rings. A
+ * refusal throws an ApiError: 409 when the tap is off, 400 when the id is not one of the card's passages now, 404
+ * when the card can't be tapped by this reader.
+ */
+export function setTapPassage(cardId: string, passage: string | null): Promise<TapPassageResponseBody> {
+  return callApi<TapPassageResponseBody>(`/api/v1/cards/${encodeURIComponent(cardId)}/tap/passage`, { method: 'PUT', body: { passage } });
 }
 
 /**

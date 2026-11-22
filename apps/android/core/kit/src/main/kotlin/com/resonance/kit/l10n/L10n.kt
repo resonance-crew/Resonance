@@ -827,6 +827,14 @@ object L10n {
             val send: String get() = Strings.string("card.tap.send")
             /** Didn't go through, try again */
             val failed: String get() = Strings.string("card.tap.failed")
+            /** Quietly tell the author which part stayed with you */
+            val passageTitle: String get() = Strings.string("card.tap.passageTitle")
+            /** Skip */
+            val passageSkip: String get() = Strings.string("card.tap.passageSkip")
+            /** Pick a part */
+            val passagePick: String get() = Strings.string("card.tap.passagePick")
+            /** “{text}” */
+            fun passageQuote(text: String): String = Strings.format("card.tap.passageQuote", mapOf("text" to text))
         }
         object Reply {
             /** Reply with a card */

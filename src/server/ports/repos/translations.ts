@@ -45,6 +45,25 @@ export interface SummarySource {
   translations: unknown;
 }
 
+/** What making a card's tap passages reads of it (round 27; lib/cards/tapPassages). */
+export interface PassageSource {
+  /** `thoughtCore` when a string, else ''. */
+  title: string;
+  /** `story` when a string, else ''. */
+  story: string;
+  /** The fields `offersPassages` reads (publishedAt, visibility, trashedAt, story…), as stored. */
+  fields: Record<string, unknown>;
+  /** `tapPassages` as stored, `undefined` when the field is absent. */
+  tapPassages: unknown;
+}
+
+/** `cards.tapPassages` as made: the story's hash, the items (none: settled), the model; its `at` the write's time. */
+export interface TapPassagesValue {
+  of: string;
+  items: { id: string; text: string }[];
+  model: string;
+}
+
 /** A story's kept translation (`cards/{id}/translations/{to}`), when its title and story are text. */
 export interface KeptTranslation {
   /** The hash of the title and story it was made from (translationHash); null when it has none. */
@@ -92,6 +111,10 @@ export interface TranslationsTxRepo {
   getSummarySource(id: string): Promise<SummarySource | null>;
   /** Store the card's translated summaries (never its `updatedAt`). */
   putSummaryTranslations(id: string, value: SummaryTranslationsValue): void;
+  /** The card as its tap passages are made from it; null when it is gone. */
+  getPassageSource(id: string): Promise<PassageSource | null>;
+  /** Store the card's tap passages whole, `at` the write's time (never its `updatedAt`; a failure count goes with it). */
+  putTapPassages(id: string, value: TapPassagesValue): void;
 }
 
 /** Outside a transaction: reads, and writes that need none. */
@@ -100,6 +123,12 @@ export interface TranslationsData {
   getSummarySource(id: string): Promise<SummarySource | null>;
   /** Remove the card's translated summaries (the card must exist). */
   removeSummaryTranslations(id: string): Promise<void>;
+  /** The card as its tap passages are made from it; null when it is gone. */
+  getPassageSource(id: string): Promise<PassageSource | null>;
+  /** Remove the card's tap passages (the card must exist). */
+  removeTapPassages(id: string): Promise<void>;
+  /** Count a failed pick for the story `of` (`tapPassages.failed`), the passages kept as they were. */
+  putTapPassagesFailed(id: string, failed: { of: string; tries: number }): Promise<void>;
 
   /** The story's kept translation into `to`; null when there is none (or its title or story isn't text). */
   getKeptTranslation(cardId: string, to: TranslationLang): Promise<KeptTranslation | null>;

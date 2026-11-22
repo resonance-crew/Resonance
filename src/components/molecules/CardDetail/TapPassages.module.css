@@ -1,0 +1,95 @@
+/* Which part stayed with the reader (round 27 §U1): the title, then the author's own sentences as bands — the
+   who-resonated list's (TapPeople), running to the paper's edges through the bell's DialogScroll and its --bell-inset. */
+.body {
+  display: flex;
+  flex-direction: column;
+  /* The list's cap (§U1.3): the reader list's, and it scrolls inside (DialogScroll reads it). */
+  --dialog-scroll-max: min(420px, 55vh);
+  /* The story's own type (§U1.3), as story.css sets it by script: CJK first by default… */
+  --passage-face: var(--font-story-sans);
+  --passage-leading: var(--story-leading);
+}
+
+/* …a Latin-script story in its body face and leading. */
+.body[data-script='latin'] {
+  --passage-face: var(--font-body);
+  --passage-leading: var(--story-leading-latin);
+}
+
+/* A phone takes the compact leading (story.css's 640 literal: a media query can't read a token). */
+@media (max-width: 640px) {
+  .body {
+    --passage-leading: var(--story-leading-compact);
+  }
+
+  .body[data-script='latin'] {
+    --passage-leading: var(--story-leading-latin-compact);
+  }
+}
+
+.title {
+  font-family: var(--font-heading);
+  font-size: 20px;
+  line-height: 1.4;
+  margin: 0 0 10px;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* A row is a button: no face of its own — its band is the press — its words on the dialog's own inset. */
+.row {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  min-height: 48px;
+  margin: 0;
+  padding: 0 var(--bell-inset-end, 20px) 0 var(--bell-inset, 20px);
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--color-terracotta);
+  outline-offset: -4px;
+  border-radius: 12px;
+}
+
+.rowInner {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  padding-block: 12px;
+}
+
+/* The author's sentence in the story's type at 16 and its leading, wrapped in full: never cut, never 「…」. */
+.text {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--passage-face);
+  font-size: 16px;
+  line-height: var(--passage-leading);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.check {
+  display: inline-flex;
+  flex: none;
+  /* The text ink, as the apps draw it (iOS Tokens.text, Android Tokens.Text). */
+  color: var(--color-text);
+}

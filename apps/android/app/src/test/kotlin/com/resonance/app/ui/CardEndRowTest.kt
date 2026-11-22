@@ -127,6 +127,19 @@ class CardEndRowTest {
         assertFalse(switch.on)
     }
 
+    @Test fun theCapturesPassagesShowTheTapOnAndSendNothing() {
+        // `cardEnd passages` on a phone's first variant used to press 共振 for real: dora's tap stayed on the seeded
+        // stack, and the dark and English variants' taps-author-list showed her above the four seeded people.
+        val sent = mutableListOf<Boolean>()
+        val switch = TapSwitch(false, launch = { error("nothing sent") }, send = { on -> sent += on; on })
+        assertTrue(switch.showOnForCapture())
+        assertTrue(switch.on)
+        assertEquals(emptyList<Boolean>(), sent)
+        // Already on (the seed's own tap): still nothing sent, and the dialog marks the pick it has.
+        assertFalse(switch.showOnForCapture())
+        assertTrue(switch.on)
+    }
+
     @Test fun aPageReadAgainSaysWhatTheServerHas() {
         val switch = TapSwitch(false, launch = { error("nothing sent") }, send = { it })
         switch.read(true)

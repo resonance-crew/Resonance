@@ -74,6 +74,25 @@ export function describeTapsContract(name: string, make: () => TapsHarness | Pro
       expect(await h.data.taps.tapIsOn(id, 'carol')).toBe(false);
     });
 
+    it('a pick (round 27): written alone on the tap, read back by ownTap and the lists, cleared when the tap is taken back', async () => {
+      const id = h.card('pick');
+      await h.seedCard(id, 'alice');
+      await h.uow.run(async (tx) => tx.taps.putTapOn(id, 'bob', new Date(T0), null));
+      expect(await h.data.taps.ownTap(id, 'bob')).toEqual({ on: true, passage: null });
+      expect(await h.uow.run((tx) => tx.taps.getPassageCard(id))).toMatchObject({ id, authorId: 'alice' });
+      await h.uow.run(async (tx) => tx.taps.setTapPassage(id, 'bob', { id: 'p1', text: 'The words she chose' }));
+      expect(await h.data.taps.ownTap(id, 'bob')).toEqual({ on: true, passage: { id: 'p1', text: 'The words she chose' } });
+      // Nothing else on the tap moved: still on, at the same time.
+      expect(await h.uow.run((tx) => tx.taps.getTap(id, 'bob'))).toMatchObject({ on: true });
+      const page = await h.data.taps.tapsOnPage(id, 10);
+      expect(page.tappers).toEqual([{ uid: 'bob', at: T0, passage: { id: 'p1', text: 'The words she chose' } }]);
+      expect(await h.data.taps.tapsOnBy(id, ['bob'])).toEqual([{ uid: 'bob', at: T0, passage: { id: 'p1', text: 'The words she chose' } }]);
+      await h.uow.run(async (tx) => tx.taps.turnTapOff(id, 'bob'));
+      expect(await h.data.taps.ownTap(id, 'bob')).toEqual({ on: false, passage: null });
+      await h.uow.run(async (tx) => tx.taps.putTapOn(id, 'bob', new Date(T0 + 1000), null));
+      expect(await h.data.taps.ownTap(id, 'bob')).toEqual({ on: true, passage: null });
+    });
+
     it('tapsOnPage: newest first, ties by id, every tap that is on exactly once across pages, never one taken back', async () => {
       const id = h.card('page');
       await h.seedCard(id, 'alice');

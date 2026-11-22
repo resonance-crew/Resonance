@@ -191,6 +191,8 @@ export async function measurePage(page: Page, { touch, phone = false, frames = f
         if (!visible(el)) continue;
         const text = ((el as HTMLElement).innerText || '').trim();
         if (!text || text.length > shortLabel || text.includes('\n')) continue;
+        // A tap passage is the author's sentence, a row that is meant to wrap in full (round 27 §U1.3): not a label.
+        if (el.hasAttribute('data-passage')) continue;
         const boxes: { top: number; bottom: number }[] = [];
         const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
         for (let node = walker.nextNode(); node; node = walker.nextNode()) {

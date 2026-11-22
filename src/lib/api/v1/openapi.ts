@@ -393,6 +393,23 @@ export function buildOpenApi(): Json {
           responses: { '200': { description: 'OK', ...json(ref('TapResponse')) }, ...errors(400, 401, 403, 404, 409, 429) },
         },
       },
+      '/cards/{key}/tap/passage': {
+        put: {
+          operationId: 'setTapPassage',
+          summary: 'Say which part of a card stayed with you, after you resonated: one of its passages, or none (round 27)',
+          description:
+            "Pick one of `CardDetail.tap.passages` (its `id`), or send `passage: null` to clear your pick. Only the card's " +
+            'author learns it — their list of who resonated shows each pick (`TapPerson.passage`); a reader sees only their ' +
+            'own. Nothing rings and nothing is counted. Checked in this order: the contract (`400`); your budget (`429`, the ' +
+            "tap's); the card (`404` wherever `CardDetail.tap` is null: one you can't read, a draft, one in the trash, your " +
+            'own, a named card across a block either way — an anonymous card is answered exactly as without a block); your ' +
+            'tap on it is on (`409 conflict` otherwise: resonate first); the passage is one the card offers now (`400` ' +
+            'otherwise — the options change when the story does: read the card again). Taking your tap back clears the pick.',
+          parameters: [cardId],
+          requestBody: { required: true, ...json(ref('TapPassageRequest')) },
+          responses: { '200': { description: 'OK', ...json(ref('TapPassageResponse')) }, ...errors(400, 401, 403, 404, 409, 429) },
+        },
+      },
       '/cards/{key}/taps': get('getCardTaps', 'Who resonated with a card (共振), as you may see them', 'TapList', {
         description:
           "The card's author gets everyone, newest first, 30 a page (pass `nextPageToken` back as `pageToken`), each with " +
