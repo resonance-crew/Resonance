@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { fakeAdminDb } from '../../test/fakeAdminDb';
 import { signalledJson } from '@/lib/api/v1/signalTag';
 import { getCardDetail } from '@/server/app/cardsRead';
-import { listBellIn, listConversationsIn, listThreadIn } from '@/server/app/inbox';
+import { listBellIn, listConversationsByIdIn, listConversationsIn, listThreadIn } from '@/server/app/inbox';
 import { ctxFor } from '@/server/infra/firestore/ctx';
 import { memoryRealtime } from '@/server/infra/memory/adapters';
 
@@ -20,6 +20,11 @@ const MAX = {
   conversations: 100,
   /** …asked again while the viewer's `inbox` counter stands: the signal document alone (100 before the early 304). */
   conversationsUnchanged: 1,
+  /**
+   * GET /conversations?pairs= — the web's list after a send, a read mark or a message heard: the conversation that
+   * moved and its person (the whole page, 100, before the delta; client/messages conversationsReader).
+   */
+  conversationsDelta: 2,
   /** GET /me/bell, 20 rows naming 20 people. */
   bell: 40,
   /** GET …/messages, the newest window of 50. */
@@ -95,6 +100,16 @@ describe('read-count ratchets', () => {
       expect(res.status).toBe(304);
     });
     expect(unchanged + 1).toBeLessThanOrEqual(MAX.conversationsUnchanged);
+  });
+
+  it('the list after one conversation moved: that conversation and its person', async () => {
+    const { fake, ctx } = seeded();
+    let n = 0;
+    const one = await cost(fake, async () => {
+      n = (await listConversationsByIdIn(ctx, ME, [pairWith(others[3])])).conversations.length;
+    });
+    expect(n).toBe(1);
+    expect(one).toBeLessThanOrEqual(MAX.conversationsDelta);
   });
 
   it('the bell', async () => {

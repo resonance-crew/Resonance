@@ -417,6 +417,47 @@ export async function getUsersByIds(ids: string[]): Promise<Record<string, User>
   return out;
 }
 
+/** GET /users/{handle} reads on their way, by pen name: a thread's person and its connection (or a profile's) ask once. */
+const profileReads = new Map<string, Promise<ProfileBody | null>>();
+
+/**
+ * The profile's head alone (no lists) for a pen name, signed in: who goes by
+ * it now as the viewer may see them, and whether the viewer is connected with
+ * them — or null when no one goes by it (404) or it can't be one (400). One
+ * read at a time per name, shared while it is on its way (SWR decides when to
+ * ask again).
+ */
+function profileHead(handle: string): Promise<ProfileBody | null> {
+  const key = handle.trim();
+  const pending = profileReads.get(key);
+  if (pending) return pending;
+  const read = callApi<ProfileBody>(`/api/v1/users/${encodeURIComponent(key)}`).catch((err: unknown) => {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 400)) return null;
+    throw err;
+  });
+  profileReads.set(key, read);
+  void read.catch(() => undefined).finally(() => {
+    if (profileReads.get(key) === read) profileReads.delete(key);
+  });
+  return read;
+}
+
+/**
+ * Whether the signed-in viewer is connected with `otherId`, who goes by
+ * `handle`: as their profile says (`isConnected`, the one connection read
+ * among its five — the same connection document /me/connections lists),
+ * where {@link isConnected} reads every connection and each one's person
+ * (two reads apiece). When the pen name isn't theirs (any more), the whole
+ * list says.
+ */
+export async function isConnectedTo(handle: string, otherId: string): Promise<boolean> {
+  const uid = getFirebaseClientAuth().currentUser?.uid;
+  if (!uid || uid === otherId) return false;
+  const body = await profileHead(handle);
+  if (body && body.author.id === otherId) return !body.isSelf && body.isConnected;
+  return isConnected(uid, otherId);
+}
+
 /**
  * The person who goes by a pen name: its reservation (handles/{name}, kept
  * by the server with each profile write) names them.
@@ -425,17 +466,11 @@ export async function getUserByHandle(handle: string): Promise<User | null> {
   const key = handle.trim().toLowerCase();
   if (!key) return null;
   if (signedIn()) {
-    // The profile's head alone (no lists): who goes by it now, as the viewer may see them.
-    try {
-      const body = await callApi<ProfileBody>(`/api/v1/users/${encodeURIComponent(handle.trim())}`);
-      const user = { ...summaryAuthor(body.author, { bio: body.bio, joinedAt: body.joinedAt }), avatarSeed: body.author.avatarSeed ?? '0' };
-      remember(user.id, user);
-      return user;
-    } catch (err) {
-      // No one goes by it (404), or a name that can't be one (400).
-      if (err instanceof ApiError && (err.status === 404 || err.status === 400)) return null;
-      throw err;
-    }
+    const body = await profileHead(handle);
+    if (!body) return null;
+    const user = { ...summaryAuthor(body.author, { bio: body.bio, joinedAt: body.joinedAt }), avatarSeed: body.author.avatarSeed ?? '0' };
+    remember(user.id, user);
+    return user;
   }
   // Every pen name is reserved (handles/{name}, backfill.ts handles): no reservation, no such person.
   let uid: unknown = null;
