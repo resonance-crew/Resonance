@@ -22,6 +22,8 @@ npm run visual -- compare --run <id>         # redraw the report (after verdicts
 npm run visual -- accept --run <id> --reason "<the owner's words>"   # the run becomes the baseline
 npm run visual -- accept --run <id> --only card,web/phone/home@dark-zh-TW.png --reason "…"   # only these screens / captures
 npm run visual -- accept --runs <id>,<id> --only card --reason "…"   # several runs at once (a retake named after the run it retakes)
+npm run visual -- promote --from r30/base --reason "<the owner's words>"   # a merged round's accepted pictures into main's baseline
+npm run visual -- baselines                  # main's and every branch's baseline, and which one this checkout uses
 npm run visual -- capture web ios android --web-only card --web-device phone --ios-only card,thread --android-device phone   # one run, each platform its own slice
 ```
 
@@ -313,6 +315,26 @@ npm run visual -- accept --run <id> --only card,home --reason "owner, in chat: t
 - An accept compares the run again only where it copied: every other capture's result is reused
   (the comparison keeps each result with what it was judged from, `_compare.json`).
 - The report's per-capture command (`index.html`) carries a `--reason "<the owner's words>"` to fill in.
+
+### Promoting a round's pictures into main's
+
+A round accepts into its own baseline; once its work is on main, its look becomes main's with `promote`, held as
+an accept into main's (`promote.ts`):
+
+```bash
+npm run visual -- promote --from r30/base --reason "<the owner's words>" [--only card,thread] [--allow-unmerged]
+```
+
+- Refused without `--reason`, and the guard hook checks the words are the owner's, as for `accept`.
+- Only what the round **accepted** moves: a picture whose commit in the round's `meta.json` was accepted after its
+  baseline was cloned from main's (`branch.json`). Its other pictures are main's own as they were then, and never
+  go back over main's newer ones. Each moved picture keeps its round commit in main's `meta.json`, and each run is
+  a row of the accept log, `(promoted from r30/base)` after the reason.
+- Every commit those pictures were taken at must be in main's history (`git merge-base --is-ancestor <c> main`):
+  one that isn't — the round not merged yet, or merged as a squash or cherry-pick under other hashes — stops it,
+  naming them, unless `--allow-unmerged` says the owner knows (said again as it goes).
+- The round's own baseline stays as it is; removing a branch's baseline (`visual/baselines/<name>/`) is the
+  owner's call, never a step of its own.
 
 ## The review with Antigravity (`--agy`)
 

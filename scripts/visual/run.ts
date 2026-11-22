@@ -20,6 +20,9 @@
  *   accept   --reason "<the owner's words>" [--run <id> | --runs <id>,<id>,…] [--only <key|screen>,…]
  *            refused without --reason; each run accepted is a row of docs/visual-accept-log.md (acceptLog.ts);
  *            with --runs, a capture several runs took comes from the one named last (accept.ts)
+ *   promote  --from <branch> --reason "<the owner's words>" [--only <key|screen>,…] [--allow-unmerged]
+ *            a branch's (a round's) accepted pictures into main's baseline, once main has its commits (promote.ts)
+ *   baselines                     main's and every branch's baseline, and which one this checkout uses (baselines.ts)
  *
  * capture, compare and review end with the run's verdict — `Visual PASS|FAIL <id>: …` as the last
  * line, summary.json beside the report, exit code 1 on a FAIL (gate.ts says what fails a run).
@@ -35,8 +38,10 @@ import { LockBusy, acquire, resourcesFor, type Lock, type LockHolder } from './l
 import { writeReport } from './report';
 import { reviewWithAgy, reviewWithGemini, writeReviewPack } from './review';
 import { startStack, type Stack } from './stack';
-import { PORTS, RUNS_DIR, VISUAL_DIR, git, ignorePath, listPngs, readJson, writeJson, type Capture } from './util';
-import { baselineDir, currentBaselineName, ensureBaseline, runBaselineName } from './baselines';
+import { PORTS, ROOT, RUNS_DIR, VISUAL_DIR, git, ignorePath, listPngs, readJson, writeJson, type Capture } from './util';
+import { MAIN, baselineDir, currentBaselineName, ensureBaseline, listBaselines, runBaselineName } from './baselines';
+import { applyPromote, planPromote } from './promote';
+import { execFileSync } from 'node:child_process';
 import type { Platform } from './screens';
 import { DEVICE_STATES, EXTRA_VARIANTS, VARIANT_SETS, estimate, variantSetOf } from './variants';
 import { watchdog } from './watchdog';
@@ -289,6 +294,55 @@ async function accept(args: string[]) {
   for (const dir of runDirs) await finish(dir);
 }
 
+/** Whether main's history has `commit` (the promote's check: a branch's pictures go to main's once its work is there). */
+function onMain(commit: string): boolean {
+  try {
+    execFileSync('git', ['merge-base', '--is-ancestor', commit, MAIN], { cwd: ROOT, stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** A branch's accepted pictures into main's baseline (promote.ts), on the owner's word. */
+function promote(args: string[]) {
+  const reason = acceptReason(args);
+  if (!reason) {
+    console.error(REASON_REQUIRED.replace('accept needs', 'promote needs'));
+    process.exitCode = 1;
+    return;
+  }
+  const only = list(flag(args, 'only'));
+  const plan = planPromote(flag(args, 'from') ?? '', { root: VISUAL_DIR, only, onMain });
+  if ('error' in plan) {
+    console.error(plan.error);
+    process.exitCode = 1;
+    return;
+  }
+  if (plan.unmerged.length) {
+    const what = `${plan.unmerged.length} commit(s) these pictures were taken at are not in main's history: ${plan.unmerged.map((c) => c.slice(0, 8)).join(', ')}`;
+    if (!args.includes('--allow-unmerged')) {
+      console.error(`${what}. Merge ${plan.branch} into main first, or — if it reached main another way (a squash, a cherry-pick) — add --allow-unmerged. Nothing was promoted.`);
+      process.exitCode = 1;
+      return;
+    }
+    log(`Warning: ${what} — promoted anyway (--allow-unmerged)`);
+  }
+  for (const { run, commit, count } of applyPromote(plan, { root: VISUAL_DIR, reason, only })) {
+    log(`Promoted ${count} picture(s) of ${run} (${commit.slice(0, 8)}) from ${plan.branch} into main's baseline`);
+  }
+  log(`Recorded in docs/visual-accept-log.md — commit it with the work: git commit -- docs/visual-accept-log.md`);
+}
+
+/** main's baseline and every branch's, and which one this checkout uses. */
+function baselinesOf() {
+  const mine = currentBaselineName();
+  for (const b of listBaselines()) {
+    const count = listPngs(b.folder).length;
+    log(`${b.name === mine ? '*' : ' '} ${b.name.padEnd(36)} ${String(count).padStart(4)} pictures  ${b.info ? `made from main's ${b.info.clonedAt}` : ''}  ${b.folder}`);
+  }
+}
+
 /** What each variant set takes and costs (variants.ts), without taking anything. */
 function planOf(args: string[]) {
   const sets = flag(args, 'variants') ? [variantSetOf(flag(args, 'variants'))] : VARIANT_SETS;
@@ -322,6 +376,10 @@ async function main() {
     }
     case 'accept':
       return accept(args);
+    case 'promote':
+      return promote(args);
+    case 'baselines':
+      return baselinesOf();
     case 'plan':
       return planOf(args);
     default:
