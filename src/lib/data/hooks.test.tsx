@@ -48,9 +48,11 @@ vi.mock('@/lib/db/firestore/client/messages', () => {
   // The live list's reader, here a whole read every pull (its deltas: client/messages.test).
   return { listConversations, conversationsReader: () => () => listConversations(), readConversation: vi.fn() };
 });
-vi.mock('@/lib/db/firestore/client/notifications', () => ({
-  getBell: vi.fn(),
-}));
+vi.mock('@/lib/db/firestore/client/notifications', () => {
+  const getBell = vi.fn();
+  // The bell's reader, here a whole read every pull (its deltas: client/bellDelta.test).
+  return { getBell, bellReader: (_uid: string, max: number) => () => getBell(max).then((b: { items: unknown[] }) => b.items) };
+});
 // The signal channel (signals/{uid}): who watches what, fired by the test as the server's counters would move.
 const signals = vi.hoisted(() => {
   const watchers = new Map<string, Set<() => void>>();

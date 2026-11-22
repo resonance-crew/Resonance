@@ -27,7 +27,7 @@ import {
 import { loadMyThoughtMap, type ThoughtMapData } from '@/lib/db/firestore/client/thoughtMap';
 import { conversationsReader } from '@/lib/db/firestore/client/messages';
 import { liveConversationsKey } from './thread';
-import { getBell } from '@/lib/db/firestore/client/notifications';
+import { bellReader } from '@/lib/db/firestore/client/notifications';
 import { watchSignal, type SignalTopic } from '@/lib/db/firestore/client/signals';
 import { getMyBlockedIds } from '@/lib/db/firestore/client/blocks';
 import { ApiError, callApi } from '@/lib/db/firestore/client/api';
@@ -1159,14 +1159,15 @@ export function useConversations(): { data: ConversationsData | undefined; error
 /**
  * The viewer's newest notifications, live (the bell's badge and list): GET
  * /api/v1/me/bell, pulled again when the viewer's `bell` signal moves — a new
- * row, or one marked read on another device, shows without a reload.
+ * row, or one marked read on another device, shows without a reload; each
+ * pull after the first reads only what changed (client/notifications bellReader).
  */
 export function useNotifications(max = 20): LiveState<Notification[]> {
   const { user, loading } = useAuth();
   const uid = user && !loading ? user.id : null;
   return useLive<Notification[]>(
     uid ? `notifications:live:${uid}:${max}` : null,
-    pulled(uid ?? '', ['bell'], () => getBell(max).then((bell) => bell.items)),
+    pulled(uid ?? '', ['bell'], bellReader(uid ?? '', max)),
   );
 }
 
