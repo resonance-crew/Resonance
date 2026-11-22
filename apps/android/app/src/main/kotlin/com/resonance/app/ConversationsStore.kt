@@ -59,7 +59,9 @@ data class Person(
  *
  * Phase 2: with client-config's `apiInbox` on, the conversations are pulled from GET
  * /conversations instead (on the `inbox` signal, back in the foreground, and each minute on
- * screen; an ETag makes an unchanged list a 304), and with `apiSocial` the connections and blocks
+ * screen; only the conversations whose `threads` counters moved, `?pairs=`, and nothing at all when
+ * none did while the listener is live — whole when no one can say, and every ten minutes:
+ * [ConversationsReader]), and with `apiSocial` the connections and blocks
  * from GET /me/connections and /me/blocks (on `graph`). Which path a list takes is read at
  * [start]; the Firestore listeners stay for a release, for the server to send this build back.
  */
@@ -218,10 +220,12 @@ class ConversationsStore {
     }
 
     private fun pullConversations(uid: String, remote: LiveRemote) {
+        // Only what moved (?pairs=), whole when no one can say: ConversationsReader.
+        val reader = ConversationsReader(remote.inbox, remote.signals::live)
         pulls = pulls + scope.launchPulls(merge(remote.signals.topic(Signals.Topic.Inbox), inboxKicks), remote.onScreen) {
             val settled = readHere.filterValues { it }.keys
-            val list = try {
-                remote.inbox.conversations()
+            val read = try {
+                reader.read()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -229,9 +233,17 @@ class ConversationsStore {
                 return@launchPulls
             }
             if (this.uid != uid) return@launchPulls
+            if (read is ConversationsReader.Read.Same) {
+                // Nothing moved since the last read: the list stands (and one that failed since is current again).
+                if (pullsFailed.remove("conversations")) arrived("conversations")
+                return@launchPulls
+            }
             pullsFailed.remove("conversations")
-            settled.forEach { readHere.remove(it) }
-            for (c in list) {
+            // A read mark goes once a read has said what the server has of that conversation.
+            val told = if (read is ConversationsReader.Read.Delta) settled.filter { it in read.pairs } else settled
+            told.forEach { readHere.remove(it) }
+            val list = read.conversations
+            for (c in if (read is ConversationsReader.Read.Delta) list.filter { it.id in read.pairs } else list) {
                 val person = c.other?.let { Person.of(it) }
                 if (person != null) people[person.id] = person else missing.add(c.otherId)
             }
