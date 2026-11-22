@@ -469,6 +469,9 @@ struct CardScreen: View {
         // The owner's card in the trash: its banner first, and nothing around the story but its tags.
         let trashed = TrashedCardBanner.shows(detail)
         let hasCover = card.imageUrl.flatMap(URL.init(string:)) != nil
+        // The picked sentence is read here, in the page's body, not only inside the dialog's closure: the cover's first
+        // build otherwise still saw nil and opened an empty paper (round 29, the Mac's `card-picked-people`).
+        let pickedPassage = picked
         return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 if trashed {
@@ -528,8 +531,8 @@ struct CardScreen: View {
                 .padding(.bottom, story.endGap)
                 .organicModal(isPresented: $pickedOpen, seed: 41, maxWidth: PickedPeople.width(compact: window.layoutClass == .compact),
                               closeLabel: L10n.Native.close) {
-                    if let picked {
-                        PickedPeople(cardId: card.id, passage: picked, quoteFont: Font(AppFonts.uiFont(story.bodyFamily, size: 16))) {
+                    if let pickedPassage {
+                        PickedPeople(cardId: card.id, passage: pickedPassage, quoteFont: Font(AppFonts.uiFont(story.bodyFamily, size: 16))) {
                             pickedOpen = false
                         }
                         .withSession(session)

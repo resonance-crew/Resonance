@@ -77,4 +77,16 @@ import Testing
         #expect(people.people.map(\.author.id) == ["gus", "bob", "hana"])
         #expect(people.next == nil)
     }
+
+    /// The Mac's `card-picked-people` opened an empty paper: the dialog's content read `picked` only inside the cover's
+    /// closure, so the page's body depended on neither it nor the open flag, and the cover's first build still saw nil.
+    /// The page reads the passage in its body and the dialog draws that value.
+    @Test func theDialogDrawsThePassageThePageRead() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Resonance/Features/Card/CardScreen.swift").standardized
+        let source = try String(contentsOf: url, encoding: .utf8)
+        #expect(source.contains("let pickedPassage = picked"))
+        #expect(source.contains("if let pickedPassage {"))
+        #expect(!source.contains("if let picked {"))
+    }
 }
