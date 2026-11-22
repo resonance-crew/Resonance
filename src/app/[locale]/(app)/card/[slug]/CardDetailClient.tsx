@@ -205,8 +205,6 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   // view at once (round 12 §5–6): at ≥ 1200 at the end of the response row, below it at the end of the tags.
   const [bylineEl, setBylineEl] = useState<HTMLDivElement | null>(null);
   const [tagsEl, setTagsEl] = useState<HTMLDivElement | null>(null);
-  // The contents rail, when the story has one: the white right of the column runs to it (round 29 §S1).
-  const [railEl, setRailEl] = useState<HTMLElement | null>(null);
   const wide = useMediaQuery('(min-width: 1200px)');
   const endsApart = useEndsApart(bylineEl, tagsEl, { header: HEADER_TOTAL_H, extra: END_ROW_H });
   // How it is read (round 26 §U7): a signed-in reader's, never its author's — for their own picks, never by name.
@@ -432,7 +430,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               data-passages={ownPicked ? '' : undefined}
             >
               {/* The author's picked sentences: their washes and who picked them (round 29); nothing for anyone else. */}
-              <PassageMarks cardId={card.id} picked={ownPicked} script={type.script} storyRef={storyRef} rail={railEl}>
+              <PassageMarks cardId={card.id} picked={ownPicked} script={type.script} storyRef={storyRef}>
                 {/* Signed in, the embedded cards came with the lists; the link previews come with the card. */}
                 <CardEmbedSourceContext.Provider value={lists.embeds}>
                   <StoryLinkPreviewsContext.Provider value={card.linkPreviews ?? null}>
@@ -503,7 +501,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
 
           {/* The rail holds the story's contents alone (the byline names the author): only a story with headings has one. */}
           {contents && (
-            <aside ref={setRailEl} className={styles.aside}>
+            <aside className={styles.aside}>
               <CardToc headings={headings} title={t('toc')} />
             </aside>
           )}

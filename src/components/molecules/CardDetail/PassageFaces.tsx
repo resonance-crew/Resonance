@@ -11,14 +11,14 @@ import styles from './PassageFaces.module.css';
  * Round 29 §S1–§S2: the faces of who picked a sentence of the author's own story — one group per washed sentence,
  * the house stack overlapped (each face 0.66 of its size after the one before, the first on top), at most three
  * faces and nothing after them (no blank disc, no number: the pop-up says who else). Where the group stands is
- * decided by the white right of the story's column: the right margin when there is room, else in the line after
- * the sentence's last character. The pure rules here are the ones the apps port (PassageMarksTests,
- * PassageMarksTest).
+ * decided by the white left of the story's column: the left margin when there is room, else in the line after
+ * the sentence's last character (§S10: the left after all — the owner, 2026-11-22, the page's weight stays
+ * balanced). The pure rules here are the ones the apps port (PassageMarksTests, PassageMarksTest).
  */
 
-/** The white right of the column, to the contents rail or the window's edge, from which the faces stand in the margin. */
+/** The white left of the column, to the window's edge (or what stands left of the page), from which the faces stand in the margin. */
 export const PASSAGE_MARGIN_MIN = 70;
-/** The group's left edge, right of the column's right edge, in the margin. */
+/** The group's right edge, left of the column's left edge, in the margin. */
 export const PASSAGE_MARGIN_GAP = 8;
 /** At most this many faces in a group, and nothing after them (§S2). */
 export const PASSAGE_FACES_MAX = 3;
@@ -33,12 +33,16 @@ export const PASSAGE_WASH_OUT = 2;
 
 export type PassagePlacement = 'margin' | 'inline';
 
-/** The white right of the column: to the rail when one stands (always 80), else to the window's edge. */
-export function passageRoom(m: { columnRight: number; windowWidth: number; railLeft?: number | null }): number {
-  return m.railLeft != null ? m.railLeft - m.columnRight : m.windowWidth - m.columnRight;
+/**
+ * The white left of the column (§S10): from the column's left edge to the window's left edge, or to whatever stands
+ * left of the page (`leftEdge`: a side rail, a sidebar — the web has none). The contents rail on the right plays no
+ * part in it.
+ */
+export function passageRoom(m: { columnLeft: number; leftEdge?: number | null }): number {
+  return m.columnLeft - (m.leftEdge ?? 0);
 }
 
-/** The right margin when its white is ≥ 70; in the line everywhere else (every phone, windows under 820 with no rail). */
+/** The left margin when its white is ≥ 70; in the line everywhere else (every phone, windows under 820). */
 export function passagePlacement(room: number): PassagePlacement {
   return room >= PASSAGE_MARGIN_MIN ? 'margin' : 'inline';
 }
@@ -50,8 +54,8 @@ export function passageGroupWidth(n: number, size: number): number {
 
 /**
  * A face's size (§S2): 24; 22 in a Latin-script story on a compact window; in the margin never so big that three
- * would come within 6 of the rail or the window's edge — `(room − 14) ÷ 2.32`, three overlapped faces being 2.32 of
- * one (the web's reading scale is 1, so beside a rail it stays 24).
+ * would come within 6 of the window's left edge — `(room − 14) ÷ 2.32`, `room` the white left of the column, three
+ * overlapped faces being 2.32 of one (the web's reading scale is 1).
  */
 export function passageFaceSize(m: { placement: PassagePlacement; script: StoryScript; compact: boolean; room: number }): number {
   const base = m.script === 'latin' && m.compact ? PASSAGE_FACE_LATIN_COMPACT : PASSAGE_FACE;
@@ -61,13 +65,13 @@ export function passageFaceSize(m: { placement: PassagePlacement; script: StoryS
 }
 
 /**
- * The groups' centres in the margin, in the story's order: each on the line where its wash ends, a later one moved
- * down a line box where two would share a line (`y[i] = max(y[i], y[i-1] + lineBox)`).
+ * The groups' centres in the margin, in the story's order: each on the line where its wash begins (§S10), a later
+ * one moved down a line box where two would share a line (`y[i] = max(y[i], y[i-1] + lineBox)`).
  */
-export function marginCentres(ends: readonly { y: number; lineBox: number }[]): number[] {
+export function marginCentres(starts: readonly { y: number; lineBox: number }[]): number[] {
   const out: number[] = [];
-  ends.forEach((e, i) => {
-    out.push(i === 0 ? e.y : Math.max(e.y, out[i - 1] + ends[i - 1].lineBox));
+  starts.forEach((e, i) => {
+    out.push(i === 0 ? e.y : Math.max(e.y, out[i - 1] + starts[i - 1].lineBox));
   });
   return out;
 }

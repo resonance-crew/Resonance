@@ -1092,7 +1092,7 @@ describe('the sentences readers picked', () => {
     expect(faces).toHaveAttribute('data-passage-faces', PICKED);
     const marks = [...document.querySelectorAll(`mark[data-passage="${PICKED}"]`)];
     expect(marks.map((m) => m.textContent).join('')).toBe('the street is still blue.');
-    // The faces stand in the line after its last character (jsdom has no room right of the column).
+    // The faces stand in the line after its last character (jsdom has no room left of the column).
     expect(faces.closest('.story-passage-glue')).not.toBeNull();
     // The story's words are all there, in order (the faces' slot aside).
     const words = document.querySelector('.story-prose')!.cloneNode(true) as HTMLElement;

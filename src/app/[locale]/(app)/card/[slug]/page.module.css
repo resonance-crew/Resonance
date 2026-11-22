@@ -71,7 +71,7 @@
 }
 
 /* On its author's page, with sentences readers picked (round 29): the washes lie in a layer under the story's
-   blocks, and the faces' margin stands right of the column (CardDetail/PassageMarks). */
+   blocks, and the faces' margin stands left of the column (CardDetail/PassageMarks, §S10). */
 .story[data-passages] {
   position: relative;
   isolation: isolate;

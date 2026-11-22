@@ -108,6 +108,10 @@ describe('the reading pages’ places', () => {
     for (const l of both) if (l.kind === 'spot') expect(l.x < 300 || l.x > 980).toBe(true);
     const railed = readingLedges({ ...base, rail: { x: 1040, y: 120, w: 200, h: 300 } }, READING_PRESETS.desktop).ledges;
     expect(railed.filter((l) => l.kind === 'spot' && l.from === 'right')).toEqual([]);
+    // The author's picked sentences' faces in the left margin (round 29 §S10): nothing on the left, the right theirs.
+    const faced = readingLedges({ ...base, leftTaken: { x: 0, y: 120, w: 300, h: 1800 } }, READING_PRESETS.desktop).ledges.filter((l) => l.id.startsWith('margin-'));
+    expect(faced.length).toBeGreaterThan(0);
+    expect(faced.every((l) => l.kind === 'spot' && l.from === 'right')).toBe(true);
     // A phone's column runs edge to edge: no margins.
     const phone = readingLedges({ ...base, width: 375, column: { x: 20, y: 120, w: 335, h: 1800 } }, READING_PRESETS.phone).ledges;
     expect(phone.some((l) => l.id.startsWith('margin-'))).toBe(false);

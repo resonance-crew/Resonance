@@ -11,7 +11,7 @@ import { findPassage } from './passageRange';
  * With `inline`, the sentence's faces stand in the line right after its last character (§S1.2): the plugin puts an
  * empty `<span data-passage-slot={id}>` there, inside a `.story-passage-glue` span that holds the last character's
  * piece and the slot together (no line break between them, so a group never begins a line alone). Without it (the
- * right margin, §S1.1) nothing but the marks is added: nothing in the story moves.
+ * left margin, §S10) nothing but the marks is added: nothing in the story moves.
  *
  * A sentence is found as passageRange's rule says (§P3: the first leaf in the story's order that holds it); one not
  * found, or one overlapping a sentence found before it, gets nothing (§P3.4). Code blocks keep their characters.

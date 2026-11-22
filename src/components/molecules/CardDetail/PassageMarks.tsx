@@ -36,26 +36,25 @@ export interface PassageMarksProps {
   script: StoryScript;
   /** The element the story is drawn in (the faces' margin and the washes are laid in it). */
   storyRef: RefObject<HTMLDivElement | null>;
-  /** The contents rail beside the story, when the page has one (it may be hidden at this width). */
-  rail?: HTMLElement | null;
   children: ReactNode;
 }
 
 interface Measured {
   washes: { id: string; rects: WashRect[] }[];
-  ends: { id: string; y: number; lineBox: number }[];
+  /** Each sentence's first line: where its group stands in the margin (§S10). */
+  starts: { id: string; y: number; lineBox: number }[];
 }
 
-const NOTHING: Measured = { washes: [], ends: [] };
+const NOTHING: Measured = { washes: [], starts: [] };
 
 /**
  * The author's own story with the sentences readers picked (round 29 §U2, §S1–§S4): each found sentence on a faint
- * wash, and the faces of who picked it — in the right margin when the white there is ≥ 70, else in the line right
- * after the sentence. A group, or its sentence's wash, opens that sentence's people (PickedPeople). The washes lie
+ * wash, and the faces of who picked it — in the left margin when the white there is ≥ 70 (beside the line where
+ * its wash begins: §S10, the owner, 2026-11-22), else in the line right after the sentence. A group, or its sentence's wash, opens that sentence's people (PickedPeople). The washes lie
  * under the story's words (an isolated layer under its blocks: the story's `data-passages`, page.module.css), cut
  * per line from the marks' own boxes, so nothing in the story moves and a link's wave stays over them.
  */
-export function PassageMarks({ cardId, picked, script, storyRef, rail, children }: PassageMarksProps) {
+export function PassageMarks({ cardId, picked, script, storyRef, children }: PassageMarksProps) {
   // What the answer says, as one string: a read again that says the same keeps the same marks (no parse again).
   const key = (picked ?? [])
     .map((p) => `${p.id}\u0000${p.text}\u0000${p.more}\u0000${p.people.map((a) => `${a.id}:${a.handle}:${a.avatarUrl ?? ''}`).join(',')}`)
@@ -71,8 +70,8 @@ export function PassageMarks({ cardId, picked, script, storyRef, rail, children 
   const [measured, setMeasured] = useState<Measured>(NOTHING);
   const byId = useMemo(() => new Map(list.map((p) => [p.id, p])), [list]);
 
-  // Which place: the white right of the column, to the rail when it stands, else to the window's edge (§S1). A
-  // window crossing the threshold changes place at once.
+  // Which place: the white left of the column, to the window's edge (§S10; the contents rail on the right plays no
+  // part). A window crossing the threshold changes place at once.
   const any = list.length > 0;
   useLayoutEffect(() => {
     const el = storyRef.current;
@@ -81,14 +80,12 @@ export function PassageMarks({ cardId, picked, script, storyRef, rail, children 
       return;
     }
     const measure = () => {
-      const box = el.getBoundingClientRect();
-      const railShown = rail && rail.getClientRects().length > 0 ? rail.getBoundingClientRect() : null;
-      setRoom(passageRoom({ columnRight: box.right, windowWidth: document.documentElement.clientWidth, railLeft: railShown?.left ?? null }));
+      setRoom(passageRoom({ columnLeft: el.getBoundingClientRect().left }));
     };
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
-  }, [any, storyRef, rail]);
+  }, [any, storyRef]);
 
   const open = useCallback((id: string) => {
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -136,13 +133,13 @@ export function PassageMarks({ cardId, picked, script, storyRef, rail, children 
         }
         rects.set(id, into);
       }
-      const next: Measured = { washes: [], ends: [] };
+      const next: Measured = { washes: [], starts: [] };
       for (const p of list) {
         const rs = rects.get(p.id);
         if (!rs?.length) continue;
         next.washes.push({ id: p.id, rects: washPieces(rs) });
-        const last = rs[rs.length - 1];
-        next.ends.push({ id: p.id, y: (last.top + last.bottom) / 2, lineBox: last.lineBox });
+        const first = rs[0];
+        next.starts.push({ id: p.id, y: (first.top + first.bottom) / 2, lineBox: first.lineBox });
       }
       setMeasured((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
     };
@@ -183,7 +180,7 @@ export function PassageMarks({ cardId, picked, script, storyRef, rail, children 
     opener.current?.focus?.();
   };
   const shown = openId ? byId.get(openId) : undefined;
-  const centres = marginCentres(measured.ends);
+  const centres = marginCentres(measured.starts);
   return (
     <>
       <StoryPassagesContext.Provider value={ctx}>{children}</StoryPassagesContext.Provider>
@@ -196,9 +193,9 @@ export function PassageMarks({ cardId, picked, script, storyRef, rail, children 
           )}
         </div>
       )}
-      {ctx && placement === 'margin' && measured.ends.length > 0 && (
+      {ctx && placement === 'margin' && measured.starts.length > 0 && (
         <div className={styles.margin} data-passage-margin="" style={{ width: passageGroupWidth(PASSAGE_FACES_MAX, size) }}>
-          {measured.ends.map((e, i) => {
+          {measured.starts.map((e, i) => {
             const p = byId.get(e.id);
             return p ? <PassageFaces key={e.id} picked={p} size={size} placement="margin" top={centres[i]} onOpen={open} /> : null;
           })}

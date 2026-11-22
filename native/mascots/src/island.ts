@@ -107,6 +107,7 @@ function toContent(scene: ReadingScene, at: number): ReadingScene {
     cover: m(scene.cover),
     paragraphs: scene.paragraphs?.map((r) => m(r)!),
     rail: m(scene.rail),
+    leftTaken: m(scene.leftTaken),
     respond: m(scene.respond),
     respondCeiling: scene.respondCeiling != null ? scene.respondCeiling + at : null,
     more: m(scene.more),

@@ -142,9 +142,11 @@ export function readingScene(doc: Document, layer: HTMLElement): { scene: Readin
       ? Array.from(prose.children).map((el) => page.rect(el)).filter((r): r is Rect => !!r)
       : [];
     const rail = article.parentElement?.querySelector('aside');
-    // The faces of who picked a sentence, in the right margin on the author's page (round 29 §S1.1), stand there
-    // as a rail does: no puppet's place on that side.
-    scene.rail = (rail ? page.rect(rail) : null) ?? page.rect(article.querySelector('[data-passage-margin]'));
+    scene.rail = rail ? page.rect(rail) : null;
+    // The faces of who picked a sentence, in the left margin on the author's page (round 29 §S10): no puppet's
+    // place on that side; the right is theirs again where no contents rail stands.
+    const col = scene.column;
+    scene.leftTaken = col && article.querySelector('[data-passage-margin]') ? { x: 0, y: col.y, w: col.x, h: col.h } : null;
     const respond = mark('respond', article);
     // The bar at rest: ReadAfterArea holds its container at translateY(10px) until it fades in, and nothing
     // measures again when it rises — so take away whatever translation the container carries right now.

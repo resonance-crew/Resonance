@@ -230,3 +230,23 @@ describe('a feed card the browser is skipping', () => {
     expect(cards[0].words?.length).toBe(1);
   });
 });
+
+describe('the author’s picked sentences’ faces (round 29 §S10)', () => {
+  it('stand in the left margin as a rail does there: no puppet’s place on the left, the right theirs again', () => {
+    const { layer } = install(1440);
+    const sides = () =>
+      measureReading(document, layer, READING_PRESETS.desktop).ledges.flatMap((l) => (l.kind === 'spot' && l.id.startsWith('margin-') ? [l.from] : []));
+    expect(sides()).toContain('left');
+    const story = document.querySelector('[data-mascot="story"]') as HTMLElement;
+    const margin = document.createElement('div');
+    margin.setAttribute('data-passage-margin', '');
+    story.append(margin);
+    BOXES.set(margin, [340 - 8 - 56, 300, 56, 1040]);
+    const { scene } = readingScene(document, layer);
+    // The window's left edge to the column's left, the column's height; `rail` stays the contents rail alone.
+    expect(scene.leftTaken).toEqual({ x: 0, y: 200, w: 340, h: 1300 });
+    expect(scene.rail).toBeNull();
+    expect(sides().length).toBeGreaterThan(0);
+    expect(sides().every((s) => s === 'right')).toBe(true);
+  });
+});

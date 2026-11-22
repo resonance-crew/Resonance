@@ -19,7 +19,7 @@ import {
 } from './PassageFaces';
 
 // Round 29 §S1–§S2: the faces of who picked a sentence of the author's own story — the stack, its size, where it
-// stands by the room right of the column, glued to the sentence's last character in the line, and what it says.
+// stands by the room left of the column (§S10), glued to the sentence's last character in the line, and what it says.
 
 const face = (id: string): AuthorBody => ({ id, handle: id, initials: id.slice(0, 2).toUpperCase(), accentColor: 'x', avatarUrl: null, avatarSeed: '3', verified: false, region: null });
 const picked = (people: string[], more = false): TapPickedBody => ({ id: 'a1b2c3d4', text: '我坐在地上。', people: people.map(face), more });
@@ -74,7 +74,7 @@ describe('the size', () => {
     expect(passageFaceSize({ placement: 'inline', script: 'cjk', compact: true, room: 20 })).toBe(24);
     expect(passageFaceSize({ placement: 'inline', script: 'latin', compact: true, room: 20 })).toBe(22);
     expect(passageFaceSize({ placement: 'inline', script: 'latin', compact: false, room: 20 })).toBe(24);
-    // Beside a rail (80): 24 (the cap there is 28.4); three faces end 16 short of the rail.
+    // 80 on the left: 24 (the cap there is 28.4); three faces end 16 short of the window's edge.
     expect(passageFaceSize({ placement: 'margin', script: 'cjk', compact: false, room: 80 })).toBe(24);
     expect(80 - 8 - passageGroupWidth(3, 24)).toBeCloseTo(16.3, 1);
     // At the threshold, the cap is (70 − 14) ÷ 2.32.
@@ -86,16 +86,19 @@ describe('the size', () => {
 });
 
 describe('the place by room', () => {
-  it('stands in the right margin when the white right of the column is ≥ 70, in the line everywhere else', () => {
+  it('stands in the left margin when the white left of the column is ≥ 70, in the line everywhere else', () => {
     expect(PASSAGE_MARGIN_MIN).toBe(70);
-    // A rail always stands 80 from the column: the margin, the 1024 tablet turned too.
-    expect(passagePlacement(passageRoom({ columnRight: 860, windowWidth: 1024, railLeft: 940 }))).toBe('margin');
-    // No rail: the window's edge. The 820 iPad upright (a 680 column centred, 70 each side) — the margin.
-    expect(passagePlacement(passageRoom({ columnRight: 750, windowWidth: 820 }))).toBe('margin');
-    // 768 and 744 — the line.
-    expect(passagePlacement(passageRoom({ columnRight: 724, windowWidth: 768 }))).toBe('inline');
-    // A phone: 20 of gutter — the line.
-    expect(passagePlacement(passageRoom({ columnRight: 370, windowWidth: 390 }))).toBe('inline');
+    // The 820 iPad upright (a 680 column centred, 70 each side) — the margin.
+    expect(passagePlacement(passageRoom({ columnLeft: 70 }))).toBe('margin');
+    // The desktop at 1280, a 680 column beside a contents rail: the white on the left counts, the rail does not.
+    expect(passagePlacement(passageRoom({ columnLeft: 220 }))).toBe('margin');
+    // A turned 1024 tablet whose 目錄 pushes the column left: 41 there — the line.
+    expect(passagePlacement(passageRoom({ columnLeft: 41 }))).toBe('inline');
+    // Something standing left of the page (a side rail) takes its width from the room.
+    expect(passageRoom({ columnLeft: 150, leftEdge: 100 })).toBe(50);
+    // 768 — the line; a phone's 20 of gutter — the line.
+    expect(passagePlacement(passageRoom({ columnLeft: 44 }))).toBe('inline');
+    expect(passagePlacement(passageRoom({ columnLeft: 20 }))).toBe('inline');
   });
 
   it('puts a later group a line box lower when two would share a line', () => {

@@ -39,10 +39,11 @@
   vertical-align: top;
 }
 
-/* In the margin: laid on the margin's column at its centre's height (PassageMarks). */
+/* In the margin: laid on the margin's column at its centre's height (PassageMarks), its right edge on the column's
+   right edge — the stack keeps its order and overlap, only aligned to the story (§S10). */
 .group[data-placement='margin'] {
   position: absolute;
-  left: 0;
+  right: 0;
 }
 
 /* When the answer comes after the story is drawn (§S3): a fade, opacity only; at once under reduced motion. */

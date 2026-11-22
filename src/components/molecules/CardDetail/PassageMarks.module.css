@@ -17,13 +17,14 @@
   background: var(--passage-wash);
 }
 
-/* The right margin's column (§S1.1): 8 right of the column, as tall as the story, the groups laid on it at their
-   lines. The paper puppets read it as a rail (lib/mascots/reading/measure): no place on this side. */
+/* The left margin's column (§S10): its right edge 8 left of the column's left edge, as tall as the story, the groups
+   laid on it at the lines where their washes begin. The paper puppets keep off this side
+   (lib/mascots/reading/measure then sends the scene `leftTaken`). */
 .margin {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(100% + 8px);
+  right: calc(100% + 8px);
 }
 
 @keyframes passageIn {
