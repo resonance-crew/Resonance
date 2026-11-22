@@ -59,6 +59,7 @@ npx tsx scripts/ci/claudeMdCoverage.ts        # old CLAUDE.md at 343c6f21 agains
 | the push switches `{ picks, connectionCards, messages }` — the opt-in two | Round 26: the switches add `resonanceTaps` (有人共振), on until turned off like `messages` (`.claude/rules/api.md`, the row kept with it added) |
 | respond to others by authoring a *resonance* (a response card with a | Round 26 (2026-11-19, §Q1, M1): 共振 became the tap, the reply card is 用卡片回應 (still a resonance in the code), and the note the third way to answer; `CLAUDE.md`'s Architecture says the three |
 | converted to AVIF with sharp | 任務 #3 Phase 0 (2026-11-21): it was never so — uploads are re-encoded as WebP (`normalizeUpload` in `src/lib/storage/image.ts`; `convertToAvif` there is on no upload path). `.claude/rules/storage.md` says WebP; the rest of the sentence is unchanged |
+| the story's end one row: the response bar (it collapses the bookmark, then the note, to their glyphs before it would overflow) | Round 28 (2026-11-21): 收藏 left the capsule — a card's passive actions (收藏, share · ⋯) stand as one group at the end of the capsule's row on a wide window and at the end of the tags on a phone; round 30 (2026-11-22, the owner: 「照 C 做」) put the faces' line above the capsule (`.claude/rules/web-app.md`, `.claude/rules/layout.md`) |
 
 ## Where each old line went
 
