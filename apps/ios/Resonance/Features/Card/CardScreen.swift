@@ -535,7 +535,7 @@ struct CardScreen: View {
                 .organicModal(isPresented: $pickedOpen, seed: 41, maxWidth: PickedPeople.width(compact: window.layoutClass == .compact),
                               closeLabel: L10n.Native.close) {
                     if let pickedPassage {
-                        PickedPeople(cardId: card.id, passage: pickedPassage, quoteFont: Font(AppFonts.uiFont(story.bodyFamily, size: 16))) {
+                        PickedPeople(cardId: card.id, passage: pickedPassage, script: type.script) {
                             pickedOpen = false
                         }
                         .withSession(session)
