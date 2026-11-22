@@ -11,7 +11,9 @@ import type { CardSeed } from './cardSeed';
 // The hooks compose calls to the firestore client read layer. We mock that
 // whole module so the tests exercise the *composition* logic (aggregation,
 // author resolution, viewer===self short-circuit) without touching Firebase.
-vi.mock('@/lib/db/firestore/client/reads', () => ({
+vi.mock('@/lib/db/firestore/client/reads', () => {
+  const isConnected = vi.fn();
+  return {
   getCardById: vi.fn(),
   getCardBySlugOrId: vi.fn(),
   getCardsByAuthor: vi.fn(),
@@ -27,14 +29,18 @@ vi.mock('@/lib/db/firestore/client/reads', () => ({
   getUserById: vi.fn(),
   getUserByHandle: vi.fn(),
   getUsersByIds: vi.fn(),
-  isConnected: vi.fn(),
+  isConnected,
+  // A profile's connection is asked of the profile (reads.test covers how); here as the connections would answer it.
+  isConnectedTo: (_handle: string, other: string) => isConnected('me', other),
   listMyConnectionUids: vi.fn(),
   resolveCardId: vi.fn(),
-}));
-vi.mock('@/lib/db/firestore/client/messages', () => ({
-  listConversations: vi.fn(),
-  readConversation: vi.fn(),
-}));
+  };
+});
+vi.mock('@/lib/db/firestore/client/messages', () => {
+  const listConversations = vi.fn();
+  // The live list's reader, here a whole read every pull (its deltas: client/messages.test).
+  return { listConversations, conversationsReader: () => () => listConversations(), readConversation: vi.fn() };
+});
 vi.mock('@/lib/db/firestore/client/notifications', () => ({
   getBell: vi.fn(),
 }));

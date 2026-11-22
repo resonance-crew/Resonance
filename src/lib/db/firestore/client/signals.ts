@@ -41,6 +41,8 @@ interface Hub {
   watchers: Map<SignalTopic, Set<() => void>>;
   /** The counters last heard; null until the first answer. */
   last: Counters | null;
+  /** The listener's first answer since it (last) started: where the counters stood as the watchers' first reads were made. */
+  first: Counters | null;
   stopListener: () => void;
   failed: boolean;
   /** The listener failed since it last heard: its next answer pulls everything (what it missed). */
@@ -94,6 +96,7 @@ function listen(hub: Hub): void {
           // The first answer is where the counters stand: the watchers' own first reads came with them —
           // unless the listener failed before it, when whatever moved meanwhile was never heard.
           if (!before) {
+            hub.first = new Map(next);
             if (hub.missed) {
               hub.missed = false;
               fireAll(hub);
@@ -140,7 +143,7 @@ function hubOf(uid: string): Hub {
   if (hub) return hub;
   // Another account signed in on this tab: the one before stops listening.
   for (const other of hubs.values()) stopHub(other);
-  const made: Hub = { uid, watchers: new Map(), last: null, stopListener: () => {}, failed: false, missed: false, timer: null, lastAll: Date.now() };
+  const made: Hub = { uid, watchers: new Map(), last: null, first: null, stopListener: () => {}, failed: false, missed: false, timer: null, lastAll: Date.now() };
   hubs.set(uid, made);
   listen(made);
   // Ticks at the shorter interval; pulls when the one that applies has passed.
@@ -192,17 +195,44 @@ export function pokeSignal(topic: SignalTopic): void {
  */
 export function pokeOwn(topics: SignalTopic[], heard: Record<string, number> | null): void {
   for (const hub of hubs.values()) {
+    // Every counter first, then the pulls: a pull fired for one topic sees what the write did to the others
+    // (the list's delta reads the conversations whose counters moved, client/messages conversationsReader).
+    const pull: SignalTopic[] = [];
     for (const topic of topics) {
       const n = heard?.[topic];
       if (typeof n !== 'number' || !Number.isFinite(n) || !hub.last || hub.failed) {
-        fire(hub, topic);
+        pull.push(topic);
         continue;
       }
       if ((hub.last.get(topic) ?? 0) >= n) continue;
       hub.last.set(topic, n);
-      fire(hub, topic);
+      pull.push(topic);
     }
+    for (const topic of pull) fire(hub, topic);
   }
+}
+
+/** What {@link heardCounters} answers while the listener is live: the counters as last heard, and as it first heard them. */
+export interface Heard {
+  now: ReadonlyMap<SignalTopic, number>;
+  /** Where they stood as the watchers' first reads were made (the listener's first answer, which fires nothing). */
+  first: ReadonlyMap<SignalTopic, number>;
+}
+
+/**
+ * The counters `uid`'s listener heard (copies; with the ones this browser's
+ * own writes brought, pokeOwn) — what a pull compares with the counters at
+ * its last read to read only what moved (client/messages
+ * `conversationsReader`). `'waiting'` while a listener that never failed
+ * hasn't answered yet (its first answer will stand for a read made now);
+ * null while no one can say what moved: no listener, or one that failed and
+ * hasn't heard since.
+ */
+export function heardCounters(uid: string): Heard | 'waiting' | null {
+  const hub = hubs.get(uid);
+  if (!hub || hub.failed || hub.missed) return null;
+  if (!hub.last || !hub.first) return 'waiting';
+  return { now: new Map(hub.last), first: hub.first };
 }
 
 /** Stop every listener and forget every watcher (sign-out, tests). */

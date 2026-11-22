@@ -37,6 +37,10 @@
  *   npx tsx scripts/backfill.ts avatar-colors [--apply] [--emulator]
  *       profiles still wearing the one avatar colour every profile was given (or none) → their own,
  *       picked by uid from lib/design/avatarColors as a new profile's is; any other colour stays
+ *   npx tsx scripts/backfill.ts phone-hash    [--apply] [--emulator]
+ *       profiles still holding the empty `phoneHash: ''` every profile was given before audit L10 lose that
+ *       field (nothing reads it); any other value is kept and only counted. A dry run is count queries only
+ *       and an id read of the empty ones — production runs are the owner's call (docs/release/owed.md)
  *   npx tsx scripts/backfill.ts media-keys    [--apply] [--emulator]
  *       the storage key beside each stored picture URL (ADR 0005): `users.avatarKey`, `cards.media.key`,
  *       where the URL is that key on the current base (MEDIA_PUBLIC_BASE / R2_PUBLIC_BASE); a key that no
@@ -236,6 +240,11 @@ async function main() {
       await backfillAvatarColors(db, { apply });
       return;
     }
+    case 'phone-hash': {
+      const { removeEmptyPhoneHashes } = await import('./backfills/phoneHash');
+      await removeEmptyPhoneHashes(db, { apply });
+      return;
+    }
     case 'media-keys': {
       const { backfillMediaKeys } = await import('./backfills/mediaKeys');
       const { envMediaUrls } = await import('../src/server/infra/env/media');
@@ -299,7 +308,7 @@ async function main() {
       return;
     }
     default:
-      throw new Error(`Unknown task "${task ?? ''}" (anonymous | handles | edits | storage-host | rekey-images | rehost-images | square-avatars | reencode-legacy | cover-thumbs | avatar-colors | media-keys | notes | anonymous-bells | orphan-notes | card-tombstones | link-previews | summary-translations | story-translations | tap-passages | recommend-index)`);
+      throw new Error(`Unknown task "${task ?? ''}" (anonymous | handles | edits | storage-host | rekey-images | rehost-images | square-avatars | reencode-legacy | cover-thumbs | avatar-colors | phone-hash | media-keys | notes | anonymous-bells | orphan-notes | card-tombstones | link-previews | summary-translations | story-translations | tap-passages | recommend-index)`);
   }
 }
 

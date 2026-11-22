@@ -96,6 +96,23 @@ export async function listConversationsIn(ctx: ServerCtx, uid: string, pageToken
   };
 }
 
+/**
+ * GET /conversations?pairs=: only these of `uid`'s conversations (the web's delta, client/messages
+ * `followConversations`), the most recently active first, each with its person — a read per conversation and
+ * one per person, not the page's fifty and fifty. An id that is gone, or isn't theirs, is left out: to the
+ * client that held it, it went (deleted, or never one of theirs). Never a page token.
+ */
+export async function listConversationsByIdIn(ctx: ServerCtx, uid: string, pairs: readonly string[]): Promise<ConversationListBody> {
+  const mine = [...new Set(pairs)].filter((p) => otherInPair(p, uid) !== null);
+  const found = await Promise.all(mine.map((p) => ctx.data.conversations.getConversationRow(p)));
+  const rows = found
+    .filter((r): r is ConversationRow => r !== null && r.participants.includes(uid))
+    .sort((a, b) => (a.updatedAt === b.updatedAt ? (a.id < b.id ? 1 : -1) : (a.updatedAt ?? '') < (b.updatedAt ?? '') ? 1 : -1));
+  const others = rows.map((c) => otherIn(c, uid));
+  const people = others.some(Boolean) ? await ctx.data.users.rowsOf(others.filter(Boolean), AUTHOR_FIELDS) : new Map();
+  return { conversations: rows.map((c, i) => presentConversation(c, uid, others[i], people.get(others[i]))), nextPageToken: null };
+}
+
 /** GET /conversations/{pair}: one of `uid`'s conversations; 404 for anyone else, whether it exists or not. */
 export async function getConversationIn(ctx: ServerCtx, uid: string, pair: string): Promise<ConversationBody> {
   const other = otherOf(uid, pair);

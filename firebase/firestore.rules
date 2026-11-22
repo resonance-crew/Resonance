@@ -627,14 +627,14 @@ service cloud.firestore {
     // --- resonances (legacy) ---
     // A resonance is a response card now (referenceCardId); nothing writes
     // these any more. The resonator and the card's author may still read
-    // theirs, and the resonator delete it.
+    // theirs. No client deletes one either (the web's last did until
+    // 2026-06-05, 90d9728f; no app build ever did): the server's purge does.
     match /resonances/{resonanceId} {
       allow read: if signedIn() && (
         resource.data.userId == request.auth.uid
         || get(/databases/$(database)/documents/cards/$(resource.data.cardId)).data.authorId == request.auth.uid
       );
-      allow create, update: if false;
-      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create, update, delete: if false;
     }
 
     // --- notes (小紙條) ---
@@ -648,13 +648,9 @@ service cloud.firestore {
     // whom it was withheld from (`withheldFor`): readable by no client.
     match /notes/{noteId} {
       allow read: if signedIn() && resource.data.toUserId == request.auth.uid;
-      allow create: if false;
-      // The recipient may mark it read (now); nothing else ever changes.
-      allow update: if signedIn()
-        && resource.data.toUserId == request.auth.uid
-        && changedKeys().hasOnly(["readAt"])
-        && request.resource.data.readAt == request.time;
-      allow delete: if false;
+      // No client ever marked one read (the web, the only client that wrote
+      // notes, sent them only; the apps never wrote one): nothing changes.
+      allow create, update, delete: if false;
     }
 
     // --- cardLinks ---

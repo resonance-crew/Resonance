@@ -53,6 +53,7 @@ import {
   getUserById,
   getUsersByIds,
   isConnected,
+  isConnectedTo,
 } from './reads';
 
 // What the SDK rejects with: a FirestoreError carries its `code`.
@@ -140,6 +141,40 @@ describe('isConnected / listMyConnectionUids (GET /api/v1/me/connections)', () =
   it('lets a failed read fail rather than answer "not connected"', async () => {
     api([], { '/api/v1/me/connections': new Error('offline') });
     await expect(isConnected('me', 'bob')).rejects.toThrow('offline');
+  });
+});
+
+describe('isConnectedTo (a thread’s or a profile’s connection, from GET /api/v1/users/{handle})', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    auth.currentUser = { uid: 'me' };
+    forgetCachedUser();
+  });
+  const head = (id: string, handle: string, isConnected: boolean) => ({ ...person(id, handle), isSelf: false, isConnected, isBlocked: false });
+  const asked = (path: string) => vi.mocked(callApi).mock.calls.filter(([p]) => p === path).length;
+
+  it('asks the profile once for the pen name’s lookup and the connection together — never the whole connections list', async () => {
+    api([], { '/api/v1/users/bob': head('bob', 'bob', true), '/api/v1/users/carol': head('carol', 'carol', false) });
+    const [who, withBob] = await Promise.all([getUserByHandle('bob'), isConnectedTo('bob', 'bob')]);
+    expect(who).toMatchObject({ id: 'bob' });
+    expect(withBob).toBe(true);
+    await expect(isConnectedTo('carol', 'carol')).resolves.toBe(false);
+    expect(asked('/api/v1/users/bob')).toBe(1);
+    expect(asked('/api/v1/me/connections')).toBe(0);
+  });
+
+  it('asks the whole list when the pen name is someone else’s now, and no one for oneself or signed out', async () => {
+    api([], {
+      '/api/v1/users/bob': head('dave', 'bob', false),
+      '/api/v1/me/connections': { connections: [{ userId: 'bob', establishedAt: null, person: person('bob') }] },
+    });
+    await expect(isConnectedTo('bob', 'bob')).resolves.toBe(true);
+    expect(asked('/api/v1/me/connections')).toBe(1);
+    vi.mocked(callApi).mockClear();
+    await expect(isConnectedTo('me', 'me')).resolves.toBe(false);
+    auth.currentUser = null;
+    await expect(isConnectedTo('bob', 'bob')).resolves.toBe(false);
+    expect(callApi).not.toHaveBeenCalled();
   });
 });
 

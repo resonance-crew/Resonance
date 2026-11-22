@@ -145,8 +145,9 @@ export function pulled<T>(uid: string, topics: SignalTopic[], read: () => Promis
           }
         });
     };
-    pull();
+    // Watching before the first read: the listener is started, so the read knows it is the one its first answer stands for.
     const stops = topics.map((topic) => watchSignal(uid, topic, pull));
+    pull();
     return () => {
       stopped = true;
       stops.forEach((stop) => stop());

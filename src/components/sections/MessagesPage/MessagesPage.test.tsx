@@ -70,6 +70,7 @@ const mockIsConnected = vi.fn();
 vi.mock('@/lib/db/firestore/client/reads', () => ({
   getUserByHandle: (h: string) => mockGetUserByHandle(h),
   isConnected: () => mockIsConnected(),
+  isConnectedTo: () => mockIsConnected(),
 }));
 
 const mockSendMessage = vi.fn();
@@ -96,6 +97,7 @@ vi.mock('@/lib/db/firestore/client/messages', () => ({
   getConversation: () => mockGetConversation(),
   readConversation: (pairId: string) => mockMarkRead(pairId),
   listConversations: () => new Promise(() => {}),
+  conversationsReader: () => () => new Promise(() => {}),
   isGone: (e: unknown) => [403, 404].includes((e as { status?: number } | null)?.status ?? 0),
   sendMessage: (...args: unknown[]) => mockSendMessage(...args),
   uploadChatImage: (...args: unknown[]) => mockUploadChatImage(...args),

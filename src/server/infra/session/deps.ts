@@ -13,9 +13,9 @@ import { jwtSessionSigner } from './signer';
  * '@/lib/db/firestore/admin', which the emulator suites mock, as serverCtx's): the session store,
  * the signer over RESONANCE_JWT_KEYS, Firebase Auth as the identity provider
  * (its tokens, and whether an account still stands), the context's
- * budgets and clock, and this instance's per-address budgets.
+ * budgets, clock, log and signing out everywhere, and this instance's per-address budgets.
  */
-export function sessionDeps(ctx: Pick<ServerCtx, 'limits' | 'clock'>, overrides: Partial<SessionDeps> = {}): SessionDeps {
+export function sessionDeps(ctx: Pick<ServerCtx, 'limits' | 'clock' | 'identity' | 'log'>, overrides: Partial<SessionDeps> = {}): SessionDeps {
   return {
     store: firestoreSessionStore(getAdminDb()),
     signer: jwtSessionSigner(),
@@ -23,6 +23,9 @@ export function sessionDeps(ctx: Pick<ServerCtx, 'limits' | 'clock'>, overrides:
     standing: firebaseAccountStanding(),
     limits: ctx.limits,
     addresses: instanceAddressLimiter(),
+    // The context's identity admin is withOwnSessions' (infra/firestore/ctx.ts): Firebase's tokens and every family here.
+    revokeSessions: (uid) => ctx.identity.revokeSessions(uid),
+    log: ctx.log,
     now: () => ctx.clock.date(),
     ...overrides,
   };

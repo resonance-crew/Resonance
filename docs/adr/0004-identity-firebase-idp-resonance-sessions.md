@@ -40,8 +40,20 @@ Sign in with Apple's token revocation and App Check are Firebase products too.
   `kid` per key, no JWT library).
 - The access token lives 15 minutes; `sub` is the Firebase uid, `auth_time` the exchange, `sid` the refresh
   family. A refresh token (`rt1.` + 32 random bytes) lives 30 days, is stored only as its SHA-256, and is good
-  once: a second use revokes its whole family. `revokeSessions(uid)` (account deletion) revokes every family
-  of the account as well as Firebase's tokens.
+  once. `revokeSessions(uid)` (account deletion) revokes every family of the account as well as Firebase's
+  tokens.
+- A second use of a refresh token (L3, the owner's option (b), 2026-11-22): within `REFRESH_GRACE_MS` (30 s,
+  `src/server/domain/session.ts`) of its use, while the token it was traded for (`nextHash`, kept on the used
+  row — a hash, never the token) is still unused, it is the client's own second try — two refreshes racing, a
+  retry after a lost answer — and answers `409 conflict`: nothing revoked, nothing handed out. Returning the
+  pair already issued instead was rejected: it means storing the next refresh token itself, and it hands a
+  thief racing the owner a live pair. Any other second use — after the grace, or once the next token was
+  used too (a token two generations old) — is theft: the family is deleted, the account is signed out
+  everywhere (`revokeSessions`: every family and Firebase's refresh tokens, so the web's cookie and every
+  device too), it is logged (`[auth] a used refresh token presented again`), and it answers `401`. The grace
+  is short on purpose: a thief who replays within it only gets a `409` (and is caught on the next try), and
+  a client that gets a `409` with no newer pair in hand logs its token out, which ends the family whoever
+  won the race.
 - `getCurrentUser()` asks `ResonanceJwtVerifier` first (`src/server/infra/session/verifier.ts`): a token with
   one of our key ids is decided there alone (signature, claims, then the account's standing at Firebase Auth —
   gone, disabled, or revoked after `auth_time` — live on writes, the instance's 2-minute cache on reads, as
@@ -63,8 +75,12 @@ Sign in with Apple's token revocation and App Check are Firebase products too.
 - The apps keep sending the Firebase ID token until a build switches. A build that switches: after sign-in,
   exchange the Firebase ID token once; keep the refresh token in the Keychain / EncryptedSharedPreferences;
   hand `APIConfiguration.idToken` (iOS) / the Android API client's token provider the access token, refreshing
-  when it is within a minute of `expiresIn` or on a `401`; on a `401` from `/auth/refresh` (reuse, revocation,
-  deletion) exchange again from the Firebase SDK's current ID token, and sign out only if that fails too. On
+  when it is within a minute of `expiresIn` or on a `401`; refresh one at a time (a single in-flight
+  refresh shared by every caller). On a `409` from `/auth/refresh` (another refresh of the same token won):
+  use the pair that refresh got; holding none (its answer was lost), call `/auth/logout` with the token
+  and exchange again. On a `401` from `/auth/refresh` (reuse, revocation, deletion) exchange again from the
+  Firebase SDK's current ID token, and sign out only if that fails too (after a reuse it does: the account
+  was signed out everywhere). On
   sign-out call `/auth/logout`. On `503` (feature off) keep the Firebase token — the server accepts both.
 - The web keeps its `__session` cookie (firebase-admin's); moving it onto Resonance's tokens is a later step.
 - Dual accept ends only when `minBuild` (ADR 0002) passes every build that sends a Firebase token.

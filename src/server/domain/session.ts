@@ -8,6 +8,27 @@
 export const ACCESS_TTL_S = 15 * 60;
 /** A refresh token's life from when it was issued; each refresh issues the next one. */
 export const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * How long after a refresh token was traded the same token, presented again,
+ * is taken for the client's own second try (two refreshes racing, a retry
+ * after the answer was lost) rather than a thief's (L3, owner's call (b):
+ * 30–60 s). Only while the token it was traded for is still unused: that
+ * one is the newest of the family, so nothing has moved on since. The answer
+ * is a quiet 409 that hands out nothing (`superseded`); past this, or once
+ * the next token has been used too, it is theft.
+ */
+export const REFRESH_GRACE_MS = 30_000;
+
+/**
+ * What a used refresh token presented again at `atMs` is: the client's own
+ * replay (`superseded`: within REFRESH_GRACE_MS of its use and the token it
+ * was traded for still the newest, unused) or a stolen copy (`reused`).
+ */
+export function replayOf(input: { usedAtMs: number; atMs: number; successorUnused: boolean }): 'superseded' | 'reused' {
+  const since = input.atMs - input.usedAtMs;
+  return input.successorUnused && since >= 0 && since <= REFRESH_GRACE_MS ? 'superseded' : 'reused';
+}
+
 /** Clock skew tolerated between instances (a token "issued" slightly in the future). */
 export const CLOCK_SKEW_S = 30;
 
