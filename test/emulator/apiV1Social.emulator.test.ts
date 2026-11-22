@@ -4,6 +4,7 @@ import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestor
 import { ApiFailure } from '@/lib/api/v1/http';
 import { ctxFor } from '@/server/infra/firestore/ctx';
 import { getCardDetail, getMe } from '@/server/app/cardsRead';
+import { sendMessage } from '@/lib/api/v1/conversations';
 import { acceptInviteIn } from '@/server/app/invites';
 import { updateProfileIn } from '@/server/app/profile';
 import {
@@ -106,6 +107,17 @@ describe('bookmarks (PUT / DELETE /me/bookmarks/{cardId})', () => {
     expect(await data('users/alice/bookmarks/bobPrivate')).toBeUndefined();
     await deleteBookmarkIn(ctx(), 'alice', 'bobNamed');
     await deleteBookmarkIn(ctx(), 'alice', 'bobNamed');
+    expect(await data('users/alice/bookmarks/bobNamed')).toBeUndefined();
+  });
+
+  it('a 私人卡 shared in a message is read, never bookmarked; and a slug is no card id', async () => {
+    await db.doc('cards/bobPrivate').update({ slug: 'slug-bob-private' });
+    await db.doc('cards/bobNamed').update({ slug: 'slug-bob-named' });
+    await sendMessage(db, 'bob', { to: 'alice', text: '', cardRef: 'bobPrivate' });
+    expect((await getCardDetail(ctx(), 'alice', 'bobPrivate')).card.id).toBe('bobPrivate');
+    expect((await failure(putBookmarkIn(ctx(), 'alice', 'bobPrivate'))).code).toBe('not_found');
+    expect(await data('users/alice/bookmarks/bobPrivate')).toBeUndefined();
+    for (const slug of ['slug-bob-named', 'slug-bob-private']) expect((await failure(putBookmarkIn(ctx(), 'alice', slug))).code, slug).toBe('not_found');
     expect(await data('users/alice/bookmarks/bobNamed')).toBeUndefined();
   });
 });
