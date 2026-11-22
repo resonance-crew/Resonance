@@ -16,7 +16,12 @@
 // or getAll asks (there or not), one per document a query answers (at least
 // one for a query that answers none) — what the read-count ratchets
 // (src/server/readCounts.test.ts) hold down. A query's snapshot has a
-// `readTime` (now, as a Timestamp), as Firestore's does.
+// `readTime` (now, as a Timestamp), as Firestore's does. `count()` answers a
+// query's count, billed as Firestore bills an aggregation (one read per
+// thousand index entries, at least one). With `serverTime`, a
+// `FieldValue.serverTimestamp()` written is stored as the commit's time —
+// each later than every one before, and every readTime at or after them — so
+// a change read by its `editedAt` after a cursor is never missed nor repeated.
 // `hold(read)`, if given, is awaited before a read answers (it is logged in
 // `reads` first): a suite can keep one read pending and see which others
 // were asked meanwhile — that two reads run side by side, or one after the
@@ -59,6 +64,8 @@ const hasField = (data: Data, field: string) => fieldOf(data, field) !== undefin
 
 export interface FakeAdminDbOptions {
   hold?: (read: string) => Promise<void> | void;
+  /** Store `FieldValue.serverTimestamp()` as the commit's time (see above); off, sentinels are stored as they are. */
+  serverTime?: boolean;
 }
 
 /** Firestore's order across types (null < booleans < numbers < timestamps < strings), then within one. */
@@ -73,7 +80,7 @@ function rank(v: unknown): number {
 function compare(a: unknown, b: unknown): number {
   const byType = rank(a) - rank(b);
   if (byType) return byType;
-  if (a instanceof Timestamp && b instanceof Timestamp) return a.toMillis() - b.toMillis();
+  if (a instanceof Timestamp && b instanceof Timestamp) return a.seconds - b.seconds || a.nanoseconds - b.nanoseconds;
   if (typeof a === 'number' || typeof a === 'boolean') return Number(a) - Number(b);
   if (typeof a === 'string' && typeof b === 'string') return a < b ? -1 : a > b ? 1 : 0;
   return 0;
@@ -106,6 +113,27 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
     await options.hold?.(read);
   };
   const writes: string[] = [];
+  // The latest time handed out, a commit's or a read's (serverTime): a commit is a microsecond past it, or now
+  // when later — so a commit after a read is always after its readTime, as in Firestore.
+  let last: Timestamp | null = null;
+  const commitTime = () => {
+    const now = Timestamp.now();
+    const next = last && compare(now, last) <= 0 ? new Timestamp(last.seconds, last.nanoseconds + 1000) : now;
+    last = next.nanoseconds >= 1e9 ? new Timestamp(next.seconds + 1, next.nanoseconds - 1e9) : next;
+    return last;
+  };
+  const readTime = () => {
+    const now = Timestamp.now();
+    last = last && compare(last, now) > 0 ? last : now;
+    return last;
+  };
+  const isServerTime = (v: unknown) => v instanceof FieldValue && v.isEqual(FieldValue.serverTimestamp());
+  /** `data` as stored: with serverTime, its server timestamps the commit's time (one for the whole write). */
+  const stamped = (data: Data): Data => {
+    if (!options.serverTime || !Object.values(data).some(isServerTime)) return data;
+    const at = commitTime();
+    return Object.fromEntries(Object.entries(data).map(([k, v]) => [k, isServerTime(v) ? at : v]));
+  };
   const snap = (path: string, fields?: string[]) => {
     const whole = docs[path];
     const data = whole && fields ? masked(whole, fields) : whole;
@@ -126,23 +154,24 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
     // A plain replace (FieldValue sentinels are stored as they are).
     set: async (data: Data) => {
       writes.push(path);
-      docs[path] = data;
+      docs[path] = stamped(data);
     },
     update: async (data: Data) => update(path, data),
     // Fails (code 6, ALREADY_EXISTS) when the document is there, as Firestore's does.
     create: async (data: Data) => {
       if (docs[path] !== undefined) throw Object.assign(new Error(`fakeAdminDb: ${path} exists`), { code: 6 });
       writes.push(path);
-      docs[path] = data;
+      docs[path] = stamped(data);
     },
     delete: async () => {
       writes.push(path);
       delete docs[path];
     },
   });
-  const update = (path: string, data: Data) => {
+  const update = (path: string, given: Data) => {
     if (!docs[path]) throw Object.assign(new Error(`fakeAdminDb: no document to update at ${path}`), { code: 5 });
     writes.push(path);
+    const data = stamped(given);
     const next: Data = { ...docs[path] };
     for (const [key, value] of Object.entries(data)) {
       // A dotted key is a field path: the nested field it names, its parents copied rather than shared.
@@ -171,6 +200,49 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
     /** startAfter's boundary: the order's values, or a document path whose values it takes. */
     after?: unknown[] | string;
   }
+  /** A query's documents (unbilled), in its order, within its limit. */
+  const hitsOf = async (name: string, spec: Spec) => {
+    await held(`${name}?${spec.filters.map((f) => `${f.field}${f.op === 'in' ? ' in ' : f.op}${String(f.value)}`).join('&')}`);
+    const matches = (f: Filter, v: unknown) => {
+      switch (f.op) {
+        case 'in':
+          return (f.value as unknown[]).some((x) => same(v, x));
+        case 'array-contains':
+          return Array.isArray(v) && v.some((x) => same(x, f.value));
+        case '==':
+          return same(v, f.value);
+        case '!=':
+          return !same(v, f.value);
+        default: {
+          // A range compares within one type, as Firestore's does.
+          if (rank(v) !== rank(f.value)) return false;
+          const c = compare(v, f.value);
+          return f.op === '<' ? c < 0 : f.op === '<=' ? c <= 0 : f.op === '>' ? c > 0 : c >= 0;
+        }
+      }
+    };
+    const value = (p: string, field: string) => (field === NAME ? p.split('/').pop() : fieldOf(docs[p], field));
+    const byOrder = (a: unknown[], b: unknown[]) => {
+      for (const [i, o] of spec.order.entries()) {
+        const c = compare(a[i], b[i]);
+        if (c) return o.dir === 'desc' ? -c : c;
+      }
+      return 0;
+    };
+    const keyOf = (p: string) => spec.order.map((o) => value(p, o.field));
+    const boundary = typeof spec.after === 'string' ? keyOf(spec.after) : spec.after;
+    const hits = Object.keys(docs)
+      // The collection's own documents (a subcollection's too: `users/bob/blocks`), never those under them.
+      .filter((p) => p.startsWith(`${name}/`) && p.split('/').length === name.split('/').length + 1)
+      // As in Firestore, a document missing a filtered or ordered field never matches.
+      .filter((p) => spec.filters.every((f) => hasField(docs[p], f.field) && matches(f, fieldOf(docs[p], f.field))))
+      .filter((p) => spec.order.every((o) => o.field === NAME || hasField(docs[p], o.field)))
+      .sort((a, b) => byOrder(keyOf(a), keyOf(b)))
+      .filter((p) => !boundary || byOrder(keyOf(p), boundary) > 0)
+      .slice(0, spec.max)
+      .map((p) => snap(p, spec.fields));
+    return hits;
+  };
   const query = (name: string, spec: Spec) => ({
     where: (field: string, op: string, value: unknown) => {
       if (!OPS.has(op)) throw new Error(`fakeAdminDb: unsupported operator ${op}`);
@@ -187,48 +259,18 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
       return query(name, { ...spec, after: values.length === 1 && first?.ref?.path ? first.ref.path : values });
     },
     get: async () => {
-      await held(`${name}?${spec.filters.map((f) => `${f.field}${f.op === 'in' ? ' in ' : f.op}${String(f.value)}`).join('&')}`);
-      const matches = (f: Filter, v: unknown) => {
-        switch (f.op) {
-          case 'in':
-            return (f.value as unknown[]).some((x) => same(v, x));
-          case 'array-contains':
-            return Array.isArray(v) && v.some((x) => same(x, f.value));
-          case '==':
-            return same(v, f.value);
-          case '!=':
-            return !same(v, f.value);
-          default: {
-            // A range compares within one type, as Firestore's does.
-            if (rank(v) !== rank(f.value)) return false;
-            const c = compare(v, f.value);
-            return f.op === '<' ? c < 0 : f.op === '<=' ? c <= 0 : f.op === '>' ? c > 0 : c >= 0;
-          }
-        }
-      };
-      const value = (p: string, field: string) => (field === NAME ? p.split('/').pop() : fieldOf(docs[p], field));
-      const byOrder = (a: unknown[], b: unknown[]) => {
-        for (const [i, o] of spec.order.entries()) {
-          const c = compare(a[i], b[i]);
-          if (c) return o.dir === 'desc' ? -c : c;
-        }
-        return 0;
-      };
-      const keyOf = (p: string) => spec.order.map((o) => value(p, o.field));
-      const boundary = typeof spec.after === 'string' ? keyOf(spec.after) : spec.after;
-      const hits = Object.keys(docs)
-        // The collection's own documents (a subcollection's too: `users/bob/blocks`), never those under them.
-        .filter((p) => p.startsWith(`${name}/`) && p.split('/').length === name.split('/').length + 1)
-        // As in Firestore, a document missing a filtered or ordered field never matches.
-        .filter((p) => spec.filters.every((f) => hasField(docs[p], f.field) && matches(f, fieldOf(docs[p], f.field))))
-        .filter((p) => spec.order.every((o) => o.field === NAME || hasField(docs[p], o.field)))
-        .sort((a, b) => byOrder(keyOf(a), keyOf(b)))
-        .filter((p) => !boundary || byOrder(keyOf(p), boundary) > 0)
-        .slice(0, spec.max)
-        .map((p) => snap(p, spec.fields));
+      const hits = await hitsOf(name, spec);
       billed += Math.max(1, hits.length);
-      return { docs: hits, empty: hits.length === 0, size: hits.length, readTime: Timestamp.now() };
+      return { docs: hits, empty: hits.length === 0, size: hits.length, readTime: readTime() };
     },
+    // An aggregation: one read per thousand index entries it counts, at least one.
+    count: () => ({
+      get: async () => {
+        const n = (await hitsOf(name, spec)).length;
+        billed += Math.max(1, Math.ceil(n / 1000));
+        return { data: () => ({ count: n }), readTime: readTime() };
+      },
+    }),
   });
   type Ref = ReturnType<typeof docRef> & { path?: string };
   const pathOf = (ref: Ref) => ref.path!;

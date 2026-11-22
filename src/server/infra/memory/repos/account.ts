@@ -3,6 +3,7 @@ import { isQueriedField, personQuery, SPECS, type EntityName, type ExportSection
 import type { AccountData, AccountTxRepo, ExportCardLine, PurgeSession } from '@/server/ports/repos/account';
 import type { MemoryState, Row } from '../state';
 import type { MemoryTx } from '../uow';
+import { bellEdited } from './bell';
 
 /**
  * `account` over a MemoryState. Tables are named by collection path, as
@@ -139,7 +140,7 @@ export function accountData(state: MemoryState): AccountData {
       for (const r of rows) {
         const left = (at(r.row, 'payload.fromUserIds') as string[]).filter((u) => u !== uid);
         if (!left.length) state.delete('notifications', r.id);
-        else state.put('notifications', r.id, { ...r.row, payload: { ...(r.row.payload as Row), fromUserIds: left } });
+        else state.put('notifications', r.id, { ...r.row, payload: { ...(r.row.payload as Row), fromUserIds: left }, ...bellEdited(state) });
       }
       return rows.length;
     },

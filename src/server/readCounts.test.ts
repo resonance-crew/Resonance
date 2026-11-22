@@ -10,7 +10,7 @@ vi.mock('@/server/ctx', () => ({ serverCtx: () => route.ctx }));
 import { GET as getConnections } from '@/app/api/v1/me/connections/route';
 import { signalledJson } from '@/lib/api/v1/signalTag';
 import { getCardDetail } from '@/server/app/cardsRead';
-import { listBellIn, listConversationsByIdIn, listConversationsIn, listThreadIn } from '@/server/app/inbox';
+import { listBellIn, listConversationsByIdIn, listConversationsIn, listThreadIn, markBellReadIn } from '@/server/app/inbox';
 import { ctxFor } from '@/server/infra/firestore/ctx';
 import { memoryRealtime } from '@/server/infra/memory/adapters';
 
@@ -38,6 +38,13 @@ const MAX = {
   connectionsUnchanged: 1,
   /** GET /me/bell, 20 rows naming 20 people. */
   bell: 40,
+  /** …asked for its changes (`changes=1`, the web's whole read): the page, its people, and the rows' count. */
+  bellWhole: 41,
+  /**
+   * …then the open bell's pull after one row was marked read (`updatedAfter`): the rows' count and the row (41
+   * before: the page and its people again; client/notifications bellReader).
+   */
+  bellDelta: 2,
   /** GET …/messages, the newest window of 50. */
   threadWindow: 51,
   /** …then an open thread's pull after one message came and one changed: the conversation, a new one, a changed one (51 before). */
@@ -82,7 +89,7 @@ function seeded() {
     thoughtCore: 'A walk after rain',
     story: 'It rained, and then it stopped.',
   };
-  const fake = fakeAdminDb(docs);
+  const fake = fakeAdminDb(docs, { serverTime: true });
   const realtime = memoryRealtime();
   const ctx = ctxFor(fake.db, { realtime });
   route.ctx = ctx;
@@ -145,6 +152,24 @@ describe('read-count ratchets', () => {
   it('the bell', async () => {
     const { fake, ctx } = seeded();
     expect(await cost(fake, () => listBellIn(ctx, ME, 20))).toBeLessThanOrEqual(MAX.bell);
+  });
+
+  it('an open bell: the page once, then only the row that changed', async () => {
+    const { fake, ctx } = seeded();
+    let page = await listBellIn(ctx, ME, 20, null, { changes: true });
+    const whole = await cost(fake, async () => {
+      page = await listBellIn(ctx, ME, 20, null, { changes: true });
+    });
+    expect(page.items).toHaveLength(20);
+    expect(whole).toBeLessThanOrEqual(MAX.bellWhole);
+    await markBellReadIn(ctx, ME, { ids: [page.items[3].id] });
+    let since = page;
+    const delta = await cost(fake, async () => {
+      since = await listBellIn(ctx, ME, 20, null, { updatedAfter: page.updatedCursor });
+    });
+    expect(since.delta).toBe(true);
+    expect(since.items.map((i) => [i.id, i.readAt !== null])).toEqual([[page.items[3].id, true]]);
+    expect(delta).toBeLessThanOrEqual(MAX.bellDelta);
   });
 
   it('an open thread: the window once, then only what came and what changed', async () => {

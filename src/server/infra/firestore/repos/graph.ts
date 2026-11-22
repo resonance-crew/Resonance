@@ -28,6 +28,7 @@ import {
 } from '@/server/domain/graph';
 import type { GraphCard, GraphData, GraphTxRepo, PairReads, Reach } from '@/server/ports/repos/graph';
 import type { AdminDb } from '../db';
+import { bellMade } from './bell';
 
 // Today's queries and transaction code of src/lib/api/v1/{resonate,origins,
 // invites,preLetter}.ts, moved here as they were: the same documents, the
@@ -261,6 +262,7 @@ export function graphTx(db: AdminDb, tx: Transaction): GraphTxRepo {
         payload: { fromUserId: b.from, fromHandle: b.fromHandle, cardId: b.cardId, ...(b.anonymous ? { anonymous: true } : {}) },
         readAt: null,
         createdAt: FieldValue.serverTimestamp(),
+        ...bellMade(),
       });
     },
     setInviteStatus(inviteId, status) {
@@ -268,7 +270,7 @@ export function graphTx(db: AdminDb, tx: Transaction): GraphTxRepo {
     },
     ringInviteAccepted(to, payload) {
       const bell = db.collection('notifications').doc();
-      tx.set(bell, { userId: to, type: 'invite_accepted', payload, readAt: null, createdAt: FieldValue.serverTimestamp() });
+      tx.set(bell, { userId: to, type: 'invite_accepted', payload, readAt: null, createdAt: FieldValue.serverTimestamp(), ...bellMade() });
       return bell.id;
     },
     answerLetters(a, b, requestHeld) {

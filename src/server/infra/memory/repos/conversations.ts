@@ -76,7 +76,7 @@ function nextStamp(state: MemoryState, at: Date): Instant {
 }
 
 /** The latest server time handed out (where a read now stands: every later change gets a later one); the epoch before any. */
-function markOf(state: MemoryState): Instant {
+export function markOf(state: MemoryState): Instant {
   const last = lastStamp.get(state);
   return last ? toInstant(last.ms, last.micros) : toInstant(0);
 }
@@ -174,13 +174,16 @@ function messageRow(m: NewMessage, sentAt: Instant): Row {
   return row;
 }
 
-const bellRow = (bell: NewBell, at: Date): Row => ({
+const bellRow = (bell: NewBell, at: Date, made: Instant): Row => ({
   userId: bell.userId,
   type: bell.type,
   payload: bell.payload,
   readAt: null,
   ...(bell.pushed ? { pushedAt: at } : {}),
   createdAt: at,
+  // As Firestore's bell rows (repos/bell BELL_EDITED_AT, BELL_MADE_AT).
+  editedAt: made,
+  madeAt: made,
 });
 
 /** lib/api/v1/origins keepsReasons / answeredBy, over a row. */
@@ -287,7 +290,7 @@ export function conversationsTx(tx: MemoryTx): ConversationsTxRepo {
       tx.put('notes', id, { ...note, readAt: null, createdAt: at });
     },
     putBell(id, bell, at) {
-      tx.put('notifications', id, bellRow(bell, at));
+      tx.put('notifications', id, bellRow(bell, at, editStamp(tx.state)));
     },
     connectByLetter(a, b, by) {
       const userIds = [a, b].sort();

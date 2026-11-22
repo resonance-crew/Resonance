@@ -11,6 +11,7 @@ import { cardVisible } from '@/server/domain/visibility';
 import { compareInstants, instantParts, toInstant } from '@/server/ports/time';
 import type { MemoryState } from '../state';
 import { MemoryTx, TxTracker } from '../uow';
+import { bellMade } from './bell';
 
 /**
  * Tables, named after the collections: `cards` (Card rows by id — times as
@@ -160,6 +161,7 @@ function cardsWriteTx(tx: MemoryTx): CardsTxRepo {
         payload: { fromUserId: r.from, fromHandle: String(r.me?.handle), cardId: r.originalId, ...(named ? {} : { anonymous: true }) },
         readAt: null,
         createdAt: now,
+        ...bellMade(tx.state),
       });
       return id;
     },

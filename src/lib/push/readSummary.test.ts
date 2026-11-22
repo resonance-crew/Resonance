@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { fakeAdminDb } from '../../../test/fakeAdminDb';
 import { BELL_READ_SUMMARY_CAPABILITY, READ_SUMMARY_MIN, WEEK_MS, readSummaryId, runReadSummary, weekTally } from './readSummary';
 import { pushText } from './send';
@@ -74,6 +74,9 @@ describe('runReadSummary', () => {
       readAt: null,
       createdAt: Timestamp.fromMillis(MONDAY),
       pushedAt: Timestamp.fromMillis(MONDAY),
+      // The commit's own time, the bell's change stamps (repos/bell BELL_EDITED_AT, BELL_MADE_AT).
+      editedAt: FieldValue.serverTimestamp(),
+      madeAt: FieldValue.serverTimestamp(),
     });
     expect(docs['notifications/rsum_masked_20261123'].payload).toEqual({ cardId: 'masked', readers: 3, reread: false, anonymous: true });
     // A card in the trash, and one only two read to the end: nothing.
