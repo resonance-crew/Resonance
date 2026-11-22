@@ -115,6 +115,9 @@ export function launchArgs(ctx: CaptureContext, account: Account | null, route: 
     '-emulatorFirestorePort', String(ctx.ports.firestore),
     '-emulatorApiPort', String(ctx.ports.dev),
     '-visualCapture', 'YES',
+    // The notification asks' memory starts empty each launch (NotificationAsks.Book.fresh), as Android's after `pm clear`:
+    // kept, the card pages the captures opened made the feed's picks invite come and go with the simulator's history.
+    '-visualFreshAsks', 'YES',
     '-appearance.scheme', v.theme,
     '-appearance.accent', 'terracotta',
     '-appearance.mascots', 'NO',

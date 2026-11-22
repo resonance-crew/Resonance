@@ -97,8 +97,22 @@ final class NotificationAsks {
     /// signed-in account's kept (``retainOnly(_:)``).
     struct Book {
         let defaults: UserDefaults
+        /// Nothing kept, nothing read back: every launch starts as a fresh install would (``launchedFresh``).
+        var fresh = Book.launchedFresh
         static let key = "notificationAsks"
         static let installKey = "notificationAskDeclines"
+
+        /// `-visualFreshAsks YES` (debug builds, the release screenshots — scripts/visual/ios.ts): the asks start from no
+        /// memory each launch, as Android's do after the captures' `pm clear`. Kept across launches, the card pages a
+        /// capture opened counted toward tonight's card's invite, and the feed's top changed with the simulator's
+        /// history (home with and without 晚上也想讀一張嗎？ from one run to the next, 2026-11-22).
+        static var launchedFresh: Bool {
+            #if DEBUG
+            UserDefaults.standard.bool(forKey: "visualFreshAsks")
+            #else
+            false
+            #endif
+        }
 
         private struct Declines: Codable {
             var count = 0
@@ -106,6 +120,7 @@ final class NotificationAsks {
         }
 
         func memory(_ uid: String?) -> Memory {
+            if fresh { return Memory() }
             var memory = uid.flatMap { entries[Self.name($0)] }.flatMap { try? JSONDecoder().decode(Memory.self, from: $0) } ?? Memory()
             let declines = defaults.data(forKey: Self.installKey).flatMap { try? JSONDecoder().decode(Declines.self, from: $0) } ?? Declines()
             memory.declines = declines.count
@@ -114,6 +129,7 @@ final class NotificationAsks {
         }
 
         func save(_ memory: Memory, uid: String?) {
+            if fresh { return }
             defaults.set(try? JSONEncoder().encode(Declines(count: memory.declines, at: memory.declinedAt)), forKey: Self.installKey)
             guard let uid else { return }
             var account = memory

@@ -177,6 +177,33 @@ import Testing
         #expect(!asks.shows(.connectionCards))
     }
 
+    /// The release screenshots launch with `-visualFreshAsks YES`: the card pages earlier captures opened must not carry
+    /// into a later launch's feed (its top changed with the simulator's history: the invite came and went between runs).
+    @Test func aFreshBookStartsEveryLaunchFromNoMemory() async {
+        // Kept, as an install keeps it: five pages in one launch, the next launch's feed offers tonight's card.
+        let world = World()
+        let first = asks(world)
+        for _ in 1...5 { first.cardOpened() }
+        let next = asks(world)
+        await next.refresh()
+        #expect(next.memory.cardOpens == 5 && next.shows(.picks))
+
+        // Fresh: the next launch counts from nothing, and nothing was written for it to read.
+        let clean = World()
+        func freshAsks() -> NotificationAsks {
+            let asks = NotificationAsks(book: .init(defaults: clean.defaults, fresh: true), permission: { clean.permission }, ask: { clean.ask() },
+                                        fetch: { clean.stored }, save: { try clean.save($0, $1) }, now: { clean.now })
+            asks.use(account: "alice")
+            return asks
+        }
+        let capture = freshAsks()
+        for _ in 1...5 { capture.cardOpened() }
+        let feed = freshAsks()
+        await feed.refresh()
+        #expect(feed.memory.cardOpens == 0 && !feed.shows(.picks))
+        #expect(clean.defaults.dictionary(forKey: NotificationAsks.Book.key) == nil)
+    }
+
     @Test func noInviteWhileItsSwitchIsOnOrTheSystemSaidNo() async {
         let world = World()
         world.stored = Settings(picks: true, connectionCards: false)
