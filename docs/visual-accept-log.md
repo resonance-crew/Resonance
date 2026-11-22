@@ -37,3 +37,5 @@ what says on whose word they changed. Commit the new row with the accept
 | 2026-11-22T10:07:40Z | 20261122-050903 | 9000b994 | android | card-picked-people | 4 | 接受為基準 |
 | 2026-11-22T10:07:40Z | 20261122-083711 | 9000b994 | ios | card-picked-people | 1 | 接受為基準 |
 | 2026-11-22T10:07:41Z | 20261122-085814 | 9000b994 | ios | card-picked-people | 3 | 接受為基準 |
+| 2026-11-22T18:14:14Z | 20261122-170103 | c9ea85ed | web | thought-map, publish-cover | 4 | 1、2 接受，3 是設計本來如此 |
+| 2026-11-22T18:14:21Z | 20261122-170235 | c9ea85ed | android | card-note-open | 3 | 1、2 接受，3 是設計本來如此 |
