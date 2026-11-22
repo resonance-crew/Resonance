@@ -20,3 +20,8 @@ what says on whose word they changed. Commit the new row with the accept
 | 2026-11-19T16:15:54Z | 20261119-063118 | d05f87ac | android, ios, mac, web | all | 148 | 你帮我 push，然后把截图设成基准 |
 | 2026-11-19T20:02:09Z | 20261119-195529 | 22103904 | android | thread-attach | 4 | 你帮我 push，然后把截图设成基准 |
 | 2026-11-21T12:34:07Z | 20261121-095831 | 4d186439 | web | landing | 5 | 收為基準 |
+| 2026-11-22T04:39:13Z | 20261122-035402 | b4169a57 | web | card, card-own-taps, card-picked-people, taps-author-list, taps-list, card-other, card-tapped | 35 | 修改完就可以接受为基准 |
+| 2026-11-22T04:39:24Z | 20261122-035931 | b4169a57 | mac | card, card-own-taps, card-picked-people, taps-author-list, taps-list, card-other, card-tapped | 7 | 修改完就可以接受为基准 |
+| 2026-11-22T04:39:25Z | 20261122-040232 | b4169a57 | ios | card-own-taps, card-tapped, taps-list, taps-author-list | 16 | 修改完就可以接受为基准 |
+| 2026-11-22T04:39:31Z | 20261122-042207 | b4169a57 | ios | card, card-picked-people, card-other | 12 | 修改完就可以接受为基准 |
+| 2026-11-22T04:39:32Z | 20261122-040953 | b4169a57 | android | card, card-own-taps, card-picked-people, taps-author-list, taps-list, card-other, card-tapped | 28 | 修改完就可以接受为基准 |
