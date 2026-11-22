@@ -127,7 +127,7 @@ export const SCREENS: Screen[] = [
   { id: 'film-meet', route: '/', as: null, platforms: ['web'], web: filmAt(50), film: { t: 50, scene: 3 },
     expect: 'The landing film at 50 s (scene 3, dusk): the two cards side by side over the sky, the puppets meeting on the bridge' },
   { id: 'film-yours', route: '/', as: null, platforms: ['web'], web: filmAt(63), film: { t: 63, scene: 4 },
-    expect: 'The landing film at 63 s (scene 4, night): stars over the dark hills and houses, a card waiting — the next story is the visitor\'s' },
+    expect: 'The landing film at 63 s (scene 4, night): stars over the dark hills and houses, five puppets holding hands, the next story is the visitor\'s. The waiting card differs by frame: on the phone a small cream card just peeks over the ridge, and the narrow scrubber carries no 換你 label; on the desktop cards float in the sky; on the tablet there is no card at all — by design (owner, 2026-11-23: 「3 是設計本來如此」)' },
   { id: 'welcome', route: null, as: null, platforms: ['ios', 'android', 'mac'],
     expect: 'The signed-out start screen with its sign-in choices' },
   // Below the build the server still serves (client-config's minBuild, 任務 #3 Phase 2). A capture's stack retires no
