@@ -20,16 +20,28 @@ export interface RefreshRow {
   createdAt: Date;
   /** Past this the token is no good; the store's TTL removes the row some time after. */
   expiresAt: Date;
-  /** When it was traded for the next one; a second use is a stolen token's (the family is revoked). */
+  /** When it was traded for the next one; a second use is a stolen token's (the family is revoked) — but see `nextHash`. */
   usedAt: Date | null;
+  /**
+   * The hash of the token it was traded for (set with `usedAt`; absent on
+   * rows used before it was kept): within REFRESH_GRACE_MS, while that one is
+   * unused, a second use is the client's own replay, not theft (domain/session.ts replayOf).
+   */
+  nextHash?: string | null;
 }
 
 /** What trading a refresh token for the next one came to. */
 export type RotateOutcome =
   /** Traded: `row` is the token presented (now used); the next one is stored. */
   | { kind: 'rotated'; row: RefreshRow }
-  /** Already traded once: its whole family is revoked now. */
-  | { kind: 'reused'; uid: string }
+  /**
+   * Already traded, moments ago, for the token that is still the family's
+   * newest: the client's own second try (a race, a lost answer). Nothing
+   * changed, nothing handed out (REFRESH_GRACE_MS).
+   */
+  | { kind: 'superseded' }
+  /** Already traded once, and not the replay above: its whole family is revoked now (the caller signs the account out everywhere). */
+  | { kind: 'reused'; uid: string; family: string }
   /** Past its `expiresAt` (its row is removed). */
   | { kind: 'expired' }
   /** No such token (never issued, logged out, revoked). */
@@ -46,9 +58,11 @@ export interface SessionStore {
   /** The stored token by its hash, or null. */
   getRefresh(hash: string): Promise<RefreshRow | null>;
   /**
-   * In one transaction: the token `hash` marked used and `next` stored in its
-   * family — unless it was used before (its family is revoked), has expired,
-   * or is unknown. `at` decides expiry.
+   * In one transaction: the token `hash` marked used (and `nextHash` kept on
+   * it) and `next` stored in its family — unless it was used before (within
+   * REFRESH_GRACE_MS while its successor is unused: `superseded`, nothing
+   * changes; otherwise `reused`, its family revoked), has expired, or is
+   * unknown. `at` decides expiry and the grace.
    */
   rotateRefresh(hash: string, nextHash: string, next: (row: RefreshRow) => RefreshRow, at: Date): Promise<RotateOutcome>;
   /** Delete every token of a family (logout, reuse). */

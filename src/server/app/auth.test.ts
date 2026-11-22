@@ -2,7 +2,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiFailure } from '@/lib/api/v1/http';
 import { ADDRESS_LIMITS } from '@/server/domain/rateLimit';
-import { ACCESS_TTL_S, REFRESH_TTL_MS } from '@/server/domain/session';
+import { ACCESS_TTL_S, REFRESH_GRACE_MS, REFRESH_TTL_MS } from '@/server/domain/session';
 import { memoryAddressLimiter } from '@/server/infra/memory/addressBudget';
 import { memoryIdentity, type MemoryIdentity } from '@/server/infra/memory/identity';
 import { memoryRateLimiter } from '@/server/infra/memory/rateLimit';
@@ -25,6 +25,8 @@ let store: MemorySessionStore;
 let now: Date;
 let standing: Map<string, { disabled: boolean; validSince: number }>;
 let deps: SessionDeps;
+let revoked: string[];
+let warnings: unknown[][];
 
 beforeEach(() => {
   idp = memoryIdentity();
@@ -32,6 +34,8 @@ beforeEach(() => {
   store = memorySessionStore();
   now = new Date('2026-11-21T10:00:00Z');
   standing = new Map([['ann', { disabled: false, validSince: 0 }]]);
+  revoked = [];
+  warnings = [];
   deps = {
     store,
     signer: jwtSessionSigner(() => KEYS),
@@ -39,6 +43,12 @@ beforeEach(() => {
     standing: { standing: async (uid) => standing.get(uid) ?? null },
     limits: memoryRateLimiter(new MemoryState()),
     addresses: memoryAddressLimiter(),
+    // withOwnSessions' revokeSessions: Firebase's tokens (recorded here) and every family of the account.
+    revokeSessions: async (uid) => {
+      revoked.push(uid);
+      await store.revokeUser(uid);
+    },
+    log: { info: () => {}, warn: (...a: unknown[]) => void warnings.push(a), error: () => {} },
     now: () => now,
   };
 });
@@ -93,14 +103,58 @@ describe('refreshIn', () => {
     expect(third.userId).toBe('ann');
   });
 
-  it('takes a second use for theft: 401, and the whole family is revoked — the thief\'s next token too', async () => {
+  it('takes a second use past the grace for theft: 401, the account signed out everywhere (once), every family gone, logged', async () => {
     const first = await exchangeIn(deps, { provider: 'firebase', token: 'token-of-ann' });
     const other = await exchangeIn(deps, { provider: 'firebase', token: 'token-of-ann' });
     const second = await refreshIn(deps, { refreshToken: first.refreshToken });
+    now = new Date(now.getTime() + REFRESH_GRACE_MS + 1);
     expect((await failure(refreshIn(deps, { refreshToken: first.refreshToken }))).code).toBe('unauthenticated');
+    expect(revoked).toEqual(['ann']);
+    expect(warnings).toHaveLength(1);
+    expect(store.refresh.size).toBe(0);
+    // The thief's next token, and another device's session too: revokeSessions ends them all.
     expect((await failure(refreshIn(deps, { refreshToken: second.refreshToken }))).code).toBe('unauthenticated');
-    // Another device's session (its own family) stands.
-    await expect(refreshIn(deps, { refreshToken: other.refreshToken })).resolves.toMatchObject({ userId: 'ann' });
+    expect((await failure(refreshIn(deps, { refreshToken: other.refreshToken }))).code).toBe('unauthenticated');
+    expect(revoked).toEqual(['ann']);
+  });
+
+  it('two refreshes racing within the grace: one wins, the other is a quiet 409 that hands out nothing and revokes nothing', async () => {
+    const first = await exchangeIn(deps, { provider: 'firebase', token: 'token-of-ann' });
+    const answers = await Promise.allSettled([refreshIn(deps, { refreshToken: first.refreshToken }), refreshIn(deps, { refreshToken: first.refreshToken })]);
+    const won = answers.filter((a) => a.status === 'fulfilled');
+    const lost = answers.filter((a): a is PromiseRejectedResult => a.status === 'rejected');
+    expect(won).toHaveLength(1);
+    expect(lost).toHaveLength(1);
+    expect(lost[0].reason).toBeInstanceOf(ApiFailure);
+    expect((lost[0].reason as ApiFailure).code).toBe('conflict');
+    expect(revoked).toEqual([]);
+    expect(warnings).toEqual([]);
+    // The winner's pair goes on.
+    const winner = (won[0] as PromiseFulfilledResult<Awaited<ReturnType<typeof refreshIn>>>).value;
+    await expect(refreshIn(deps, { refreshToken: winner.refreshToken })).resolves.toMatchObject({ userId: 'ann' });
+  });
+
+  it('a retry after a lost answer, within the grace: 409, nothing revoked; the client can log it out (the family goes) and exchange again', async () => {
+    const first = await exchangeIn(deps, { provider: 'firebase', token: 'token-of-ann' });
+    const lostAnswer = await refreshIn(deps, { refreshToken: first.refreshToken });
+    now = new Date(now.getTime() + REFRESH_GRACE_MS);
+    expect((await failure(refreshIn(deps, { refreshToken: first.refreshToken }))).code).toBe('conflict');
+    expect((await failure(refreshIn(deps, { refreshToken: first.refreshToken }))).code).toBe('conflict');
+    expect(revoked).toEqual([]);
+    expect(store.refresh.size).toBe(2);
+    // Holding no newer pair, the client logs the token it has out: whoever won the race loses it too.
+    await logoutIn(deps, { refreshToken: first.refreshToken });
+    expect((await failure(refreshIn(deps, { refreshToken: lostAnswer.refreshToken }))).code).toBe('unauthenticated');
+    expect(revoked).toEqual([]);
+  });
+
+  it('a token two generations old is theft even within the grace: its successor was used already', async () => {
+    const first = await exchangeIn(deps, { provider: 'firebase', token: 'token-of-ann' });
+    const second = await refreshIn(deps, { refreshToken: first.refreshToken });
+    await refreshIn(deps, { refreshToken: second.refreshToken });
+    expect((await failure(refreshIn(deps, { refreshToken: first.refreshToken }))).code).toBe('unauthenticated');
+    expect(revoked).toEqual(['ann']);
+    expect(store.refresh.size).toBe(0);
   });
 
   it('is 401 for an expired, unknown or ill-formed token', async () => {

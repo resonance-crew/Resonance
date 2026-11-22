@@ -70,8 +70,10 @@ called — never when the context is built. Pass a real one in `overrides`.
   `ports/sessions.ts`: the `SessionStore` (`infra/{firestore,memory}/sessions.ts`:
   `identities/{provider}_{subject}`, `refreshTokens/{sha256}`), the `SessionSigner`
   (`infra/session/{jwt,signer}.ts`, ES256 by `node:crypto`, keys from `RESONANCE_JWT_KEYS`)
-  and `AccountStanding` (Firebase Auth's, with its revocation cache). Lifetimes and
-  claims are `domain/session.ts`.
+  and `AccountStanding` (Firebase Auth's, with its revocation cache). Lifetimes,
+  claims and the refresh grace (`REFRESH_GRACE_MS`, `replayOf`: a replay within it is
+  a quiet 409, any other reuse signs the account out everywhere) are `domain/session.ts`;
+  every store keeps `contract/sessions.contract.ts`.
 - `infra/session/verifier.ts` `resonanceJwtVerifier` is first in `requestVerifier()`;
   it `owns` a token with one of our key ids, so the chain asks no one after it about
   one (a forged one never reaches Firebase as something else).
