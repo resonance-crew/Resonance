@@ -88,6 +88,17 @@ export function chatImageFiles(docs: DocumentSnapshot[]): string[] {
 
 // ── Reading documents as domain values ──
 
+/**
+ * The store's time of a message's latest change after it was sent — every
+ * write of these to a message already there sets it (a reaction, an unsend,
+ * a quote emptied, 停止分享) — so a thread can ask for just what changed
+ * (`listMessagesChangedAfter`). Never shown to a client. Not (yet) the link
+ * preview's write (infra.ts): its suite pins that write to `preview` alone, so
+ * an open thread reads its window whole while a link of its newest messages
+ * may still get one (client/messages `awaitsPreview`).
+ */
+export const EDITED_AT = 'editedAt';
+
 const instantOf = (v: unknown): Instant | null => (v instanceof Timestamp ? instantFromParts(v.seconds, v.nanoseconds) : null);
 const timestampOf = (t: Instant) => {
   const { seconds, nanos } = instantParts(t);
@@ -334,13 +345,18 @@ export function conversationsTx(db: AdminDb, tx: Transaction): ConversationsTxRe
       tx.set(conversation(pair), { unread: { [uid]: FieldValue.increment(1) } }, { merge: true });
     },
     setReaction(pair, messageId, uid, reaction) {
-      tx.update(message(pair, messageId), new FieldPath('reactions', uid), reaction ?? FieldValue.delete());
+      tx.update(message(pair, messageId), new FieldPath('reactions', uid), reaction ?? FieldValue.delete(), EDITED_AT, FieldValue.serverTimestamp());
     },
     unsendMessage(pair, messageId, senderId, sentAt, _at) {
-      tx.set(message(pair, messageId), { senderId, sentAt: timestampOf(sentAt), unsentAt: FieldValue.serverTimestamp() });
+      tx.set(message(pair, messageId), {
+        senderId,
+        sentAt: timestampOf(sentAt),
+        unsentAt: FieldValue.serverTimestamp(),
+        [EDITED_AT]: FieldValue.serverTimestamp(),
+      });
     },
     emptyQuote(pair, quoteId, unsentId, senderId) {
-      tx.update(message(pair, quoteId), { replyTo: unsentQuote(unsentId, senderId) });
+      tx.update(message(pair, quoteId), { replyTo: unsentQuote(unsentId, senderId), [EDITED_AT]: FieldValue.serverTimestamp() });
     },
     previewUnsent(pair, senderId, sentAt) {
       tx.update(conversation(pair), { lastMessage: { senderId, sentAt: timestampOf(sentAt), unsent: true } });
@@ -349,7 +365,7 @@ export function conversationsTx(db: AdminDb, tx: Transaction): ConversationsTxRe
       tx.set(unsentCopyRef(db, copy.pair, copy.messageId), { ...copy, sentAt: timestampOf(sentAt), unsentAt: FieldValue.serverTimestamp() });
     },
     unmarkShare(pair, messageId) {
-      tx.update(message(pair, messageId), { privateShare: FieldValue.delete() });
+      tx.update(message(pair, messageId), { privateShare: FieldValue.delete(), [EDITED_AT]: FieldValue.serverTimestamp() });
     },
     putPrivateShare(cardId, authorId, _at) {
       tx.set(privateShareRef(db, cardId), { authorId, at: FieldValue.serverTimestamp() });
@@ -413,7 +429,11 @@ export function conversationsData(db: AdminDb): ConversationsData {
       const snap = await page.get();
       const list = snap.docs.map((d) => messageOf(d.id, d.data()));
       const last = list[list.length - 1];
-      return { messages: list, next: list.length === limit && last?.sentAt ? encodeCursor({ t: last.sentAt, id: last.id }) : null };
+      return {
+        messages: list,
+        next: list.length === limit && last?.sentAt ? encodeCursor({ t: last.sentAt, id: last.id }) : null,
+        mark: instantOf(snap.readTime),
+      };
     },
     async listMessagesAfter(pair, limit, after) {
       const at = decodeCursor(after);
@@ -426,7 +446,18 @@ export function conversationsData(db: AdminDb): ConversationsData {
         .get();
       const list = snap.docs.map((d) => messageOf(d.id, d.data()));
       const newest = list[list.length - 1];
-      return { messages: list.reverse(), next: list.length === limit && newest?.sentAt ? encodeCursor({ t: newest.sentAt, id: newest.id }) : null };
+      return {
+        messages: list.reverse(),
+        next: list.length === limit && newest?.sentAt ? encodeCursor({ t: newest.sentAt, id: newest.id }) : null,
+        mark: instantOf(snap.readTime),
+      };
+    },
+    async listMessagesChangedAfter(pair, limit, since) {
+      // `editedAt` is a commit's own time (serverTimestamp), and a query sees every commit up to its readTime:
+      // a change it doesn't see has an editedAt after that readTime, so the readTime is the next mark.
+      const snap = await messages(pair).where(EDITED_AT, '>', timestampOf(since)).orderBy(EDITED_AT, 'asc').limit(limit).get();
+      const list = snap.docs.map((d) => messageOf(d.id, d.data()));
+      return { messages: list, mark: list.length >= limit ? null : instantOf(snap.readTime) };
     },
     async listConversations(uid, limit, before) {
       let at: CursorPosition | null = null;
@@ -480,7 +511,7 @@ export function conversationsData(db: AdminDb): ConversationsData {
     async emptyQuotes(pair, quoteIds, unsentId, senderId) {
       if (!quoteIds.length) return;
       const batch = db.batch();
-      for (const id of quoteIds) batch.update(messages(pair).doc(id), { replyTo: unsentQuote(unsentId, senderId) });
+      for (const id of quoteIds) batch.update(messages(pair).doc(id), { replyTo: unsentQuote(unsentId, senderId), [EDITED_AT]: FieldValue.serverTimestamp() });
       await batch.commit();
     },
     async unsentCopiesOf(pair) {

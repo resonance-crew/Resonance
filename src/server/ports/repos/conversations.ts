@@ -208,6 +208,20 @@ export interface MessagePage {
   messages: StoredMessage[];
   /** Resumes after the page's last message; null when the page wasn't full. */
   next: PageCursor | null;
+  /**
+   * The store's time the page was read at (Firestore: the query's readTime):
+   * every message changed since has an `editedAt` after it, so it is where
+   * `listMessagesChangedAfter` starts next. Absent when the store can't say.
+   */
+  mark?: Instant | null;
+}
+
+/** The messages changed since a mark (a reaction, an unsend, a quote emptied, a link preview, 停止分享). */
+export interface ChangedMessages {
+  /** Oldest change first. */
+  messages: StoredMessage[];
+  /** Where the next ask starts (this read's time); null when the page came back full or the store can't say. */
+  mark: Instant | null;
 }
 
 // --- Phase 2 inbox (2a-inbox): what the clients' lists show, read through /api/v1
@@ -351,6 +365,12 @@ export interface ConversationsData extends ConversationsReads {
    * newest one's cursor when the page was full (more may follow), else null.
    */
   listMessagesAfter(pair: string, limit: number, after: PageCursor): Promise<MessagePage>;
+  /**
+   * The (at most `limit`) messages of the conversation whose `editedAt` — the
+   * store's time, written by every change to a message already sent — is
+   * after `since`, of any age. A single-field range: no composite index.
+   */
+  listMessagesChangedAfter(pair: string, limit: number, since: Instant): Promise<ChangedMessages>;
   /** `uid`'s conversations (`participants` holding them), `(updatedAt, id)` descending, after `before` (invalid_request when it isn't a cursor). */
   listConversations(uid: string, limit: number, before?: PageCursor): Promise<ConversationPage>;
   /** The conversation as the lists show it; null when there is none. */

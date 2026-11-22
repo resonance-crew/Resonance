@@ -85,7 +85,8 @@ describe('a note, its answer, and the thread after', () => {
     ctx.clock.advance(60 * 60 * 1000);
     const unsent = await unsendMessageIn(ctx, 'alice', PAIR, 'a1');
     expect(unsent.push).toEqual({ conversationId: PAIR, messageId: 'a1', from: 'alice', to: 'bob' });
-    expect(Object.keys(message(PAIR, 'a1')!).sort()).toEqual(['senderId', 'sentAt', 'unsentAt']);
+    // (and `editedAt`, the server's time of the change, which an open thread asks by)
+    expect(Object.keys(message(PAIR, 'a1')!).sort()).toEqual(['editedAt', 'senderId', 'sentAt', 'unsentAt']);
     expect(message(PAIR, 'b2')?.replyTo).toEqual({ id: 'a1', senderId: 'alice', unsent: true });
     expect(ctx.state.get('unsentMessages', `${PAIR}_a1`)).toMatchObject({ text: 'Coffee sometime?', senderId: 'alice', to: 'bob' });
     // Unsent again: done already, nothing new to tell; a reaction to it is gone with it, and taking one back is nothing.

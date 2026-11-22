@@ -39,6 +39,7 @@ describeInboxContract('Firestore (emulator)', () => {
   const ctx = ctxFor(db);
   return {
     data: ctx.data,
+    uow: ctx.uow,
     uid: (n) => `${prefix}${n}`,
     async seedConversation(pair, { updatedAt, lastMessage, ...c }) {
       await db.doc(`conversations/${pair}`).set({

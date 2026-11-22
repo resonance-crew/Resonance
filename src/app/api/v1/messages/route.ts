@@ -4,6 +4,7 @@ import { SendMessageRequest } from '@/lib/api/v1/schemas';
 import { serverCtx } from '@/server/ctx';
 import { sendMessageIn } from '@/server/app/conversations';
 import { afterMessageSentIn } from '@/server/app/pushAfter';
+import { OWN_SIGNALS_HEADER, type OwnSignals } from '@/server/app/inbox';
 
 export const dynamic = 'force-dynamic';
 // The push and the link preview run after the response, within the function's time:
@@ -25,7 +26,12 @@ export const POST = withUser(async (user, req) => {
   // Spent beside the send's reads, and still before any refusal or write (sendMessage awaits it).
   const spent = server.limits.spend(user.id, 'message');
   spent.catch(() => {});
-  const sent = await sendMessageIn(server, user.id, input, spent);
+  const own: { signals?: OwnSignals } = {};
+  const sent = await sendMessageIn(server, user.id, input, spent, (signals) => (own.signals = signals));
   afterMessageSentIn(server, sent, input.text);
-  return NextResponse.json({ conversationId: sent.conversationId, id: sent.id }, { status: 201 });
+  // The sender's own counters after the send: their client takes them as heard (client/signals pokeOwn).
+  return NextResponse.json(
+    { conversationId: sent.conversationId, id: sent.id },
+    { status: 201, headers: own.signals ? { [OWN_SIGNALS_HEADER]: JSON.stringify(own.signals) } : {} },
+  );
 });

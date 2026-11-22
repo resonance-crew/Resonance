@@ -21,7 +21,7 @@ vi.mock('./listen', () => ({
     }),
 }));
 
-import { SAFETY_PULL_MS, pokeSignal, resetSignals, watchSignal } from './signals';
+import { FAILED_PULL_MS, SAFETY_PULL_MS, pokeOwn, pokeSignal, resetSignals, watchSignal } from './signals';
 
 const live = () => firestore.listeners.filter((l) => !l.stopped);
 const hear = (d: Doc) => live().forEach((l) => l.onData(d));
@@ -73,7 +73,7 @@ describe('the signal channel', () => {
     expect(other).toHaveBeenCalledTimes(1);
   });
 
-  it('pulls everything watched every minute while the page is in the foreground, never in the background', () => {
+  it('pulls everything watched every safety interval while the page is in the foreground, never in the background', () => {
     const inbox = vi.fn();
     watchSignal('me', 'inbox', inbox);
     vi.advanceTimersByTime(SAFETY_PULL_MS);
@@ -83,7 +83,7 @@ describe('the signal channel', () => {
     vi.advanceTimersByTime(SAFETY_PULL_MS * 3);
     expect(inbox).toHaveBeenCalledTimes(1);
 
-    // Back in the tab after more than a minute: pulled at once.
+    // Back in the tab after more than the interval: pulled at once.
     hidden.mockReturnValue('visible');
     document.dispatchEvent(new Event('visibilitychange'));
     expect(inbox).toHaveBeenCalledTimes(2);
@@ -96,11 +96,82 @@ describe('the signal channel', () => {
     pokeSignal('graph');
     expect(graph).toHaveBeenCalledTimes(1);
 
-    // The rules not deployed yet, say: the listener fails; the minute's pull still carries the page.
+    // The rules not deployed yet, say: the listener fails; the shorter pulls carry the page.
     live()[0].onError(Object.assign(new Error('denied'), { code: 'permission-denied' }));
     window.dispatchEvent(new Event('online'));
     expect(firestore.listeners).toHaveLength(2);
     expect(live()).toHaveLength(1);
+  });
+
+  it('pulls every five minutes while the listener is live, every minute while it has failed, and everything once when it hears again', () => {
+    expect(SAFETY_PULL_MS).toBe(5 * 60_000);
+    const inbox = vi.fn();
+    watchSignal('me', 'inbox', inbox);
+    hear({ v: 1, inbox: 1 });
+    vi.advanceTimersByTime(4 * 60_000);
+    expect(inbox).toHaveBeenCalledTimes(0);
+    vi.advanceTimersByTime(60_000);
+    expect(inbox).toHaveBeenCalledTimes(1);
+
+    // The listener fails: nothing tells of a change now, so the pulls go every minute.
+    live()[0].onError(new Error('unavailable'));
+    vi.advanceTimersByTime(3 * FAILED_PULL_MS);
+    expect(inbox).toHaveBeenCalledTimes(4);
+
+    // Back online: it listens again, and its first answer pulls everything (what moved meanwhile was never heard).
+    window.dispatchEvent(new Event('online'));
+    const pulledBefore = inbox.mock.calls.length;
+    hear({ v: 1, inbox: 1 });
+    expect(inbox).toHaveBeenCalledTimes(pulledBefore + 1);
+    // …then the five minutes again.
+    inbox.mockClear();
+    vi.advanceTimersByTime(4 * 60_000);
+    expect(inbox).toHaveBeenCalledTimes(0);
+  });
+
+  // Ratchet (numbers may fall, never rise): a visible tab on the messages page — the list and the header's
+  // badge share one watcher of `inbox`, the bell one of `bell` — over an hour with nothing happening.
+  // Before 2026-11-22 it was 60 pulls of each (a minute's safety pull), each a GET of the whole list.
+  it('ratchet: an idle visible hour costs at most 12 pulls of each list', () => {
+    const inbox = vi.fn();
+    const bell = vi.fn();
+    watchSignal('me', 'inbox', inbox);
+    watchSignal('me', 'bell', bell);
+    hear({ v: 1, inbox: 3, bell: 2 });
+    vi.advanceTimersByTime(60 * 60_000);
+    expect(inbox.mock.calls.length).toBeLessThanOrEqual(12);
+    expect(bell.mock.calls.length).toBeLessThanOrEqual(12);
+  });
+
+  it("pulls a write of this browser's once: the listener bringing the same touch pulls nothing more, anyone else's still does", () => {
+    const inbox = vi.fn();
+    const thread = vi.fn();
+    watchSignal('me', 'inbox', inbox);
+    watchSignal('me', 'thread:bob_me', thread);
+    hear({ v: 1, inbox: 3, threads: { bob_me: 7 } });
+
+    // A send: its answer says the sender's own counters went to 4 and 8 — pulled now, once.
+    pokeOwn(['thread:bob_me', 'inbox'], { 'thread:bob_me': 8, inbox: 4 });
+    expect([inbox, thread].map((f) => f.mock.calls.length)).toEqual([1, 1]);
+    // The listener brings that touch: nothing more.
+    hear({ v: 1, inbox: 4, threads: { bob_me: 8 } });
+    expect([inbox, thread].map((f) => f.mock.calls.length)).toEqual([1, 1]);
+    // A snapshot from before the send, late: kept as heard, nothing pulled.
+    hear({ v: 1, inbox: 3, threads: { bob_me: 7 } });
+    expect([inbox, thread].map((f) => f.mock.calls.length)).toEqual([1, 1]);
+    // Bob answers: the counters move past what the answer said — pulled.
+    hear({ v: 1, inbox: 5, threads: { bob_me: 9 } });
+    expect([inbox, thread].map((f) => f.mock.calls.length)).toEqual([2, 2]);
+
+    // The listener heard the touch before the answer came: its watchers were pulled then, after the write.
+    hear({ v: 1, inbox: 6, threads: { bob_me: 10 } });
+    expect([inbox, thread].map((f) => f.mock.calls.length)).toEqual([3, 3]);
+    pokeOwn(['thread:bob_me', 'inbox'], { 'thread:bob_me': 10, inbox: 6 });
+    expect([inbox, thread].map((f) => f.mock.calls.length)).toEqual([3, 3]);
+
+    // No counters in the answer (an older server, a touch that failed): pulled, as pokeSignal.
+    pokeOwn(['inbox'], null);
+    expect(inbox).toHaveBeenCalledTimes(4);
   });
 
   it("listens for one account at a time: another signing in stops the one before's listener", () => {

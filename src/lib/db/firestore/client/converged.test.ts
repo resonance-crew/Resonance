@@ -17,7 +17,7 @@ const auth = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/auth/firebase/client', () => ({ getFirebaseClientAuth: () => auth, ensureAppCheck: vi.fn() }));
 const poked = vi.hoisted(() => [] as string[]);
-vi.mock('./signals', () => ({ pokeSignal: (t: string) => poked.push(t), watchSignal: () => () => {} }));
+vi.mock('./signals', () => ({ pokeSignal: (t: string) => poked.push(t), pokeOwn: (ts: string[]) => poked.push(...ts), watchSignal: () => () => {} }));
 
 import { getCurrentUserHandle, updateProfile } from './profile';
 import { syncHintCount } from './hints';

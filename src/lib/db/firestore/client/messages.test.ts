@@ -57,6 +57,7 @@ vi.mock('./signals', () => ({
     return () => signals.watchers.delete(`${uid}|${topic}`);
   },
   pokeSignal: (topic: string) => signals.poked.push(topic),
+  pokeOwn: (topics: string[]) => signals.poked.push(...topics),
 }));
 
 import { getDoc, getDocs, writeBatch } from 'firebase/firestore/lite';
@@ -74,6 +75,7 @@ import {
   sendMessage,
   unsendMessage,
   uploadChatImage,
+  THREAD_FULL_READ_MS,
   type ThreadWindow,
 } from './messages';
 
@@ -293,6 +295,64 @@ describe('the thread and the list, through /api/v1', () => {
 
     stop();
     expect(signals.watchers.size).toBe(0);
+  });
+
+  it('after the first window, pulls only what came and what changed (after= and updatedAfter=), the window as a whole read would give it', async () => {
+    pages['limit=50'] = page([{ id: 'm2', text: 'two', sentAt: '2026-09-01T08:02:00.000000Z' }, { id: 'm1', text: 'one', sentAt: '2026-09-01T08:01:00.000000Z' }], {
+      updatedCursor: 'u.1',
+    });
+    const { heard } = await follow();
+
+    // A reaction to m1 and a new message m3: one request, nothing of the window read again.
+    pages['after=c1.m2&updatedAfter=u.1&limit=100'] = page([{ id: 'm3', text: 'three', sentAt: '2026-09-01T08:03:00.000000Z' }], {
+      updated: [{ id: 'm1', cursor: 'c1.m1', senderId: 'aaa', text: 'one', sentAt: '2026-09-01T08:01:00.000000Z', reactions: { bbb: 'heart' } }],
+      updatedCursor: 'u.2',
+    });
+    fetchMock.mockClear();
+    signals.fire('bbb|thread:aaa_bbb');
+    await vi.waitFor(() => expect(heard).toHaveBeenCalledTimes(2));
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/conversations/aaa_bbb/messages?after=c1.m2&updatedAfter=u.1&limit=100']);
+    const second = heardMessages(heard, 1);
+    expect(second.map((m) => m.id)).toEqual(['m3', 'm2', 'm1']);
+    expect(second[2].reactions).toEqual({ bbb: 'heart' });
+
+    // An unsend of m2: the next pull starts where the last answer ended, from the newest held.
+    pages['after=c1.m3&updatedAfter=u.2&limit=100'] = page([], {
+      newerCursor: 'c1.m3',
+      updated: [{ id: 'm2', cursor: 'c1.m2', senderId: 'aaa', text: '', sentAt: '2026-09-01T08:02:00.000000Z', unsentAt: '2026-09-01T08:04:00.000000Z' }],
+      updatedCursor: 'u.3',
+    });
+    fetchMock.mockClear();
+    signals.fire('bbb|thread:aaa_bbb');
+    await vi.waitFor(() => expect(heard).toHaveBeenCalledTimes(3));
+    expect(fetchMock.mock.calls).toHaveLength(1);
+    const third = heardMessages(heard, 2);
+    expect(third.map((m) => m.id)).toEqual(['m3', 'm2', 'm1']);
+    expect(third[1].unsentAt).toBeInstanceOf(Date);
+    expect(third[2].reactions).toEqual({ bbb: 'heart' });
+
+    // An answer that can't vouch for itself (no updatedCursor: an older server) reads the whole window again.
+    pages['after=c1.m3&updatedAfter=u.3&limit=100'] = page([], { newerCursor: 'c1.m3' });
+    pages['limit=50'] = page([{ id: 'm3' }, { id: 'm2' }, { id: 'm1' }], { updatedCursor: 'u.4' });
+    fetchMock.mockClear();
+    signals.fire('bbb|thread:aaa_bbb');
+    await vi.waitFor(() => expect(heard).toHaveBeenCalledTimes(4));
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/v1/conversations/aaa_bbb/messages?after=c1.m3&updatedAfter=u.3&limit=100',
+      '/api/v1/conversations/aaa_bbb/messages?limit=50',
+    ]);
+  });
+
+  it('reads the whole window again after THREAD_FULL_READ_MS, whatever the incremental answers say', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    pages['limit=50'] = page([{ id: 'm1' }], { updatedCursor: 'u.1' });
+    const { heard } = await follow();
+    now.mockReturnValue(1_000_000 + THREAD_FULL_READ_MS);
+    fetchMock.mockClear();
+    signals.fire('bbb|thread:aaa_bbb');
+    await vi.waitFor(() => expect(heard).toHaveBeenCalledTimes(2));
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/conversations/aaa_bbb/messages?limit=50']);
+    now.mockRestore();
   });
 
   it('says a refusal (404: no such conversation for this viewer) as gone, and stops reading once stopped', async () => {

@@ -99,6 +99,13 @@ export function memoryRealtime(): MemoryRealtime {
   return {
     touches,
     touch: async (uid, topics) => void touches.push({ uid, topics: [...topics] }),
+    async read(uid) {
+      return this.signals(uid);
+    },
+    async touchAndRead(uid, topics) {
+      touches.push({ uid, topics: [...topics] });
+      return this.signals(uid);
+    },
     signals(uid) {
       const doc: SignalsDoc = { v: SIGNALS_VERSION, inbox: 0, bell: 0, graph: 0, map: 0, drafts: 0, threads: {} };
       for (const t of touches) {

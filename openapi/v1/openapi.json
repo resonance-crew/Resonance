@@ -7566,6 +7566,16 @@
           },
           "hasNewer": {
             "type": "boolean"
+          },
+          "updated": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ThreadMessage"
+            }
+          },
+          "updatedCursor": {
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [

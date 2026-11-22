@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ApiFailure } from '@/lib/api/v1/http';
-import type { DataRepos } from '@/server/ports/uow';
+import type { DataRepos, TxRepos, UnitOfWork } from '@/server/ports/uow';
 import { decodeCursor, encodeCursor, type Instant } from '@/server/ports/time';
 
 /**
@@ -13,6 +13,8 @@ import { decodeCursor, encodeCursor, type Instant } from '@/server/ports/time';
  */
 export interface InboxHarness {
   data: DataRepos;
+  /** The adapter's transactions (a reaction, an unsend: what changes a message already sent). */
+  uow: UnitOfWork<TxRepos>;
   uid(n: string): string;
   /** A conversation stored as is (times exact, to the microsecond). */
   seedConversation(pair: string, c: { participants: string[]; updatedAt: Instant; unread?: Record<string, number>; lastMessage?: Record<string, unknown>; request?: Record<string, unknown> }): Promise<void>;
@@ -99,6 +101,35 @@ export function describeInboxContract(name: string, make: () => InboxHarness | P
       const back = await h.data.conversations.listMessages(ab, 5, encodeCursor({ t: t('000002'), id: 'm3' }));
       expect(back.messages.map((m) => m.id)).toEqual(['m2', 'm1']);
       expect((await failure(h.data.conversations.listMessagesAfter(ab, 2, 'c1.bad'))).code).toBe('invalid_request');
+    });
+
+    it('listMessagesChangedAfter: every change to a message already sent, of any age, after the mark a page was read at', async () => {
+      const ab = pairOf(a, b);
+      await h.seedConversation(ab, { participants: [a, b].sort(), updatedAt: t('000005') });
+      await h.seedMessage(ab, 'm1', { senderId: a, text: 'one', sentAt: t('000001') });
+      await h.seedMessage(ab, 'm2', { senderId: b, text: 'two', sentAt: t('000002') });
+      await h.seedMessage(ab, 'm3', { senderId: a, text: 'three', sentAt: t('000003') });
+      const page = await h.data.conversations.listMessages(ab, 1);
+      expect(page.messages.map((m) => m.id)).toEqual(['m3']);
+      expect(page.mark).toBeTruthy();
+      // Nothing changed since the page was read.
+      const none = await h.data.conversations.listMessagesChangedAfter(ab, 10, page.mark!);
+      expect(none.messages).toEqual([]);
+      expect(none.mark).toBeTruthy();
+
+      // A reaction on the oldest (outside the page) and an unsend of the newest.
+      await h.uow.run(async ({ conversations: tx }) => tx.setReaction(ab, 'm1', b, 'heart'));
+      await h.uow.run(async ({ conversations: tx }) => tx.unsendMessage(ab, 'm3', a, t('000003'), new Date()));
+      const changed = await h.data.conversations.listMessagesChangedAfter(ab, 10, none.mark!);
+      expect(changed.messages.map((m) => m.id)).toEqual(['m1', 'm3']);
+      expect(changed.messages[0].reactions).toEqual({ [b]: 'heart' });
+      expect(changed.messages[1].unsent).toBe(true);
+      // Heard: asked again from its mark, nothing.
+      expect((await h.data.conversations.listMessagesChangedAfter(ab, 10, changed.mark!)).messages).toEqual([]);
+      // A full page says it can't vouch for the rest: no mark.
+      const full = await h.data.conversations.listMessagesChangedAfter(ab, 1, none.mark!);
+      expect(full.messages.map((m) => m.id)).toEqual(['m1']);
+      expect(full.mark).toBeNull();
     });
 
     it('markRead: their count 0, the other untouched; a conversation gone is `gone` and not made again', async () => {
