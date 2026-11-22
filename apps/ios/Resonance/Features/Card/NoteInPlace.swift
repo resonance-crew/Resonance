@@ -14,14 +14,13 @@ nonisolated enum NoteInPlace {
     static let countFrom = 1800
     /// How long after the last keystroke the words are kept (leaving keeps them at once).
     static let keepDelay: Duration = .milliseconds(400)
-    /// The field's block: 12 under the faces' row, 40 to what follows (the page's own 40 under the story's end).
+    /// The field's block: 12 under the capsule (round 30 §S2: the faces' line stands above it now), 40 to what follows
+    /// (the page's own 40 under the story's end).
     static let gapAbove: CGFloat = 12
     static let gapBelow: CGFloat = 40
     /// Once the keyboard has risen under the field, its block rests this far over it: the scroll's reach, never the
     /// layout's (`noteScrollTarget(_:)`).
     static let keyboardGap: CGFloat = 12
-    /// Wider than a phone, the field is as wide as the story's measure at most.
-    static let maxWidth: CGFloat = 680
     /// Under the field: its one line, 6 below it.
     static let lineGap: CGFloat = 6
     /// Opening and closing (none under Reduce Motion).
@@ -75,11 +74,9 @@ nonisolated enum NoteInPlace {
         return shortWindow ? 2 : 3
     }
 
-    /// The field's width: a phone's column (nil), wider the story's column up to 680, starting where it starts.
-    static func width(compact: Bool, column: CGFloat) -> CGFloat? {
-        // Before the column is measured, the column's own width (nothing drawn 0 wide for a frame).
-        compact || column <= 0 ? nil : min(column, maxWidth)
-    }
+    /// Where everything in the note's place starts (round 30 §S4): the field's words and placeholder (no envelope before
+    /// them any more), the line under the field, the wait line — 16 from the capsule's start.
+    static let wordsStart: CGFloat = NoteFieldCapsule<EmptyView>.wordsStart
 }
 
 extension View {
@@ -98,9 +95,9 @@ extension View {
     }
 }
 
-/// The note field, open in place under the story's end row: ``NoteFieldCapsule`` — the envelope's column, the text
-/// (one line in 48, growing to ``NoteInPlace/maxLines(compact:shortWindow:)`` then scrolling inside), 寄出 — and one
-/// line under it (``NoteInPlace/Line``; the count at its end near the limit). Today's composer, moved, not
+/// The note field, open in place under the story's end row, as wide as the story's column: ``NoteFieldCapsule`` — the text
+/// 16 in (one line in 48, growing to ``NoteInPlace/maxLines(compact:shortWindow:)`` then scrolling inside), 寄出 — and
+/// one line under it, 16 in as well (``NoteInPlace/Line``; the count at its end near the limit). Today's composer, moved, not
 /// rewritten: the words are kept on the device as they are typed and however the page goes (``NoteDrafts``), and 寄出
 /// clears and closes the field at once with 「紙條寄出了」 while the note goes on behind it under its card's attempt
 /// (``NoteSends``: a retry is never a second note). A failure while the page is still there brings the field back on
@@ -176,6 +173,7 @@ struct NoteField: View {
                     Spacer(minLength: 0)
                     if NoteInPlace.showsCount(count) { countView }
                 }
+                .padding(.leading, NoteInPlace.wordsStart)
                 .transition(.opacity)
             } else if NoteInPlace.showsCount(count) {
                 HStack { Spacer(minLength: 0); countView }
@@ -318,13 +316,14 @@ struct NoteField: View {
 }
 
 /// The place of the note field while the author waits to answer three notes (`CardTap.mayNote` false): one muted line,
-/// no field — the card's draft stays on the device for when they answer.
+/// no field, starting where the field's words would (16 in) — the card's draft stays on the device for when they answer.
 struct NoteWaitLine: View {
     var body: some View {
         Text(L10n.Card.Note.waitForReply)
             .font(AppFonts.body(13.5)).foregroundStyle(Tokens.textMuted)
             .lineSpacing(13.5 * 0.4)
             .fixedSize(horizontal: false, vertical: true)
+            .padding(.leading, NoteInPlace.wordsStart)
             .frame(maxWidth: .infinity, minHeight: ComposerMetrics.height, alignment: .leading)
     }
 }

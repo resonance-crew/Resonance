@@ -4,8 +4,8 @@ import UIKit
 /// The note to a card's author, written in place under the story (round 26, SETTLED "the note, in place"; the
 /// owner: 「這個寄小紙條的界面應該不要做成 pop ups，因為它會擋住這個畫面上其他東西」): the chat composer's input capsule
 /// (``ComposerCapsule``'s face — the field's wobble, the cream paper, its pen darkening while written in, never a
-/// halo) with the envelope `note` glyph in ＋'s 44 column at its start (a mark, not a button), the text (`field`),
-/// and 寄出 as its 52 end segment behind the wavy seam — tonal at rest, solid once there is something to send. One
+/// halo) with the text (`field`) starting ``wordsStart`` in — no envelope before it since round 30 (§S4; the owner:
+/// 「这个输入框左边要不要显示这个 envelope 的 icon 呢」; the thread's composer keeps its ＋ column) — and 寄出 as its 52 end segment behind the wavy seam — tonal at rest, solid once there is something to send. One
 /// line is exactly 48; more lines grow it, the send segment then a 52 × 48 block at its foot (`block`).
 public struct NoteFieldCapsule<Field: View>: View {
     let focused: Bool
@@ -18,7 +18,8 @@ public struct NoteFieldCapsule<Field: View>: View {
     @ViewBuilder let field: Field
     @State private var sendPressed = false
 
-    public static var leadGlyph: CGFloat { NoteLeadGlyph.size }
+    /// Where the words (and the placeholder) start from the capsule's start: the envelope's 44 column is gone.
+    public nonisolated static var wordsStart: CGFloat { 16 }
 
     public init(focused: Bool, canSend: Bool, block: Bool = false, sendLabel: String, seed: Double = 17,
                 onSend: @escaping () -> Void, @ViewBuilder field: () -> Field) {
@@ -33,12 +34,9 @@ public struct NoteFieldCapsule<Field: View>: View {
 
     public var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
-            // The envelope: what this field is (a note), in ＋'s column — read by no one, tapped by no one.
-            NoteLeadGlyph()
-                .frame(width: ComposerMetrics.attachWidth, height: ComposerMetrics.height)
-                .accessibilityHidden(true)
             field
                 .frame(maxWidth: .infinity, minHeight: ComposerMetrics.height, alignment: .leading)
+                .padding(.leading, Self.wordsStart)
                 .padding(.trailing, ComposerMetrics.textTrailing)
             Button {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -70,18 +68,5 @@ private struct NotePressReport: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .onChange(of: configuration.isPressed) { _, now in pressed = now }
-    }
-}
-
-/// The envelope in the note field's lead column (item 2): what the field is, a mark and not a button — the web's
-/// (`<Icon name="note" size={18} color="var(--color-text-muted)" />`, NoteInPlace.module.css `.glyph`): 18, the muted
-/// text ink, with the icon's own pen (INK_STRONG), never a lighter one. Android's `NoteLeadGlyph` is the same.
-public struct NoteLeadGlyph: View {
-    public static let size: CGFloat = 18
-
-    public init() {}
-
-    public var body: some View {
-        OrganicIcon(.note, size: Self.size, color: Tokens.textMuted, strokeWidth: Tokens.inkStrong)
     }
 }

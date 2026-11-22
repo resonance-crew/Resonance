@@ -435,6 +435,10 @@ struct CardScreen: View {
         // The owner's card in the trash: its banner first, and nothing around the story but its tags.
         let trashed = TrashedCardBanner.shows(detail)
         let hasCover = card.imageUrl.flatMap(URL.init(string:)) != nil
+        // The reader's end row follows the tags (or the story): its faces' line 16 under them, signed in (round 30 §S1).
+        let endRowFollows = Self.showsEndRow(detail, trashed: trashed)
+        let endRowAbove = EndRowAir.above(facesLine: session.uid != nil)
+        let bookmarkInTags = endRowFollows && EndRowPlacement.place(compact: window.layoutClass == .compact) == .tagsRow
         return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 if trashed {
@@ -488,20 +492,19 @@ struct CardScreen: View {
                 .id(translatedCopy)
                 .transition(.opacity)
                 }
-                .padding(.bottom, story.endGap)
+                // The end row's faces' line starts 16 under the story when no tags' row stands between (round 30 §S1).
+                .padding(.bottom, endRowFollows && card.tags.isEmpty && !bookmarkInTags ? endRowAbove : story.endGap)
                 // A phone's 收藏 ends the tags' row (round 28 §S3): the tags wrap in their own column, 收藏 on their
                 // first line — alone at the row's end when there are none. Wide, it ends the capsule's row instead.
-                let bookmarkInTags = Self.showsEndRow(detail, trashed: trashed)
-                    && EndRowPlacement.place(compact: window.layoutClass == .compact) == .tagsRow
                 if bookmarkInTags {
                     EndRowTagsRow(hasTags: !card.tags.isEmpty) {
                         tagList(card.tags)
                     } end: {
                         CardBookmarkButton(bookmark: bookmark, cardId: card.id)
                     }
-                    .padding(.bottom, 40)
+                    .padding(.bottom, endRowAbove)
                 } else if !card.tags.isEmpty {
-                    tagList(card.tags).padding(.bottom, 40)
+                    tagList(card.tags).padding(.bottom, endRowFollows ? endRowAbove : 40)
                 }
                 // The story's end (round 9 §3): the response bar alone — share and ⋯ are the bar's (a phone's) or
                 // the byline's (a tablet's) — and none on the author's own card. Someone else's 私人卡, shared in a
@@ -593,8 +596,8 @@ struct CardScreen: View {
         !all && cards.count > resonancesShownFirst
     }
 
-    /// The story's end (round 26 §U1): the three kinds of feedback (共振 · 寄小紙條 · 用卡片回應) — 收藏 at their row's
-    /// end when wide (a phone's is in the tags' row above, round 28) — the faces under them, and the note in place when
+    /// The story's end (round 26 §U1): the faces over them (round 30), the three kinds of feedback (共振 · 寄小紙條 ·
+    /// 用卡片回應) — 收藏 at their row's end when wide (a phone's is in the tags' row above, round 28) — and the note in place when
     /// it is open (``CardEndRow``); the card's share and ⋯ are in the bar or the byline already. It fades in once scrolled to; its coming into view is the story read through (§U7).
     private func endRow(_ model: CardModel, _ detail: CardDetail, script: StoryScript, translated: Bool) -> some View {
         CardEndRow(detail: detail, bookmark: bookmark, script: script, translated: translated) { Task { await model.load() } }
