@@ -500,7 +500,13 @@ and xcodebuild). `--force-build` (or `VISUAL_FORCE_BUILD=1`) builds anyway; `VIS
 reuses the last build without looking. The builds run beside
 the captures, never blocking them: the APK and the simulator app start building as the run starts,
 while the web and the Mac app are captured, and the two Xcode builds (Mac, simulator) take turns, as
-they share the project and Swift's package caches. Phases (`PHASES` in `run.ts`): web + Mac, then
+they share the project and Swift's package caches. The web's own captures run in several browser contexts at once (`VISUAL_WEB_PARALLEL`, default 3; 1 takes
+them one by one as before), with the writes its pages make to the shared stack — a read counted once per reader,
+card and day, the bell's panel marking its notifications read, a screen's hints unspent — kept in their old order:
+each screen's first visit by an account runs one at a time in the old order, and only the later visits (the dark
+and English phone, the tablet, the desktop), which write nothing new, run side by side (`webSchedule.ts`). A
+context that fails is tried once more in a fresh one; failing twice, its captures are said and fail the run as
+unsettled, and the others go on. Phases (`PHASES` in `run.ts`): web + Mac, then
 Android's phone and tablet together, then the iPhone and iPad together — in one run whatever slices the
 platforms take: `--<platform>-only a,b` and `--<platform>-device x,y` give a platform its own screens and
 devices (`--only` / `--device` are the others'), so a slice of four platforms starts one stack, builds the

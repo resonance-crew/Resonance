@@ -7,6 +7,9 @@
  * The landing film is held at its moment (`?rest=1&t=`, screens.ts) with its
  * cast on stage; its pinned stills go to the run's `_glance/` (looked at, not
  * compared).
+ *
+ * Several browser contexts capture at once (`VISUAL_WEB_PARALLEL`, default 3), the writes the pages make to the
+ * shared stack kept in their old order: webSchedule.ts.
  */
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -16,6 +19,7 @@ import { SCREENS, screensFor, shotName, type Account, type Screen, type Variant 
 import { lookNote, secondLook, type Look } from './secondLook';
 import { GLANCE_DIR, SEED_PASSWORD, ignorePath, settle, shotPath, type Capture, type CaptureContext, type Rect } from './util';
 import { devicesFor, groups, plan } from './variants';
+import { runGroups, schedule, webParallel, type WebGroup } from './webSchedule';
 import { checksPath, consoleNoise, judgePage, measurePage, type Finding } from './webChecks';
 
 export type WebDevice = { id: string; phone: boolean; width: number; height: number; touch: boolean };
@@ -263,41 +267,56 @@ async function warmUp(ctx: CaptureContext, screens: Screen[]) {
   }
 }
 
+/** One group's captures in a context of its own, closed whatever happens; answers the keys that never settled. */
+async function captureGroup(browser: Browser, ctx: CaptureContext, { device: id, variant: v, account, screens }: WebGroup): Promise<string[]> {
+  const device = WEB_DEVICES.find((d) => d.id === id)!;
+  const unsettled: string[] = [];
+  const context = await newContext(browser, device, v);
+  try {
+    const page = await context.newPage();
+    if (account) await signIn(page, ctx, v, account);
+    for (const screen of screens) {
+      const name = shotName(screen, v);
+      const key = `web/${device.id}/${name}`;
+      const look = await shoot(page, ctx, screen, v, device, key);
+      const file = shotPath(screen.film ? join(ctx.runDir, GLANCE_DIR) : ctx.runDir, 'web', device.id, name);
+      writeFileSync(file, look.png);
+      if (look.ignore.length) writeFileSync(ignorePath(file), JSON.stringify(look.ignore));
+      if (look.findings.length) writeFileSync(checksPath(file), JSON.stringify(look.findings, null, 2));
+      if (!look.settled) unsettled.push(key);
+      if (look.retaken) ctx.retaken.push(key);
+      const checks = look.findings.length ? `  (${look.findings.map((f) => f.check).join(', ')})` : '';
+      ctx.log(`  ${key}${lookNote(look)}${checks}`);
+    }
+  } finally {
+    await context.close().catch(() => {});
+  }
+  return unsettled;
+}
+
 export const captureWeb: Capture = async (ctx) => {
   const browser = await chromium.launch();
-  const unsettled: string[] = [];
   const set = ctx.set ?? 'release';
   try {
     await warmUp(ctx, screensFor('web', ctx.only, set === 'extended'));
-    for (const id of devicesFor('web', set, ctx.devices)) {
-      const device = WEB_DEVICES.find((d) => d.id === id)!;
-      // By variant and account (variants.ts): one context per account, so a signed-out screen never sees
-      // someone's session. The film's stills are light zh-TW only (their art is the same in both schemes and languages).
-      for (const { variant: v, account, screens } of groups(plan('web', id, set, ctx.only))) {
-        const context = await newContext(browser, device, v);
-        const page = await context.newPage();
-        try {
-          if (account) await signIn(page, ctx, v, account);
-          for (const screen of screens) {
-            const name = shotName(screen, v);
-            const key = `web/${device.id}/${name}`;
-            const look = await shoot(page, ctx, screen, v, device, key);
-            const file = shotPath(screen.film ? join(ctx.runDir, GLANCE_DIR) : ctx.runDir, 'web', device.id, name);
-            writeFileSync(file, look.png);
-            if (look.ignore.length) writeFileSync(ignorePath(file), JSON.stringify(look.ignore));
-            if (look.findings.length) writeFileSync(checksPath(file), JSON.stringify(look.findings, null, 2));
-            if (!look.settled) unsettled.push(key);
-            if (look.retaken) ctx.retaken.push(key);
-            const checks = look.findings.length ? `  (${look.findings.map((f) => f.check).join(', ')})` : '';
-            ctx.log(`  ${key}${lookNote(look)}${checks}`);
-          }
-        } finally {
-          await context.close();
-        }
-      }
-    }
+    // By device, variant and account (variants.ts): one context per account, so a signed-out screen never sees
+    // someone's session. The film's stills are light zh-TW only (their art is the same in both schemes and languages).
+    const planned: WebGroup[] = devicesFor('web', set, ctx.devices).flatMap((device) =>
+      groups(plan('web', device, set, ctx.only)).map((g) => ({ device, variant: g.variant, account: g.account, screens: g.screens })),
+    );
+    const { first, rest } = schedule(planned);
+    const limit = webParallel();
+    const options = {
+      run: (g: WebGroup) => captureGroup(browser, ctx, g),
+      keysOf: (g: WebGroup) => g.screens.map((s) => `web/${g.device}/${shotName(s, g.variant)}`),
+      log: ctx.log,
+    };
+    if (limit > 1 && rest.length) ctx.log(`  ${first.reduce((n, g) => n + g.screens.length, 0)} first visits one by one, then ${rest.reduce((n, g) => n + g.screens.length, 0)} more ${limit} at a time`);
+    // The first visits, which write to the stack, one by one in the old order; then the rest side by side (webSchedule.ts).
+    const unsettled = await runGroups(first, { ...options, limit: 1 });
+    unsettled.push(...(await runGroups(rest, { ...options, limit })));
+    return unsettled;
   } finally {
     await browser.close();
   }
-  return unsettled;
 };
