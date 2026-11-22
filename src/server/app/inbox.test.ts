@@ -199,9 +199,11 @@ describe('what the inbox reads', () => {
     connect();
     const ids: string[] = [];
     for (const text of ['one', 'two', 'three']) ids.push((await sendMessageIn(ctx, 'alice', { to: 'bob', text })).id);
-    const first = await listThreadIn(ctx, 'bob', PAIR, { limit: 2 });
+    const first = await listThreadIn(ctx, 'bob', PAIR, { limit: 2, changes: '1' });
     expect(first.messages.map((m) => m.text)).toEqual(['three', 'two']);
     expect(first.updatedCursor).toBeTruthy();
+    // Not asked: none — the window's body (and so its ETag) is the same while nothing changed.
+    expect((await listThreadIn(ctx, 'bob', PAIR, { limit: 2 })).updatedCursor).toBeUndefined();
 
     // Nothing since: nothing, and a cursor to ask from next.
     const none = await listThreadIn(ctx, 'bob', PAIR, { limit: 100, after: first.newerCursor, updatedAfter: first.updatedCursor });

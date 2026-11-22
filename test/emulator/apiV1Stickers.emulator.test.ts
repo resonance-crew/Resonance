@@ -188,7 +188,8 @@ describe('a sticker', () => {
     await unsendMessage(db, 'alice', PAIR, sticker.id);
 
     const m = (await message(sticker.id))!;
-    expect(m).toEqual({ senderId: 'alice', sentAt: expect.any(Timestamp), unsentAt: expect.any(Timestamp) });
+    // Its sender and times only (editedAt: when it changed, what an open thread asks by).
+    expect(m).toEqual({ senderId: 'alice', sentAt: expect.any(Timestamp), unsentAt: expect.any(Timestamp), editedAt: expect.any(Timestamp) });
     expect((await message(reply.id))!.replyTo).toEqual({ id: sticker.id, senderId: 'alice', unsent: true });
     expect((await convo()).lastMessage).toEqual({ senderId: 'alice', sentAt: expect.any(Timestamp), unsent: true });
     expect((await db.doc(`unsentMessages/${PAIR}_${sticker.id}`).get()).data()).toEqual({

@@ -104,9 +104,9 @@ describe('read-count ratchets', () => {
 
   it('an open thread: the window once, then only what came and what changed', async () => {
     const { fake, ctx, pair } = seeded();
-    let page = await listThreadIn(ctx, ME, pair, { limit: 50 });
+    let page = await listThreadIn(ctx, ME, pair, { limit: 50, changes: '1' });
     const window = await cost(fake, async () => {
-      page = await listThreadIn(ctx, ME, pair, { limit: 50 });
+      page = await listThreadIn(ctx, ME, pair, { limit: 50, changes: '1' });
     });
     expect(window).toBeLessThanOrEqual(MAX.threadWindow);
     expect(page.updatedCursor).toBeTruthy();

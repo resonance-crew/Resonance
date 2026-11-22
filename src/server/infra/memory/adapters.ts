@@ -100,7 +100,7 @@ export function memoryRealtime(): MemoryRealtime {
     touches,
     touch: async (uid, topics) => void touches.push({ uid, topics: [...topics] }),
     async read(uid) {
-      return this.signals(uid);
+      return touches.some((t) => t.uid === uid) ? this.signals(uid) : null;
     },
     async touchAndRead(uid, topics) {
       touches.push({ uid, topics: [...topics] });

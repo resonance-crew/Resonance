@@ -405,7 +405,7 @@ const newestFirst = (a: ThreadMessageBody, b: ThreadMessageBody) =>
  * reaction, an unsend, a preview, 停止分享), on the safety pulls, and at once
  * after this browser sent one ({@link pokeSignal}).
  *
- * The first read is the window (`limit=50`). Every pull after it asks only
+ * The first read is the window (`limit=50&changes=1`). Every pull after it asks only
  * what happened since (`after=` the newest held, `updatedAfter=` the last
  * answer's `updatedCursor`): the messages that came, and the ones that
  * changed — so a reaction costs the server a read or two, not fifty. What
@@ -451,7 +451,7 @@ export function followThread(
   };
 
   const whole = async (): Promise<ThreadMessageBody[]> => {
-    const page = await callApi<MessagePageBody>(messagesPath(pairId, { limit: String(max) }));
+    const page = await callApi<MessagePageBody>(messagesPath(pairId, { limit: String(max), changes: '1' }));
     let messages = page.messages;
     const had = new Set(held.map((m) => m.id));
     if (newer && had.size && messages.length >= max && !messages.some((m) => had.has(m.id))) {

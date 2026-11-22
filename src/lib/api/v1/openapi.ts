@@ -642,12 +642,28 @@ export function buildOpenApi(): Json {
           '`signals/{uid}` `threads.{pair}` moves: a reaction, an unsend or a link preview changes it too). `before`: the ' +
           'page older than a message (`olderCursor`, or any message\'s `cursor`). `after`: the messages sent right after one ' +
           '(`newerCursor`), oldest of them first in time but answered newest first; `hasNewer` says the page was full. ' +
+          'An open thread asks the window once with `changes=1`, then `after` its newest and `updatedAfter` its last ' +
+          'answer\'s `updatedCursor`: what came and what changed (a reaction, an unsend, 停止分享), not the window again. ' +
           'Ordered by send time to the microsecond, then id: two messages sent in one millisecond are never skipped. `404` ' +
           'for anyone but its two participants, whether the conversation exists or not.',
         parameters: [
           conversationParam,
           { name: 'before', in: 'query', required: false, description: 'A cursor: the page older than it', schema: { type: 'string', maxLength: 512 } },
           { name: 'after', in: 'query', required: false, description: 'A cursor: what came after it (not with `before`)', schema: { type: 'string', maxLength: 512 } },
+          {
+            name: 'updatedAfter',
+            in: 'query',
+            required: false,
+            description: 'An answer\'s `updatedCursor`: also answer `updated`, the messages changed since it, of any age (not with `before`)',
+            schema: { type: 'string', maxLength: 512 },
+          },
+          {
+            name: 'changes',
+            in: 'query',
+            required: false,
+            description: '`1`: answer an `updatedCursor` (implied by `updatedAfter`); an answer carrying one is never a 304',
+            schema: { type: 'string', enum: ['0', '1'] },
+          },
           { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: THREAD_PAGE_MAX, default: THREAD_PAGE } },
         ],
       }),

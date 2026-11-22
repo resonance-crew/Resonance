@@ -108,6 +108,8 @@ export interface MessagesQueryInput {
   after?: string | null;
   /** An answer's `updatedCursor`: say what changed since it, too. */
   updatedAfter?: string | null;
+  /** `'1'`: answer an `updatedCursor` (implied by `updatedAfter`). */
+  changes?: string | null;
   limit: number;
 }
 
@@ -128,8 +130,9 @@ function changesSince(cursor: string): Instant {
  * participant; 404 for anyone else. Pages are `(sentAt, id)` at the
  * microsecond, so two messages sent in one millisecond are never skipped.
  *
- * With `updatedAfter` (an earlier answer's `updatedCursor`), also the
- * messages changed since (`updated`, by their `editedAt`): an open thread
+ * With `changes=1` the answer carries an `updatedCursor`; with
+ * `updatedAfter` (an earlier answer's), also the messages changed since
+ * (`updated`, by their `editedAt`): an open thread
  * then asks `after` its newest and `updatedAfter` its last answer — a read
  * per new or changed message, not the newest fifty again. The changes are
  * read after the page, so where they overlap they are the newer word, and
@@ -152,7 +155,8 @@ export async function listThreadIn(ctx: ServerCtx, uid: string, pair: string, q:
     next: page.next,
     ...(q.after ? { after: q.after } : {}),
     ...(changed ? { updated: changed.messages } : {}),
-    ...(mode === 'before' ? {} : { updatedCursor: mark ? changesCursor(mark) : null }),
+    // Only when asked: it is the read's own time, so a body carrying it never repeats (no 304 for it).
+    ...(mode !== 'before' && (since !== null || q.changes === '1') ? { updatedCursor: mark ? changesCursor(mark) : null } : {}),
   });
 }
 

@@ -170,7 +170,8 @@ describe('unsendMessage', () => {
     expect(push).toEqual({ conversationId: PAIR, messageId: id, from: 'alice', to: 'bob' });
 
     const now = (await message(id))!;
-    expect(Object.keys(now).sort()).toEqual(['senderId', 'sentAt', 'unsentAt']);
+    // Its sender and times only (editedAt: when it changed, what an open thread asks by).
+    expect(Object.keys(now).sort()).toEqual(['editedAt', 'senderId', 'sentAt', 'unsentAt']);
     expect(now.senderId).toBe('alice');
     expect((now.sentAt as Timestamp).isEqual(sentAt as Timestamp)).toBe(true);
     expect(now.unsentAt).toBeInstanceOf(Timestamp);
