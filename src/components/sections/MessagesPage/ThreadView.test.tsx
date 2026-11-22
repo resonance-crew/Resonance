@@ -48,7 +48,7 @@ const server = vi.hoisted(() => ({
   }),
 }));
 // The signal channel: nothing listens to Firestore here (watchers are kept, pokes do nothing).
-vi.mock('@/lib/db/firestore/client/signals', () => ({ watchSignal: () => () => {}, pokeSignal: () => {} }));
+vi.mock('@/lib/db/firestore/client/signals', () => ({ watchSignal: () => () => {}, pokeSignal: () => {}, pokeOwn: () => {} }));
 vi.mock('@/lib/db/firestore/client/messages', () => ({
   MESSAGE_MAX_LENGTH: 2000,
   conversationId: (a: string, b: string) => [a, b].sort().join('_'),

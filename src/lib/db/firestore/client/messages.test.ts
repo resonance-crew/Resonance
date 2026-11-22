@@ -57,6 +57,7 @@ vi.mock('./signals', () => ({
     return () => signals.watchers.delete(`${uid}|${topic}`);
   },
   pokeSignal: (topic: string) => signals.poked.push(topic),
+  pokeOwn: (topics: string[]) => signals.poked.push(...topics),
 }));
 
 import { getDoc, getDocs, writeBatch } from 'firebase/firestore/lite';
@@ -74,6 +75,7 @@ import {
   sendMessage,
   unsendMessage,
   uploadChatImage,
+  THREAD_FULL_READ_MS,
   type ThreadWindow,
 } from './messages';
 
@@ -254,12 +256,12 @@ describe('the thread and the list, through /api/v1', () => {
   });
 
   it("reads a thread's newest messages at the times they were sent, each with its opaque cursor, never through Firestore", async () => {
-    pages['limit=50'] = page([
+    pages['limit=50&changes=1'] = page([
       { id: 'm2', senderId: 'aaa', text: 'and you?', sentAt: '2026-09-01T08:05:00.123456Z' },
       { id: 'm1', senderId: 'bbb', text: 'hello', sentAt: '2026-09-01T08:00:00.000000Z', cardRef: 'walk' },
     ]);
     const { heard } = await follow();
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/conversations/aaa_bbb/messages?limit=50');
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/conversations/aaa_bbb/messages?limit=50&changes=1');
     const window = heard.mock.calls[0][0] as ThreadWindow;
     expect(window).not.toHaveProperty('fromCache');
     const messages = heardMessages(heard);
@@ -273,26 +275,84 @@ describe('the thread and the list, through /api/v1', () => {
   });
 
   it("reads the newest window again when the conversation's signal moves, and catches up with after= past a full window", async () => {
-    pages['limit=2'] = page([{ id: 'm2' }, { id: 'm1' }]);
+    pages['limit=2&changes=1'] = page([{ id: 'm2' }, { id: 'm1' }]);
     const { heard, stop } = await follow(2);
     expect([...signals.watchers.keys()]).toEqual(['bbb|thread:aaa_bbb']);
 
     // Five came meanwhile: the newest two no longer meet what was held, so the ones between are read after m2.
-    pages['limit=2'] = page([{ id: 'm7' }, { id: 'm6' }]);
+    pages['limit=2&changes=1'] = page([{ id: 'm7' }, { id: 'm6' }]);
     pages['after=c1.m2&limit=100'] = page([{ id: 'm5' }, { id: 'm4' }, { id: 'm3' }]);
     signals.fire('bbb|thread:aaa_bbb');
     await vi.waitFor(() => expect(heard).toHaveBeenCalledTimes(2));
     expect(heardMessages(heard, 1).map((m) => m.id)).toEqual(['m7', 'm6', 'm5', 'm4', 'm3']);
 
     // One more: the window meets what was held, no catch-up.
-    pages['limit=2'] = page([{ id: 'm8' }, { id: 'm7' }]);
+    pages['limit=2&changes=1'] = page([{ id: 'm8' }, { id: 'm7' }]);
     fetchMock.mockClear();
     signals.fire('bbb|thread:aaa_bbb');
     await vi.waitFor(() => expect(heard).toHaveBeenCalledTimes(3));
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/conversations/aaa_bbb/messages?limit=2']);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/conversations/aaa_bbb/messages?limit=2&changes=1']);
 
     stop();
     expect(signals.watchers.size).toBe(0);
+  });
+
+  it('after the first window, pulls only what came and what changed (after= and updatedAfter=), the window as a whole read would give it', async () => {
+    pages['limit=50&changes=1'] = page([{ id: 'm2', text: 'two', sentAt: '2026-09-01T08:02:00.000000Z' }, { id: 'm1', text: 'one', sentAt: '2026-09-01T08:01:00.000000Z' }], {
+      updatedCursor: 'u.1',
+    });
+    const { heard } = await follow();
+
+    // A reaction to m1 and a new message m3: one request, nothing of the window read again.
+    pages['after=c1.m2&updatedAfter=u.1&limit=100'] = page([{ id: 'm3', text: 'three', sentAt: '2026-09-01T08:03:00.000000Z' }], {
+      updated: [{ id: 'm1', cursor: 'c1.m1', senderId: 'aaa', text: 'one', sentAt: '2026-09-01T08:01:00.000000Z', reactions: { bbb: 'heart' } }],
+      updatedCursor: 'u.2',
+    });
+    fetchMock.mockClear();
+    signals.fire('bbb|thread:aaa_bbb');
+    await vi.waitFor(() => expect(heard).toHaveBeenCalledTimes(2));
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/conversations/aaa_bbb/messages?after=c1.m2&updatedAfter=u.1&limit=100']);
+    const second = heardMessages(heard, 1);
+    expect(second.map((m) => m.id)).toEqual(['m3', 'm2', 'm1']);
+    expect(second[2].reactions).toEqual({ bbb: 'heart' });
+
+    // An unsend of m2: the next pull starts where the last answer ended, from the newest held.
+    pages['after=c1.m3&updatedAfter=u.2&limit=100'] = page([], {
+      newerCursor: 'c1.m3',
+      updated: [{ id: 'm2', cursor: 'c1.m2', senderId: 'aaa', text: '', sentAt: '2026-09-01T08:02:00.000000Z', unsentAt: '2026-09-01T08:04:00.000000Z' }],
+      updatedCursor: 'u.3',
+    });
+    fetchMock.mockClear();
+    signals.fire('bbb|thread:aaa_bbb');
+    await vi.waitFor(() => expect(heard).toHaveBeenCalledTimes(3));
+    expect(fetchMock.mock.calls).toHaveLength(1);
+    const third = heardMessages(heard, 2);
+    expect(third.map((m) => m.id)).toEqual(['m3', 'm2', 'm1']);
+    expect(third[1].unsentAt).toBeInstanceOf(Date);
+    expect(third[2].reactions).toEqual({ bbb: 'heart' });
+
+    // An answer that can't vouch for itself (no updatedCursor: an older server) reads the whole window again.
+    pages['after=c1.m3&updatedAfter=u.3&limit=100'] = page([], { newerCursor: 'c1.m3' });
+    pages['limit=50&changes=1'] = page([{ id: 'm3' }, { id: 'm2' }, { id: 'm1' }], { updatedCursor: 'u.4' });
+    fetchMock.mockClear();
+    signals.fire('bbb|thread:aaa_bbb');
+    await vi.waitFor(() => expect(heard).toHaveBeenCalledTimes(4));
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/v1/conversations/aaa_bbb/messages?after=c1.m3&updatedAfter=u.3&limit=100',
+      '/api/v1/conversations/aaa_bbb/messages?limit=50&changes=1',
+    ]);
+  });
+
+  it('reads the whole window again after THREAD_FULL_READ_MS, whatever the incremental answers say', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    pages['limit=50&changes=1'] = page([{ id: 'm1' }], { updatedCursor: 'u.1' });
+    const { heard } = await follow();
+    now.mockReturnValue(1_000_000 + THREAD_FULL_READ_MS);
+    fetchMock.mockClear();
+    signals.fire('bbb|thread:aaa_bbb');
+    await vi.waitFor(() => expect(heard).toHaveBeenCalledTimes(2));
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/conversations/aaa_bbb/messages?limit=50&changes=1']);
+    now.mockRestore();
   });
 
   it('says a refusal (404: no such conversation for this viewer) as gone, and stops reading once stopped', async () => {
@@ -305,7 +365,7 @@ describe('the thread and the list, through /api/v1', () => {
   });
 
   it('carries a reply quote and a link preview, and drops a preview that is not safe to show', async () => {
-    pages['limit=50'] = page([
+    pages['limit=50&changes=1'] = page([
       { id: 'm3', text: 'bad', preview: { url: 'javascript:alert(1)', title: 'x' } },
       { id: 'm2', text: 'see https://example.com', preview: { url: 'https://example.com/', title: 'Example', image: 'https://evil.test/p.png' } },
       {
@@ -325,7 +385,7 @@ describe('the thread and the list, through /api/v1', () => {
   });
 
   it("reads a note as a note, and a kind it doesn't know as a plain message", async () => {
-    pages['limit=50'] = page([
+    pages['limit=50&changes=1'] = page([
       { id: 'later', text: 'hm', kind: 'sticker' },
       { id: 'note-1', text: 'Your walk stayed with me.', cardRef: 'walk', kind: 'note' },
     ]);
@@ -337,7 +397,7 @@ describe('the thread and the list, through /api/v1', () => {
   });
 
   it('reads a picture with its size, a sticker, an album picture, and anything written oddly as none', async () => {
-    pages['limit=50'] = page([
+    pages['limit=50&changes=1'] = page([
       { id: 'odd', text: '?', sticker: { pack: 'Twine!', id: 7 }, album: { id: 'a', index: 0, count: 2 } },
       { id: 'a2', image: { id: 'p2', width: 0, height: 0 }, album: { id: 'alb', index: 5, count: 2 } },
       { id: 'a1', text: 'two', image: { id: 'p1', width: 800, height: 1200 }, album: { id: 'alb', index: 0, count: 2 } },
@@ -356,7 +416,7 @@ describe('the thread and the list, through /api/v1', () => {
   });
 
   it('reads reactions it knows, and an unsent message as nothing but its sender and time', async () => {
-    pages['limit=50'] = page([
+    pages['limit=50&changes=1'] = page([
       { id: 'r1', senderId: 'bbb', text: 'what?', replyTo: { id: 'u1', senderId: 'aaa', unsent: true, text: '' } },
       { id: 'u1', text: '', unsentAt: '2026-09-01T08:05:00.000000Z' },
       { id: 'm1', text: 'hi', reactions: { bbb: 'heart', aaa: 'angry', ddd: 'thumbs' } },

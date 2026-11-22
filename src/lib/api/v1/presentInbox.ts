@@ -102,15 +102,26 @@ export function presentMessage(m: StoredMessage): ThreadMessageBody | null {
 /** A page of messages, newest first, with where to go on from it. */
 export function presentMessagePage(
   messages: StoredMessage[],
-  page: { mode: 'newest' | 'before' | 'after'; next: string | null; after?: string },
+  page: {
+    mode: 'newest' | 'before' | 'after';
+    next: string | null;
+    after?: string;
+    /** Asked with `updatedAfter`: what changed since. */
+    updated?: StoredMessage[];
+    /** Where the next `updatedAfter` starts (null: can't say); absent on a `before` page. */
+    updatedCursor?: string | null;
+  },
 ): MessagePageBody {
-  const shown = messages.map(presentMessage).filter((m): m is ThreadMessageBody => m !== null);
+  const show = (list: StoredMessage[]) => list.map(presentMessage).filter((m): m is ThreadMessageBody => m !== null);
+  const shown = show(messages);
   const newest = shown[0]?.cursor ?? (page.mode === 'after' ? (page.after ?? null) : null);
   return {
     messages: shown,
     olderCursor: page.mode === 'after' ? null : page.next,
     newerCursor: page.mode === 'before' ? (shown[0]?.cursor ?? null) : newest,
     hasNewer: page.mode === 'after' && page.next !== null,
+    ...(page.updated ? { updated: show(page.updated) } : {}),
+    ...(page.updatedCursor !== undefined ? { updatedCursor: page.updatedCursor } : {}),
   };
 }
 

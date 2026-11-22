@@ -10,6 +10,7 @@ describeInboxContract('memory', () => {
   const ctx = memoryCtx();
   return {
     data: ctx.data,
+    uow: ctx.uow,
     uid: (n) => n,
     async seedConversation(pair, c) {
       ctx.state.put('conversations', pair, { createdAt: c.updatedAt, lastMessage: null, unread: {}, ...c });

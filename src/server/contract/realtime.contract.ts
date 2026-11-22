@@ -43,6 +43,22 @@ export function describeRealtimeContract(name: string, make: () => RealtimeHarne
       expect((await h.read(carol))?.bell).toBe(8);
     });
 
+    it('reads the document as it stands, and touchAndRead answers exactly what its own touch left — beside other touches', async () => {
+      const h = await make();
+      const fay = h.id('fay');
+      const pair = `${fay}_${h.id('zed')}`;
+      if (!h.publisher.read || !h.publisher.touchAndRead) return;
+      expect(await h.publisher.read(fay)).toBeNull();
+      await h.publisher.touch(fay, ['inbox']);
+      expect(await h.publisher.read(fay)).toMatchObject({ inbox: 1, bell: 0, threads: {} });
+      const left = await h.publisher.touchAndRead(fay, ['inbox', { thread: pair }]);
+      expect(left).toMatchObject({ inbox: 2, threads: { [pair]: 1 } });
+      // Several at once: each answer is a different count, and none is lost.
+      const answers = await Promise.all(Array.from({ length: 4 }, () => h.publisher.touchAndRead!(fay, ['inbox'])));
+      expect(answers.map((d) => d!.inbox).sort()).toEqual([3, 4, 5, 6]);
+      expect(await h.publisher.read(fay)).toMatchObject({ inbox: 6, threads: { [pair]: 1 } });
+    });
+
     it("touches only the person named: no one else's document appears", async () => {
       const h = await make();
       await h.publisher.touch(h.id('dan'), ['map', 'drafts']);

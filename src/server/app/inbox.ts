@@ -10,10 +10,11 @@ import {
 } from '@/lib/api/v1/schemas';
 import type { AuthorBody } from '@/lib/api/v1/schemas';
 import type { ServerCtx } from '@/server/ctx';
+import { counterOf, type RealtimeTopic } from '@/server/ports/realtime';
 import { otherInPair } from '@/server/domain/conversations';
 import { bellChanged, conversationRead, type Touch } from '@/server/domain/realtimeInbox';
 import type { ConversationRow } from '@/server/ports/repos/conversations';
-import { isInstant, toInstant, type Instant } from '@/server/ports/time';
+import { decodeCursor, encodeCursor, isInstant, toInstant, type Instant } from '@/server/ports/time';
 import { AUTHOR_FIELDS } from './viewer';
 
 // Phase 2 inbox (2a-inbox): the reads the clients' Firestore listeners made
@@ -34,6 +35,35 @@ export async function signal(ctx: ServerCtx, touches: Touch[]): Promise<void> {
     () => Promise.all(touches.map((t) => ctx.realtime.touch(t.uid, t.topics).catch((e: unknown) => ctx.log.warn('[signals] touch', t.uid, e)))),
     'signals',
   );
+}
+
+/** The writer's own counters after their write, by the clients' topic names (`inbox`, `thread:{pair}`). */
+export type OwnSignals = Record<string, number>;
+
+/** The response header that carries {@link OwnSignals} (JSON) to the writer's own client. */
+export const OWN_SIGNALS_HEADER = 'X-Resonance-Signals';
+
+const topicName = (t: RealtimeTopic) => (typeof t === 'string' ? t : `thread:${t.thread}`);
+
+/**
+ * {@link signal}, except that the writer's own touch is made now, before the
+ * response, and the counters it left are handed to `own` — so the writer's
+ * client, which pulls its lists at once after its write, can take that
+ * counter as heard and not pull again when the listener brings the same
+ * touch (client/signals `pokeOwn`). Everyone else's touches still run after
+ * the response. When the store can't answer (no touchAndRead, or the touch
+ * failed) the writer's touch joins the others and `own` is never called.
+ */
+export async function signalWithOwn(ctx: ServerCtx, writer: string, touches: Touch[], own?: (signals: OwnSignals) => void): Promise<void> {
+  const mine = own && ctx.realtime.touchAndRead ? touches.filter((t) => t.uid === writer) : [];
+  const rest = touches.filter((t) => !mine.includes(t));
+  if (mine.length) {
+    const topics = mine.flatMap((t) => t.topics);
+    const doc = await ctx.realtime.touchAndRead!(writer, topics).catch((e: unknown) => (ctx.log.warn('[signals] touch', writer, e), null));
+    if (doc) own!(Object.fromEntries(topics.map((t) => [topicName(t), counterOf(doc, t)])));
+    else rest.push(...mine);
+  }
+  await signal(ctx, rest);
 }
 
 const noConversation = () => new ApiFailure('not_found', 'No such conversation.');
@@ -76,7 +106,22 @@ export async function getConversationIn(ctx: ServerCtx, uid: string, pair: strin
 export interface MessagesQueryInput {
   before?: string | null;
   after?: string | null;
+  /** An answer's `updatedCursor`: say what changed since it, too. */
+  updatedAfter?: string | null;
+  /** `'1'`: answer an `updatedCursor` (implied by `updatedAfter`). */
+  changes?: string | null;
   limit: number;
+}
+
+/** An `updatedCursor`: where a thread's changes were read up to (the store's time), opaque to clients. */
+const changesCursor = (mark: Instant) => encodeCursor({ t: mark, id: 'changes' });
+
+function changesSince(cursor: string): Instant {
+  const at = decodeCursor(cursor);
+  if (!at || at.id !== 'changes') {
+    throw new ApiFailure('invalid_request', 'The request does not match the contract.', [{ path: 'updatedAfter', message: 'Not a valid cursor.' }]);
+  }
+  return at.t;
 }
 
 /**
@@ -84,9 +129,18 @@ export interface MessagesQueryInput {
  * `limit` before `before`, or the `limit` right after `after` — for a
  * participant; 404 for anyone else. Pages are `(sentAt, id)` at the
  * microsecond, so two messages sent in one millisecond are never skipped.
+ *
+ * With `changes=1` the answer carries an `updatedCursor`; with
+ * `updatedAfter` (an earlier answer's), also the messages changed since
+ * (`updated`, by their `editedAt`): an open thread
+ * then asks `after` its newest and `updatedAfter` its last answer — a read
+ * per new or changed message, not the newest fifty again. The changes are
+ * read after the page, so where they overlap they are the newer word, and
+ * their read's time is the next cursor.
  */
 export async function listThreadIn(ctx: ServerCtx, uid: string, pair: string, q: MessagesQueryInput): Promise<MessagePageBody> {
   otherOf(uid, pair);
+  const since = q.updatedAfter ? changesSince(q.updatedAfter) : null;
   const repo = ctx.data.conversations;
   // Read beside the check, shown only after it.
   const pageRead = q.after ? repo.listMessagesAfter(pair, q.limit, q.after) : repo.listMessages(pair, q.limit, q.before ?? undefined);
@@ -94,7 +148,16 @@ export async function listThreadIn(ctx: ServerCtx, uid: string, pair: string, q:
   await ownRow(ctx, uid, pair);
   const page = await pageRead;
   const mode = q.after ? 'after' : q.before ? 'before' : 'newest';
-  return presentMessagePage(page.messages, { mode, next: page.next, ...(q.after ? { after: q.after } : {}) });
+  const changed = since !== null ? await repo.listMessagesChangedAfter(pair, q.limit, since) : null;
+  const mark = changed ? changed.mark : (page.mark ?? null);
+  return presentMessagePage(page.messages, {
+    mode,
+    next: page.next,
+    ...(q.after ? { after: q.after } : {}),
+    ...(changed ? { updated: changed.messages } : {}),
+    // Only when asked: it is the read's own time, so a body carrying it never repeats (no 304 for it).
+    ...(mode !== 'before' && (since !== null || q.changes === '1') ? { updatedCursor: mark ? changesCursor(mark) : null } : {}),
+  });
 }
 
 /**
@@ -102,12 +165,12 @@ export async function listThreadIn(ctx: ServerCtx, uid: string, pair: string, q:
  * rules let a participant make. 404 for anyone else. Nothing written (and no
  * signal) when it is 0 already.
  */
-export async function markConversationReadIn(ctx: ServerCtx, uid: string, pair: string): Promise<void> {
+export async function markConversationReadIn(ctx: ServerCtx, uid: string, pair: string, own?: (signals: OwnSignals) => void): Promise<void> {
   otherOf(uid, pair);
   const row = await ownRow(ctx, uid, pair);
   if ((row.unread[uid] ?? 0) === 0) return;
   if ((await ctx.data.conversations.markRead(pair, uid)) === 'gone') throw noConversation();
-  await signal(ctx, conversationRead(pair, uid));
+  await signalWithOwn(ctx, uid, conversationRead(pair, uid), own);
 }
 
 /** A time sent as `before`: a row's own `createdAt` as it is, any other through the end of its millisecond. */

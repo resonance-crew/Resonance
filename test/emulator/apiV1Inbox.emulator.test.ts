@@ -23,6 +23,16 @@ const bellRoute = await import('@/app/api/v1/me/bell/route');
 const bellReadRoute = await import('@/app/api/v1/notifications/read/route');
 const { sendMessage, sendNote } = await import('@/lib/api/v1/conversations');
 const { setReaction, unsendMessage } = await import('@/lib/api/v1/messageActions');
+const { firestoreRealtime } = await import('@/server/infra/firestore/realtime');
+const { consoleLogger } = await import('@/server/infra/system/log');
+
+/**
+ * The touch a write's after-response work makes (after() is mocked away in
+ * this suite): the lists answer 304 before reading while the viewer's
+ * counter stands (lib/api/v1/signalTag), so a change only shows once its
+ * touch has landed, as in production.
+ */
+const touched = (uid: string, topics: ('inbox' | 'bell')[]) => firestoreRealtime(db, consoleLogger).touch(uid, topics);
 
 const PROJECT = 'demo-resonance-api-inbox';
 const PAIR = 'alice_bob';
@@ -115,6 +125,7 @@ describe('GET /conversations', () => {
     const again = await list('', { 'If-None-Match': etag });
     expect([again.status, await again.text()]).toEqual([304, '']);
     await sendMessage(db, 'alice', { to: 'bob', text: 'two' });
+    await touched('bob', ['inbox']);
     const changed = await list('', { 'If-None-Match': etag });
     expect(changed.status).toBe(200);
   });
@@ -302,6 +313,7 @@ describe('the bell', () => {
     const readAt = (id: string) => db.doc(`notifications/${id}`).get().then((s) => s.get('readAt'));
     expect(await readAt('a')).toBeInstanceOf(Timestamp);
     expect(await readAt('x')).toBeNull();
+    await touched('bob', ['bell']);
     expect((await bell('', { 'If-None-Match': etag })).status).toBe(200);
     expect((await bellRead({ before: new Date(T + 1000).toISOString() })).status).toBe(204);
     expect(await readAt('b')).toBeInstanceOf(Timestamp);

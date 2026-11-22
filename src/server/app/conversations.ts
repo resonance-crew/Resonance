@@ -18,7 +18,7 @@ import {
 } from '@/server/domain/conversations';
 import type { ChatImageRecord, ReplyQuote, StoredMessage, StoredNote } from '@/server/ports/repos/conversations';
 import { messageSent, noteSent, threadChanged, type NoteOutcome } from '@/server/domain/realtimeInbox';
-import { signal } from './inbox';
+import { signal, signalWithOwn, type OwnSignals } from './inbox';
 
 // Notes, messages and conversations as application services: what each
 // answer checks, in which order, and what it writes. Why: the module comment
@@ -278,11 +278,18 @@ export function replyQuote(original: StoredMessage): ReplyQuote {
 }
 
 /** See src/lib/api/v1/conversations.ts `sendMessage`. */
-export async function sendMessageIn(ctx: ServerCtx, uid: string, input: SendMessageInput, spent: Promise<void> = Promise.resolve()): Promise<SentMessage> {
+export async function sendMessageIn(
+  ctx: ServerCtx,
+  uid: string,
+  input: SendMessageInput,
+  spent: Promise<void> = Promise.resolve(),
+  own?: (signals: OwnSignals) => void,
+): Promise<SentMessage> {
   const out = { rang: false };
   const sent = await budgetFirst(spent, () => writeMessage(ctx, uid, input, spent, out));
-  // After the commit: both people's list and thread, and the recipient's bell when its first message rang it.
-  if (!sent.duplicate) await signal(ctx, messageSent(sent.conversationId, uid, input.to, out.rang));
+  // After the commit: both people's list and thread, and the recipient's bell when its first message rang it —
+  // the sender's own touch before the response when `own` asks for its counters (signalWithOwn).
+  if (!sent.duplicate) await signalWithOwn(ctx, uid, messageSent(sent.conversationId, uid, input.to, out.rang), own);
   return sent;
 }
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { memoryCtx, type MemoryCtx } from '@/server/infra/memory/ctx';
 import { deleteConversationIn, sendMessageIn, sendNoteIn } from './conversations';
 import { getConversationIn, listBellIn, listConversationsIn, listThreadIn, markBellReadIn, markConversationReadIn } from './inbox';
@@ -193,5 +193,54 @@ describe('what the inbox reads', () => {
     const [unsent] = (await listThreadIn(ctx, 'bob', PAIR, { limit: 1 })).messages;
     expect(Object.keys(unsent).sort()).toEqual(['cursor', 'id', 'senderId', 'sentAt', 'text', 'unsentAt']);
     expect(unsent.text).toBe('');
+  });
+
+  it('after a page, answers only what came and what changed since it (`after` + `updatedAfter`), of any age', async () => {
+    connect();
+    const ids: string[] = [];
+    for (const text of ['one', 'two', 'three']) ids.push((await sendMessageIn(ctx, 'alice', { to: 'bob', text })).id);
+    const first = await listThreadIn(ctx, 'bob', PAIR, { limit: 2, changes: '1' });
+    expect(first.messages.map((m) => m.text)).toEqual(['three', 'two']);
+    expect(first.updatedCursor).toBeTruthy();
+    // Not asked: none — the window's body (and so its ETag) is the same while nothing changed.
+    expect((await listThreadIn(ctx, 'bob', PAIR, { limit: 2 })).updatedCursor).toBeUndefined();
+
+    // Nothing since: nothing, and a cursor to ask from next.
+    const none = await listThreadIn(ctx, 'bob', PAIR, { limit: 100, after: first.newerCursor, updatedAfter: first.updatedCursor });
+    expect([none.messages, none.updated]).toEqual([[], []]);
+
+    // A reaction to `one` (older than the page), `three` unsent, `four` sent.
+    await setReactionIn(ctx, 'bob', PAIR, ids[0], { reaction: 'heart' });
+    await unsendMessageIn(ctx, 'alice', PAIR, ids[2]);
+    await sendMessageIn(ctx, 'alice', { to: 'bob', text: 'four' });
+    const since = await listThreadIn(ctx, 'bob', PAIR, { limit: 100, after: none.newerCursor, updatedAfter: none.updatedCursor });
+    expect(since.messages.map((m) => m.text)).toEqual(['four']);
+    expect(since.updated!.map((m) => [m.id, m.reactions ?? null, m.unsentAt ? 'unsent' : null])).toEqual([
+      [ids[0], { bob: 'heart' }, null],
+      [ids[2], null, 'unsent'],
+    ]);
+    // The change's time is the server's own business: never in an answer.
+    expect(JSON.stringify(since)).not.toContain('editedAt');
+    const quiet = await listThreadIn(ctx, 'bob', PAIR, { limit: 100, after: since.newerCursor, updatedAfter: since.updatedCursor });
+    expect([quiet.messages, quiet.updated]).toEqual([[], []]);
+
+    // A cursor that isn't one: refused. Not beside `before`.
+    await expect(listThreadIn(ctx, 'bob', PAIR, { limit: 2, updatedAfter: first.newerCursor })).rejects.toMatchObject({ code: 'invalid_request' });
+  });
+
+  it("hands the writer's own counters on, touched before the answer — everyone else's still after it", async () => {
+    connect();
+    const own = vi.fn();
+    await sendMessageIn(ctx, 'alice', { to: 'bob', text: 'hi' }, undefined, own);
+    expect(own).toHaveBeenCalledWith({ inbox: 1, [`thread:${PAIR}`]: 1 });
+    const read = vi.fn();
+    await markConversationReadIn(ctx, 'bob', PAIR, read);
+    expect(read).toHaveBeenCalledWith({ inbox: 2, [`thread:${PAIR}`]: 2 });
+    // Every one touched, as ever: the writer's now (before the response), the others' after.
+    expect(touched()).toEqual([`alice: inbox,thread ${PAIR}`, `bob: inbox,thread ${PAIR},bell`, `bob: inbox,thread ${PAIR}`]);
+    // Nothing unread: nothing touched, nothing handed on.
+    const again = vi.fn();
+    await markConversationReadIn(ctx, 'bob', PAIR, again);
+    expect(again).not.toHaveBeenCalled();
   });
 });

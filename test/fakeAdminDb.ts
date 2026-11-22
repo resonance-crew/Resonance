@@ -12,6 +12,11 @@
 // field — taking `FieldValue.delete()` and `FieldValue.increment(n)`, and `runTransaction` runs its function once with a
 // transaction whose get/getAll/set/update/delete act at once (no isolation: a suite
 // that needs a conflict makes it happen inside a fake it passes in).
+// `billed()` counts documents as Firestore bills reads: one per document a get
+// or getAll asks (there or not), one per document a query answers (at least
+// one for a query that answers none) — what the read-count ratchets
+// (src/server/readCounts.test.ts) hold down. A query's snapshot has a
+// `readTime` (now, as a Timestamp), as Firestore's does.
 // `hold(read)`, if given, is awaited before a read answers (it is logged in
 // `reads` first): a suite can keep one read pending and see which others
 // were asked meanwhile — that two reads run side by side, or one after the
@@ -28,6 +33,8 @@ export interface FakeAdminDb {
   docs: Record<string, Data>;
   reads: string[];
   writes: string[];
+  /** Documents read so far, as Firestore bills them. */
+  billed(): number;
 }
 
 type Op = '==' | '!=' | 'in' | 'array-contains' | '<' | '<=' | '>' | '>=';
@@ -93,6 +100,7 @@ function masked(whole: Data, fields: string[]): Data {
 
 export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOptions = {}): FakeAdminDb {
   const reads: string[] = [];
+  let billed = 0;
   const held = async (read: string) => {
     reads.push(read);
     await options.hold?.(read);
@@ -111,6 +119,7 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
   };
   const docRef = (path: string) => ({
     get: async () => {
+      billed += 1;
       await held(path);
       return snap(path);
     },
@@ -217,7 +226,8 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
         .filter((p) => !boundary || byOrder(keyOf(p), boundary) > 0)
         .slice(0, spec.max)
         .map((p) => snap(p, spec.fields));
-      return { docs: hits, empty: hits.length === 0, size: hits.length };
+      billed += Math.max(1, hits.length);
+      return { docs: hits, empty: hits.length === 0, size: hits.length, readTime: Timestamp.now() };
     },
   });
   type Ref = ReturnType<typeof docRef> & { path?: string };
@@ -229,6 +239,7 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
       const last = args.at(-1) as { fieldMask?: string[]; path?: string } | undefined;
       const read = last && !last.path ? (args.pop() as { fieldMask?: string[] }) : {};
       const refs = args as Ref[];
+      billed += refs.length;
       await Promise.all(refs.map((ref) => held(pathOf(ref))));
       return refs.map((ref) => snap(pathOf(ref), read.fieldMask));
     },
@@ -266,5 +277,5 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
       return b;
     },
   };
-  return { db: db as unknown as Firestore, docs, reads, writes };
+  return { db: db as unknown as Firestore, docs, reads, writes, billed: () => billed };
 }
