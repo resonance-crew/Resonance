@@ -177,7 +177,7 @@ export const SCREENS: Screen[] = [
   { id: 'card-picked-people', route: '/card/rich-story', as: 'alice',
     web: { click: '[data-passage-faces]' },
     app: { ios: ['-visualEnd', 'YES', '-visualTaps', 'picked'], android: ['--es', 'cardEnd', 'picked'] },
-    expect: "Who picked the first sentence of alice's rich story, in a centred dialog (a phone's 400 or the column less 16 a side; tablet, Mac and desktop 480): the title 對這一段有共鳴的人, the sentence once in the story's type at 16, muted, in full, in 「」, then gus and bob, newest first, each a face 36 and a pen name in a banded row — no quote under a name — and the small 關閉 at the foot's end; never a bottom sheet, never a popover" },
+    expect: "Who picked the first sentence of alice's rich story, in a centred dialog (a phone's 400 or the column less 16 a side; tablet, Mac and desktop 480): the title 對這一段有共鳴的人, the sentence once in the story's type at 16, muted, in full, in 「」, at the story's compact leading (1.8), then gus and bob, newest first, each a face 36 and a pen name in a banded row — no quote under a name — and the small 關閉 at the foot's end; the paper's air the apps' (32 above and below, 28 a side, round 29 §S12), the bands still reaching its pen line; never a bottom sheet, never a popover" },
   // Round 27 §V2: the passages' dialog after a press that turns 共振 on, as dora (no tap of hers on the rich story). The
   // web holds it with `?visualTap=` (emulator builds only, nothing written: a real press would turn the stored tap off
   // on the next device), the apps with their launch args.

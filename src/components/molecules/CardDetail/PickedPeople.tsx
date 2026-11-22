@@ -13,6 +13,9 @@ import { TAP_LIST_DIALOG_WIDTH, TAP_LIST_PHONE_QUERY } from './TapFaces';
 import { TapPeople, TapPeopleSkeleton } from './TapPeople';
 import styles from './PickedPeople.module.css';
 
+/** The paper's padding, the apps' `ModalPaper` inset (round 29 §S12): 32 above and below, 28 at each side. */
+export const PICKED_PEOPLE_PADDING = '32px 28px';
+
 export interface PickedPeopleProps {
   cardId: string;
   passage: Pick<TapPickedBody, 'id' | 'text'>;
@@ -38,11 +41,12 @@ export function PickedPeople({ cardId, passage, script, onClose }: PickedPeopleP
       onClose={onClose}
       maxWidth={onPhone ? TAP_LIST_DIALOG_WIDTH.phone : TAP_LIST_DIALOG_WIDTH.wide}
       seed={59}
-      padding="24px 22px 22px"
+      // The apps' shell (§S12; the owner, 2026-11-22: 「留白够不够…把它一致」): 32 above and below, 28 a side.
+      padding={PICKED_PEOPLE_PADDING}
       ariaLabel={t('pickedTitle')}
       closeButton
     >
-      <div data-tap-picked="" id="tap-picked">
+      <div className={styles.picked} data-tap-picked="" id="tap-picked">
         <h3 className={styles.title}>{t('pickedTitle')}</h3>
         <p className={styles.sentence} data-script={script}>
           {t('passageQuote', { text: passage.text })}
