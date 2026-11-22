@@ -29,6 +29,8 @@ struct MascotStage: ViewModifier {
     var footRoom: CGFloat = 0
     /// Something standing in the right margin beside the story (a tablet's contents rail).
     var rail: CGRect?
+    /// Something standing in the left margin beside the story (the author's picked sentences' faces, round 29 §S10).
+    var leftTaken: CGRect?
     @State private var island: MascotIsland?
     /// Where the page's marked views are (they say so themselves).
     @State private var sink = ReadingMarkSink()
@@ -89,13 +91,13 @@ struct MascotStage: ViewModifier {
                 }
                 let made = island
                 if let view = seen.view { made?.view(view) }
-                made?.sceneSource = { [sink, rail] size in ReadingSceneBuilder.scene(sink.all, size: size, rail: rail) }
+                made?.sceneSource = { [sink, rail, leftTaken] size in ReadingSceneBuilder.scene(sink.all, size: size, rail: rail, leftTaken: leftTaken) }
                 sink.onChange = on ? { [weak made] in made?.sceneChanged() } : nil
                 applySettings()
                 made?.sceneChanged()
             }
-            .onChange(of: rail) {
-                island?.sceneSource = { [sink, rail] size in ReadingSceneBuilder.scene(sink.all, size: size, rail: rail) }
+            .onChange(of: [rail, leftTaken]) {
+                island?.sceneSource = { [sink, rail, leftTaken] size in ReadingSceneBuilder.scene(sink.all, size: size, rail: rail, leftTaken: leftTaken) }
                 island?.sceneChanged()
             }
             .onChange(of: colorScheme) { applySettings() }
@@ -630,6 +632,9 @@ struct ReadingScene: Codable, Equatable {
     var cover: SceneRect?
     var paragraphs: [SceneRect]?
     var rail: SceneRect?
+    /// The shared `leftTaken` (round 29 §S10): the faces' left margin, from the window's left edge to the column's,
+    /// the column's height — no puppet's place on the left side. `rail` stays the contents rail alone.
+    var leftTaken: SceneRect?
     var respond: SceneRect?
     var respondCeiling: Double?
     var more: SceneRect?
@@ -639,11 +644,12 @@ struct ReadingScene: Codable, Equatable {
 
 /// The page's marked views (``ReadingMark``, in content points) as a ``ReadingScene``.
 enum ReadingSceneBuilder {
-    static func scene(_ marks: [ReadingMark], size: CGSize, rail: CGRect? = nil) -> ReadingScene {
-        scene(marks, width: size.width, height: size.height, rail: rail)
+    static func scene(_ marks: [ReadingMark], size: CGSize, rail: CGRect? = nil, leftTaken: CGRect? = nil) -> ReadingScene {
+        scene(marks, width: size.width, height: size.height, rail: rail, leftTaken: leftTaken)
     }
 
-    static func scene(_ marks: [ReadingMark], width: CGFloat, height: CGFloat, dx: CGFloat = 0, rail: CGRect? = nil) -> ReadingScene {
+    static func scene(_ marks: [ReadingMark], width: CGFloat, height: CGFloat, dx: CGFloat = 0, rail: CGRect? = nil,
+                      leftTaken: CGRect? = nil) -> ReadingScene {
         let marks = marks.filter { $0.rect.width > 0 && $0.rect.height > 0 }.map { ReadingMark($0.role, $0.rect.offsetBy(dx: dx, dy: 0)) }
         func rects(_ role: ReadingMarkRole) -> [CGRect] { marks.filter { $0.role == role }.map(\.rect) }
 
@@ -672,6 +678,9 @@ enum ReadingSceneBuilder {
             cover: rects(.cover).first.map(SceneRect.init),
             paragraphs: column == nil ? nil : rects(.block).sorted { $0.minY < $1.minY }.map(SceneRect.init),
             rail: rail.map(SceneRect.init),
+            leftTaken: leftTaken.map { taken in
+                SceneRect(column.map { CGRect(x: 0, y: $0.minY, width: max(taken.width, $0.minX), height: $0.height) } ?? taken)
+            },
             respond: respond.map(SceneRect.init),
             respondCeiling: respond == nil ? nil : ceiling.map { Double($0) },
             more: rects(.more).first.map(SceneRect.init),

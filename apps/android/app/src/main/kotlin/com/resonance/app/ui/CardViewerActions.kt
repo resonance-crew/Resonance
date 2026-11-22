@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,6 +32,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -48,6 +48,7 @@ import com.resonance.design.OrganicIcon
 import com.resonance.design.OrganicIndication
 import com.resonance.design.Segment
 import com.resonance.design.SegmentedActionBar
+import com.resonance.design.segmentCentre
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.plainClickable
@@ -57,6 +58,7 @@ import com.resonance.kit.l10n.Strings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
  * The end of someone else's story (round 26 §U1–§U4; the web's ReadAfterArea → CardViewerActions, iOS's twin) — three
@@ -304,15 +306,18 @@ fun CardViewerActions(
         }
         val twoLines = form == EndRowForm.TwoLines
         // The capsule's (first) line: 共振 alone on two lines (the puppets stand on it), else the three.
+        val firstSegments = if (twoLines) listOf(tap) else listOf(tap, noteSegment, replySegment)
         val firstLine: @Composable () -> Unit = {
             SegmentedActionBar(
-                if (twoLines) listOf(tap) else listOf(tap, noteSegment, replySegment),
+                firstSegments,
                 Modifier.width(capsule.dp).onGloballyPositioned(onRow),
                 mascotKey = "respond",
             )
         }
         ReaderEndStack(
             capsuleWidth = capsule.dp,
+            // The faces over 共振 stand centred on its segment (round 29 §S11), on the capsule's first line.
+            facesCentre = segmentCentre(firstSegments, capsule.dp),
             faces = { TapFacesButton(faces, session.uid, author = false, onOpen = { openList = true }, selfOpens = faces.offersPassages && !translated()) },
             firstLine = firstLine,
             // Wide: 收藏 ends the capsule's row at the column's end, its glyph where the byline's ⋯ ends (§S2).
@@ -384,13 +389,6 @@ fun CardViewerActions(
 internal val Row2Height = 48.dp
 
 /**
- * Where the first face's rim stands in from row 2's start: 12 — the web's, whose faces' line (6) and their button (6)
- * both pad it (CardViewerActions.module.css `.faces`, TapFaces.module.css `.faces`). A face has nothing under it now,
- * so the group's start is the face's.
- */
-internal val Row2FacesStart = 12.dp
-
-/**
  * How far in from the tags' row's end (a phone, round 28 §S3) 收藏's glyph stands, in its 48 to the finger flush with
  * that end: the web's — its glyph centred in a 44 button (a finger's pointer) on the row's end — so its 48 box keeps
  * the finger's room and only the glyph moves (centred, it stood 14 in). Wide, it is the byline's ⋯'s: [BylineGlyphEnd].
@@ -402,25 +400,37 @@ internal val BookmarkGlyph = 20.dp
 
 /**
  * The faces' line (§U1.2, round 28 §S4; "row 2" while it stood under the capsule — round 30 §S1 stands it right over
- * it, 0 between): as wide as the capsule ([modifier] gives the width), [Row2Height] tall — [faces] at its start, the
- * first face [Row2FacesStart] in, and nothing at its end (收藏 ends the capsule's row or the tags').
+ * it, 0 between): as wide as the capsule ([modifier] gives the width), [Row2Height] tall — [faces] centred on
+ * [facesCentre] (the 共振 segment's centre from the capsule's start, round 29 §S11: one, two or three faces alike),
+ * never past the line's start, centred in its height; nothing at its end (收藏 ends the capsule's row or the tags').
  */
 @Composable
-internal fun EndRowTwo(modifier: Modifier, faces: @Composable () -> Unit) {
-    Row(modifier.height(Row2Height), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.padding(start = Row2FacesStart)) { faces() }
+internal fun EndRowTwo(modifier: Modifier, facesCentre: Dp, faces: @Composable () -> Unit) {
+    androidx.compose.ui.layout.Layout(
+        content = { Box { faces() } },
+        modifier = modifier.height(Row2Height),
+    ) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val group = measurables[0].measure(loose)
+        val width = constraints.maxWidth
+        val height = constraints.maxHeight.takeIf { it != androidx.compose.ui.unit.Constraints.Infinity } ?: Row2Height.roundToPx()
+        layout(width, height) {
+            val left = (facesCentre.toPx() - group.width / 2f).roundToInt().coerceAtLeast(0)
+            group.place(left, (height - group.height) / 2)
+        }
     }
 }
 
 /**
- * A reader's end, top to bottom (round 30 §S1, §S2): the faces' line ([EndRowTwo], [faces] at its start), 0 between,
- * the capsule's (first) line — with [bookmark] at the column's end when wide ([EndBeside]) — its [secondLine]
- * [EndRowLayout.LINE_GAP] under it when it takes two, and the [note]'s place under them ([NoteInPlace] keeps its own
- * 12 over the field). Heard in that order: the faces, 共振, 寄小紙條, 用卡片回應, 收藏, the field.
+ * A reader's end, top to bottom (round 30 §S1, §S2): the faces' line ([EndRowTwo], [faces] centred on [facesCentre]),
+ * 0 between, the capsule's (first) line — with [bookmark] at the column's end when wide ([EndBeside]) — its
+ * [secondLine] [EndRowLayout.LINE_GAP] under it when it takes two, and the [note]'s place under them ([NoteInPlace]
+ * keeps its own 12 over the field). Heard in that order: the faces, 共振, 寄小紙條, 用卡片回應, 收藏, the field.
  */
 @Composable
 internal fun ReaderEndStack(
-    capsuleWidth: androidx.compose.ui.unit.Dp,
+    capsuleWidth: Dp,
+    facesCentre: Dp,
     faces: @Composable () -> Unit,
     firstLine: @Composable () -> Unit,
     bookmark: (@Composable () -> Unit)?,
@@ -429,7 +439,7 @@ internal fun ReaderEndStack(
 ) {
     Column(Modifier.fillMaxWidth()) {
         // Always there, faces or none, so the capsule never moves as faces come (the reader's own sliding in).
-        EndRowTwo(Modifier.width(capsuleWidth), faces)
+        EndRowTwo(Modifier.width(capsuleWidth), facesCentre, faces)
         if (bookmark != null) EndBeside(main = firstLine, end = bookmark, modifier = Modifier.fillMaxWidth()) else firstLine()
         if (secondLine != null) {
             Spacer(Modifier.height(EndRowLayout.LINE_GAP.dp))

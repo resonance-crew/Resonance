@@ -25,6 +25,8 @@ public struct StoryMarkdownView<Embed: View, LinkCard: View>: View {
     let linkCard: (_ href: String?, _ text: String) -> LinkCard?
     var anchorsHeadings = false
     var headingSpace: String?
+    /// The author's picked sentences (round 29), set only by their own card page.
+    @Environment(\.storyPassages) private var passages
 
     /// `language`: the story's own (`ScriptRule.storyLang`), for VoiceOver.
     public init(blocks: [StoryBlock], typography: StoryTypography, language: String? = nil, onOpenURL: @escaping (URL) -> Void,
@@ -41,8 +43,14 @@ public struct StoryMarkdownView<Embed: View, LinkCard: View>: View {
     public var body: some View {
         BlockStack(blocks: blocks, style: .body(typography, language: language), rhythm: typography.rhythm(), onOpenURL: onOpenURL, embed: embed,
                    linkCard: linkCard, anchors: anchorsHeadings, headingSpace: headingSpace, marks: true)
-            // The story's column, for the paper puppets (its own blocks are marked too).
+            // The story's column, for the paper puppets (its own blocks are marked too), and the edge a picked
+            // sentence's faces stand by in the left margin (round 29 §S10).
+            .coordinateSpace(.named(PassageFaces.columnSpace))
             .readingMark(.column)
+            // Where each picked sentence lies among the story's drawn texts (§P3): found once here, read by each text.
+            .environment(\.storyPassageLeaves, passages.map { plan in
+                PassageLeaves.marks(blocks, sentences: plan.passages.map { ($0.id, $0.text) })
+            } ?? [:])
     }
 
     /// Each heading among the story's own blocks (not inside a quote or a list) carries a
@@ -99,6 +107,8 @@ struct BlockStack<Embed: View, LinkCard: View>: View {
     var headingSpace: String?
     /// The story's own blocks (not a quote's or a list's) say where they are, for the paper puppets.
     var marks = false
+    /// Where these blocks are in the story (``PassageLeaves``' paths): the root's are [].
+    var path: [Int] = []
 
     var body: some View {
         // A standalone link with its page's card is a block (the block gap round it), else the paragraph it is.
@@ -109,7 +119,8 @@ struct BlockStack<Embed: View, LinkCard: View>: View {
         let gaps = ProseMetrics.gaps(blocks, rhythm) { cards[$0] }
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { i, block in
-                let view = BlockView(block: block, style: style, rhythm: rhythm, onOpenURL: onOpenURL, embed: embed, linkCard: linkCard)
+                let view = BlockView(block: block, style: style, rhythm: rhythm, onOpenURL: onOpenURL, embed: embed, linkCard: linkCard,
+                                     path: path + [i])
                     .readingMark(marks ? .block : nil)
                 if anchors, case .heading = block {
                     // The anchor is a child of its own, laid out `margin` above the heading — a scroll
@@ -147,6 +158,9 @@ struct BlockView<Embed: View, LinkCard: View>: View {
     let onOpenURL: (URL) -> Void
     let embed: (String, String) -> Embed?
     let linkCard: (String?, String) -> LinkCard?
+    var path: [Int] = []
+    @Environment(\.storyPassages) private var passages
+    @Environment(\.storyPassageLeaves) private var leaves
 
     /// A picture or a card narrower than the column: centred in it, at the quote's edge inside a quote.
     private var blockAlignment: Alignment { style.inQuote ? .leading : .center }
@@ -182,7 +196,8 @@ struct BlockView<Embed: View, LinkCard: View>: View {
                     .frame(width: StoryTypography.quoteRail)
                     .frame(maxHeight: .infinity)
                     .accessibilityHidden(true)
-                BlockStack(blocks: children, style: style.quoted, rhythm: rhythm, onOpenURL: onOpenURL, embed: embed, linkCard: linkCard)
+                BlockStack(blocks: children, style: style.quoted, rhythm: rhythm, onOpenURL: onOpenURL, embed: embed, linkCard: linkCard,
+                           path: path)
             }
             .fixedSize(horizontal: false, vertical: true)
         case let .list(ordered, start, items):
@@ -190,7 +205,7 @@ struct BlockView<Embed: View, LinkCard: View>: View {
             VStack(alignment: .leading, spacing: style.typography.itemGap * em) {
                 ForEach(Array(items.enumerated()), id: \.offset) { i, item in
                     ListItemView(marker: ordered ? "\(start + i)." : "•", blocks: item, style: style, rhythm: rhythm, onOpenURL: onOpenURL,
-                                 embed: embed, linkCard: linkCard)
+                                 embed: embed, linkCard: linkCard, path: path + [i])
                 }
             }
         case .rule:
@@ -198,12 +213,18 @@ struct BlockView<Embed: View, LinkCard: View>: View {
         case let .code(code):
             CodeBlockView(code: code, typography: style.typography, size: em)
         case let .table(head, rows, alignments):
-            StoryTableView(head: head, rows: rows, alignments: alignments, style: style, onOpenURL: onOpenURL)
+            StoryTableView(head: head, rows: rows, alignments: alignments, style: style, onOpenURL: onOpenURL, path: path)
         }
     }
 
-    private func text(_ runs: [InlineRun], _ s: ProseStyle) -> some View {
-        CSSTextView(s.attributed(runs), font: s.font, lineHeight: s.lineHeight, language: s.language, onOpenURL: onOpenURL)
+    @ViewBuilder private func text(_ runs: [InlineRun], _ s: ProseStyle) -> some View {
+        if let passages {
+            // The author's own page (round 29): every text can wash a picked sentence, now or when the picks come.
+            PassageText(text: s.attributed(runs), font: s.font, lineHeight: s.lineHeight, language: s.language, onOpenURL: onOpenURL,
+                        marks: leaves[path] ?? [], plan: passages)
+        } else {
+            CSSTextView(s.attributed(runs), font: s.font, lineHeight: s.lineHeight, language: s.language, onOpenURL: onOpenURL)
+        }
     }
 }
 
@@ -218,6 +239,7 @@ struct ListItemView<Embed: View, LinkCard: View>: View {
     let onOpenURL: (URL) -> Void
     let embed: (String, String) -> Embed?
     let linkCard: (String?, String) -> LinkCard?
+    var path: [Int] = []
 
     var body: some View {
         let em = rhythm.body
@@ -228,7 +250,7 @@ struct ListItemView<Embed: View, LinkCard: View>: View {
             CSSText(marker, font: style.font, lineHeight: style.lineHeight, color: Tokens.UI.textMuted, alignment: .right)
                 .frame(width: gutter - Self.markerSpace * em)
                 .accessibilityHidden(true)
-            BlockStack(blocks: blocks, style: style, rhythm: rhythm, onOpenURL: onOpenURL, embed: embed, linkCard: linkCard)
+            BlockStack(blocks: blocks, style: style, rhythm: rhythm, onOpenURL: onOpenURL, embed: embed, linkCard: linkCard, path: path)
                 .padding(.leading, gutter)
         }
     }

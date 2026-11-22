@@ -26,6 +26,7 @@ import { CardBookmark } from '@/components/molecules/CardDetail/CardBookmark';
 import { CardSafetyMenu } from '@/components/molecules/CardDetail/CardSafetyMenu';
 import { ReadAfterArea } from '@/components/molecules/CardDetail/ReadAfterArea';
 import { AuthorTaps } from '@/components/molecules/CardDetail/AuthorTaps';
+import { PassageMarks } from '@/components/molecules/CardDetail/PassageMarks';
 import { ResonanceCards } from '@/components/molecules/CardDetail/ResonanceCards';
 import { OrganicImage } from '@/components/atoms/OrganicImage/OrganicImage';
 import { StoryMarkdown } from '@/components/molecules/CardDetail/StoryMarkdown';
@@ -297,6 +298,12 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   // Someone else's 私人卡 the viewer reads at all was shared with them in a message (api/v1/sharedCards): theirs
   // to read, and only to read — no note, no resonance, no bookmark (the server would refuse each).
   const sharedPrivate = !isOwner && (!card.publishedAt || card.visibility === 'private');
+  // The sentences readers picked, on the author's own published card alone (round 29 §U1): never a draft, a private
+  // card, the trash or a translation (the server answers `picked` to the author only, too).
+  const ownPicked =
+    isOwner && !trashed && !!card.publishedAt && card.visibility !== 'private' && !tr.shown && lists.tap?.picked?.length
+      ? lists.tap.picked
+      : undefined;
 
   // The card's share and ⋯: under its title (the byline's end) and again at its story's end (round 8 §10.2).
   const cardActions = (
@@ -431,13 +438,22 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
 
             <TranslateLine tr={tr} />
 
-            <div ref={storyRef} key={`story-${tr.swaps}`} className={`${styles.story}${swapClass}`} data-mascot="story">
-              {/* Signed in, the embedded cards came with the lists; the link previews come with the card. */}
-              <CardEmbedSourceContext.Provider value={lists.embeds}>
-                <StoryLinkPreviewsContext.Provider value={card.linkPreviews ?? null}>
-                  <StoryMarkdown source={shownStory} script={type.script} lang={type.lang} />
-                </StoryLinkPreviewsContext.Provider>
-              </CardEmbedSourceContext.Provider>
+            <div
+              ref={storyRef}
+              key={`story-${tr.swaps}`}
+              className={`${styles.story}${swapClass}`}
+              data-mascot="story"
+              data-passages={ownPicked ? '' : undefined}
+            >
+              {/* The author's picked sentences: their washes and who picked them (round 29); nothing for anyone else. */}
+              <PassageMarks cardId={card.id} picked={ownPicked} script={type.script} storyRef={storyRef}>
+                {/* Signed in, the embedded cards came with the lists; the link previews come with the card. */}
+                <CardEmbedSourceContext.Provider value={lists.embeds}>
+                  <StoryLinkPreviewsContext.Provider value={card.linkPreviews ?? null}>
+                    <StoryMarkdown source={shownStory} script={type.script} lang={type.lang} />
+                  </StoryLinkPreviewsContext.Provider>
+                </CardEmbedSourceContext.Provider>
+              </PassageMarks>
             </div>
 
             {/* The tags, and at their end on a phone a reader's passive actions (收藏, then the card's share · ⋯ after

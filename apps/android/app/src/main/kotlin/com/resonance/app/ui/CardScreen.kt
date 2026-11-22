@@ -70,6 +70,8 @@ import androidx.compose.ui.unit.Dp
 import com.resonance.design.prefersReducedMotion
 import com.resonance.design.readingProgress
 import com.resonance.design.LayoutClass
+import com.resonance.design.readingTextScale
+import androidx.compose.ui.platform.LocalConfiguration
 import com.resonance.design.storyHeadGap
 import com.resonance.design.StoryMetaLine
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -470,6 +472,13 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     // with contents, an expanded window sets their rail beside the article (round 8 §10.1: the author is under the title).
     val columns = LocalWindowLayout.current.cardPage(rail = phase == "loaded" && headings.isNotEmpty())
     val railed = columns.railStart != null
+    // The author's own published page, the story as written (round 29 §U1): the sentences readers picked, washed, with
+    // their faces — in the left margin where the white left of the column is 70 or more (§S10), else in the line.
+    val ownPicked = detail?.let { d -> ownPickedPassages(d, original = shownBlocks === blocks) }
+    val passageMarks = remember(shownBlocks, ownPicked) { passageMarks(shownBlocks, ownPicked) }
+    val passageRoom = passageRoom(columns.start)
+    val passagesInMargin = passageMarks.isNotEmpty() && passageInMargin(passageRoom)
+    var pickedOpen by remember(key) { mutableStateOf<String?>(null) }
     var listCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     // Where the story's end row (or the author's line) is: the screenshots bring it into view.
     var endRowCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -585,8 +594,12 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                 val relatedLayout = cardListLayout()
                 // The screenshots' end of the story (`--es cardEnd …`, round 26): taken once, its row brought to the middle.
                 val launchEnd = remember(card.id) { DebugLaunch.takeCardEnd() }
+                // `picked` (round 29 §S7, `card-picked-people`): the first group's people open over the story's top.
+                LaunchedEffect(launchEnd, passageMarks.isNotEmpty()) {
+                    if (DebugLaunch.CardEnd.Picked in launchEnd && pickedOpen == null) passageMarks.firstOrNull()?.let { pickedOpen = it.id }
+                }
                 LaunchedEffect(launchEnd) {
-                    if (launchEnd.isEmpty()) return@LaunchedEffect
+                    if (launchEnd.isEmpty() || launchEnd == setOf(DebugLaunch.CardEnd.Picked)) return@LaunchedEffect
                     // The story laid out (its pictures' places) before the row is found.
                     delay(LAUNCH_END_SETTLE_MS)
                     // The note's field open, the keyboard up: the field has brought itself over the keyboard (and asked
@@ -623,10 +636,16 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                 privateCard = isPrivateCard(d) || isSharedPrivateCard(d),
                             ) { open(Route.Author(it)) }
                             // The story alone is what the bar's progress measures (not the cover, title or lists).
+                            // A face 24 × the story's reading scale (22 × it for a Latin story on a phone), capped in the margin (§S2, §S1.1).
+                            val passageFace = passageFaceSize(
+                                readingTextScale(LocalConfiguration.current.fontScale), latin = !type.cjk, compact = cls == LayoutClass.Compact,
+                                room = passageRoom.takeIf { passagesInMargin },
+                            )
+                            val passages = rememberStoryPassages(passageMarks, shownBlocks, passagesInMargin, passageFace, reduced) { pickedOpen = it }
                             Box(Modifier.onGloballyPositioned(progress::story).mascotMark("story").graphicsLayer { alpha = fade.value }) {
                                 // Its words follow the system's text size up to 2× (the cards in it keep the interface's).
                                 ReadingTextScale {
-                                    StoryMarkdown(shownBlocks, type, text.lang, openUrl, linkCards, headingAnchor = if (railed) anchors::anchor else null) { href, title, style ->
+                                    StoryMarkdown(shownBlocks, type, text.lang, openUrl, linkCards, headingAnchor = if (railed) anchors::anchor else null, passages = passages) { href, title, style ->
                                         CardEmbed(embeds.embedFor(href), href, title, style, open)
                                     }
                                 }
@@ -675,6 +694,10 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                     Modifier.onGloballyPositioned { endRowCoords = it }.padding(bottom = 40.dp),
                                     launchOpen = DebugLaunch.CardEnd.Taps in launchEnd,
                                 )
+                                // Who resonated with one sentence (§S4), opened by its faces or its wash.
+                                passageMarks.firstOrNull { it.id == pickedOpen }?.let { mark ->
+                                    PickedPeople(session, card.id, mark, type, d.anonymous, onDismiss = { pickedOpen = null }, open = open)
+                                }
                             }
                         }
                     }
@@ -714,7 +737,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     }
     // 外觀's 小紙團 (round 19): the paper puppets' island over the page once it has loaded — never on a card in the trash.
     if (marks != null && phase == "loaded" && detail?.let(::ownTrashed) == false) {
-        MascotOverlay(list, marks, insetTop = top, insetBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(), rail = railed, modifier = Modifier.fillMaxSize())
+        MascotOverlay(list, marks, insetTop = top, insetBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(), rail = railed, leftTaken = passagesInMargin, modifier = Modifier.fillMaxSize())
     }
     // The contents' rail beside the article (an expanded window, a story with headings): pinned under the bar
     // while the article scrolls, leaving with its end. The author is under the title at every width (round 8 §10.1).

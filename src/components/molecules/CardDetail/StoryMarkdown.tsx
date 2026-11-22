@@ -19,6 +19,7 @@ import { seedFromString } from '@/lib/design/prng';
 import { storyLinkWaveVars } from '@/lib/design/storyLinkWave';
 import { useLinkWaveInk } from '@/lib/design/useAppearance';
 import { rehypeLatinMarks } from '@/lib/markdown/rehypeLatinMarks';
+import { rehypePassageMarks, type PassageMarkInput } from '@/lib/markdown/rehypePassageMarks';
 import { storyType, type StoryScript } from '@/lib/text/script';
 import '@/styles/story.css';
 import styles from './StoryMarkdown.module.css';
@@ -33,6 +34,30 @@ interface StoryLinkCards {
   previews: ReadonlyMap<string, LinkPreview>;
 }
 const StoryLinkCardsContext = createContext<StoryLinkCards | null>(null);
+
+/**
+ * The author's picked sentences in their own story (round 29 §U1–§S1), given by the card page alone
+ * (CardDetail/PassageMarks): which sentences to mark, whether their faces stand in the line after each one, and
+ * what stands there. With none — every other page, the writer's original card, a reader's page — the story is
+ * drawn as it always was.
+ */
+export interface StoryPassages {
+  passages: readonly PassageMarkInput[];
+  inline: boolean;
+  /** The faces after a sentence (`inline`): drawn in the slot the plugin left after its last character. */
+  slot: (id: string) => ReactNode;
+}
+export const StoryPassagesContext = createContext<StoryPassages | null>(null);
+
+/** Where a sentence's faces stand in its line: the glue holds it to the sentence's last character (story.css). */
+function PassageSlot({ id }: { id: string }) {
+  const marks = useContext(StoryPassagesContext);
+  return (
+    <span className="story-passage-slot" data-passage-slot={id}>
+      {marks?.slot(id)}
+    </span>
+  );
+}
 
 /** A story's link in its pen wave, the wave in the ink the page's theme and scheme give it. */
 function StoryLink({ href, children, ...rest }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
@@ -179,6 +204,11 @@ const components: Components = {
     return <OrganicStoryImage className={styles.storyImage} src={url} alt={alt ?? ''} seed={seedFromString(url)} />;
   },
   p: StoryParagraph,
+  // The faces' place after a picked sentence (rehypePassageMarks); every other span as it is.
+  span: ({ node: _node, ...rest }) => {
+    const slot = (rest as Record<string, unknown>)['data-passage-slot'];
+    return typeof slot === 'string' ? <PassageSlot id={slot} /> : <span {...rest} />;
+  },
 };
 
 /** Whether the card-link paragraph at `offset` is among the story's first STORY_EMBED_MAX (rendered in reading order). */
@@ -315,12 +345,26 @@ export const StoryMarkdown = memo(function StoryMarkdown({ source, script, lang,
   const read = useMemo(() => (script ? null : storyType('', source)), [script, source]);
   const setAs = script ?? read?.script;
   // A CJK story sets an apostrophe inside a Latin word in its Latin face (after the slugs, read from the words as they are).
-  const rehypePlugins = setAs === 'latin' ? LATIN_PLUGINS : CJK_PLUGINS;
+  const base = setAs === 'latin' ? LATIN_PLUGINS : CJK_PLUGINS;
+  // The author's picked sentences, after the latin marks (so a range is cut at their edges like any element's).
+  const marks = useContext(StoryPassagesContext);
+  const passages = marks?.passages;
+  const inline = !!marks?.inline;
+  const rehypePlugins = useMemo(
+    () => (passages?.length ? [...base, [rehypePassageMarks, { passages, inline }] as [typeof rehypePassageMarks, Parameters<typeof rehypePassageMarks>[0]]] : base),
+    [base, passages, inline],
+  );
   // A new story, a new count.
   const embedOrder = useMemo(() => ({ source, order: new Map<number, number>() }), [source]);
   const asWords = useMemo(() => storyTooComplex(source), [source]);
   return (
-    <div className="story-prose" data-script={setAs} data-density={density} lang={read ? read.lang : lang}>
+    <div
+      className="story-prose"
+      data-script={setAs}
+      data-density={density}
+      data-passages={passages?.length ? (inline ? 'inline' : 'margin') : undefined}
+      lang={read ? read.lang : lang}
+    >
       {asWords ? (
         <StoryWords source={source} />
       ) : (

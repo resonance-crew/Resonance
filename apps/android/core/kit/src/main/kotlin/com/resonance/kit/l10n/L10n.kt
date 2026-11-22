@@ -835,6 +835,12 @@ object L10n {
             val passagePick: String get() = Strings.string("card.tap.passagePick")
             /** “{text}” */
             fun passageQuote(text: String): String = Strings.format("card.tap.passageQuote", mapOf("text" to text))
+            /** People this part stayed with */
+            val pickedTitle: String get() = Strings.string("card.tap.pickedTitle")
+            /** This part stayed with {names} */
+            fun pickedBy(names: String): String = Strings.format("card.tap.pickedBy", mapOf("names" to names))
+            /** This part stayed with {names} and others */
+            fun pickedByMore(names: String): String = Strings.format("card.tap.pickedByMore", mapOf("names" to names))
         }
         object Reply {
             /** Reply with a card */

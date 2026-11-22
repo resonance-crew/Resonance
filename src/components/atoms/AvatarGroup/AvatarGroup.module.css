@@ -16,31 +16,6 @@
   margin-left: 0;
 }
 
-/* The blank disc for "more": the avatar's shape in the waiting disc's paper (the cream-dark by day, raised at night), the faces' own pen line. */
-.disc {
-  position: relative;
-  display: block;
-  overflow: visible;
-}
-
-.disc path {
-  fill: var(--avatar-wait);
-  stroke: var(--avatar-stroke);
-  stroke-linejoin: round;
-}
-
-/* At night the waiting disc's paper sits too close to the page's: lifted toward the muted ink, about 3:1 against the
-   dark page (§U2.2), still no colour of anyone's. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-scheme='light']) .disc path {
-    fill: color-mix(in oklch, var(--color-text-muted) 66%, var(--color-cream));
-  }
-}
-
-:root[data-scheme='dark'] .disc path {
-  fill: color-mix(in oklch, var(--color-text-muted) 66%, var(--color-cream));
-}
-
 /* The viewer's own face slides in as their tap turns on, and out as it turns off (150 ms). */
 .item[data-arriving] {
   animation: faceIn 150ms ease-out;

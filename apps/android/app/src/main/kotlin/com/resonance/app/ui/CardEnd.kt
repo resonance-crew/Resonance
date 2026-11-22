@@ -150,7 +150,7 @@ internal fun tapIcon(on: Boolean): IconName = if (on) IconName.WavePair else Ico
  * The faces under the capsule (§U2) as the viewer sees them: the viewer's own face first while their tap is on
  * ([mine]), then their connections who tapped (the author's: the newest tappers), all of them as the server gave them,
  * and whether it knows [more]. The server's `CardDetail.tap`, then the viewer's taps drawn at once ([withViewer]).
- * Only the drawing cuts them to [MAX] ([shown], then the blank disc: [showsMore]) — kept whole, a tap turned on and
+ * Only the drawing cuts them to [MAX] ([shown]; [showsMore] is said, never drawn — round 29 §S5) — kept whole, a tap turned on and
  * off again gives back the face it pushed out (iOS's TapState keeps them so too).
  */
 internal data class TapFaces(
@@ -180,7 +180,7 @@ internal data class TapFaces(
     /** The faces drawn: [MAX] at most. */
     val shown: List<Author> get() = faces.take(MAX)
 
-    /** The blank disc after them: more people than the faces drawn (a fourth face pushed out tells there are more). */
+    /** More people than the faces drawn (a fourth face pushed out tells there are more): said 「還有其他人」, never drawn (round 29 §S5). */
     val showsMore: Boolean get() = more || faces.size > MAX
 
     /** Only the viewer's own face: nothing to open (§U2.4) — read as 你共振了. */
@@ -211,7 +211,7 @@ internal fun facesLabel(faces: TapFaces, viewerId: String?, author: Boolean): St
     val zh = Strings.language == Strings.Language.ZhTW
     val list = if (zh) "、" else ", "
     val and = if (zh) "，" else ", "
-    // The faces drawn, then the disc: what is said is what is seen.
+    // The faces drawn, then whether there are others (no disc stands for them since round 29 §S5).
     val more = faces.showsMore
     val others = faces.shown.filter { it.id != viewerId }.map { it.handle }
     if (others.isEmpty() && !more) return if (faces.mine) L10n.Card.Tap.selfOnly else ""

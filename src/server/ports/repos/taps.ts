@@ -138,8 +138,11 @@ export interface TapsData {
   connectionsOf(uid: string): Promise<string[]>;
   /** The taps of `uids` on the card that are on, in no order (a query per 30 of them, side by side). */
   tapsOnBy(cardId: string, uids: string[]): Promise<Tapper[]>;
-  /** A page of `limit` of the card's taps that are on, newest first, after `after` (a page token; invalid_request when it isn't one). */
-  tapsOnPage(cardId: string, limit: number, after?: PageCursor): Promise<TapPage>;
+  /**
+   * A page of `limit` of the card's taps that are on, newest first, after `after` (a page token; invalid_request when
+   * it isn't one). With `passage`, only the taps whose pick has that id (round 29; the same order and tokens).
+   */
+  tapsOnPage(cardId: string, limit: number, after?: PageCursor, passage?: string): Promise<TapPage>;
   /** The profiles behind `uids` as the contract shows them; anyone without one left out. */
   profiles(uids: string[]): Promise<Map<string, AuthorBody>>;
   /** The latest note each of `uids` left `authorId` on the card (delivered to them), its whole text. */

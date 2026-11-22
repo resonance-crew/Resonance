@@ -268,6 +268,28 @@
       ]
     },
     {
+      "collectionGroup": "resonanceTaps",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "cardId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "on",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "passage.id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "at",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "cards",
       "queryScope": "COLLECTION",
       "fields": [

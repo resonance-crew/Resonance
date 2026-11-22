@@ -73,7 +73,7 @@ internal fun Author.groupFace(): GroupFace = GroupFace(id, initials, avatarUrl, 
 
 /**
  * The faces of the people who resonated (round 26 §U2 — the owner: 「避免直接使用文字說…直接放那個頭像就好」): stacked, no
- * words on screen, the blank disc when there are more. The whole group is one button opening the list (48 tall to
+ * words on screen, at most three and nothing after them (round 29 §S5: no blank disc — who else, the list says). The whole group is one button opening the list (48 tall to
  * the finger) — except when the only face is the viewer's own ([TapFaces.selfOnly]): then it is no button, read as
  * 你共振了. A screen reader hears who ([facesLabel]); nothing on screen says it. Nothing when there are no faces.
  * [author]: the author's line — the 16 wave before the faces, inside the hit area (§U3.1).
@@ -99,7 +99,7 @@ internal fun TapFacesButton(
                 OrganicIcon(IconName.Wave, size = 16.dp, color = Tokens.TextMuted)
                 Spacer(Modifier.width(AuthorFacesGap))
             }
-            AvatarGroup(faces.shown.map { it.groupFace() }, faces.showsMore, size = TapFaceSize, reducedMotion = reduced)
+            AvatarGroup(faces.shown.map { it.groupFace() }, size = TapFaceSize, reducedMotion = reduced)
         }
     }
     Box(
@@ -271,7 +271,7 @@ internal fun readerListWidth(cls: LayoutClass): Dp = if (cls == LayoutClass.Comp
 
 /**
  * What the author sees where a reader's row would be (§U3.1): one line — a 16 wave in the muted ink, 8 before the
- * faces, inside the hit area — and the three newest tappers' faces, the blank disc when there are more. Nothing when
+ * faces, inside the hit area — and the three newest tappers' faces, nothing after them (round 29 §S5). Nothing when
  * no one has tapped; no number anywhere. It opens the author's list ([AuthorTapList]).
  */
 @Composable
@@ -321,7 +321,7 @@ internal data class TapRowMeasure(val height: Dp, val face: Dp, val inset: Dp, v
 
 /** The list's rows: banded, each the face, the pen name and the excerpt; the rows' shapes while read. */
 @Composable
-private fun TapRows(list: TapPeople, measure: TapRowMeasure, lines: (TapPerson) -> TapRowLines, onRow: (TapPerson) -> Unit) {
+internal fun TapRows(list: TapPeople, measure: TapRowMeasure, lines: (TapPerson) -> TapRowLines, onRow: (TapPerson) -> Unit) {
     val rowHeight = measure.height
     val face = measure.face
     val people = list.people

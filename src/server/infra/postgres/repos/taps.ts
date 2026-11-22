@@ -154,7 +154,7 @@ export function pgTapsData(docs: PgDocs): TapsData {
       const rows = await docs.rows(TAPS, { eq: { cardId, on: true }, in: { userId: uids } });
       return rows.map(({ row }) => tapperOf(row)).filter((t): t is Tapper => !!t);
     },
-    async tapsOnPage(cardId, limit, after): Promise<TapPage> {
+    async tapsOnPage(cardId, limit, after, passage): Promise<TapPage> {
       const from = after ? decodeCursor(after) : undefined;
       if (from === null) throw notAToken();
       const params: unknown[] = [cardId, Math.max(0, Math.floor(limit))];
@@ -162,6 +162,11 @@ export function pgTapsData(docs: PgDocs): TapsData {
       if (from) {
         params.push(from.t, from.id);
         keyset = `and (at, (card_id || '_' || user_id) collate "C") < ($3::timestamptz, $4::text collate "C")`;
+      }
+      // One picked sentence's people (round 29).
+      if (passage) {
+        params.push(passage);
+        keyset += ` and extra->'passage'->>'id' = $${params.length}`;
       }
       const { rows } = await docs.db.query<Doc>(
         `select card_id, user_id, at, extra->'passage' as passage, to_char(at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as at_us

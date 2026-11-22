@@ -24,3 +24,8 @@ what says on whose word they changed. Commit the new row with the accept
 | 2026-11-21T18:04:48Z | 20261121-163239 | 4afae1ba | android, ios, mac, web | card-passage-picked | 8 | 收為基準 |
 | 2026-11-22T03:49:42Z | 20261121-140459 | ce42d27a (dirty) | ios, mac | ios/iphone/update-required@dark-zh-TW.png, ios/iphone/update-required@light-zh-TW.png, ios/iphone/update-required@light-en.png, ios/ipad/update-required@light-zh-TW.png, mac/mac/update-required@light-zh-TW.png | 5 | 好，接受 |
 | 2026-11-22T03:49:51Z | 20261121-142552 | 55f7c566 (dirty) | android | update-required | 4 | 好，接受 |
+| 2026-11-22T04:39:13Z | 20261122-035402 | b4169a57 | web | card, card-own-taps, card-picked-people, taps-author-list, taps-list, card-other, card-tapped | 35 | 修改完就可以接受为基准 |
+| 2026-11-22T04:39:24Z | 20261122-035931 | b4169a57 | mac | card, card-own-taps, card-picked-people, taps-author-list, taps-list, card-other, card-tapped | 7 | 修改完就可以接受为基准 |
+| 2026-11-22T04:39:25Z | 20261122-040232 | b4169a57 | ios | card-own-taps, card-tapped, taps-list, taps-author-list | 16 | 修改完就可以接受为基准 |
+| 2026-11-22T04:39:31Z | 20261122-042207 | b4169a57 | ios | card, card-picked-people, card-other | 12 | 修改完就可以接受为基准 |
+| 2026-11-22T04:39:32Z | 20261122-040953 | b4169a57 | android | card, card-own-taps, card-picked-people, taps-author-list, taps-list, card-other, card-tapped | 28 | 修改完就可以接受为基准 |

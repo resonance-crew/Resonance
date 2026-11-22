@@ -46,6 +46,9 @@ const PAIRS: [PaletteToken, PaletteToken, number][] = [
   ['color-cream', 'button-fill', 4.5],
   ['button-on-tonal', 'button-tonal', 4.5],
   ['button-on-tonal', 'color-cream', 4.5],
+  // A picked sentence's wash (round 29) under the story's words and a link's (contrast.test.ts has the same).
+  ['color-text', 'passage-wash', 7],
+  ['button-on-tonal', 'passage-wash', 4.5],
   // The call-to-action band's two buttons: the verb a paper pill, the second action a deeper band.
   ['cta-verb-ink', 'cta-ink', 4.5],
   ['cta-ink', 'cta-ghost', 4.5],

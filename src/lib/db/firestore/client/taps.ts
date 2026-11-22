@@ -31,7 +31,13 @@ export function setTapPassage(cardId: string, passage: string | null): Promise<T
  * on a named card; a reader gets themselves and the people they are connected
  * with, in one page.
  */
-export function listTaps(cardId: string, pageToken?: string | null): Promise<TapListBody> {
-  const q = pageToken ? `?pageToken=${encodeURIComponent(pageToken)}` : '';
+export function listTaps(cardId: string, pageToken?: string | null, passage?: string | null): Promise<TapListBody> {
+  const params = new URLSearchParams();
+  if (pageToken) params.set('pageToken', pageToken);
+  // Round 29 §S4.4: the author's list of one picked sentence's people (a `TapPicked.id`).
+  if (passage) params.set('passage', passage);
+  // Not `params.size`: it is undefined before Safari 17 / Chrome 113, which would drop both parameters.
+  const s = params.toString();
+  const q = s ? `?${s}` : '';
   return callApi<TapListBody>(`/api/v1/cards/${encodeURIComponent(cardId)}/taps${q}`);
 }

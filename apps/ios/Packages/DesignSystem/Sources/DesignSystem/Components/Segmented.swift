@@ -59,6 +59,15 @@ public struct SegmentSpec: Identifiable {
     }
 }
 
+/// Each shown segment's bounds, by its id: what stands under one segment can stand by it (round 29 §S11, the faces under
+/// 共振 centred on its segment).
+public struct SegmentBounds: PreferenceKey {
+    public static let defaultValue: [String: Anchor<CGRect>] = [:]
+    public static func reduce(value: inout [String: Anchor<CGRect>], nextValue: () -> [String: Anchor<CGRect>]) {
+        value.merge(nextValue()) { _, new in new }
+    }
+}
+
 /// Several actions fused into one filled bar (SegmentedActionBar.tsx), split by hand-drawn seams.
 /// Its segments are buttons, so like every button it is a filled shape with no pen line (an
 /// outline marks a floating surface, a container or an input): the bar wears the tonal face
@@ -272,6 +281,7 @@ private struct SegmentButton: View {
         .accessibilityAddTraits(spec.selected == true ? .isSelected : [])
         .accessibilityAddTraits(spec.working ? .updatesFrequently : [])
         .accessibilityValue(spec.working ? busyLabel : "")
+        .anchorPreference(key: SegmentBounds.self, value: .bounds) { [spec.id: $0] }
     }
 
     /// SegmentedActionBar.tsx: the seam after segment i is seeded `seed + i·37 + 11`.

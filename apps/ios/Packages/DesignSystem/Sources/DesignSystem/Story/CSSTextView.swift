@@ -15,6 +15,10 @@ public struct CSSTextView: UIViewRepresentable {
     var fitsContent: Bool
     /// The language VoiceOver reads it in (a story's own, whatever the interface's); nil keeps the app's.
     var language: String?
+    /// The author's picked sentences in it (round 29, ``washing(_:onLayout:onPress:)``); none on every other page.
+    var washes: [PassageWash] = []
+    var onWashLayout: ((PassageLayout) -> Void)?
+    var onWashPress: ((String) -> Void)?
 
     public init(_ text: NSAttributedString, font: UIFont, lineHeight: CGFloat, fitsContent: Bool = false, language: String? = nil,
                 onOpenURL: @escaping (URL) -> Void = { _ in }) {
@@ -24,6 +28,16 @@ public struct CSSTextView: UIViewRepresentable {
         self.font = font
         self.lineHeight = lineHeight
         self.onOpenURL = onOpenURL
+    }
+
+    /// Washes `washes` under their glyphs (``PassageWash``), kerning each one's room for its faces onto its last
+    /// character; `onLayout` hears where they came out after each layout, `onPress` a tap on one that isn't on a link.
+    func washing(_ washes: [PassageWash], onLayout: @escaping (PassageLayout) -> Void, onPress: @escaping (String) -> Void) -> CSSTextView {
+        var view = self
+        view.washes = washes
+        view.onWashLayout = onLayout
+        view.onWashPress = onPress
+        return view
     }
 
     public func makeCoordinator() -> Coordinator { Coordinator() }
@@ -64,9 +78,16 @@ public struct CSSTextView: UIViewRepresentable {
         (view as? LinkWaveTextView)?.waveDrop = LinkWaves.drop(fontSize: font.pointSize)
         view.layoutManager.delegate = boxes
         let coordinator = context.coordinator
-        if coordinator.input != text {
-            coordinator.input = text
-            view.attributedText = text
+        // The faces' room in the line rides on each sentence's last character (no wash: the text as given).
+        let shown = PassageWash.kerned(text, washes)
+        if coordinator.input != shown {
+            coordinator.input = shown
+            view.attributedText = shown
+        }
+        if let waves = view as? LinkWaveTextView, waves.onWashLayout != nil || onWashLayout != nil || !washes.isEmpty {
+            waves.onWashLayout = onWashLayout
+            waves.onWashPress = onWashPress
+            waves.washes = washes
         }
         view.accessibilityLanguage = language
     }

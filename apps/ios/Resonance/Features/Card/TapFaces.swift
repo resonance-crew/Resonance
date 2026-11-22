@@ -3,12 +3,12 @@ import ResonanceKit
 import SwiftUI
 
 /// The faces of who resonated (round 26 §U2; the owner: 「避免直接使用文字說…不要寫這樣的文字，直接放那個頭像就好。然後點擊可能就
-/// 會出現那個名單」): ``FaceStack`` at 28 (the Mac's 77 % makes it 21.6), the whole group one button with a 44 hit area
+/// 會出現那個名單」): ``FaceStack`` at 28 (the Mac's 77 % makes it 21.6) — at most three faces and nothing after them
+/// (round 29 §S5: no blank disc; who else there is, the list says) — the whole group one button with a 44 hit area
 /// opening the list — except when the only face is the reader's own, which is no button, read as 「你共振了」. What a
-/// screen reader hears names them; nothing on screen does.
+/// screen reader hears names them (with 等人 when there are more); nothing on screen does.
 struct TapFaces: View {
     let faces: [Author]
-    let more: Bool
     let spoken: String
     let isButton: Bool
     let onOpen: () -> Void
@@ -22,7 +22,7 @@ struct TapFaces: View {
     static let buttonPad: CGFloat = RowTwo.faceInset - RowTwo.facesLine
 
     var body: some View {
-        let stack = FaceStack(faces: faces.map(Self.face), more: more)
+        let stack = FaceStack(faces: faces.map(Self.face))
             .padding(.horizontal, Self.buttonPad)
             // A finger's 44 at the least, the faces at its start (the web's `min-width: 44px`).
             .frame(minWidth: Self.rowHeight, minHeight: Self.rowHeight, alignment: .leading)
@@ -169,7 +169,7 @@ struct TapPersonRow: View {
 }
 
 /// The rows of a list, banded, each curve keyed by the row under it (``ListBands``); `line` gives each its second line.
-private struct TapRows: View {
+struct TapRows: View {
     let people: [TapPerson]
     let line: (TapPerson) -> TapRowLine?
     let press: (TapPerson) -> Void
@@ -186,7 +186,7 @@ private struct TapRows: View {
 }
 
 /// While the list is read: two rows' shapes; when it couldn't be, a line and 重試.
-private struct TapListState: View {
+struct TapListState: View {
     let people: TapPeople
 
     var body: some View {
@@ -269,8 +269,8 @@ struct ReaderTapList: View {
 // MARK: - What the author sees
 
 /// On the author's own published card, where a reader's row would be (§U3): one line — the 16 wave in the muted ink,
-/// ``facesGap`` before the three newest faces (and the blank disc when there are more) — the whole of it one button
-/// opening who resonated. Nothing when no one has; no number anywhere.
+/// ``facesGap`` before the three newest faces, and nothing after them (round 29 §S5: no blank disc) — the whole of it
+/// one button opening who resonated. Nothing when no one has; no number anywhere.
 struct AuthorTaps: View {
     let cardId: String
     let faces: [Author]
@@ -291,7 +291,7 @@ struct AuthorTaps: View {
         Button { open = true } label: {
             HStack(spacing: Self.facesGap) {
                 OrganicIcon(.wave, size: 16, color: Tokens.textMuted, strokeWidth: Tokens.ink)
-                FaceStack(faces: faces.prefix(FaceStack.maxFaces).map(TapFaces.face), more: more || faces.count > FaceStack.maxFaces)
+                FaceStack(faces: faces.prefix(FaceStack.maxFaces).map(TapFaces.face))
             }
             .frame(minHeight: TapFaces.rowHeight)
             .contentShape(Rectangle())

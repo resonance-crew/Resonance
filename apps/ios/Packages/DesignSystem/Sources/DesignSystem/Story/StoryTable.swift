@@ -104,7 +104,13 @@ struct StoryTableView: View {
     /// The text it is set in (the body's, or a quote's: its ink).
     let style: ProseStyle
     let onOpenURL: (URL) -> Void
+    /// Where the table is in the story (``PassageLeaves``' paths): a cell's leaf is this, its row (0 the header, then
+    /// 1…) and its column.
+    var path: [Int] = []
     @Environment(\.storyTableLabel) private var label
+    /// The author's picked sentences (round 29): a cell washes one it holds, its faces in the line.
+    @Environment(\.storyPassages) private var passages
+    @Environment(\.storyPassageLeaves) private var leaves
     @State private var more = StoryTable.More.none
 
     /// A cell's words, and how they are measured and drawn.
@@ -122,11 +128,11 @@ struct StoryTableView: View {
         let table = seedFromString(headCells.map(\.text.string).joined(separator: "|"))
         ScrollView(.horizontal, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                row(headCells, widths: widths)
+                row(headCells, index: 0, widths: widths)
                 rule(header: true, row: 0, table: table, widths: widths)
                 ForEach(Array(bodyCells.enumerated()), id: \.offset) { i, cells in
                     if i > 0 { rule(header: false, row: i, table: table, widths: widths) }
-                    row(cells, widths: widths)
+                    row(cells, index: i + 1, widths: widths)
                 }
             }
             // Room for the header rule's overshoot, which the scroll view would clip at its edges; the
@@ -162,12 +168,16 @@ struct StoryTableView: View {
     }
 
     /// One row: each cell in its column's width, top-aligned, padded 8 × 14 (none outside the table's
-    /// first and last columns).
-    private func row(_ cells: [Cell], widths: [CGFloat]) -> some View {
+    /// first and last columns). `index`: the row's place, 0 the header's. On the author's page a cell is a
+    /// ``PassageText`` (its faces in the line, as Android's `inLineOnly()`), so a sentence picked in it is washed there.
+    private func row(_ cells: [Cell], index: Int, widths: [CGFloat]) -> some View {
         HStack(alignment: .top, spacing: 0) {
             ForEach(Array(widths.enumerated()), id: \.offset) { c, width in
                 Group {
-                    if c < cells.count, cells[c].text.length > 0 {
+                    if c < cells.count, cells[c].text.length > 0, let passages {
+                        PassageText(text: cells[c].text, font: cells[c].font, lineHeight: cells[c].lineHeight, language: style.language,
+                                    onOpenURL: onOpenURL, marks: leaves[path + [index, c]] ?? [], plan: passages.inLineOnly)
+                    } else if c < cells.count, cells[c].text.length > 0 {
                         CSSTextView(cells[c].text, font: cells[c].font, lineHeight: cells[c].lineHeight, language: style.language,
                                     onOpenURL: onOpenURL)
                     } else {

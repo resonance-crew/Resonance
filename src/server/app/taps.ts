@@ -1,7 +1,8 @@
 import { NOTE_REQUEST_MAX, noPenName } from '@/lib/api/v1/conversations';
 import { ApiFailure } from '@/lib/api/v1/http';
 import { cardVisible, trashedAtOf } from '@/lib/api/v1/present';
-import { TAP_FACES_MAX, type AuthorBody, type CardTapBody, type TapListBody, type TapPassageResponseBody, type TapPersonBody } from '@/lib/api/v1/schemas';
+import { TAP_FACES_MAX, type AuthorBody, type CardTapBody, type TapListBody, type TapPassageResponseBody, type TapPersonBody, type TapPickedBody } from '@/lib/api/v1/schemas';
+import { PICKED_CANDIDATES, PICKED_SCAN, pickedFaces, pickedIn } from '@/lib/cards/tapPicked';
 import { presentTapPassages } from '@/lib/api/v1/tapPassages';
 import type { Card } from '@/lib/db/types';
 import type { ServerCtx } from '@/server/ctx';
@@ -66,10 +67,10 @@ export function deleteTapsOnIn(ctx: ServerCtx, cardId: string): Promise<void> {
  * The author's own people: a page of `limit` taps that are on, newest first,
  * from `after` — minus the author and anyone with a block between them and
  * the author, either way (`blocked`: the author's blocks, read once by the
- * caller, B5).
+ * caller, B5). With `passage`, only the taps whose pick has that id (round 29).
  */
-async function authorPeople(ctx: ServerCtx, card: Card, limit: number, after: PageCursor | undefined, blocked: ReadonlySet<string>) {
-  const page = await ctx.data.taps.tapsOnPage(card.id, limit, after);
+async function authorPeople(ctx: ServerCtx, card: Card, limit: number, after: PageCursor | undefined, blocked: ReadonlySet<string>, passage?: string) {
+  const page = await ctx.data.taps.tapsOnPage(card.id, limit, after, passage);
   const tappers = page.tappers.filter((t) => t.uid !== card.authorId && !blocked.has(t.uid));
   const blockers = await ctx.data.taps.blockersOf(tappers.map((t) => t.uid), card.authorId);
   return { people: tappers.filter((t) => !blockers.has(t.uid)), next: page.next, full: page.full };
@@ -125,6 +126,33 @@ async function firstFaces(ctx: ServerCtx, people: Tapper[], n: number): Promise<
   return { faces, more: known.length > n || people.length > head.length };
 }
 
+/**
+ * The author's picked sentences (round 29 §P1): one page of the newest
+ * PICKED_SCAN taps that are on (billed by what it finds), their picks that
+ * are sentences of the story now (`pickedIn`), and for each its newest
+ * PICKED_CANDIDATES pickers — the only people whose blocks and profiles are
+ * read. The author's people as `authorPeople` reads them: never the author,
+ * never anyone with a block between them either way, only people with a
+ * profile. A sentence none of whose candidates qualifies is left out.
+ */
+async function authorPicked(ctx: ServerCtx, card: Card, blocked: ReadonlySet<string>): Promise<TapPickedBody[]> {
+  const story = typeof card.story === 'string' ? card.story : '';
+  if (!story.trim()) return [];
+  const page = await ctx.data.taps.tapsOnPage(card.id, PICKED_SCAN);
+  const tappers = page.tappers.filter((t) => t.passage && t.uid !== card.authorId && !blocked.has(t.uid));
+  const sentences = pickedIn(story, tappers);
+  if (!sentences.length) return [];
+  const uids = [...new Set(sentences.flatMap((s) => s.pickers.slice(0, PICKED_CANDIDATES).map((p) => p.uid)))];
+  const [blockers, found] = await Promise.all([ctx.data.taps.blockersOf(uids, card.authorId), ctx.data.taps.profiles(uids)]);
+  const faceOf = (uid: string) => (blockers.has(uid) ? null : (found.get(uid) ?? null));
+  const out: TapPickedBody[] = [];
+  for (const s of sentences) {
+    const faces = pickedFaces(s, faceOf, page.full);
+    if (faces) out.push({ id: s.id, text: s.text, people: faces.people, more: faces.more });
+  }
+  return out;
+}
+
 /** See src/lib/api/v1/taps.ts `cardTap`. */
 export async function cardTapIn(
   ctx: ServerCtx,
@@ -145,8 +173,9 @@ export async function cardTapIn(
       if (!page.full || !page.next) break;
       after = page.next;
     }
-    const { faces, more } = await firstFaces(ctx, people, TAP_FACES_MAX);
-    return { mine: false, faces, more, mayNote: false };
+    const [{ faces, more }, picked] = await Promise.all([firstFaces(ctx, people, TAP_FACES_MAX), authorPicked(ctx, card, blocked)]);
+    // Picked sentences (round 29): only where there is one to show, so every other answer is as it was.
+    return { mine: false, faces, more, mayNote: false, ...(picked.length ? { picked } : {}) };
   }
   // A reader: on a named card, the blocks either way and whether a note would be taken in one read, beside their people.
   const named = card.anonymous !== true;
@@ -172,11 +201,12 @@ async function latestNotes(ctx: ServerCtx, cardId: string, author: string, uids:
 }
 
 /** See src/lib/api/v1/taps.ts `listTaps`. */
-export async function listTapsIn(ctx: ServerCtx, viewerId: string, cardId: string, pageToken?: string | null): Promise<TapListBody> {
+export async function listTapsIn(ctx: ServerCtx, viewerId: string, cardId: string, pageToken?: string | null, passage?: string | null): Promise<TapListBody> {
   const taps = ctx.data.taps;
   const card = await taps.visibleCard(viewerId, cardId);
   const view = await tapViewOf(ctx, viewerId, card);
   if (!view) throw notFound();
+  // `passage` is the author's alone (round 29): a reader's answer is the same with it or without.
   if (view === 'reader') {
     const { people } = await readerPeople(ctx, viewerId, card);
     const found = await taps.profiles(people.map((p) => p.uid));
@@ -188,7 +218,7 @@ export async function listTapsIn(ctx: ServerCtx, viewerId: string, cardId: strin
       nextPageToken: null,
     };
   }
-  const page = await authorPeople(ctx, card, TAP_PAGE, pageToken || undefined, await taps.blockedBy(card.authorId));
+  const page = await authorPeople(ctx, card, TAP_PAGE, pageToken || undefined, await taps.blockedBy(card.authorId), passage || undefined);
   const uids = page.people.map((p) => p.uid);
   const [found, notes] = await Promise.all([
     taps.profiles(uids),

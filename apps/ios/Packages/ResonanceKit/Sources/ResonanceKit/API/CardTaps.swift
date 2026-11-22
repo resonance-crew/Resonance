@@ -5,6 +5,7 @@ public typealias CardTap = Components.Schemas.CardTap
 public typealias TapList = Components.Schemas.TapList
 public typealias TapPerson = Components.Schemas.TapPerson
 public typealias TapPassage = Components.Schemas.TapPassage
+public typealias TapPicked = Components.Schemas.TapPicked
 public typealias ReadingReportBody = Components.Schemas.ReadingReportRequest
 
 /// The resonance tap (共振, round 26 §R1) and the reading report (§R3) as plain async calls — the reading
@@ -58,9 +59,10 @@ extension ReadingAPI {
     }
 
     /// Who resonated with card `id`, as the viewer may see them (GET /cards/{id}/taps): the author pages of 30
-    /// with each person's latest note on a named card; a reader one page of their connections.
-    public func taps(_ id: String, pageToken: String? = nil) async throws -> TapList {
-        switch try await client.getCardTaps(path: .init(key: id), query: .init(pageToken: pageToken)) {
+    /// with each person's latest note on a named card; a reader one page of their connections. With `passage` (round
+    /// 29, one of `CardTap.picked`' ids), the author's pages hold only the people who picked that sentence.
+    public func taps(_ id: String, pageToken: String? = nil, passage: String? = nil) async throws -> TapList {
+        switch try await client.getCardTaps(path: .init(key: id), query: .init(pageToken: pageToken, passage: passage)) {
         case let .ok(r): return try r.body.json
         case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
         case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)

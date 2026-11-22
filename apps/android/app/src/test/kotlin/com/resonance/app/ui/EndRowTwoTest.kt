@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PixelMap
@@ -25,9 +28,16 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.unit.dp
 import com.resonance.design.AppFonts
+import com.resonance.design.AvatarGroup
+import com.resonance.design.Grain
 import com.resonance.design.OrganicIcon
+import com.resonance.design.Segment
+import com.resonance.design.SegmentedActionBar
+import com.resonance.design.segmentCentre
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.kit.l10n.Strings
@@ -53,7 +63,7 @@ import org.robolectric.annotation.GraphicsMode
  * The faces' line over the capsule (round 30 §S1; row 2 under it until then), 收藏 beside the tags (a phone) or the
  * capsule (wide; round 28 §S2–§S4) as their twins draw them — the web's, where iOS differs (the screens' review: Android's stood apart from both). 收藏 a bare glyph in the
  * muted text ink with the one pen, its glyph 12 in from the row's end in its 48 box (the web's 44 button, centred, on
- * the row's end); a face 12 in from the row's start (the web's 6 + 6). Drawn for real and
+ * the row's end); the faces centred on the 共振 segment's centre (round 29 §S11). Drawn for real and
  * measured pixel by pixel.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -78,9 +88,10 @@ class EndRowTwoTest {
     private val density get() = RuntimeEnvironment.getApplication().resources.displayMetrics.density
 
     @Before fun catalogs() {
+        AppFonts.init(RuntimeEnvironment.getApplication())
+        Grain.init(RuntimeEnvironment.getApplication())
         Strings.load { File("../../../src/messages/${it.tag}.json").readText() }
         Strings.language = Strings.Language.ZhTW
-        AppFonts.init(RuntimeEnvironment.getApplication())
     }
 
     @After fun restore() {
@@ -128,20 +139,60 @@ class EndRowTwoTest {
         assertTrue("the glyph ends ${endGap(button)} px in, expected $expected", abs(endGap(button) - expected) <= 1)
     }
 
-    @Test fun aFaceStandsTwelveInFromTheRowsStartAndNothingEndsTheRow() {
+    @Test fun theFacesStandCentredOnTheCentreGivenOneTwoOrThreeAndNothingEndsTheLine() {
+        // Round 29 §S11: the group's centre on the 共振 segment's — one face, two, three (the stack's widths) alike.
+        var count by mutableStateOf(1)
         compose.setContent {
             Box(Modifier.width(320.dp).testTag("column")) {
-                // A face as the group draws it now: the 28 itself, nothing round it (round 26: the pads are gone).
-                EndRowTwo(Modifier.width(320.dp)) { Box(Modifier.size(28.dp).testTag("face")) }
+                EndRowTwo(Modifier.width(320.dp), facesCentre = 70.dp) { Box(Modifier.size(AvatarGroup.width(count, TapFaceSize), 28.dp).testTag("face")) }
+            }
+        }
+        for (faces in 1..3) {
+            count = faces
+            compose.waitForIdle()
+            val row = compose.onNodeWithTag("column").getBoundsInRoot()
+            val face = compose.onNodeWithTag("face").getBoundsInRoot()
+            // Not 12 in from the line's start (the leading edge it stood on): centred on 70.
+            assertEquals("$faces faces", 70f, ((face.left + face.right) / 2 - row.left).value, 0.5f)
+            // Centred in the line's 48 too, which stands with a face or none; 收藏 is not on it (round 28 §S4).
+            assertEquals(((row.top + row.bottom) / 2).value, ((face.top + face.bottom) / 2).value, 0.5f)
+            assertEquals(Row2Height.value, (row.bottom - row.top).value, 0.5f)
+        }
+        compose.onAllNodesWithContentDescription("收藏").assertCountEquals(0)
+    }
+
+    @Test fun aGroupWiderThanTwiceTheCentreStopsAtTheLinesStart() {
+        compose.setContent {
+            Box(Modifier.width(320.dp).testTag("column")) {
+                EndRowTwo(Modifier.width(320.dp), facesCentre = 20.dp) { Box(Modifier.size(64.dp, 28.dp).testTag("face")) }
             }
         }
         val row = compose.onNodeWithTag("column").getBoundsInRoot()
-        val face = compose.onNodeWithTag("face").getBoundsInRoot()
-        // The face's rim 12 in, the web's — where it stood when a pad of 3 came before it.
-        assertEquals(12f, (face.left - row.left).value, 0.5f)
-        // The row 48 tall with a face or none (the reader's own slides in without moving the page), 收藏 not on it (round 28 §S4).
-        assertEquals(Row2Height.value, (row.bottom - row.top).value, 0.5f)
-        compose.onAllNodesWithContentDescription("收藏").assertCountEquals(0)
+        assertEquals(row.left.value, compose.onNodeWithTag("face").getBoundsInRoot().left.value, 0.5f)
+    }
+
+    @Test fun theCentreIsTheTapSegmentsAsTheCapsuleDrawsIt() {
+        // The capsule's three segments as a phone's 300 draws them, and the two-line form's 共振 alone: the faces over
+        // the 共振 segment's own centre (round 30: the line stands above the capsule), not the capsule's.
+        val forms = listOf(
+            listOf(Segment("tap", "共振", IconName.Wave) { }, Segment("note", "寄小紙條", IconName.Note) { }, Segment("reply", "寫卡片", IconName.Pen) { }),
+            listOf(Segment("tap", "共振", IconName.Wave) { }),
+        )
+        var shown by mutableStateOf(forms[0])
+        compose.setContent {
+            Column(Modifier.width(300.dp)) {
+                EndRowTwo(Modifier.width(300.dp), facesCentre = segmentCentre(shown, 300.dp)) { Box(Modifier.size(AvatarGroup.width(3, TapFaceSize), 28.dp).testTag("face")) }
+                SegmentedActionBar(shown, Modifier.width(300.dp))
+            }
+        }
+        for (segments in forms) {
+            shown = segments
+            compose.waitForIdle()
+            val seg = compose.onNode(hasClickAction() and hasText("共振")).getBoundsInRoot()
+            val face = compose.onNodeWithTag("face").getBoundsInRoot()
+            assertEquals("${segments.size} segments", ((seg.left + seg.right) / 2).value, ((face.left + face.right) / 2).value, 1f)
+            assertTrue("the faces stand over the capsule", face.bottom.value <= seg.top.value + 0.5f)
+        }
     }
 
     private fun tags(n: Int) = listOf("散文", "早晨", "咖啡", "搬家", "一個人", "城市", "日常", "回憶", "台北", "練習").take(n)
@@ -265,6 +316,7 @@ class EndRowTwoTest {
                 StoryTagsRow(names, if (wide) null else toggle, Modifier.padding(bottom = endRowAir(reader = true).dp).testTag("tagsRow"))
                 ReaderEndStack(
                     capsuleWidth = (if (wide) 420 else width).dp,
+                    facesCentre = 70.dp,
                     faces = { Box(Modifier.size(28.dp).testTag("face")) },
                     firstLine = { Box(Modifier.size((if (wide) 420 else width).dp, 48.dp).testTag("capsule")) },
                     bookmark = if (wide) ({ BookmarkButton(saved = false, glyphEnd = BylineGlyphEnd) {} }) else null,
@@ -284,9 +336,9 @@ class EndRowTwoTest {
         val note = compose.onNodeWithTag("note").getBoundsInRoot()
         assertEquals(16f + Row2Height.value, (capsule.top - tagsRow.bottom).value, 0.5f)
         assertEquals(64f, (capsule.top - tagsRow.bottom).value, 0.5f)
-        // The face centred in its 48 line, 12 in, and wholly over the capsule.
+        // The face centred in its 48 line, on the centre it was given (共振's, round 29 §S11), and wholly over the capsule.
         assertEquals(capsule.top.value - Row2Height.value / 2, (face.top.value + face.bottom.value) / 2, 0.5f)
-        assertEquals(12f, face.left.value, 0.5f)
+        assertEquals(70f, (face.left.value + face.right.value) / 2, 0.5f)
         assertTrue(face.bottom.value <= capsule.top.value)
         assertEquals(capsule.bottom.value, note.top.value, 0.5f)
         // Every other end keeps the 40 under the tags.

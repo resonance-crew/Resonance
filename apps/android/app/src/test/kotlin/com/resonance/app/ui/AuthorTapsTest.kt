@@ -26,7 +26,7 @@ class AuthorTapsTest {
     @Test fun noOneTappedShowsNothing() {
         assertTrue(TapFaces.of(CardTap(mine = false, faces = emptyList(), more = false, mayNote = false)).isEmpty)
         assertTrue(TapFaces.of(null).isEmpty)
-        // The author's own card: three newest, then the blank disc.
+        // The author's own card: three newest; that there are more is said, never drawn (round 29 §S5).
         val faces = TapFaces.of(CardTap(false, listOf(person("gus"), person("hana"), person("bob")), more = true, mayNote = false))
         assertEquals(3, faces.faces.size)
         assertTrue(faces.more)

@@ -198,7 +198,7 @@ private class CodeSpan(private val scale: Float) : MetricAffectingSpan() {
  * A link in running text: terracotta, with no straight underline — [RichCssText]
  * draws the pen's wave under each line the link covers — and taps resolved there.
  */
-class LinkSpan(val url: String, private val color: Int) : CharacterStyle() {
+class LinkSpan(val url: String, val color: Int) : CharacterStyle() {
     override fun updateDrawState(tp: TextPaint) {
         tp.color = color
     }
@@ -279,8 +279,15 @@ internal fun linkStrokes(layout: Layout, spanned: Spanned, sizePx: Float, densit
  * start edge in every script (round 25 §H), strict CJK breaks on API 33+, balanced lines for a title or a heading — as story.css
  * sets them. [breakAt] are offsets a line must start at (a title's clauses, [TitleClauses]).
  */
-internal fun buildRichLayout(runs: List<InlineRun>, style: ProseStyle, widthPx: Int, density: Density): Pair<StaticLayout, Spanned> =
-    layoutProse(richText(runs, style), runs, style, widthPx, density)
+internal fun buildRichLayout(
+    runs: List<InlineRun>,
+    style: ProseStyle,
+    widthPx: Int,
+    density: Density,
+    /** Last touches to the text before it is laid out (round 29: the picked sentences' marks and their groups' room). */
+    prepare: ((SpannableStringBuilder) -> Unit)? = null,
+): Pair<StaticLayout, Spanned> =
+    layoutProse(richText(runs, style), runs, style, widthPx, density, prepare)
 
 /** [runs] as one text with their marks as spans (bold, italic, strikethrough, code, links), before [layoutProse] lays it out. */
 private fun richText(runs: List<InlineRun>, style: ProseStyle): SpannableStringBuilder {
@@ -316,9 +323,18 @@ internal fun richDesiredWidth(runs: List<InlineRun>, style: ProseStyle, density:
 }
 
 /** [text] (with its runs' spans already on it) laid out in [style]'s CSS line boxes and breaking. */
-private fun layoutProse(text: SpannableStringBuilder, runs: List<InlineRun>, style: ProseStyle, widthPx: Int, density: Density): Pair<StaticLayout, Spanned> {
+private fun layoutProse(
+    text: SpannableStringBuilder,
+    runs: List<InlineRun>,
+    style: ProseStyle,
+    widthPx: Int,
+    density: Density,
+    prepare: ((SpannableStringBuilder) -> Unit)? = null,
+): Pair<StaticLayout, Spanned> {
     val paint = prosePaint(style, density)
     if (style.latinMarks) markLatin(text, runs, style)
+    // After the Latin marks (they find their runs by the runs' own offsets), before the line boxes (which cover it all).
+    prepare?.invoke(text)
     text.setSpan(CssLineHeightSpan(paint.textSize * style.lineHeight, paint.fontMetrics), 0, text.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
     val b = StaticLayout.Builder.obtain(text, 0, text.length, paint, max(1, widthPx))
         .setAlignment(style.align)
@@ -374,9 +390,14 @@ private fun Modifier.drawBehind(rail: Color, draw: androidx.compose.ui.graphics.
 /** OpenType's tabular figures: every digit one width, so a column of numbers lines up. */
 private const val TABULAR_FIGURES = "tnum"
 
-/** Rich story text in exact CSS line boxes, with tappable links. */
+/**
+ * Rich story text in exact CSS line boxes, with tappable links. On the author's own page ([passages], round 29) the
+ * sentences readers picked in it wear their wash under the words, and each its group of faces — in the line right
+ * after it, or in the left margin, 8 short of the column's left edge (§S10); a press on a group or on its wash opens who picked it (a
+ * link inside the wash keeps its own press).
+ */
 @Composable
-fun RichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl: (String) -> Unit, modifier: Modifier = Modifier) {
+fun RichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl: (String) -> Unit, modifier: Modifier = Modifier, passages: StoryPassages? = null) {
     val open by rememberUpdatedState(onOpenUrl)
     val scaled = LocalDensity.current
     val density = scaled.density
@@ -387,53 +408,141 @@ fun RichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl: (String) ->
     // Whether its words hold a link at all; one whose strokes came out empty (only spaces) takes no tap, as before.
     val linked = remember(runs) { runs.any { it.link != null && it.text.isNotEmpty() } }
     val wave = Tokens.LinkWave
-    Box(modifier.fillMaxWidth()) {
-        Box(
-            Modifier
-                .builtForWidth(
-                    key = RichTextKey(runs, style, density, scaled.fontScale),
-                    built = built,
-                    build = { widthPx ->
-                        val (layout, spanned) = buildRichLayout(runs, style, widthPx, scaled)
-                        RichTextLayout(layout, spanned, linkStrokes(layout, spanned, scaled.cssFontPx(style.size), density))
-                    },
-                    size = { IntSize(it.layout.width, it.layout.height) },
-                    drawKey = wave,
-                ) { (layout, _, strokes) ->
-                    // The waves first, under the letters (the web paints them as the link's background):
-                    // a descender's foot rests in its arch rather than being crossed by it.
-                    val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                    strokes.forEach { s ->
-                        translate(s.x, s.y) { drawPath(s.wave, wave, alpha = if (s.url == pressedUrl.value) 1f else 0.7f, style = pen) }
-                    }
-                    drawIntoCanvas { layout.draw(it.nativeCanvas) }
+    // The picked sentences in this leaf, if any (only the author's page hands any).
+    val leaf = passages?.of(runs).orEmpty()
+    val marks = passages?.takeIf { leaf.isNotEmpty() }
+    // In the line a face is never taller than the line box (§S1.2): the line keeps its height.
+    val face = marks?.let { m ->
+        if (!m.inLine) m.face else min(m.face.value, scaled.cssFontPx(style.size) * style.lineHeight / density).dp
+    }
+    val wash = Tokens.PassageWash
+    // How far this leaf starts in from the column's left (a quote's, a list item's): a group in the margin stands by the column's edge.
+    val indent = if (marks == null || marks.inLine) 0.dp else LocalPassageIndent.current
+    val marksNow by rememberUpdatedState(marks)
+    val faceNow by rememberUpdatedState(face)
+    val text = Modifier
+        .builtForWidth(
+            key = RichTextKey(runs, style, density, scaled.fontScale, marks?.keyFor(leaf)?.let { it to indent }),
+            built = built,
+            build = { widthPx ->
+                val prepare: ((SpannableStringBuilder) -> Unit)? = if (marks == null || face == null) null else { t ->
+                    markPassages(t, leaf, marks.inLine) { id -> with(scaled) { (marks.groupWidth(id, face) + StoryPassages.InLineGap * 2).roundToPx() } }
                 }
-                .semantics { this.text = plain }
-                .then(if (!linked) Modifier else Modifier.pointerInput(built) {
-                    fun linkAt(p: androidx.compose.ui.geometry.Offset): LinkSpan? {
-                        val laid = built.value?.takeIf { it.strokes.isNotEmpty() } ?: return null
-                        val line = laid.layout.getLineForVertical(p.y.roundToInt())
-                        val offset = laid.layout.getOffsetForHorizontal(line, p.x)
-                        return laid.spanned.getSpans(offset, offset, LinkSpan::class.java).firstOrNull()
-                    }
-                    detectTapGestures(
-                        onPress = { p ->
-                            // The pen presses harder while the finger is down: the web's hover.
-                            pressedUrl.value = linkAt(p)?.url
-                            tryAwaitRelease()
-                            pressedUrl.value = null
-                        },
-                    ) { p -> linkAt(p)?.let { open(it.url) } }
-                }),
-        )
+                val (layout, spanned) = buildRichLayout(runs, style, widthPx, scaled, prepare)
+                val strokes = linkStrokes(layout, spanned, scaled.cssFontPx(style.size), density)
+                if (marks == null) RichTextLayout(layout, spanned, strokes)
+                else with(scaled) {
+                    val (washes, spots) = passagePlaces(
+                        layout, spanned, marks.inLine,
+                        StoryPassages.WashReach.toPx(), StoryPassages.WashShort.toPx(), StoryPassages.InLineGap.toPx(), StoryPassages.MarginGap.toPx(),
+                        indentPx = indent.toPx(), widthPx = { id -> marks.groupWidth(id, face ?: marks.face).toPx() },
+                    )
+                    RichTextLayout(layout, spanned, strokes, washes, spots)
+                }
+            },
+            size = { IntSize(it.layout.width, it.layout.height) },
+            drawKey = if (marks == null) wave else wave to wash,
+        ) { (layout, _, strokes, washes) ->
+            // The washes first, under everything (§U2.1): the link's wave and the letters over them.
+            if (washes.isNotEmpty()) {
+                val a = marksNow?.alpha?.invoke() ?: 1f
+                val corner = androidx.compose.ui.geometry.CornerRadius(StoryPassages.WashCorner.toPx())
+                washes.forEach { w -> drawRoundRect(wash, w.rect.topLeft, w.rect.size, corner, alpha = a) }
+            }
+            // The waves first, under the letters (the web paints them as the link's background):
+            // a descender's foot rests in its arch rather than being crossed by it.
+            val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+            strokes.forEach { s ->
+                translate(s.x, s.y) { drawPath(s.wave, wave, alpha = if (s.url == pressedUrl.value) 1f else 0.7f, style = pen) }
+            }
+            drawIntoCanvas { layout.draw(it.nativeCanvas) }
+        }
+        .semantics { this.text = plain }
+        .then(if (!linked && marks == null) Modifier else Modifier.pointerInput(built) {
+            fun linkAt(p: androidx.compose.ui.geometry.Offset): LinkSpan? {
+                val laid = built.value?.takeIf { it.strokes.isNotEmpty() } ?: return null
+                val line = laid.layout.getLineForVertical(p.y.roundToInt())
+                val offset = laid.layout.getOffsetForHorizontal(line, p.x)
+                return laid.spanned.getSpans(offset, offset, LinkSpan::class.java).firstOrNull()
+            }
+            // A group in the line (its 48 round it, into the lines above and below), else a sentence's wash.
+            fun passageAt(p: androidx.compose.ui.geometry.Offset): String? {
+                val m = marksNow ?: return null
+                val laid = built.value ?: return null
+                val size = faceNow ?: return null
+                if (m.inLine) laid.spots.firstOrNull { s ->
+                    val w = m.groupWidth(s.id, size).toPx()
+                    val hw = max(w, StoryPassages.Hit.toPx()) / 2
+                    val hh = max(size.toPx(), StoryPassages.Hit.toPx()) / 2
+                    val cx = s.left + w / 2
+                    p.x in (cx - hw)..(cx + hw) && p.y in (s.centre - hh)..(s.centre + hh)
+                }?.let { return it.id }
+                return laid.washes.firstOrNull { it.rect.contains(p) }?.id
+            }
+            detectTapGestures(
+                onPress = { p ->
+                    // The pen presses harder while the finger is down: the web's hover.
+                    pressedUrl.value = linkAt(p)?.url
+                    tryAwaitRelease()
+                    pressedUrl.value = null
+                },
+            ) { p ->
+                val link = linkAt(p)
+                if (link != null) open(link.url)
+                else passageAt(p)?.let { id -> marksNow?.onOpen?.invoke(id) }
+            }
+        })
+    if (marks == null || face == null) {
+        Box(modifier.fillMaxWidth()) { Box(text) }
+        return
+    }
+    // The groups over the text, where its layout put them (in the line, or left of the column's edge in the margin).
+    androidx.compose.ui.layout.Layout(
+        content = {
+            Box(text)
+            leaf.forEach { p -> androidx.compose.runtime.key(p.id) { PassageGroup(marks, p.id, face, clickable = !marks.inLine) } }
+        },
+        modifier = modifier.fillMaxWidth(),
+    ) { measurables, constraints ->
+        val words = measurables[0].measure(constraints.copy(minHeight = 0))
+        val laid = built.value
+        val groups = measurables.drop(1).map { it.measure(androidx.compose.ui.unit.Constraints()) }
+        layout(max(constraints.minWidth, words.width), words.height) {
+            words.place(0, 0)
+            groups.forEachIndexed { i, g ->
+                val id = leaf[i].id
+                val spot = laid?.spots?.firstOrNull { it.id == id } ?: return@forEachIndexed
+                val w = marks.groupWidth(id, face).toPx()
+                g.place((spot.left - (g.width - w) / 2).roundToInt(), (spot.centre - g.height / 2f).roundToInt())
+            }
+        }
     }
 }
 
-/** A run of story text laid out for a width: the layout, its spanned text and its links' strokes. */
-internal data class RichTextLayout(val layout: StaticLayout, val spanned: Spanned, val strokes: List<LinkStroke>)
+/**
+ * How far the leaf drawn here starts in from the story column's left edge — a quote's rail and gap, a list item's
+ * gutter, added up when nested: a picked sentence's group in the left margin stands by the column's edge (§S10).
+ */
+private val LocalPassageIndent = androidx.compose.runtime.staticCompositionLocalOf { 0.dp }
+
+/** Adds [by] to [LocalPassageIndent] for [content] on the author's own page ([story] has passages); else just [content]. */
+@Composable
+private fun Indented(story: Story, by: Dp, content: @Composable () -> Unit) {
+    if (story.passages == null || story.passages.inLine) content()
+    else androidx.compose.runtime.CompositionLocalProvider(LocalPassageIndent provides LocalPassageIndent.current + by, content = content)
+}
+
+/** A run of story text laid out for a width: the layout, its spanned text, its links' strokes and its picked sentences' washes and groups. */
+internal data class RichTextLayout(
+    val layout: StaticLayout,
+    val spanned: Spanned,
+    val strokes: List<LinkStroke>,
+    val washes: List<WashPiece> = emptyList(),
+    val spots: List<GroupSpot> = emptyList(),
+)
 
 /** Everything a [RichCssText]'s layout comes from but the width. */
-private data class RichTextKey(val runs: List<InlineRun>, val style: ProseStyle, val density: Float, val fontScale: Float)
+private data class RichTextKey(val runs: List<InlineRun>, val style: ProseStyle, val density: Float, val fontScale: Float, val passages: Any? = null)
 
 /**
  * Where a title breaks between its clauses (LatinMarkText on the web): Chinese breaks between any
@@ -597,11 +706,13 @@ fun StoryMarkdown(
     links: StoryLinkCards? = null,
     /** On each heading (in a quote or a list too): where the table of contents finds it ([StoryAnchors]). */
     headingAnchor: ((StoryBlock.Heading) -> Modifier)? = null,
+    /** The author's own page only (round 29): the sentences readers picked, washed, with their faces. */
+    passages: StoryPassages? = null,
     /** A card link standing alone, drawn by the page in the story's [ProseStyle] (for when it has no card to show). */
     embed: @Composable (href: String, title: String, style: ProseStyle) -> Unit,
 ) {
     val body = ProseStyle.body(type, lang)
-    val story = remember(type, lang, onOpenUrl, links, embed, headingAnchor, body) { Story(type, lang, onOpenUrl, links, embed, headingAnchor, body) }
+    val story = remember(type, lang, onOpenUrl, links, embed, headingAnchor, body, passages) { Story(type, lang, onOpenUrl, links, embed, headingAnchor, body, passages) }
     BlockColumn(blocks, story.body, story, nested = false)
 }
 
@@ -615,6 +726,8 @@ private class Story(
     val headingAnchor: ((StoryBlock.Heading) -> Modifier)?,
     /** The story's words in its type ([ProseStyle.body]), in the palette on screen. */
     val body: ProseStyle,
+    /** The author's picked sentences (round 29), or none. */
+    val passages: StoryPassages? = null,
 ) {
     val spacing = type.spacing()
 
@@ -654,11 +767,12 @@ private fun Block(block: StoryBlock, style: ProseStyle, story: Story) {
     val em = (story.type.bodySize * grown).dp
     val onOpenUrl = story.onOpenUrl
     when (block) {
-        is StoryBlock.Paragraph -> RichCssText(block.runs, style, onOpenUrl)
+        is StoryBlock.Paragraph -> RichCssText(block.runs, style, onOpenUrl, passages = story.passages)
         // h2–h6 at their start, balanced; inside a quote in its muted ink.
         is StoryBlock.Heading -> RichCssText(
             block.runs, ProseStyle.heading(story.type, block.level, story.lang, style.color).copy(inQuote = style.inQuote), onOpenUrl,
             Modifier.semantics { heading() }.then(story.headingAnchor?.invoke(block) ?: Modifier),
+            passages = story.passages,
         )
         StoryBlock.Blank -> Spacer(Modifier.height((story.spacing.blank * grown).dp).clearAndSetSemantics { })
         is StoryBlock.Image -> StoryImage(block.url, block.alt, atStart = style.inQuote)
@@ -674,7 +788,7 @@ private fun Block(block: StoryBlock, style: ProseStyle, story: Story) {
                     CappedTextScale { StoryLinkCard(face.preview, face.foot, links.label(face.spoken), onOpen = { links.open(face.preview) }) }
                 }
             } else {
-                RichCssText(block.runs, style, onOpenUrl)
+                RichCssText(block.runs, style, onOpenUrl, passages = story.passages)
             }
         }
         // The rail is drawn behind the quote's own box (its height is the
@@ -695,7 +809,7 @@ private fun Block(block: StoryBlock, style: ProseStyle, story: Story) {
                     drawPath(path, it, style = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round))
                 }
                 .padding(start = QuoteRailWidth + em),
-        ) { BlockColumn(block.children, style.quoted, story, nested = true) }
+        ) { Indented(story, QuoteRailWidth + em) { BlockColumn(block.children, style.quoted, story, nested = true) } }
         // Each item's marker in the muted ink at the start of the 1.6em gutter, the items 0.3em apart.
         is StoryBlock.ListBlock -> {
             val itemGaps = remember(block, story) { ProseMetrics.itemGaps(block.items, story.spacing, story::drawnAsCard) }
@@ -707,13 +821,14 @@ private fun Block(block: StoryBlock, style: ProseStyle, story: Story) {
                         Box(Modifier.width((story.type.listIndent * grown).dp)) {
                             RichCssText(listOf(InlineRun(if (block.ordered) "${block.start + i}." else "•")), marker, onOpenUrl, Modifier.clearAndSetSemantics { })
                         }
-                        Box(Modifier.weight(1f)) { BlockColumn(item, style, story, nested = false) }
+                        Box(Modifier.weight(1f)) { Indented(story, (story.type.listIndent * grown).dp) { BlockColumn(item, style, story, nested = false) } }
                     }
                 }
             }
         }
         StoryBlock.Rule -> WavyDivider(seed = 23.0)
-        is StoryBlock.Table -> StoryTable(block, style, onOpenUrl)
+        // A cell's group stands in its line: a margin there would be the next column.
+        is StoryBlock.Table -> StoryTable(block, style, onOpenUrl, story.passages?.inLineOnly())
         // A block of code: monospace at the inline code's size, 1.6 apart, on the code tint, never justified or tracked.
         is StoryBlock.CodeBlock -> BasicText(
             block.code,
@@ -790,7 +905,7 @@ private val QuoteRailWidth = 5.2.dp
  * it as 表格, a table of its rows and columns.
  */
 @Composable
-private fun StoryTable(table: StoryBlock.Table, style: ProseStyle, onOpenUrl: (String) -> Unit) {
+private fun StoryTable(table: StoryBlock.Table, style: ProseStyle, onOpenUrl: (String) -> Unit, passages: StoryPassages? = null) {
     val columns = table.align.size
     if (columns == 0) return
     val density = LocalDensity.current
@@ -871,7 +986,7 @@ private fun StoryTable(table: StoryBlock.Table, style: ProseStyle, onOpenUrl: (S
                                 )
                                 .semantics { collectionItemInfo = CollectionItemInfo(rowIndex = r, rowSpan = 1, columnIndex = c, columnSpan = 1) },
                         ) {
-                            RichCssText(cells.getOrNull(c).orEmpty(), if (r == 0) headStyles[c] else bodyStyles[c], onOpenUrl)
+                            RichCssText(cells.getOrNull(c).orEmpty(), if (r == 0) headStyles[c] else bodyStyles[c], onOpenUrl, passages = passages)
                         }
                     }
                 }

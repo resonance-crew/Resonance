@@ -41,11 +41,13 @@ describe('AuthorTaps', () => {
     expect(renderLine(null).container).toBeEmptyDOMElement();
   });
 
-  it('is the wave and the three newest faces, the blank disc when there are more — one button, no number', () => {
+  it('is the wave and the three newest faces, nothing after them when there are more — one button, no number', () => {
+    // Round 29 §S5: no blank disc for the others; the label still says there are others (the dialog says who).
     const { container } = renderLine({ mine: false, faces: [face('gus'), face('carol'), face('hana')], more: true, mayNote: false });
     const button = screen.getByRole('button', { name: 'Resonated with this card: gus, carol, hana, and others' });
-    expect(button.querySelectorAll('svg').length).toBeGreaterThan(3);
-    expect(container.querySelector('[data-more]')).not.toBeNull();
+    expect([...button.querySelectorAll('[data-face]')].map((f) => f.getAttribute('data-face'))).toEqual(['gus', 'carol', 'hana']);
+    expect(button.querySelector('[data-count]')?.getAttribute('data-count')).toBe('3');
+    expect(container.querySelector('[data-more]')).toBeNull();
     expect(container.textContent).not.toMatch(/\d/);
   });
 

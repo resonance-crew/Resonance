@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { useLocale, useTranslations } from 'next-intl';
 import { Icon } from '@/components/atoms/Icon';
@@ -68,8 +68,9 @@ export const ENDS_GAP = 12;
  * place under the row, never in a dialog) and 用卡片回應 (a card of one's own; 修改 with a draft, 已回應 once
  * published) — its row ended, at the column's end, by the card's passive actions (`trailing`: 收藏, and its share
  * and ⋯ after a long story) wherever the capsule stands at its own width. Right above it (0 between) the faces' line:
- * the faces of who resonated, over 共振 — above the capsule since round 30 (the owner, 2026-11-22: 「把共振…使用者头像，
- * 把它移到共振按钮的上方」), so that the note opens right under its own button, 12 under the capsule.
+ * the faces of who resonated, centred on the 共振 segment (round 29 §S11) and over it — above the capsule since round
+ * 30 (the owner, 2026-11-22: 「把共振…使用者头像，把它移到共振按钮的上方」), so that the note opens right under its own
+ * button, 12 under the capsule.
  * Tapping 共振 fills the segment and slides the viewer's face in; on a card with passages (round 27 §U1) a press that
  * turns it on also asks, 240 ms later, which part stayed with them — a small centred dialog the tap never waits on.
  * Nothing here is the author's.
@@ -164,6 +165,28 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
     const ends = endsRef.current ? endsRef.current.offsetWidth + ENDS_GAP : 0;
     if (need > Math.max(box.clientWidth - ends, 0) + 1) setFit(fit === 'full' ? 'short' : 'split');
   }, [fit, room, tapOn, replyState, fonts]);
+
+  // The faces over 共振 stand centred on its segment (round 29 §S11; the owner, 2026-11-22: 「这三个圈圈可不可以中点帮我
+  // 对齐这个共振按钮的中间呢」): the segment's centre, from the faces' line's start, set as `--tap-centre` there.
+  const facesLineRef = useRef<HTMLDivElement>(null);
+  const [tapCentre, setTapCentre] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const line = facesLineRef.current;
+    const segment = firstBar.current?.querySelector<HTMLElement>('[role="group"] > button');
+    if (!line || !segment) return;
+    const measure = () => {
+      const s = segment.getBoundingClientRect();
+      const centre = Math.round((s.left + s.width / 2 - line.getBoundingClientRect().left) * 10) / 10;
+      setTapCentre(Number.isFinite(centre) && s.width > 0 ? centre : null);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(segment);
+    ro.observe(line);
+    return () => ro.disconnect();
+    // (the faces' line comes with the viewer and their tap; the segment changes with the words' fit)
+  }, [fit, room, fonts, tapOn, loading, user, tap]);
 
   const onTap = useCallback(async () => {
     if (!user) return router.push('/signin');
@@ -288,9 +311,16 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
     <div ref={containerRef} className={styles.container} data-end-row="" data-faces-line={user ? '' : undefined}>
       <div className={styles.end} data-fit={fit}>
         {user && (
-          <div className={styles.facesLine}>
+          <div ref={facesLineRef} className={styles.facesLine} data-end-faces-line="">
             {/* Marked for the paper puppets (lib/mascots/reading/measure): no peek rises over the bar in front of them. */}
-            <span className={styles.faces} data-end-faces="">{faces}</span>
+            <span
+              className={styles.faces}
+              data-end-faces=""
+              data-tap-centred={tapCentre != null ? '' : undefined}
+              style={tapCentre != null ? ({ '--tap-centre': `${tapCentre}px` } as CSSProperties) : undefined}
+            >
+              {faces}
+            </span>
           </div>
         )}
         <div className={styles.row}>
