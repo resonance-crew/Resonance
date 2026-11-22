@@ -4,8 +4,8 @@ import UIKit
 
 // Round 29: on the author's own page of a published card, every sentence a reader picked after 共振 — still in the
 // story — wears a faint wash, and the people who picked it (newest first, at most three, overlapped, nothing after
-// them) stand beside it: in the right margin where the white right of the column is ≥ 70, else in the line, right
-// after the sentence's last character (§S1, §S2, §S9). Pressing the faces or the wash opens who picked that sentence
+// them) stand beside it: in the left margin where the white left of the column is ≥ 70, else in the line, right
+// after the sentence's last character (§S1, §S2, §S9, §S10: the owner moved the margin to the left on 2026-11-22). Pressing the faces or the wash opens who picked that sentence
 // (§S4). Only the author's page passes the marks; every other page is drawn as it was.
 
 /// One picked sentence in one drawn text: its id, its range in the text (UTF-16), and — in the line placement — the
@@ -47,8 +47,8 @@ public struct PassageWash: Equatable, Sendable {
     }
 
     /// Where `wash` came out in a laid-out text: one piece per line (in the view's points, `origin` the text
-    /// container's inset), the line box of the line it ends on, and in the line placement the faces' slot after its
-    /// last character. Nil when the range isn't in the text.
+    /// container's inset), the line boxes of the lines it begins and ends on, and in the line placement the faces'
+    /// slot after its last character. Nil when the range isn't in the text.
     public static func geometry(of wash: PassageWash, layoutManager lm: NSLayoutManager, container: NSTextContainer, origin: CGPoint,
                          width: CGFloat) -> PassageGeometry? {
         guard let storage = lm.textStorage, wash.range.length > 0, NSMaxRange(wash.range) <= storage.length else { return nil }
@@ -58,6 +58,8 @@ public struct PassageWash: Equatable, Sendable {
         let glyphs = lm.glyphRange(forCharacterRange: last, actualCharacterRange: nil)
         guard glyphs.length > 0 else { return nil }
         let line = lm.lineFragmentRect(forGlyphAt: glyphs.location, effectiveRange: nil)
+        let firstGlyph = lm.glyphIndexForCharacter(at: wash.range.location)
+        let first = lm.lineFragmentRect(forGlyphAt: firstGlyph, effectiveRange: nil)
         // The last character's own end: where its glyph starts, its advance and the story's tracking — not the room
         // kerned on for the faces.
         var advance: CGFloat = 0
@@ -77,24 +79,28 @@ public struct PassageWash: Equatable, Sendable {
                           width: max(0, maxX - f.minX) + 2 * overhang, height: max(0, f.lineHeight - inset))
         }
         let endLine = CGRect(x: 0, y: line.minY + origin.y, width: width, height: line.height)
+        let startLine = CGRect(x: 0, y: first.minY + origin.y, width: width, height: first.height)
         let slot = wash.gap > 0
             ? CGRect(x: end + PassageFaces.lineGap + origin.x, y: line.minY + origin.y, width: max(0, wash.gap - 2 * PassageFaces.lineGap),
                      height: line.height)
             : nil
-        return PassageGeometry(pieces: pieces, endLine: endLine, slot: slot)
+        return PassageGeometry(pieces: pieces, startLine: startLine, endLine: endLine, slot: slot)
     }
 }
 
 /// Where one wash came out, in its text view's points.
 public struct PassageGeometry: Equatable, Sendable {
     public var pieces: [CGRect]
+    /// The line box of the line the sentence begins on, across the view: what the faces in the margin stand by (§S10).
+    public var startLine: CGRect
     /// The line box of the line the sentence ends on, across the view.
     public var endLine: CGRect
     /// In the line placement: where its faces lie, after its last character.
     public var slot: CGRect?
 
-    public init(pieces: [CGRect], endLine: CGRect, slot: CGRect?) {
+    public init(pieces: [CGRect], startLine: CGRect, endLine: CGRect, slot: CGRect?) {
         self.pieces = pieces
+        self.startLine = startLine
         self.endLine = endLine
         self.slot = slot
     }
@@ -115,26 +121,30 @@ public nonisolated enum PassageFaces {
     public static let size: CGFloat = 24
     /// A Latin-script story on a compact window (its line box is 28.8).
     public static let latinCompactSize: CGFloat = 22
-    /// The white right of the column the margin needs (`PASSAGE_MARGIN_MIN`).
+    /// The white left of the column the margin needs (`PASSAGE_MARGIN_MIN`).
     public static let marginMin: CGFloat = 70
-    /// From the column's right edge to the group's left edge, in the margin.
+    /// From the group's right edge to the column's left edge, in the margin.
     public static let marginGap: CGFloat = 8
     /// In the line: after the sentence's last character, and before the next.
     public static let lineGap: CGFloat = 4
-    /// In the margin the widest group keeps at least 6 from the rail or the window's edge: room − 14 for three faces.
+    /// In the margin the widest group keeps at least 6 from the window's edge: room − 14 for three faces.
     public static let marginClear: CGFloat = 14
     /// A finger's hit area, centred on the group.
     public static let hit: CGFloat = 44
 
-    /// Which place by the white right of the column.
+    /// Which place by the white left of the column.
     public static func place(room: CGFloat) -> Place { room >= marginMin ? .margin : .inline }
 
-    /// The white right of the story's column: to the contents rail when one stands (always the rail gap), else to the
-    /// page's edge. `width`: what the page has across.
+    /// The white left of the story's column (§S10): from the column's left edge to the page's — a sidebar stands
+    /// outside the page. A contents rail on the right only shifts the column (a turned 1024 iPad with one has 41).
+    /// `width`: what the page has across (kept for the call sites; the left white doesn't depend on it).
     public static func room(_ layout: CardPageLayout, width: CGFloat) -> CGFloat {
-        if layout.rail { return Tokens.storyRailGap }
-        return max(0, width - (layout.leading + layout.article - CardPageLayout.articleInset))
+        max(0, min(width, layout.leading + CardPageLayout.articleInset))
     }
+
+    /// The story's column as a named space, so a quote's or a list item's text knows how far in from the column's
+    /// left edge it starts: its faces in the margin stand by the column's edge, not by its own.
+    public static let columnSpace = "story-passage-column"
 
     /// A face's size: 24 × the reading scale (22 × it for a Latin story on a compact window) and never taller than
     /// the line box in the line; in the margin capped so three overlapped faces (2.32 × a face) keep 6 clear.
@@ -150,17 +160,18 @@ public nonisolated enum PassageFaces {
         FaceStack.width(count: count, size: size) + 2 * lineGap
     }
 
-    /// Each margin group's centre line, in order down the text: a group that would share a line with the one before
-    /// it moves down one line box.
-    public static func marginCentres(_ ends: [CGFloat], lineBox: CGFloat) -> [CGFloat] {
+    /// Each margin group's centre line, in order down the text (the middle of the line each wash begins on): a group
+    /// that would share a line with the one before it moves down one line box.
+    public static func marginCentres(_ starts: [CGFloat], lineBox: CGFloat) -> [CGFloat] {
         var out: [CGFloat] = []
-        for y in ends { out.append(max(y, (out.last ?? -.infinity) + lineBox)) }
+        for y in starts { out.append(max(y, (out.last ?? -.infinity) + lineBox)) }
         return out
     }
 
     /// The group's box in its text's points: in the line, its slot (centred, the faces' own width); in the margin,
-    /// ``marginGap`` past the text's right edge, centred on `centreY`.
-    public static func groupBox(_ geometry: PassageGeometry, place: Place, count: Int, size: CGFloat, textWidth: CGFloat,
+    /// its right edge ``marginGap`` left of the column's left edge — `indent` left of the text's own (a quote's, a list
+    /// item's) — centred on `centreY`.
+    public static func groupBox(_ geometry: PassageGeometry, place: Place, count: Int, size: CGFloat, indent: CGFloat,
                                 centreY: CGFloat) -> CGRect {
         let width = FaceStack.width(count: count, size: size)
         switch place {
@@ -168,7 +179,7 @@ public nonisolated enum PassageFaces {
             let slot = geometry.slot ?? geometry.endLine
             return CGRect(x: slot.minX, y: slot.midY - size / 2, width: width, height: size)
         case .margin:
-            return CGRect(x: textWidth + marginGap, y: centreY - size / 2, width: width, height: size)
+            return CGRect(x: -indent - marginGap - width, y: centreY - size / 2, width: width, height: size)
         }
     }
 }
@@ -259,6 +270,8 @@ struct PassageText: View {
     let marks: [PassageLeaves.Mark]
     let plan: StoryPassageMarks
     @State private var layout: PassageLayout?
+    /// How far in from the story column's left edge this text starts (a quote's, a list item's indent).
+    @State private var indent: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var lineBox: CGFloat { font.pointSize * lineHeight }
@@ -284,6 +297,7 @@ struct PassageText: View {
             .overlay(alignment: .topLeading) {
                 if let layout { groups(layout, size: size) }
             }
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(PassageFaces.columnSpace)).minX } action: { indent = max(0, $0) }
     }
 
     /// A layout that brings a sentence the text didn't have when last drawn fades its faces in (as the wash does).
@@ -299,11 +313,11 @@ struct PassageText: View {
 
     private func groups(_ layout: PassageLayout, size: CGFloat) -> some View {
         let items = shown.filter { layout.marks[$0.mark.id] != nil }
-        let centres = PassageFaces.marginCentres(items.map { layout.marks[$0.mark.id]!.endLine.midY }, lineBox: lineBox)
+        let centres = PassageFaces.marginCentres(items.map { layout.marks[$0.mark.id]!.startLine.midY }, lineBox: lineBox)
         return ZStack(alignment: .topLeading) {
             ForEach(Array(items.enumerated()), id: \.element.mark.id) { i, item in
                 let box = PassageFaces.groupBox(layout.marks[item.mark.id]!, place: plan.place, count: item.passage.faces.count,
-                                                size: size, textWidth: layout.width, centreY: centres[i])
+                                                size: size, indent: indent, centreY: centres[i])
                 PassageGroup(passage: item.passage, order: item.mark.order, size: size, box: box, links: layout.links) {
                     plan.press(item.passage.id)
                 }

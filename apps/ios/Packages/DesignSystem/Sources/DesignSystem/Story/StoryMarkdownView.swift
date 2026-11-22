@@ -43,7 +43,9 @@ public struct StoryMarkdownView<Embed: View, LinkCard: View>: View {
     public var body: some View {
         BlockStack(blocks: blocks, style: .body(typography, language: language), rhythm: typography.rhythm(), onOpenURL: onOpenURL, embed: embed,
                    linkCard: linkCard, anchors: anchorsHeadings, headingSpace: headingSpace, marks: true)
-            // The story's column, for the paper puppets (its own blocks are marked too).
+            // The story's column, for the paper puppets (its own blocks are marked too), and the edge a picked
+            // sentence's faces stand by in the left margin (round 29 §S10).
+            .coordinateSpace(.named(PassageFaces.columnSpace))
             .readingMark(.column)
             // Where each picked sentence lies among the story's drawn texts (§P3): found once here, read by each text.
             .environment(\.storyPassageLeaves, passages.map { plan in

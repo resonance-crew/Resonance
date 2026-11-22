@@ -96,9 +96,11 @@ struct CardScreen: View {
             // The toast's 看譯文 brings the reader back to the same place in the translated story.
             .scrollPosition($position)
             // The paper puppets (round 19), while Settings → 外觀 → 小紙團 is on: on the card once it has
-            // loaded, never one in the trash. A tablet's contents rail keeps them out of the right margin, and so do the
-            // faces of the author's picked sentences standing there (round 29 §S1.1).
-            .modifier(MascotStage(page: "card", allowed: mascotsAllowed, rail: layout.rail ? CGRect(x: layout.railX, y: 0, width: Tokens.cardRailW, height: 1) : marginFaces))
+            // loaded, never one in the trash. A tablet's contents rail keeps them out of the right margin, and the faces
+            // of the author's picked sentences standing in the left one keep them out of that (round 29 §S10).
+            .modifier(MascotStage(page: "card", allowed: mascotsAllowed,
+                                  rail: layout.rail ? CGRect(x: layout.railX, y: 0, width: Tokens.cardRailW, height: 1) : nil,
+                                  leftTaken: marginFaces))
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             // The page's own scroll (the bar's line and progress): on the page's scroll view alone, not
             // on the rail's table of contents, which scrolls by itself.
@@ -428,8 +430,9 @@ struct CardScreen: View {
     }
 
     /// What the author's own page hands its story (round 29 §U1): nil on every other page, and on the author's when the
-    /// card is in the trash, private, or shown in a translation. The faces stand in the right margin when the white right
-    /// of the column is ≥ 70 (to the contents rail, else the window's edge), else in the line after the sentence (§S1).
+    /// card is in the trash, private, or shown in a translation. The faces stand in the left margin when the white left
+    /// of the column is ≥ 70 (to the page's edge; a contents rail on the right only shifts the column), else in the line
+    /// after the sentence (§S1, §S10).
     private func passageMarks(_ detail: CardDetail, blocks: [StoryBlock], story: StoryTypography, script: StoryScript, trashed: Bool,
                               translated: Bool) -> StoryPassageMarks? {
         guard PickedPeople.washes(detail, trashed: trashed, translated: translated), !Self.isPrivate(detail.card) else { return nil }
@@ -441,16 +444,16 @@ struct CardScreen: View {
         }
     }
 
-    /// The right margin, when the author's picked sentences' faces stand in it (round 29 §S1.1): the paper puppets take
-    /// no place there, as beside a contents rail.
+    /// The left margin, when the author's picked sentences' faces stand in it (round 29 §S10): the paper puppets take
+    /// no place there, as beside a contents rail on the right.
     private var marginFaces: CGRect? {
-        guard let detail = model?.detail, model?.phase == .loaded, !layout.rail,
+        guard let detail = model?.detail, model?.phase == .loaded,
               PickedPeople.washes(detail, trashed: TrashedCardBanner.shows(detail), translated: shownStory != nil),
               !PickedPeople.passages(detail.tap?.value1).isEmpty else { return nil }
         let pageWidth = width ?? window.contentWidth
         let room = PassageFaces.room(layout, width: pageWidth)
         guard PassageFaces.place(room: room) == .margin else { return nil }
-        return CGRect(x: pageWidth - room, y: 0, width: room, height: 1)
+        return CGRect(x: 0, y: 0, width: room, height: 1)
     }
 
     private func openPicked(_ passage: PickedPeople.Passage) {
