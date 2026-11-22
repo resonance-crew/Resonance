@@ -22,3 +22,5 @@ what says on whose word they changed. Commit the new row with the accept
 | 2026-11-21T12:34:07Z | 20261121-095831 | 4d186439 | web | landing | 5 | 收為基準 |
 | 2026-11-21T18:04:10Z | 20261121-161711 | 4afae1ba | android, ios, mac, web | card-passages, taps-author-list, taps-list, card-tapped | 56 | 收為基準 |
 | 2026-11-21T18:04:48Z | 20261121-163239 | 4afae1ba | android, ios, mac, web | card-passage-picked | 8 | 收為基準 |
+| 2026-11-22T03:49:42Z | 20261121-140459 | ce42d27a (dirty) | ios, mac | ios/iphone/update-required@dark-zh-TW.png, ios/iphone/update-required@light-zh-TW.png, ios/iphone/update-required@light-en.png, ios/ipad/update-required@light-zh-TW.png, mac/mac/update-required@light-zh-TW.png | 5 | 好，接受 |
+| 2026-11-22T03:49:51Z | 20261121-142552 | 55f7c566 (dirty) | android | update-required | 4 | 好，接受 |
