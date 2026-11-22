@@ -199,7 +199,13 @@ fun ComposerCapsule(
     trailing: (@Composable () -> Unit)? = null,
     /** What rides with the message (round 23 §2), inside the pen line over the text, the capsule's whole width ([CapsuleField]'s `header`). */
     header: (@Composable () -> Unit)? = null,
-    leading: @Composable () -> Unit,
+    /**
+     * The ＋ square at its start; none (the note's field in place, round 30 §S4: no envelope) and the words start
+     * [fieldStart] in.
+     */
+    leading: (@Composable () -> Unit)?,
+    /** Where the words start without a [leading] square: the field's own padding unless the caller says (the note's 16). */
+    fieldStart: Dp = Tokens.FieldPadX.dp,
     field: @Composable BoxScope.(vertical: Dp) -> Unit,
 ) = CapsuleField(
     ready = canSend && segment == ComposerSegment.Send,
@@ -218,6 +224,7 @@ fun ComposerCapsule(
     // A row coming or going moves the capsule's sides and top only: its foot, ＋ / ☺ and Send's corner stay put.
     steadyEdges = true,
     leading = leading,
+    fieldStart = fieldStart,
     segment = { ink ->
         // ˄ / ˅ is one chevron turning as the panel grows (never an arrow, which reads as sending the sticker). Its
         // turn lives in this branch alone, so coming from Send it starts where it should instead of spinning there.
@@ -278,6 +285,8 @@ fun CapsuleField(
      * is the field's own, as it was).
      */
     steadyEdges: Boolean = false,
+    /** Where the field starts without a [leading] square (dp): the field's own padding by default. */
+    fieldStart: Dp = Tokens.FieldPadX.dp,
     segment: @Composable (ink: Color) -> Unit,
     field: @Composable BoxScope.(vertical: Dp) -> Unit,
 ) {
@@ -327,7 +336,7 @@ fun CapsuleField(
             Box(Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth().heightIn(min = ComposerHeight).padding(end = segmentWidth), verticalAlignment = Alignment.Bottom) {
                     if (leading != null) Box(Modifier.width(ComposerHeight).height(ComposerHeight), contentAlignment = Alignment.Center) { leading() }
-                    Box(Modifier.weight(1f).padding(start = if (leading != null) 0.dp else Tokens.FieldPadX.dp, end = if (trailing != null) 0.dp else 10.dp)) { field(vertical) }
+                    Box(Modifier.weight(1f).padding(start = if (leading != null) 0.dp else fieldStart, end = if (trailing != null) 0.dp else 10.dp)) { field(vertical) }
                     if (trailing != null) Box(Modifier.width(ComposerHeight).height(ComposerHeight), contentAlignment = Alignment.Center) { trailing() }
                 }
                 if (block && overSegment != null) {

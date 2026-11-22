@@ -1,6 +1,23 @@
 package com.resonance.app.ui
 
+import android.app.Application
+import android.content.ComponentName
+import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.unit.dp
 import com.resonance.app.NoteSends
+import com.resonance.design.AppFonts
+import com.resonance.design.Grain
+import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -8,19 +25,48 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.RuleChain
+import org.junit.runner.RunWith
+import org.junit.runners.model.Statement
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /**
  * The note in place (round 26, SETTLED — the owner: 「這個記小紙條的界面應該不要做成 pop ups」): 寄小紙條 opens the field
  * under the story, focused — never a dialog, and 共振 opens nothing; tapped again an empty field closes and one with
  * words only takes the focus; one line under it by priority; a draft opens it with the page; a note that didn't go
- * comes back into the field while the page is there.
+ * comes back into the field while the page is there. Round 30 (「照 C 做」): the field across the story's column at every
+ * width (no 680 cap), no envelope — the words, the line under them and the wait line all 16 in.
  */
+@RunWith(RobolectricTestRunner::class)
+// A tablet's column (900) as well as a phone's.
+@Config(application = Application::class, qualifiers = "w1200dp-h1600dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class NoteInPlaceTest {
+    private val compose = createComposeRule()
+
+    // The app's own manifest has no host for a composed screen: the test's activity is made known before the rule starts it.
+    @get:Rule val rules: RuleChain = RuleChain.outerRule { base, _ ->
+        object : Statement() {
+            override fun evaluate() {
+                val app = RuntimeEnvironment.getApplication()
+                shadowOf(app.packageManager).addActivityIfNotPresent(ComponentName(app, ComponentActivity::class.java))
+                base.evaluate()
+            }
+        }
+    }.around(compose)
+
     private val language = Strings.language
 
     @Before fun catalogs() {
+        AppFonts.init(RuntimeEnvironment.getApplication())
+        Grain.init(RuntimeEnvironment.getApplication())
         Strings.load { File("../../../src/messages/${it.tag}.json").readText() }
         Strings.language = Strings.Language.ZhTW
     }
@@ -158,5 +204,60 @@ class NoteInPlaceTest {
         val source = File("src/main/kotlin/com/resonance/app/ui/NoteInPlace.kt").readText()
         assertTrue(source.contains("onTextLayout = { lines = it.lineCount }"))
         assertTrue(source.contains("block = composerTools(state.text, lines, expanded = false).block"))
+    }
+
+    /** The note's place open in a column [width] wide. */
+    private fun shown(note: NoteFieldState, width: Int, mayNote: Boolean = true) = compose.setContent {
+        Box(Modifier.width(width.dp).testTag("column")) {
+            NoteInPlace(note, mayNote = mayNote, reducedMotion = true, onSend = {}, onUpgrade = {})
+        }
+    }
+
+    @Test fun wideTheFieldSpansTheStorysColumnTo寄出OnItsEdge() {
+        // A tablet's column of 900: the field from its start to its end (it stopped at 680), 寄出 ending on the edge.
+        shown(NoteFieldState("謝謝你", mayNote = true).apply { segment() }, 900)
+        compose.waitForIdle()
+        val column = compose.onNodeWithTag("column").getBoundsInRoot()
+        val send = compose.onNodeWithContentDescription(L10n.Card.Note.send).getBoundsInRoot()
+        assertEquals(column.right.value, send.right.value, 0.5f)
+        assertTrue("the field passes the old 680 cap", send.right.value > 680f + 1f)
+    }
+
+    @Test fun onAPhoneTheFieldSpansTheColumnAsBefore() {
+        shown(NoteFieldState("謝謝你", mayNote = true).apply { segment() }, 335)
+        compose.waitForIdle()
+        assertEquals(335f, compose.onNodeWithContentDescription(L10n.Card.Note.send).getBoundsInRoot().right.value, 0.5f)
+    }
+
+    @Test fun noEnvelopeTheWordsStartSixteenIn() {
+        // The envelope's 48 lead column is gone: the words (and the placeholder) start 16 from the field's start.
+        shown(NoteFieldState("", mayNote = true).apply { segment() }, 600)
+        compose.waitForIdle()
+        val field = compose.onNode(hasSetTextAction()).getBoundsInRoot()
+        assertEquals(NoteWordsStart.value, field.left.value, 0.5f)
+        assertEquals(16f, NoteWordsStart.value, 0f)
+        val hint = compose.onNodeWithText(notePlaceholder(), useUnmergedTree = true).getBoundsInRoot()
+        assertEquals(16f, hint.left.value, 0.5f)
+        // The envelope is drawn nowhere in it: the field is named as before, and is the only thing at its start.
+        compose.onNode(hasSetTextAction()).assertExistsWithEntry()
+    }
+
+    private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertExistsWithEntry() {
+        assertEquals(L10n.Card.Note.entry, fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.ContentDescription].single())
+    }
+
+    @Test fun theLineUnderTheFieldStartsSixteenIn() {
+        val note = NoteFieldState("", mayNote = true).apply { segment() }
+        note.edit("字".repeat(NOTE_UPGRADE_THRESHOLD + 1))
+        shown(note, 600)
+        compose.waitForIdle()
+        assertEquals(16f, compose.onNodeWithText(L10n.Card.Note.upgrade, useUnmergedTree = true).getBoundsInRoot().left.value, 0.5f)
+    }
+
+    @Test fun theWaitLineStartsSixteenIn() {
+        // Three letters unanswered: the wait line alone in the note's place, 16 in (it stood 0 in).
+        shown(NoteFieldState("寫到一半", mayNote = false).apply { segment(mayNote = false) }, 600, mayNote = false)
+        compose.waitForIdle()
+        assertEquals(16f, compose.onNodeWithText(L10n.Card.Note.waitForReply, useUnmergedTree = true).getBoundsInRoot().left.value, 0.5f)
     }
 }
