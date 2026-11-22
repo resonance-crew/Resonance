@@ -4,34 +4,48 @@
  * See scripts/visual/README.md.
  *
  *   capture [web android ios mac] [--only home,card] [--device phone] [--variants release|extended] [--no-stack] [--flows] [--review] [--wait]
+ *            --<platform>-only a,b / --<platform>-device x,y: that platform's own slice in the same run (round-verify takes
+ *            every platform's slice in one run: one stack, the builds beside the first phase, no gaps between runs)
  *            --variants extended: the release set plus the device states and variants of variants.ts (large text,
  *            the tablets turned and in the dark, a narrow Mac window, the composer's extra states)
  *            --flows: the Maestro flows on Android then iOS once the captures are done (stack still up);
  *            --tags a,b: only the flows tagged so; with --variants extended the `tablet` flows on the tablets too
  *            --review: the agy review straight after (what a release runs, with --flows)
  *            --wait: queue behind another run holding the same devices or ports (lock.ts), instead of refusing
+ *            --force-build: build the apps even when their inputs match the last build's (buildStamp.ts)
+ *            a run that stops moving (VISUAL_STALL_MIN) or runs too long (VISUAL_RUN_TIMEOUT_MIN) ends (watchdog.ts)
  *   compare  [--run <id>]          recompute the comparison and the report
  *   review   [--run <id>] [--agy | --gemini] [--all]   --all: unchanged captures too
  *   plan     [--variants release|extended]   how many captures each set takes, by platform, and roughly how long
- *   accept   --reason "<the owner's words>" [--run <id>] [--only <key|screen>,…]
- *            refused without --reason; each accept is a row of docs/visual-accept-log.md (acceptLog.ts)
+ *   accept   --reason "<the owner's words>" [--run <id> | --runs <id>,<id>,…] [--only <key|screen>,…]
+ *            refused without --reason; each run accepted is a row of docs/visual-accept-log.md (acceptLog.ts);
+ *            with --runs, a capture several runs took comes from the one named last (accept.ts)
+ *   promote  --from <branch> --reason "<the owner's words>" [--only <key|screen>,…] [--allow-unmerged]
+ *            a branch's (a round's) accepted pictures into main's baseline, once main has its commits (promote.ts)
+ *   baselines                     main's and every branch's baseline, and which one this checkout uses (baselines.ts)
  *
  * capture, compare and review end with the run's verdict — `Visual PASS|FAIL <id>: …` as the last
  * line, summary.json beside the report, exit code 1 on a FAIL (gate.ts says what fails a run).
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { acceptReason, appendAcceptLog, REASON_REQUIRED } from './acceptLog';
-import { compareRun, type RunInfo } from './compare';
+import { acceptReason, REASON_REQUIRED } from './acceptLog';
+import { applyAccept, planAccept } from './accept';
+import { compareRun, sliceOf, slicesOf, type RunInfo } from './compare';
 import { describe, foreign, lostDevices, runningDevices, type RunningDevice } from './devices';
 import { gateLines, judgeRun } from './gate';
-import { LockBusy, acquire, resourcesFor, type Lock } from './lock';
+import { LockBusy, acquire, resourcesFor, type Lock, type LockHolder } from './lock';
 import { writeReport } from './report';
 import { reviewWithAgy, reviewWithGemini, writeReviewPack } from './review';
 import { startStack, type Stack } from './stack';
-import { BASELINE_DIR, PORTS, RUNS_DIR, VISUAL_DIR, git, ignorePath, listPngs, readJson, writeJson, type Capture } from './util';
+import { PORTS, ROOT, RUNS_DIR, VISUAL_DIR, git, ignorePath, listPngs, readJson, writeJson, type Capture } from './util';
+import { MAIN, baselineDir, currentBaselineName, ensureBaseline, listBaselines, runBaselineName } from './baselines';
+import { applyPromote, planPromote } from './promote';
+import { execFileSync } from 'node:child_process';
 import type { Platform } from './screens';
 import { DEVICE_STATES, EXTRA_VARIANTS, VARIANT_SETS, estimate, variantSetOf } from './variants';
+import { watchdog } from './watchdog';
+import type { Result } from './compare';
 
 /** Every platform, in the order the report lists them. */
 const PLATFORMS: Platform[] = ['web', 'android', 'ios', 'mac'];
@@ -71,8 +85,9 @@ function runDirOf(args: string[]): string {
   return join(RUNS_DIR, id);
 }
 
-function finish(runDir: string) {
-  const results = compareRun(runDir);
+/** The comparison, the review brief and the report; answers the comparison, for the verdict after it. */
+async function finish(runDir: string): Promise<Result[]> {
+  const results = await compareRun(runDir, { log });
   // A brief written by `review --all` stays as it was.
   if (!existsSync(join(runDir, 'review', 'REVIEW.md'))) writeReviewPack(runDir, results);
   const report = writeReport(runDir, results);
@@ -80,6 +95,7 @@ function finish(runDir: string) {
   log(`\nRun ${runDir.split('/').pop()}: ${count('changed')} changed · ${count('new')} new · ${count('missing')} missing · ${count('unchanged')} unchanged`);
   log(`Report: ${report}`);
   log(`Review brief for an agent: ${join(runDir, 'review', 'REVIEW.md')}`);
+  return results;
 }
 
 async function capture(args: string[]) {
@@ -87,8 +103,15 @@ async function capture(args: string[]) {
   const named = args.filter((a): a is Platform => PLATFORMS.includes(a as Platform));
   const platforms = PLATFORMS.filter((p) => !named.length || named.includes(p));
   const set = variantSetOf(flag(args, 'variants'));
+  // The apps built even when their inputs match the last build's (buildStamp.ts).
+  if (args.includes('--force-build')) process.env.VISUAL_FORCE_BUILD = '1';
+  // A run that stops moving or runs too long ends (watchdog.ts), and so does one whose lock another run took over
+  // (its beat had stopped: lock.ts). Set once the run has begun.
+  let abort: (why: string) => void = () => {};
   // One run at a time on these devices and these ports (lock.ts): refused, or queued with --wait, before anything starts.
-  const lock = await lockFor(platforms, !args.includes('--no-stack'), args.includes('--wait'));
+  const lock = await lockFor(platforms, !args.includes('--no-stack'), args.includes('--wait'), (resource, holder) =>
+    abort(`another run (pid ${holder?.pid ?? '?'}) took over its ${resource} lock: this one's beat had stopped`),
+  );
   if (!lock) return;
   const id = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
   const runDir = join(RUNS_DIR, id);
@@ -105,20 +128,44 @@ async function capture(args: string[]) {
     unsettled: [],
     retaken: [],
     variants: set,
+    // This checkout's baseline (baselines.ts): main's on main, its round's on a round's branches, its own elsewhere.
+    baseline: currentBaselineName(),
   };
+  baselineDir(log);
+  log(`Baseline: ${info.baseline}`);
+  const slices = slicesOf(args, platforms);
+  if (Object.keys(slices).length) info.slices = slices;
   writeJson(join(runDir, 'run.json'), info);
+  let stack: Stack | undefined;
+  const dog = watchdog((why) => abort(why));
+  // Every line the run says is progress (each capture, build, boot and phase says one).
+  const say = (line: string) => {
+    dog.progress();
+    log(line);
+  };
+  abort = (why) => {
+    dog.stop();
+    info.aborted = why;
+    writeJson(join(runDir, 'run.json'), info);
+    try {
+      stack?.stop();
+    } finally {
+      lock.release();
+    }
+    log(`\nVisual FAIL ${id}: aborted — ${why}. The devices it booted may still run; its locks are free. → ${join(runDir, 'run.json')}`);
+    process.exit(1);
+  };
   if (set !== 'release') log(`Variants: ${set} (${estimate(set).captures} captures in all, about ${estimate(set).minutes} min; npm run visual -- plan)`);
 
   // The others' devices as the run starts: the harness never shuts one down, and says if one went down anyway (devices.ts).
   const apps = platforms.some((p) => p !== 'web');
   const before: RunningDevice[] = apps ? runningDevices() : [];
   if (foreign(before).length) log(`Left alone while this runs: ${foreign(before).map(describe).join(', ')}`);
-  let stack: Stack | undefined;
   try {
     stack = args.includes('--no-stack')
       ? { devUrl: process.env.VISUAL_DEV_URL || `http://localhost:${PORTS.dev}`, stop: () => {} }
-      : await startStack(join(runDir, '_logs'), log);
-    const ctx = { runDir, devUrl: stack.devUrl, ports: PORTS, only: info.only, devices: info.devices, log, retaken: info.retaken!, set };
+      : await startStack(join(runDir, '_logs'), say);
+    const ctx = { runDir, devUrl: stack.devUrl, ports: PORTS, only: info.only, devices: info.devices, log: say, retaken: info.retaken!, set };
     // The apps' builds start now, beside the first phase's captures, so a later phase finds its app
     // ready (each build is made once; the Xcode ones take turns). A failed one fails its phase.
     const headStart: Promise<unknown>[] = [];
@@ -128,16 +175,18 @@ async function capture(args: string[]) {
     for (const phase of PHASES) {
       const here = phase.filter((p) => platforms.includes(p));
       if (!here.length) continue;
-      log(`\n== ${here.join(' + ')}`);
-      const unsettled = await Promise.all(here.map(async (platform) => (await capturer(platform))(ctx)));
+      say(`\n== ${here.join(' + ')}`);
+      // Each platform with its own slice (--ios-only …), else the run's.
+      const unsettled = await Promise.all(here.map(async (platform) => (await capturer(platform))({ ...ctx, ...sliceOf(info, platform) })));
       info.unsettled.push(...unsettled.flat());
       writeJson(join(runDir, 'run.json'), info);
     }
     if (args.includes('--flows')) {
-      info.flowsFailed = await flows(runDir, platforms, stack.devUrl, list(flag(args, 'tags')), set === 'extended');
+      info.flowsFailed = await flows(runDir, platforms, stack.devUrl, list(flag(args, 'tags')), set === 'extended', say);
       writeJson(join(runDir, 'run.json'), info);
     }
   } finally {
+    dog.stop();
     stack?.stop();
     if (apps) {
       const lost = lostDevices(before, runningDevices());
@@ -148,15 +197,15 @@ async function capture(args: string[]) {
     }
     lock.release();
   }
-  finish(runDir);
-  if (args.includes('--review')) await review(runDir, ['--agy']);
-  gate(runDir);
+  let results = await finish(runDir);
+  if (args.includes('--review')) results = await review(runDir, ['--agy'], results);
+  await gate(runDir, results);
 }
 
 /** The run's locks (lock.ts), or null after saying why it doesn't start (exit code 1). */
-async function lockFor(platforms: Platform[], ownStack: boolean, wait: boolean): Promise<Lock | null> {
+async function lockFor(platforms: Platform[], ownStack: boolean, wait: boolean, onLost?: (resource: string, holder: LockHolder | null) => void): Promise<Lock | null> {
   try {
-    return await acquire(resourcesFor(platforms, ownStack ? PORTS : null), { wait, log });
+    return await acquire(resourcesFor(platforms, ownStack ? PORTS : null), { wait, log, onLost });
   } catch (error) {
     if (!(error instanceof LockBusy)) throw error;
     console.error(error.message);
@@ -169,8 +218,8 @@ async function lockFor(platforms: Platform[], ownStack: boolean, wait: boolean):
  * The run's verdict, last on the console: the problems, then one `Visual PASS|FAIL` line naming
  * summary.json — and exit code 1 on a FAIL (gate.ts says what fails a run).
  */
-function gate(runDir: string) {
-  const { summary, file } = judgeRun(runDir, compareRun(runDir));
+async function gate(runDir: string, results?: Result[]) {
+  const { summary, file } = judgeRun(runDir, results ?? (await compareRun(runDir, { log })));
   log('');
   for (const line of gateLines(summary, file)) log(line);
   if (!summary.pass) process.exitCode = 1;
@@ -182,7 +231,7 @@ function gate(runDir: string) {
  * `tablet`-tagged flows on the iPad and the Android tablet). Reports in `<run>/_flows/` (out of the
  * captures' way); the failed ones are answered, kept in run.json, and fail the run (gate.ts).
  */
-async function flows(runDir: string, platforms: Platform[], devUrl: string, tags: string[], tablets: boolean): Promise<string[]> {
+async function flows(runDir: string, platforms: Platform[], devUrl: string, tags: string[], tablets: boolean, log: (line: string) => void): Promise<string[]> {
   const { runFlows } = await import('./flows');
   const failed: string[] = [];
   for (const platform of (['android', 'ios'] as const).filter((p) => platforms.includes(p))) {
@@ -197,51 +246,101 @@ async function flows(runDir: string, platforms: Platform[], devUrl: string, tags
   return failed;
 }
 
-async function review(runDir: string, args: string[]) {
-  const results = compareRun(runDir);
+async function review(runDir: string, args: string[], given?: Result[]): Promise<Result[]> {
+  const results = given ?? (await compareRun(runDir, { log }));
   const all = args.includes('--all');
   if (args.includes('--agy')) await reviewWithAgy(runDir, results, log, all);
   else if (args.includes('--gemini')) await reviewWithGemini(runDir, results, log, all);
   log(`Review brief: ${writeReviewPack(runDir, results, all)}`);
   log(`Report: ${writeReport(runDir, results)}`);
+  return results;
 }
 
 /**
- * Copies a run's captures into the baseline: all of them, or the keys / screen ids given — only with
- * a `--reason` (the owner's words, or what the accept rests on), recorded in docs/visual-accept-log.md.
+ * Copies one run's captures, or several runs' (`--runs a,b`), into the baseline: all of them, or the keys / screen ids
+ * given — only with a `--reason` (the owner's words, or what the accept rests on), recorded in
+ * docs/visual-accept-log.md, one row per run (accept.ts). Each run's comparison is then judged again where it changed.
  */
-function accept(args: string[]) {
+async function accept(args: string[]) {
   const reason = acceptReason(args);
   if (!reason) {
     console.error(REASON_REQUIRED);
     process.exitCode = 1;
     return;
   }
-  const runDir = runDirOf(args);
-  const info = readJson<RunInfo>(join(runDir, 'run.json'))!;
   const only = list(flag(args, 'only'));
-  const keys = listPngs(runDir).filter((k) => !only.length || only.some((o) => k === o || k.split('/').pop()!.startsWith(`${o}@`)));
-  if (!keys.length) {
-    console.error(`Nothing in ${info.id} matches ${only.length ? `--only ${only.join(',')}` : 'the run'}: nothing was accepted.`);
+  const runs = list(flag(args, 'runs'));
+  const runDirs = runs.length ? runs.map((id) => join(RUNS_DIR, id)) : [runDirOf(args)];
+  const planned = planAccept(runDirs, only);
+  if ('error' in planned) {
+    console.error(planned.error);
     process.exitCode = 1;
     return;
   }
-  for (const key of keys) {
-    const to = join(BASELINE_DIR, key);
-    mkdirSync(join(to, '..'), { recursive: true });
-    writeFileSync(to, readFileSync(join(runDir, key)));
-    // The regions it asked the comparison to skip go with it (or a stale list goes).
-    const ignore = ignorePath(join(runDir, key));
-    if (existsSync(ignore)) writeFileSync(ignorePath(to), readFileSync(ignore));
-    else rmSync(ignorePath(to), { force: true });
+  // Into the baseline the runs were compared with (baselines.ts): one, or none.
+  const names = [...new Set(runDirs.map(runBaselineName))];
+  if (names.length > 1) {
+    console.error(`These runs were taken against different baselines (${names.join(', ')}): accept them one baseline at a time. Nothing was accepted.`);
+    process.exitCode = 1;
+    return;
   }
-  for (const platform of new Set(keys.map((k) => k.split('/')[0]))) {
-    writeJson(join(BASELINE_DIR, platform, 'meta.json'), { commit: info.commit, run: info.id, acceptedAt: new Date().toISOString(), reason });
+  const into = ensureBaseline(names[0]).folder;
+  for (const line of planned.replaced) log(`  not taken: ${line}`);
+  for (const { run, count } of applyAccept(planned.plans, { reason, only, baselineDir: into })) {
+    log(`Accepted ${count} capture(s) from ${run} into the ${names[0]} baseline (${into})`);
   }
-  appendAcceptLog({ at: new Date(), run: info.id, commit: info.commit, dirty: info.dirty, keys, only, reason });
-  log(`Accepted ${keys.length} capture(s) from ${info.id} into ${BASELINE_DIR}`);
   log(`Recorded in docs/visual-accept-log.md — commit it with the accept: git commit -- docs/visual-accept-log.md`);
-  finish(runDir);
+  // Every named run compared again (only what the copies changed is judged again: compare.ts).
+  for (const dir of runDirs) await finish(dir);
+}
+
+/** Whether main's history has `commit` (the promote's check: a branch's pictures go to main's once its work is there). */
+function onMain(commit: string): boolean {
+  try {
+    execFileSync('git', ['merge-base', '--is-ancestor', commit, MAIN], { cwd: ROOT, stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** A branch's accepted pictures into main's baseline (promote.ts), on the owner's word. */
+function promote(args: string[]) {
+  const reason = acceptReason(args);
+  if (!reason) {
+    console.error(REASON_REQUIRED.replace('accept needs', 'promote needs'));
+    process.exitCode = 1;
+    return;
+  }
+  const only = list(flag(args, 'only'));
+  const plan = planPromote(flag(args, 'from') ?? '', { root: VISUAL_DIR, only, onMain });
+  if ('error' in plan) {
+    console.error(plan.error);
+    process.exitCode = 1;
+    return;
+  }
+  if (plan.unmerged.length) {
+    const what = `${plan.unmerged.length} commit(s) these pictures were taken at are not in main's history: ${plan.unmerged.map((c) => c.slice(0, 8)).join(', ')}`;
+    if (!args.includes('--allow-unmerged')) {
+      console.error(`${what}. Merge ${plan.branch} into main first, or — if it reached main another way (a squash, a cherry-pick) — add --allow-unmerged. Nothing was promoted.`);
+      process.exitCode = 1;
+      return;
+    }
+    log(`Warning: ${what} — promoted anyway (--allow-unmerged)`);
+  }
+  for (const { run, commit, count } of applyPromote(plan, { root: VISUAL_DIR, reason, only })) {
+    log(`Promoted ${count} picture(s) of ${run} (${commit.slice(0, 8)}) from ${plan.branch} into main's baseline`);
+  }
+  log(`Recorded in docs/visual-accept-log.md — commit it with the work: git commit -- docs/visual-accept-log.md`);
+}
+
+/** main's baseline and every branch's, and which one this checkout uses. */
+function baselinesOf() {
+  const mine = currentBaselineName();
+  for (const b of listBaselines()) {
+    const count = listPngs(b.folder).length;
+    log(`${b.name === mine ? '*' : ' '} ${b.name.padEnd(36)} ${String(count).padStart(4)} pictures  ${b.info ? `made from main's ${b.info.clonedAt}` : ''}  ${b.folder}`);
+  }
 }
 
 /** What each variant set takes and costs (variants.ts), without taking anything. */
@@ -269,20 +368,22 @@ async function main() {
       return capture(args);
     case 'compare': {
       const runDir = runDirOf(args);
-      finish(runDir);
-      return gate(runDir);
+      return gate(runDir, await finish(runDir));
     }
     case 'review': {
       const runDir = runDirOf(args);
-      await review(runDir, args);
-      return gate(runDir);
+      return gate(runDir, await review(runDir, args));
     }
     case 'accept':
       return accept(args);
+    case 'promote':
+      return promote(args);
+    case 'baselines':
+      return baselinesOf();
     case 'plan':
       return planOf(args);
     default:
-      log('Usage: npm run visual -- capture [web android ios mac] [--only ids] [--device ids] [--variants release|extended] [--no-stack] [--flows] [--review] [--wait] | compare | review [--agy | --gemini] [--all] | accept --reason "<the owner\'s words>" [--only keys]  (each with --run <id>) | plan [--variants …]');
+      log('Usage: npm run visual -- capture [web android ios mac] [--only ids] [--device ids] [--variants release|extended] [--no-stack] [--flows] [--review] [--wait] | compare | review [--agy | --gemini] [--all] | accept --reason "<the owner\'s words>" [--only keys] [--runs a,b]  (each with --run <id>) | plan [--variants …]');
       process.exit(command ? 1 : 0);
   }
 }

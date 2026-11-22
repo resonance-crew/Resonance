@@ -21,6 +21,10 @@ npm run visual -- review --run <id> --gemini # the Gemini API instead (GEMINI_AP
 npm run visual -- compare --run <id>         # redraw the report (after verdicts came in another way)
 npm run visual -- accept --run <id> --reason "<the owner's words>"   # the run becomes the baseline
 npm run visual -- accept --run <id> --only card,web/phone/home@dark-zh-TW.png --reason "…"   # only these screens / captures
+npm run visual -- accept --runs <id>,<id> --only card --reason "…"   # several runs at once (a retake named after the run it retakes)
+npm run visual -- promote --from r30/base --reason "<the owner's words>"   # a merged round's accepted pictures into main's baseline
+npm run visual -- baselines                  # main's and every branch's baseline, and which one this checkout uses
+npm run visual -- capture web ios android --web-only card --web-device phone --ios-only card,thread --android-device phone   # one run, each platform its own slice
 ```
 
 Every command prints `Run <id>: …`; pass that id with `--run` (the default, `visual/latest`, is
@@ -29,14 +33,36 @@ whichever run started last on this machine, which can be someone else's).
 Everything lands in `visual/` (git-ignored):
 
 ```
-visual/baseline/<platform>/<device>/<screen>@<theme>-<locale>.png   the accepted pictures
-visual/baseline/<platform>/meta.json                                the commit, run and reason of the latest accept
+visual/baseline/<platform>/<device>/<screen>@<theme>-<locale>.png   main's accepted pictures
+visual/baseline/<platform>/meta.json                                the latest accept, and each picture's commit
+visual/baselines/<branch, encoded>/…                                a round's or a branch's own (Baselines, below)
 visual/runs/<id>/<platform>/<device>/…png                           a run's captures
 visual/runs/<id>/_diff/…png                                         changed pixels in red
 visual/runs/<id>/results.json   index.html                          the comparison and its report (open in a browser)
 visual/runs/<id>/review/REVIEW.md   verdicts.json                   the review brief and the model's verdicts
 visual/runs/<id>/_logs/                                             emulators, dev server, app builds
 ```
+
+## Baselines: main's, a round's, a branch's
+
+Each line of work compares with, and accepts into, a baseline of its own (`baselines.ts`); a round's accept no
+longer becomes every other branch's baseline (on 2026-11-22 the one baseline was r29/r30's look, and main's and
+the other rounds' captures all came out changed and unexplained). Which one a checkout uses:
+
+| Checkout on | Baseline | Folder |
+| --- | --- | --- |
+| `main` (or `master`) | main's | `visual/baseline/` — the old single baseline, where it always was |
+| a round's branch: `r30/base`, `r30/web`, `r30/ios`, … | the round's, shared by its lanes and round-verify | `visual/baselines/r30%2Fbase/` |
+| any other branch | its own | `visual/baselines/<its name, encoded>/` |
+| a detached checkout | its commit's | `visual/baselines/detached-<sha8>/` |
+| `VISUAL_BASELINE=<name>` set | that one (`main` for main's) | as above |
+
+A branch's baseline is made the first time it is used, cloned from main's (`cp -c`: APFS clones, no bytes
+copied), with `branch.json` saying when; a name becomes a folder with every byte but letters, digits, `-` and
+`_` as `%XX`, so no branch name makes a path (`..` → `%2E%2E`). Each run records its baseline (`run.json`
+`baseline`), and `compare`, `review` and `accept` of a run use that one, from whichever checkout; runs from
+before had main's. Only main itself (or `VISUAL_BASELINE=main`) accepts into main's — a branch's pictures reach
+it by `promote` (below). Each baseline's `meta.json` starts its trailer range at its own accepts.
 
 ## When to run what
 
@@ -113,6 +139,7 @@ the report, and exit code 1 on a FAIL. So an agent can stop on it: the run passe
 | `unexplained` | a capture changed and no `Visual:` trailer since the baseline names its screen |
 | `flow` | a Maestro flow failed (`--flows`) |
 | `check` | a web check at `fail` found something (below: `blank`, `overflow`, `wrapped-label`) |
+| `aborted` | the run was ended before its end: nothing moved for `VISUAL_STALL_MIN` (30), it passed `VISUAL_RUN_TIMEOUT_MIN` (300), or another run took over its lock (One run at a time, below) |
 
 Warnings are said and never fail: a capture *taken again* because its first look was early, a
 baseline capture the run didn't take (*missing*), a web check still at `warn`. A changed capture a
@@ -128,7 +155,11 @@ the later one is kept, and it is looked at once more, three looks in all; still 
 `unsettled`. On the apps every capture without a baseline gets the second look too — a machine's
 first run, a new screen, the extended set's first run — or a skeleton taken there would be the
 baseline the next run trusts (the web's pass has its own guards: requests drained, a blank page
-retaken). It costs a few seconds per changed or new capture, nothing for an unchanged one.
+retaken). It costs a few seconds per changed or new capture, nothing for an unchanged one. On the apps a
+capture with no baseline has had a settled first look already (Android: held 3.5 s with no skeleton named; iOS and
+the Mac: 4 s after the launch), so its second look, after the same wait, is one plain frame (a screencap, a simctl
+screenshot): the same page again and the first look is kept; another page, and the whole looks go on as above
+(about 7 s less per new Android capture, 1–2 s on iOS and the Mac; a changed capture's looks are as they were).
 
 **Android's skeletons** are told by name, not by pixels: the app names each skeleton for TalkBack
 (`L10n.Home.moreLoading`, 載入中… / Loading… — the card page's story, the conversations, the bell, a
@@ -206,6 +237,22 @@ A web slice on its own ports takes only those ports, so two of them run side by 
 run was killed outright is taken over (its pid is gone). `scripts/visual/flows.ts` takes the same
 locks.
 
+A run never holds them for ever (2026-11-22: one sat 2 h 16 min on `simctl bootstatus`, a second
+queued behind it the whole time):
+
+- **Every device command has a time.** `simctl bootstatus` 5 min (`VISUAL_BOOT_TIMEOUT_S`), then the
+  harness's own simulator is shut down and booted once more; an AVD that doesn't boot in that time is
+  stopped and started once more; an adb call 2 min (`VISUAL_ADB_TIMEOUT_S`; an install 5), then
+  `adb reconnect` and once more; any other blocking command 10 min (`VISUAL_CMD_TIMEOUT_S`). A second
+  timeout fails the run (`retry.ts`).
+- **The lock beats.** Its holder writes the time into its lock files every 30 s; a holder still alive
+  whose beat is older than 10 min (`VISUAL_LOCK_STALE_MIN`) is stuck, and its locks are taken over —
+  said, never killed. A lock from an older harness, without a beat, is judged by its pid alone (`lock.ts`).
+- **The watchdog.** A capture with nothing said for 30 min (`VISUAL_STALL_MIN`; a cold Mac build, the
+  longest quiet step, takes 17) or running past 300 min (`VISUAL_RUN_TIMEOUT_MIN`) ends: its stack
+  stops, its locks go free, and its last line is `Visual FAIL <id>: aborted — why` (exit 1; `watchdog.ts`).
+  So does one that finds its lock taken over.
+
 The harness shuts down only what it booted, and only its own (`devices.ts`: `Visual iPhone`,
 `Visual iPad`, `emulator-5600`, `emulator-5602`); every shutdown goes through that check, and anything
 else is left running and said. A run with an app in it lists everyone else's simulators and
@@ -257,12 +304,41 @@ npm run visual -- accept --run <id> --only card,home --reason "owner, in chat: t
   re-rendered, owner's OK in chat`).
 - An `--only` that matches no capture of the run accepts nothing either (exit code 1), rather than
   quietly doing nothing.
+- `--runs a,b,c` accepts several runs as one (accept.ts): all are checked first — each exists and gives
+  at least one capture — or nothing is accepted. A capture two of them took comes from the one named
+  last (a retake after the run it retakes), and the other is said. Each run gets its own log row and
+  each capture its own run's commit in `meta.json`. `--run <id>` (or none: the latest) works as before.
 - Each accept appends one row to [docs/visual-accept-log.md](../../docs/visual-accept-log.md), which
   is in git (`visual/` isn't): the time (UTC), the run and the commit it captured (`(dirty)` when the
   tree had changes), the platforms, what `--only` named (*all* for the whole run), how many captures
   and the reason. Commit that row with the work it accepts: `git commit -- docs/visual-accept-log.md`.
-  The platform's `meta.json` keeps the reason of its latest accept too.
+- The platform's `meta.json` keeps the run, time and reason of its latest accept, the commit each
+  capture was accepted at (`captures`), and as `commit` the oldest of those: where the review starts
+  reading `Visual:` trailers, so an `--only` accept never hides the trailers of the platform's other,
+  older pictures (`baselineMeta.ts`).
+- An accept compares the run again only where it copied: every other capture's result is reused
+  (the comparison keeps each result with what it was judged from, `_compare.json`).
 - The report's per-capture command (`index.html`) carries a `--reason "<the owner's words>"` to fill in.
+
+### Promoting a round's pictures into main's
+
+A round accepts into its own baseline; once its work is on main, its look becomes main's with `promote`, held as
+an accept into main's (`promote.ts`):
+
+```bash
+npm run visual -- promote --from r30/base --reason "<the owner's words>" [--only card,thread] [--allow-unmerged]
+```
+
+- Refused without `--reason`, and the guard hook checks the words are the owner's, as for `accept`.
+- Only what the round **accepted** moves: a picture whose commit in the round's `meta.json` was accepted after its
+  baseline was cloned from main's (`branch.json`). Its other pictures are main's own as they were then, and never
+  go back over main's newer ones. Each moved picture keeps its round commit in main's `meta.json`, and each run is
+  a row of the accept log, `(promoted from r30/base)` after the reason.
+- Every commit those pictures were taken at must be in main's history (`git merge-base --is-ancestor <c> main`):
+  one that isn't — the round not merged yet, or merged as a squash or cherry-pick under other hashes — stops it,
+  naming them, unless `--allow-unmerged` says the owner knows (said again as it goes).
+- The round's own baseline stays as it is; removing a branch's baseline (`visual/baselines/<name>/`) is the
+  owner's call, never a step of its own.
 
 ## The review with Antigravity (`--agy`)
 
@@ -398,6 +474,18 @@ change near one of those states (`capture android --device phone-large --only se
   since card-note-open's privacy line went, 2026-11-19) starts every capture with them unspent (`hints.ts`).
 - **No picks**: the stack seeds with `SEED_PICKS=none` (`noPicks.ts`), so home is the latest cards on every
   platform and run, never picks that one capture built and a later one found.
+- **The apps say when a screen is drawn** (`ready.ts`): each launch carries a token of its own, and a debug build
+  launched with one (`--es visualReadyToken` / `-visualReadyToken`) says it back once its screen is quiet — at
+  least one request answered, none on its way, no skeleton block or picture placeholder on screen, for 0.8 s
+  (`VisualReady`: Android in logcat, iOS and the Mac in the unified log, subsystem `com.resonance.visual`, read with `log stream` / `simctl spawn … log stream` — the Mac app's sandbox container is closed to every other process). The harness then goes
+  on at once to a closer settle (frames 0.5 s apart; Android holds 1 s, not 3.5) instead of the fixed waits
+  (Android's 4 s, 8 s on an account's first launch; iOS's and the Mac's 4 s). The sign-in launch iOS and the Mac make
+  for each account keeps its full 10 s: it isn't captured, it settles the account on the device, and nothing yet
+  shows the app is done with that at its first quiet moment.
+  Everything that judges the frame stays as it was — the settle, Android's skeleton names, the second look. A
+  launch that says nothing within `VISUAL_READY_TIMEOUT_S` (12) waits out the rest of the old fixed wait and goes
+  on exactly as before; each capture's log line says which (`ready in 1.9 s`, `no ready signal`).
+  `VISUAL_READY=0` turns it off. Release builds have none of it.
 - **Waiting for the real page**: a capture is taken again and again until two in a row match
   (`settle` in `util.ts`). A page waiting for a compile or a read holds still too, so the web first
   waits for its requests to drain (bar the realtime channels), and Android checks a settled frame
@@ -414,7 +502,7 @@ change near one of those states (`capture android --device phone-large --only se
 - **Things that move by themselves**: the landing film is held still (`?rest=1`: every act stands at
   its moment, no idle life) with its cast on stage — the paper puppets load (`/mascots/`) and a capture
   waits until every one is live; the reading puppets are off by default.
-- **The comparison** (`diff.ts`): not a share of the page's pixels, which a window drawn a pixel
+- **The comparison** (`diff.ts`; two files with the very same bytes are the same page without it, and each result is kept with the stamps of what it was judged from, `_compare.json`, so `compare`, the verdict, a review and an accept judge only what changed under them; what is left is judged on worker threads, `VISUAL_COMPARE_WORKERS`, default the cores less two and at most 4, each PNG decoded by libvips — byte for byte pngjs's RGBA, checked on every capture of three real runs, with pngjs kept for a PNG carrying an ICC profile or more than 8 bits a channel, `judge.ts`; 185 web captures 31.8 s → 5.3 s): not a share of the page's pixels, which a window drawn a pixel
   lower fills with red edges while a heading moved across the page hardly registers. A pixel
   differs past pixelmatch's threshold (YIQ 0.1). The page is cut into 16 px cells; a cell with
   pixels apart is only *moved*, and forgiven, when one shift of at most 2 px lines the whole cell up
@@ -464,17 +552,33 @@ The apps' debug-only launch routes for the tabs and the writer (`/home`, `/messa
 and links route as before.
 
 Each app capture builds its Debug app first (`apps/ios/build/visual-sim`, `visual-mac`,
-`./gradlew :app:assembleDebug`); `VISUAL_SKIP_BUILD=1` reuses the last build. The builds run beside
+`./gradlew :app:assembleDebug`) — unless its inputs are as at the last build: the fingerprint of the
+app's sources, the files it takes from the rest of the repository (fonts, strings, stickers, both
+islands, native/), its build arguments and Xcode's version is kept beside the product, and a match
+with the product untouched since reuses it (`buildStamp.ts`; about 0.3 s against 30–200 s of xcodegen
+and xcodebuild). `--force-build` (or `VISUAL_FORCE_BUILD=1`) builds anyway; `VISUAL_SKIP_BUILD=1`
+reuses the last build without looking. The builds run beside
 the captures, never blocking them: the APK and the simulator app start building as the run starts,
 while the web and the Mac app are captured, and the two Xcode builds (Mac, simulator) take turns, as
-they share the project and Swift's package caches. Phases (`PHASES` in `run.ts`): web + Mac, then
-Android's phone and tablet together, then the iPhone and iPad together (`VISUAL_PARALLEL=0` runs a
+they share the project and Swift's package caches. The web's own captures run in several browser contexts at once (`VISUAL_WEB_PARALLEL`, default 3; 1 takes
+them one by one as before), with the writes its pages make to the shared stack — a read counted once per reader,
+card and day, the bell's panel marking its notifications read, a screen's hints unspent — kept in their old order:
+each screen's first visit by an account runs one at a time in the old order, and only the later visits (the dark
+and English phone, the tablet, the desktop), which write nothing new, run side by side (`webSchedule.ts`). A
+context that fails is tried once more in a fresh one; failing twice, its captures are said and fail the run as
+unsettled, and the others go on. Phases (`PHASES` in `run.ts`): web + Mac, then
+Android's phone and tablet together, then the iPhone and iPad together — in one run whatever slices the
+platforms take: `--<platform>-only a,b` and `--<platform>-device x,y` give a platform its own screens and
+devices (`--only` / `--device` are the others'), so a slice of four platforms starts one stack, builds the
+apps beside the first phase and leaves no gap between platforms (round-verify takes its slices this way) (`VISUAL_PARALLEL=0` runs a
 platform's devices one at a time, for a machine short of memory); an AVD or simulator this run
 booted is shut down when its screens are done (`VISUAL_KEEP_DEVICES=1` keeps the simulators up), and
 nothing else ever is (One run at a time, and the owner's devices).
 The flows still run one platform at a time after the captures: each reseeds (and so empties) the
 stack's database, which would pull the data from under the other platform's flow. The stack's `next dev` builds into `.next-visual/<port>` with its own
-tsconfig, so it never meets another dev server's `.next` and never rewrites `tsconfig.json`.
+tsconfig, so it never meets another dev server's `.next` and never rewrites `tsconfig.json`, and keeps
+every page it compiled for the whole run (`VISUAL_KEEP_PAGES` → next.config's `onDemandEntries`): by
+default it drops a page left unasked for a while, and a full web run compiled `/[locale]/home` ten times.
 
 ## Adding a screen
 

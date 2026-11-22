@@ -10,8 +10,9 @@
  *             (exit 2). Also SessionStart: remembers where the session began.
  *   guard     PreToolUse on Bash|Edit|Write|MultiEdit — refuses what only the owner decides:
  *             `pkill` / `killall`, `git push`, `git add -A` / `.` and `git commit -a`, a
- *             `visual … accept` whose --reason isn't the owner's words, and writing under
- *             visual/baseline/. The way through after the owner's yes is in docs/rules/hooks.md.
+ *             `visual … accept` or `visual … promote` whose --reason isn't the owner's words, and
+ *             writing under visual/baseline/ or visual/baselines/ (main's and each branch's,
+ *             scripts/visual/baselines.ts). The way through after the owner's yes is in docs/rules/hooks.md.
  *
  * Plain Node, no dependencies; the .sh wrappers find node and call this.
  */
@@ -19,6 +20,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const mode = process.argv[2];
 
@@ -226,12 +228,15 @@ const BASH_RULES = [
   ['add-all', new RegExp(String.raw`${GIT}add\b[^;&|\n]*?\s(?:-A|--all|\.|:/?|-u|--update)${END}`), '`git add -A` / `git add .` sweeps in other sessions’ changes in a shared checkout. Stage your files by path: `git add path/a path/b`.'],
   ['commit-all', new RegExp(String.raw`${GIT}commit\b[^;&|\n]*?\s(?:--all\b|-[b-zA-Z]*a[a-zA-Z]*${END})`), '`git commit -a` sweeps in every tracked change, other sessions’ too. Stage by path, then commit.'],
 ];
-const BASELINE_WHY = 'visual/baseline/ is the owner’s accepted screenshots: only `npm run visual -- accept --run <id> --only … --reason "<the owner’s words>"` writes there (reading it with ls / cat / find is fine).';
-const ACCEPT = /(?:\bnpm\s+run\s+(?:-s\s+)?visual\b|\bscripts\/visual\/run\.ts\b)[^;&|\n]*\saccept\b[^;&|\n]*/;
-const WRITE_OP = /(?:^|[\s(`])(?:rm|mv|cp|rsync|ln|tee|touch|mkdir|truncate|dd|install|tar|unzip|ditto|sips)\b|\bsed\s+-i|\bfind\b.*\s-(?:delete|exec)\b|>\s*\S*visual\/baseline/;
+const BASELINE_WHY = 'visual/baseline/ (main’s) and visual/baselines/ (each branch’s) are the owner’s accepted screenshots: only `npm run visual -- accept --run <id> --only … --reason "<the owner’s words>"` and `npm run visual -- promote --from <branch> --reason "<the owner’s words>"` write there (reading them with ls / cat / find is fine).';
+/** `visual … accept` and `visual … promote`: each makes pictures a baseline, so each needs the owner's words. */
+const ACCEPT = /(?:\bnpm\s+run\s+(?:-s\s+)?visual\b|\bscripts\/visual\/run\.ts\b)(?:\s+-{1,2}[\w-]*)*\s+(accept|promote)\b[^;&|\n]*/;
+const WRITE_OP = /(?:^|[\s(`])(?:rm|mv|cp|rsync|ln|tee|touch|mkdir|truncate|dd|install|tar|unzip|ditto|sips)\b|\bsed\s+-i|\bfind\b.*\s-(?:delete|exec)\b|>\s*\S*visual\/baselines?\b/;
+/** main's baseline (visual/baseline/) and every branch's (visual/baselines/). */
+const BASELINE_PATH = /visual\/baselines?\b/;
 
-/** A part of the command (between ; && || | and line ends) that both names visual/baseline and writes. */
-const writesBaseline = (command) => command.split(/[;&|\n]+/).some((part) => /visual\/baseline\b/.test(part) && WRITE_OP.test(part));
+/** A part of the command (between ; && || | and line ends) that both names a baseline folder and writes. */
+const writesBaseline = (command) => command.split(/[;&|\n]+/).some((part) => BASELINE_PATH.test(part) && WRITE_OP.test(part));
 
 /** The owner's last few messages in this session's transcript — their own words only, no tool results or reminders. */
 export function ownerMessages(transcriptPath, last = 5) {
@@ -290,7 +295,7 @@ export function guardDecision(input) {
   const ti = input.tool_input ?? {};
   if (tool === 'Edit' || tool === 'Write' || tool === 'MultiEdit' || tool === 'NotebookEdit') {
     const path = String(ti.file_path ?? ti.notebook_path ?? '');
-    if (/(^|\/)visual\/baseline\//.test(path)) return BASELINE_WHY;
+    if (/(^|\/)visual\/baselines?\//.test(path)) return BASELINE_WHY;
     if (/\/\.claude\/projects\/.+\.jsonl$/.test(path)) return 'A session transcript is the record the guard reads the owner’s words from; it is never edited.';
     return null;
   }
@@ -303,9 +308,10 @@ export function guardDecision(input) {
   if (writesBaseline(scrubbed)) hits.push(BASELINE_WHY);
   const accept = ACCEPT.exec(scrubbed);
   if (accept) {
+    const verb = accept[1];
     const reason = reasonOf(command);
-    if (!reason) hits.push('`visual … accept` makes new pictures the baseline: it needs `--reason "<the owner’s words>"`, the owner’s yes in their own words.');
-    else if (!saidByOwner(reason, input.transcript_path)) hits.push(`\`visual … accept --reason\` must quote the owner verbatim; "${reason.slice(0, 80)}" is not in their last five messages.`);
+    if (!reason) hits.push(`\`visual … ${verb}\` makes pictures a baseline: it needs \`--reason "<the owner’s words>"\`, the owner’s yes in their own words.`);
+    else if (!saidByOwner(reason, input.transcript_path)) hits.push(`\`visual … ${verb} --reason\` must quote the owner verbatim; "${reason.slice(0, 80)}" is not in their last five messages.`);
   }
   if (hits.length === 0) return null;
   const ok = ownerOk(command);
@@ -333,7 +339,8 @@ function guard() {
   return 0;
 }
 
-if (mode) {
+// Run as a hook (`node hooks.mjs <mode>`), never when a test imports it.
+if (mode && process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const modes = { 'ui-rules': uiRules, gate, guard };
   const fn = modes[mode];
   process.exitCode = fn ? fn() : (process.stderr.write(`hooks.mjs: unknown mode ${mode}\n`), 1);

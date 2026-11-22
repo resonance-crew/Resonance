@@ -28,7 +28,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, openSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import en from '../../src/messages/en.json';
 import zhTW from '../../src/messages/zh-TW.json';
@@ -37,7 +37,10 @@ import { forgetBooted, mayShutDown, noteBooted } from './devices';
 import { unspendHints } from './hints';
 import { lookNote, secondLook, type Look, type Shot } from './secondLook';
 import { shotName, type Account, type Screen, type Variant } from './screens';
-import { ROOT, SEED_PASSWORD, ignorePath, pixelsApart, settle, shotPath, sleep, type Capture, type CaptureContext, type Rect } from './util';
+import { withRestart } from './retry';
+import { logSays, readyNote, readyOn, readyToken, restOfWait, waitReady, type Ready } from './ready';
+import { buildIfChanged, stampFile, type BuildInputs } from './buildStamp';
+import { CommandTimeout, ROOT, SEED_PASSWORD, execTimed, ignorePath, pixelsApart, settle, shotPath, sleep, type Capture, type CaptureContext, type Rect } from './util';
 import { devicesFor, groups, plan, stateOf, type DeviceState } from './variants';
 
 const execFileAsync = promisify(execFile);
@@ -60,16 +63,31 @@ export const ANDROID_DEVICES: AndroidDevice[] = [
 
 export const serialOf = (d: AndroidDevice) => `emulator-${d.port}`;
 
+/** How long one adb call may take (`VISUAL_ADB_TIMEOUT_S`, default 2 min; an install 5). */
+const ADB_TIMEOUT_MS = Number(process.env.VISUAL_ADB_TIMEOUT_S || 120) * 1000;
+const INSTALL_TIMEOUT_MS = 5 * 60_000;
+
+/** adb's link to the emulator made again (`adb reconnect`): what a call that hung most often needs. */
+async function reconnect(serial: string) {
+  await execTimed(ADB, ['-s', serial, 'reconnect'], { timeoutMs: 30_000 }).catch(() => {});
+  await sleep(2000);
+}
+
+/** One adb call, stopped once it runs past its time and tried once more after a reconnect (retry.ts). */
+async function adbTimed(serial: string, args: string[], buffer: boolean): Promise<string | Buffer> {
+  const timeoutMs = args[0] === 'install' ? INSTALL_TIMEOUT_MS : ADB_TIMEOUT_MS;
+  const call = () => execTimed(ADB, ['-s', serial, ...args], { timeoutMs, buffer, maxBuffer: buffer ? 64 << 20 : 16 << 20 });
+  return (await withRestart(`adb ${args.slice(0, 2).join(' ')} on ${serial}`, call, () => reconnect(serial))).stdout;
+}
+
 export async function adb(serial: string, ...args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync(ADB, ['-s', serial, ...args], { encoding: 'utf8', maxBuffer: 16 << 20 });
-  return stdout.trim();
+  return String(await adbTimed(serial, args, false)).trim();
 }
 
 export const shell = (serial: string, command: string) => adb(serial, 'shell', command);
 
 async function screencap(serial: string): Promise<Buffer> {
-  const { stdout } = await execFileAsync(ADB, ['-s', serial, 'exec-out', 'screencap', '-p'], { encoding: 'buffer', maxBuffer: 64 << 20 });
-  return stdout;
+  return (await adbTimed(serial, ['exec-out', 'screencap', '-p'], true)) as Buffer;
 }
 
 async function booted(serial: string): Promise<boolean> {
@@ -92,8 +110,8 @@ export async function kill(serial: string, log: (line: string) => void = console
   await adb(serial, 'emu', 'kill').catch(() => {});
   const end = Date.now() + 40_000;
   while (Date.now() < end) {
-    const { stdout } = await execFileAsync(ADB, ['devices'], { encoding: 'utf8' });
-    if (!stdout.split('\n').some((line) => line.startsWith(`${serial}\t`))) return;
+    const listed = await execTimed(ADB, ['devices'], { timeoutMs: 30_000 }).catch(() => null);
+    if (listed && !String(listed.stdout).split('\n').some((line) => line.startsWith(`${serial}\t`))) return;
     await sleep(1000);
   }
 }
@@ -105,26 +123,41 @@ export async function boot(device: AndroidDevice, ctx: CaptureContext): Promise<
   if (!existsSync(join(homedir(), '.android/avd', `${device.avd}.avd`))) {
     throw new Error(`No AVD ${device.avd}: create it first (see the top of scripts/visual/android.ts)`);
   }
-  ctx.log(`  booting ${device.avd} as ${serial}…`);
   mkdirSync(join(ctx.runDir, '_logs'), { recursive: true });
   const out = openSync(join(ctx.runDir, '_logs', `emulator-${device.id}.log`), 'a');
-  // -no-snapshot-save: every run boots the same device; -gpu host: our AVDs would draw in software otherwise.
-  const child = spawn(EMULATOR, ['-avd', device.avd, '-port', String(device.port), '-no-window', '-gpu', 'host', '-no-snapshot-save', '-no-boot-anim', '-no-audio'], {
-    detached: true,
-    stdio: ['ignore', out, out],
-  });
-  child.unref();
-  const end = Date.now() + 240_000;
-  while (Date.now() < end) {
-    if (await booted(serial)) {
-      noteBooted(serial);
-      return true;
+  // One that doesn't come up in BOOT_TIMEOUT_MS is stopped (it is this run's own: it started it) and started once more.
+  const start = async () => {
+    ctx.log(`  booting ${device.avd} as ${serial}…`);
+    // -no-snapshot-save: every run boots the same device; -gpu host: our AVDs would draw in software otherwise.
+    const child = spawn(EMULATOR, ['-avd', device.avd, '-port', String(device.port), '-no-window', '-gpu', 'host', '-no-snapshot-save', '-no-boot-anim', '-no-audio'], {
+      detached: true,
+      stdio: ['ignore', out, out],
+    });
+    child.unref();
+    const end = Date.now() + BOOT_TIMEOUT_MS;
+    while (Date.now() < end) {
+      if (await booted(serial)) {
+        noteBooted(serial);
+        return true;
+      }
+      await sleep(2000);
     }
-    await sleep(2000);
-  }
-  if (child.pid) process.kill(child.pid, 'SIGTERM');
-  throw new Error(`${device.avd} did not boot within 4 minutes`);
+    await execTimed(ADB, ['-s', serial, 'emu', 'kill'], { timeoutMs: 30_000 }).catch(() => {});
+    if (child.pid) {
+      try {
+        process.kill(child.pid, 'SIGTERM');
+      } catch {
+        // already gone
+      }
+    }
+    await sleep(5000);
+    throw new CommandTimeout(`${device.avd}'s boot`, BOOT_TIMEOUT_MS);
+  };
+  return withRestart(device.avd, start, () => {}, { log: ctx.log });
 }
+
+/** How long an AVD may take to boot (`VISUAL_BOOT_TIMEOUT_S`, default 5 min). */
+const BOOT_TIMEOUT_MS = Number(process.env.VISUAL_BOOT_TIMEOUT_S || 300) * 1000;
 
 /** Holds still what the system would otherwise move between runs. */
 export async function holdStill(serial: string, ctx: CaptureContext) {
@@ -182,17 +215,42 @@ async function wear(serial: string, v: Variant) {
   await shell(serial, `cmd uimode night ${v.theme === 'dark' ? 'yes' : 'no'}`);
 }
 
+const GRADLE_ARGS = [':app:assembleDebug', '-q'];
+
+/**
+ * What goes into the debug APK (buildStamp.ts): the app, the files its Gradle build takes from the rest of the
+ * repository (fonts, the design system's resources under apps/ios, strings, stickers, both islands, the Kotlin
+ * geometry under native/), this machine's SDK path and Java.
+ */
+export function androidInputs(): BuildInputs {
+  return {
+    roots: ['apps/android', 'apps/shared', 'apps/ios/Packages/DesignSystem/Sources/DesignSystem/Resources', 'native', 'src/messages', 'public/stickers'],
+    extras: ['apps/android/local.properties', 'native/editor/dist', 'native/mascots/dist', 'native/fonts'],
+    salt: [...GRADLE_ARGS, process.env.JAVA_HOME ?? '', process.env.ANDROID_HOME ?? process.env.ANDROID_SDK_ROOT ?? '', process.arch],
+  };
+}
+
 /** The APK, built once per run however many ask (the captures, the flows, the run's head start). */
 let built: Promise<void> | null = null;
 export function build(ctx: CaptureContext): Promise<void> {
   if (built) return built;
   if (process.env.VISUAL_SKIP_BUILD === '1' && existsSync(APK)) return (built = Promise.resolve());
-  ctx.log('  building the debug APK (VISUAL_SKIP_BUILD=1 skips it)…');
   return (built = (async () => {
     if (!existsSync(join(ROOT, 'native/editor/dist/editor.html'))) {
       await execFileAsync('npm', ['run', '-s', 'native:editor'], { cwd: ROOT, maxBuffer: 64 << 20 });
     }
-    await execFileAsync('./gradlew', [':app:assembleDebug', '-q'], { cwd: ANDROID_DIR, maxBuffer: 64 << 20 });
+    // Skipped when its inputs are as at the last build (buildStamp.ts; --force-build builds anyway).
+    await buildIfChanged({
+      name: 'the debug APK',
+      stamp: stampFile(dirname(APK)),
+      product: APK,
+      inputs: androidInputs(),
+      log: ctx.log,
+      build: async () => {
+        ctx.log('  building the debug APK (VISUAL_SKIP_BUILD=1 skips it)…');
+        await execFileAsync('./gradlew', GRADLE_ARGS, { cwd: ANDROID_DIR, maxBuffer: 64 << 20 });
+      },
+    });
   })());
 }
 
@@ -315,7 +373,7 @@ export function caretBlink(box: Rect | null, fields: Rect[]): Rect | null {
  * a keyboard screen held still only when two looks met the caret in the same phase (run
  * 20261118-235458: the tablet's thread-keyboard and dark card-note-open never did).
  */
-async function steady(serial: string, ignore: Rect[] = []): Promise<Shot> {
+async function steady(serial: string, ignore: Rect[] = [], ready = false): Promise<Shot> {
   const same = async (a: Buffer, b: Buffer) => {
     if (a.equals(b) || pixelsApart(a, b) === 0) return true;
     const box = apartBox(a, b, ignore);
@@ -327,8 +385,10 @@ async function steady(serial: string, ignore: Rect[] = []): Promise<Shot> {
   };
   const end = Date.now() + 90_000;
   for (;;) {
-    const shot = await settle(() => screencap(serial), { intervalMs: 1000, timeoutMs: 45_000, same });
-    await sleep(3500);
+    // After the app's ready signal (ready.ts) the frames are looked at closer together and held 1 s, not 3.5:
+    // the skeleton check below is the same either way.
+    const shot = await settle(() => screencap(serial), { intervalMs: ready ? 500 : 1000, timeoutMs: 45_000, same });
+    await sleep(ready ? 1000 : 3500);
     const again = await screencap(serial);
     const still = await same(again, shot.png);
     const loading = still && stillLoading((await hierarchy(serial)) ?? '');
@@ -337,17 +397,24 @@ async function steady(serial: string, ignore: Rect[] = []): Promise<Shot> {
   }
 }
 
-async function shoot(serial: string, ctx: CaptureContext, screen: Screen, first: boolean, key: string): Promise<Look & { ignore: Rect[] }> {
+async function shoot(serial: string, ctx: CaptureContext, screen: Screen, first: boolean, key: string): Promise<Look & { ignore: Rect[]; ready: Ready | null }> {
   // Its hints unspent for its account on the stack (hints.ts), before the app reads the profile.
   await unspendHints(ctx, screen);
-  await launch(serial, ctx, screen.as, screen.route, screen.app?.android);
-  // A cold start reads the account and the page over the network (an account's first launch also signs in).
-  await sleep(first ? 8000 : 4000);
+  // The launch says when its screen is quiet (ready.ts): a token of its own, logcat emptied of the last launch's.
+  const token = readyOn() ? readyToken() : null;
+  if (token) await adb(serial, 'logcat', '-c').catch(() => '');
+  await launch(serial, ctx, screen.as, screen.route, [...(screen.app?.android ?? []), ...(token ? ['--es', 'visualReadyToken', token] : [])]);
+  // A cold start reads the account and the page over the network (an account's first launch also signs in): the
+  // signal, or else the fixed wait as before.
+  const fixed = first ? 8000 : 4000;
+  const ready = token ? await waitReady(async () => logSays(await adb(serial, 'logcat', '-d', '-s', 'VisualReady:I', '-v', 'raw').catch(() => ''), token)) : null;
+  if (ready) await restOfWait(ready, fixed);
+  else await sleep(fixed);
   await demoBar(serial);
   // A caret's box found by either look is skipped by both, and by the comparison with the baseline.
   const ignore: Rect[] = [];
-  const look = await secondLook(await steady(serial, ignore), () => steady(serial, ignore), { key, ignore });
-  return { ...look, ignore };
+  const look = await secondLook(await steady(serial, ignore, !!ready?.ready), () => steady(serial, ignore), { key, ignore, glance: () => screencap(serial) });
+  return { ...look, ignore, ready };
 }
 
 /**
@@ -429,7 +496,7 @@ async function captureDevice(id: string, serial: string, ctx: CaptureContext): P
       const name = shotName(screen, v);
       const key = `android/${id}/${name}`;
       if (screen.keyboard) await softKeyboard(serial, true);
-      let look: Look & { ignore: Rect[] };
+      let look: Look & { ignore: Rect[]; ready: Ready | null };
       try {
         look = await shoot(serial, ctx, screen, first, key);
       } finally {
@@ -442,7 +509,7 @@ async function captureDevice(id: string, serial: string, ctx: CaptureContext): P
       if (look.ignore.length) writeFileSync(ignorePath(file), JSON.stringify(look.ignore));
       if (!look.settled) unsettled.push(key);
       if (look.retaken) ctx.retaken.push(key);
-      ctx.log(`  ${key}${lookNote(look)}`);
+      ctx.log(`  ${key}${lookNote(look)}${readyNote(look.ready)}`);
     }
   }
   return unsettled;

@@ -4,6 +4,7 @@ import java.util.concurrent.TimeUnit
 import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
+import com.resonance.kit.visual.VisualReady
 
 /**
  * The app's one OkHttpClient — the API and the pictures share its connections and threads (the
@@ -26,6 +27,16 @@ object AppHttp {
         .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .addInterceptor(Interceptor { chain -> chain.proceed(chain.request().newBuilder().header("User-Agent", userAgent).build()) })
+        // The release screenshots' ready signal (VisualReady): every request on its way, the pictures' too. Off unless a
+        // debug build was launched for a capture: then `requestStarted` answers false and nothing else happens.
+        .addInterceptor(Interceptor { chain ->
+            val counted = VisualReady.requestStarted()
+            try {
+                chain.proceed(chain.request())
+            } finally {
+                if (counted) VisualReady.requestEnded()
+            }
+        })
         // A network interceptor: asked again on every hop, so a redirect off our API never carries the token.
         .addNetworkInterceptor(Interceptor { chain ->
             val request = chain.request()

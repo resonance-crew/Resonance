@@ -81,7 +81,7 @@ None of these is a preference: each has been broken and cost a regression, a rej
 
 1. **Verification** — the three hard rules below: both widths for UI; a slice of the release screenshots for a screen, with a `Visual:` line on every commit touching UI (CI `commits` job); a data-layer change ships with a test that fails without it (CI `commits` job).
 2. **Never push unasked.** A push to `main` deploys production; releasing follows [docs/release-checklist.md](docs/release-checklist.md). *Guard hook.*
-3. **Never accept a baseline unasked**: only `npm run visual -- accept … --reason "<the owner's words>"`, never a write under `visual/baseline/`. *`accept` refuses without a reason; the guard hook checks the words are the owner's.*
+3. **Never accept a baseline unasked**: only `npm run visual -- accept … --reason "<the owner's words>"` (or `promote --from <branch> --reason "…"` into main's), never a write under `visual/baseline/` or `visual/baselines/`. *`accept` refuses without a reason; the guard hook checks the words are the owner's.*
 4. **Stop only what you started, by its PID** — never `pkill` / `killall` (other sessions' simulators, servers and builds). *Guard hook.*
 5. **Commit by explicit paths** — never `git add -A` / `git add .` / `git commit -a`: other sessions share checkouts. *Guard hook.*
 6. **Safety** ([.claude/rules/safety.md](.claude/rules/safety.md)): no answer anywhere tells who wrote an anonymous card; a block hides people and their named cards, never an anonymous card; every guarantee the rules give the client is re-checked on the server (Admin SDK) and covered by an emulator test.

@@ -130,6 +130,40 @@ describe('a second look', () => {
     expect(steady).toEqual({ png: LOADED, settled: true, retaken: false });
   });
 
+  // Its first look is already a settled one (Android: held 3.5 s, no skeleton named; iOS and the Mac: 4 s after the
+  // launch), so a new capture's second look is one plain frame: the same page again is two looks that agree.
+  it('looks at a new capture once more with one plain frame, after the same wait, and keeps its first look', async () => {
+    const retake = takes(OTHER);
+    const glance = Object.assign(async () => LOADED, { calls: 0 });
+    const waited: number[] = [];
+    const look = await secondLook(shot(LOADED), retake, options({ glance, wait: async (ms: number) => void waited.push(ms) }));
+    expect(look).toEqual({ png: LOADED, settled: true, retaken: false });
+    expect(retake.calls).toBe(0);
+    expect(waited).toEqual([5000]);
+  });
+
+  it('goes on with whole looks as before when the frame shows another page: the first look was early', async () => {
+    // The first look a skeleton that held still; the frame 5 s later the loaded card; whole looks then settle on it.
+    const retake = takes(LOADED, LOADED);
+    const look = await secondLook(shot(SKELETON), retake, options({ glance: async () => LOADED }));
+    expect(look).toEqual({ png: LOADED, settled: true, retaken: true });
+    expect(retake.calls).toBe(2);
+    // Still moving through every whole look: unsettled, as ever.
+    const moving = await secondLook(shot(SKELETON), takes(LOADED, OTHER, SKELETON), options({ glance: async () => OTHER }));
+    expect(moving.settled).toBe(false);
+  });
+
+  it('never glances at a capture that has a baseline: a changed one gets whole looks, as before', async () => {
+    put(KEY, LOADED);
+    const glance = Object.assign(async () => OTHER, { calls: 0 });
+    let glanced = 0;
+    const retake = takes(OTHER);
+    const look = await secondLook(shot(OTHER), retake, options({ glance: async () => (glanced++, glance()) }));
+    expect(look).toEqual({ png: OTHER, settled: true, retaken: false });
+    expect(glanced).toBe(0);
+    expect(retake.calls).toBe(1);
+  });
+
   it("skips what the baseline asked to skip too (its .ignore.json)", () => {
     put(KEY, SKELETON);
     writeFileSync(join(baseline, KEY.replace(/\.png$/, '.ignore.json')), JSON.stringify([{ x: 0, y: 70, width: W, height: 40 }]));

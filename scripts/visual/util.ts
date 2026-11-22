@@ -2,7 +2,7 @@
  * Shared plumbing for the release screenshots: where runs and baselines live,
  * waiting for a screen to stop changing, and small process helpers.
  */
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { execFile, execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -14,6 +14,7 @@ import type { VariantSet } from './variants';
 export const ROOT = resolve(__dirname, '../..');
 /** Git-ignored: baselines are this machine's (fonts and antialiasing differ between machines and OS versions). */
 export const VISUAL_DIR = join(ROOT, 'visual');
+/** main's baseline. Which one a checkout compares with and accepts into is baselines.ts's (`baselineDir`). */
 export const BASELINE_DIR = join(VISUAL_DIR, 'baseline');
 export const RUNS_DIR = join(VISUAL_DIR, 'runs');
 /**
@@ -89,7 +90,8 @@ export function listPngs(dir: string): string[] {
 
 export function git(...args: string[]): string {
   try {
-    return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
+    // git's own complaint (a commit this checkout lacks) stays off the run's console: '' says it.
+    return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
     return '';
   }
@@ -163,6 +165,47 @@ export function stopGroup(child: ChildProcess | undefined) {
   }
 }
 
-export function run(command: string, args: string[], env: Record<string, string> = {}): string {
-  return execFileSync(command, args, { cwd: ROOT, env: { ...process.env, ...env }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+/**
+ * How long a blocking command may take before it is stopped (`VISUAL_CMD_TIMEOUT_S`, default 10 min). A command that
+ * never answers held a run for hours (2026-11-22: `simctl bootstatus` 2 h 16 min, every lock with it), and a blocking
+ * one stops the lock's heartbeat too (lock.ts), so none waits for ever.
+ */
+export const CMD_TIMEOUT_MS = Number(process.env.VISUAL_CMD_TIMEOUT_S || 600) * 1000;
+
+/** A command that gave no answer within its time: stopped, and said as such (a device to restart, a retry). */
+export class CommandTimeout extends Error {
+  constructor(readonly command: string, readonly timeoutMs: number) {
+    super(`${command} gave no answer within ${Math.round(timeoutMs / 1000)} s and was stopped`);
+  }
+}
+
+const timedOut = (error: unknown) => {
+  const e = error as { killed?: boolean; signal?: string; code?: string };
+  return e?.code === 'ETIMEDOUT' || (e?.killed === true && e?.signal === 'SIGKILL');
+};
+
+export function run(command: string, args: string[], env: Record<string, string> = {}, timeoutMs = CMD_TIMEOUT_MS): string {
+  try {
+    return execFileSync(command, args, { cwd: ROOT, env: { ...process.env, ...env }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs, killSignal: 'SIGKILL' });
+  } catch (error) {
+    if (timedOut(error)) throw new CommandTimeout(`${command} ${args.slice(0, 3).join(' ')}`.trim(), timeoutMs);
+    throw error;
+  }
+}
+
+/**
+ * `execFile` without blocking, stopped (SIGKILL) once `timeoutMs` passes and then rejected with [CommandTimeout]:
+ * for the device commands that can hang (simctl bootstatus, adb).
+ */
+export function execTimed(
+  command: string,
+  args: string[],
+  { timeoutMs, cwd = ROOT, buffer = false, maxBuffer = 64 << 20 }: { timeoutMs: number; cwd?: string; buffer?: boolean; maxBuffer?: number },
+): Promise<{ stdout: string | Buffer }> {
+  return new Promise((resolve, reject) => {
+    execFile(command, args, { cwd, timeout: timeoutMs, killSignal: 'SIGKILL', maxBuffer, encoding: buffer ? 'buffer' : 'utf8' }, (error, stdout) => {
+      if (!error) return resolve({ stdout });
+      reject(timedOut(error) ? new CommandTimeout(`${command} ${args.slice(0, 3).join(' ')}`.trim(), timeoutMs) : error);
+    });
+  });
 }

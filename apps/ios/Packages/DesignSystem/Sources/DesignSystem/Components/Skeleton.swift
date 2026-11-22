@@ -2,6 +2,15 @@ import Synchronization
 import UIKit
 import SwiftUI
 
+#if DEBUG
+/// Every skeleton block and picture placeholder (``SkeletonBlock``) coming on screen (+1) and going (-1), for the
+/// release screenshots' ready signal: the app hands it to ResonanceKit's `VisualReady` when a capture launches it
+/// (`-visualReadyToken`). Nil, and so nothing, otherwise; not in a release build at all.
+public enum PlaceholderWatch {
+    public static var changed: ((Int) -> Void)?
+}
+#endif
+
 /// Skeleton.tsx: one placeholder block with the warm shimmer — sand, then a
 /// light band of the card's hue sweeping across, 1.5s a pass. Plain sand
 /// under Reduce Motion (the web's `animation: none`).
@@ -32,6 +41,15 @@ public struct SkeletonBlock: View {
     @Environment(\.skeletonPaused) private var paused
 
     public var body: some View {
+        block
+        #if DEBUG
+            // The release screenshots' ready signal waits while any block is on screen (PlaceholderWatch).
+            .onAppear { PlaceholderWatch.changed?(1) }
+            .onDisappear { PlaceholderWatch.changed?(-1) }
+        #endif
+    }
+
+    @ViewBuilder private var block: some View {
         if circle {
             let side = width ?? height ?? 14
             fill.clipShape(Circle()).frame(width: side, height: side)

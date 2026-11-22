@@ -20,6 +20,12 @@ struct ResonanceApp: App {
         HardwareKeyboard.watch()
         #if DEBUG
         if VisualCapture.on { UIView.setAnimationsEnabled(false) }
+        // `-visualReadyToken <t>`: say when the screen is drawn (VisualReady → the unified log), so the release
+        // screenshots go on without their fixed waits (scripts/visual/ios.ts, mac.ts).
+        if VisualCapture.on, let token = UserDefaults.standard.string(forKey: "visualReadyToken"), !token.isEmpty {
+            VisualReady.shared.start(token: token)
+            PlaceholderWatch.changed = { VisualReady.shared.placeholder($0) }
+        }
         // `-openLink <url>`: the link a flow opens, through the same inbox a universal link reaches (LinkInbox).
         if let link = LinkInbox.launchLink(UserDefaults.standard.string(forKey: "openLink")) {
             store.links.receive(link) { _ in false }

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { LockBusy, acquire, busyMessage, resourcesFor } from './lock';
+import { LockBusy, acquire, busyMessage, resourcesFor, stale } from './lock';
 
 const dirs: string[] = [];
 const freshDir = () => {
@@ -99,6 +99,73 @@ describe('acquire', () => {
     writeFileSync(join(dir, 'mac.lock'), JSON.stringify({ pid: 333, startedAt: at.toISOString(), cwd: '/y', command: 'other' }));
     mine.release();
     expect(JSON.parse(readFileSync(join(dir, 'mac.lock'), 'utf8')).pid).toBe(333);
+  });
+});
+
+describe('the beat (a stuck holder)', () => {
+  const holderFile = (dir: string, resource: string) => JSON.parse(readFileSync(join(dir, `${resource}.lock`), 'utf8'));
+
+  it('writes its beat into every file it holds, and keeps who it is', async () => {
+    const dir = freshDir();
+    let now = at;
+    const lock = await acquire(['ios', 'port-3150'], { ...as(111, dir), now: () => now, heartbeatMs: 0 });
+    expect(holderFile(dir, 'ios').heartbeatAt).toBe(at.toISOString());
+    now = new Date(at.getTime() + 60_000);
+    lock.beat!();
+    for (const r of ['ios', 'port-3150']) expect(holderFile(dir, r)).toMatchObject({ pid: 111, command: 'visual capture (111)', heartbeatAt: now.toISOString() });
+    lock.release();
+  });
+
+  it('beats on its own timer while it holds the lock, and stops once released', async () => {
+    const dir = freshDir();
+    let tick = 0;
+    const lock = await acquire(['android'], { ...as(111, dir), now: () => new Date(at.getTime() + ++tick * 1000), heartbeatMs: 5 });
+    const first = holderFile(dir, 'android').heartbeatAt;
+    await new Promise((r) => setTimeout(r, 40));
+    expect(holderFile(dir, 'android').heartbeatAt > first).toBe(true);
+    lock.release();
+    expect(existsSync(join(dir, 'android.lock'))).toBe(false);
+  });
+
+  it('takes over a live holder whose beat stopped (stuck), says so, and never touches the process', async () => {
+    const dir = freshDir();
+    const old = new Date(at.getTime() - 11 * 60_000).toISOString();
+    writeFileSync(join(dir, 'ios.lock'), JSON.stringify({ pid: 999, startedAt: old, cwd: '/r30', command: 'visual capture ios', heartbeatAt: old }));
+    const said: string[] = [];
+    const lock = await acquire(['ios'], { ...as(222, dir), log: (l) => said.push(l), heartbeatMs: 0 });
+    expect(holderFile(dir, 'ios').pid).toBe(222);
+    expect(said.join('\n')).toMatch(/pid 999.*stuck, so its lock is taken over.*left running/);
+    lock.release();
+  });
+
+  it('leaves a live holder whose beat is recent, and an older harness’s lock without a beat, to their pid', async () => {
+    const dir = freshDir();
+    const recent = new Date(at.getTime() - 2 * 60_000).toISOString();
+    writeFileSync(join(dir, 'ios.lock'), JSON.stringify({ pid: 999, startedAt: recent, cwd: '/a', command: 'a', heartbeatAt: recent }));
+    await expect(acquire(['ios'], { ...as(222, dir), heartbeatMs: 0 })).rejects.toBeInstanceOf(LockBusy);
+    const longAgo = new Date(at.getTime() - 3 * 3600_000).toISOString();
+    writeFileSync(join(dir, 'mac.lock'), JSON.stringify({ pid: 998, startedAt: longAgo, cwd: '/b', command: 'b' }));
+    await expect(acquire(['mac'], { ...as(222, dir), heartbeatMs: 0 })).rejects.toBeInstanceOf(LockBusy);
+  });
+
+  it('says when another run took its lock over, so the run can stop', async () => {
+    const dir = freshDir();
+    const lost: [string, number | undefined][] = [];
+    const lock = await acquire(['mac'], { ...as(111, dir), heartbeatMs: 0, onLost: (r, h) => lost.push([r, h?.pid]) });
+    writeFileSync(join(dir, 'mac.lock'), JSON.stringify({ pid: 333, startedAt: at.toISOString(), cwd: '/y', command: 'other', heartbeatAt: at.toISOString() }));
+    lock.beat!();
+    expect(lost).toEqual([['mac', 333]]);
+    // It no longer beats into the other run's file, nor removes it.
+    expect(holderFile(dir, 'mac').pid).toBe(333);
+    lock.release();
+    expect(holderFile(dir, 'mac').pid).toBe(333);
+  });
+
+  it('judges staleness by the beat alone', () => {
+    const h = { pid: 1, startedAt: at.toISOString(), cwd: '/', command: 'c' };
+    expect(stale(h, at, 1000)).toBe(false);
+    expect(stale({ ...h, heartbeatAt: new Date(at.getTime() - 2000).toISOString() }, at, 1000)).toBe(true);
+    expect(stale({ ...h, heartbeatAt: new Date(at.getTime() - 500).toISOString() }, at, 1000)).toBe(false);
   });
 });
 

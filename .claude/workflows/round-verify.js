@@ -1,10 +1,10 @@
 export const meta = {
   name: 'round-verify',
-  description: 'A built Resonance round on its base branch: screenshot slices one platform at a time, a read-only review of what changed, fixes and a retake of what they touched, then the record in Resonance-notes. Never accepts a baseline, never pushes.',
+  description: 'A built Resonance round on its base branch: every platform\'s screenshot slice in one run, a read-only review of what changed, fixes and one retake of what they touched, then the record in Resonance-notes. Never accepts a baseline, never pushes.',
   whenToUse: 'After round-build, on the round base worktree. Ends where the owner looks at the changed captures and says whether they become the baseline.',
   phases: [
     { title: 'Preflight', detail: 'the base worktree and its ports' },
-    { title: 'Capture', detail: 'one platform at a time' },
+    { title: 'Capture', detail: 'every platform\'s slice in one run' },
     { title: 'Review', detail: 'changed captures, then a refuter' },
     { title: 'Fixes', detail: 'confirmed issues, then a retake of those screens' },
     { title: 'Record', detail: 'runs, verdicts, what waits for the owner' },
@@ -18,6 +18,10 @@ export const meta = {
 //   round, date, notes, spec, acceptance   as round-build's
 //   slices      { web: { only: 'thread,messages', device: 'phone,desktop' }, ios: { only: '…', device: 'iphone,ipad' },
 //                 android: { only: '…', device: 'phone,tablet' }, mac: { only: '…' } }   — which screens, per platform
+//
+// Every platform's slice is taken by ONE capture (`--<platform>-only` / `--<platform>-device`, scripts/visual/run.ts):
+// one stack, the app builds beside the first phase, no gap between platforms; a fix round's retake is one run too.
+// The owner's accept then names every run at once (`accept --runs a,b`).
 //   ownerWords  the owner's request, verbatim
 //   main        '/Users/ncchen/Documents/Resonance' (default)
 //   retries     fix-and-retake rounds, at most 2 (the cap wins)
@@ -115,12 +119,28 @@ if (!pre || !pre.ok) {
 result.preflight = pre
 const WT = pre.worktree
 
-function capture(p, only, label) {
-  const s = A.slices[p]
-  const device = s.device ? ` --device ${s.device}` : ''
+/** The capture command's arguments for `screens` ({ platform: 'a,b' }): every platform in one run, each with its own slice. */
+function sliceArgs(screens) {
+  const ps = PLATFORMS.filter((p) => screens[p])
+  const parts = [...ps]
+  for (const p of ps) {
+    parts.push(`--${p}-only ${screens[p]}`)
+    if (A.slices[p].device) parts.push(`--${p}-device ${A.slices[p].device}`)
+  }
+  return parts.join(' ')
+}
+
+/** One capture of every platform named in `screens` ({ platform: 'a,b' }). */
+function capture(screens, label) {
   return run(`${SCOPE}
 
-In ${WT}: \`${pre.visualEnv} npm run visual -- capture ${p} --only ${only}${device}; echo "exit=$?"\`. It ends with a \`Visual PASS|FAIL <id>: …\` line and writes visual/runs/<id>/summary.json. Return the run id, the exit code, that last line, the summary's path, and from summary.json and results.json: every changed and every new capture's path (relative to the run folder), the problems (kind: key — detail) and the awaiting list. Don't open the pictures; don't retry a failing run more than once (and only if it failed before capturing anything).`, { label, phase: 'Capture', schema: CAPTURE, model: MODELS.mechanical })
+In ${WT}: \`${pre.visualEnv} npm run visual -- capture ${sliceArgs(screens)}; echo "exit=$?"\`. One run takes every platform's slice (web and Mac side by side, then the AVDs, then the simulators). It ends with a \`Visual PASS|FAIL <id>: …\` line and writes visual/runs/<id>/summary.json. Return the run id, the exit code, that last line, the summary's path, and from summary.json and results.json: every changed and every new capture's path (relative to the run folder, so it starts with its platform), the problems (kind: key — detail) and the awaiting list. Don't open the pictures; don't retry a failing run more than once (and only if it failed before capturing anything).`, { label, phase: 'Capture', schema: CAPTURE, model: MODELS.mechanical })
+}
+
+/** A capture's answer for one platform: its changed and new captures (the keys start with the platform). */
+function forPlatform(cap, p) {
+  const mine = (k) => k.split('/')[0] === p
+  return Object.assign({}, cap, { changed: cap.changed.filter(mine), newCaptures: cap.newCaptures.filter(mine) })
 }
 
 function review(p, cap, label) {
@@ -138,16 +158,18 @@ function review(p, cap, label) {
     })
 }
 
-// Capture one platform at a time (the machine runs one full capture at a time); each platform's review starts as
-// soon as its run is in, while the next platform captures.
+// Every platform's slice in one run; then each platform's changed captures reviewed side by side.
 phase('Capture')
 const pending = []
-for (const p of PLATFORMS) {
-  const cap = await capture(p, A.slices[p].only, `capture:${p}`)
-  result.captures.push({ platform: p, capture: cap })
-  if (!cap) { log(`${p}: the capture agent gave no answer`); continue }
-  log(`${p}: ${cap.verdictLine}`)
-  if (cap.changed.length + cap.newCaptures.length) pending.push(review(p, cap, `look:${p}`).catch(() => null))
+const first = await capture(Object.fromEntries(PLATFORMS.map((p) => [p, A.slices[p].only])), 'capture')
+result.captures.push({ platforms: PLATFORMS, capture: first })
+if (!first) log('the capture agent gave no answer')
+else {
+  log(first.verdictLine)
+  for (const p of PLATFORMS) {
+    const cap = forPlatform(first, p)
+    if (cap.changed.length + cap.newCaptures.length) pending.push(review(p, cap, `look:${p}`).catch(() => null))
+  }
 }
 phase('Review')
 result.reviews = (await Promise.all(pending)).filter(Boolean)
@@ -160,9 +182,10 @@ for (let round = 0; round < MAX_RETRIES && open.length; round++) {
   const byPlatform = {}
   for (const i of open) (byPlatform[i.platform] = byPlatform[i.platform] || []).push(i)
   const ps = Object.keys(byPlatform)
-  // One platform at a time: each fixer commits in the same worktree, then its screens are captured again.
+  // The fixers one at a time (each commits in the same worktree), then every fixed platform's screens in one retake.
   const left = []
   const roundLog = []
+  const retake = {}
   for (const p of ps) {
     const issues = byPlatform[p]
     const fixed = await run(`${SCOPE}
@@ -172,11 +195,21 @@ You fix what the screenshot review of round ${ROUND} confirmed on ${p}, in ${WT}
 ${JSON.stringify(issues, null, 2)}`, { label: `fix:${p}${round ? `:${round + 1}` : ''}`, phase: 'Fixes', schema: FIXED, type: FIXER[p] })
     const screens = fixed && fixed.screens && fixed.screens.length ? fixed.screens.join(',') : null
     if (!screens) { left.push(...issues); roundLog.push({ platform: p, fixed, retake: null }); continue }
-    const cap = await capture(p, screens, `retake:${p}${round ? `:${round + 1}` : ''}`)
-    const again = cap && cap.changed.concat(cap.newCaptures).length ? await review(p, cap, `relook:${p}${round ? `:${round + 1}` : ''}`) : null
-    const remaining = again ? again.confirmed.filter((i) => i.verdict !== 'nit').map((i) => Object.assign({ platform: p }, i)) : []
-    left.push(...remaining)
-    roundLog.push({ platform: p, fixed, retake: cap, review: again })
+    retake[p] = screens
+    roundLog.push({ platform: p, fixed })
+  }
+  if (Object.keys(retake).length) {
+    const tag = round ? `:${round + 1}` : ''
+    const cap = await capture(retake, `retake${tag}`)
+    const relooks = await Promise.all(Object.keys(retake).map((p) => {
+      const mine = cap ? forPlatform(cap, p) : null
+      return mine && mine.changed.concat(mine.newCaptures).length ? review(p, mine, `relook:${p}${tag}`).catch(() => null) : Promise.resolve(null)
+    }))
+    Object.keys(retake).forEach((p, i) => {
+      const again = relooks[i]
+      left.push(...(again ? again.confirmed.filter((x) => x.verdict !== 'nit').map((x) => Object.assign({ platform: p }, x)) : []))
+      Object.assign(roundLog.find((r) => r.platform === p), { retake: cap, review: again })
+    })
   }
   result.fixRounds.push(roundLog)
   log(`fixes round ${round + 1}: ${open.length} → ${left.length} open`)
@@ -193,7 +226,7 @@ result.record = await run(`${SCOPE}
 You write round ${ROUND}'s screenshot record into ${NOTES}, from the data below — not from memory. Traditional Chinese (Taiwan usage), the house's plain voice: no sentence opens with 「我」, subjects left out where Chinese leaves them out, the owner called 擁有者; paths, run ids and commit hashes as they are. Only these files:
 
 - visual-review.md — append 「## round-verify ${A.date}」: per platform the run id and its verdict line, the reviewer's verdict per changed capture (fine ones with why, issues with where and cause), what was fixed (commit) and retaken (run id), and the captures no reviewer read (if any).
-- open-items.md — append 「## round-verify ${A.date}」: issues still open, and **what waits for the owner**: the run ids whose changed captures need their OK, each with the command the lead will run after the OK (do not run it): \`npm run visual -- accept --run <id> --only <screens> --reason "<the owner's words>"\`; then the push, which is the owner's word too.
+- open-items.md — append 「## round-verify ${A.date}」: issues still open, and **what waits for the owner**: the run ids whose changed captures need their OK, and the one command the lead will run after the OK (do not run it), every run in it, a retake named after the run it retakes (the last named wins a capture both took): \`npm run visual -- accept --runs <id>,<id> --only <screens> --reason "<the owner's words>"\`; then the push, which is the owner's word too.
 - notes.md — add 「## round-verify ${A.date}」 with the same facts in a few lines.
 - round-verify.json — the whole result below, verbatim.
 

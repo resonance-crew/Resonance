@@ -53,8 +53,17 @@ public enum ResonanceClient {
             serverURL: configuration.apiURL,
             configuration: .init(dateTranscoder: .iso8601WithFractionalSeconds),
             transport: transport,
-            middlewares: [OpenEnumsMiddleware(), RequiredNullsMiddleware(), AppCheckMiddleware()] + middlewares
+            middlewares: [OpenEnumsMiddleware(), RequiredNullsMiddleware(), AppCheckMiddleware()] + middlewares + debugMiddlewares
         )
+    }
+
+    /// The release screenshots' ready signal counts every call (``VisualReady``): debug builds only.
+    static var debugMiddlewares: [any ClientMiddleware] {
+        #if DEBUG
+        [VisualReadyMiddleware()]
+        #else
+        []
+        #endif
     }
 }
 

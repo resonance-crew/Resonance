@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const run = vi.fn();
 vi.mock('./util', async (importOriginal) => ({ ...(await importOriginal<typeof import('./util')>()), run: (...a: unknown[]) => run(...a), sleep: async () => {} }));
 
-const { seed } = await import('./stack');
+const { devServerEnv, seed } = await import('./stack');
 
 describe('seed', () => {
   beforeEach(() => {
@@ -43,5 +43,34 @@ describe('seed', () => {
   it('seeds once when the first seed works', async () => {
     await seed(() => {});
     expect(run).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the stack’s dev server keeps what it compiled', () => {
+  it('asks for every page kept (VISUAL_KEEP_PAGES), beside its own build folder and tsconfig', () => {
+    expect(devServerEnv('.next-visual/3150', '.next-visual/tsconfig.3150.json')).toMatchObject({
+      NEXT_DIST_DIR: '.next-visual/3150',
+      NEXT_TSCONFIG_PATH: '.next-visual/tsconfig.3150.json',
+      VISUAL_KEEP_PAGES: '1',
+    });
+  });
+
+  it('only that stack keeps every page: next.config sets onDemandEntries under VISUAL_KEEP_PAGES and never otherwise', async () => {
+    const load = async (keep: string | undefined) => {
+      vi.resetModules();
+      if (keep == null) delete process.env.VISUAL_KEEP_PAGES;
+      else process.env.VISUAL_KEEP_PAGES = keep;
+      try {
+        return (await import('../../next.config')).default as { onDemandEntries?: { maxInactiveAge: number; pagesBufferLength: number } };
+      } finally {
+        delete process.env.VISUAL_KEEP_PAGES;
+      }
+    };
+    expect((await load(undefined)).onDemandEntries).toBeUndefined();
+    expect((await load('0')).onDemandEntries).toBeUndefined();
+    const kept = (await load('1')).onDemandEntries!;
+    // Longer than any run (a release with its flows takes about two hours), more pages than the app has.
+    expect(kept.maxInactiveAge).toBeGreaterThanOrEqual(6 * 3600_000);
+    expect(kept.pagesBufferLength).toBeGreaterThanOrEqual(200);
   });
 });
