@@ -38,6 +38,12 @@ public struct InboxAPI: Sendable {
 
     /// The account's conversations, the most recently active first (up to `conversationPages` pages).
     public func conversations() async throws -> [Conversation] {
+        try await conversationPages().conversations
+    }
+
+    /// The account's conversations as ``conversations()`` reads them, and whether they reached the end (false: the
+    /// last page read still had a next one).
+    public func conversationPages() async throws -> (conversations: [Conversation], complete: Bool) {
         var all: [Conversation] = []
         var token: String?
         for _ in 0..<Self.conversationPages {
@@ -52,7 +58,19 @@ public struct InboxAPI: Sendable {
             }
             if token == nil { break }
         }
-        return all
+        return (all, token == nil)
+    }
+
+    /// Only these conversations (1–20 ids; `?pairs=`), the most recently active first, each with its person: one
+    /// deleted, or not this reader's, is left out — what a list that knows which conversations moved merges in.
+    public func conversations(pairs: [String]) async throws -> [Conversation] {
+        guard !pairs.isEmpty else { return [] }
+        switch try await client.listConversations(query: .init(pairs: pairs.joined(separator: ","))) {
+        case let .ok(r): return try r.body.json.conversations
+        case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
+        case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
+        case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
+        }
     }
 
     /// One conversation, or nil when there is none for this reader (never made, deleted, or not theirs: the
