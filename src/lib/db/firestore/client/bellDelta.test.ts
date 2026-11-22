@@ -118,7 +118,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const GETS = (rs: { path: string }[]) => rs.filter((r) => r.path.startsWith('/api/v1/me/bell'));
+const GETS = <R extends { path: string }>(rs: R[]) => rs.filter((r) => r.path.startsWith('/api/v1/me/bell'));
 
 describe('the bell reads only what changed', () => {
   it('tap a bell row: the read mark, then that one row — not the page and its people, and nothing when the listener hears it', async () => {
