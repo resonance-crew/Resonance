@@ -1,7 +1,7 @@
 import { ApiFailure } from '@/lib/api/v1/http';
 import { accessClaims, ACCESS_TTL_S, REFRESH_TOKEN, REFRESH_TTL_MS, revokedBy, type Provider } from '@/server/domain/session';
 import type { IdentityVerifier } from '@/server/ports/identity';
-import type { RateLimiter } from '@/server/ports/rateLimit';
+import type { AddressLimiter, RateLimiter } from '@/server/ports/rateLimit';
 import type { AccountStanding, RefreshRow, SessionSigner, SessionStore } from '@/server/ports/sessions';
 
 /**
@@ -21,7 +21,15 @@ export interface SessionDeps {
   idp: IdentityVerifier;
   standing: AccountStanding;
   limits: RateLimiter;
+  /** Per-address budgets for refresh and logout, spent before the token's row is read (ADDRESS_LIMITS). */
+  addresses: AddressLimiter;
   now: () => Date;
+}
+
+/** A refresh token, and the address the request came from (null: none known). */
+export interface RefreshInput {
+  refreshToken: string;
+  address?: string | null;
 }
 
 export interface SessionTokens {
@@ -84,8 +92,10 @@ export async function exchangeIn(deps: SessionDeps, input: { provider: Provider;
  * token since the exchange) is revoked, and the client signs in again. An
  * account gone, disabled or revoked since the sign-in ends its family too.
  */
-export async function refreshIn(deps: SessionDeps, input: { refreshToken: string }): Promise<SessionTokens> {
+export async function refreshIn(deps: SessionDeps, input: RefreshInput): Promise<SessionTokens> {
   if (!deps.signer.enabled()) throw off();
+  // Before the row is read: whose token it is isn't known yet, so its address pays.
+  await deps.addresses.spend(input.address ?? null, 'authRefresh');
   const expired = () => signedOut('This session has ended: sign in again.');
   if (!REFRESH_TOKEN.test(input.refreshToken)) throw expired();
   const hash = deps.signer.hash(input.refreshToken);
@@ -107,9 +117,11 @@ export async function refreshIn(deps: SessionDeps, input: { refreshToken: string
 /**
  * POST /api/v1/auth/logout: the refresh token's family revoked (the access
  * token it came with stands until it expires, ≤ 15 minutes). Unknown or
- * already revoked: nothing to do, the same answer.
+ * already revoked: nothing to do, the same answer. Its address's budget is
+ * spent before the row is read (429 past it).
  */
-export async function logoutIn(deps: SessionDeps, input: { refreshToken: string }): Promise<void> {
+export async function logoutIn(deps: SessionDeps, input: RefreshInput): Promise<void> {
+  await deps.addresses.spend(input.address ?? null, 'authLogout');
   if (!REFRESH_TOKEN.test(input.refreshToken)) return;
   const row = await deps.store.getRefresh(deps.signer.hash(input.refreshToken));
   if (row) await deps.store.revokeFamily(row.family);

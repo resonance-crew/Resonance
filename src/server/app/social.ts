@@ -4,7 +4,8 @@ import type { BlockListBody, ConnectionListBody, InviteListBody, PersonBody, Per
 import type { ServerCtx } from '@/server/ctx';
 import { inviteOpen } from '@/server/domain/graph';
 import type { PersonRow } from '@/server/ports/repos/users';
-import { visibleCard } from './cardsRead';
+import { CARD_VISIBILITY_FIELDS } from '@/lib/api/v1/present';
+import { visibleCardById } from './cardsRead';
 import { signal } from './realtime';
 import { AUTHOR_FIELDS } from './viewer';
 
@@ -49,16 +50,18 @@ export async function lookupUsersIn(ctx: ServerCtx, ids: readonly string[]): Pro
 /* ───────────── bookmarks ───────────── */
 
 /**
- * Bookmark a card (收藏): only one the viewer may read — the very check GET
- * /cards/{key} makes (visibleCard), so a card they can't read is `not_found`
- * exactly as it is there, an absent one alike, and no answer here tells
- * anything that one doesn't. A block never keeps a card from its reader
+ * Bookmark a card (收藏): only one the viewer may read, by its document id —
+ * canView's check (visibleCardById), so a card they can't read is `not_found`
+ * exactly as it is on GET /cards/{key}, an absent one alike, and no answer
+ * here tells anything that one doesn't. A 私人卡 shared with them in a
+ * message is a pass to read it, never to bookmark it (safety.md), and a slug
+ * is no id (api.md: an id route reads by id). A block never keeps a card from its reader
  * (a named one is the client's to hide, an anonymous one is everyone's), so
  * neither does it here. Bookmarking again keeps the first time. Never counted,
  * never told to the author.
  */
 export async function putBookmarkIn(ctx: ServerCtx, uid: string, cardId: string): Promise<void> {
-  const card = await visibleCard(ctx, uid, cardId);
+  const card = await visibleCardById(ctx, uid, cardId, CARD_VISIBILITY_FIELDS);
   await ctx.data.social.putBookmark(uid, card.id);
 }
 

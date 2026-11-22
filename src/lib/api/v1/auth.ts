@@ -12,6 +12,15 @@ import { AuthExchangeRequest, AuthRefreshRequest } from './schemas';
  */
 const production = (): SessionDeps => sessionDeps(serverCtx());
 
+/**
+ * The address a request came from: on Vercel `x-real-ip` (or the first of
+ * `x-forwarded-for`), both set by its edge, never the client's own; null
+ * when there is neither (a local server).
+ */
+export function clientAddress(req: Request): string | null {
+  return req.headers.get('x-real-ip')?.trim() || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null;
+}
+
 /** POST /api/v1/auth/exchange — a Firebase ID token traded for Resonance's tokens. */
 export const exchangeRoute = (deps: () => SessionDeps = production) =>
   withoutUser(async (req) => {
@@ -23,13 +32,13 @@ export const exchangeRoute = (deps: () => SessionDeps = production) =>
 export const refreshRoute = (deps: () => SessionDeps = production) =>
   withoutUser(async (req) => {
     const input = parse(AuthRefreshRequest, await jsonBody(req));
-    return NextResponse.json(await refreshIn(deps(), input));
+    return NextResponse.json(await refreshIn(deps(), { ...input, address: clientAddress(req) }));
   });
 
 /** POST /api/v1/auth/logout — the refresh token's session revoked. */
 export const logoutRoute = (deps: () => SessionDeps = production) =>
   withoutUser(async (req) => {
     const input = parse(AuthRefreshRequest, await jsonBody(req));
-    await logoutIn(deps(), input);
+    await logoutIn(deps(), { ...input, address: clientAddress(req) });
     return new Response(null, { status: 204 });
   });

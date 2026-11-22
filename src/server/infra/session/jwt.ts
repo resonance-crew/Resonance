@@ -72,11 +72,24 @@ export function parseJwtKeys(raw: string | undefined): SigningKey[] {
 
 let cache: { raw: string | undefined; keys: SigningKey[] } | null = null;
 
-/** The environment's keys, parsed once per value (a test may stub it). */
+/**
+ * The environment's keys, parsed once per value (a test may stub it). A
+ * value that can't be used is remembered as no keys, said once per value
+ * (console.error) and never parsed again until it changes: fail closed —
+ * our tokens verify nothing and nothing signs (the sessions routes answer
+ * 503), Firebase tokens go on working — without every bearer request
+ * re-parsing it and logging.
+ */
 export function envJwtKeys(env: Record<string, string | undefined> = process.env): SigningKey[] {
   const raw = env.RESONANCE_JWT_KEYS;
   if (cache && cache.raw === raw) return cache.keys;
-  const keys = parseJwtKeys(raw);
+  let keys: SigningKey[];
+  try {
+    keys = parseJwtKeys(raw);
+  } catch (e) {
+    console.error('[auth] RESONANCE_JWT_KEYS is unusable, so our sessions are off:', e instanceof Error ? e.message : e);
+    keys = [];
+  }
   cache = { raw, keys };
   return keys;
 }

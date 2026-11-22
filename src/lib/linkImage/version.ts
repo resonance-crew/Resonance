@@ -24,17 +24,15 @@ let warned = false;
 
 /**
  * The key a drawn card's version is made with: `linkPreviewKeys().share`
- * (../links/previewSecret — HKDF-SHA256, info "resonance share-image v1", of
- * `LINK_PREVIEW_SECRET` when it is set, else of the Firebase service account's
- * private key — so it is neither the key that signs link-preview pictures nor
- * anything else's). Without either, outside production, a fixed key. In
- * production without either — or with a malformed `derived-v1:` setting — it
+ * (../links/previewSecret — from `LINK_PREVIEW_SECRET`, so it is neither the
+ * key that signs link-preview pictures nor anything else's). Without it,
+ * outside production, a fixed key. In production without it — or with a malformed `derived-v1:` setting — it
  * is null: the version is then left unkeyed (and that is logged once) rather
  * than failing the card page that names it. Changing the secret changes every
  * drawn card's URL: the old ones are sent on to the new.
  */
 export function shareVersionKey(env: Record<string, string | undefined> = process.env): Buffer | null {
-  let reason = 'no LINK_PREVIEW_SECRET or FIREBASE_PRIVATE_KEY';
+  let reason = 'no LINK_PREVIEW_SECRET';
   try {
     const keys = linkPreviewKeys(env);
     if (keys) return keys.share;

@@ -1,7 +1,9 @@
 import { generateKeyPairSync } from 'node:crypto';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiFailure } from '@/lib/api/v1/http';
+import { ADDRESS_LIMITS } from '@/server/domain/rateLimit';
 import { ACCESS_TTL_S, REFRESH_TTL_MS } from '@/server/domain/session';
+import { memoryAddressLimiter } from '@/server/infra/memory/addressBudget';
 import { memoryIdentity, type MemoryIdentity } from '@/server/infra/memory/identity';
 import { memoryRateLimiter } from '@/server/infra/memory/rateLimit';
 import { memorySessionStore, type MemorySessionStore } from '@/server/infra/memory/sessions';
@@ -36,6 +38,7 @@ beforeEach(() => {
     idp,
     standing: { standing: async (uid) => standing.get(uid) ?? null },
     limits: memoryRateLimiter(new MemoryState()),
+    addresses: memoryAddressLimiter(),
     now: () => now,
   };
 });
@@ -135,5 +138,33 @@ describe('logoutIn', () => {
     expect((await failure(refreshIn(deps, { refreshToken: second.refreshToken }))).code).toBe('unauthenticated');
     await expect(logoutIn(deps, { refreshToken: second.refreshToken })).resolves.toBeUndefined();
     await expect(logoutIn(deps, { refreshToken: 'nope' })).resolves.toBeUndefined();
+  });
+});
+
+describe('the per-address budget of refresh and logout', () => {
+  const garbage = (i: number) => `rt1.${String(i).padStart(43, 'A')}`;
+
+  it('refuses an address past its budget BEFORE the token is read: made-up tokens cost no store read past it', async () => {
+    const reads = vi.spyOn(store, 'getRefresh');
+    const { max } = ADDRESS_LIMITS.authRefresh;
+    for (let i = 0; i < max; i++) expect((await failure(refreshIn(deps, { refreshToken: garbage(i), address: '203.0.113.9' }))).code).toBe('unauthenticated');
+    expect(reads).toHaveBeenCalledTimes(max);
+    expect((await failure(refreshIn(deps, { refreshToken: garbage(max), address: '203.0.113.9' }))).code).toBe('rate_limited');
+    expect(reads).toHaveBeenCalledTimes(max);
+    // Another address still has its own; the window lapses.
+    const s = await exchangeIn(deps, { provider: 'firebase', token: 'token-of-ann' });
+    await expect(refreshIn(deps, { refreshToken: s.refreshToken, address: '198.51.100.1' })).resolves.toMatchObject({ userId: 'ann' });
+    const later = Date.now() + ADDRESS_LIMITS.authRefresh.windowMs;
+    await expect(deps.addresses.spend('203.0.113.9', 'authRefresh', later)).resolves.toBeUndefined();
+  });
+
+  it('logout is charged too, before its read, on a budget of its own', async () => {
+    const reads = vi.spyOn(store, 'getRefresh');
+    const { max } = ADDRESS_LIMITS.authLogout;
+    for (let i = 0; i < max; i++) await logoutIn(deps, { refreshToken: garbage(i), address: '203.0.113.9' });
+    expect((await failure(logoutIn(deps, { refreshToken: garbage(max), address: '203.0.113.9' }))).code).toBe('rate_limited');
+    expect(reads).toHaveBeenCalledTimes(max);
+    // Refresh's budget at that address is untouched by logout's.
+    expect((await failure(refreshIn(deps, { refreshToken: garbage(0), address: '203.0.113.9' }))).code).toBe('unauthenticated');
   });
 });
