@@ -15,7 +15,8 @@ import { join } from 'node:path';
 import { PNG } from 'pngjs';
 import { compareImages } from './diff';
 import { SCREENS, type Platform } from './screens';
-import { BASELINE_DIR, ignorePath, readJson, sleep, type Rect } from './util';
+import { baselineDir as currentBaseline } from './baselines';
+import { ignorePath, readJson, sleep, type Rect } from './util';
 
 export type Shot = { png: Buffer; settled: boolean };
 /** A capture as kept: `retaken` when an earlier look was found too early. */
@@ -47,7 +48,7 @@ export function samePicture(a: Buffer, b: Buffer, ignore: Rect[] = [], allowance
  * looked at again — a machine's first run, a new screen, the extended set's first run — or a capture
  * taken before load would be the baseline the next run trusts.
  */
-export function wantsSecondLook(key: string, png: Buffer, ignore: Rect[] = [], baselineDir = BASELINE_DIR): boolean {
+export function wantsSecondLook(key: string, png: Buffer, ignore: Rect[] = [], baselineDir = currentBaseline()): boolean {
   const file = join(baselineDir, key);
   const platform = key.split('/')[0];
   if (!existsSync(file)) return platform !== 'web' || existsSync(join(baselineDir, platform));
@@ -71,7 +72,7 @@ export const lookNote = (look: Look) => (!look.settled ? '  (never settled)' : l
 
 /** The capture to keep: `first`, or a later look when `first` was taken too early (see above). */
 export async function secondLook(first: Shot, retake: () => Promise<Shot>, options: SecondLookOptions): Promise<Look> {
-  const { key, ignore = [], baselineDir = BASELINE_DIR, wait = sleep } = options;
+  const { key, ignore = [], baselineDir = currentBaseline(), wait = sleep } = options;
   const waitMs = options.waitMs ?? SECOND_LOOK_MS[key.split('/')[0] as Platform] ?? 5000;
   if (!wantsSecondLook(key, first.png, ignore, baselineDir)) return { ...first, retaken: false };
   const allowance = allowanceOf(key);

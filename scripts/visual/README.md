@@ -31,14 +31,36 @@ whichever run started last on this machine, which can be someone else's).
 Everything lands in `visual/` (git-ignored):
 
 ```
-visual/baseline/<platform>/<device>/<screen>@<theme>-<locale>.png   the accepted pictures
-visual/baseline/<platform>/meta.json                                the commit, run and reason of the latest accept
+visual/baseline/<platform>/<device>/<screen>@<theme>-<locale>.png   main's accepted pictures
+visual/baseline/<platform>/meta.json                                the latest accept, and each picture's commit
+visual/baselines/<branch, encoded>/…                                a round's or a branch's own (Baselines, below)
 visual/runs/<id>/<platform>/<device>/…png                           a run's captures
 visual/runs/<id>/_diff/…png                                         changed pixels in red
 visual/runs/<id>/results.json   index.html                          the comparison and its report (open in a browser)
 visual/runs/<id>/review/REVIEW.md   verdicts.json                   the review brief and the model's verdicts
 visual/runs/<id>/_logs/                                             emulators, dev server, app builds
 ```
+
+## Baselines: main's, a round's, a branch's
+
+Each line of work compares with, and accepts into, a baseline of its own (`baselines.ts`); a round's accept no
+longer becomes every other branch's baseline (on 2026-11-22 the one baseline was r29/r30's look, and main's and
+the other rounds' captures all came out changed and unexplained). Which one a checkout uses:
+
+| Checkout on | Baseline | Folder |
+| --- | --- | --- |
+| `main` (or `master`) | main's | `visual/baseline/` — the old single baseline, where it always was |
+| a round's branch: `r30/base`, `r30/web`, `r30/ios`, … | the round's, shared by its lanes and round-verify | `visual/baselines/r30%2Fbase/` |
+| any other branch | its own | `visual/baselines/<its name, encoded>/` |
+| a detached checkout | its commit's | `visual/baselines/detached-<sha8>/` |
+| `VISUAL_BASELINE=<name>` set | that one (`main` for main's) | as above |
+
+A branch's baseline is made the first time it is used, cloned from main's (`cp -c`: APFS clones, no bytes
+copied), with `branch.json` saying when; a name becomes a folder with every byte but letters, digits, `-` and
+`_` as `%XX`, so no branch name makes a path (`..` → `%2E%2E`). Each run records its baseline (`run.json`
+`baseline`), and `compare`, `review` and `accept` of a run use that one, from whichever checkout; runs from
+before had main's. Only main itself (or `VISUAL_BASELINE=main`) accepts into main's — a branch's pictures reach
+it by `promote` (below). Each baseline's `meta.json` starts its trailer range at its own accepts.
 
 ## When to run what
 

@@ -35,7 +35,8 @@ import { LockBusy, acquire, resourcesFor, type Lock, type LockHolder } from './l
 import { writeReport } from './report';
 import { reviewWithAgy, reviewWithGemini, writeReviewPack } from './review';
 import { startStack, type Stack } from './stack';
-import { BASELINE_DIR, PORTS, RUNS_DIR, VISUAL_DIR, git, ignorePath, listPngs, readJson, writeJson, type Capture } from './util';
+import { PORTS, RUNS_DIR, VISUAL_DIR, git, ignorePath, listPngs, readJson, writeJson, type Capture } from './util';
+import { baselineDir, currentBaselineName, ensureBaseline, runBaselineName } from './baselines';
 import type { Platform } from './screens';
 import { DEVICE_STATES, EXTRA_VARIANTS, VARIANT_SETS, estimate, variantSetOf } from './variants';
 import { watchdog } from './watchdog';
@@ -122,7 +123,11 @@ async function capture(args: string[]) {
     unsettled: [],
     retaken: [],
     variants: set,
+    // This checkout's baseline (baselines.ts): main's on main, its round's on a round's branches, its own elsewhere.
+    baseline: currentBaselineName(),
   };
+  baselineDir(log);
+  log(`Baseline: ${info.baseline}`);
   const slices = slicesOf(args, platforms);
   if (Object.keys(slices).length) info.slices = slices;
   writeJson(join(runDir, 'run.json'), info);
@@ -267,9 +272,17 @@ async function accept(args: string[]) {
     process.exitCode = 1;
     return;
   }
+  // Into the baseline the runs were compared with (baselines.ts): one, or none.
+  const names = [...new Set(runDirs.map(runBaselineName))];
+  if (names.length > 1) {
+    console.error(`These runs were taken against different baselines (${names.join(', ')}): accept them one baseline at a time. Nothing was accepted.`);
+    process.exitCode = 1;
+    return;
+  }
+  const into = ensureBaseline(names[0]).folder;
   for (const line of planned.replaced) log(`  not taken: ${line}`);
-  for (const { run, count } of applyAccept(planned.plans, { reason, only, baselineDir: BASELINE_DIR })) {
-    log(`Accepted ${count} capture(s) from ${run} into ${BASELINE_DIR}`);
+  for (const { run, count } of applyAccept(planned.plans, { reason, only, baselineDir: into })) {
+    log(`Accepted ${count} capture(s) from ${run} into the ${names[0]} baseline (${into})`);
   }
   log(`Recorded in docs/visual-accept-log.md — commit it with the accept: git commit -- docs/visual-accept-log.md`);
   // Every named run compared again (only what the copies changed is judged again: compare.ts).

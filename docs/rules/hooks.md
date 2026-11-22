@@ -17,8 +17,8 @@ sample hook input on stdin.
 - `pkill`, `killall` — they stop other sessions' simulators, dev servers and builds. Stop what you started by its PID.
 - `git push` (any form: `git -C … push`, `git push origin main`) — a push to main deploys production.
 - `git add -A`, `git add --all`, `git add .`, `git add :/`, `git add -u`, and `git commit -a` / `-am` — in a shared checkout they sweep in other sessions' changes. Stage by path.
-- `npm run visual -- accept …` (or `tsx scripts/visual/run.ts accept`) without `--reason`, or with a `--reason` that is not the owner's words, verbatim, from one of their last five messages.
-- Writing under `visual/baseline/`: an Edit/Write there, or a shell command that names `visual/baseline` and writes (`rm`, `mv`, `cp`, `rsync`, `tee`, `>`, `sed -i`, `find -delete`…). Reading (`ls`, `cat`, `find`) is fine.
+- `npm run visual -- accept …` or `promote …` (or `tsx scripts/visual/run.ts accept|promote`), as the command's subcommand, without `--reason`, or with a `--reason` that is not the owner's words, verbatim, from one of their last five messages.
+- Writing under `visual/baseline/` (main's) or `visual/baselines/` (each branch's, scripts/visual/baselines.ts): an Edit/Write there, or a shell command that names either and writes (`rm`, `mv`, `cp`, `rsync`, `tee`, `>`, `sed -i`, `find -delete`…). Reading (`ls`, `cat`, `find`) is fine.
 - Editing a session transcript (`~/.claude/projects/**/*.jsonl`), which is what the guard reads the owner's words from.
 
 Commit messages, heredocs and quoted strings are not read as commands (`git commit -m "never git push"` is
@@ -36,7 +36,7 @@ fine); `bash -c "…"` and `eval` are read whole.
    (`origin.kind: "human"`, not a tool result, a task notification, a compaction summary, a system reminder or
    an injected block). A subagent can never use it (its "user" is another agent). Each use is logged to
    `<git dir>/claude-hooks/guard.log`.
-3. **`accept`** needs no OWNER_OK: its `--reason "<the owner's words>"` is checked the same way.
+3. **`accept`** and **`promote`** need no OWNER_OK: its `--reason "<the owner's words>"` is checked the same way.
 
 ## How strong this is — honestly
 

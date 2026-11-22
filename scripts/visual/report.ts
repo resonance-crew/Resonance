@@ -6,7 +6,8 @@
  */
 import { writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { BASELINE_DIR, GLANCE_DIR, listPngs, readJson } from './util';
+import { runBaseline } from './baselines';
+import { GLANCE_DIR, listPngs, readJson } from './util';
 import { SCREENS } from './screens';
 import { intendedChanges, names, readVerdicts, type Verdict } from './review';
 import type { Result, RunInfo } from './compare';
@@ -52,7 +53,7 @@ function glanceBlock(s: Summary, keys: string[], verdicts: Map<string, Verdict>)
 }
 
 function item(runDir: string, r: Result, v: Verdict | undefined, runId: string, intended: string[], s: Summary) {
-  const base = r.status === 'changed' || r.status === 'missing' ? relative(runDir, join(BASELINE_DIR, r.key)) : null;
+  const base = r.status === 'changed' || r.status === 'missing' ? relative(runDir, join(runBaseline(runDir), r.key)) : null;
   const now = r.status === 'missing' ? null : r.key;
   const diff = r.status === 'changed' && !r.sizes ? `_diff/${r.key}` : null;
   const where = r.areas?.length ? ` · ${r.areas.length} area${r.areas.length > 1 ? 's' : ''} (largest ${r.areas[0].width}×${r.areas[0].height} at ${r.areas[0].x},${r.areas[0].y})` : '';

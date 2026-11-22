@@ -14,6 +14,7 @@ import type { VariantSet } from './variants';
 export const ROOT = resolve(__dirname, '../..');
 /** Git-ignored: baselines are this machine's (fonts and antialiasing differ between machines and OS versions). */
 export const VISUAL_DIR = join(ROOT, 'visual');
+/** main's baseline. Which one a checkout compares with and accepts into is baselines.ts's (`baselineDir`). */
 export const BASELINE_DIR = join(VISUAL_DIR, 'baseline');
 export const RUNS_DIR = join(VISUAL_DIR, 'runs');
 /**

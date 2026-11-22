@@ -21,7 +21,8 @@ import { existsSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { judgeCapture, type Job, type Result } from './judge';
 import { compareWorkers, inWorkers } from './pool';
-import { BASELINE_DIR, ignorePath, listPngs, readJson, writeJson } from './util';
+import { runBaseline } from './baselines';
+import { ignorePath, listPngs, readJson, writeJson } from './util';
 import { SCREENS, type Platform } from './screens';
 import { inSet, type VariantSet } from './variants';
 
@@ -48,6 +49,8 @@ export type RunInfo = {
   devicesLost?: string[];
   /** Why the run was ended before its end (watchdog.ts, or its lock taken over): it fails. */
   aborted?: string;
+  /** The baseline it was taken against (baselines.ts): `main`, a round's (`r30/base`), a branch's; absent before names: main's. */
+  baseline?: string;
   /**
    * A platform's own screens and devices, where the run named them (`--ios-only card --android-device phone,tablet`):
    * one run takes each platform's slice, and `only` / `devices` are the rest's.
@@ -114,7 +117,7 @@ const WORKER = join(__dirname, 'compareWorker.ts');
 
 export type CompareOptions = { baselineDir?: string; workers?: number; log?: (line: string) => void };
 
-export async function compareRun(runDir: string, { baselineDir = BASELINE_DIR, workers = compareWorkers(), log }: CompareOptions = {}): Promise<Result[]> {
+export async function compareRun(runDir: string, { baselineDir = runBaseline(runDir), workers = compareWorkers(), log }: CompareOptions = {}): Promise<Result[]> {
   const info = readJson<RunInfo>(join(runDir, 'run.json'));
   const captured = listPngs(runDir);
   const baseline = new Set(listPngs(baselineDir));

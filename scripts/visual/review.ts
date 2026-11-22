@@ -28,7 +28,8 @@ import { spawnSync } from 'node:child_process';
 import { oldestCommit } from './baselineMeta';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
-import { BASELINE_DIR, GLANCE_DIR, ROOT, git, listPngs, readJson, writeJson } from './util';
+import { runBaseline } from './baselines';
+import { GLANCE_DIR, ROOT, git, listPngs, readJson, writeJson } from './util';
 import { SCREENS } from './screens';
 import type { Result, RunInfo } from './compare';
 
@@ -72,7 +73,8 @@ For a changed screen, compare it with the baseline and say what moved. Call it "
  */
 function baselineCommit(runDir: string): string | undefined {
   const info = readJson<RunInfo>(join(runDir, 'run.json'));
-  const commits = (info?.platforms ?? []).map((p) => readJson<{ commit: string }>(join(BASELINE_DIR, p, 'meta.json'))?.commit ?? '');
+  // The run's own baseline (baselines.ts): a round's starts at its own accepts, never at another branch's.
+  const commits = (info?.platforms ?? []).map((p) => readJson<{ commit: string }>(join(runBaseline(runDir), p, 'meta.json'))?.commit ?? '');
   return oldestCommit(commits) ?? undefined;
 }
 
@@ -166,7 +168,7 @@ function items(runDir: string, results: Result[], all = false): Item[] {
         status: r.status,
         expect: byId.get(id) ?? '',
         intended: changes.filter((c) => c.targets.some((t) => names(t, r.key))).map((c) => `${c.reason} (${c.commit})`),
-        baseline: r.status === 'changed' ? join(BASELINE_DIR, r.key) : null,
+        baseline: r.status === 'changed' ? join(runBaseline(runDir), r.key) : null,
         current: join(runDir, r.key),
         diff: r.status === 'changed' && existsSync(join(runDir, '_diff', r.key)) ? join(runDir, '_diff', r.key) : null,
         areas: (r.areas ?? []).slice(0, 5).map((a) => `${a.width}×${a.height} px at (${a.x}, ${a.y})`),
