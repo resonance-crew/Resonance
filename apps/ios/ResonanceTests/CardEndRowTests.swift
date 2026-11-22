@@ -212,7 +212,8 @@ extension Fixture {
     @Test func aFaceStandsTwelveInAndTheBookmarksGlyphEndsTwelveIn() throws {
         #expect(RowTwo.faceInset == 12 && RowTwo.glyphEnd == 12)
         let width: CGFloat = 300
-        let row = EndRowTwo {
+        // Before the capsule's 共振 is measured (its first frame): the line's 6 and the button's 6.
+        let row = EndRowTwo(facesCentre: nil, faceCount: 1) {
             TapFaces(faces: [Fixture.author("dora")], spoken: "", isButton: true) {}
         } end: {
             RowTwoBookmark(saved: false) {}
@@ -235,6 +236,78 @@ extension Fixture {
         #expect(faceStart >= RowTwo.faceInset - 1.5 && faceStart <= RowTwo.faceInset + 1, "\(faceStart)")
         // The glyph's 20 box ends 12 in, its ink a little inside it (the web's about 16 in); it stood on the edge.
         #expect(inkEnd >= RowTwo.glyphEnd && inkEnd <= RowTwo.glyphEnd + 8, "\(inkEnd)")
+    }
+}
+
+/// Round 29 §S11 (the owner, 2026-11-22: 「這三個圈圈可不可以中點幫我對齊這個共振按鈕的中間呢」): the faces under the capsule
+/// stand centred on the 共振 segment — the segment's, not the capsule's — one, two or three alike, stopping at the row's
+/// start; they used to start 12 in whatever the segment.
+@MainActor @Suite(.serialized) struct RowTwoCentreTests {
+    /// The drawn faces' extent across (points), on the row's left half.
+    private func facesSpan(_ count: Int, centre: CGFloat?, width: CGFloat = 360) throws -> ClosedRange<CGFloat> {
+        let row = EndRowTwo(facesCentre: centre, faceCount: count) {
+            TapFaces(faces: (0 ..< count).map { Fixture.author("p\($0)") }, spoken: "", isButton: true) {}
+        } end: {
+            RowTwoBookmark(saved: false) {}
+        }
+        let drawn = try DrawnPixels(row.frame(width: width).background(Tokens.cream))
+        let paper = try DrawnPixels(Color.clear.frame(width: 4, height: 4).background(Tokens.cream)).rgb(2, 2)
+        var first: Int?, last: Int?
+        for y in 0 ..< drawn.height {
+            for x in 0 ..< drawn.width * 2 / 3 {
+                guard zip(drawn.rgb(x, y), paper).reduce(0, { $0 + abs($1.0 - $1.1) }) > 30 else { continue }
+                first = min(first ?? x, x)
+                last = max(last ?? x, x)
+            }
+        }
+        return CGFloat(try #require(first)) / 2 ... CGFloat(try #require(last) + 1) / 2
+    }
+
+    @Test func oneTwoOrThreeFacesStandCentredOnTheTapSegment() throws {
+        // A 360 capsule of three even segments: 共振's centre at 60.
+        for count in 1 ... 3 {
+            let span = try facesSpan(count, centre: 60)
+            let mid = (span.lowerBound + span.upperBound) / 2
+            #expect(abs(mid - 60) <= 1.5, "\(count): \(span)")
+            // Not where they stood: the first face 12 in.
+            #expect(span.lowerBound > RowTwo.faceInset + 4, "\(count): \(span)")
+        }
+        // A segment as wide as the capsule (two lines, 共振 alone on the first): its centre.
+        let wide = try facesSpan(2, centre: 180)
+        #expect(abs((wide.lowerBound + wide.upperBound) / 2 - 180) <= 1.5, "\(wide)")
+    }
+
+    @Test func aGroupThatWouldPassTheRowsStartStopsThere() throws {
+        #expect(RowTwo.facesLead(centre: 10, count: 3) == 0)
+        #expect(RowTwo.facesLead(centre: nil, count: 3) == RowTwo.facesLine)
+        #expect(abs(RowTwo.facesLead(centre: 60, count: 1) - (60 - 14 - TapFaces.buttonPad)) < 0.01)
+        let span = try facesSpan(3, centre: 10)
+        #expect(span.lowerBound >= TapFaces.buttonPad - 1.5 && span.lowerBound <= TapFaces.buttonPad + 1, "\(span)")
+    }
+
+    /// The capsule says where its segments are: 共振's bounds, read through ``SegmentBounds``, are the first third of an
+    /// even bar.
+    @Test func theCapsuleSaysWhereItsTapSegmentIs() async throws {
+        final class Box { var centre: CGFloat? }
+        let box = Box()
+        let bar = SegmentedActionBar([
+            SegmentSpec(id: "tap", label: "共振") {}, SegmentSpec(id: "note", label: "寄小紙條") {}, SegmentSpec(id: "reply", label: "寫卡片") {},
+        ])
+        .frame(width: 360)
+        .backgroundPreferenceValue(SegmentBounds.self) { bounds in
+            GeometryReader { proxy in
+                Color.clear.onAppear { box.centre = bounds["tap"].map { proxy[$0].midX } }
+            }
+        }
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 400)
+        window.rootViewController = UIHostingController(rootView: bar)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        _ = await eventually { box.centre != nil }
+        let centre = try #require(box.centre)
+        #expect(abs(centre - 60) < 2, "\(centre)")
     }
 }
 

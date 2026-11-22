@@ -39,6 +39,8 @@ struct CardEndRow: View {
     @State private var resonating = false
     @State private var bookmark = BookmarkState()
     @State private var tap: TapState
+    /// The 共振 segment's centre across the capsule (and row 2), once laid out (round 29 §S11).
+    @State private var tapCentre: CGFloat?
     @State private var noteOpen = false
     /// The field opened by the reader takes the focus; opened by a draft with the page, it doesn't.
     @State private var noteFocusOnOpen = true
@@ -89,6 +91,15 @@ struct CardEndRow: View {
             // A phone spreads it across the column; wider, the capsule keeps its own width and row 2 is as wide.
             .frame(maxWidth: compact ? .infinity : nil, alignment: .leading)
             .fixedSize(horizontal: !compact, vertical: false)
+            // The 共振 segment's centre across, from the capsule's start (row 2's too): the faces stand on it (§S11).
+            .backgroundPreferenceValue(SegmentBounds.self) { bounds in
+                GeometryReader { proxy in
+                    let centre = bounds[Self.tapSegmentId].map { proxy[$0].midX }
+                    Color.clear
+                        .onAppear { tapCentre = centre }
+                        .onChange(of: centre) { tapCentre = centre }
+                }
+            }
             if noteOpen {
                 noteBlock
                     .padding(.top, NoteInPlace.gapAbove)
@@ -234,8 +245,11 @@ struct CardEndRow: View {
 
     /// 共振 — a switch: tonal at rest, solid with `wave-pair` once on; its words stay (the owner, 2026-11-20: 已共振
     /// moved the wave beside it), VoiceOver hearing it selected.
+    /// The 共振 segment's id in the capsule.
+    static let tapSegmentId = "tap"
+
     private func tapSegment(_ words: EndRowLabels.Words) -> SegmentSpec {
-        SegmentSpec(id: "tap", icon: tap.on ? .wavePairOrWave : .wave, label: words.tap,
+        SegmentSpec(id: Self.tapSegmentId, icon: tap.on ? .wavePairOrWave : .wave, label: words.tap,
                     fill: tap.on ? Tokens.buttonFill : nil, ink: tap.on ? Tokens.cream : Tokens.buttonOnTonal,
                     pressInk: tap.on ? Tokens.towardInk.opacity(0.14) : Tokens.terracotta.opacity(0.14),
                     selected: tap.on, action: flipTap)
@@ -352,7 +366,7 @@ struct CardEndRow: View {
     // MARK: Row 2, the faces and 收藏
 
     private var rowTwo: some View {
-        EndRowTwo {
+        EndRowTwo(facesCentre: tapCentre, faceCount: tap.shownFaces.count) {
             if !tap.shownFaces.isEmpty {
                 // With passages on offer, the reader's own face alone is a button too: their row picks one (§U3).
                 TapFaces(faces: tap.shownFaces, spoken: tap.spoken(viewer: session.uid),
@@ -422,8 +436,9 @@ struct CardEndRow: View {
 
 // MARK: - Row 2
 
-/// Row 2's measures (§U1.2), the web's: its faces' line pads 6 (CardViewerActions.module.css `.faces`) and their button
-/// 6 more (TapFaces.module.css `.faces`), so a face stands 12 in from the row's start; 收藏 is a bare glyph of 20
+/// Row 2's measures (§U1.2), the web's: the faces stand centred on the 共振 segment (round 29 §S11, the owner 2026-11-22:
+/// 「這三個圈圈可不可以中點幫我對齊這個共振按鈕的中間呢」), never past the row's start; before the segment is measured (the
+/// first frame) its faces' line pads 6 and their button 6 more, so a face stands 12 in; 收藏 is a bare glyph of 20
 /// (BareIconButton, `iconSize` 20) centred in a 44 to the finger flush with the row's end, so its glyph ends 12 in.
 /// Android's `Row2FacesStart` / `Row2GlyphEnd` (EndRowTwoTest) stand the same; the Mac's 77 % scales them all alike.
 nonisolated enum RowTwo {
@@ -437,18 +452,27 @@ nonisolated enum RowTwo {
     static let glyph: CGFloat = 20
     /// How far in from the row's end 收藏's glyph box ends: (44 − 20) / 2.
     static var glyphEnd: CGFloat { (touch - glyph) / 2 }
+
+    /// Where the faces' button starts in row 2 (§S11): the drawn faces' centre on `centre` (the 共振 segment's, from the
+    /// row's start) for one, two or three, the button stopping at the row's start; nil (not measured yet) the line's 6.
+    @MainActor static func facesLead(centre: CGFloat?, count: Int, size: CGFloat = FaceStack.size) -> CGFloat {
+        guard let centre else { return facesLine }
+        return max(0, centre - FaceStack.width(count: count, size: size) / 2 - TapFaces.buttonPad)
+    }
 }
 
-/// Row 2 (§U1.2), laid out alone: as wide as the capsule above it (the caller gives the width), 44 tall, `faces` at its
-/// start on their line ``RowTwo/facesLine`` in, `end` (收藏) at its end. Always there, faces or none, so a face coming
-/// in never moves the page.
+/// Row 2 (§U1.2), laid out alone: as wide as the capsule above it (the caller gives the width), 44 tall, `faces`
+/// centred on `facesCentre` (the 共振 segment's centre, round 29 §S11; ``RowTwo/facesLead(centre:count:size:)``), `end`
+/// (收藏) at its end. Always there, faces or none, so a face coming in never moves the page.
 struct EndRowTwo<Faces: View, End: View>: View {
+    var facesCentre: CGFloat?
+    var faceCount: Int
     @ViewBuilder let faces: Faces
     @ViewBuilder let end: End
 
     var body: some View {
         HStack(spacing: 0) {
-            faces.padding(.leading, RowTwo.facesLine)
+            faces.padding(.leading, RowTwo.facesLead(centre: facesCentre, count: faceCount))
             Spacer(minLength: 12)
             end
         }
