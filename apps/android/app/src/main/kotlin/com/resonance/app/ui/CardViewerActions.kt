@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,6 +32,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -48,6 +48,7 @@ import com.resonance.design.OrganicIcon
 import com.resonance.design.OrganicIndication
 import com.resonance.design.Segment
 import com.resonance.design.SegmentedActionBar
+import com.resonance.design.segmentCentre
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.plainClickable
@@ -57,6 +58,7 @@ import com.resonance.kit.l10n.Strings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
  * The end of someone else's story (round 26 §U1–§U4; the web's ReadAfterArea → CardViewerActions, iOS's twin) — three
@@ -309,9 +311,11 @@ fun CardViewerActions(
                     mascotKey = "respond",
                 )
             }
-            // Row 2: the faces at its start, under 共振; 收藏 at its end. Always there, so nothing moves as faces come.
+            // Row 2: the faces under 共振, centred on its segment (§S11); 收藏 at its end. Always there, so the row never grows as faces come.
+            val tapCentre = segmentCentre(if (form == EndRowForm.TwoLines) listOf(tap) else listOf(tap, noteSegment, replySegment), capsule.dp)
             EndRowTwo(
                 Modifier.width(capsule.dp),
+                facesCentre = tapCentre,
                 faces = { TapFacesButton(faces, session.uid, author = false, onOpen = { openList = true }, selfOpens = faces.offersPassages && !translated()) },
             ) {
                 BookmarkButton(bookmarked) {
@@ -390,13 +394,6 @@ fun CardViewerActions(
 internal val Row2Height = 48.dp
 
 /**
- * Where the first face's rim stands in from row 2's start: 12 — the web's, whose faces' line (6) and their button (6)
- * both pad it (CardViewerActions.module.css `.faces`, TapFaces.module.css `.faces`). A face has nothing under it now,
- * so the group's start is the face's.
- */
-internal val Row2FacesStart = 12.dp
-
-/**
  * How far in from row 2's end 收藏's glyph stands, in its 48 to the finger flush with that end: the web's — its glyph
  * centred in a 44 button (a finger's pointer) on the row's end — so its 48 box keeps the finger's room and only the
  * glyph moves (centred, it stood 14 in).
@@ -407,15 +404,29 @@ internal val Row2GlyphEnd = 12.dp
 internal val BookmarkGlyph = 20.dp
 
 /**
- * Row 2 (§U1.2): as wide as the capsule ([modifier] gives the width), [Row2Height] tall — [faces] at its start, the
- * first face [Row2FacesStart] in; [end] (收藏) at its end.
+ * Row 2 (§U1.2): as wide as the capsule ([modifier] gives the width), [Row2Height] tall — [faces] centred on
+ * [facesCentre] (the 共振 segment's centre from the capsule's start, round 29 §S11: one, two or three faces alike),
+ * never past the row's start; [end] (收藏) at its end. Both centred in the row's height.
  */
 @Composable
-internal fun EndRowTwo(modifier: Modifier, faces: @Composable () -> Unit, end: @Composable () -> Unit) {
-    Row(modifier.height(Row2Height), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.padding(start = Row2FacesStart)) { faces() }
-        Spacer(Modifier.weight(1f))
-        end()
+internal fun EndRowTwo(modifier: Modifier, facesCentre: Dp, faces: @Composable () -> Unit, end: @Composable () -> Unit) {
+    androidx.compose.ui.layout.Layout(
+        content = {
+            Box { faces() }
+            Box { end() }
+        },
+        modifier = modifier.height(Row2Height),
+    ) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val tail = measurables[1].measure(loose)
+        val group = measurables[0].measure(loose)
+        val width = constraints.maxWidth
+        val height = constraints.maxHeight.takeIf { it != androidx.compose.ui.unit.Constraints.Infinity } ?: Row2Height.roundToPx()
+        layout(width, height) {
+            val left = (facesCentre.toPx() - group.width / 2f).roundToInt().coerceAtLeast(0)
+            group.place(left, (height - group.height) / 2)
+            tail.place(width - tail.width, (height - tail.height) / 2)
+        }
     }
 }
 

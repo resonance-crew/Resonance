@@ -99,6 +99,31 @@ internal fun segmentPadY(minHeight: Dp): Dp = ((minHeight - SegmentLine) / 2).co
 /** A segment's words' line: 14 at its font's own height. */
 private val SegmentLine = 20.dp
 
+/** A segment's words: 14 at 600, one line. */
+private val SegmentLabelStyle: androidx.compose.ui.text.TextStyle
+    @Composable get() = AppFonts.body(14f, 600, lineHeight = 1f)
+
+/** The words of [segments] measured as a [SegmentedActionBar] draws them (dp): one line, 14 at 600. */
+@Composable
+private fun segmentLabelWidths(segments: List<Segment>): List<Float> {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val style = SegmentLabelStyle
+    return segments.map { seg -> with(density) { measurer.measure(seg.label, style, softWrap = false, maxLines = 1).size.width.toDp().value } }
+}
+
+/**
+ * The centre of [segments]' [index]th segment, from the start of a [SegmentedActionBar] [width] wide drawing them: what
+ * stands under a segment lines up on it (round 29 §S11: the faces under 共振).
+ */
+@Composable
+fun segmentCentre(segments: List<Segment>, width: Dp, index: Int = 0): Dp {
+    val labels = segmentLabelWidths(segments)
+    val room = width.value
+    val spread = room < SegmentedLayout.SPREAD_BELOW
+    return SegmentedLayout.centre(labels, segments.map { it.icon != null }, segments.map { it.collapse }, room, spread, index).dp
+}
+
 /**
  * SegmentedActionBar.tsx: actions fused into one organic bar, split by hand-drawn wavy seams. Its
  * segments are buttons, so like every button it is a filled shape with no pen line: the bar wears
@@ -126,15 +151,13 @@ fun SegmentedActionBar(
     /** The bar as the paper puppets' island knows it ([mascotMark]: the card page's response bar), at its own width. */
     mascotKey: String? = null,
 ) {
-    val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    val style = AppFonts.body(14f, 600, lineHeight = 1f)
+    val style = SegmentLabelStyle
+    val labelWidths = segmentLabelWidths(segments)
     BoxWithConstraints(modifier) {
         val room = maxWidth.value
         val spread = room < SegmentedLayout.SPREAD_BELOW
-        val labels = segments.map { seg ->
-            with(density) { measurer.measure(seg.label, style, softWrap = false, maxLines = 1).size.width.toDp().value }
-        }
+        val labels = labelWidths
         val icons = segments.map { it.icon != null }
         val collapse = segments.map { it.collapse }
         val widths = SegmentedLayout.widths(labels, icons, collapse, room, spread)
@@ -278,6 +301,12 @@ object SegmentedLayout {
     /** Whether any segment shows its glyph alone ([steps] past 0). */
     fun collapses(labels: List<Float>, icons: List<Boolean>, collapse: List<Int>, room: Float, spread: Boolean): Boolean =
         steps(labels, icons, collapse, room, spread) > 0
+
+    /** The centre of the [index]th segment, from the bar's start, as [widths] shares the room. */
+    fun centre(labels: List<Float>, icons: List<Boolean>, collapse: List<Int>, room: Float, spread: Boolean, index: Int): Float {
+        val widths = widths(labels, icons, collapse, room, spread)
+        return widths.take(index).sum() + widths[index] / 2
+    }
 
     fun widths(labels: List<Float>, icons: List<Boolean>, collapse: List<Int>, room: Float, spread: Boolean): List<Float> {
         val step = steps(labels, icons, collapse, room, spread)
