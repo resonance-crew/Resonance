@@ -32,3 +32,8 @@ what says on whose word they changed. Commit the new row with the accept
 | 2026-11-22T09:09:17Z | 20261122-050028 | 4aafa213 | web | all | 60 | 现在其他分支也有一些修改，请你用最新的画面当作新的 baseline |
 | 2026-11-22T09:09:23Z | 20261122-051139 | 4aafa213 | android, ios, mac | all | 54 | 现在其他分支也有一些修改，请你用最新的画面当作新的 baseline |
 | 2026-11-22T09:09:31Z | 20261122-090015 | 4aafa213 | ios | all | 27 | 现在其他分支也有一些修改，请你用最新的画面当作新的 baseline |
+| 2026-11-22T10:07:39Z | 20261122-050607 | 9000b994 | web | card-picked-people | 5 | 接受為基準 |
+| 2026-11-22T10:07:39Z | 20261122-050711 | 9000b994 | mac | card-picked-people | 1 | 接受為基準 |
+| 2026-11-22T10:07:40Z | 20261122-050903 | 9000b994 | android | card-picked-people | 4 | 接受為基準 |
+| 2026-11-22T10:07:40Z | 20261122-083711 | 9000b994 | ios | card-picked-people | 1 | 接受為基準 |
+| 2026-11-22T10:07:41Z | 20261122-085814 | 9000b994 | ios | card-picked-people | 3 | 接受為基準 |
