@@ -24,7 +24,8 @@ export interface AuthorTapsProps {
 
 /**
  * What the author sees where a reader's end row would be (round 26 §U3): one line — the `wave` glyph, muted, then
- * the faces of the three newest who resonated (a blank disc after them when there are more). Nothing at all when no
+ * the faces of the three newest who resonated, and nothing after them when there are more (no blank disc, round 29
+ * §S5: the dialog says who else). Nothing at all when no
  * one has (no 「還沒有人共振」), and no number anywhere. Tapping it opens who they are in a centred dialog on every
  * device: 30 at a time then 顯示更多, each a face and a pen name, and — when they left a note on this card — its first
  * line, muted, opening that conversation (an unconnected reader's is the letter; replying connects, as ever). Someone
@@ -43,7 +44,7 @@ export function AuthorTaps({ cardId, tap, trailing }: AuthorTapsProps) {
         <span className={styles.glyph} aria-hidden>
           <Icon name="wave" size={16} color="var(--color-text-muted)" />
         </span>
-        <AvatarGroup members={tap.faces.map(memberOf)} more={tap.more} size={28} />
+        <AvatarGroup members={tap.faces.map(memberOf)} size={28} />
       </button>
       {trailing && <span className={styles.trailing}>{trailing}</span>}
       {open && (

@@ -23,6 +23,9 @@ public nonisolated enum ReadingMarkRole: Hashable, Sendable {
     /// The response bar at the story's end, and what stands above it (its tags).
     case respond
     case ceiling
+    /// The faces of who resonated, on their line right over the response bar (round 30): a puppet peeking over the bar
+    /// near them is not let rise in front of them (or take their touches).
+    case respondFaces
     /// The feed's 顯示更多, or its end line.
     case more
     case end

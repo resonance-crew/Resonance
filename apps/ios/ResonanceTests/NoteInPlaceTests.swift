@@ -7,7 +7,7 @@ import UIKit
 @testable import Resonance
 
 /// The note, in place (round 26 SETTLED; the owner: 「這個寄小紙條的界面應該不要做成 pop ups，因為它會擋住這個畫面上其他東西」):
-/// only 寄小紙條 opens the field, under the faces' row, never a dialog; 共振 opens nothing. Tapping 寄小紙條 again closes an
+/// only 寄小紙條 opens the field, 12 under the capsule (round 30), never a dialog; 共振 opens nothing. Tapping 寄小紙條 again closes an
 /// empty field and only focuses a written one; a draft opens the field with the page; one line under the field says one
 /// thing at a time; a failure while the page is there brings the field back on the words, saying why.
 @MainActor @Suite(.serialized) struct NoteInPlaceTests {
@@ -52,10 +52,6 @@ import UIKit
         #expect(NoteInPlace.maxLines(compact: true, shortWindow: false) == 3)
         #expect(NoteInPlace.maxLines(compact: true, shortWindow: true) == 2)
         #expect(NoteInPlace.maxLines(compact: false, shortWindow: false) == 5)
-        // A phone's column; wider, the story's column up to 680.
-        #expect(NoteInPlace.width(compact: true, column: 402) == nil)
-        #expect(NoteInPlace.width(compact: false, column: 900) == 680)
-        #expect(NoteInPlace.width(compact: false, column: 600) == 600)
     }
 
     /// The field is the composer's input capsule: one line exactly 48 tall, its send segment 52 at the end.
@@ -71,18 +67,39 @@ import UIKit
         #expect(abs(size.height - ComposerMetrics.height) < 1, "\(size.height)")
     }
 
-    /// The envelope in the field's lead column is the web's (round 26, the screens' review): 18, the muted text ink, with
-    /// the icon's own pen (INK_STRONG) — it wore the lighter INK here. Android's NoteLeadGlyph is the same.
-    @Test func theEnvelopeWearsTheIconsOwnPenInTheMutedInk() throws {
-        #expect(NoteLeadGlyph.size == 18)
-        #expect(NoteFieldCapsule<EmptyView>.leadGlyph == 18)
-        let drawn = try DrawnPixels(NoteLeadGlyph().background(Tokens.cream))
-        let web = try DrawnPixels(OrganicIcon(.note, size: 18, color: Tokens.textMuted).background(Tokens.cream))
-        let difference = try #require(drawn.difference(web), "drawn \(drawn.width) × \(drawn.height)")
-        #expect(difference <= 8, "\(difference)")
-        // The lighter pen it wore is told apart.
-        let before = try DrawnPixels(OrganicIcon(.note, size: 18, color: Tokens.textMuted, strokeWidth: Tokens.ink).background(Tokens.cream))
-        #expect((drawn.difference(before) ?? .max) > 8)
+    /// Round 30 §S3, §S4 (the owner: 「可能它这个讯息框也没有对齐左右的宽度」, 「这个输入框左边要不要显示这个 envelope 的 icon
+    /// 呢」, then 「照 C 做」): no envelope — the words start 16 from the capsule's start (they stood 44 in, after its column)
+    /// — and the field spans what it is given at every width, its send ending on the edge: no 680 cap on an iPad's or the
+    /// Mac's column. The wait line starts where the words do.
+    @Test func theFieldHasNoEnvelopeAndSpansTheColumn() throws {
+        #expect(NoteInPlace.wordsStart == 16 && NoteFieldCapsule<EmptyView>.wordsStart == 16)
+        let column: CGFloat = 900
+        let capsule = NoteFieldCapsule(focused: false, canSend: false, sendLabel: L10n.Card.Tap.send, onSend: {}) {
+            Color(red: 1, green: 0, blue: 0).frame(width: 40, height: 20)
+        }
+        let drawn = try DrawnPixels(capsule.frame(width: column).padding(20).background(Tokens.cream))
+        let red = (0 ..< drawn.width).filter { x in (0 ..< drawn.height).contains { y in
+            let c = drawn.rgb(x, y); return c[0] > 200 && c[1] < 60 && c[2] < 60 } }
+        let wordsAt = CGFloat(try #require(red.first)) / 2 - 20
+        #expect(abs(wordsAt - 16) < 0.5, "the words start \(wordsAt) in")
+        // Nothing drawn before the words but the capsule's own line: across its middle, no envelope's ink (it stood 13
+        // to 31 in) between the line's start and the words.
+        let paper = try DrawnPixels.paper()
+        let ink = try #require(drawn.inkBounds(paper: paper))
+        var lead = 0
+        for y in (20 + 16) * 2 ..< (20 + 32) * 2 {
+            for x in (20 + 6) * 2 ..< (20 + 15) * 2 where zip(drawn.rgb(x, y), paper).reduce(0, { $0 + abs($1.0 - $1.1) }) > 30 {
+                lead += 1
+            }
+        }
+        #expect(lead == 0, "\(lead) pixels of ink before the words")
+        // The capsule's line reaches the column's end (its send segment's corner), not 680.
+        let inkEnd = CGFloat(ink.maxX + 1) / 2 - 20
+        #expect(inkEnd > column - 4 && inkEnd < column + 4, "ink ends at \(inkEnd) of \(column)")
+        // The wait line, 16 in too.
+        let wait = try DrawnPixels(NoteWaitLine().frame(width: 300).background(Tokens.cream))
+        let words = try #require(wait.inkBounds(paper: paper))
+        #expect(CGFloat(words.minX) / 2 >= 15.5 && CGFloat(words.minX) / 2 <= 18, "\(CGFloat(words.minX) / 2)")
     }
 
     @Test func aFailureWhileThePageIsThereOpensTheFieldAgainSayingWhy() {

@@ -11,35 +11,35 @@ function member(id: string): AvatarGroupMember {
 
 const css = readFileSync(join(process.cwd(), 'src/components/atoms/AvatarGroup/AvatarGroup.module.css'), 'utf8');
 
-// Round 26 §U2: who resonated, as faces — at most three, then a blank paper disc, never a number.
+// Round 26 §U2: who resonated, as faces — at most three, never a number. Round 29 §S5 (the owner: 「不要把當有第四、
+// 第五個的時候顯示成灰色」): nothing after the three either — no blank disc.
 describe('AvatarGroup', () => {
-  it('draws at most `max` faces, the rest one blank disc — no count anywhere', () => {
+  it('draws at most `max` faces and nothing after them — no blank disc, no count anywhere', () => {
     const { container } = render(<AvatarGroup members={['a', 'b', 'c', 'd', 'e'].map(member)} max={3} />);
     expect(screen.getByText('A')).toBeInTheDocument();
     expect(screen.getByText('B')).toBeInTheDocument();
     expect(screen.getByText('C')).toBeInTheDocument();
     expect(screen.queryByText('D')).not.toBeInTheDocument();
-    expect(container.querySelector('[data-more]')).not.toBeNull();
+    const stack = container.firstElementChild as HTMLElement;
+    expect(stack.children).toHaveLength(3);
+    expect(stack.getAttribute('data-count')).toBe('3');
+    expect(container.querySelector('[data-more]')).toBeNull();
     // Who, not how many: nothing that reads as a number.
     expect(container.textContent).not.toMatch(/\d/);
   });
 
-  it('draws the blank disc when the host says there are more than the faces it has', () => {
-    const { container } = render(<AvatarGroup members={['a', 'b'].map(member)} more />);
+  it('has no way left to draw a blank disc', () => {
+    const { container } = render(<AvatarGroup members={['a', 'b'].map(member)} {...({ more: true } as object)} />);
     expect(container.querySelectorAll('[data-face]')).toHaveLength(2);
-    expect(container.querySelector('[data-more]')).not.toBeNull();
-  });
-
-  it('draws no disc when every face fits', () => {
-    const { container } = render(<AvatarGroup members={['a', 'b'].map(member)} max={3} />);
     expect(container.querySelector('[data-more]')).toBeNull();
+    expect(css).not.toMatch(/\.disc\b|--avatar-wait/);
   });
 
   it('draws each face on no pad — the face alone, stepping 0.34 of its size over the one before, the first on top', () => {
     // The owner, 2026-11-19: a pad of the page's paper round each face made the overlap read wider. Each face is its
     // own drawing now (its fill, initials or photo, its pen line); the front face's fill covers the one behind.
-    const { container } = render(<AvatarGroup members={['a', 'b', 'c'].map(member)} size={28} more />);
-    const items = [...container.querySelectorAll<HTMLElement>('[data-face], [data-more]')];
+    const { container } = render(<AvatarGroup members={['a', 'b', 'c'].map(member)} size={28} />);
+    const items = [...container.querySelectorAll<HTMLElement>('[data-face]')];
     for (const item of items) {
       // One drawing per face, as big as the face: nothing larger laid under it.
       expect(item.children).toHaveLength(1);

@@ -43,20 +43,20 @@ class CardEndRowTest {
 
     @Test fun theThreeFitAPhoneOf390InChinese() {
         // §U1.3: 共振 ≈ 80 + 寄小紙條 ≈ 110 + 用卡片回應 ≈ 125 ≤ 350.
-        assertEquals(EndRowForm.Full, EndRowLayout.choose(zhFull, zhShort, room = 350f, english = false, largeText = false))
+        assertEquals(EndRowForm.Full, EndRowLayout.choose(zhFull, zhShort, column = 350f, english = false, largeText = false))
         assertTrue(EndRowLayout.need(zhFull) <= 350f)
     }
 
     @Test fun aNarrowColumnEnglishOrLargeTextTakeTheShortWords() {
-        assertEquals(EndRowForm.Short, EndRowLayout.choose(zhFull, zhShort, room = 340f, english = false, largeText = false))
-        assertEquals(EndRowForm.Short, EndRowLayout.choose(zhFull, zhShort, room = 600f, english = true, largeText = false))
-        assertEquals(EndRowForm.Short, EndRowLayout.choose(zhFull, zhShort, room = 600f, english = false, largeText = true))
+        assertEquals(EndRowForm.Short, EndRowLayout.choose(zhFull, zhShort, column = 340f, english = false, largeText = false))
+        assertEquals(EndRowForm.Short, EndRowLayout.choose(zhFull, zhShort, column = 600f, english = true, largeText = false))
+        assertEquals(EndRowForm.Short, EndRowLayout.choose(zhFull, zhShort, column = 600f, english = false, largeText = true))
     }
 
     @Test fun stillTooWideItTakesTwoLinesAndHidesNothing() {
         // Large text: the words twice as wide.
         val big = zhShort.map { it * 2.2f }
-        assertEquals(EndRowForm.TwoLines, EndRowLayout.choose(zhFull.map { it * 2.2f }, big, room = 330f, english = false, largeText = true))
+        assertEquals(EndRowForm.TwoLines, EndRowLayout.choose(zhFull.map { it * 2.2f }, big, column = 330f, english = false, largeText = true))
         // Two lines span the column, row 2 with them.
         assertEquals(330f, EndRowLayout.capsuleWidth(big, 330f, EndRowForm.TwoLines))
     }
@@ -67,6 +67,103 @@ class CardEndRowTest {
         val own = EndRowLayout.capsuleWidth(zhFull, 700f, EndRowForm.Full)
         assertTrue(own < 700f)
         assertEquals(EndRowLayout.need(zhFull, 24f), own)
+    }
+
+    @Test fun bookmarkEndsTheCapsulesRowWhenWideAndTheTagsRowOnAPhone() {
+        // Round 28 §S2/§S3: wherever the capsule stands at its own width (the bar's 560), 收藏 ends its row; narrower,
+        // the capsule spans the column and 收藏 ends the tags' row.
+        assertEquals(EndRowPlacement.Phone, EndRowLayout.placement(335f))
+        assertEquals(EndRowPlacement.Phone, EndRowLayout.placement(559f))
+        assertEquals(EndRowPlacement.Wide, EndRowLayout.placement(560f))
+        assertEquals(EndRowPlacement.Wide, EndRowLayout.placement(680f))
+    }
+
+    @Test fun wideTheCapsulesWordsAreWeighedInTheRoomBeside收藏() {
+        // The column less 收藏's 48 and the 12 before it; a phone's capsule has the whole column.
+        assertEquals(620f, EndRowLayout.capsuleRoom(680f))
+        assertEquals(500f, EndRowLayout.capsuleRoom(560f))
+        assertEquals(400f, EndRowLayout.capsuleRoom(400f))
+        // Words that fit 600 at the wide padding (573) but not the 540 left beside 收藏: the short words.
+        val full = listOf(100f, 130f, 130f)
+        val short = listOf(100f, 130f, 80f)
+        assertTrue(EndRowLayout.need(full, 24f) <= 600f && EndRowLayout.need(full, 24f) > 540f)
+        assertEquals(EndRowForm.Short, EndRowLayout.choose(full, short, column = 600f, english = false, largeText = false))
+        // Given another 60 they are full again.
+        assertEquals(EndRowForm.Full, EndRowLayout.choose(full, short, column = 660f, english = false, largeText = false))
+        // Too wide for the room even short: two lines, spanning the room beside 收藏 (never under it).
+        val big = short.map { it * 1.6f }
+        assertEquals(EndRowForm.TwoLines, EndRowLayout.choose(big, big, column = 600f, english = false, largeText = false))
+        assertEquals(540f, EndRowLayout.capsuleWidth(big, 600f, EndRowForm.TwoLines))
+        // The capsule never runs past the room beside 收藏.
+        assertTrue(EndRowLayout.capsuleWidth(full, 600f, EndRowForm.Full) <= 540f)
+    }
+
+    @Test fun theShortWordsRuleAndThePaddingReadTheColumn() {
+        // The ≤ 340 rule reads the column: a phone of 340 takes the short words though the full ones fit.
+        assertTrue(EndRowLayout.need(zhFull) <= 340f)
+        assertEquals(EndRowForm.Short, EndRowLayout.choose(zhFull, zhShort, column = 340f, english = false, largeText = false))
+        // A wide column weighs the segments at the wide padding (24 a side), though the room left is under 560:
+        // words needing 501 at 24 a side (but 405 at 8) don't fit the 500 beside 收藏 on a column of 560.
+        val words = listOf(96f, 96f, 96f)
+        assertTrue(EndRowLayout.need(words, 24f) > 500f && EndRowLayout.need(words, 8f) < 500f)
+        assertEquals(EndRowForm.TwoLines, EndRowLayout.choose(words, words, column = 560f, english = false, largeText = false))
+    }
+
+    @Test fun onAPhoneTheTagsWrapInTheirOwnColumnBeside收藏() {
+        // §S3: the content width less 收藏's box and 12; no 收藏, or wide (收藏 is by the capsule), the whole column.
+        assertEquals(275f, EndRowLayout.tagsWidth(335f, bookmark = true))
+        assertEquals(335f, EndRowLayout.tagsWidth(335f, bookmark = false))
+        assertEquals(680f, EndRowLayout.tagsWidth(680f, bookmark = true))
+    }
+
+    @Test fun 收藏IsCentredOnTheFirstLineAndHangsOverARowShorterThanItsBox() {
+        // A pill of 30 (or 36 at the owner's 1.5×) beside a 48: the box starts above the row, the row stays the pill's.
+        assertEquals(-9, EndRowLayout.besideTop(30, 48))
+        assertEquals(-6, EndRowLayout.besideTop(36, 48))
+        // A capsule's line taller than the box (large text): the box inside it, centred.
+        assertEquals(6, EndRowLayout.besideTop(60, 48))
+    }
+
+    @Test fun theTagsWrapInOrderEightApart() {
+        assertEquals(emptyList<List<Int>>(), EndRowLayout.tagLines(emptyList(), 275, 8))
+        // 100 + 8 + 100 = 208; + 8 + 60 = 276 > 275: the third starts a line.
+        assertEquals(listOf(listOf(0, 1), listOf(2)), EndRowLayout.tagLines(listOf(100, 100, 60), 275, 8))
+        assertEquals(listOf(listOf(0, 1, 2)), EndRowLayout.tagLines(listOf(100, 100, 59), 275, 8))
+        // A pill as wide as the column stands alone.
+        assertEquals(listOf(listOf(0), listOf(1), listOf(2)), EndRowLayout.tagLines(listOf(50, 275, 50), 275, 8))
+    }
+
+    @Test fun 收藏FlipsAtOnceSaysSoAndGoesBackOnARefusal() = runBlocking {
+        val pressed = mutableListOf<Boolean>()
+        var wrote = 0
+        var fail = false
+        val written = mutableListOf<Boolean>()
+        val toggle = BookmarkToggle(
+            launch = { launch(block = it) },
+            writer = { { on: Boolean -> written += on; if (fail) throw IOException("offline"); on } },
+            onPressed = { pressed += it },
+            onWrote = { wrote++ },
+        )
+        toggle.read(false)
+        val saving = toggle.toggle()!!
+        // Drawn saved before the server answers, and said (the toast is the page's: 收藏到卡片盒了 when saving).
+        assertTrue(toggle.saved)
+        saving.join()
+        assertTrue(toggle.saved)
+        assertEquals(listOf(true), written)
+        assertEquals(1, wrote)
+        fail = true
+        toggle.toggle()!!.join()
+        // Refused: back to saved, and nothing noted as the account's own write.
+        assertTrue(toggle.saved)
+        assertEquals(listOf(true, false), pressed)
+        assertEquals(1, wrote)
+    }
+
+    @Test fun signedOut收藏DoesNothing() {
+        val toggle = BookmarkToggle(launch = { error("nothing sent") }, writer = { null }, onPressed = { error("nothing said") })
+        assertEquals(null, toggle.toggle())
+        assertFalse(toggle.saved)
     }
 
     @Test fun theTapIsASwitchWithTwoWavesInPhaseWhenOn() {

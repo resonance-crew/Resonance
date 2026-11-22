@@ -506,6 +506,45 @@
   font-family: var(--font-playfair, 'Playfair Display'), var(--s-heading-face);
 }
 
+/* ── A sentence readers picked, on its author's page (round 29) ─────── */
+
+/* The words keep everything they had: no weight, no colour, no underline, no
+   box. The wash is laid under their lines by the card page
+   (CardDetail/PassageMarks), so a link's wave stays over it; the mark only
+   tells where the sentence is, and that it opens who picked it. */
+.story-prose mark.story-passage {
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* The sentence's last character and its faces stay on one line (§S1.2): a
+   group never begins a line alone. */
+.story-prose .story-passage-glue {
+  white-space: nowrap;
+}
+
+/* The faces' place in the line: 4 after the sentence's last character, 4
+   before the next; one line box tall at most, aligned to the line box's top,
+   so the line keeps its height. Not selectable: copying the story copies the
+   story. */
+.story-prose .story-passage-slot {
+  display: inline-block;
+  vertical-align: top;
+  height: calc(var(--s-leading) * 1em);
+  height: 1lh;
+  margin-inline: 4px;
+  user-select: none;
+  -webkit-user-select: none;
+  white-space: normal;
+}
+
+/* Where faces stand over the words around them, a link's own box wins (§S2). */
+.story-prose[data-passages] a:is(.story-link, :not([class])) {
+  position: relative;
+  z-index: 1;
+}
+
 /* A CJK title's clauses (CardDetail/LatinMarkText): each one whole on a line
    when it fits, so a long title breaks after its punctuation, not mid-phrase. */
 .story-title .story-clause {

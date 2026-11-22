@@ -42,9 +42,10 @@ import org.robolectric.annotation.Config
  * to 12 above the keyboard (nothing floats)」), in a short window: the screens' review found it under the keyboard on a
  * phone on its side, where the header's line and the keyboard leave about 28 dp — less than the field's one line. The
  * page brings the field with its line where both fit under the bar, the field alone where only it fits, and where not
- * even that fits the bar steps aside and the field stands under the status bar — 6 under it, in the air under row 2,
- * where the block brought 12 over the keyboard would leave the lower edges of row 2's faces as a cut sliver under the
- * status bar's paper (the relook of round 26, android/phone-landscape/card-note-open). Measured on the AVD the
+ * even that fits the bar steps aside and the field stands under the status bar — 6 under it, in the air under the
+ * capsule, where the block brought 12 over the keyboard would leave the capsule's foot as a cut sliver under the status
+ * bar's paper (the relook of round 26, android/phone-landscape/card-note-open, when row 2 stood there; round 30 §S2
+ * moved the faces' line over the capsule, so the capsule, 48 tall as row 2 was, is what stands over the field now). Measured on the AVD the
  * screenshots use (1080 × 2424 at 420 dpi, turned: 411 dp tall, the status bar 49, the expanded header's 72 + its 10,
  * Gboard 252).
  */
@@ -73,7 +74,8 @@ class NoteRevealTest {
     private val line = 24f
     private val clearance = NoteKeyboardClearance.value
     private val air = NoteRevealAir.value
-    private val row2 = Row2Height.value
+    /** What stands over the field (round 30 §S2): the capsule, 48 tall (the segments' minimum), 12 over it. */
+    private val capsule = 48f
     private val gap = NoteInPlaceGap.value
 
     @Test fun onItsSideNotEvenTheFieldFitsUnderTheBarSoTheBarStepsAside() {
@@ -81,8 +83,8 @@ class NoteRevealTest {
         val keyboardTop = window - keyboard
         val reveal = noteReveal(keyboardTop, bar, status, field, line, clearance, air)
         assertTrue(reveal.barAside)
-        // Under the status bar 110: the field, its line and the 12 take 84, which would leave 26 over the field — row 2's
-        // foot. The rect is the whole viewport instead: the field 6 under the status bar, the rest under the block.
+        // Under the status bar 110: the field, its line and the 12 take 84, which would leave 26 over the field — the
+        // capsule's foot. The rect is the whole viewport instead: the field 6 under the status bar, the rest under the block.
         assertEquals(status + air, reveal.above)
         assertEquals(keyboardTop - status - air, reveal.below)
         assertEquals(keyboardTop, reveal.above + reveal.below)
@@ -102,8 +104,8 @@ class NoteRevealTest {
         assertEquals(status, reveal.above)
         assertEquals(72f + line + clearance, reveal.below)
         assertTrue(keyboardTop - status - reveal.below <= gap)
-        // Row 2 and its 12 (60) never fit over even the field alone and its 12 here (50 left): row 2 never shows whole.
-        assertTrue(row2 + gap > keyboardTop - status - (field + clearance))
+        // The capsule and its 12 (60) never fit over even the field alone and its 12 here (50 left): it never shows whole.
+        assertTrue(capsule + gap > keyboardTop - status - (field + clearance))
     }
 
     @Test fun upright_theFieldAndItsLineUnderTheBar_andTheFieldAloneWhereOnlyItFits() {
@@ -121,7 +123,7 @@ class NoteRevealTest {
 
     private var scope: CoroutineScope? = null
 
-    /** The page's list in a short window, stopping at the keyboard; row 2, its 12, the field and its line far down the story. */
+    /** The page's list in a short window, stopping at the keyboard; the faces' line, the capsule, its 12, the field and its line far down the story. */
     private fun page(requester: BringIntoViewRequester, viewport: Dp, top: Dp) {
         compose.setContent {
             scope = rememberCoroutineScope()
@@ -129,8 +131,9 @@ class NoteRevealTest {
                 LazyColumn(Modifier.fillMaxWidth().height(viewport), contentPadding = PaddingValues(top = top)) {
                     item {
                         Column {
-                            Spacer(Modifier.height((700f - row2 - gap).dp))
-                            Box(Modifier.fillMaxWidth().height(row2.dp).testTag("row2"))
+                            Spacer(Modifier.height((700f - Row2Height.value - capsule - gap).dp))
+                            Box(Modifier.fillMaxWidth().height(Row2Height).testTag("faces"))
+                            Box(Modifier.fillMaxWidth().height(capsule.dp).testTag("capsule"))
                             Spacer(Modifier.height(gap.dp))
                             Box(Modifier.fillMaxWidth().height(field.dp).bringIntoViewRequester(requester).testTag("field"))
                             Box(Modifier.fillMaxWidth().height(line.dp).testTag("line"))
@@ -149,7 +152,7 @@ class NoteRevealTest {
 
     private val density get() = RuntimeEnvironment.getApplication().resources.displayMetrics.density
 
-    @Test fun onItsSideTheRectAskedBringsTheFieldAndItsLineOverTheKeyboardWithRow2WhollyUnderTheStatusBar() {
+    @Test fun onItsSideTheRectAskedBringsTheFieldAndItsLineOverTheKeyboardWithTheCapsuleWhollyUnderTheStatusBar() {
         val requester = BringIntoViewRequester()
         val keyboardTop = window - keyboard
         page(requester, keyboardTop.dp, bar.dp)
@@ -159,24 +162,24 @@ class NoteRevealTest {
         bring(requester, reveal.rect(400f * px))
         val shown = compose.onNodeWithTag("field").getBoundsInRoot()
         val under = compose.onNodeWithTag("line").getBoundsInRoot()
-        val faces = compose.onNodeWithTag("row2").getBoundsInRoot()
+        val over = compose.onNodeWithTag("capsule").getBoundsInRoot()
         // The field 6 under the status bar, its line at least 12 over the keyboard.
         assertEquals(status + air, shown.top.value, 0.5f)
         assertTrue("the line ends 12 over the keyboard or higher (${under.bottom})", under.bottom.value <= keyboardTop - clearance + 0.5f)
-        // Row 2 wholly behind the status bar's paper: nothing of it under it (the cut falls in the 12 over the field).
-        assertTrue("row 2's foot (${faces.bottom}) is under the status bar ($status)", faces.bottom.value <= status + 0.5f)
+        // The capsule wholly behind the status bar's paper: nothing of it under it (the cut falls in the 12 over the field).
+        assertTrue("the capsule's foot (${over.bottom}) is under the status bar ($status)", over.bottom.value <= status + 0.5f)
     }
 
-    @Test fun onItsSideTheRectBeforeTheRelookLeftASliverOfRow2UnderTheStatusBar() {
+    @Test fun onItsSideTheRectBeforeTheRelookLeftASliverOfTheCapsuleUnderTheStatusBar() {
         // The block's own rect (the status bar's room over the field, the block under it), brought to the keyboard: 26 over
-        // the field under the status bar, 14 of them row 2's foot — its faces' lower edges cut thin.
+        // the field under the status bar, 14 of them the capsule's foot, cut thin.
         val requester = BringIntoViewRequester()
         val keyboardTop = window - keyboard
         page(requester, keyboardTop.dp, bar.dp)
         val px = density
         bring(requester, Rect(0f, -status * px, 400f * px, (field + line + clearance) * px))
-        val faces = compose.onNodeWithTag("row2").getBoundsInRoot()
-        assertTrue("row 2's foot (${faces.bottom}) shows under the status bar ($status)", faces.bottom.value > status + 0.5f)
+        val over = compose.onNodeWithTag("capsule").getBoundsInRoot()
+        assertTrue("the capsule's foot (${over.bottom}) shows under the status bar ($status)", over.bottom.value > status + 0.5f)
     }
 
     @Test fun theOldAskLeftTheFieldUnderTheBar() {

@@ -7,6 +7,9 @@ public struct LinkFragment: Equatable, Sendable {
     public var minX: CGFloat
     public var maxX: CGFloat
     public var baseline: CGFloat
+    /// The line box it lies in (round 29: a picked sentence's wash is that box less 6).
+    public var lineTop: CGFloat = 0
+    public var lineHeight: CGFloat = 0
 }
 
 /// The pen-wave underlines of a story's links, found from the layout: one
@@ -67,7 +70,7 @@ public enum LinkWaves {
             let box = lm.boundingRect(forGlyphRange: visible, in: container)
             guard box.width > 0.5 else { return }
             let baseline = rect.minY + lm.location(forGlyphAt: visible.location).y
-            out.append(LinkFragment(minX: box.minX, maxX: box.maxX, baseline: baseline))
+            out.append(LinkFragment(minX: box.minX, maxX: box.maxX, baseline: baseline, lineTop: rect.minY, lineHeight: rect.height))
         }
         return out
     }
@@ -98,6 +101,7 @@ final class LinkWaveTextView: UITextView, UIGestureRecognizerDelegate {
         // A layer holds a CGColor, which no appearance change reaches: the waves take the ink again.
         registerForTraitChanges([UITraitUserInterfaceStyle.self, AccentTrait.self]) { (view: LinkWaveTextView, _) in
             view.recolourWaves()
+            view.recolourWashes()
         }
     }
 
@@ -113,9 +117,98 @@ final class LinkWaveTextView: UITextView, UIGestureRecognizerDelegate {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        if let drawn, drawn.width == bounds.width, drawn.text.isEqual(to: attributedText) { return }
+        if let drawn, drawn.width == bounds.width, drawn.text.isEqual(to: attributedText), drawnWashes == washes { return }
+        let before = drawn == nil ? nil : Set(drawnWashes.map(\.id))
         rebuildWaves()
+        rebuildWashes(fadingAllBut: before)
         drawn = (bounds.width, NSAttributedString(attributedString: attributedText))
+        drawnWashes = washes
+    }
+
+    // MARK: Picked sentences (round 29 §U2)
+
+    /// The author's picked sentences in this text, washed under their glyphs (``PassageWash``).
+    var washes: [PassageWash] = [] {
+        didSet { if washes != oldValue { setNeedsLayout() } }
+    }
+    /// Where each wash and its faces' place came out, after each layout (on the next turn of the main loop).
+    var onWashLayout: ((PassageLayout) -> Void)?
+    /// A tap on a wash that is not on a link.
+    var onWashPress: ((String) -> Void)?
+    private var drawnWashes: [PassageWash] = []
+    private var washLayers: [(id: String, layer: CAShapeLayer)] = []
+    private var washPieces: [(id: String, rects: [CGRect])] = []
+    /// Made with the first wash: a text with none carries no recognizer of its own.
+    private var washTap: UITapGestureRecognizer?
+
+    private var washInk: CGColor { PassageWash.ink.resolvedColor(with: traitCollection).cgColor }
+
+    private func recolourWashes() {
+        let ink = washInk
+        washLayers.forEach { $0.layer.fillColor = ink }
+    }
+
+    /// The washes under the glyphs and under the links' waves: one piece per line, from the sentence's first glyph to
+    /// its last on that line and ``PassageWash/overhang`` past each end, the line box less ``PassageWash/inset`` tall.
+    /// A wash that was not there when this text was last drawn fades in (150 ms; at once under Reduce Motion or with
+    /// UIKit's animations off, as in the release screenshots); one drawn with the text comes with it.
+    private func rebuildWashes(fadingAllBut before: Set<String>?) {
+        washLayers.forEach { $0.layer.removeFromSuperlayer() }
+        washLayers = []
+        washPieces = []
+        guard !washes.isEmpty || onWashLayout != nil else { return }
+        if !washes.isEmpty, washTap == nil {
+            let tap = UITapGestureRecognizer(target: self, action: #selector(tappedWash(_:)))
+            tap.delegate = self
+            tap.cancelsTouchesInView = false
+            addGestureRecognizer(tap)
+            washTap = tap
+        }
+        let origin = CGPoint(x: textContainerInset.left, y: textContainerInset.top)
+        var layout = PassageLayout(marks: [:], links: [], width: bounds.width)
+        for link in LinkWaves.links(in: textStorage) {
+            for f in LinkWaves.fragments(of: link.range, layoutManager: layoutManager, container: textContainer) {
+                layout.links.append(CGRect(x: f.minX + origin.x, y: f.lineTop + origin.y, width: f.maxX - f.minX, height: f.lineHeight))
+            }
+        }
+        let fade = before != nil && UIView.areAnimationsEnabled && !UIAccessibility.isReduceMotionEnabled
+        for wash in washes {
+            guard let geometry = PassageWash.geometry(of: wash, layoutManager: layoutManager, container: textContainer, origin: origin,
+                                                      width: bounds.width) else { continue }
+            layout.marks[wash.id] = geometry
+            let path = UIBezierPath()
+            for piece in geometry.pieces {
+                path.append(UIBezierPath(roundedRect: piece, cornerRadius: min(PassageWash.corner, piece.height / 2)))
+            }
+            let layer = CAShapeLayer()
+            layer.path = path.cgPath
+            layer.fillColor = washInk
+            layer.strokeColor = nil
+            // Under the glyphs and under the waves (inserted after them, at the bottom).
+            self.layer.insertSublayer(layer, at: 0)
+            if fade, let before, !before.contains(wash.id) {
+                let appear = CABasicAnimation(keyPath: "opacity")
+                appear.fromValue = 0
+                appear.toValue = 1
+                appear.duration = PassageWash.fade
+                appear.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                layer.add(appear, forKey: "appear")
+            }
+            washLayers.append((wash.id, layer))
+            washPieces.append((wash.id, geometry.pieces))
+        }
+        if let onWashLayout {
+            DispatchQueue.main.async { onWashLayout(layout) }
+        }
+    }
+
+    private func wash(at point: CGPoint) -> String? {
+        washPieces.first { $0.rects.contains { $0.contains(point) } }?.id
+    }
+
+    @objc private func tappedWash(_ g: UITapGestureRecognizer) {
+        guard g.state == .ended, let id = wash(at: g.location(in: self)) else { return }
+        onWashPress?(id)
     }
 
     private var tracks: [(url: URL, layer: CAShapeLayer)] = []
@@ -158,6 +251,11 @@ final class LinkWaveTextView: UITextView, UIGestureRecognizerDelegate {
     }
 
     override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+        // A wash is pressed where it lies, except on a link inside it: the link keeps its own press.
+        if let washTap, g === washTap {
+            let point = g.location(in: self)
+            return onWashPress != nil && wash(at: point) != nil && link(at: point) == nil
+        }
         guard g is UILongPressGestureRecognizer, g.delegate === self else { return super.gestureRecognizerShouldBegin(g) }
         return link(at: g.location(in: self)) != nil
     }

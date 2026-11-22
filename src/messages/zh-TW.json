@@ -481,7 +481,10 @@
       "passageTitle": "悄悄告訴作者，哪一段讓你有共鳴",
       "passageSkip": "略過",
       "passagePick": "選一段",
-      "passageQuote": "「{text}」"
+      "passageQuote": "「{text}」",
+      "pickedTitle": "對這一段有共鳴的人",
+      "pickedBy": "{names}對這一段有共鳴",
+      "pickedByMore": "{names}等人對這一段有共鳴"
     },
     "reply": {
       "label": "用卡片回應",

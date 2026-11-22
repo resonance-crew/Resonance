@@ -231,6 +231,7 @@ const DERIVED_TOKENS = [
   'menu-frame',
   'segment-idle-ink',
   'link-wave',
+  'passage-wash',
   'story-code-tint',
   'footer-bg',
   'footer-ink',
@@ -345,6 +346,8 @@ const RECIPES: Record<Scheme, (b: Base) => Record<DerivedToken, Oklch>> = {
     'segment-idle-ink': mixWithBlack(b['color-text-muted'], 0.1),
     // A link's pen wave under its words: the accent quieter (0.6× its chroma) and a touch lighter.
     'link-wave': lch(b['color-terracotta'].L + 0.03, b['color-terracotta'].C * 0.6, b['color-terracotta'].H),
+    // A sentence readers picked, on its author's page (round 29 §P4): the tap's tonal fill at 60 % over the paper.
+    'passage-wash': over(over(b['color-terracotta-light'], 0.75, b['color-cream-dark']), 0.6, b['color-cream']),
     // Inline code and code blocks: the ink at a whisper.
     'story-code-tint': { ...b['color-text'], alpha: 0.06 },
     // The footer is a band of ink with paper words; the call to action a band of the accent.
@@ -395,6 +398,8 @@ const RECIPES: Record<Scheme, (b: Base) => Record<DerivedToken, Oklch>> = {
       'menu-frame': fitGamut(lch(0.52, accent.C * 0.5, accent.H)),
       'segment-idle-ink': over(b['color-text'], 0.1, b['color-text-muted']),
       'link-wave': lch(accent.L - 0.06, accent.C * 0.6, accent.H),
+      // A picked sentence's wash: the night's tonal fill at 50 % over the night paper.
+      'passage-wash': over(over(b['color-terracotta-light'], 0.75, b['color-cream-dark']), 0.5, paper),
       'story-code-tint': { ...b['color-text'], alpha: 0.08 },
       // Ink as a band would be a cream slab, the accent a glaring one: both go deep, their words light.
       'footer-bg': lch(0.15, paper.C * 0.75, paper.H),

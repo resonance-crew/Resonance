@@ -1,0 +1,40 @@
+/* Round 29 §U2: the washes under the picked sentences — a layer under the story's blocks (the story is isolated
+   while it has marks: page.module.css `.story[data-passages]`), so every word, a link's wave and its focus ring stay
+   over it. Not a control, not selectable. */
+.washes {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  user-select: none;
+  animation: passageIn 150ms ease-out;
+}
+
+/* One piece per line: the line box less 6 tall, 2 past the first and last glyph, corners 6, no shadow. */
+.wash {
+  position: absolute;
+  border-radius: 6px;
+  background: var(--passage-wash);
+}
+
+/* The left margin's column (§S10): its right edge 8 left of the column's left edge, as tall as the story, the groups
+   laid on it at the lines where their washes begin. The paper puppets keep off this side
+   (lib/mascots/reading/measure then sends the scene `leftTaken`). */
+.margin {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: calc(100% + 8px);
+}
+
+@keyframes passageIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .washes {
+    animation: none;
+  }
+}

@@ -4,8 +4,9 @@
    page the page's side margin, in the reading column. */
 .scrollArea {
   position: relative;
-  /* NotificationBell's dialog padding at the sides. */
-  --bell-pad: 22px;
+  /* The dialog's padding at the sides: NotificationBell's 22, or a dialog's own (PickedPeople's 28: --dialog-pad-x on
+     an ancestor). */
+  --bell-pad: var(--dialog-pad-x, 22px);
   /* The body reaches 10 past the dialog's box on both sides — past the farthest the paper's wobble swings out — and
      the dialog's outline, its clip, ends every band on the paper's pen line. */
   --bell-bleed: calc(var(--bell-pad) + 10px);

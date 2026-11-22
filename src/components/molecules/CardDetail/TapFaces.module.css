@@ -1,12 +1,13 @@
-/* The faces' place at the start of the end row's second line (round 26 §U2). */
+/* The faces' place on the end row's second line, centred on the 共振 segment (round 26 §U2, round 29 §S11). */
 .anchor {
   display: inline-flex;
 }
 
-/* One button, 44 tall (the hit area): the faces centred in it, no frame — a face is its own shape. */
+/* One button, 44 tall (the hit area): the faces centred in it (so the group's centre is the button's), no frame — a face is its own shape. */
 .faces {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 44px;
   min-width: 44px;
   padding: 0 6px;

@@ -6,19 +6,38 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PixelMap
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Density
+import com.resonance.design.TagPill
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.unit.dp
+import com.resonance.design.AppFonts
+import com.resonance.design.AvatarGroup
+import com.resonance.design.Grain
 import com.resonance.design.OrganicIcon
+import com.resonance.design.Segment
+import com.resonance.design.SegmentedActionBar
+import com.resonance.design.segmentCentre
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.kit.l10n.Strings
@@ -41,14 +60,15 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Row 2 under the capsule and the note field's envelope (round 26 §U1.2, the note in place item 2) as their twins draw
- * them — the web's, where iOS differs (the screens' review: Android's stood apart from both). 收藏 a bare glyph in the
+ * The faces' line over the capsule (round 30 §S1; row 2 under it until then), 收藏 beside the tags (a phone) or the
+ * capsule (wide; round 28 §S2–§S4) as their twins draw them — the web's, where iOS differs (the screens' review: Android's stood apart from both). 收藏 a bare glyph in the
  * muted text ink with the one pen, its glyph 12 in from the row's end in its 48 box (the web's 44 button, centred, on
- * the row's end); a face 12 in from the row's start (the web's 6 + 6); the envelope muted at 18. Drawn for real and
+ * the row's end); the faces centred on the 共振 segment's centre (round 29 §S11). Drawn for real and
  * measured pixel by pixel.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, qualifiers = "xxhdpi")
+// Wide enough for a tablet's column (680) beside a phone's (335).
+@Config(application = Application::class, qualifiers = "w1000dp-h1600dp-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class EndRowTwoTest {
     private val compose = createComposeRule()
@@ -68,6 +88,8 @@ class EndRowTwoTest {
     private val density get() = RuntimeEnvironment.getApplication().resources.displayMetrics.density
 
     @Before fun catalogs() {
+        AppFonts.init(RuntimeEnvironment.getApplication())
+        Grain.init(RuntimeEnvironment.getApplication())
         Strings.load { File("../../../src/messages/${it.tag}.json").readText() }
         Strings.language = Strings.Language.ZhTW
     }
@@ -117,34 +139,239 @@ class EndRowTwoTest {
         assertTrue("the glyph ends ${endGap(button)} px in, expected $expected", abs(endGap(button) - expected) <= 1)
     }
 
-    @Test fun aFaceStandsTwelveInFromTheRowsStartAndTheEndIsTheRowsEnd() {
+    @Test fun theFacesStandCentredOnTheCentreGivenOneTwoOrThreeAndNothingEndsTheLine() {
+        // Round 29 §S11: the group's centre on the 共振 segment's — one face, two, three (the stack's widths) alike.
+        var count by mutableStateOf(1)
         compose.setContent {
             Box(Modifier.width(320.dp).testTag("column")) {
-                EndRowTwo(
-                    Modifier.width(320.dp),
-                    // A face as the group draws it now: the 28 itself, nothing round it (round 26: the pads are gone).
-                    faces = { Box(Modifier.size(28.dp).testTag("face")) },
-                ) { Box(Modifier.size(48.dp).testTag("end")) }
+                EndRowTwo(Modifier.width(320.dp), facesCentre = 70.dp) { Box(Modifier.size(AvatarGroup.width(count, TapFaceSize), 28.dp).testTag("face")) }
+            }
+        }
+        for (faces in 1..3) {
+            count = faces
+            compose.waitForIdle()
+            val row = compose.onNodeWithTag("column").getBoundsInRoot()
+            val face = compose.onNodeWithTag("face").getBoundsInRoot()
+            // Not 12 in from the line's start (the leading edge it stood on): centred on 70.
+            assertEquals("$faces faces", 70f, ((face.left + face.right) / 2 - row.left).value, 0.5f)
+            // Centred in the line's 48 too, which stands with a face or none; 收藏 is not on it (round 28 §S4).
+            assertEquals(((row.top + row.bottom) / 2).value, ((face.top + face.bottom) / 2).value, 0.5f)
+            assertEquals(Row2Height.value, (row.bottom - row.top).value, 0.5f)
+        }
+        compose.onAllNodesWithContentDescription("收藏").assertCountEquals(0)
+    }
+
+    @Test fun aGroupWiderThanTwiceTheCentreStopsAtTheLinesStart() {
+        compose.setContent {
+            Box(Modifier.width(320.dp).testTag("column")) {
+                EndRowTwo(Modifier.width(320.dp), facesCentre = 20.dp) { Box(Modifier.size(64.dp, 28.dp).testTag("face")) }
             }
         }
         val row = compose.onNodeWithTag("column").getBoundsInRoot()
-        val face = compose.onNodeWithTag("face").getBoundsInRoot()
-        val end = compose.onNodeWithTag("end").getBoundsInRoot()
-        // The face's rim 12 in, the web's — where it stood when a pad of 3 came before it.
-        assertEquals(12f, (face.left - row.left).value, 0.5f)
-        // 收藏's 48 on the row's end, the row 48 tall.
-        assertEquals(row.right.value, end.right.value, 0.5f)
-        assertEquals(Row2Height.value, (row.bottom - row.top).value, 0.5f)
+        assertEquals(row.left.value, compose.onNodeWithTag("face").getBoundsInRoot().left.value, 0.5f)
     }
 
-    @Test fun theNotesEnvelopeIsMutedAtEighteen() {
-        var muted = Color.Unspecified
+    @Test fun theCentreIsTheTapSegmentsAsTheCapsuleDrawsIt() {
+        // The capsule's three segments as a phone's 300 draws them, and the two-line form's 共振 alone: the faces over
+        // the 共振 segment's own centre (round 30: the line stands above the capsule), not the capsule's.
+        val forms = listOf(
+            listOf(Segment("tap", "共振", IconName.Wave) { }, Segment("note", "寄小紙條", IconName.Note) { }, Segment("reply", "寫卡片", IconName.Pen) { }),
+            listOf(Segment("tap", "共振", IconName.Wave) { }),
+        )
+        var shown by mutableStateOf(forms[0])
         compose.setContent {
-            muted = Tokens.TextMuted
-            Box(Modifier.background(Color.White).testTag("lead")) { NoteLeadGlyph() }
+            Column(Modifier.width(300.dp)) {
+                EndRowTwo(Modifier.width(300.dp), facesCentre = segmentCentre(shown, 300.dp)) { Box(Modifier.size(AvatarGroup.width(3, TapFaceSize), 28.dp).testTag("face")) }
+                SegmentedActionBar(shown, Modifier.width(300.dp))
+            }
         }
-        val lead = map("lead")
-        assertEquals((18 * density).toInt(), lead.width)
-        assertTrue("the envelope is drawn in the muted text ink", near(ink(lead), muted))
+        for (segments in forms) {
+            shown = segments
+            compose.waitForIdle()
+            val seg = compose.onNode(hasClickAction() and hasText("共振")).getBoundsInRoot()
+            val face = compose.onNodeWithTag("face").getBoundsInRoot()
+            assertEquals("${segments.size} segments", ((seg.left + seg.right) / 2).value, ((face.left + face.right) / 2).value, 1f)
+            assertTrue("the faces stand over the capsule", face.bottom.value <= seg.top.value + 0.5f)
+        }
+    }
+
+    private fun tags(n: Int) = listOf("散文", "早晨", "咖啡", "搬家", "一個人", "城市", "日常", "回憶", "台北", "練習").take(n)
+
+    private fun toggle(saved: Boolean = false) = BookmarkToggle(launch = { error("nothing sent") }, writer = { null }).apply { read(saved) }
+
+    /** The tags' row on a column [width] wide, 收藏 beside them as a reader sees it, at the text scale [fontScale]. */
+    private fun tagsRow(names: List<String>, width: Int, saved: Boolean = false, fontScale: Float = 1f) {
+        val toggle = toggle(saved)
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
+                Column {
+                    // One pill alone: a line's height at this text scale.
+                    TagFlow(Modifier.testTag("single")) { TagPill(names.firstOrNull() ?: "散文", fill = Tokens.TerracottaLight) }
+                    Box(Modifier.width(width.dp).testTag("column")) {
+                        StoryTagsRow(names, toggle, Modifier.testTag("row"), tagsModifier = Modifier.testTag("tags"))
+                    }
+                }
+            }
+        }
+    }
+
+    private fun lineHeight() = compose.onNodeWithTag("single").getBoundsInRoot().let { (it.bottom - it.top).value }
+
+    @Test fun onAPhone收藏EndsTheTagsRowCentredOnTheFirstLineAndTheRowStaysTheTags() {
+        tagsRow(tags(2), 335)
+        val row = compose.onNodeWithTag("row").getBoundsInRoot()
+        val one = compose.onNodeWithTag("tags").getBoundsInRoot()
+        val mark = compose.onNodeWithContentDescription("收藏").getBoundsInRoot()
+        // Its 48 flush with the column's end; the tags in their own column, 12 + 48 short of it.
+        assertEquals(335f, mark.right.value, 0.5f)
+        assertEquals(48f, (mark.right - mark.left).value, 0.5f)
+        assertTrue("the tags keep to their column", one.right.value <= 335f - 60f + 0.5f)
+        // One line: the box centred on it, the row the pills' height — the box hangs over it, not taller.
+        val line = (one.bottom - one.top).value
+        assertTrue("a pill is shorter than 收藏's box ($line)", line < 48f)
+        assertEquals(line, (row.bottom - row.top).value, 0.5f)
+        assertEquals((one.top.value + one.bottom.value) / 2, (mark.top.value + mark.bottom.value) / 2, 0.5f)
+    }
+
+    @Test fun manyTagsWrapUnderTheFirstLineAnd收藏StaysOnIt() {
+        tagsRow(tags(10), 335)
+        val line = lineHeight()
+        val row = compose.onNodeWithTag("row").getBoundsInRoot()
+        val all = compose.onNodeWithTag("tags").getBoundsInRoot()
+        val mark = compose.onNodeWithContentDescription("收藏").getBoundsInRoot()
+        assertTrue("ten tags take more than one line", (all.bottom - all.top).value > line * 2)
+        assertEquals((all.bottom - all.top).value, (row.bottom - row.top).value, 0.5f)
+        // Centred on the first line, not the whole.
+        assertEquals(all.top.value + line / 2, (mark.top.value + mark.bottom.value) / 2, 0.5f)
+    }
+
+    @Test fun noTags收藏AloneIsTheRowAndWideItIsNotThere() {
+        tagsRow(emptyList(), 335, saved = true)
+        val row = compose.onNodeWithTag("row").getBoundsInRoot()
+        // Saved, it is named by what a tap does.
+        val mark = compose.onNodeWithContentDescription("取消收藏").getBoundsInRoot()
+        assertEquals(48f, (row.bottom - row.top).value, 0.5f)
+        assertEquals(row.top.value, mark.top.value, 0.5f)
+        assertEquals(335f, mark.right.value, 0.5f)
+    }
+
+    @Test fun wideTheTagsRowIsTheTagsAlone() {
+        // Wide, 收藏 ends the capsule's row: the tags' row is the tags alone, across the column.
+        tagsRow(tags(2), 680)
+        compose.onAllNodesWithContentDescription("收藏").assertCountEquals(0)
+    }
+
+    @Test fun theOwnersLargeTextKeeps收藏OnTheFirstLineWithoutGrowingTheRow() {
+        // The owner's Pixel: font 1.5× (round 17 and 24 shipped cut-off text there).
+        tagsRow(tags(6), 335, fontScale = 1.5f)
+        val line = lineHeight()
+        val row = compose.onNodeWithTag("row").getBoundsInRoot()
+        val all = compose.onNodeWithTag("tags").getBoundsInRoot()
+        val mark = compose.onNodeWithContentDescription("收藏").getBoundsInRoot()
+        assertTrue("six tags wrap at 1.5×", (all.bottom - all.top).value > line * 1.5f)
+        assertEquals((all.bottom - all.top).value, (row.bottom - row.top).value, 0.5f)
+        assertEquals(335f, mark.right.value, 0.5f)
+        assertEquals(all.top.value + line / 2, (mark.top.value + mark.bottom.value) / 2, 0.5f)
+    }
+
+    @Test fun wide收藏EndsTheCapsulesRowCentredOnItAndTheRowIsTheCapsules() {
+        compose.setContent {
+            Box(Modifier.width(680.dp).testTag("column")) {
+                EndBeside(
+                    main = { Box(Modifier.size(width = 420.dp, height = 40.dp).testTag("capsule")) },
+                    end = { BookmarkButton(saved = false, glyphEnd = BylineGlyphEnd) {} },
+                    modifier = Modifier.width(680.dp).testTag("row"),
+                )
+            }
+        }
+        val row = compose.onNodeWithTag("row").getBoundsInRoot()
+        val capsule = compose.onNodeWithTag("capsule").getBoundsInRoot()
+        val mark = compose.onNodeWithContentDescription("收藏").getBoundsInRoot()
+        assertEquals(680f, mark.right.value, 0.5f)
+        assertEquals(40f, (row.bottom - row.top).value, 0.5f)
+        assertEquals((capsule.top.value + capsule.bottom.value) / 2, (mark.top.value + mark.bottom.value) / 2, 0.5f)
+        assertEquals(0f, capsule.left.value, 0.5f)
+    }
+
+    @Test fun wide收藏sGlyphEndsWhereTheBylinesEllipsisDoes() {
+        // The byline's ⋯ is a bare 48 with its 20 glyph centred, flush with the column's end: 14 in. 收藏 matches it
+        // (the spec: share the byline's right edge), where on a phone's tags row it keeps the web's 12.
+        assertEquals(14f, BylineGlyphEnd.value, 0.01f)
+        compose.setContent {
+            Column(Modifier.background(Color.White)) {
+                Box(Modifier.testTag("wide")) { BookmarkButton(saved = false, glyphEnd = BylineGlyphEnd) {} }
+                Box(Modifier.testTag("glyph")) { OrganicIcon(IconName.Bookmark, size = BookmarkGlyph, color = Tokens.TextMuted, strokeWidth = Tokens.Ink.value) }
+            }
+        }
+        val expected = (BylineGlyphEnd.value * density).toInt() + endGap(map("glyph"))
+        val seen = endGap(map("wide"))
+        assertTrue("the glyph ends $seen px in, expected $expected", abs(seen - expected) <= 1)
+    }
+
+    /** A reader's end as the page stacks it: the tags (收藏 at their end on a phone), their air, the faces' line, the capsule. */
+    private fun readerEnd(width: Int, names: List<String>, twoLines: Boolean = false, wide: Boolean = false) {
+        val toggle = toggle()
+        compose.setContent {
+            Column(Modifier.width(width.dp)) {
+                StoryTagsRow(names, if (wide) null else toggle, Modifier.padding(bottom = endRowAir(reader = true).dp).testTag("tagsRow"))
+                ReaderEndStack(
+                    capsuleWidth = (if (wide) 420 else width).dp,
+                    facesCentre = 70.dp,
+                    faces = { Box(Modifier.size(28.dp).testTag("face")) },
+                    firstLine = { Box(Modifier.size((if (wide) 420 else width).dp, 48.dp).testTag("capsule")) },
+                    bookmark = if (wide) ({ BookmarkButton(saved = false, glyphEnd = BylineGlyphEnd) {} }) else null,
+                    secondLine = if (twoLines) ({ Box(Modifier.size(width.dp, 48.dp).testTag("second")) }) else null,
+                ) { Box(Modifier.size(width.dp, 10.dp).testTag("note")) }
+            }
+        }
+    }
+
+    @Test fun theFacesLineStandsRightOverTheCapsuleSixteenUnderTheTags() {
+        // Round 30 §S1 (「把它移到共振按鈕的上方」): tags → 16 → the faces' line (48) → 0 → the capsule — 64 from the
+        // tags to the capsule, a face or none; the note's place under the capsule (it keeps its own 12 over the field).
+        readerEnd(335, tags(2))
+        val tagsRow = compose.onNodeWithTag("tagsRow").getBoundsInRoot()
+        val capsule = compose.onNodeWithTag("capsule").getBoundsInRoot()
+        val face = compose.onNodeWithTag("face").getBoundsInRoot()
+        val note = compose.onNodeWithTag("note").getBoundsInRoot()
+        assertEquals(16f + Row2Height.value, (capsule.top - tagsRow.bottom).value, 0.5f)
+        assertEquals(64f, (capsule.top - tagsRow.bottom).value, 0.5f)
+        // The face centred in its 48 line, on the centre it was given (共振's, round 29 §S11), and wholly over the capsule.
+        assertEquals(capsule.top.value - Row2Height.value / 2, (face.top.value + face.bottom.value) / 2, 0.5f)
+        assertEquals(70f, (face.left.value + face.right.value) / 2, 0.5f)
+        assertTrue(face.bottom.value <= capsule.top.value)
+        assertEquals(capsule.bottom.value, note.top.value, 0.5f)
+        // Every other end keeps the 40 under the tags.
+        assertEquals(40f, endRowAir(reader = false), 0f)
+    }
+
+    @Test fun noTagsTheFacesLineStartsSixteenUnderTheStory() {
+        // Wide, no tags: the tags' row is empty, and the end row starts its 16 under what stood above it.
+        readerEnd(680, emptyList(), wide = true)
+        val tagsRow = compose.onNodeWithTag("tagsRow").getBoundsInRoot()
+        val capsule = compose.onNodeWithTag("capsule").getBoundsInRoot()
+        // (The tag is inside the row's padding: the tags' own bounds, empty here.)
+        assertEquals(0f, (tagsRow.bottom - tagsRow.top).value, 0.5f)
+        assertEquals(tagsRow.bottom.value + 16f + Row2Height.value, capsule.top.value, 0.5f)
+    }
+
+    @Test fun onTwoLinesTheFacesStandOverTheFirstAndTheNoteUnderTheSecond() {
+        readerEnd(300, tags(1), twoLines = true)
+        val capsule = compose.onNodeWithTag("capsule").getBoundsInRoot()
+        val second = compose.onNodeWithTag("second").getBoundsInRoot()
+        val face = compose.onNodeWithTag("face").getBoundsInRoot()
+        val note = compose.onNodeWithTag("note").getBoundsInRoot()
+        assertTrue(face.bottom.value <= capsule.top.value)
+        assertEquals(EndRowLayout.LINE_GAP, (second.top - capsule.bottom).value, 0.5f)
+        assertEquals(second.bottom.value, note.top.value, 0.5f)
+    }
+
+    @Test fun wide收藏StaysCentredOnTheCapsulesLineNotTheFaces() {
+        // Round 28's place, unchanged (§S1): at the column's end, centred on the capsule; nothing ends the faces' line.
+        readerEnd(680, tags(2), wide = true)
+        val capsule = compose.onNodeWithTag("capsule").getBoundsInRoot()
+        val mark = compose.onNodeWithContentDescription("收藏").getBoundsInRoot()
+        assertEquals(680f, mark.right.value, 0.5f)
+        assertEquals((capsule.top.value + capsule.bottom.value) / 2, (mark.top.value + mark.bottom.value) / 2, 0.5f)
     }
 }

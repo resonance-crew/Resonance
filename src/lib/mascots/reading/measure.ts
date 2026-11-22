@@ -105,6 +105,9 @@ export function translationOf(win: Window, el: Element | null | undefined): { x:
 }
 
 /** The home feed's or a card page's scene, measured now. */
+/** How far a puppet's body reaches either side of where it peeks over the response bar, at most. */
+export const PEEK_REACH = 48;
+
 export function readingScene(doc: Document, layer: HTMLElement): { scene: ReadingScene; page: Page; header: number } {
   const win = doc.defaultView as Window;
   const page = new Page(doc, win, layer);
@@ -143,6 +146,10 @@ export function readingScene(doc: Document, layer: HTMLElement): { scene: Readin
       : [];
     const rail = article.parentElement?.querySelector('aside');
     scene.rail = rail ? page.rect(rail) : null;
+    // The faces of who picked a sentence, in the left margin on the author's page (round 29 §S10): no puppet's
+    // place on that side; the right is theirs again where no contents rail stands.
+    const col = scene.column;
+    scene.leftTaken = col && article.querySelector('[data-passage-margin]') ? { x: 0, y: col.y, w: col.x, h: col.h } : null;
     const respond = mark('respond', article);
     // The bar at rest: ReadAfterArea holds its container at translateY(10px) until it fades in, and nothing
     // measures again when it rises — so take away whatever translation the container carries right now.
@@ -151,6 +158,16 @@ export function readingScene(doc: Document, layer: HTMLElement): { scene: Readin
     scene.respond = bar ? { ...bar, x: bar.x - lift.x, y: bar.y - lift.y } : null;
     if (scene.respond) {
       const above = [story, respond?.previousElementSibling].map((el) => page.rect(el)).filter((r): r is Rect => !!r && r.y < scene.respond!.y);
+      // Round 30 stood the faces' line right over the bar. Where the faces come within a puppet's reach of the place
+      // the scene's peek rises (`right(bar) − min(48, w / 4)`, scene.ts) — only over a short bar: 共振 alone, the
+      // first line of a capsule in two — their foot is the ceiling, so no peek rises in front of them (iOS
+      // `MascotStage.respondCeiling`, the same 48).
+      const faces = page.rect(respond?.querySelector('[data-end-faces]')?.firstElementChild ?? null);
+      if (faces && faces.w > 0) {
+        const at = { ...faces, x: faces.x - lift.x, y: faces.y - lift.y };
+        const peek = scene.respond.x + scene.respond.w - Math.min(48, scene.respond.w / 4);
+        if (at.y < scene.respond.y && at.x < peek + PEEK_REACH && at.x + at.w > peek - PEEK_REACH) above.push(at);
+      }
       scene.respondCeiling = above.length ? Math.max(...above.map((r) => r.y + r.h)) + 2 : null;
     }
     // the cards under the story (resonances, related): after the article

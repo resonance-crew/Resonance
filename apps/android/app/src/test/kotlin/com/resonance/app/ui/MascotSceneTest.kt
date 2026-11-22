@@ -90,6 +90,15 @@ class MascotSceneTest {
         // The rail stands in the margin right of the column.
         assertEquals(880f, scene.rect("rail")[0])
         assertEquals(0, scene["cards"]!!.jsonArray.size)
+        assertEquals(null, scene["leftTaken"])
+    }
+
+    @Test fun theAuthorsFacesInTheLeftMarginTakeThatSideAndLeaveTheRightToThePuppets() {
+        // Round 29 §S10: the faces stand left of the column — the left margin is theirs; no contents rail, so no `rail`.
+        val parts = MascotScene.Parts(rects = mapOf("column" to rect(300f, 0f, 680f, 2400f), "block:0001" to rect(300f, 300f, 680f, 200f)))
+        val scene = MascotScene.of(parts, 1280f, 800f, rail = false, leftTaken = true)
+        assertEquals(listOf(0f, 0f, 300f, 2400f), scene.rect("leftTaken"))
+        assertEquals(null, scene["rail"])
     }
 
     @Test fun theScrollIsReadOffAnItemBothFramesShow() {

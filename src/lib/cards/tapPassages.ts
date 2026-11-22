@@ -102,11 +102,34 @@ export function passageFits(text: string, script: 'cjk' | 'latin'): boolean {
  * as plain text, whitespace read as one, in order: a passage lies within one
  * (plainText runs blocks together, so a piece across two would read as one).
  */
-function blocksOf(story: string): { text: string; md: string }[] {
+export function blocksOf(story: string): StoryBlock[] {
   return story
     .split(/\n[ \t\u00A0]*\n/)
     .map((md) => ({ md: md.trim(), text: squash(plainText(md)) }))
     .filter((b) => b.text.length > 0);
+}
+
+/** One of {@link blocksOf}'s blocks: its Markdown and its plain text, whitespace read as one. */
+export interface StoryBlock {
+  text: string;
+  md: string;
+}
+
+/**
+ * Where a sentence lies in the story's blocks, read as a pick is read (the
+ * text whitespace-squashed, then the first block whose plain text holds it,
+ * at its first place there): the block's index, where it starts and ends in
+ * that block's text, and the squashed text. Null when no one block holds it.
+ * The one place-finder of {@link verifyPassages} and the author's picked
+ * sentences (lib/cards/tapPicked, round 29).
+ */
+export function placeInBlocks(blocks: readonly StoryBlock[], raw: string): { block: number; start: number; end: number; text: string } | null {
+  const text = squash(raw);
+  if (!text) return null;
+  const block = blocks.findIndex((b) => b.text.includes(text));
+  if (block < 0) return null;
+  const start = blocks[block].text.indexOf(text);
+  return { block, start, end: start + text.length, text };
 }
 
 /**
@@ -126,12 +149,8 @@ export function verifyPassages(story: string, picked: readonly unknown[], opts: 
   const found: { block: number; start: number; end: number; text: string }[] = [];
   for (const raw of picked) {
     if (typeof raw !== 'string') continue;
-    const text = squash(raw);
-    if (!text) continue;
-    const block = blocks.findIndex((b) => b.text.includes(text));
-    if (block < 0) continue;
-    const start = blocks[block].text.indexOf(text);
-    found.push({ block, start, end: start + text.length, text });
+    const place = placeInBlocks(blocks, raw);
+    if (place) found.push(place);
   }
   found.sort((a, b) => a.block - b.block || a.start - b.start || a.end - b.end);
   const kept: typeof found = [];

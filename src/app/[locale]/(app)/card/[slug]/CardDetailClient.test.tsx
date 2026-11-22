@@ -65,8 +65,12 @@ vi.mock('@/lib/db/firestore/client/cards', async (orig) => ({
 }));
 // Leaf components with reads of their own (bookmarks, notes) aren't the subject.
 vi.mock('@/components/molecules/CardDetail/ReadAfterArea', () => ({
-  // It draws what the page hands it to end its row (the card's share and ⋯).
+  // It draws what the page hands it to end its row (收藏, the card's share and ⋯).
   ReadAfterArea: ({ trailing }: { trailing?: React.ReactNode }) => <div data-testid="read-after-area">{trailing}</div>,
+}));
+vi.mock('@/components/molecules/CardDetail/CardBookmark', () => ({
+  // 收藏 is a signed-in reader's.
+  CardBookmark: () => (mockUseAuth().user ? <button aria-label="Bookmark" /> : null),
 }));
 
 import {
@@ -815,8 +819,9 @@ describe('the head: title, byline and actions', () => {
   });
 
   // Round 12 §5–6: the card's share · ⋯ come again at the story's end only when the byline and the end can't
-  // be in view at once — at ≥ 1200 at the end of the response row (its owner's: a row of its own), below it at
-  // the end of the tags.
+  // be in view at once. A reader's follow 收藏, one group (the owner, 2026-11-21): at the end of the capsule's row
+  // wherever it stands at its own width, at the end of the tags on a phone. Its owner's: at ≥ 1200 a row of their
+  // own, below it at the end of the tags.
   describe('the share · ⋯ at the story’s end', () => {
     const realMatchMedia = window.matchMedia;
     const realRect = Element.prototype.getBoundingClientRect;
@@ -824,9 +829,9 @@ describe('the head: title, byline and actions', () => {
       window.matchMedia = realMatchMedia;
       Element.prototype.getBoundingClientRect = realRect;
     });
-    const wideIs = (wide: boolean) => {
+    const wideIs = (wide: boolean, phone = false) => {
       window.matchMedia = ((query: string) => ({
-        matches: query.includes('min-width: 1200px') ? wide : false,
+        matches: query.includes('min-width: 1200px') ? wide : query.includes('max-width: 560px') ? phone : false,
         media: query,
         onchange: null,
         addEventListener: () => {},
@@ -862,15 +867,72 @@ describe('the head: title, byline and actions', () => {
       expect(screen.getAllByRole('button', { name: 'Manage card' })).toHaveLength(1);
     });
 
+    const endLabels = () => within(screen.getByTestId('read-after-area')).queryAllByRole('button').map((b) => b.getAttribute('aria-label'));
+    const tagsLabels = () => within(tagsRow()).queryAllByRole('button').map((b) => b.getAttribute('aria-label'));
+    const asReader = () => {
+      signIn();
+      mockUseAuth.mockReturnValue({ user: { id: 'me' }, loading: false });
+      vi.mocked(callApi).mockResolvedValue(detail());
+    };
+
+    it('ends a reader’s capsule row with 收藏 — and the card’s share · ⋯ after a long story — at a tablet’s width as at the desktop’s', async () => {
+      for (const wide of [true, false]) {
+        wideIs(wide);
+        asReader();
+        const short = renderPage({ seed: seed() });
+        await waitFor(() => expect(endLabels()).toEqual(['Bookmark']));
+        expect(tagsLabels()).toEqual([]);
+        short.unmount();
+
+        longStory();
+        const long = renderPage({ seed: seed() });
+        await waitFor(() => expect(endLabels()).toEqual(['Bookmark', 'Share', 'Report or block']));
+        // One group, on one row: nothing of it at the end of the tags.
+        expect(tagsLabels()).toEqual([]);
+        long.unmount();
+        Element.prototype.getBoundingClientRect = realRect;
+      }
+    });
+
+    it('keeps them at the end of the tags on a phone, 收藏 first, where the capsule spans the column', async () => {
+      wideIs(false, true);
+      asReader();
+      const short = renderPage({ seed: seed() });
+      await waitFor(() => expect(tagsLabels()).toEqual(['Bookmark']));
+      expect(endLabels()).toEqual([]);
+      short.unmount();
+
+      longStory();
+      renderPage({ seed: seed() });
+      await waitFor(() => expect(tagsLabels()).toEqual(['Bookmark', 'Share', 'Report or block']));
+      expect(endLabels()).toEqual([]);
+    });
+
+    it('signed out: a long story’s share alone, at the capsule row’s end or a phone’s tags’, and nothing after a short one', async () => {
+      wideIs(false);
+      vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
+      const short = renderPage({ slug: 'c1' });
+      await screen.findByRole('heading', { level: 1 });
+      expect(endLabels()).toEqual([]);
+      expect(tagsLabels()).toEqual([]);
+      short.unmount();
+
+      wideIs(false, true);
+      longStory();
+      vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
+      renderPage({ slug: 'c1' });
+      await screen.findByRole('heading', { level: 1 });
+      await waitFor(() => expect(tagsLabels()).toEqual(['Share']));
+      expect(endLabels()).toEqual([]);
+    });
+
     it('ends a long story’s response row with them at ≥ 1200 — its owner’s with a row of their own', async () => {
       wideIs(true);
       longStory();
       vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
       const view = renderPage({ slug: 'c1' });
       await screen.findByRole('heading', { level: 1 });
-      await waitFor(() =>
-        expect(within(screen.getByTestId('read-after-area')).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Share']),
-      );
+      await waitFor(() => expect(endLabels()).toEqual(['Share']));
       expect(within(tagsRow()).queryAllByRole('button')).toHaveLength(0);
       view.unmount();
 
@@ -1054,5 +1116,91 @@ describe("someone else's 私人卡 shared in a message", () => {
     expect(screen.getByText('Private')).toBeInTheDocument();
     expect(screen.getByText('bob shared this private card with you — only you can read it')).toBeInTheDocument();
     expect(screen.queryByTestId('read-after-area')).not.toBeInTheDocument();
+  });
+});
+
+// Round 29 §U1–§S4: the sentences readers picked, on the author's own published card alone — the page's data
+// (`CardDetail.tap.picked`) drawn as marks and faces, opening that sentence's people by the faces or by the wash.
+describe('the sentences readers picked', () => {
+  const PICKED = 'a1b2c3d4';
+  const who = (id: string) => ({ id, handle: id, initials: id.slice(0, 2).toUpperCase(), accentColor: 'x', avatarUrl: null, avatarSeed: '3', verified: false, region: null });
+  const tapWithPicks = {
+    mine: false,
+    faces: [who('gus'), who('bob'), who('carol')],
+    more: true,
+    mayNote: false,
+    picked: [{ id: PICKED, text: 'the street is still blue.', people: [who('gus'), who('bob')], more: false }],
+  };
+  const as = (viewer: string) => {
+    signIn();
+    mockUseAuth.mockReturnValue({ user: { id: viewer }, loading: false });
+  };
+  /** The page's one signed-in request answers the tap with its picks; the sentence's people answer `?passage=`. */
+  function answer(extra: Partial<CardDetailBody> = {}) {
+    vi.mocked(callApi).mockImplementation((async (path: string) => {
+      if (path.includes(`/taps?passage=${PICKED}`)) return { people: [{ author: who('gus'), note: null }, { author: who('bob'), note: { excerpt: 'Blue, yes.' } }], nextPageToken: null };
+      if (path.includes('include=')) return detail({ isOwner: true, tap: tapWithPicks, ...extra });
+      return null;
+    }) as never);
+  }
+
+  it('shows its author the wash and the faces after the sentence, and the sentence’s people from either', async () => {
+    as('a1');
+    vi.mocked(getCardById).mockResolvedValue(card('pub1', { story: STORY }));
+    answer();
+    renderPage({ seed: seed() });
+
+    const faces = await screen.findByRole('button', { name: 'This part stayed with gus, bob' });
+    expect(faces).toHaveAttribute('data-passage-faces', PICKED);
+    const marks = [...document.querySelectorAll(`mark[data-passage="${PICKED}"]`)];
+    expect(marks.map((m) => m.textContent).join('')).toBe('the street is still blue.');
+    // The faces stand in the line after its last character (jsdom has no room left of the column).
+    expect(faces.closest('.story-passage-glue')).not.toBeNull();
+    // The story's words are all there, in order (the faces' slot aside).
+    const words = document.querySelector('.story-prose')!.cloneNode(true) as HTMLElement;
+    words.querySelectorAll('[data-passage-slot]').forEach((s) => s.remove());
+    expect(words.textContent).toBe(STORY);
+    // The faces at the story's end: three, and no blank disc after them for carol's others.
+    const end = document.querySelector('[data-tap-author]')!;
+    expect(end.querySelectorAll('[data-face]')).toHaveLength(3);
+    expect(end.querySelector('[data-more]')).toBeNull();
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    await user.click(faces);
+    let dialog = await screen.findByRole('dialog', { name: 'People this part stayed with' });
+    expect(within(dialog).getByText('“the street is still blue.”')).toBeInTheDocument();
+    expect((await within(dialog).findAllByRole('link')).map((r) => r.getAttribute('href'))).toEqual(['/u/gus', '/messages/bob?u=bob']);
+    expect(callApi).toHaveBeenCalledWith(`/api/v1/cards/pub1/taps?passage=${PICKED}`);
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    // The wash opens it too.
+    await user.click(marks[0]);
+    dialog = await screen.findByRole('dialog', { name: 'People this part stayed with' });
+    expect(within(dialog).getByRole('heading', { name: 'People this part stayed with' })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['a reader', 'me', {}, card('pub1', { story: STORY })],
+    ['its author, on a private card', 'a1', {}, card('pub1', { story: STORY, visibility: 'private' })],
+    ['its author, on a draft', 'a1', {}, card('pub1', { story: STORY, publishedAt: null as unknown as Date })],
+    [
+      'its author, on a card in the trash',
+      'a1',
+      {},
+      card('pub1', { story: STORY, visibility: 'private', trashedAt: new Date(), trashedFrom: { visibility: 'public', referenceCardId: null } }),
+    ],
+  ])('shows %s no wash and no faces — the story as it always was', async (_, viewer, extra, c) => {
+    as(viewer);
+    vi.mocked(getCardById).mockResolvedValue(c);
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(c);
+    answer(extra);
+    renderPage({ seed: viewer === 'me' ? seed() : null, slug: viewer === 'me' ? undefined : 'pub1' });
+    await waitFor(() => expect(storyVisible()).toBe(true));
+    await waitFor(() => expect(callApi).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(document.querySelector('mark')).toBeNull();
+    expect(document.querySelector('[data-passage-faces]')).toBeNull();
+    expect(document.querySelector('[data-passages]')).toBeNull();
   });
 });

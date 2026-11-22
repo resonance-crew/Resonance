@@ -95,6 +95,28 @@ describe('the note, in place', () => {
     expect(css).toMatch(/\.line\[data-empty\]\s*\{\s*min-height: 0;\s*margin-top: 0;\s*\}/);
   });
 
+  it('is the column wide with no envelope: the words start 16 in, and so do the lines under them (round 30)', async () => {
+    renderPage();
+    await user().click(noteSegment());
+    const input = field() as HTMLElement;
+    const block = input.closest('[data-mode="field"]') as HTMLElement;
+    // Nothing stands before the words in the capsule's line: no mark, no column of its own.
+    const line = input.closest('[class*="field"]')?.parentElement as HTMLElement;
+    expect(line.firstElementChild).toContainElement(input);
+    // The only drawn glyph in the place is the send's.
+    expect(block.querySelectorAll('button')).toHaveLength(1);
+    expect(block.querySelector('button')?.previousElementSibling ?? block.querySelector('button')).not.toBeNull();
+    const css = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/NoteInPlace.module.css'), 'utf8');
+    // No cap: the block is the story's column at every width (a 680 cap left it short on a wider column).
+    expect(css).not.toMatch(/max-width:\s*680px/);
+    expect(css.match(/\.block\s*\{[^}]*\}/)?.[0]).not.toMatch(/max-width/);
+    expect(css).not.toMatch(/\.glyph\b/);
+    // One start for the words, the line under them and the waiting line.
+    expect(css).toMatch(/\.field\s*\{[^}]*padding: 0 10px 0 16px;/);
+    expect(css).toMatch(/\.line\s*\{[^}]*padding-inline: 16px 4px;/);
+    expect(css).toMatch(/\.wait\s*\{[^}]*padding-inline: 16px 4px;/);
+  });
+
   it('tapping 共振 opens no field, and the field’s placeholder is one, the tap on, off or never', async () => {
     renderPage();
     const resonate = () => within(screen.getAllByRole('group')[0]).getByRole('button', { name: /Resonate/ });

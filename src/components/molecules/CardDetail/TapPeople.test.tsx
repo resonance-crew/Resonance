@@ -92,4 +92,20 @@ describe('TapPeople: the passage on a row (§U2, §U3)', () => {
     renderWithIntl(<TapPeople people={people} own={{ id: 'dora', quote: null, offer: true, onPress: () => {} }} />, zh);
     expect(lines(screen.getByRole('button'))).toEqual(['dora', '選一段']);
   });
+
+  it('one sentence’s people (round 29 §S4.2): the same rows, the note under the name, no quote — the author’s list keeps its quotes', () => {
+    const people: TapPersonBody[] = [
+      { author: face('gus'), note: null, passage: { text: FIRST } },
+      { author: face('carol'), note: { excerpt: '讀到搬家那段，好像看見自己。' }, passage: { text: FIRST } },
+    ];
+    const { unmount } = renderWithIntl(<TapPeople people={people} quotes={false} />, zh);
+    const [gus, carol] = screen.getAllByRole('link');
+    expect(lines(gus)).toEqual(['gus']);
+    expect(lines(carol)).toEqual(['carol', '讀到搬家那段，好像看見自己。']);
+    expect(carol).toHaveAttribute('href', '/messages/carol?u=carol');
+    unmount();
+    // The author's list itself is unchanged (「保留原本查看的这个这个框」).
+    renderWithIntl(<TapPeople people={people} />, zh);
+    expect(lines(screen.getAllByRole('link')[0])).toEqual(['gus', `「${FIRST}」`]);
+  });
 });

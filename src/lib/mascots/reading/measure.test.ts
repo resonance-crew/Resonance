@@ -189,6 +189,39 @@ describe.each([
 });
 
 /**
+ * Round 30: the faces' line stands right over the capsule. A puppet peeking over the bar rises 48 in from its end —
+ * far from the faces over a capsule's one line, right in front of them over a short bar (共振 alone, the first line of
+ * a capsule in two): there the faces' foot is the bar's ceiling, and the engine lets no peek rise under it.
+ */
+describe('the faces over the response bar', () => {
+  function withFaces(barWidth: number) {
+    const { layer, respond, bar } = install(1440);
+    const group = respond.querySelector('[role="group"]') as HTMLElement;
+    BOXES.set(group, [bar[0], bar[1], barWidth, bar[3]]);
+    const line = document.createElement('div');
+    line.innerHTML = '<span data-end-faces=""><span><button aria-label="faces"></button></span></span>';
+    respond.prepend(line);
+    const faces = line.querySelector('[data-end-faces] > span') as HTMLElement;
+    // The faces' button: 6 in from the line's start, 95 wide, 44 tall, its foot on the bar's top.
+    BOXES.set(faces, [bar[0] + 6, bar[1] - 44, 95, 44]);
+    return { layer, bar };
+  }
+
+  it('leaves the ceiling to what stands above the end row when the peek rises far from them (a capsule on one line)', () => {
+    const { layer } = withFaces(420);
+    const { scene } = readingScene(document, layer);
+    // The story's foot (300 + 1040), not the faces' (1400).
+    expect(scene.respondCeiling).toBe(1342);
+  });
+
+  it('makes their foot the ceiling when the peek would rise in front of them (共振 alone on the first line)', () => {
+    const { layer, bar } = withFaces(108);
+    const { scene } = readingScene(document, layer);
+    expect(scene.respondCeiling).toBe(bar[1] + 2);
+  });
+});
+
+/**
  * The perf audit's W8: the feed's far-off cards skip their layout (content-visibility: auto on the grid's item), and
  * reading a skipped card's outline, foot or title would lay it all out again. Such a card is read by its item's box
  * (less the item's padding, the card's reach) and keeps its key; nothing inside it is asked where it is.
@@ -228,5 +261,25 @@ describe('a feed card the browser is skipping', () => {
     expect(cards.map((c) => c.key)).toEqual(['near', 'far']);
     expect(cards[1]).toEqual({ key: 'far', box: { x: 100, y: 7000, w: 340, h: 500 }, radius: 18 });
     expect(cards[0].words?.length).toBe(1);
+  });
+});
+
+describe('the author’s picked sentences’ faces (round 29 §S10)', () => {
+  it('stand in the left margin as a rail does there: no puppet’s place on the left, the right theirs again', () => {
+    const { layer } = install(1440);
+    const sides = () =>
+      measureReading(document, layer, READING_PRESETS.desktop).ledges.flatMap((l) => (l.kind === 'spot' && l.id.startsWith('margin-') ? [l.from] : []));
+    expect(sides()).toContain('left');
+    const story = document.querySelector('[data-mascot="story"]') as HTMLElement;
+    const margin = document.createElement('div');
+    margin.setAttribute('data-passage-margin', '');
+    story.append(margin);
+    BOXES.set(margin, [340 - 8 - 56, 300, 56, 1040]);
+    const { scene } = readingScene(document, layer);
+    // The window's left edge to the column's left, the column's height; `rail` stays the contents rail alone.
+    expect(scene.leftTaken).toEqual({ x: 0, y: 200, w: 340, h: 1300 });
+    expect(scene.rail).toBeNull();
+    expect(sides().length).toBeGreaterThan(0);
+    expect(sides().every((s) => s === 'right')).toBe(true);
   });
 });

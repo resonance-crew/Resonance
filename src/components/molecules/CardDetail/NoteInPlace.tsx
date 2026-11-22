@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { CharCount, Textarea } from '@/components/atoms/Field/Field';
-import { Icon } from '@/components/atoms/Icon';
 import { ComposerCapsule } from '@/components/sections/MessagesPage/ComposerCapsule';
 import { useToast } from '@/components/providers/ToastProvider';
 import { useRouter } from '@/i18n/navigation';
@@ -226,8 +225,9 @@ export interface NoteInPlaceProps {
 }
 
 /**
- * The note's place under the end row: the composer's input capsule (messages-ui) — the envelope's column, the
- * text, the send segment (tonal at rest, solid with words) — one line 48 tall growing to three on a phone (two in a
+ * The note's place under the capsule, its own button (round 30: 12 under it, the story's column wide at every
+ * width): the composer's input capsule (messages-ui) — the text, 16 in, and the send segment (tonal at rest, solid
+ * with words), no envelope: the held 寄小紙條 segment right above is its label (the owner, 2026-11-22) — one line 48 tall growing to three on a phone (two in a
  * short window), five wider, then scrolling inside, its placeholder 「悄悄告訴作者，哪一段打動你」 whatever the tap
  * (the owner, 2026-11-19: the placeholder says where the words go, so no privacy line under it); and one line under
  * it, one message at a time: why a send was refused > 「這段話想寫成一張卡片嗎？」 past 200 — nothing else, so with
@@ -314,9 +314,6 @@ export function NoteInPlace({ id, note, onClosedByKey }: NoteInPlaceProps) {
     <div {...block}>
       <div className={styles.inner}>
         <ComposerCapsule focused={focused} ready={valid} sendLabel={t('send')} onSend={note.send} block={lines > 1}>
-          <span className={styles.glyph} aria-hidden>
-            <Icon name="note" size={18} color="var(--color-text-muted)" />
-          </span>
           <div className={styles.field}>
             <Textarea
               ref={inputRef}

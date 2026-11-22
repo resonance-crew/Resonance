@@ -271,13 +271,6 @@ class PaletteMixes private constructor(private val palette: ResonanceColors) {
      * where it lands toward the night paper.
      */
     val quietTag: Color = mixed(lch("color-terracotta-light"), lch("color-cream"), 0.5)
-    /**
-     * The blank disc after an [AvatarGroup]'s faces when there are more (round 26 §U2.2, the web's `.disc path` in
-     * AvatarGroup.module.css, iOS's FaceStack.discFill): the waiting disc's paper (`avatar-wait`, the cream-dark) by day;
-     * at night the muted ink at 66 % over the cream, `color-mix(in oklch, var(--color-text-muted) 66%, var(--color-cream))`
-     * — the night's cream-dark sat about 1.07 : 1 against the page, and the disc read as a bare ring. Still no one's colour.
-     */
-    val blankDisc: Color = if (palette.dark) mixed(lch("color-text-muted"), lch("color-cream"), 0.66) else palette.AvatarWait
     private val highlights = HashMap<Double?, Color>()
 
     /**

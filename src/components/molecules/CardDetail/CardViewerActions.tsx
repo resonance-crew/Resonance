@@ -1,10 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { useLocale, useTranslations } from 'next-intl';
-import useSWR from 'swr';
-import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
 import { Icon } from '@/components/atoms/Icon';
 import { SegmentedActionBar, type SegmentSpec } from '@/components/molecules/SegmentedActionBar/SegmentedActionBar';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -14,7 +12,6 @@ import type { AuthorBody, CardTapBody } from '@/lib/api/v1/schemas';
 import { usePrefillCard } from '@/lib/data/cardPrefill';
 import { useMyProfile, useMyResonance } from '@/lib/data/hooks';
 import { faceOf, useTapPassage, useTapToggle, type TapFailure } from '@/lib/data/taps';
-import { isBookmarked, toggleBookmark } from '@/lib/db/firestore/client/bookmarks';
 import { cardShareKey } from '@/lib/share/links';
 import type { StoryScript } from '@/lib/text/script';
 import { NoteInPlace, useNoteInPlace } from './NoteInPlace';
@@ -43,7 +40,11 @@ export interface CardViewerActionsProps {
   author: { id: string; handle: string; initials: string; accentColor: string };
   /** The resonance tap as the server answers this reader (`CardDetail.tap`): undefined while it loads or signed out. */
   tap?: CardTapBody | null;
-  /** What ends the second line (round 8 §10.2, round 26 §U1.2): the card's share and ⋯ after a long story at ≥ 1200. */
+  /**
+   * The card's passive actions, at the end of the capsule's row: 收藏 and, after a long story, its share and ⋯ (the
+   * owner, 2026-11-21: 「把它移到這個 segmented buttons 的右邊」). A phone's page keeps them at the end of its tags
+   * instead and passes nothing: its capsule spans the column.
+   */
   trailing?: ReactNode;
   /** The story is on screen in translation (round 25 §F): the passages, the author's own words, are not offered then. */
   translated?: boolean;
@@ -57,13 +58,19 @@ type Fit = 'full' | 'short' | 'split';
 /** At this content width or less the capsule says its short words (§U1.3: 寫卡片), whether the full ones squeeze in or not — as Android. */
 export const NARROW_ROW = 340;
 
+/** Between the capsule and what ends its row, at least (CardViewerActions.module.css `.row`'s gap). */
+export const ENDS_GAP = 12;
+
 /**
  * The end of a story, for a reader (round 26 §U1): the three answers in one capsule — 共振 (the tap: a switch, so
  * all three are tonal at rest and only a tap that is on is solid with `wave-pair` — its words stay 共振, so nothing in
  * the capsule moves (the owner, 2026-11-20) —), 寄小紙條 (the note, written in
  * place under the row, never in a dialog) and 用卡片回應 (a card of one's own; 修改 with a draft, 已回應 once
- * published) — then, right under it and as wide, the second line: the faces of who resonated at its start, 收藏 at
- * its end (and, after a long story at the desktop's width, the card's share and ⋯). The note opens 12 under that.
+ * published) — its row ended, at the column's end, by the card's passive actions (`trailing`: 收藏, and its share
+ * and ⋯ after a long story) wherever the capsule stands at its own width. Right above it (0 between) the faces' line:
+ * the faces of who resonated, centred on the 共振 segment (round 29 §S11) and over it — above the capsule since round
+ * 30 (the owner, 2026-11-22: 「把共振…使用者头像，把它移到共振按钮的上方」), so that the note opens right under its own
+ * button, 12 under the capsule.
  * Tapping 共振 fills the segment and slides the viewer's face in; on a card with passages (round 27 §U1) a press that
  * turns it on also asks, 240 ms later, which part stayed with them — a small centred dialog the tap never waits on.
  * Nothing here is the author's.
@@ -115,8 +122,6 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
   const leaveTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(leaveTimer.current), []);
 
-  const { data: saved, mutate: mutateSaved } = useSWR(user ? `bookmark:${cardId}:${user.id}` : null, () => isBookmarked(cardId));
-
   // --- How the capsule's words fit -------------------------------------------------------------------------------
   const [room, setRoom] = useState(0);
   // English, or a narrow row (≤ 340 of content: a 360 browser, a 375 phone's 335), starts from the short words.
@@ -124,6 +129,7 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
   const [fit, setFit] = useState<Fit>(base);
   const containerRef = useRef<HTMLDivElement>(null);
   const firstBar = useRef<HTMLDivElement>(null);
+  const endsRef = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -155,8 +161,32 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
     const buttons = firstBar.current?.querySelectorAll<HTMLElement>('[role="group"] > button');
     if (!box || !buttons?.length) return;
     const need = [...buttons].reduce((w, b) => w + Math.max(b.offsetWidth, b.scrollWidth), 0);
-    if (need > box.clientWidth + 1) setFit(fit === 'full' ? 'short' : 'split');
+    // What ends the row takes its width and the 12 before it: the words shorten before it would ever wrap.
+    const ends = endsRef.current ? endsRef.current.offsetWidth + ENDS_GAP : 0;
+    if (need > Math.max(box.clientWidth - ends, 0) + 1) setFit(fit === 'full' ? 'short' : 'split');
   }, [fit, room, tapOn, replyState, fonts]);
+
+  // The faces over 共振 stand centred on its segment (round 29 §S11; the owner, 2026-11-22: 「这三个圈圈可不可以中点帮我
+  // 对齐这个共振按钮的中间呢」): the segment's centre, from the faces' line's start, set as `--tap-centre` there.
+  const facesLineRef = useRef<HTMLDivElement>(null);
+  const [tapCentre, setTapCentre] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const line = facesLineRef.current;
+    const segment = firstBar.current?.querySelector<HTMLElement>('[role="group"] > button');
+    if (!line || !segment) return;
+    const measure = () => {
+      const s = segment.getBoundingClientRect();
+      const centre = Math.round((s.left + s.width / 2 - line.getBoundingClientRect().left) * 10) / 10;
+      setTapCentre(Number.isFinite(centre) && s.width > 0 ? centre : null);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(segment);
+    ro.observe(line);
+    return () => ro.disconnect();
+    // (the faces' line comes with the viewer and their tap; the segment changes with the words' fit)
+  }, [fit, room, fonts, tapOn, loading, user, tap]);
 
   const onTap = useCallback(async () => {
     if (!user) return router.push('/signin');
@@ -226,13 +256,6 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
     setPicking(true);
   }, [user, mine, me, router, prefill]);
 
-  const onSave = useCallback(() => {
-    if (!user) return;
-    const saving = !saved;
-    void mutateSaved(async () => toggleBookmark(cardId, saving), { optimisticData: saving, revalidate: false }).catch(() => {});
-    if (saving) toast.show({ message: t('saved') });
-  }, [user, saved, mutateSaved, cardId, toast, t]);
-
   if (loading) return null;
   // The author of the card has nothing to answer it with (their own line is AuthorTaps).
   if (user && user.id === author.id) return null;
@@ -269,7 +292,8 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
     onClick: onReply,
   };
 
-  // The second line holds only what needs no account for someone signed out (§U1.4): their faces and 收藏 need one.
+  // The faces' line is the faces' alone, and a signed-in reader's (§U1.4): there with no face on it too, so the
+  // reader's own slides in without moving the capsule under it.
   const faces =
     user && tap ? (
       <TapFaces
@@ -282,47 +306,42 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
         onOwnRow={offersPassages && tapOn ? () => setPassagesOpen(true) : undefined}
       />
     ) : null;
-  const save = user ? (
-    <BareIconButton
-      icon="bookmark"
-      label={saved ? t('bookmark.remove') : t('bookmark.add')}
-      pressed={!!saved}
-      onClick={onSave}
-      iconSize={20}
-      tipAlign="end"
-      seed={67}
-    />
-  ) : null;
-  const secondLine = faces || save || trailing;
 
   return (
-    <div ref={containerRef} className={styles.container} data-end-row="">
+    <div ref={containerRef} className={styles.container} data-end-row="" data-faces-line={user ? '' : undefined}>
       <div className={styles.end} data-fit={fit}>
-        <div ref={firstBar} className={styles.bars}>
-          {fit === 'split' ? (
-            <>
-              <div className={styles.bar}>
-                <SegmentedActionBar segments={[tapSegment]} seed={71} />
-              </div>
-              <div className={styles.bar}>
-                <SegmentedActionBar segments={[noteSegmentSpec, replySegment]} seed={73} />
-              </div>
-            </>
-          ) : (
-            <div className={styles.bar}>
-              <SegmentedActionBar segments={[tapSegment, noteSegmentSpec, replySegment]} />
-            </div>
-          )}
-        </div>
-        {secondLine && (
-          <div className={styles.second}>
-            <span className={styles.faces}>{faces}</span>
-            <span className={styles.ends}>
-              {save}
-              {trailing && <span className={styles.trailing}>{trailing}</span>}
+        {user && (
+          <div ref={facesLineRef} className={styles.facesLine} data-end-faces-line="">
+            {/* Marked for the paper puppets (lib/mascots/reading/measure): no peek rises over the bar in front of them. */}
+            <span
+              className={styles.faces}
+              data-end-faces=""
+              data-tap-centred={tapCentre != null ? '' : undefined}
+              style={tapCentre != null ? ({ '--tap-centre': `${tapCentre}px` } as CSSProperties) : undefined}
+            >
+              {faces}
             </span>
           </div>
         )}
+        <div className={styles.row}>
+          <div ref={firstBar} className={styles.bars}>
+            {fit === 'split' ? (
+              <>
+                <div className={styles.bar}>
+                  <SegmentedActionBar segments={[tapSegment]} seed={71} />
+                </div>
+                <div className={styles.bar}>
+                  <SegmentedActionBar segments={[noteSegmentSpec, replySegment]} seed={73} />
+                </div>
+              </>
+            ) : (
+              <div className={styles.bar}>
+                <SegmentedActionBar segments={[tapSegment, noteSegmentSpec, replySegment]} />
+              </div>
+            )}
+          </div>
+          {trailing && <span ref={endsRef} className={styles.ends}>{trailing}</span>}
+        </div>
       </div>
 
       {user && (

@@ -6,21 +6,28 @@ import SwiftUI
 /// The end of someone else's story (round 26 §U1, the web's CardViewerActions; the owner: 「三種回饋的操作，第一種是按共振的
 /// 按鈕…第二種是用小紙條回應它，第三種是用自己的卡片跟它連接…那其他被動的就包括分享和收藏」):
 ///
-/// 1. **The capsule**, the three kinds of feedback, all tonal at rest — 共振 (the tap: a switch, solid with
-///    `wave-pair` once on, its words unchanged), 寄小紙條 (opens the note in place under row 2, its wash held while open, never
-///    a dialog), 用卡片回應 (the picker: write a card in answer or pick one; 修改 with a draft, 已回應 once published).
-///    The puppets measure this bar alone (`.readingMark(.respond)`): row 2 and the field never move their ground.
-/// 2. **Row 2**, directly under it, 44 tall, as wide as it: the faces of who resonated (the reader first, then their
-///    connections — no words, no number) at its start, under 共振, and 收藏 as a glyph at its end. Share is the
-///    bar's or the byline's already. The row is always there, so the reader's face slides in without moving the page.
-/// 3. **The note field** when 寄小紙條 opened it (``NoteField``) — or, while three notes wait for the author's answer,
-///    one muted line in its place.
+/// 1. **The faces' line** (round 30 §S1: it stood under the capsule until then), directly above the capsule's row, 44
+///    tall: the faces of who resonated (the reader first, then their connections — no words, no number) at its start,
+///    over 共振, and nothing at its end. For a signed-in reader it is always there, so their face slides in without
+///    moving the capsule; it starts ``EndRowAir/facesLineAbove`` under the tags' row (or the story).
+/// 2. **The capsule**, the three kinds of feedback, all tonal at rest — 共振 (the tap: a switch, solid with
+///    `wave-pair` once on, its words unchanged), 寄小紙條 (opens the note in place 12 under the capsule, its wash held
+///    while open, never a dialog), 用卡片回應 (the picker: write a card in answer or pick one; 修改 with a draft, 已回應
+///    once published). The puppets measure this bar alone (`.readingMark(.respond)`): the faces and the field never
+///    move their ground. Wide (the capsule at its own width: iPad, the Mac), 收藏 ends the capsule's row at the column's
+///    end, the byline's ⋯'s right edge (round 28 §S2; ``EndRowCapsuleRow``); a phone's 收藏 ends the tags' row above
+///    instead (§S3: ``EndRowTagsRow``, drawn by the page). Share and ⋯ stay the bar's or the byline's.
+/// 3. **The note field** when 寄小紙條 opened it (``NoteField``), spanning the story's column — or, while three notes
+///    wait for the author's answer, one muted line in its place.
 ///
 /// Tapping 共振 fills the segment and slides the face in; a failure flips it back with 「沒送出去，再試一次」. On a card
 /// that offers passages (round 27 §U1), a press that turned it on opens ``TapPassages`` 240 ms later — the tap never
 /// waits on it — unless the story on screen is its translation.
 struct CardEndRow: View {
     let detail: CardDetail
+    /// Whether the reader keeps this card: the page's, read here once, drawn here (wide) or in the page's tags row (a
+    /// phone).
+    let bookmark: CardBookmark
     /// The story's script: the passages are set in its type.
     let script: StoryScript
     /// The translation shows in place of the story: no passages are offered (they are the author's own words).
@@ -37,8 +44,9 @@ struct CardEndRow: View {
     @State private var lookup = ResonanceLookup()
     @State private var picking = false
     @State private var resonating = false
-    @State private var bookmark = BookmarkState()
     @State private var tap: TapState
+    /// The 共振 segment's centre across the capsule (and row 2), once laid out (round 29 §S11).
+    @State private var tapCentre: CGFloat?
     @State private var noteOpen = false
     /// The field opened by the reader takes the focus; opened by a draft with the page, it doesn't.
     @State private var noteFocusOnOpen = true
@@ -57,11 +65,13 @@ struct CardEndRow: View {
     @State private var tapSend: Task<Bool?, Never>?
     /// The screenshots' `-visualTap picked`: the dialog held open on its pick, nothing sent.
     @State private var passagesHeld = false
-    /// The story's column, which a wide window's note field spans up to 680.
+    /// The story's column, which the capsule's words are weighed in (the note field spans it at every width).
     @State private var column: CGFloat = 0
 
-    init(detail: CardDetail, script: StoryScript = .cjk, translated: Bool = false, reload: @escaping () -> Void = {}) {
+    init(detail: CardDetail, bookmark: CardBookmark, script: StoryScript = .cjk, translated: Bool = false,
+         reload: @escaping () -> Void = {}) {
         self.detail = detail
+        self.bookmark = bookmark
         self.script = script
         self.translated = translated
         self.reload = reload
@@ -77,18 +87,25 @@ struct CardEndRow: View {
     static let secondLineSeed: Double = 73
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 0) {
-                capsule
-                    .sensoryFeedback(.selection, trigger: tap.on)
-                rowTwo
-                if lookup.tapFailed {
-                    Text(L10n.Native.loadError).font(AppFonts.body(13)).foregroundStyle(Tokens.textMuted)
+        // The faces' line directly on the capsule's row (round 30 §S1: it stood under it), the note 12 under the capsule.
+        EndRowStack(facesLine: session.uid != nil) {
+            rowTwo
+        } capsuleRow: {
+            // A phone spreads the capsule across the column; wider, it keeps its own width and 收藏 ends its row.
+            switch EndRowPlacement.place(compact: compact) {
+            case .tagsRow:
+                measuredCapsule
+            case .capsuleRow:
+                EndRowCapsuleRow(room: EndRowPlacement.capsuleRoom(column: column)) {
+                    measuredCapsule
+                } end: {
+                    CardBookmarkButton(bookmark: bookmark, cardId: cardId)
                 }
             }
-            // A phone spreads it across the column; wider, the capsule keeps its own width and row 2 is as wide.
-            .frame(maxWidth: compact ? .infinity : nil, alignment: .leading)
-            .fixedSize(horizontal: !compact, vertical: false)
+        } below: {
+            if lookup.tapFailed {
+                Text(L10n.Native.loadError).font(AppFonts.body(13)).foregroundStyle(Tokens.textMuted)
+            }
             if noteOpen {
                 noteBlock
                     .padding(.top, NoteInPlace.gapAbove)
@@ -152,9 +169,8 @@ struct CardEndRow: View {
             guard let drafts = session.drafts else { return await lookup.look { nil } }
             await lookup.look { try await drafts.myResonance(to: cardId) }
         }
-        .task(id: cardId) {
-            bookmark.found((try? await session.bookmarks?.isBookmarked(cardId)) ?? false)
-        }
+        // 收藏's one read, wherever the page draws it.
+        .task(id: cardId) { await bookmark.load(cardId, from: session.bookmarks) }
         #if DEBUG
         .task { await visualState() }
         #endif
@@ -212,19 +228,26 @@ struct CardEndRow: View {
         return .answer
     }
 
-    /// The first set of words that fits on one line, else the capsule in two (共振 alone on the first).
+    /// The first set of words that fits on one line, else the capsule in two (共振 alone on the first). Wide, each set
+    /// keeps its own width and is weighed in the room 收藏 leaves (``EndRowPlacement/capsuleRoom(column:)``); the ≤ 340
+    /// rule still reads the column's width.
     private var capsule: some View {
         let sets = EndRowLabels.candidates(language: Strings.shared.language, reply: replyFace, column: column)
         let short = sets[sets.count - 1]
+        let natural = !compact
         return ViewThatFits(in: .horizontal) {
             ForEach(Array(sets.enumerated()), id: \.offset) { _, words in
                 SegmentedActionBar(segments(words)).readingMark(.respond)
+                    .fixedSize(horizontal: natural, vertical: false)
             }
-            // Still too wide (large text, a narrow window): two lines, 8 apart; the puppets stand on the first.
+            // Still too wide (large text, a narrow window): two lines, 8 apart; the puppets stand on the first, and
+            // so does 收藏 beside it.
             VStack(alignment: .leading, spacing: 8) {
                 SegmentedActionBar([tapSegment(short)]).readingMark(.respond)
+                    .alignmentGuide(.capsuleFirstLine) { $0[VerticalAlignment.center] }
                 SegmentedActionBar([noteSegment(short), replySegment(short)], seed: Self.secondLineSeed)
             }
+            .fixedSize(horizontal: natural, vertical: false)
         }
     }
 
@@ -234,8 +257,11 @@ struct CardEndRow: View {
 
     /// 共振 — a switch: tonal at rest, solid with `wave-pair` once on; its words stay (the owner, 2026-11-20: 已共振
     /// moved the wave beside it), VoiceOver hearing it selected.
+    /// The 共振 segment's id in the capsule.
+    static let tapSegmentId = "tap"
+
     private func tapSegment(_ words: EndRowLabels.Words) -> SegmentSpec {
-        SegmentSpec(id: "tap", icon: tap.on ? .wavePairOrWave : .wave, label: words.tap,
+        SegmentSpec(id: Self.tapSegmentId, icon: tap.on ? .wavePairOrWave : .wave, label: words.tap,
                     fill: tap.on ? Tokens.buttonFill : nil, ink: tap.on ? Tokens.cream : Tokens.buttonOnTonal,
                     pressInk: tap.on ? Tokens.towardInk.opacity(0.14) : Tokens.terracotta.opacity(0.14),
                     selected: tap.on, action: flipTap)
@@ -349,28 +375,32 @@ struct CardEndRow: View {
         }
     }
 
-    // MARK: Row 2, the faces and 收藏
-
-    private var rowTwo: some View {
-        EndRowTwo {
-            if !tap.shownFaces.isEmpty {
-                // With passages on offer, the reader's own face alone is a button too: their row picks one (§U3).
-                TapFaces(faces: tap.shownFaces, more: tap.showsMore, spoken: tap.spoken(viewer: session.uid),
-                         isButton: !tap.onlyMine(viewer: session.uid) || (tap.on && offersPassages)) { listOpen = true }
-            }
-        } end: {
-            // 收藏: pressed while saved (filled), flipped at once; saving says 「收藏到卡片盒了」.
-            RowTwoBookmark(saved: bookmark.active) {
-                guard let bookmarks = session.bookmarks else { return }
-                let saving = bookmark.flip()
-                if saving { session.toasts.show(L10n.Card.saved) }
-                Task {
-                    // The API path says what the reader wants (nothing read first); the older one flips the document.
-                    let result = bookmarks.usesAPI ? try? await bookmarks.set(cardId, saved: saving) : try? await bookmarks.toggle(cardId)
-                    bookmark.settled(saving: saving, result: result)
+    /// The capsule as the end row draws it, saying where its 共振 segment's centre is — from the capsule's start, which
+    /// is the faces' line's too: the faces stand on it (round 29 §S11), over the capsule since round 30.
+    private var measuredCapsule: some View {
+        capsule
+            .sensoryFeedback(.selection, trigger: tap.on)
+            .backgroundPreferenceValue(SegmentBounds.self) { bounds in
+                GeometryReader { proxy in
+                    let centre = bounds[Self.tapSegmentId].map { proxy[$0].midX }
+                    Color.clear
+                        .onAppear { tapCentre = centre }
+                        .onChange(of: centre) { tapCentre = centre }
                 }
             }
-            .sensoryFeedback(.selection, trigger: bookmark.active)
+    }
+
+    // MARK: The faces' line
+
+    private var rowTwo: some View {
+        EndRowTwo(facesCentre: tapCentre, faceCount: tap.shownFaces.count) {
+            if !tap.shownFaces.isEmpty {
+                // With passages on offer, the reader's own face alone is a button too: their row picks one (§U3).
+                TapFaces(faces: tap.shownFaces, spoken: tap.spoken(viewer: session.uid),
+                         isButton: !tap.onlyMine(viewer: session.uid) || (tap.on && offersPassages)) { listOpen = true }
+                    // Over the capsule now: a puppet peeking over a short bar near them never rises in front of them.
+                    .readingMark(.respondFaces)
+            }
         }
     }
 
@@ -391,7 +421,9 @@ struct CardEndRow: View {
                 NoteWaitLine()
             }
         }
-        .frame(maxWidth: NoteInPlace.width(compact: compact, column: column) ?? .infinity, alignment: .leading)
+        // The story's column at every width (round 30 §S3: no 680 cap): wide, its send ends on the column's edge, where
+        // 收藏's glyph box and the byline's ⋯ end.
+        .frame(maxWidth: .infinity, alignment: .leading)
         // 12 above the keyboard once it has risen under the field (the page scrolls; nothing floats), with nothing added
         // under it in the layout: the page's 40 is all there is to the next section.
         .noteScrollTarget(Self.noteBlock)
@@ -422,44 +454,234 @@ struct CardEndRow: View {
 
 // MARK: - Row 2
 
-/// Row 2's measures (§U1.2), the web's: its faces' line pads 6 (CardViewerActions.module.css `.faces`) and their button
-/// 6 more (TapFaces.module.css `.faces`), so a face stands 12 in from the row's start; 收藏 is a bare glyph of 20
-/// (BareIconButton, `iconSize` 20) centred in a 44 to the finger flush with the row's end, so its glyph ends 12 in.
+/// The faces' line's measures (§U1.2; "row 2" while it stood under the capsule), the web's: the faces stand centred on the
+/// 共振 segment (round 29 §S11, the owner 2026-11-22: 「這三個圈圈可不可以中點幫我對齊這個共振按鈕的中間呢」), never past the
+/// line's start; before the segment is measured (the first frame) the line pads 6 and their button 6 more, so a face
+/// stands 12 in. 收藏 (which ended this row until round 28, and now ends the capsule's or the tags' row:
+/// ``EndRowPlacement``) is a bare glyph of 20 (BareIconButton, `iconSize` 20) centred in a 44 to the finger, its glyph
+/// 12 in from the box's end.
 /// Android's `Row2FacesStart` / `Row2GlyphEnd` (EndRowTwoTest) stand the same; the Mac's 77 % scales them all alike.
 nonisolated enum RowTwo {
     /// The faces' line, padded at its start (the web's `.faces` `padding-inline-start`).
     static let facesLine: CGFloat = 6
     /// Where a face stands in from row 2's start: the line, then the button's own 6.
     static let faceInset: CGFloat = 12
-    /// 收藏's touch box: a finger's, flush with the row's end (never hung past it).
+    /// 收藏's touch box: a finger's.
     static let touch: CGFloat = 44
     /// 收藏's glyph, centred in its touch box.
     static let glyph: CGFloat = 20
-    /// How far in from the row's end 收藏's glyph box ends: (44 − 20) / 2.
+    /// How far in from its box's end 收藏's glyph box ends: (44 − 20) / 2.
     static var glyphEnd: CGFloat { (touch - glyph) / 2 }
-}
 
-/// Row 2 (§U1.2), laid out alone: as wide as the capsule above it (the caller gives the width), 44 tall, `faces` at its
-/// start on their line ``RowTwo/facesLine`` in, `end` (收藏) at its end. Always there, faces or none, so a face coming
-/// in never moves the page.
-struct EndRowTwo<Faces: View, End: View>: View {
-    @ViewBuilder let faces: Faces
-    @ViewBuilder let end: End
-
-    var body: some View {
-        HStack(spacing: 0) {
-            faces.padding(.leading, RowTwo.facesLine)
-            Spacer(minLength: 12)
-            end
-        }
-        .frame(height: TapFaces.rowHeight)
+    /// Where the faces' button starts in row 2 (§S11): the drawn faces' centre on `centre` (the 共振 segment's, from the
+    /// row's start) for one, two or three, the button stopping at the row's start; nil (not measured yet) the line's 6.
+    @MainActor static func facesLead(centre: CGFloat?, count: Int, size: CGFloat = FaceStack.size) -> CGFloat {
+        guard let centre else { return facesLine }
+        return max(0, centre - FaceStack.width(count: count, size: size) / 2 - TapFaces.buttonPad)
     }
 }
 
-/// 收藏 (§U1.2): a bare glyph at row 2's end, the web's BareIconButton — the muted text ink with the one pen (INK) at
-/// rest and once saved, drawn filled in that ink then (never the story's text ink, never a heavier pen) — centred in a 44
-/// square to the finger flush with the row's end, so its glyph ends ``RowTwo/glyphEnd`` in. Named by what a tap does
-/// (收藏 / 取消收藏, what the flows say to it).
+/// The story's end row in its order (round 30 §S1, §S2; the owner: 「把共振这个地方已经共振的这些使用者头像，把它移到共振按钮的
+/// 上方」): the faces' line (``EndRowTwo``) for a signed-in reader, directly on the capsule's row (0 between them), then
+/// what stands under the capsule — the note's block, 12 under it (``NoteInPlace/gapAbove``). The eye's order is the
+/// keyboard's and VoiceOver's: the faces, 共振 · 寄小紙條 · 用卡片回應, (wide) 收藏, the field.
+struct EndRowStack<Faces: View, CapsuleRow: View, Below: View>: View {
+    /// Signed in: the line is there, faces or none, so a face coming in never moves the capsule. Signed out it isn't.
+    let facesLine: Bool
+    @ViewBuilder let faces: Faces
+    @ViewBuilder let capsuleRow: CapsuleRow
+    @ViewBuilder let below: Below
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if facesLine { faces }
+            capsuleRow
+            below
+        }
+    }
+}
+
+/// The air around the end row (round 30 §S1): its faces' line starts 16 under what stands above it (the tags' row, or
+/// the story when there is none) where the capsule stood 40 under it — so with no face yet the capsule is 16 + 44 = 60
+/// under the tags; signed out (no faces' line) the capsule keeps its 40. The next section follows 40 under the capsule
+/// (or the open note).
+nonisolated enum EndRowAir {
+    static let facesLineAbove: CGFloat = 16
+    static let capsuleAbove: CGFloat = 40
+    static let below: CGFloat = 40
+
+    /// What stands between the row above and the end row.
+    static func above(facesLine: Bool) -> CGFloat { facesLine ? facesLineAbove : capsuleAbove }
+}
+
+/// Row 2 (§U1.2, round 28 §S4) — since round 30 the faces' line above the capsule — laid out alone: 44 tall, `faces`
+/// centred on `facesCentre` (the 共振 segment's centre from the line's start, round 29 §S11;
+/// ``RowTwo/facesLead(centre:count:size:)``), nothing at its end. Always there for a signed-in reader, faces or none, so
+/// a face coming in never moves the page.
+struct EndRowTwo<Faces: View>: View {
+    var facesCentre: CGFloat?
+    var faceCount: Int
+    @ViewBuilder let faces: Faces
+
+    var body: some View {
+        // The line is a clear strip of its own height with the faces laid on it: with no face yet the builder is empty,
+        // an empty view lays out as nothing and a frame on nothing is nothing — the line would fold away and the
+        // capsule under it drop 44 when the reader's own face arrived (round 30: the line stands above the capsule).
+        Color.clear
+            .frame(maxWidth: .infinity, minHeight: TapFaces.rowHeight, maxHeight: TapFaces.rowHeight)
+            .overlay(alignment: .leading) { faces.padding(.leading, RowTwo.facesLead(centre: facesCentre, count: faceCount)) }
+    }
+}
+
+// MARK: - Where 收藏 stands (round 28)
+
+/// Where 收藏 stands at the end of someone else's story (round 28; the owner, 2026-11-21: 「這收藏按鈕不應該放在這裡」),
+/// the web's CardViewerActions `.row` / `.ends` and the page's `.tagsRow`, and Android's twins:
+///
+/// - **wide** (the capsule at its own width, `!compact`: iPad, the Mac at 77 %): at the end of the capsule's row, at
+///   the content column's end, centred on the capsule (on its first line when it takes two) — ``EndRowCapsuleRow``;
+/// - **a phone** (compact, the capsule spans the column): at the end of the tags' row above it, on the tags' first
+///   line, the tags wrapping in the column left to them — ``EndRowTagsRow``.
+///
+/// Its 44 box hangs ``hang`` past the column's end, as the byline's share and ⋯ do (CardScreen's `head`: their pads
+/// in the margin, their glyphs' boxes ending on the column's edge), so 收藏's glyph and the byline's ⋯ share one right
+/// edge. At least ``gap`` stands between the box and what is beside it.
+nonisolated enum EndRowPlacement {
+    enum Place: Equatable { case capsuleRow, tagsRow }
+
+    /// Between 收藏's box and the capsule (or the tags) beside it, at least: the web's `.row` / `.tagsRow` gap.
+    static let gap: CGFloat = 12
+    /// How far 收藏's box reaches past the column's end: its pad, as the byline's glyphs' (`padding(.trailing, -12)`).
+    static let hang: CGFloat = RowTwo.glyphEnd
+    /// What 收藏 takes of the column: its box less what hangs in the margin.
+    static var boxInColumn: CGFloat { RowTwo.touch - hang }
+
+    static func place(compact: Bool) -> Place { compact ? .tagsRow : .capsuleRow }
+
+    /// The room the capsule's words are weighed in, wide: the column less 收藏 and the gap before it (nil before the
+    /// column is measured: the full words first, as the web's room 0).
+    static func capsuleRoom(column: CGFloat) -> CGFloat? {
+        column > 0 ? max(0, column - gap - boxInColumn) : nil
+    }
+
+    /// The tags' own column on a phone: the content's width less 收藏 and the gap before it.
+    static func tagsColumn(content: CGFloat) -> CGFloat { max(0, content - gap - boxInColumn) }
+
+    /// How far 收藏's box reaches above and below the tags' first line (negative: the web's
+    /// `margin-block: (22 − box) / 2`), so a row of pills is no taller with it than without.
+    static func tagsLineBleed(line: CGFloat) -> CGFloat { min(0, (line - RowTwo.touch) / 2) }
+}
+
+extension VerticalAlignment {
+    private enum CapsuleFirstLine: AlignmentID {
+        static func defaultValue(in d: ViewDimensions) -> CGFloat { d[VerticalAlignment.center] }
+    }
+
+    /// The capsule's first line: its centre, or its first bar's when it takes two (where 收藏 stands beside it).
+    static let capsuleFirstLine = VerticalAlignment(CapsuleFirstLine.self)
+}
+
+/// The capsule's row, wide (§S2): the capsule at its own width, weighed in `room`, then `end` (收藏) at the column's
+/// end — its box hanging ``EndRowPlacement/hang`` past it — centred on the capsule's first line.
+struct EndRowCapsuleRow<Capsule: View, End: View>: View {
+    let room: CGFloat?
+    @ViewBuilder let capsule: Capsule
+    @ViewBuilder let end: End
+
+    var body: some View {
+        HStack(alignment: .capsuleFirstLine, spacing: EndRowPlacement.gap) {
+            capsule.frame(maxWidth: room ?? .infinity, alignment: .leading)
+            end.padding(.trailing, -EndRowPlacement.hang)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The tags' row on a phone (§S3): the tags wrapping in their own column, `end` (收藏) at the row's end — its box
+/// hanging ``EndRowPlacement/hang`` past it — centred on the tags' first line and never making the row taller than
+/// the tags; with no tags, 收藏 alone at the row's end (the row is its box's height).
+struct EndRowTagsRow<Tags: View, End: View>: View {
+    let hasTags: Bool
+    @ViewBuilder let tags: Tags
+    @ViewBuilder let end: End
+    /// The tags' first line, as drawn (a pill: about 22).
+    @State private var line: CGFloat = 22
+
+    var body: some View {
+        HStack(alignment: .top, spacing: EndRowPlacement.gap) {
+            if hasTags {
+                tags
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .onPreferenceChange(EndRowTagLine.self) { if $0 > 0 { line = $0 } }
+            } else {
+                Spacer(minLength: 0)
+            }
+            end
+                .padding(.vertical, hasTags ? EndRowPlacement.tagsLineBleed(line: line) : 0)
+                .padding(.trailing, -EndRowPlacement.hang)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The height of one tag, which the tags' row centres 收藏 on (any tag: they are one line box tall).
+struct EndRowTagLine: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+extension View {
+    /// Says this tag's height to the tags' row around it (``EndRowTagsRow``).
+    func endRowTagLine() -> some View {
+        background { GeometryReader { Color.clear.preference(key: EndRowTagLine.self, value: $0.size.height) } }
+    }
+}
+
+/// Whether the reader keeps this card, for the page: read once (``CardEndRow``'s task), drawn wherever the page stands
+/// 收藏 — the capsule's row or a phone's tags row — so it moves between them without asking again.
+@MainActor @Observable final class CardBookmark {
+    private(set) var state = BookmarkState()
+
+    var saved: Bool { state.active }
+
+    func load(_ cardId: String, from bookmarks: BookmarkService?) async {
+        state.found((try? await bookmarks?.isBookmarked(cardId)) ?? false)
+    }
+
+    /// The tap: flipped at once, then set to what the write returns. Returns whether it is saving (nil: signed out,
+    /// nothing done).
+    @discardableResult
+    func press(_ cardId: String, with bookmarks: BookmarkService?) -> Bool? {
+        guard let bookmarks else { return nil }
+        let saving = state.flip()
+        Task {
+            // The API path says what the reader wants (nothing read first); the older one flips the document.
+            let result = bookmarks.usesAPI ? try? await bookmarks.set(cardId, saved: saving) : try? await bookmarks.toggle(cardId)
+            state.settled(saving: saving, result: result)
+        }
+        return saving
+    }
+}
+
+/// 收藏 as the page draws it: pressed while saved (filled), flipped at once; saving says 「收藏到卡片盒了」, with the
+/// selection haptic.
+struct CardBookmarkButton: View {
+    let bookmark: CardBookmark
+    let cardId: String
+    @Environment(SessionStore.self) private var session
+
+    var body: some View {
+        RowTwoBookmark(saved: bookmark.saved) {
+            if bookmark.press(cardId, with: session.bookmarks) == true { session.toasts.show(L10n.Card.saved) }
+        }
+        .sensoryFeedback(.selection, trigger: bookmark.saved)
+    }
+}
+
+/// 收藏 (§U1.2): a bare glyph, the web's BareIconButton — the muted text ink with the one pen (INK) at rest and once
+/// saved, drawn filled in that ink then (never the story's text ink, never a heavier pen) — centred in a 44 square to
+/// the finger, so its glyph ends ``RowTwo/glyphEnd`` in from the box's end. Named by what a tap does (收藏 / 取消收藏,
+/// what the flows say to it).
 struct RowTwoBookmark: View {
     let saved: Bool
     let action: () -> Void

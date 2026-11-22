@@ -100,232 +100,234 @@ class ResonanceColors(
     val SegmentIdleInk: Color = at(29)
     /** --link-wave */
     val LinkWave: Color = at(30)
+    /** --passage-wash */
+    val PassageWash: Color = at(31)
     /** --story-code-tint */
-    val StoryCodeTint: Color = at(31)
+    val StoryCodeTint: Color = at(32)
     /** --footer-bg */
-    val FooterBg: Color = at(32)
+    val FooterBg: Color = at(33)
     /** --footer-ink */
-    val FooterInk: Color = at(33)
+    val FooterInk: Color = at(34)
     /** --cta-band */
-    val CtaBand: Color = at(34)
+    val CtaBand: Color = at(35)
     /** --cta-ink */
-    val CtaInk: Color = at(35)
+    val CtaInk: Color = at(36)
     /** --cta-ghost */
-    val CtaGhost: Color = at(36)
+    val CtaGhost: Color = at(37)
     /** --cta-verb-ink */
-    val CtaVerbInk: Color = at(37)
+    val CtaVerbInk: Color = at(38)
     /** --skeleton-base */
-    val SkeletonBase: Color = at(38)
+    val SkeletonBase: Color = at(39)
     /** --skeleton-glow */
-    val SkeletonGlow: Color = at(39)
+    val SkeletonGlow: Color = at(40)
     /** --avatar-wait */
-    val AvatarWait: Color = at(40)
+    val AvatarWait: Color = at(41)
     /** --apple-fill */
-    val AppleFill: Color = at(41)
+    val AppleFill: Color = at(42)
     /** --apple-label */
-    val AppleLabel: Color = at(42)
+    val AppleLabel: Color = at(43)
     /** --color-danger */
-    val Danger: Color = at(43)
+    val Danger: Color = at(44)
     /** --danger-fill */
-    val DangerFill: Color = at(44)
+    val DangerFill: Color = at(45)
     /** --button-danger-tonal */
-    val ButtonDangerTonal: Color = at(45)
+    val ButtonDangerTonal: Color = at(46)
     /** --button-on-danger-tonal */
-    val ButtonOnDangerTonal: Color = at(46)
+    val ButtonOnDangerTonal: Color = at(47)
     /** --color-lavender */
-    val Lavender: Color = at(47)
+    val Lavender: Color = at(48)
     /** --color-sage */
-    val Sage: Color = at(48)
+    val Sage: Color = at(49)
     /** --color-yellow */
-    val Yellow: Color = at(49)
+    val Yellow: Color = at(50)
     /** --color-sky */
-    val Sky: Color = at(50)
+    val Sky: Color = at(51)
     /** --avatar-stroke */
-    val AvatarStroke: Color = at(51)
+    val AvatarStroke: Color = at(52)
     /** --tag-stroke */
-    val TagStroke: Color = at(52)
+    val TagStroke: Color = at(53)
     /** --scrim — what a modal lays over the screen */
-    val Scrim: Color = at(53)
+    val Scrim: Color = at(54)
     /** --shadow-ink — a real drop shadow */
-    val ShadowInk: Color = at(54)
+    val ShadowInk: Color = at(55)
     /** --grain-ink — the grain's specks: dark on cream, light on night paper */
-    val GrainInk: Color = at(55)
+    val GrainInk: Color = at(56)
     /** --toward-ink — "further from the paper": black in light, white in dark (a press or hover wash, at a low alpha) */
-    val TowardInk: Color = at(56)
+    val TowardInk: Color = at(57)
     /** --footer-ink-soft */
-    val FooterInkSoft: Color = at(57)
+    val FooterInkSoft: Color = at(58)
     /** --picture-backing — behind a story picture: none in light, a light paper in dark (a transparent logo's black words still show) */
-    val PictureBacking: Color = at(58)
+    val PictureBacking: Color = at(59)
     /** --soft-pen */
-    val SoftPen: Color = at(59)
+    val SoftPen: Color = at(60)
     /** --color-ok */
-    val Ok: Color = at(60)
+    val Ok: Color = at(61)
     /** --verified-mark */
-    val VerifiedMark: Color = at(61)
+    val VerifiedMark: Color = at(62)
     /** --photo-ink */
-    val PhotoInk: Color = at(62)
+    val PhotoInk: Color = at(63)
     /** --photo-shade */
-    val PhotoShade: Color = at(63)
+    val PhotoShade: Color = at(64)
     /** --viewer-ground */
-    val ViewerGround: Color = at(64)
+    val ViewerGround: Color = at(65)
     /** --reaction-outline */
-    val ReactionOutline: Color = at(65)
+    val ReactionOutline: Color = at(66)
     /** --card-fill-0 */
-    val CardFill0: Color = at(66)
+    val CardFill0: Color = at(67)
     /** --card-fill-1 */
-    val CardFill1: Color = at(67)
+    val CardFill1: Color = at(68)
     /** --card-fill-2 */
-    val CardFill2: Color = at(68)
+    val CardFill2: Color = at(69)
     /** --card-fill-3 */
-    val CardFill3: Color = at(69)
+    val CardFill3: Color = at(70)
     /** --card-fill-4 */
-    val CardFill4: Color = at(70)
+    val CardFill4: Color = at(71)
     /** --card-fill-5 */
-    val CardFill5: Color = at(71)
+    val CardFill5: Color = at(72)
     /** --card-border-0 */
-    val CardBorder0: Color = at(72)
+    val CardBorder0: Color = at(73)
     /** --card-border-1 */
-    val CardBorder1: Color = at(73)
+    val CardBorder1: Color = at(74)
     /** --card-border-2 */
-    val CardBorder2: Color = at(74)
+    val CardBorder2: Color = at(75)
     /** --card-border-3 */
-    val CardBorder3: Color = at(75)
+    val CardBorder3: Color = at(76)
     /** --card-border-4 */
-    val CardBorder4: Color = at(76)
+    val CardBorder4: Color = at(77)
     /** --card-border-5 */
-    val CardBorder5: Color = at(77)
+    val CardBorder5: Color = at(78)
     /** --card-border-deep-0 */
-    val CardBorderDeep0: Color = at(78)
+    val CardBorderDeep0: Color = at(79)
     /** --card-border-deep-1 */
-    val CardBorderDeep1: Color = at(79)
+    val CardBorderDeep1: Color = at(80)
     /** --card-border-deep-2 */
-    val CardBorderDeep2: Color = at(80)
+    val CardBorderDeep2: Color = at(81)
     /** --card-border-deep-3 */
-    val CardBorderDeep3: Color = at(81)
+    val CardBorderDeep3: Color = at(82)
     /** --card-border-deep-4 */
-    val CardBorderDeep4: Color = at(82)
+    val CardBorderDeep4: Color = at(83)
     /** --card-border-deep-5 */
-    val CardBorderDeep5: Color = at(83)
+    val CardBorderDeep5: Color = at(84)
     /** --card-interior-0 */
-    val CardInterior0: Color = at(84)
+    val CardInterior0: Color = at(85)
     /** --card-interior-1 */
-    val CardInterior1: Color = at(85)
+    val CardInterior1: Color = at(86)
     /** --card-interior-2 */
-    val CardInterior2: Color = at(86)
+    val CardInterior2: Color = at(87)
     /** --card-interior-3 */
-    val CardInterior3: Color = at(87)
+    val CardInterior3: Color = at(88)
     /** --card-interior-4 */
-    val CardInterior4: Color = at(88)
+    val CardInterior4: Color = at(89)
     /** --card-interior-5 */
-    val CardInterior5: Color = at(89)
+    val CardInterior5: Color = at(90)
     /** --card-separator-0 */
-    val CardSeparator0: Color = at(90)
+    val CardSeparator0: Color = at(91)
     /** --card-separator-1 */
-    val CardSeparator1: Color = at(91)
+    val CardSeparator1: Color = at(92)
     /** --card-separator-2 */
-    val CardSeparator2: Color = at(92)
+    val CardSeparator2: Color = at(93)
     /** --card-separator-3 */
-    val CardSeparator3: Color = at(93)
+    val CardSeparator3: Color = at(94)
     /** --card-separator-4 */
-    val CardSeparator4: Color = at(94)
+    val CardSeparator4: Color = at(95)
     /** --card-separator-5 */
-    val CardSeparator5: Color = at(95)
+    val CardSeparator5: Color = at(96)
     /** --card-note-ink-0 */
-    val CardNoteInk0: Color = at(96)
+    val CardNoteInk0: Color = at(97)
     /** --card-note-ink-1 */
-    val CardNoteInk1: Color = at(97)
+    val CardNoteInk1: Color = at(98)
     /** --card-note-ink-2 */
-    val CardNoteInk2: Color = at(98)
+    val CardNoteInk2: Color = at(99)
     /** --card-note-ink-3 */
-    val CardNoteInk3: Color = at(99)
+    val CardNoteInk3: Color = at(100)
     /** --card-note-ink-4 */
-    val CardNoteInk4: Color = at(100)
+    val CardNoteInk4: Color = at(101)
     /** --card-note-ink-5 */
-    val CardNoteInk5: Color = at(101)
+    val CardNoteInk5: Color = at(102)
     /** --card-stripe-0 */
-    val CardStripe0: Color = at(102)
+    val CardStripe0: Color = at(103)
     /** --card-stripe-1 */
-    val CardStripe1: Color = at(103)
+    val CardStripe1: Color = at(104)
     /** --card-stripe-2 */
-    val CardStripe2: Color = at(104)
+    val CardStripe2: Color = at(105)
     /** --card-stripe-3 */
-    val CardStripe3: Color = at(105)
+    val CardStripe3: Color = at(106)
     /** --card-stripe-4 */
-    val CardStripe4: Color = at(106)
+    val CardStripe4: Color = at(107)
     /** --card-stripe-5 */
-    val CardStripe5: Color = at(107)
+    val CardStripe5: Color = at(108)
     /** --card-accent-0 */
-    val CardAccent0: Color = at(108)
+    val CardAccent0: Color = at(109)
     /** --card-accent-1 */
-    val CardAccent1: Color = at(109)
+    val CardAccent1: Color = at(110)
     /** --card-accent-2 */
-    val CardAccent2: Color = at(110)
+    val CardAccent2: Color = at(111)
     /** --card-accent-3 */
-    val CardAccent3: Color = at(111)
+    val CardAccent3: Color = at(112)
     /** --card-accent-4 */
-    val CardAccent4: Color = at(112)
+    val CardAccent4: Color = at(113)
     /** --card-accent-5 */
-    val CardAccent5: Color = at(113)
+    val CardAccent5: Color = at(114)
     /** --card-hover-0 */
-    val CardHover0: Color = at(114)
+    val CardHover0: Color = at(115)
     /** --card-hover-1 */
-    val CardHover1: Color = at(115)
+    val CardHover1: Color = at(116)
     /** --card-hover-2 */
-    val CardHover2: Color = at(116)
+    val CardHover2: Color = at(117)
     /** --card-hover-3 */
-    val CardHover3: Color = at(117)
+    val CardHover3: Color = at(118)
     /** --card-hover-4 */
-    val CardHover4: Color = at(118)
+    val CardHover4: Color = at(119)
     /** --card-hover-5 */
-    val CardHover5: Color = at(119)
+    val CardHover5: Color = at(120)
     /** --card-skeleton-0 */
-    val CardSkeleton0: Color = at(120)
+    val CardSkeleton0: Color = at(121)
     /** --card-skeleton-1 */
-    val CardSkeleton1: Color = at(121)
+    val CardSkeleton1: Color = at(122)
     /** --card-skeleton-2 */
-    val CardSkeleton2: Color = at(122)
+    val CardSkeleton2: Color = at(123)
     /** --card-skeleton-3 */
-    val CardSkeleton3: Color = at(123)
+    val CardSkeleton3: Color = at(124)
     /** --card-skeleton-4 */
-    val CardSkeleton4: Color = at(124)
+    val CardSkeleton4: Color = at(125)
     /** --card-skeleton-5 */
-    val CardSkeleton5: Color = at(125)
+    val CardSkeleton5: Color = at(126)
     /** --card-tag-0 */
-    val CardTag0: Color = at(126)
+    val CardTag0: Color = at(127)
     /** --card-tag-1 */
-    val CardTag1: Color = at(127)
+    val CardTag1: Color = at(128)
     /** --card-tag-2 */
-    val CardTag2: Color = at(128)
+    val CardTag2: Color = at(129)
     /** --card-tag-3 */
-    val CardTag3: Color = at(129)
+    val CardTag3: Color = at(130)
     /** --card-tag-4 */
-    val CardTag4: Color = at(130)
+    val CardTag4: Color = at(131)
     /** --card-tag-5 */
-    val CardTag5: Color = at(131)
+    val CardTag5: Color = at(132)
     /** --card-pill-0 */
-    val CardPill0: Color = at(132)
+    val CardPill0: Color = at(133)
     /** --card-pill-1 */
-    val CardPill1: Color = at(133)
+    val CardPill1: Color = at(134)
     /** --card-pill-2 */
-    val CardPill2: Color = at(134)
+    val CardPill2: Color = at(135)
     /** --card-pill-3 */
-    val CardPill3: Color = at(135)
+    val CardPill3: Color = at(136)
     /** --card-pill-4 */
-    val CardPill4: Color = at(136)
+    val CardPill4: Color = at(137)
     /** --card-pill-5 */
-    val CardPill5: Color = at(137)
+    val CardPill5: Color = at(138)
     /** --card-pill-ink-0 */
-    val CardPillInk0: Color = at(138)
+    val CardPillInk0: Color = at(139)
     /** --card-pill-ink-1 */
-    val CardPillInk1: Color = at(139)
+    val CardPillInk1: Color = at(140)
     /** --card-pill-ink-2 */
-    val CardPillInk2: Color = at(140)
+    val CardPillInk2: Color = at(141)
     /** --card-pill-ink-3 */
-    val CardPillInk3: Color = at(141)
+    val CardPillInk3: Color = at(142)
     /** --card-pill-ink-4 */
-    val CardPillInk4: Color = at(142)
+    val CardPillInk4: Color = at(143)
     /** --card-pill-ink-5 */
-    val CardPillInk5: Color = at(143)
+    val CardPillInk5: Color = at(144)
 
     /** --card-fill-0…5, in CardPalette.HUES order. */
     val CardFills: List<Color> = listOf(CardFill0, CardFill1, CardFill2, CardFill3, CardFill4, CardFill5)
@@ -418,6 +420,7 @@ class ResonanceColors(
             "menu-frame",
             "segment-idle-ink",
             "link-wave",
+            "passage-wash",
             "story-code-tint",
             "footer-bg",
             "footer-ink",
@@ -615,6 +618,7 @@ internal object PaletteTables {
         0.62, 0.14, 45.0, 1.0, // menu-frame
         0.468, 0.036, 70.0, 1.0, // segment-idle-ink
         0.65, 0.084, 45.0, 1.0, // link-wave
+        0.9215, 0.04209, 66.0, 1.0, // passage-wash
         0.26, 0.03, 60.0, 0.06, // story-code-tint
         0.26, 0.03, 60.0, 1.0, // footer-bg
         0.965, 0.0105, 75.0, 1.0, // footer-ink
@@ -763,6 +767,7 @@ internal object PaletteTables {
         0.52, 0.0675, 47.0, 1.0, // menu-frame
         0.7, 0.029, 70.6, 1.0, // segment-idle-ink
         0.65, 0.081, 47.0, 1.0, // link-wave
+        0.25875, 0.030435, 58.0, 1.0, // passage-wash
         0.88, 0.02, 76.0, 0.08, // story-code-tint
         0.15, 0.006337, 62.0, 1.0, // footer-bg
         0.88, 0.02, 76.0, 1.0, // footer-ink
@@ -911,6 +916,7 @@ internal object PaletteTables {
         0.55, 0.13, 140.0, 1.0, // menu-frame
         0.45, 0.02205, 145.0, 1.0, // segment-idle-ink
         0.58, 0.078, 140.0, 1.0, // link-wave
+        0.9125, 0.03568, 140.0, 1.0, // passage-wash
         0.26, 0.0175, 150.0, 0.06, // story-code-tint
         0.26, 0.0175, 150.0, 1.0, // footer-bg
         0.965, 0.00715, 140.0, 1.0, // footer-ink
@@ -1059,6 +1065,7 @@ internal object PaletteTables {
         0.52, 0.06, 145.0, 1.0, // menu-frame
         0.7, 0.0203, 148.6, 1.0, // segment-idle-ink
         0.67, 0.072, 145.0, 1.0, // link-wave
+        0.25875, 0.026441, 143.5, 1.0, // passage-wash
         0.88, 0.014, 154.0, 0.08, // story-code-tint
         0.15, 0.004875, 140.0, 1.0, // footer-bg
         0.88, 0.014, 154.0, 1.0, // footer-ink
@@ -1207,6 +1214,7 @@ internal object PaletteTables {
         0.58, 0.14, 290.0, 1.0, // menu-frame
         0.45, 0.02205, 295.0, 1.0, // segment-idle-ink
         0.61, 0.084, 290.0, 1.0, // link-wave
+        0.91775, 0.033128, 297.75, 1.0, // passage-wash
         0.26, 0.0175, 295.0, 0.06, // story-code-tint
         0.26, 0.0175, 295.0, 1.0, // footer-bg
         0.965, 0.0066, 300.0, 1.0, // footer-ink
@@ -1355,6 +1363,7 @@ internal object PaletteTables {
         0.52, 0.0575, 292.0, 1.0, // menu-frame
         0.7, 0.017177, 306.6, 1.0, // segment-idle-ink
         0.67, 0.069, 292.0, 1.0, // link-wave
+        0.25875, 0.024897, 297.375, 1.0, // passage-wash
         0.88, 0.011846, 312.0, 0.08, // story-code-tint
         0.15, 0.004125, 298.0, 1.0, // footer-bg
         0.88, 0.011846, 312.0, 1.0, // footer-ink
@@ -1503,6 +1512,7 @@ internal object PaletteTables {
         0.64, 0.13, 78.0, 1.0, // menu-frame
         0.468, 0.02835, 88.0, 1.0, // segment-idle-ink
         0.67, 0.078, 78.0, 1.0, // link-wave
+        0.9305, 0.04688, 92.75, 1.0, // passage-wash
         0.26, 0.021, 80.0, 0.06, // story-code-tint
         0.26, 0.021, 80.0, 1.0, // footer-bg
         0.965, 0.011, 95.0, 1.0, // footer-ink
@@ -1651,6 +1661,7 @@ internal object PaletteTables {
         0.52, 0.0625, 80.0, 1.0, // menu-frame
         0.7, 0.023423, 96.6, 1.0, // segment-idle-ink
         0.73, 0.075, 80.0, 1.0, // link-wave
+        0.25875, 0.027984, 86.625, 1.0, // passage-wash
         0.88, 0.016154, 102.0, 0.08, // story-code-tint
         0.15, 0.005625, 88.0, 1.0, // footer-bg
         0.88, 0.016154, 102.0, 1.0, // footer-ink

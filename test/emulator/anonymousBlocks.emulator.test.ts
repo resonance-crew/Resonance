@@ -327,6 +327,41 @@ describe('the passage picked after a tap on an anonymous card', () => {
     }
   });
 
+  // Round 29 §P2: the author's picked sentences and their list of one sentence's people leave her out across a block,
+  // as his faces and his list do; everything she and carol are answered stays as with no block.
+  it("leaves her out of the author's picked sentences alone across a block — her side and carol's the same", async () => {
+    const [, second] = passageItems();
+    const answer = await sameInEveryState(async () => {
+      await setTap(db, 'alice', 'masked', true);
+      await setTapPassage(db, 'alice', 'masked', second.id);
+      const seen = {
+        detail: (await getCardDetail(db, 'alice', 'masked', ALL)).tap,
+        herList: await listTaps(db, 'alice', 'masked', null, second.id),
+        herWholeList: await listTaps(db, 'alice', 'masked'),
+        carols: (await getCardDetail(db, 'carol', 'masked')).tap,
+        carolsList: await listTaps(db, 'carol', 'masked', null, second.id),
+      };
+      await setTap(db, 'alice', 'masked', false);
+      return seen;
+    });
+    expect(answer.detail).not.toHaveProperty('picked');
+    expect(answer.carols).not.toHaveProperty('picked');
+    expect(answer.herList).toEqual(answer.herWholeList);
+    expect(answer.carolsList.people.map((p) => p.author.handle)).toEqual(['alice']);
+    for (const state of STATES) {
+      await state.apply();
+      await setTap(db, 'alice', 'masked', true);
+      await setTapPassage(db, 'alice', 'masked', second.id);
+      const blocked = state.name !== 'no block';
+      const picked = (await getCardDetail(db, 'bob', 'masked')).tap!.picked;
+      expect(picked?.map((p) => [p.id, p.people.map((a) => a.handle)]), state.name).toEqual(blocked ? undefined : [[second.id, ['alice']]]);
+      const people = (await listTaps(db, 'bob', 'masked', null, second.id)).people.map((p) => p.author.handle);
+      expect(people, state.name).toEqual(blocked ? [] : ['alice']);
+      await setTap(db, 'alice', 'masked', false);
+      await unblock();
+    }
+  });
+
   it('is not_found on a named card across a block either way', async () => {
     const [first] = passageItems();
     await setTap(db, 'alice', 'namedLong', true);

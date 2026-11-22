@@ -56,6 +56,11 @@ export interface ReadingScene {
   paragraphs?: readonly Rect[];
   /** Something standing in the right margin beside the story (the contents rail): no places there. */
   rail?: Rect | null;
+  /**
+   * The left margin taken (round 29 §S10: the author's picked sentences' faces stand there) — the window's left edge
+   * to the column's left, the column's height: no places on the left. `rail` stays the contents rail alone.
+   */
+  leftTaken?: Rect | null;
   /** The response bar at the story's end, and the foot of what is above it (its tags, the story). */
   respond?: Rect | null;
   respondCeiling?: number | null;
@@ -247,7 +252,7 @@ export function readingLedges(scene: ReadingScene, preset: ReadingPreset): Readi
   if (col && paras.length) {
     const room = unit * preset.marginRoom;
     const sides: ('left' | 'right')[] = [];
-    if (col.x >= room) sides.push('left');
+    if (col.x >= room && !scene.leftTaken) sides.push('left');
     if (scene.width - right(col) >= room && !scene.rail) sides.push('right');
     // a paragraph's foot every few puppets' heights down the story, sides by turns
     let last = -Infinity;

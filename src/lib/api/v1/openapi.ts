@@ -416,10 +416,19 @@ export function buildOpenApi(): Json {
           'the excerpt of the latest note they left on a named card (`note`; open your conversation with them) — never across ' +
           'a block, and never a note on an anonymous card. A reader gets the faces of `CardDetail.tap` without its cap: ' +
           'themselves first, then the people they are connected with, in one page, with no notes. `404` wherever ' +
-          '`CardDetail.tap` is null. `429` is documented for a budget to come; nothing answers it yet.',
+          '`CardDetail.tap` is null. `429` is documented for a budget to come; nothing answers it yet. With `passage` ' +
+          "(round 29), the author's pages hold only the people who picked that sentence (`CardDetail.tap.picked`), the " +
+          'same rows, order and page size; a reader is answered the same with it or without.',
         parameters: [
           cardId,
           { name: 'pageToken', in: 'query', required: false, description: "A page's `nextPageToken`", schema: { type: 'string', maxLength: 512 } },
+          {
+            name: 'passage',
+            in: 'query',
+            required: false,
+            description: "For the card's author: only the people who picked this sentence (a `TapPicked.id`). Ignored for a reader.",
+            schema: { type: 'string', pattern: '^[0-9a-f]{8}$' },
+          },
         ],
       }, [400, 401, 404, 429]),
       '/cards/{key}/related': get('getRelatedCards', 'A few recent cards sharing its tags', 'CardList', { parameters: [cardId] }),
