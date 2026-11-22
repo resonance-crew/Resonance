@@ -12,28 +12,20 @@
  * its baseline, both ignore lists (size and mtime), the screen's allowance and this file's and
  * diff.ts's own source. `compare`, the verdict after a capture, a review and an `accept` reuse what
  * still matches and judge only the rest again (an accept: just the captures it copied).
+ *
+ * What is left to judge is judged on worker threads (judge.ts, through compareWorker.ts; `VISUAL_COMPARE_WORKERS`,
+ * default the cores less two, at most 4; 0 judges on this thread), each capture decoded by libvips.
  */
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { PNG } from 'pngjs';
-import { compareImages, type Area } from './diff';
-import { BASELINE_DIR, ignorePath, listPngs, readJson, writeJson, type Rect } from './util';
+import { existsSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { judgeCapture, type Job, type Result } from './judge';
+import { compareWorkers, inWorkers } from './pool';
+import { BASELINE_DIR, ignorePath, listPngs, readJson, writeJson } from './util';
 import { SCREENS, type Platform } from './screens';
 import { inSet, type VariantSet } from './variants';
 
-export type Status = 'unchanged' | 'changed' | 'new' | 'missing';
-export type Result = {
-  /** `<platform>/<device>/<screen>@<theme>-<locale>.png` */
-  key: string;
-  status: Status;
-  /** Share of pixels apart beyond a shift of a couple of pixels, or null (new, missing). */
-  ratio: number | null;
-  /** The areas that changed, largest first (changed only; none when the sizes differ). */
-  areas?: Area[];
-  /** Set when the two images differ in size. */
-  sizes?: { baseline: [number, number]; current: [number, number] };
-};
+export type { Result, Status } from './judge';
 
 export type RunInfo = {
   id: string;
@@ -62,7 +54,7 @@ export type RunInfo = {
 let codeStamp: string | null = null;
 function judgedBy(): string {
   codeStamp ??= createHash('sha1')
-    .update(['compare.ts', 'diff.ts'].map((f) => readFileSync(join(__dirname, f), 'utf8')).join('\0'))
+    .update(['compare.ts', 'diff.ts', 'judge.ts'].map((f) => readFileSync(join(__dirname, f), 'utf8')).join('\0'))
     .digest('hex')
     .slice(0, 12);
   return codeStamp;
@@ -82,30 +74,11 @@ function fileStamp(file: string): string {
 export const compareCachePath = (runDir: string) => join(runDir, '_compare.json');
 type Cache = { judgedBy: string; entries: Record<string, { stamp: string; result: Result }> };
 
-/** One capture against its baseline (both present): the same bytes are the same page, without decoding either. */
-export function compareOne(runDir: string, key: string, baselineDir: string, allowance: number | undefined): Result {
-  const rawA = readFileSync(join(baselineDir, key));
-  const rawB = readFileSync(join(runDir, key));
-  if (rawA.equals(rawB)) return { key, status: 'unchanged', ratio: 0 };
-  const a = PNG.sync.read(rawA);
-  const b = PNG.sync.read(rawB);
-  if (a.width !== b.width || a.height !== b.height) {
-    return { key, status: 'changed', ratio: 1, sizes: { baseline: [a.width, a.height], current: [b.width, b.height] } };
-  }
-  // What the capture asked to be left out, as it was found now and in the baseline (a title that moved).
-  const ignore = [join(runDir, key), join(baselineDir, key)].flatMap((png) => readJson<Rect[]>(ignorePath(png)) ?? []);
-  const { ratio, areas, diff } = compareImages(a.data, b.data, a.width, a.height, ignore);
-  // A screen's own allowance (`maxDiff`) forgives what is left as long as it stays under that share.
-  if (!areas.length || (allowance != null && ratio <= allowance)) return { key, status: 'unchanged', ratio };
-  const out = join(runDir, '_diff', key);
-  mkdirSync(dirname(out), { recursive: true });
-  const png = new PNG({ width: a.width, height: a.height });
-  png.data = Buffer.from(diff.buffer);
-  writeFileSync(out, PNG.sync.write(png));
-  return { key, status: 'changed', ratio, areas };
-}
+const WORKER = join(__dirname, 'compareWorker.ts');
 
-export function compareRun(runDir: string, baselineDir = BASELINE_DIR): Result[] {
+export type CompareOptions = { baselineDir?: string; workers?: number; log?: (line: string) => void };
+
+export async function compareRun(runDir: string, { baselineDir = BASELINE_DIR, workers = compareWorkers(), log }: CompareOptions = {}): Promise<Result[]> {
   const info = readJson<RunInfo>(join(runDir, 'run.json'));
   const captured = listPngs(runDir);
   const baseline = new Set(listPngs(baselineDir));
@@ -114,22 +87,31 @@ export function compareRun(runDir: string, baselineDir = BASELINE_DIR): Result[]
   const kept = readJson<Cache>(cacheFile);
   const old = kept?.judgedBy === judgedBy() ? kept.entries : {};
   const cache: Cache = { judgedBy: judgedBy(), entries: {} };
-  const results: Result[] = captured.map((key) => {
-    if (!baseline.has(key)) return { key, status: 'new', ratio: null };
+  const results: Result[] = new Array(captured.length);
+  const stamps: string[] = new Array(captured.length);
+  const todo: { index: number; job: Job }[] = [];
+  captured.forEach((key, index) => {
+    if (!baseline.has(key)) return void (results[index] = { key, status: 'new', ratio: null });
     const allowance = allowed.get(key.split('/').pop()!.split('@')[0]);
     const current = join(runDir, key);
     const base = join(baselineDir, key);
-    const stamp = [fileStamp(current), fileStamp(base), fileStamp(ignorePath(current)), fileStamp(ignorePath(base)), allowance ?? '-'].join('|');
+    stamps[index] = [fileStamp(current), fileStamp(base), fileStamp(ignorePath(current)), fileStamp(ignorePath(base)), allowance ?? '-'].join('|');
     const reuse = old[key];
-    const diffImage = join(runDir, '_diff', key);
-    const result =
-      reuse?.stamp === stamp && (reuse.result.status !== 'changed' || reuse.result.sizes || existsSync(diffImage))
-        ? reuse.result
-        : compareOne(runDir, key, baselineDir, allowance);
+    if (reuse?.stamp === stamps[index] && (reuse.result.status !== 'changed' || reuse.result.sizes || existsSync(join(runDir, '_diff', key)))) {
+      results[index] = reuse.result;
+    } else todo.push({ index, job: { key, runDir, baselineDir, allowance } });
+  });
+  const judged = await inWorkers(
+    todo.map((t) => t.job),
+    { size: workers, file: WORKER, local: judgeCapture, log },
+  );
+  todo.forEach((t, i) => (results[t.index] = judged[i]));
+  captured.forEach((key, index) => {
+    const result = results[index];
+    if (result.status === 'new') return;
     // A diff image left from when it was changed would show a change that is no longer there.
-    if (result.status === 'unchanged') rmSync(diffImage, { force: true });
-    cache.entries[key] = { stamp, result };
-    return result;
+    if (result.status === 'unchanged') rmSync(join(runDir, '_diff', key), { force: true });
+    cache.entries[key] = { stamp: stamps[index], result };
   });
   const platforms = new Set(info?.platforms ?? []);
   const taken = new Set(captured);

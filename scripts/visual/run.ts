@@ -77,8 +77,8 @@ function runDirOf(args: string[]): string {
 }
 
 /** The comparison, the review brief and the report; answers the comparison, for the verdict after it. */
-function finish(runDir: string): Result[] {
-  const results = compareRun(runDir);
+async function finish(runDir: string): Promise<Result[]> {
+  const results = await compareRun(runDir, { log });
   // A brief written by `review --all` stays as it was.
   if (!existsSync(join(runDir, 'review', 'REVIEW.md'))) writeReviewPack(runDir, results);
   const report = writeReport(runDir, results);
@@ -181,9 +181,9 @@ async function capture(args: string[]) {
     }
     lock.release();
   }
-  let results = finish(runDir);
+  let results = await finish(runDir);
   if (args.includes('--review')) results = await review(runDir, ['--agy'], results);
-  gate(runDir, results);
+  await gate(runDir, results);
 }
 
 /** The run's locks (lock.ts), or null after saying why it doesn't start (exit code 1). */
@@ -202,8 +202,8 @@ async function lockFor(platforms: Platform[], ownStack: boolean, wait: boolean, 
  * The run's verdict, last on the console: the problems, then one `Visual PASS|FAIL` line naming
  * summary.json — and exit code 1 on a FAIL (gate.ts says what fails a run).
  */
-function gate(runDir: string, results: Result[] = compareRun(runDir)) {
-  const { summary, file } = judgeRun(runDir, results);
+async function gate(runDir: string, results?: Result[]) {
+  const { summary, file } = judgeRun(runDir, results ?? (await compareRun(runDir, { log })));
   log('');
   for (const line of gateLines(summary, file)) log(line);
   if (!summary.pass) process.exitCode = 1;
@@ -230,7 +230,8 @@ async function flows(runDir: string, platforms: Platform[], devUrl: string, tags
   return failed;
 }
 
-async function review(runDir: string, args: string[], results: Result[] = compareRun(runDir)): Promise<Result[]> {
+async function review(runDir: string, args: string[], given?: Result[]): Promise<Result[]> {
+  const results = given ?? (await compareRun(runDir, { log }));
   const all = args.includes('--all');
   if (args.includes('--agy')) await reviewWithAgy(runDir, results, log, all);
   else if (args.includes('--gemini')) await reviewWithGemini(runDir, results, log, all);
@@ -243,7 +244,7 @@ async function review(runDir: string, args: string[], results: Result[] = compar
  * Copies a run's captures into the baseline: all of them, or the keys / screen ids given — only with
  * a `--reason` (the owner's words, or what the accept rests on), recorded in docs/visual-accept-log.md.
  */
-function accept(args: string[]) {
+async function accept(args: string[]) {
   const reason = acceptReason(args);
   if (!reason) {
     console.error(REASON_REQUIRED);
@@ -280,7 +281,7 @@ function accept(args: string[]) {
   appendAcceptLog({ at: new Date(), run: info.id, commit: info.commit, dirty: info.dirty, keys, only, reason });
   log(`Accepted ${keys.length} capture(s) from ${info.id} into ${BASELINE_DIR}`);
   log(`Recorded in docs/visual-accept-log.md — commit it with the accept: git commit -- docs/visual-accept-log.md`);
-  finish(runDir);
+  await finish(runDir);
 }
 
 /** What each variant set takes and costs (variants.ts), without taking anything. */
@@ -308,7 +309,7 @@ async function main() {
       return capture(args);
     case 'compare': {
       const runDir = runDirOf(args);
-      return gate(runDir, finish(runDir));
+      return gate(runDir, await finish(runDir));
     }
     case 'review': {
       const runDir = runDirOf(args);

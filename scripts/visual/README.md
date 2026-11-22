@@ -436,7 +436,7 @@ change near one of those states (`capture android --device phone-large --only se
 - **Things that move by themselves**: the landing film is held still (`?rest=1`: every act stands at
   its moment, no idle life) with its cast on stage — the paper puppets load (`/mascots/`) and a capture
   waits until every one is live; the reading puppets are off by default.
-- **The comparison** (`diff.ts`; two files with the very same bytes are the same page without it, and each result is kept with the stamps of what it was judged from, `_compare.json`, so `compare`, the verdict, a review and an accept judge only what changed under them): not a share of the page's pixels, which a window drawn a pixel
+- **The comparison** (`diff.ts`; two files with the very same bytes are the same page without it, and each result is kept with the stamps of what it was judged from, `_compare.json`, so `compare`, the verdict, a review and an accept judge only what changed under them; what is left is judged on worker threads, `VISUAL_COMPARE_WORKERS`, default the cores less two and at most 4, each PNG decoded by libvips — byte for byte pngjs's RGBA, checked on every capture of three real runs, with pngjs kept for a PNG carrying an ICC profile or more than 8 bits a channel, `judge.ts`; 185 web captures 31.8 s → 5.3 s): not a share of the page's pixels, which a window drawn a pixel
   lower fills with red edges while a heading moved across the page hardly registers. A pixel
   differs past pixelmatch's threshold (YIQ 0.1). The page is cut into 16 px cells; a cell with
   pixels apart is only *moved*, and forgiven, when one shift of at most 2 px lines the whole cell up

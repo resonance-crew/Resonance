@@ -89,7 +89,8 @@ export function listPngs(dir: string): string[] {
 
 export function git(...args: string[]): string {
   try {
-    return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
+    // git's own complaint (a commit this checkout lacks) stays off the run's console: '' says it.
+    return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
     return '';
   }
