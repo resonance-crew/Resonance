@@ -63,7 +63,7 @@ VISUAL_SKIP_BUILD=1 npx tsx scripts/visual/flows.ts ios      # the last build, i
 | `social` | block-person | the social graph over `/api/v1` (`apiSocial`): blocks, connections |
 | `signals` | live-message | `signals/{uid}` and the pulls it starts: what arrives while a person only watches |
 | `update-gate` | update-gate | client-config's `minBuild`, the update page — `--stack update-gate`, never the usual stack |
-| `tablet` | sign-in, send-message, send-sticker, sticker-replies, open-notification | written to hold on two panes and popovers: `--device tablet` runs these alone |
+| `tablet` | sign-in, send-message, send-sticker, sticker-replies, open-notification, tap-picked | written to hold on two panes and popovers: `--device tablet` runs these alone |
 
 plus the older ones by area (`chat`, `stickers`, `reactions`, `letters`, `card`, `notifications`,
 `writer`, `trash`, `auth`). A tag no flow carries is refused, not run as nothing. `capture --flows

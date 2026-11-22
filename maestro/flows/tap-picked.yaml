@@ -8,6 +8,7 @@ appId: com.resonance.stories
 name: tap-picked
 tags:
   - card
+  - tablet
 ---
 - runFlow:
     file: common/launch.yaml
