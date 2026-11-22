@@ -1,7 +1,10 @@
 package com.resonance.app.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -9,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import com.resonance.api.models.TapPerson
 import com.resonance.app.Session
@@ -63,7 +67,9 @@ internal fun PickedPeople(
 /**
  * The dialog as it is drawn (§S4.1–3): a centred [OrganicModal] — the who-resonated dialog's shell and widths
  * ([readerListWidth]: a phone's 400, 480 wider), never a sheet, never a popover — titled `card.tap.pickedTitle`; the
- * [sentence] once, 「…」, in the story's [type] at 16, muted, in full; that sentence's people, newest first, as the
+ * [sentence] once, 「…」, in the story's [type] at 16 sp, muted, in full, at the story's compact leading at every width
+ * ([pickedSentenceLeading]) — [PickedTitleGap] under the title, [PickedRowsGap] over the rows (§S12: the web's and iOS's
+ * measures); that sentence's people, newest first, as the
  * author's list draws a row (a face 36, the pen name, the note's excerpt) — each [onRow] where that row leads in the
  * author's list ([tapRowRoute]); 顯示更多 for the next page; the small 關閉 at the foot's end.
  */
@@ -77,12 +83,18 @@ internal fun PickedPeopleDialog(
     onRow: (TapPerson) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val quote = AppFonts.style(type.bodyFamily, 16f, type.bodyWeight, type.bodyLeading, Tokens.TextMuted, letterSpacing = type.bodyTracking.em)
+    val quote = AppFonts.style(type.bodyFamily, 16f, type.bodyWeight, pickedSentenceLeading(type), Tokens.TextMuted, letterSpacing = type.bodyTracking.em)
     OrganicModal(onDismiss, L10n.Card.Tap.pickedTitle, seed = 53.0, closeLabel = L10n.Native.close, maxWidth = readerListWidth(LocalWindowLayout.current.cls)) {
-        ModalTitle(L10n.Card.Tap.pickedTitle)
-        // The flows find the dialog by it (maestro/flows/tap-picked.yaml).
-        BasicText(L10n.Card.Tap.passageQuote(sentence), Modifier.fillMaxWidth().flowTag("tap-picked"), style = quote)
-        TapRows(list, TapRowMeasure.Dialog, lines = { pickedRowLines(it, anonymous) }, onRow = onRow)
+        // The title, the sentence and the rows in a column of their own: 10 and 12 between them, not the shell's 14 (§S12);
+        // 顯示更多 and 關閉 keep the shell's gaps under it.
+        Column(Modifier.fillMaxWidth()) {
+            ModalTitle(L10n.Card.Tap.pickedTitle)
+            Spacer(Modifier.height(PickedTitleGap))
+            // The flows find the dialog by it (maestro/flows/tap-picked.yaml).
+            BasicText(L10n.Card.Tap.passageQuote(sentence), Modifier.fillMaxWidth().flowTag("tap-picked"), style = quote)
+            Spacer(Modifier.height(PickedRowsGap))
+            TapRows(list, TapRowMeasure.Dialog, lines = { pickedRowLines(it, anonymous) }, onRow = onRow)
+        }
         if (showsMore(list)) {
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 OrganicButton(L10n.Home.moreBtn, variant = ButtonVariant.Tonal, small = true) { scope.launch { list.more() } }
@@ -92,6 +104,15 @@ internal fun PickedPeopleDialog(
         ModalCloseButton(L10n.Native.close, onDismiss, buttonModifier = Modifier.flowTag(PICKED_CLOSE_TAG))
     }
 }
+
+/** The pop-up's title to its sentence (round 29 §S12: 10 on the web, iOS and here). */
+internal val PickedTitleGap = 10.dp
+
+/** The pop-up's sentence to its rows (§S12: 12). */
+internal val PickedRowsGap = 12.dp
+
+/** The sentence's leading in the pop-up (§S12): the story's compact one at every width — 1.8 for CJK, 1.6 for Latin. */
+internal fun pickedSentenceLeading(type: StoryType): Float = if (type.cjk) Tokens.StoryLeadingCompact else Tokens.StoryLeadingLatinCompact
 
 /** The flows' name of the pop-up's 關閉 (maestro/flows/tap-picked.yaml; iOS sets the same id). */
 internal const val PICKED_CLOSE_TAG = "tap-picked-close"

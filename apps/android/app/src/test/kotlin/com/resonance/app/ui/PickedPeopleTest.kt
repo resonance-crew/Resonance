@@ -8,6 +8,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -133,6 +135,42 @@ class PickedPeopleTest {
         val row = compose.onNodeWithText("gus").getBoundsInRoot()
         val width = (row.right - row.left).value
         assertTrue("a row $width wide", width > 380f && width <= 480f)
+    }
+
+    /** The title, the sentence, the first row and 關閉 as drawn, and the two gaps and the sentence's leading measured. */
+    private fun measures() {
+        compose.waitForIdle()
+        val title = compose.onNodeWithText(L10n.Card.Tap.pickedTitle).getBoundsInRoot()
+        val quote = compose.onNodeWithTag("tap-picked", useUnmergedTree = true).getBoundsInRoot()
+        val first = compose.onNode(hasClickAction() and hasText("gus")).getBoundsInRoot()
+        val last = compose.onNode(hasClickAction() and hasText("bob")).getBoundsInRoot()
+        val close = compose.onNodeWithTag("tap-picked-close", useUnmergedTree = true).getBoundsInRoot()
+        // Title → sentence 10, sentence → rows 12 (round 29 §S12; the shell's 14 before).
+        assertEquals(10f, (quote.top - title.bottom).value, 0.5f)
+        assertEquals(12f, (first.top - quote.bottom).value, 0.5f)
+        // The sentence's lines at 16 × 1.8 (the story's compact CJK leading), never the tablet's 1.85.
+        // (Laid out in whole pixels: within 0.75 of the lines; at 1.85 they are 1.2 or more off.)
+        val height = (quote.bottom - quote.top).value
+        val line = 16f * 1.8f
+        val lines = kotlin.math.round(height / line)
+        assertTrue("$height tall: not ${lines.toInt()} lines of $line", lines >= 1 && kotlin.math.abs(height - lines * line) < 0.75f)
+        // 關閉 where it stood: the shell's 14 and its own 4 under the rows.
+        assertEquals(18f, (close.top - last.bottom).value, 2f)
+    }
+
+    @Test fun onAPhoneTheTitleSentenceAndRowsStand10And12ApartTheSentenceAt1Point8() {
+        show(390.dp)
+        measures()
+    }
+
+    @Test @Config(qualifiers = "w1280dp-h800dp")
+    fun onATabletTheSameMeasuresTheStorysCompactLeadingNotItsWide() {
+        show(1280.dp)
+        measures()
+        // A Latin story's, at every width: 1.6.
+        assertEquals(1.6f, pickedSentenceLeading(StoryType.of(StoryScript.Latin, LayoutClass.Expanded)), 0f)
+        assertEquals(1.6f, pickedSentenceLeading(StoryType.of(StoryScript.Latin, LayoutClass.Compact)), 0f)
+        assertEquals(1.8f, pickedSentenceLeading(StoryType.of(StoryScript.Cjk, LayoutClass.Expanded)), 0f)
     }
 
     @Test fun aRowSaysTheNoteNeverThePickAndLeadsWhereTheAuthorsListLeads() {

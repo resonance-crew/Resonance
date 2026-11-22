@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SWRConfig } from 'swr';
@@ -76,6 +78,30 @@ describe('PickedPeople', () => {
     for (const row of rows) expect(row.querySelector('svg')?.getAttribute('width')).toBe('36');
     // Only that sentence's people: the list asked by its id.
     expect(listTaps).toHaveBeenCalledWith('rich-story', null, 'a1b2c3d4');
+  });
+
+  it('stands on the apps’ measures (§S12): paper 32 · 28, the rows’ bands to its edges, the sentence at the story’s compact leading', async () => {
+    phone(true);
+    listTaps.mockResolvedValueOnce({ people: [person('gus')], nextPageToken: null });
+    open();
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findAllByRole('link');
+    // The paper's padding is the Modal's (the apps' ModalPaper): 32 above and below, 28 at each side.
+    const padded = [dialog, ...dialog.querySelectorAll<HTMLElement>('*')].find((el) => el.style.padding);
+    expect(padded?.style.padding).toBe('32px 28px');
+    const read = (f: string) => readFileSync(join(process.cwd(), f), 'utf8');
+    const css = read('src/components/molecules/CardDetail/PickedPeople.module.css');
+    // The rows' bands bleed by the dialog's own side padding, so they still end on the paper's pen line.
+    expect(css).toMatch(/\.picked \{[^}]*--dialog-pad-x: 28px;/);
+    expect(read('src/components/sections/AppHeader/NotificationBell.module.css')).toMatch(/--bell-pad: var\(--dialog-pad-x, 22px\);/);
+    // The sentence: 16, 1.8 for a CJK story and 1.6 for a Latin one (the story's compact leadings), 12 to the rows;
+    // the title 10 above it.
+    expect(css).toMatch(/\.sentence \{[^}]*margin: 0 0 12px;[^}]*font-size: 16px;[^}]*line-height: var\(--story-leading-compact\);/);
+    expect(css).toMatch(/\.sentence\[data-script='latin'\] \{[^}]*line-height: var\(--story-leading-latin-compact\);/);
+    expect(css).toMatch(/\.title \{[^}]*margin: 0 0 10px;/);
+    const tokens = read('src/styles/tokens.css');
+    expect(tokens).toMatch(/--story-leading-compact: 1\.8;/);
+    expect(tokens).toMatch(/--story-leading-latin-compact: 1\.6;/);
   });
 
   it('shows the next page under 顯示更多, asking for the same sentence', async () => {

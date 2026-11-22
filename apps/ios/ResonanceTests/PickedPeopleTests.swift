@@ -2,6 +2,7 @@ import DesignSystem
 import Foundation
 import ResonanceAPI
 import ResonanceKit
+import StoryFormat
 import Testing
 @testable import Resonance
 
@@ -16,6 +17,27 @@ import Testing
 
     private func picked(_ id: String, _ text: String, people: [String], more: Bool = false) -> TapPicked {
         TapPicked(id: id, text: text, people: people.map { Fixture.author($0) }, more: more)
+    }
+
+    /// §S12 (the owner, 2026-11-22: one set of measures on the three platforms): the pop-up's sentence is the story's
+    /// face at 16 × the reading text scale (it followed no text size before) on the story's compact leading — 1.8 for a
+    /// CJK story, 1.6 for a Latin one (≈ 1.91 before, a fixed 8 of line spacing) — as the passages dialog sets its rows.
+    @Test func theSentenceIsSetAsTheStorysLinesAtTheReadingSize() throws {
+        let reading = TextScale.readingFactor(relativeTo: .body)
+        for script in [StoryScript.cjk, .latin] {
+            let font = PickedPeople.sentenceFont(script: script)
+            let story = StoryTypography(script: script, compact: true)
+            #expect(abs(font.pointSize - 16 * reading) < 0.01, "\(script): \(font.pointSize)")
+            #expect(font.fontName == AppFonts.storyUIFont(story.bodyFamily, size: 16, relativeTo: .body).fontName)
+        }
+        #expect(PickedPeople.sentenceLeading(script: .cjk) == 1.8)
+        #expect(PickedPeople.sentenceLeading(script: .latin) == 1.6)
+        // The dialog sets it so: in CSS line boxes of that leading, never SwiftUI's fixed-size line spacing.
+        let source = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Resonance/Features/Card/PickedPeople.swift").standardized, encoding: .utf8)
+        #expect(source.contains("lineHeight: Self.sentenceLeading(script: script)"))
+        #expect(!source.contains(".lineSpacing("))
+        #expect(source.contains("accessibilityIdentifier(\"tap-picked-passage\")"))
     }
 
     @Test func theAuthorsAnswerBecomesTheStorysPassages() {

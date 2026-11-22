@@ -5,15 +5,16 @@ import SwiftUI
 /// Who resonated with one sentence (round 29 §S4; the owner: 「點選這個highlight的字都可以開啟這個誰共振了這一句。那作者的話
 /// 他可能就可以多看一下那一個人回覆的小紙條」, 「只列這一段的人」): on the author's own page, pressing a picked sentence's faces
 /// or its wash opens this centred dialog — the who-resonated dialog's shell and widths (400 on a phone, 480 on a tablet
-/// and the Mac) — with the title, the sentence once in the story's type at 16, muted, then the people who picked that
+/// and the Mac) — with the title, the sentence once in the story's type at 16 × the reading text size on the story's
+/// compact leading (1.8 CJK, 1.6 Latin, §S12: the web's and Android's), muted, in full, then the people who picked that
 /// sentence, newest first, as the author's list draws a row (a face of 36, the pen name, the note's excerpt when they
 /// left one) without the quote under each name (it is the head); 顯示更多; the small 關閉. The author's own list at
 /// the story's end is not changed.
 struct PickedPeople: View {
     let cardId: String
     let passage: Passage
-    /// The story's body face at 16 (its script's).
-    let quoteFont: Font
+    /// The story's script: the sentence is set in its body face and compact leading.
+    let script: StoryScript
     let onClose: () -> Void
     @Environment(SessionStore.self) private var session
     @Environment(\.window) private var window
@@ -29,6 +30,18 @@ struct PickedPeople: View {
     /// The dialog's width: a phone's 400, a tablet's and the Mac's 480 (the reader's list's, ``TapListMetrics``).
     static func width(compact: Bool) -> CGFloat { TapListMetrics.readerWidth(compact: compact) }
 
+    /// The sentence's face (§S12): the story's body face for `script` at 16 × the reading text scale, as the round 27
+    /// passages dialog sets its rows.
+    static func sentenceFont(script: StoryScript) -> UIFont {
+        AppFonts.storyUIFont(StoryTypography(script: script, compact: true).bodyFamily, size: sentenceSize, relativeTo: .body)
+    }
+
+    /// The sentence's leading: the story's compact one (1.8 for a CJK story, 1.6 for a Latin one), at every width.
+    static func sentenceLeading(script: StoryScript) -> CGFloat { StoryTypography(script: script, compact: true).bodyLeading }
+
+    /// The sentence's size at 1× (the web's 16px, Android's 16sp).
+    static let sentenceSize: CGFloat = 16
+
     /// No quote under a name: the sentence is the dialog's head.
     static func line(for person: TapPerson) -> TapRowLine? { nil }
 
@@ -43,10 +56,8 @@ struct PickedPeople: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ModalTitle(L10n.Card.Tap.pickedTitle).padding(.bottom, 10)
-            Text(L10n.Card.Tap.passageQuote(text: passage.text))
-                .font(quoteFont)
-                .foregroundStyle(Tokens.textMuted)
-                .lineSpacing(16 * 0.5)
+            CSSText(L10n.Card.Tap.passageQuote(text: passage.text), font: Self.sentenceFont(script: script),
+                    lineHeight: Self.sentenceLeading(script: script), color: Tokens.UI.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, 12)
