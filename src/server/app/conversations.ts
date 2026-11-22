@@ -221,7 +221,8 @@ async function leaveNote(ctx: ServerCtx, uid: string, input: NoteInput, spent: P
         },
         at,
       );
-      out.outcome = { kind: 'threaded', pair, writer: uid, author };
+      // A letter of theirs this answers connected the two (connectByLetter above): both connections lists changed.
+      out.outcome = { kind: 'threaded', pair, writer: uid, author, connected: writing && answers };
       return { id: note, notificationId: bell, push: { conversationId: pair, messageId: note, from: uid, to: author }, duplicate: false };
     },
     { label: 'sendNote' },
@@ -285,15 +286,22 @@ export async function sendMessageIn(
   spent: Promise<void> = Promise.resolve(),
   own?: (signals: OwnSignals) => void,
 ): Promise<SentMessage> {
-  const out = { rang: false };
+  const out = { rang: false, connected: false };
   const sent = await budgetFirst(spent, () => writeMessage(ctx, uid, input, spent, out));
-  // After the commit: both people's list and thread, and the recipient's bell when its first message rang it —
-  // the sender's own touch before the response when `own` asks for its counters (signalWithOwn).
-  if (!sent.duplicate) await signalWithOwn(ctx, uid, messageSent(sent.conversationId, uid, input.to, out.rang), own);
+  // After the commit: both people's list and thread, the recipient's bell when its first message rang it, and both
+  // people's connections when it answered a letter (connectByLetter) — the sender's own touch before the response
+  // when `own` asks for its counters (signalWithOwn).
+  if (!sent.duplicate) await signalWithOwn(ctx, uid, messageSent(sent.conversationId, uid, input.to, out.rang, out.connected), own);
   return sent;
 }
 
-async function writeMessage(ctx: ServerCtx, uid: string, input: SendMessageInput, spent: Promise<void>, out: { rang: boolean }): Promise<SentMessage> {
+async function writeMessage(
+  ctx: ServerCtx,
+  uid: string,
+  input: SendMessageInput,
+  spent: Promise<void>,
+  out: { rang: boolean; connected: boolean },
+): Promise<SentMessage> {
   const other = input.to;
   if (other === uid) throw new ApiFailure('invalid_request', 'You cannot message yourself.');
   const sticker = input.sticker ? { pack: input.sticker.pack, id: input.sticker.id } : null;
@@ -404,6 +412,8 @@ async function writeMessage(ctx: ServerCtx, uid: string, input: SendMessageInput
       // reads them). Not connected, their letter answered is what connects you.
       if (connection) tx.addReasons(uid, other, { letterBy: answers ? uid : null, answered: origins.answers });
       else tx.connectByLetter(uid, other, uid);
+      // A transaction may run again: only its last run's word stands.
+      out.connected = !connection;
       if (answers) tx.clearLetters(uid, other);
       // An answered letter has a conversation already: no "new conversation" bell for it.
       const first = !convo;

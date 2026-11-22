@@ -9,6 +9,7 @@ import type { ServerCtx } from '@/server/ctx';
 import { becameReachable, cardOf, docId, trashedFromOf, trashedMs } from '@/server/domain/cardsWrite';
 import type { CardRow } from '@/server/ports/repos/cards';
 import { deleteCardIn } from './cards';
+import { signal, signalConnections } from './realtime';
 
 /**
  * The trash (垃圾桶) as application services: moving a card in, bringing it
@@ -37,14 +38,18 @@ export async function trashCardIn(
 ): Promise<TrashedCardResult> {
   if (isReservedId(id)) throw notFound();
   const now = opts.now ?? ctx.clock.now();
+  let ended: readonly string[] = [];
   const { before, after, changed, me } = await ctx.uow.run(async (tx) => {
+    ended = [];
     const [row, meRow] = await Promise.all([tx.cards.getCardRow(id), tx.cards.getAuthorRow(uid)]);
     if (!row || row.authorId !== uid) throw notFound();
     const at = trashedMs(row);
     if (at != null && trashExpired(at, now)) throw notFound();
     if (at != null || row.trashedAt != null) return { before: row, after: row, changed: false, me: meRow };
     // Read before anything is written: what taking a resonance back ends.
-    tx.cards.takeBack(await tx.cards.readTakeBack(uid, id));
+    const back = await tx.cards.readTakeBack(uid, id);
+    tx.cards.takeBack(back);
+    ended = back.ends;
     const trashedFrom: TrashedFrom = {
       visibility: restorableVisibility(row.visibility),
       referenceCardId: docId(row.referenceCardId) ? row.referenceCardId : null,
@@ -54,6 +59,8 @@ export async function trashCardIn(
     const { referenceCardId: _parked, ...rest } = row;
     return { before: row, after: { ...rest, trashedAt, trashedFrom, visibility: 'private' }, changed: true, me: meRow };
   }, { label: 'trashCard' });
+  // After the commit: a connection the take-back ended changed both people's lists.
+  await signalConnections(ctx, uid, ended);
   const card = cardOf(id, after);
   if (changed) {
     const anonymous = before.anonymous === true;
@@ -98,7 +105,9 @@ export interface RestoredCardResult {
 export async function restoreCardIn(ctx: ServerCtx, uid: string, id: string, opts: { now?: number } = {}): Promise<RestoredCardResult> {
   if (isReservedId(id)) throw notFound();
   const now = opts.now ?? ctx.clock.now();
+  let made: string[][] = [];
   const result = await ctx.uow.run(async (tx) => {
+    made = [];
     const [row, meRow, edit] = await Promise.all([tx.cards.getCardRow(id), tx.cards.getAuthorRow(uid), tx.cards.getEditRow(id)]);
     if (!row || row.authorId !== uid) throw notFound();
     const at = trashedMs(row);
@@ -126,9 +135,11 @@ export async function restoreCardIn(ctx: ServerCtx, uid: string, id: string, opt
         tx.cards.patchEdit(id, anonymousForConnections(editedAudience({ ...edit, ...patch }, after)) ? both : patch);
       }
     }
-    const bell = repoint && becameReachable(row, after) ? tx.cards.reachOriginal(id, after, reach!) : null;
+    const bell = repoint && becameReachable(row, after) ? tx.cards.reachOriginal(id, after, reach!, made) : null;
     return { before: row, after, me: meRow, changed: true, dropped: !!original && !repoint, bell };
   }, { label: 'restoreCard' });
+  // After the commit: a connection the restored resonance made again changed both people's lists.
+  if (made.length) await signal(ctx, { kind: 'graph', uids: made.flat() });
   const card = cardOf(id, result.after);
   if (result.changed && result.after.publishedAt != null && card.visibility !== 'private') {
     await Promise.resolve()

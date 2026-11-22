@@ -157,14 +157,20 @@ export async function pushTapIn(ctx: ServerCtx, ring: TapRing & { from: string; 
 /** Take a purged reader out of every row naming them (one transaction each, deleting a row left empty). */
 export async function purgeTapRowsIn(ctx: ServerCtx, uid: string): Promise<number> {
   const ids = await ctx.data.bell.listRowIdsNaming(uid);
+  const rung = new Set<string>();
   for (const id of ids) {
-    await ctx.uow.run(
+    const to = await ctx.uow.run(
       async (tx) => {
         const row = await tx.bell.getRow(id);
-        if (row) removeReader(tx.bell, row, uid);
+        if (!row) return null;
+        removeReader(tx.bell, row, uid);
+        return row.userId;
       },
       { label: 'purge tap rows' },
     );
+    if (to && to !== uid) rung.add(to);
   }
+  // After the commits: each author's bell, which lost a reader (or the row).
+  for (const to of rung) await signal(ctx, bellChanged(to));
   return ids.length;
 }
