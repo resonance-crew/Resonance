@@ -39,12 +39,21 @@
   min-height: 44px;
 }
 
-/* The faces start under the 共振 segment's glyph. */
+/* The faces stand centred on the 共振 segment (round 29 §S11; the owner, 2026-11-22): a box twice as wide as the
+   segment's centre is from the line's start, the group centred in it — wider than that (a very narrow segment), it
+   starts at the content's edge. Until measured, the faces start under the segment's glyph as before. */
 .faces {
   display: inline-flex;
   align-items: center;
   min-width: 0;
   padding-inline-start: 6px;
+}
+
+.faces[data-tap-centred] {
+  flex: none;
+  justify-content: center;
+  min-width: calc(var(--tap-centre) * 2);
+  padding-inline-start: 0;
 }
 
 .ends {

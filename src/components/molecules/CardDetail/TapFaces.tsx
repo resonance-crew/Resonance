@@ -79,7 +79,7 @@ export interface TapFacesProps {
 }
 
 /**
- * The faces at the start of the end row's second line (round 26 §U2): the viewer first when they resonated, then
+ * The faces on the end row's second line, centred on the 共振 segment (round 26 §U2, round 29 §S11): the viewer first when they resonated, then
  * the people they are connected with who did — no words on screen, ever (the owner: 「不要寫這樣的文字，直接放那個頭像就好」).
  * The whole group is one button opening who they are — a centred dialog on every screen (the owner, 2026-11-19:
  * 「我在想这个直接做成这个 model 会不会好一点呢」; on a wide screen it was a popover under the faces) — except when

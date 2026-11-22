@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { useLocale, useTranslations } from 'next-intl';
 import useSWR from 'swr';
@@ -62,7 +62,7 @@ export const NARROW_ROW = 340;
  * all three are tonal at rest and only a tap that is on is solid with `wave-pair` — its words stay 共振, so nothing in
  * the capsule moves (the owner, 2026-11-20) —), 寄小紙條 (the note, written in
  * place under the row, never in a dialog) and 用卡片回應 (a card of one's own; 修改 with a draft, 已回應 once
- * published) — then, right under it and as wide, the second line: the faces of who resonated at its start, 收藏 at
+ * published) — then, right under it and as wide, the second line: the faces of who resonated centred on the 共振 segment (round 29 §S11), 收藏 at
  * its end (and, after a long story at the desktop's width, the card's share and ⋯). The note opens 12 under that.
  * Tapping 共振 fills the segment and slides the viewer's face in; on a card with passages (round 27 §U1) a press that
  * turns it on also asks, 240 ms later, which part stayed with them — a small centred dialog the tap never waits on.
@@ -157,6 +157,28 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
     const need = [...buttons].reduce((w, b) => w + Math.max(b.offsetWidth, b.scrollWidth), 0);
     if (need > box.clientWidth + 1) setFit(fit === 'full' ? 'short' : 'split');
   }, [fit, room, tapOn, replyState, fonts]);
+
+  // The faces under 共振 stand centred on its segment (round 29 §S11; the owner, 2026-11-22: 「这三个圈圈可不可以中点帮我
+  // 对齐这个共振按钮的中间呢」): the segment's centre, from the second line's start, set as `--tap-centre` there.
+  const secondRef = useRef<HTMLDivElement>(null);
+  const [tapCentre, setTapCentre] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const line = secondRef.current;
+    const segment = firstBar.current?.querySelector<HTMLElement>('[role="group"] > button');
+    if (!line || !segment) return;
+    const measure = () => {
+      const s = segment.getBoundingClientRect();
+      const centre = Math.round((s.left + s.width / 2 - line.getBoundingClientRect().left) * 10) / 10;
+      setTapCentre(Number.isFinite(centre) && s.width > 0 ? centre : null);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(segment);
+    ro.observe(line);
+    return () => ro.disconnect();
+    // (the second line comes with the viewer and their tap; the segment changes with the words' fit)
+  }, [fit, room, fonts, tapOn, loading, user, tap]);
 
   const onTap = useCallback(async () => {
     if (!user) return router.push('/signin');
@@ -315,8 +337,14 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
           )}
         </div>
         {secondLine && (
-          <div className={styles.second}>
-            <span className={styles.faces}>{faces}</span>
+          <div ref={secondRef} className={styles.second} data-end-second="">
+            <span
+              className={styles.faces}
+              data-tap-centred={tapCentre != null ? '' : undefined}
+              style={tapCentre != null ? ({ '--tap-centre': `${tapCentre}px` } as CSSProperties) : undefined}
+            >
+              {faces}
+            </span>
             <span className={styles.ends}>
               {save}
               {trailing && <span className={styles.trailing}>{trailing}</span>}

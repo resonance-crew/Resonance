@@ -301,6 +301,34 @@ describe('the end row: three answers in one capsule (§U1)', () => {
   });
 });
 
+describe('the faces under 共振 (round 29 §S11; the owner, 2026-11-22: centred on its segment)', () => {
+  const css = (f: string) => readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail', f), 'utf8');
+  it.each([1, 2, 3])('stand with their centre on the 共振 segment’s centre, not at the line’s start — %i face(s)', async (n) => {
+    const original = Element.prototype.getBoundingClientRect;
+    const box = (left: number, width: number) => ({ left, right: left + width, width, top: 0, bottom: 44, height: 44, x: left, y: 0, toJSON: () => ({}) }) as DOMRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      // The row starts at 16; the 共振 segment runs from 16 to 136 — its centre 60 from the line's start.
+      if (this.hasAttribute('data-end-second')) return box(16, 560);
+      if (this.tagName === 'BUTTON' && this.parentElement?.getAttribute('role') === 'group' && this.textContent?.includes('Resonate')) return box(16, 120);
+      return original.call(this);
+    };
+    try {
+      const { container } = renderPage({ ...NO_TAPS, faces: ['dora', 'eli', 'fay'].slice(0, n).map(face) });
+      await screen.findByRole('button', { name: /People you're connected with who resonated/ });
+      const slot = container.querySelector<HTMLElement>('[data-tap-centred]');
+      expect(slot).not.toBeNull();
+      expect(slot!.style.getPropertyValue('--tap-centre')).toBe('60px');
+      expect(slot!.querySelectorAll('[data-face]')).toHaveLength(n);
+    } finally {
+      Element.prototype.getBoundingClientRect = original;
+    }
+    // The slot is twice the centre wide with the group centred in it (wider, it starts at the content's edge); the
+    // group is centred in its own button too, whatever its count.
+    expect(css('CardViewerActions.module.css')).toMatch(/\.faces\[data-tap-centred\] \{[^}]*justify-content: center;[^}]*min-width: calc\(var\(--tap-centre\) \* 2\);[^}]*padding-inline-start: 0;/);
+    expect(css('TapFaces.module.css')).toMatch(/\.faces \{[^}]*justify-content: center;/);
+  });
+});
+
 describe('which part (round 27 §U1): the passages’ dialog after a press that turns 共振 on', () => {
   const PASSAGES = [
     { id: '14fecaaf', text: 'The rain stopped and the lamp at the corner came on first.' },
