@@ -403,7 +403,7 @@ async function shoot(serial: string, ctx: CaptureContext, screen: Screen, first:
   await demoBar(serial);
   // A caret's box found by either look is skipped by both, and by the comparison with the baseline.
   const ignore: Rect[] = [];
-  const look = await secondLook(await steady(serial, ignore), () => steady(serial, ignore), { key, ignore });
+  const look = await secondLook(await steady(serial, ignore), () => steady(serial, ignore), { key, ignore, glance: () => screencap(serial) });
   return { ...look, ignore };
 }
 

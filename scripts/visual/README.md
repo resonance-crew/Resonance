@@ -155,7 +155,11 @@ the later one is kept, and it is looked at once more, three looks in all; still 
 `unsettled`. On the apps every capture without a baseline gets the second look too — a machine's
 first run, a new screen, the extended set's first run — or a skeleton taken there would be the
 baseline the next run trusts (the web's pass has its own guards: requests drained, a blank page
-retaken). It costs a few seconds per changed or new capture, nothing for an unchanged one.
+retaken). It costs a few seconds per changed or new capture, nothing for an unchanged one. On the apps a
+capture with no baseline has had a settled first look already (Android: held 3.5 s with no skeleton named; iOS and
+the Mac: 4 s after the launch), so its second look, after the same wait, is one plain frame (a screencap, a simctl
+screenshot): the same page again and the first look is kept; another page, and the whole looks go on as above
+(about 7 s less per new Android capture, 1–2 s on iOS and the Mac; a changed capture's looks are as they were).
 
 **Android's skeletons** are told by name, not by pixels: the app names each skeleton for TalkBack
 (`L10n.Home.moreLoading`, 載入中… / Loading… — the card page's story, the conversations, the bell, a

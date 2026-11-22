@@ -242,15 +242,14 @@ export async function turn(udid: string, landscape: boolean, ctx: CaptureContext
 
 async function shoot(udid: string, ctx: CaptureContext, key: string): Promise<Look> {
   const file = join(ctx.runDir, '_logs', `ios-${udid}.png`);
-  const take = () =>
-    settle(() => {
-      run('xcrun', ['simctl', 'io', udid, 'screenshot', '--type=png', file], {}, SIMCTL_TIMEOUT_MS);
-      const png = readFileSync(file);
-      return Promise.resolve(png);
-    }, { timeoutMs: 40_000, intervalMs: 1000 });
+  const frame = () => {
+    run('xcrun', ['simctl', 'io', udid, 'screenshot', '--type=png', file], {}, SIMCTL_TIMEOUT_MS);
+    return Promise.resolve(readFileSync(file));
+  };
+  const take = () => settle(frame, { timeoutMs: 40_000, intervalMs: 1000 });
   // A launch draws its cover, restores the account and asks the stack: never judged before this.
   await sleep(4000);
-  return secondLook(await take(), take, { key });
+  return secondLook(await take(), take, { key, glance: frame });
 }
 
 export const captureIos: Capture = async (ctx) => {

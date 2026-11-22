@@ -116,13 +116,13 @@ function cut(png: Buffer, size: Size = WINDOW): Buffer {
 
 async function shoot(window: MacWindow, ctx: CaptureContext, key: string, size: Size): Promise<Look> {
   const file = join(ctx.runDir, '_logs', 'mac-window.png');
-  const take = () =>
-    settle(() => {
-      run('screencapture', ['-o', '-x', '-t', 'png', '-l', String(window.id), file]);
-      return Promise.resolve(cut(readFileSync(file), size));
-    }, { timeoutMs: 40_000, intervalMs: 1000 });
+  const frame = () => {
+    run('screencapture', ['-o', '-x', '-t', 'png', '-l', String(window.id), file]);
+    return Promise.resolve(cut(readFileSync(file), size));
+  };
+  const take = () => settle(frame, { timeoutMs: 40_000, intervalMs: 1000 });
   await sleep(4000);
-  return secondLook(await take(), take, { key });
+  return secondLook(await take(), take, { key, glance: frame });
 }
 
 export const captureMac: Capture = async (ctx) => {

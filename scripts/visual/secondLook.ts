@@ -65,17 +65,35 @@ export type SecondLookOptions = {
   waitMs?: number;
   baselineDir?: string;
   wait?: (ms: number) => Promise<void>;
+  /**
+   * One plain frame of the screen as it is now, no settling (the apps: a screencap, a simctl screenshot): for a capture
+   * with no baseline, its second look (see `secondLook`).
+   */
+  glance?: () => Promise<Buffer>;
 };
 
 /** What a capture's log line adds about how it was taken. */
 export const lookNote = (look: Look) => (!look.settled ? '  (never settled)' : look.retaken ? '  (taken again: the first look was early)' : '');
 
-/** The capture to keep: `first`, or a later look when `first` was taken too early (see above). */
+/**
+ * The capture to keep: `first`, or a later look when `first` was taken too early (see above).
+ *
+ * A capture with no baseline (a new screen, a first run) and a `glance`: its first look is already a settled one —
+ * Android's held still 3.5 s with no skeleton left in its window, iOS's and the Mac's taken 4 s after the launch — so
+ * its second look, after the same wait as ever, is one plain frame rather than a whole settled look again (on Android
+ * a screencap instead of two, a 3.5 s hold and a window dump: about 7 s a capture). The same page again: two looks
+ * apart in time agree, and the first is kept. Another page: the first look was early after all, and the looks go on
+ * as they always did — whole settled looks, `LOOKS` in all, unsettled if it never holds.
+ */
 export async function secondLook(first: Shot, retake: () => Promise<Shot>, options: SecondLookOptions): Promise<Look> {
   const { key, ignore = [], baselineDir = currentBaseline(), wait = sleep } = options;
   const waitMs = options.waitMs ?? SECOND_LOOK_MS[key.split('/')[0] as Platform] ?? 5000;
   if (!wantsSecondLook(key, first.png, ignore, baselineDir)) return { ...first, retaken: false };
   const allowance = allowanceOf(key);
+  if (options.glance && !existsSync(join(baselineDir, key))) {
+    await wait(waitMs);
+    if (samePicture(first.png, await options.glance(), ignore, allowance)) return { ...first, retaken: false };
+  }
   let current = first;
   let retaken = false;
   for (let look = 1; look < LOOKS; look++) {
