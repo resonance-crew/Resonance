@@ -49,7 +49,6 @@ export async function createProfileIn(ctx: ServerCtx, user: AuthUser, input: Cre
       autoTranslateTo: input.primaryLocale === 'zh-TW' ? ['en'] : ['zh-TW'],
       // No one is verified yet: the badge waits for a real verification process (a verified sign-in email is not one).
       verified: false,
-      phoneHash: '',
       avatarSeed: String(Math.abs([...user.id].reduce((sum, ch) => sum + ch.charCodeAt(0), 0))),
       initials,
       // Their avatar's own colour until they upload a photo, one of a few, by uid (lib/design/avatarColors).

@@ -152,7 +152,6 @@ export function usersTx(db: AdminDb, tx: Transaction): UsersTxRepo {
         primaryLocale: p.primaryLocale,
         autoTranslateTo: p.autoTranslateTo,
         verified: p.verified,
-        phoneHash: p.phoneHash,
         avatarSeed: p.avatarSeed,
         initials: p.initials,
         accentColor: p.accentColor,

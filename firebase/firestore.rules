@@ -128,6 +128,9 @@ service cloud.firestore {
     // `avatarKey`; the server writes them, an older client never sends one):
     // a key as the storage writes them — letters, digits and _ . - /, no
     // empty, `.` or `..` segment, never a URL — and the very key `url` ends in.
+    // The key goes into the pattern with each `.` made a literal dot (the
+    // only character of its charset a pattern reads otherwise), so a key
+    // `a.webp` names `…/a.webp` and never `…/aXwebp`.
     function storedKey(key, url) {
       return key is string
         && key.size() >= 1 && key.size() <= 512
@@ -135,7 +138,7 @@ service cloud.firestore {
         && !key.matches("(.*/)?[.]{1,2}(/.*)?")
         && !key.matches("/.*|.*/|.*//.*")
         && url is string
-        && url.matches(".+/" + key);
+        && url.matches(".+/" + key.replace("[.]", "[.]"));
     }
 
     // --- users ---
@@ -185,7 +188,13 @@ service cloud.firestore {
           // Removed, or the key of the photo the profile names (an older client changes only the URL: allowed).
           && (!("avatarKey" in changedKeys()) || !("avatarKey" in d) || storedKey(d.avatarKey, d.avatarUrl))
           && (!("initials" in changedKeys()) || (d.initials is string && d.initials.size() <= 8))
-          && (!("accentColor" in changedKeys()) || (d.accentColor is string && d.accentColor.size() <= 60))
+          // An avatar colour as the server gives them out (lib/design/avatarColors:
+          // `oklch(L% C H)`), or none. No client writes one today — the web and
+          // both apps only read it — so this holds the field to that one shape.
+          && (!("accentColor" in changedKeys())
+              || (d.accentColor is string && d.accentColor.size() <= 60
+                  && (d.accentColor == ""
+                      || d.accentColor.matches("oklch[(][0-9]{1,3}([.][0-9]+)?% [0-9]([.][0-9]+)? [0-9]{1,3}([.][0-9]+)?[)]"))))
           // How often each hint was shown (lib/hints: 3 at most).
           && (!("hintsSeen" in changedKeys())
               || (d.hintsSeen is map && d.hintsSeen.size() <= 50
@@ -235,9 +244,11 @@ service cloud.firestore {
     // that changes what this person's screens list (inbox, bell, graph, map,
     // drafts, threads.{pair}), so their clients refetch through /api/v1.
     // Numbers only — no content, no one else's uid but in the pair ids of
-    // their own conversations. Its owner listens; only the server writes.
+    // their own conversations. Its owner listens to the one document (the
+    // web, iOS and Android each listen to signals/{uid}, never a query), so
+    // a get is all it takes; only the server writes.
     match /signals/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
+      allow get: if request.auth != null && request.auth.uid == uid;
       allow write: if false;
     }
 
@@ -281,7 +292,8 @@ service cloud.firestore {
         && request.resource.data.inviteCount == 0
         && request.resource.data.get("createdAt", request.time) == request.time
         && optionalString(request.resource.data, "originalLocale", 10)
-        && (!("translations" in request.resource.data) || request.resource.data.translations.size() == 0)
+        && (!("translations" in request.resource.data)
+            || (request.resource.data.translations is map && request.resource.data.translations.size() == 0))
         && validCardContent(request.resource.data, request.resource.data.keys())
         && !anonymousForConnections(request.resource.data)
         && answersReadableCard(request.resource.data);
@@ -707,10 +719,19 @@ service cloud.firestore {
           && validGroup(request.resource.data, changedKeys());
       }
 
+      // A position or a size on the board, in its own units. The clients
+      // place cards and regions where a person drags them, a region never
+      // smaller than a card (web, iOS, Android: NODE_W + 60 × NODE_H + 80);
+      // a million either way is far past anything dragged, and keeps a
+      // hand-written write from storing a number no screen can draw.
+      function onBoard(v) {
+        return v is number && v >= -1000000 && v <= 1000000;
+      }
+
       function validNode(d, keys) {
         return (!("cardId" in keys) || shortId(d.cardId))
-          && (!("x" in keys) || d.x is number)
-          && (!("y" in keys) || d.y is number)
+          && (!("x" in keys) || onBoard(d.x))
+          && (!("y" in keys) || onBoard(d.y))
           && (!("groupId" in keys) || d.groupId == null || shortId(d.groupId))
           && (!("createdAt" in keys) || d.createdAt == request.time)
           && (!("updatedAt" in keys) || d.updatedAt == request.time);
@@ -718,11 +739,12 @@ service cloud.firestore {
 
       function validGroup(d, keys) {
         return (!("title" in keys) || (d.title is string && d.title.size() <= 500))
-          && (!("hue" in keys) || d.hue is number)
-          && (!("x" in keys) || d.x is number)
-          && (!("y" in keys) || d.y is number)
-          && (!("w" in keys) || d.w is number)
-          && (!("h" in keys) || d.h is number);
+          // A degree of the colour wheel (the clients pick one of GROUP_HUES).
+          && (!("hue" in keys) || (d.hue is number && d.hue >= 0 && d.hue <= 360))
+          && (!("x" in keys) || onBoard(d.x))
+          && (!("y" in keys) || onBoard(d.y))
+          && (!("w" in keys) || (onBoard(d.w) && d.w >= 0))
+          && (!("h" in keys) || (onBoard(d.h) && d.h >= 0));
       }
     }
 

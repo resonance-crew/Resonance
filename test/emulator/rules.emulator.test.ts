@@ -636,6 +636,19 @@ describe('profiles (users/{uid})', () => {
     await assertFails(updateDoc(doc(as('bob'), 'users', 'alice'), { bio: 'not mine' }));
   });
 
+  it('take an avatar colour only in the shape the server gives one out: oklch(L% C H), or none (audit L11)', async () => {
+    const me = doc(as('alice'), 'users', 'alice');
+    // Every colour lib/design/avatarColors gives out, and the one profiles wore before.
+    for (const accentColor of ['oklch(88% 0.08 55)', 'oklch(90% 0.07 88)', 'oklch(89% 0.07 165)', 'oklch(90% 0.05 290)', 'oklch(70.5% 0.1 40.25)', '']) {
+      await assertSucceeds(updateDoc(me, { accentColor }));
+    }
+    // A string of anything else, under the old 60-character cap: CSS that reaches out, words, another notation.
+    for (const accentColor of ['url(https://tracker.example/p.gif)', 'var(--accent)', '#fff', 'red', 'oklch(88% 0.08 55); color: red', 'oklch(88% 0.08 55) ', 'oklch(1000% 0.08 55)']) {
+      await assertFails(updateDoc(me, { accentColor }));
+    }
+    await assertFails(updateDoc(me, { accentColor: 55 }));
+  });
+
   it("hold the fields everyone downloads to their size: a hint's count, the translation languages", async () => {
     const me = doc(as('alice'), 'users', 'alice');
     await assertFails(updateDoc(me, { 'hintsSeen.editor': 'x'.repeat(100_000) }));
@@ -762,6 +775,9 @@ describe('cards: what the author may write', () => {
       draft('alice', { verified: true }),
       draft('alice', { visibility: 'everyone' }),
       draft('alice', { translations: { en: { thoughtCore: 'x', story: 'y' } } }),
+      // Empty, but not a map (audit L13): the apps and the web send {}.
+      draft('alice', { translations: '' }),
+      draft('alice', { translations: [] }),
       draft('alice', { media: { type: 'image', url: 'javascript:alert(1)' } }),
       // Sizes: everyone who reads the card downloads all of it.
       draft('alice', { thoughtCore: 'x'.repeat(201) }),
@@ -1397,6 +1413,32 @@ describe('server-only records', () => {
     }
   });
 
+  // The recommender's vectors, each reader's taste and their cached feed are
+  // the Admin SDK's alone: a private card's vector is among them.
+  it("card vectors, readers' tastes and their picks are the server's alone, the reader's own included", async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'cardVectors', 'alice-card__story__0'), { cardId: 'alice-card', authorId: 'alice', visibility: 'private', part: 0 });
+      await setDoc(doc(db, 'userProfiles', 'alice'), { taste: [{ cardId: 'bob-card', w: 1 }], against: [] });
+      await setDoc(doc(db, 'recommendations', 'alice'), { shown: { 'bob-card': { n: 1, lastDay: '2026-11-22' } }, coldStart: false });
+    });
+    const records: [string, string, Record<string, unknown>][] = [
+      ['cardVectors', 'alice-card__story__0', { cardId: 'alice-card', authorId: 'alice', part: 0 }],
+      ['userProfiles', 'alice', { taste: [], against: [] }],
+      ['recommendations', 'alice', { shown: {}, coldStart: true }],
+    ];
+    for (const [name, id, data] of records) {
+      for (const who of [as('alice'), as('bob'), anonymous()]) {
+        await assertFails(getDoc(doc(who, name, id)));
+        await assertFails(getDocs(collection(who, name)));
+        await assertFails(setDoc(doc(who, name, id), data));
+        await assertFails(updateDoc(doc(who, name, id), data));
+        await assertFails(deleteDoc(doc(who, name, id)));
+      }
+      await assertFails(getDocs(query(collection(as('alice'), name), where('authorId', '==', 'alice'))));
+      await assertFails(setDoc(doc(as('carol'), name, 'carol'), data));
+    }
+  });
+
   // Why two people are connected names which card of whose made it — a
   // resonance its writer may have made anonymous since. Neither of them reads it.
   it("why two people are connected is the server's alone, theirs included", async () => {
@@ -1483,6 +1525,16 @@ describe('thought maps (thoughtMaps/{uid}/…)', () => {
     await assertSucceeds(setDoc(doc(db, 'thoughtMaps', 'alice', 'edges', 'c1_c2'), { sourceCardId: 'c1', targetCardId: 'c2', label: '', createdAt: serverTimestamp() }));
     await assertFails(setDoc(doc(db, 'thoughtMaps', 'alice', 'edges', 'c1_c2'), { sourceCardId: 'c1', targetCardId: 'c3', label: '', createdAt: serverTimestamp() }));
     await assertFails(updateDoc(doc(db, 'thoughtMaps', 'alice', 'edges', 'c1_c2'), { label: 'x'.repeat(501) }));
+    // Numbers no board can draw (audit L13): a million either way at most, a region's size never negative, a hue a degree of the wheel.
+    await assertFails(setDoc(doc(db, 'thoughtMaps', 'alice', 'nodes', 'c1'), { ...node('c1'), x: 1e7 }));
+    await assertFails(updateDoc(doc(db, 'thoughtMaps', 'alice', 'nodes', 'c1'), { y: -1e9, updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(db, 'thoughtMaps', 'alice', 'nodes', 'c1'), { x: -24_000.5, y: 18_000, updatedAt: serverTimestamp() }));
+    const region = { title: 't', hue: 290, x: 0, y: 0, w: 460, h: 340, createdAt: serverTimestamp() };
+    await assertSucceeds(setDoc(doc(db, 'thoughtMaps', 'alice', 'groups', 'g2'), region));
+    for (const bad of [{ hue: 400 }, { hue: -1 }, { w: -5 }, { h: 2e6 }, { x: 1e12 }]) {
+      await assertFails(setDoc(doc(db, 'thoughtMaps', 'alice', 'groups', 'g3'), { ...region, ...bad }));
+      await assertFails(updateDoc(doc(db, 'thoughtMaps', 'alice', 'groups', 'g2'), bad));
+    }
     // Nothing else lives under a map, and the map document itself is never written.
     await assertFails(setDoc(doc(db, 'thoughtMaps', 'alice', 'stash', 's1'), { anything: true }));
     await assertFails(setDoc(doc(db, 'thoughtMaps', 'alice'), { anything: true }));
