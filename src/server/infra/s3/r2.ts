@@ -24,21 +24,35 @@ function env(name: string) {
   return value;
 }
 
-/** An S3 client for R2, with the account's keys unless others are given (a bucket a key of its own reaches). */
+/**
+ * The S3 clients made so far, one per endpoint and key pair: a client holds
+ * its own connection pool and signer, so every request that reaches R2 (a
+ * chat picture read is one per picture drawn) shares one rather than making
+ * its own.
+ */
+const clients = new Map<string, S3Client>();
+
+/** An S3 client for R2, with the account's keys unless others are given (a bucket a key of its own reaches); one per configuration. */
 export function r2Client(credentials?: { accessKeyId: string; secretAccessKey: string }): S3Client {
+  const endpoint = env('R2_ENDPOINT');
+  const keys = credentials ?? { accessKeyId: env('R2_ACCESS_KEY_ID'), secretAccessKey: env('R2_SECRET_ACCESS_KEY') };
+  const id = JSON.stringify([endpoint, keys.accessKeyId, keys.secretAccessKey]);
+  let client = clients.get(id);
+  if (!client) clients.set(id, (client = makeClient(endpoint, keys)));
+  return client;
+}
+
+function makeClient(endpoint: string, credentials: { accessKeyId: string; secretAccessKey: string }): S3Client {
   return new S3Client({
     region: 'auto',
-    endpoint: env('R2_ENDPOINT'),
+    endpoint,
     forcePathStyle: true,
     // R2 does not support the AWS SDK v3 default flexible-checksum trailer; left
     // on, the SDK embeds a bogus crc32 (computed over an empty body at presign
     // time) and rejects/garbles uploads. Only send a checksum when required.
     requestChecksumCalculation: 'WHEN_REQUIRED',
     responseChecksumValidation: 'WHEN_REQUIRED',
-    credentials: credentials ?? {
-      accessKeyId: env('R2_ACCESS_KEY_ID'),
-      secretAccessKey: env('R2_SECRET_ACCESS_KEY'),
-    },
+    credentials: { accessKeyId: credentials.accessKeyId, secretAccessKey: credentials.secretAccessKey },
   });
 }
 
