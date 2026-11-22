@@ -53,7 +53,9 @@ describe('createProfile', () => {
     expect(me).toMatchObject({ id: 'nina', handle: '小夜', initials: '小夜', bio: null, region: 'TW', primaryLocale: 'zh-TW' });
     expect(me.handleChangedAt).toMatch(/^\d{4}-/);
     const doc = (await db.doc('users/nina').get()).data()!;
-    expect(doc).toMatchObject({ handleLower: '小夜', autoTranslateTo: ['en'], verified: false, phoneHash: '', accentColor: avatarColorFor(newcomer.id) });
+    expect(doc).toMatchObject({ handleLower: '小夜', autoTranslateTo: ['en'], verified: false, accentColor: avatarColorFor(newcomer.id) });
+    // No empty phone hash any more (audit L10): nothing reads one, and a profile is public.
+    expect(doc).not.toHaveProperty('phoneHash');
     expect(doc.avatarSeed).toBe(String([...'nina'].reduce((s, c) => s + c.charCodeAt(0), 0)));
   });
 
