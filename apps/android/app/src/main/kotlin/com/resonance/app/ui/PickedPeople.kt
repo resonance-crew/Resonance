@@ -88,6 +88,7 @@ internal fun PickedPeopleDialog(
                 OrganicButton(L10n.Home.moreBtn, variant = ButtonVariant.Tonal, small = true) { scope.launch { list.more() } }
             }
         }
-        ModalCloseButton(L10n.Native.close, onDismiss)
+        // The flow closes it by this id: the backdrop is named 關閉 too (maestro/flows/tap-picked.yaml).
+        ModalCloseButton(L10n.Native.close, onDismiss, buttonModifier = Modifier.flowTag("tap-picked-close"))
     }
 }

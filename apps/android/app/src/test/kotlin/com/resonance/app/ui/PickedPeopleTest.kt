@@ -119,7 +119,8 @@ class PickedPeopleTest {
         compose.onAllNodesWithText(L10n.Home.moreBtn).assertCountEquals(0)
         compose.onNodeWithText("bob").performClick()
         assertEquals(listOf("bob"), opened.map { it.author.handle })
-        compose.onNodeWithText(L10n.Native.close).performClick()
+        // The flow presses 關閉 by its id (maestro/flows/tap-picked.yaml).
+        compose.onNodeWithTag("tap-picked-close", useUnmergedTree = true).performClick()
         assertEquals(1, closed)
     }
 
