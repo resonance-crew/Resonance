@@ -119,6 +119,9 @@ final class ConversationsStore {
     @ObservationIgnored private var inbox: InboxAPI?
     @ObservationIgnored private var social: SocialAPI?
     @ObservationIgnored private var subscription: SignalSubscription?
+    /// The signals the list compares with its last read, and the read that asks only for what moved.
+    @ObservationIgnored private weak var signals: SignalListener?
+    @ObservationIgnored private var reader: ConversationsReader?
     @ObservationIgnored private var pulls = PullGate()
     /// Someone's profile, by the path the session takes (GET /users with `apiSocial`, else Firestore).
     @ObservationIgnored var readPeople: @Sendable (Set<String>) async -> [String: PeopleBook.Read] = { ids in
@@ -135,6 +138,8 @@ final class ConversationsStore {
         self.uid = uid
         self.inbox = inbox
         self.social = social
+        self.signals = signals
+        reader = inbox.map { ConversationsReader(inbox: $0) }
         let db = FirebaseBootstrap.db
         if inbox != nil || social != nil {
             var topics: Set<SignalTopic> = []
@@ -209,18 +214,25 @@ final class ConversationsStore {
     /// for meanwhile runs once more after it.
     private func pull(_ moved: Set<SignalTopic>) {
         guard let uid else { return }
-        if let inbox, moved.isEmpty || moved.contains(.inbox) {
-            pulls.run("inbox") { [weak self] in await self?.pullConversations(inbox, uid: uid) }
+        if let reader, moved.isEmpty || moved.contains(.inbox) {
+            pulls.run("inbox") { [weak self] in await self?.pullConversations(reader, uid: uid) }
         }
         if let social, moved.isEmpty || moved.contains(.graph) {
             pulls.run("graph") { [weak self] in await self?.pullGraph(social, uid: uid) }
         }
     }
 
-    private func pullConversations(_ inbox: InboxAPI, uid: String) async {
+    /// The list through `reader`: only the conversations whose `threads[pair]` counters moved since its last read
+    /// (`?pairs=`), merged into what it holds — nothing at all when nothing moved and the listener is live — or the
+    /// whole list when no one can say what moved, and every 10 minutes (``ConversationsReader``).
+    private func pullConversations(_ reader: ConversationsReader, uid: String) async {
         do {
-            let list = try await inbox.conversations()
+            let before = reader.held
+            // Taken before the read: a touch heard while it is on its way is compared again by the next pull.
+            let list = try await reader.read(heard: signals?.heard ?? .unknown)
             guard self.uid == uid else { return }
+            // Nothing asked (nothing moved): the list stands as it was.
+            if let before, before == list, ready.contains("conversations") { return pullSucceeded(nil) }
             for conversation in list {
                 // Who it is with, as the server read them now (null: their account is gone).
                 if let author = conversation.other?.value1, let person = Person(author: author) {
@@ -293,6 +305,8 @@ final class ConversationsStore {
         listeners.removeAll()
         subscription?.cancel()
         subscription = nil
+        signals = nil
+        reader = nil
         inbox = nil
         social = nil
         pulls = PullGate()
