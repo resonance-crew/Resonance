@@ -1734,6 +1734,19 @@ export const MarkNotificationsReadRequest = named(
 );
 
 export const PageTokenQuery = z.object({ pageToken: z.string().min(1).max(512).nullish() });
+/** GET /conversations?pairs=: at most this many conversations by id at once. */
+export const CONVERSATION_PAIRS_MAX = 20;
+/**
+ * GET /conversations: a page (`pageToken`), or — `pairs`, the web's delta — only these conversations of the
+ * viewer's, by id (one that is gone or not theirs is left out of the answer).
+ */
+export const ConversationsQuery = PageTokenQuery.extend({
+  pairs: z
+    .string()
+    .transform((v) => [...new Set(v.split(',').map((k) => k.trim()).filter(Boolean))])
+    .pipe(z.array(z.string().regex(/^[A-Za-z0-9_-]{3,257}$/, 'Not a valid id.')).min(1).max(CONVERSATION_PAIRS_MAX))
+    .optional(),
+});
 export const BellQuery = z.object({
   pageToken: z.string().min(1).max(512).nullish(),
   limit: z.coerce.number().int().min(1).max(BELL_PAGE_MAX).default(BELL_PAGE),

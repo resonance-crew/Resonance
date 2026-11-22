@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { memoryCtx, type MemoryCtx } from '@/server/infra/memory/ctx';
 import { deleteConversationIn, sendMessageIn, sendNoteIn } from './conversations';
-import { getConversationIn, listBellIn, listConversationsIn, listThreadIn, markBellReadIn, markConversationReadIn } from './inbox';
+import { getConversationIn, listBellIn, listConversationsByIdIn, listConversationsIn, listThreadIn, markBellReadIn, markConversationReadIn } from './inbox';
 import { removeReactionIn, setReactionIn, unsendMessageIn } from './messages';
 import { pushNotificationIn } from './pushSend';
 
@@ -162,6 +162,49 @@ describe('what the inbox reads', () => {
     for (const [uid, pair] of [['carol', PAIR], ['carol', 'bob_carol'], ['bob', 'bob_carol'], ['bob', 'bob']]) {
       await expect(getConversationIn(ctx, uid, pair)).rejects.toMatchObject({ code: 'not_found' });
       await expect(listThreadIn(ctx, uid, pair, { limit: 50 })).rejects.toMatchObject({ code: 'not_found' });
+    }
+  });
+
+  it('lists conversations by id (the web’s delta): only the asker’s own, the newest first, none for an id gone or not theirs', async () => {
+    connect();
+    ctx.state.seed('connections', { alice_carol: { userIds: ['alice', 'carol'] }, bob_carol: { userIds: ['bob', 'carol'] } });
+    await sendMessageIn(ctx, 'alice', { to: 'bob', text: 'hi', image: null });
+    await sendMessageIn(ctx, 'carol', { to: 'alice', text: 'later', image: null });
+    await sendMessageIn(ctx, 'carol', { to: 'bob', text: 'not hers', image: null });
+    const asked = await listConversationsByIdIn(ctx, 'alice', [PAIR, 'alice_carol', 'bob_carol', 'alice_dave', 'alice', 'alice_carol']);
+    expect(asked.conversations.map((c) => [c.id, c.other?.handle, c.unread])).toEqual([
+      ['alice_carol', 'Carol', 1],
+      [PAIR, 'Bob', 0],
+    ]);
+    expect(asked.nextPageToken).toBeNull();
+    // Each one as the page lists it.
+    const page = await listConversationsIn(ctx, 'alice');
+    expect(asked.conversations).toEqual(page.conversations);
+    // Deleted: left out, as for anyone not in it.
+    await deleteConversationIn(ctx, 'alice', PAIR);
+    expect((await listConversationsByIdIn(ctx, 'alice', [PAIR])).conversations).toEqual([]);
+    expect((await listConversationsByIdIn(ctx, 'carol', [PAIR])).conversations).toEqual([]);
+  });
+
+  it('every write that changes a row of someone’s list moves that conversation’s own counter too (what the web’s delta reads by)', async () => {
+    connect();
+    const writes = [
+      () => sendMessageIn(ctx, 'alice', { to: 'bob', text: 'hi https://example.com', image: null }),
+      () => sendNoteIn(ctx, 'alice', { cardId: 'named', text: 'This stayed with me', clientId: 'n9' }),
+      () => markConversationReadIn(ctx, 'bob', PAIR),
+      async () => {
+        const sent = await sendMessageIn(ctx, 'bob', { to: 'alice', text: 'oops', image: null });
+        await unsendMessageIn(ctx, 'bob', PAIR, sent.id);
+      },
+      () => deleteConversationIn(ctx, 'alice', PAIR),
+    ];
+    for (const write of writes) {
+      await write();
+      for (const t of ctx.realtime.touches) {
+        if (!t.topics.includes('inbox')) continue;
+        expect(t.topics).toContainEqual({ thread: PAIR });
+      }
+      ctx.realtime.touches.length = 0;
     }
   });
 

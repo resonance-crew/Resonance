@@ -3097,6 +3097,15 @@
               "type": "string",
               "maxLength": 512
             }
+          },
+          {
+            "name": "pairs",
+            "in": "query",
+            "required": false,
+            "description": "Conversation ids, comma-separated (1–20): only these of yours, the most recently active first, each with its person — one deleted, or not yours, is left out (no `nextPageToken`). For a client that knows which conversations moved (`signals/{uid}` `threads`) and holds the rest; without it, the first page as ever.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {

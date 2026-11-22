@@ -23,7 +23,7 @@ import {
   resolveCardId,
 } from '@/lib/db/firestore/client/reads';
 import { loadMyThoughtMap, type ThoughtMapData } from '@/lib/db/firestore/client/thoughtMap';
-import { listConversations } from '@/lib/db/firestore/client/messages';
+import { conversationsReader } from '@/lib/db/firestore/client/messages';
 import { liveConversationsKey } from './thread';
 import { getBell } from '@/lib/db/firestore/client/notifications';
 import { watchSignal, type SignalTopic } from '@/lib/db/firestore/client/signals';
@@ -1034,7 +1034,7 @@ function useRevalidateOnSignal(uid: string | null, topic: SignalTopic, key: stri
 function useLiveConversations(): LiveState<Conversation[]> {
   const { user, loading } = useAuth();
   const uid = user && !loading ? user.id : null;
-  return useLive<Conversation[]>(uid ? liveConversationsKey(uid) : null, pulled(uid ?? '', ['inbox'], () => listConversations()));
+  return useLive<Conversation[]>(uid ? liveConversationsKey(uid) : null, pulled(uid ?? '', ['inbox'], conversationsReader(uid ?? '')));
 }
 
 /**

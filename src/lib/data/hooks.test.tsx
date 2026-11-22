@@ -31,10 +31,11 @@ vi.mock('@/lib/db/firestore/client/reads', () => ({
   listMyConnectionUids: vi.fn(),
   resolveCardId: vi.fn(),
 }));
-vi.mock('@/lib/db/firestore/client/messages', () => ({
-  listConversations: vi.fn(),
-  readConversation: vi.fn(),
-}));
+vi.mock('@/lib/db/firestore/client/messages', () => {
+  const listConversations = vi.fn();
+  // The live list's reader, here a whole read every pull (its deltas: client/messages.test).
+  return { listConversations, conversationsReader: () => () => listConversations(), readConversation: vi.fn() };
+});
 vi.mock('@/lib/db/firestore/client/notifications', () => ({
   getBell: vi.fn(),
 }));

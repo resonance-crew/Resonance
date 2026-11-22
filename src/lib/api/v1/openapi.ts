@@ -634,7 +634,19 @@ export function buildOpenApi(): Json {
           'holds and the other person as their profile is now (`other: null` when their account is gone). Conversations ' +
           'with people you blocked are listed too, as before: filter them by your blocks. Ask again when `signals/{uid}` ' +
           '`inbox` moves, with `If-None-Match`: an unchanged list is `304`.',
-        parameters: [pageTokenParam("A page's `nextPageToken`")],
+        parameters: [
+          pageTokenParam("A page's `nextPageToken`"),
+          {
+            name: 'pairs',
+            in: 'query',
+            required: false,
+            description:
+              'Conversation ids, comma-separated (1–20): only these of yours, the most recently active first, each with its ' +
+              'person — one deleted, or not yours, is left out (no `nextPageToken`). For a client that knows which ' +
+              'conversations moved (`signals/{uid}` `threads`) and holds the rest; without it, the first page as ever.',
+            schema: { type: 'string' },
+          },
+        ],
       }, [400, 401]),
       '/conversations/{pair}/messages': get('listMessages', "A thread's messages, newest first", 'MessagePage', {
         description:

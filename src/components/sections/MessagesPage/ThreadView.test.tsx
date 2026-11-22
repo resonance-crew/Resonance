@@ -55,6 +55,7 @@ vi.mock('@/lib/db/firestore/client/messages', () => ({
   getConversation: vi.fn(),
   // The live list a thread starts on (W15): it has heard nothing here.
   listConversations: vi.fn(() => new Promise(() => {})),
+  conversationsReader: () => () => new Promise(() => {}),
   readConversation: vi.fn(async () => {}),
   isGone: (e: unknown) => [403, 404].includes((e as { status?: number } | null)?.status ?? 0),
   sendMessage: vi.fn(),

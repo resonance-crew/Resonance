@@ -1,10 +1,12 @@
 'use client';
 
-import type { Conversation, Message } from '@/lib/db/types';
+import type { Conversation, Message, User } from '@/lib/db/types';
 import type { ConversationBody, ConversationListBody, MessagePageBody, ThreadMessageBody } from '@/lib/api/v1/schemas';
 import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
 import { ApiError, callApi, callApiForm, ownSignalsOf } from './api';
-import { pokeOwn, pokeSignal, watchSignal } from './signals';
+import { rememberUsers } from './reads';
+import { heardCounters, pokeOwn, pokeSignal, watchSignal, type Heard, type SignalTopic } from './signals';
+import { summaryAuthor } from '@/lib/data/summaries';
 import { linkPreviewOf } from '@/lib/links/previewShape';
 import { isReactionId, type ReactionId } from '@/lib/design/reactions';
 
@@ -343,11 +345,96 @@ export async function getConversation(pairId: string): Promise<Conversation | nu
 /** How many conversations the list (and the header's badge) holds: the API's first page. */
 export const CONVERSATIONS_PAGE = 50;
 
+/** The people a list answer brought along (each conversation's `other`): into the page's profile cache, so their faces need no read of their own. */
+function rememberOthers(list: ConversationBody[]): void {
+  const people: Record<string, User> = {};
+  for (const c of list) if (c.other) people[c.other.id] = { ...summaryAuthor(c.other), avatarSeed: c.other.avatarSeed ?? '0' };
+  rememberUsers(people);
+}
+
 /** The viewer's newest conversations, the most recently active first (GET /api/v1/conversations: its first page). */
 export async function listConversations(): Promise<Conversation[]> {
   const uid = requireUid();
   const body = await callApi<ConversationListBody>('/api/v1/conversations');
+  rememberOthers(body.conversations);
   return body.conversations.slice(0, CONVERSATIONS_PAGE).map((c) => mapApiConversation(c, uid));
+}
+
+/** How long the list goes on reading only what moved before it reads its first page whole again (the server's early 304 trusts a list as long: signalTag EARLY_MAX_AGE_S). */
+export const LIST_FULL_READ_MS = 10 * 60_000;
+/** The most conversations one delta asks for (the API's `pairs` cap); more moved, the page is read whole. */
+const PAIRS_MAX = 20;
+
+/** Most recently active first, as the API pages them: updatedAt, then id. */
+const activeFirst = (a: ConversationBody, b: ConversationBody) =>
+  a.updatedAt === b.updatedAt ? (a.id < b.id ? 1 : a.id > b.id ? -1 : 0) : (a.updatedAt ?? '') < (b.updatedAt ?? '') ? 1 : -1;
+
+/**
+ * The live list's read (lib/data/hooks useLiveConversations), pulled whenever
+ * the viewer's `inbox` counter moves, on the safety pulls and after this
+ * browser's own writes. Each conversation whose change moves `inbox` — a
+ * message, a note, an unsend, a read, a deletion — moves its own
+ * `threads[pair]` counter in the same touch (server domain/realtime), so a
+ * pull reads only the conversations whose counters moved since its last read
+ * (`?pairs=`: a read per conversation and per person, where the first page is
+ * fifty and fifty) and merges them into the page it holds; one the answer
+ * leaves out is gone. The first page is read whole instead — and the early
+ * 304 then answers for it — when no one can say what moved (no listener
+ * heard yet, or it failed: heardCounters), when `inbox` moved with no
+ * conversation's counter (a touch of the list alone), when more moved than a
+ * delta asks for, when a full page lost a conversation (the next one in is
+ * only the server's to say), and every {@link LIST_FULL_READ_MS} besides —
+ * for what no signal tells of (a renamed person, a touch that failed), as
+ * long as the server's early 304 trusts a list. A pull with nothing moved
+ * while the listener is live reads nothing: the counter it would be checked
+ * against stands.
+ */
+export function conversationsReader(uid: string): () => Promise<Conversation[]> {
+  let held: ConversationBody[] | null = null;
+  /** The counters as they stood when `held` was last read (null: unknown). */
+  let heardAt: ReadonlyMap<SignalTopic, number> | null = null;
+  /** `held` was read whole before the listener's first answer, which then stands for its counters. */
+  let beforeFirst = false;
+  let fullAt = 0;
+  const shown = () => held!.slice(0, CONVERSATIONS_PAGE).map((c) => mapApiConversation(c, uid));
+
+  const whole = async (counters: ReturnType<typeof heardCounters>) => {
+    const body = await callApi<ConversationListBody>('/api/v1/conversations');
+    rememberOthers(body.conversations);
+    held = body.conversations.slice(0, CONVERSATIONS_PAGE);
+    heardAt = counters && counters !== 'waiting' ? counters.now : null;
+    beforeFirst = counters === 'waiting';
+    fullAt = Date.now();
+    return shown();
+  };
+
+  return async () => {
+    if (requireUid() !== uid) throw new Error('Signed in as someone else');
+    // Taken before the read: a touch heard while it is on its way is compared again by the next pull.
+    const counters = heardCounters(uid);
+    const heard = counters && counters !== 'waiting' ? counters.now : null;
+    // A read made before the listener first answered stands for that answer (as the watchers' first reads do, client/signals).
+    const was = heardAt ?? (beforeFirst && heard ? (counters as Heard).first : null);
+    if (!held || !heard || !was || Date.now() - fullAt >= LIST_FULL_READ_MS) return whole(counters);
+    beforeFirst = false;
+    if ((heard.get('inbox') ?? 0) <= (was.get('inbox') ?? 0)) {
+      heardAt = heard;
+      return shown();
+    }
+    const moved: string[] = [];
+    for (const [topic, n] of heard) if (topic.startsWith('thread:') && n > (was.get(topic) ?? 0)) moved.push(topic.slice('thread:'.length));
+    if (!moved.length || moved.length > PAIRS_MAX) return whole(counters);
+    const body = await callApi<ConversationListBody>(`/api/v1/conversations?pairs=${moved.map(encodeURIComponent).join(',')}`);
+    const came = new Map(body.conversations.map((c) => [c.id, c]));
+    const full = held.length >= CONVERSATIONS_PAGE;
+    if (full && held.some((c) => moved.includes(c.id) && !came.has(c.id))) return whole(counters);
+    rememberOthers(body.conversations);
+    held = [...held.filter((c) => !moved.includes(c.id)), ...came.values()].sort(activeFirst);
+    // A full page stays the first page: one that moved behind its last is the next page's.
+    if (full) held = held.slice(0, CONVERSATIONS_PAGE);
+    heardAt = heard;
+    return shown();
+  };
 }
 
 /** A message with its place in the thread: the API's opaque cursor (`before` for older ones, `after` for newer). */
