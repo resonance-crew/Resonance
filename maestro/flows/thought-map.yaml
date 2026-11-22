@@ -43,19 +43,18 @@ tags:
     visible:
       id: map-node-alice-draft
     timeout: 10000
-# The region's title: a first tap selects the region, a second opens its title for writing. Android (as the web)
-# selects the old words, iOS leaves the caret after them: emptied first, as a person on either would.
+# The region's title: a first tap selects the region, a second opens its title for writing — its old words
+# selected, on both apps as on the web, so what is typed takes their place (never emptied first here: iOS once
+# left the caret after them, and 回憶 became 回憶雨天的回憶).
 - tapOn: 回憶
 - tapOn: 回憶
-- eraseText
 - inputText: 雨天的回憶 Maestro
 - pressKey: Enter
 - extendedWaitUntil:
     visible: 雨天的回憶 Maestro
     timeout: 10000
-# The arrow's words: a tap on them opens them for writing.
+# The arrow's words: a tap on them opens them for writing, selected as the title's were.
 - tapOn: 後來
-- eraseText
 - inputText: 那年以後
 - pressKey: Enter
 - extendedWaitUntil:
@@ -70,9 +69,8 @@ tags:
     notVisible:
       id: map-node-rich-story
     timeout: 10000
-# A region of her own: 分類 adds 未命名分類 with its title open for writing (emptied first, as above).
+# A region of her own: 分類 adds 未命名分類 with its title open for writing, selected as above.
 - tapOn: 分類
-- eraseText
 - inputText: 晴天 Maestro
 - pressKey: Enter
 - extendedWaitUntil:

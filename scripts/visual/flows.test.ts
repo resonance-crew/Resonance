@@ -216,6 +216,36 @@ describe('the flows’ words are the apps’ words', () => {
     expect(readFileSync(join(FLOWS, 'common/draft-on-server.js'), 'utf8')).toContain('/api/v1/me/cards?tab=draft');
   });
 
+  it('draft-offline: types twice with no network, a pause past the autosave after each, and asks for the later words', () => {
+    const flow = read('draft-offline');
+    const steps = flow.split(/^---\s*$/m)[1];
+    const at = (text: string, from = 0) => {
+      const i = steps.indexOf(text, from);
+      expect(i, text).toBeGreaterThanOrEqual(0);
+      return i;
+    };
+    const offline = at('setAirplaneMode: enabled');
+    const first = at('- inputText: 燈一盞一盞熄了 Maestro', offline);
+    // The first offline save is on its way (儲存中⋯ shows only past the autosave's pause) before she writes again…
+    const saving = at(`visible: ${zhTW.write.status.saving}`, first);
+    const second = at('- inputText: 只剩一扇窗亮著 Maestro', saving);
+    // …and the second typing gets its own pause before the app goes: longer than the writer's AUTOSAVE_DELAY_MS.
+    const pause = at('file: common/pause.js', second);
+    const ms = Number(/MS: '(\d+)'/.exec(steps.slice(pause))?.[1]);
+    const writer = readFileSync(join(process.cwd(), 'apps/android/app/src/main/kotlin/com/resonance/app/ui/WriteModel.kt'), 'utf8');
+    const autosave = Number(/const val AUTOSAVE_DELAY_MS = (\d+)L/.exec(writer)?.[1]);
+    expect(autosave).toBeGreaterThan(0);
+    expect(ms).toBeGreaterThanOrEqual(autosave * 2);
+    const stopped = at('- stopApp', pause);
+    expect(steps.indexOf('setAirplaneMode: disabled', stopped)).toBeGreaterThan(stopped);
+    // After the relaunch both the page and the server are asked for the words typed second.
+    const relaunch = at('file: common/relaunch.yaml', stopped);
+    const later = '燈一盞一盞熄了 Maestro只剩一扇窗亮著 Maestro';
+    at(`visible: .*${later}.*`, relaunch);
+    at(`WORDS: ${later}`, relaunch);
+    expect(readFileSync(join(FLOWS, 'common/pause.js'), 'utf8')).toContain('Number(MS)');
+  });
+
   it('sticker-breath: 貼圖 and the panel’s first sticker, the playing cell by its flow name', () => {
     const flow = read('sticker-breath');
     expect(flow).toContain(m.stickers);
