@@ -189,6 +189,39 @@ describe.each([
 });
 
 /**
+ * Round 30: the faces' line stands right over the capsule. A puppet peeking over the bar rises 48 in from its end —
+ * far from the faces over a capsule's one line, right in front of them over a short bar (共振 alone, the first line of
+ * a capsule in two): there the faces' foot is the bar's ceiling, and the engine lets no peek rise under it.
+ */
+describe('the faces over the response bar', () => {
+  function withFaces(barWidth: number) {
+    const { layer, respond, bar } = install(1440);
+    const group = respond.querySelector('[role="group"]') as HTMLElement;
+    BOXES.set(group, [bar[0], bar[1], barWidth, bar[3]]);
+    const line = document.createElement('div');
+    line.innerHTML = '<span data-end-faces=""><span><button aria-label="faces"></button></span></span>';
+    respond.prepend(line);
+    const faces = line.querySelector('[data-end-faces] > span') as HTMLElement;
+    // The faces' button: 6 in from the line's start, 95 wide, 44 tall, its foot on the bar's top.
+    BOXES.set(faces, [bar[0] + 6, bar[1] - 44, 95, 44]);
+    return { layer, bar };
+  }
+
+  it('leaves the ceiling to what stands above the end row when the peek rises far from them (a capsule on one line)', () => {
+    const { layer } = withFaces(420);
+    const { scene } = readingScene(document, layer);
+    // The story's foot (300 + 1040), not the faces' (1400).
+    expect(scene.respondCeiling).toBe(1342);
+  });
+
+  it('makes their foot the ceiling when the peek would rise in front of them (共振 alone on the first line)', () => {
+    const { layer, bar } = withFaces(108);
+    const { scene } = readingScene(document, layer);
+    expect(scene.respondCeiling).toBe(bar[1] + 2);
+  });
+});
+
+/**
  * The perf audit's W8: the feed's far-off cards skip their layout (content-visibility: auto on the grid's item), and
  * reading a skipped card's outline, foot or title would lay it all out again. Such a card is read by its item's box
  * (less the item's padding, the card's reach) and keeps its key; nothing inside it is asked where it is.

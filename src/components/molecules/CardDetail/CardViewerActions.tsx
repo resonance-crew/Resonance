@@ -289,7 +289,8 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
       <div className={styles.end} data-fit={fit}>
         {user && (
           <div className={styles.facesLine}>
-            <span className={styles.faces}>{faces}</span>
+            {/* Marked for the paper puppets (lib/mascots/reading/measure): no peek rises over the bar in front of them. */}
+            <span className={styles.faces} data-end-faces="">{faces}</span>
           </div>
         )}
         <div className={styles.row}>
