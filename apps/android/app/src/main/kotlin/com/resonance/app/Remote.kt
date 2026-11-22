@@ -37,7 +37,11 @@ class SignalListener(private val hub: SignalHub) {
         listeners.add(NAME) {
             val registration: ListenerRegistration = AppFirebase.db.collection("signals").document(uid)
                 .addSnapshotListener { snap, error ->
-                    if (error != null || snap == null) return@addSnapshotListener listeners.fail(NAME)
+                    if (error != null || snap == null) {
+                        // The list's delta reads nothing it can't vouch for: until the next answer, it reads whole.
+                        hub.fail()
+                        return@addSnapshotListener listeners.fail(NAME)
+                    }
                     hub.publish(Signals.of(snap.data))
                 }
             registration::remove

@@ -25,6 +25,23 @@ class SignalsTest {
         assertEquals(Signals(), Signals.of(null))
     }
 
+    @Test fun theCountersAreLiveOnlyWhileTheListenerIs() {
+        val hub = SignalHub()
+        // No answer yet: no one can say what moved.
+        assertEquals(null, hub.live())
+        hub.publish(Signals(inbox = 2))
+        assertEquals(Signals(inbox = 2), hub.live())
+        // Failed: nothing to compare with until it answers again (what it last heard stays the state).
+        hub.fail()
+        assertEquals(null, hub.live())
+        assertEquals(Signals(inbox = 2), hub.state.value)
+        hub.publish(Signals(inbox = 3))
+        assertEquals(Signals(inbox = 3), hub.live())
+        // Stopped (signed out).
+        hub.publish(null)
+        assertEquals(null, hub.live())
+    }
+
     @Test fun aMovingCounterPullsItsTopicOnly() = runTest {
         val hub = SignalHub()
         val foreground = MutableStateFlow(false)
