@@ -1259,7 +1259,7 @@ describe('closed legacy write paths', () => {
     );
   });
 
-  it('lets a note\'s recipient read it and mark it read, and nothing else', async () => {
+  it('lets a note\'s recipient read it, and nothing else: not even mark it read (no client ever did)', async () => {
     await seed(async (db) => {
       await setDoc(doc(db, 'notes', 'n1'), { fromUserId: 'carol', toUserId: 'alice', cardId: 'c1', text: 'hi', readAt: null, createdAt: new Date() });
     });
@@ -1270,7 +1270,9 @@ describe('closed legacy write paths', () => {
     await assertFails(getDocs(query(collection(as('carol'), 'notes'), where('fromUserId', '==', 'carol'))));
     await assertFails(getDoc(doc(as('bob'), 'notes', 'n1')));
     await assertFails(updateDoc(doc(as('alice'), 'notes', 'n1'), { text: 'rewritten' }));
-    await assertSucceeds(updateDoc(doc(as('alice'), 'notes', 'n1'), { readAt: serverTimestamp() }));
+    // What the old rule let its recipient write (`readAt` = now), refused now.
+    await assertFails(updateDoc(doc(as('alice'), 'notes', 'n1'), { readAt: serverTimestamp() }));
+    await assertFails(deleteDoc(doc(as('alice'), 'notes', 'n1')));
   });
 
   it("keeps card links to the server: they name both cards' authors, an anonymous card's too", async () => {
@@ -1295,6 +1297,12 @@ describe('closed legacy write paths', () => {
 
   it('refuses writing resonance records, quotas and rate limits', async () => {
     await assertFails(setDoc(doc(as('alice'), 'resonances', 'c1_alice'), { cardId: 'c1', userId: 'alice' }));
+    // A legacy record stays readable by its resonator, but no client deletes it (the old rule let the resonator).
+    await seed(async (db) => {
+      await setDoc(doc(db, 'resonances', 'c0_alice'), { cardId: 'c0', userId: 'alice', createdAt: new Date() });
+    });
+    await assertSucceeds(getDoc(doc(as('alice'), 'resonances', 'c0_alice')));
+    await assertFails(deleteDoc(doc(as('alice'), 'resonances', 'c0_alice')));
     await assertFails(setDoc(doc(as('alice'), 'quotas', 'alice_2026-09-30'), { userId: 'alice', inviteCount: 0 }));
     await assertFails(getDoc(doc(as('alice'), 'rateLimits', 'alice_notes')));
     await assertFails(setDoc(doc(as('alice'), 'rateLimits', 'alice_notes'), { count: 0 }));
