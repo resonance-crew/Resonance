@@ -41,12 +41,24 @@ export interface ListedBellRow {
   payload: Record<string, unknown>;
   createdAt: Instant;
   readAt: Instant | null;
+  /** When the row was made (the store's time of that write); null for a row older than the stamp. */
+  madeAt?: Instant | null;
 }
 
 export interface BellPage {
   rows: ListedBellRow[];
   /** Resumes after the page's last row; null when the page wasn't full. */
   next: PageCursor | null;
+  /** Where the read stood (the store's time): every change after it is stamped later (`editedAt`). */
+  mark?: Instant | null;
+}
+
+/** The rows changed after a time, and where that read stood. */
+export interface BellChanges {
+  /** Oldest change first. */
+  rows: ListedBellRow[];
+  /** The read's own time — null when `limit` rows came back (more may have changed). */
+  mark: Instant | null;
 }
 
 /** A card as the weekly read summary weighs it. */
@@ -81,6 +93,13 @@ export interface BellData {
   listReachedEnd(sinceMs: number, untilMs: number): Promise<WeekRead[]>;
   /** `uid`'s rows (`userId ==`), `(createdAt, id)` descending, after `before` (invalid_request when it isn't a cursor). */
   listRows(uid: string, limit: number, before?: PageCursor): Promise<BellPage>;
+  /**
+   * `uid`'s rows changed after `since` — made, read, rung again, their readers changed: every write to a row the
+   * bell shows stamps its `editedAt` with the store's time of that write — at most `limit`, oldest change first.
+   */
+  listRowsChangedAfter(uid: string, limit: number, since: Instant): Promise<BellChanges>;
+  /** How many rows `uid` has (`userId ==`; an aggregation: a read per thousand). A deletion is told by it. */
+  countRows(uid: string): Promise<number>;
   /** Of these rows, those that are `uid`'s and unread get `readAt` = the server's time; answers how many. */
   markRead(uid: string, ids: string[]): Promise<number>;
   /** `uid`'s unread rows made at `before` or earlier — of the newest `scan` such rows — read now; answers how many. */

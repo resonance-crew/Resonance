@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ApiFailure } from '@/lib/api/v1/http';
 import { memoryCtx } from '@/server/infra/memory/ctx';
 import { getCardDetail, getMe } from './cardsRead';
@@ -82,6 +82,21 @@ describe('blocks', () => {
     // Again: nothing changes, no one is touched.
     expect(await blockIn(ctx, 'alice', 'carol')).toBe(false);
     expect(ctx.realtime.touches).toHaveLength(1);
+  });
+
+  it("hands the blocker's own graph counter on, touched before the answer — the blocked person's still after it", async () => {
+    const ctx = world();
+    ctx.state.put('connections', 'alice_bob', { userIds: ['alice', 'bob'], establishedAt: new Date() });
+    const own = vi.fn();
+    await blockIn(ctx, 'alice', 'bob', own);
+    expect(own).toHaveBeenCalledWith({ graph: 1 });
+    expect(ctx.realtime.touches).toEqual([
+      { uid: 'alice', topics: ['graph'] },
+      { uid: 'bob', topics: ['graph'] },
+    ]);
+    const again = vi.fn();
+    await unblockIn(ctx, 'alice', 'bob', again);
+    expect(again).toHaveBeenCalledWith({ graph: 2 });
   });
 
   it('refuses blocking yourself', async () => {

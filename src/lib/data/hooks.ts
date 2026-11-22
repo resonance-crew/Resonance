@@ -21,12 +21,13 @@ import {
   isConnected,
   isConnectedTo,
   listMyConnectionUids,
+  watchConnections,
   resolveCardId,
 } from '@/lib/db/firestore/client/reads';
 import { loadMyThoughtMap, type ThoughtMapData } from '@/lib/db/firestore/client/thoughtMap';
 import { conversationsReader } from '@/lib/db/firestore/client/messages';
 import { liveConversationsKey } from './thread';
-import { getBell } from '@/lib/db/firestore/client/notifications';
+import { bellReader } from '@/lib/db/firestore/client/notifications';
 import { watchSignal, type SignalTopic } from '@/lib/db/firestore/client/signals';
 import { getMyBlockedIds } from '@/lib/db/firestore/client/blocks';
 import { ApiError, callApi } from '@/lib/db/firestore/client/api';
@@ -1004,14 +1005,20 @@ export interface ConversationsData {
  */
 const signalWatches = new Map<string, { readers: number; stop: () => void }>();
 
-function useRevalidateOnSignal(uid: string | null, topic: SignalTopic, key: string | null): void {
+function useRevalidateOnSignal(
+  uid: string | null,
+  topic: SignalTopic,
+  key: string | null,
+  /** How to watch (the topic's own watcher, when it knows a safety pull to skip: client/reads watchConnections). */
+  watchWith: (uid: string, revalidate: () => void) => () => void = (u, revalidate) => watchSignal(u, topic, revalidate),
+): void {
   const { mutate } = useSWRConfig();
   useEffect(() => {
     if (!uid || !key) return;
     const id = `${uid}|${topic}|${key}`;
     let watch = signalWatches.get(id);
     if (!watch) {
-      watch = { readers: 0, stop: watchSignal(uid, topic, () => void mutate(key)) };
+      watch = { readers: 0, stop: watchWith(uid, () => void mutate(key)) };
       signalWatches.set(id, watch);
     }
     watch.readers++;
@@ -1021,6 +1028,8 @@ function useRevalidateOnSignal(uid: string | null, topic: SignalTopic, key: stri
       w.stop();
       if (signalWatches.get(id) === w) signalWatches.delete(id);
     };
+    // `watchWith` is deliberately not a dependency: the topic names what it watches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, topic, key, mutate]);
 }
 
@@ -1122,8 +1131,9 @@ export function useConversations(): { data: ConversationsData | undefined; error
   // a delete — mutates this key (dependsOnConnections), and a new connection is a new conversation in the live
   // list, which this joins.
   const connections = useSWR<string[]>(uid ? `conversations:${uid}` : null, () => listMyConnectionUids());
-  // …and read again when the viewer's connections change elsewhere (their `graph` signal).
-  useRevalidateOnSignal(uid, 'graph', uid ? `conversations:${uid}` : null);
+  // …and read again when the viewer's connections change elsewhere (their `graph` signal) — a safety pull only when
+  // the counter can't say they are as read (watchConnections).
+  useRevalidateOnSignal(uid, 'graph', uid ? `conversations:${uid}` : null, watchConnections);
   const conversations = visibleConversations(live.data, blocked);
   const otherUids = conversations?.map((c) => c.participants.find((p) => p !== uid) ?? '');
   const ids =
@@ -1149,14 +1159,15 @@ export function useConversations(): { data: ConversationsData | undefined; error
 /**
  * The viewer's newest notifications, live (the bell's badge and list): GET
  * /api/v1/me/bell, pulled again when the viewer's `bell` signal moves — a new
- * row, or one marked read on another device, shows without a reload.
+ * row, or one marked read on another device, shows without a reload; each
+ * pull after the first reads only what changed (client/notifications bellReader).
  */
 export function useNotifications(max = 20): LiveState<Notification[]> {
   const { user, loading } = useAuth();
   const uid = user && !loading ? user.id : null;
   return useLive<Notification[]>(
     uid ? `notifications:live:${uid}:${max}` : null,
-    pulled(uid ?? '', ['bell'], () => getBell(max).then((bell) => bell.items)),
+    pulled(uid ?? '', ['bell'], bellReader(uid ?? '', max)),
   );
 }
 

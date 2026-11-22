@@ -8,6 +8,7 @@ import { isReservedId } from '@/lib/db/firestore/reservedId';
 import type { ServerCtx } from '@/server/ctx';
 import { asSnap, becameReachable, cardOf, hiddenResonance } from '@/server/domain/cardsWrite';
 import type { AudiencePatch, CardRow } from '@/server/ports/repos/cards';
+import { signalConnections } from './realtime';
 
 /**
  * The card box's own changes to a card — its visibility, its byline, deleting
@@ -36,7 +37,9 @@ export function refreshPages(ctx: ServerCtx, stale: string[]): void {
 /** Change your card's visibility and/or anonymity (only the fields sent): src/lib/api/v1/cards.ts updateCard. */
 export async function updateCardIn(ctx: ServerCtx, uid: string, id: string, input: UpdateCardInput): Promise<UpdatedCard> {
   if (isReservedId(id)) throw notFound();
+  let ended: readonly string[] = [];
   const { before, data, changed, author } = await ctx.uow.run(async (tx) => {
+    ended = [];
     const [stored, edit, me] = await Promise.all([tx.cards.getCardRow(id), tx.cards.getEditRow(id), tx.cards.getAuthorRow(uid)]);
     if (!stored || stored.authorId !== uid) throw notFound();
     // Nothing synced into its pending edit either: the restore sets that straight.
@@ -53,7 +56,11 @@ export async function updateCardIn(ctx: ServerCtx, uid: string, id: string, inpu
       throw new ApiFailure('invalid_request', BLANK_CARD_MESSAGE);
     }
     // Read before anything is written: what hiding a published resonance takes back.
-    if (changed && hiddenResonance(after)) tx.cards.takeBack(await tx.cards.readTakeBack(uid, id));
+    if (changed && hiddenResonance(after)) {
+      const back = await tx.cards.readTakeBack(uid, id);
+      tx.cards.takeBack(back);
+      ended = back.ends;
+    }
     if (changed) {
       // A published card's story is as read here: its list summary is restated with the new updatedAt.
       // A draft gets one when it is published.
@@ -67,6 +74,8 @@ export async function updateCardIn(ctx: ServerCtx, uid: string, id: string, inpu
     }
     return { before: stored, data: after, changed, author: me ?? undefined };
   }, { label: 'updateCard' });
+  // After the commit: a connection the take-back ended changed both people's lists.
+  await signalConnections(ctx, uid, ended);
   const card = cardOf(id, data);
   if (data.visibility !== before.visibility) {
     // The card has changed either way; the route answers it. A failure is logged — the recommended feed
@@ -102,7 +111,9 @@ export const NOT_IN_TRASH_MESSAGE = 'This card is not in the trash.';
 /** Delete your card for good, draft or published: src/lib/api/v1/cards.ts deleteCard. */
 export async function deleteCardIn(ctx: ServerCtx, uid: string, id: string, opts: DeleteCardOptions = {}): Promise<DeletedCard> {
   if (isReservedId(id)) throw notFound();
+  let ended: readonly string[] = [];
   const data = await ctx.uow.run(async (tx) => {
+    ended = [];
     const stored = await tx.cards.getCardRow(id);
     if (!stored || stored.authorId !== uid) throw notFound();
     const trashedAt = stored.trashedAt;
@@ -110,11 +121,15 @@ export async function deleteCardIn(ctx: ServerCtx, uid: string, id: string, opts
     if (opts.onlyIfTrashed && trashedAt == null) throw new ApiFailure('conflict', NOT_IN_TRASH_MESSAGE);
     // A resonance is taken back with it, read in this transaction: one pointed at the card a moment before
     // can't outlive it with its connection.
-    tx.cards.takeBack(await tx.cards.readTakeBack(uid, id));
+    const back = await tx.cards.readTakeBack(uid, id);
+    tx.cards.takeBack(back);
+    ended = back.ends;
     tx.cards.deleteForGood(id, stored.slug);
     return stored;
   }, { label: 'deleteCard' });
   if (!data) return { stale: [], deleted: false };
+  // After the commit: a connection that ended with the card changed both people's lists.
+  await signalConnections(ctx, uid, ended);
   // The card is gone either way, so each clean-up below runs whatever the other does (side by side, each
   // failing alone): stray notes go with its author's account (or `backfill.ts orphan-notes`), and stray vectors
   // only cost the recommender a candidate it then can't read.

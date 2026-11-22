@@ -16,8 +16,8 @@ import { graphTx, originsOf, resonanceCardOf } from '../repos/graph';
 // callers' lanes move to `tx.graph`.
 
 /** See src/lib/api/v1/resonate.ts `reachOriginal` (`card`: the resonance as the transaction leaves it). */
-export function reachOriginal(tx: Transaction, db: AdminDb, cardId: string, card: DocumentData, r: Reach): string | null {
-  return reachOriginalWith(graphTx(db, tx), cardId, resonanceCardOf(card), r, Date.now());
+export function reachOriginal(tx: Transaction, db: AdminDb, cardId: string, card: DocumentData, r: Reach, made?: string[][]): string | null {
+  return reachOriginalWith(graphTx(db, tx), cardId, resonanceCardOf(card), r, Date.now(), made);
 }
 
 /** See src/lib/api/v1/origins.ts `answeredBy` (`origins` as read in the same transaction). */

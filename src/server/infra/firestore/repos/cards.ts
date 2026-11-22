@@ -39,7 +39,8 @@ export function cardsTx(db: AdminDb, tx: Transaction): CardsTxRepo {
       return rowOf((await tx.get(db.doc(`users/${uid}`))).data());
     },
     async readTakeBack(uid, cardId) {
-      const plan: FirestoreTakeBack = { __takeBack: true, plans: await readTakeBack(tx, db, uid, cardId) };
+      const plans = await readTakeBack(tx, db, uid, cardId);
+      const plan: FirestoreTakeBack = { __takeBack: true, plans, ends: plans.filter((p) => p.ends).map((p) => p.pair) };
       return plan;
     },
     async answersTo(uid, originalId, limit) {
@@ -55,8 +56,8 @@ export function cardsTx(db: AdminDb, tx: Transaction): CardsTxRepo {
     takeBack(plan) {
       takeBack(tx, (plan as FirestoreTakeBack).plans);
     },
-    reachOriginal(cardId, card, plan) {
-      return reachOriginal(tx, db, cardId, card, (plan as FirestoreReach).reads);
+    reachOriginal(cardId, card, plan, made) {
+      return reachOriginal(tx, db, cardId, card, (plan as FirestoreReach).reads, made);
     },
     setAudience(id, patch, restate) {
       // A published card's story is as read: its list summary is restated with the new updatedAt (summary.ts).

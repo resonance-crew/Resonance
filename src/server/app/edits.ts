@@ -10,6 +10,7 @@ import type { ServerCtx } from '@/server/ctx';
 import { asSnap, becameReachable, hiddenResonance } from '@/server/domain/cardsWrite';
 import { mediaKeyFor } from '@/server/domain/media';
 import type { EditedContent } from '@/server/ports/repos/cards';
+import { signalConnections } from './realtime';
 
 export interface ApplyEditResult {
   id: string;
@@ -32,7 +33,9 @@ export interface ApplyEditResult {
  */
 export async function applyCardEditIn(ctx: ServerCtx, uid: string, id: string): Promise<ApplyEditResult> {
   if (isReservedId(id)) throw new ApiFailure('not_found', 'No such card.');
-  return ctx.uow.run(async (tx) => {
+  let ended: readonly string[] = [];
+  const result = await ctx.uow.run(async (tx) => {
+    ended = [];
     const [stored, e] = await Promise.all([tx.cards.getCardRow(id), tx.cards.getEditRow(id)]);
     // Someone else's card is as absent as a missing one.
     if (!stored || stored.authorId !== uid) throw new ApiFailure('not_found', 'No such card.');
@@ -69,7 +72,11 @@ export async function applyCardEditIn(ctx: ServerCtx, uid: string, id: string): 
     if (blankForReaders(fields) && !blankForReaders(stored)) throw new ApiFailure('invalid_request', BLANK_CARD_MESSAGE);
     const after = { ...stored, visibility: audience.visibility, anonymous: audience.anonymous };
     // Read before anything is written: what leaving a published resonance hidden takes back.
-    if (hiddenResonance(after)) tx.cards.takeBack(await tx.cards.readTakeBack(uid, id));
+    if (hiddenResonance(after)) {
+      const back = await tx.cards.readTakeBack(uid, id);
+      tx.cards.takeBack(back);
+      ended = back.ends;
+    }
     tx.cards.applyEdit(id, content, audience);
     // Its page under both names, and the landing page if it was or is public there — never its author's profile.
     const stale = [...cardPagePaths({ id, slug }), ...landingPagePaths(stored, { visibility: audience.visibility, publishedAt: stored.publishedAt })];
@@ -77,6 +84,9 @@ export async function applyCardEditIn(ctx: ServerCtx, uid: string, id: string): 
     const movedTo = audience.visibility !== stored.visibility ? visibilityOf(audience.visibility) : null;
     return { id, slug, applied: true, stale, reaches, movedTo };
   }, { label: 'applyCardEdit' });
+  // After the commit: a connection the take-back ended changed both people's lists.
+  await signalConnections(ctx, uid, ended);
+  return result;
 }
 
 function isMedia(m: unknown): m is { type: string; url: string; label?: unknown; frame?: unknown } {

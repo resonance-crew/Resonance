@@ -6,6 +6,8 @@ import { inviteOpen } from '@/server/domain/graph';
 import type { PersonRow } from '@/server/ports/repos/users';
 import { CARD_VISIBILITY_FIELDS } from '@/lib/api/v1/present';
 import { visibleCardById } from './cardsRead';
+import { touchesFor } from '@/server/domain/realtime';
+import { signalWithOwn, type OwnSignals } from './inbox';
 import { signal } from './realtime';
 import { AUTHOR_FIELDS } from './viewer';
 
@@ -79,9 +81,12 @@ export async function deleteBookmarkIn(ctx: ServerCtx, uid: string, cardId: stri
  * can be left half done. The blocked person is never told: their signal is
  * touched only when something they can see changed anyway (the connection
  * went, an invite of theirs closed) — never for the block alone. Blocking
- * again changes nothing. Answers whether the block is new.
+ * again changes nothing. Answers whether the block is new. The blocker's own
+ * touch is made before the response when `own` asks for its counters
+ * (signalWithOwn): their client's pull right after finds its `graph` moved,
+ * never an early 304 for the list as it was.
  */
-export async function blockIn(ctx: ServerCtx, uid: string, other: string): Promise<boolean> {
+export async function blockIn(ctx: ServerCtx, uid: string, other: string, own?: (signals: OwnSignals) => void): Promise<boolean> {
   if (other === uid) throw new ApiFailure('invalid_request', 'You cannot block yourself.');
   const reads = await ctx.uow.run(
     async (tx) => {
@@ -92,17 +97,18 @@ export async function blockIn(ctx: ServerCtx, uid: string, other: string): Promi
     { label: 'block' },
   );
   const theirsChanged = reads.connected || reads.pendingInvites.length > 0;
-  if (!reads.blocked || theirsChanged) await signal(ctx, { kind: 'graph', uids: theirsChanged ? [uid, other] : [uid] });
+  if (!reads.blocked || theirsChanged) await signalWithOwn(ctx, uid, touchesFor([{ kind: 'graph', uids: theirsChanged ? [uid, other] : [uid] }]), own);
   return !reads.blocked;
 }
 
 /**
  * Unblock: the block goes, nothing else comes back — a connection the block
  * ended stays ended, a withdrawn invite withdrawn. Only the unblocker's own
- * list changed, so only their signal is touched.
+ * list changed, so only their signal is touched (before the response when
+ * `own` asks for its counters, as blockIn).
  */
-export async function unblockIn(ctx: ServerCtx, uid: string, other: string): Promise<void> {
-  if (await ctx.data.social.unblock(uid, other)) await signal(ctx, { kind: 'graph', uids: [uid] });
+export async function unblockIn(ctx: ServerCtx, uid: string, other: string, own?: (signals: OwnSignals) => void): Promise<void> {
+  if (await ctx.data.social.unblock(uid, other)) await signalWithOwn(ctx, uid, touchesFor([{ kind: 'graph', uids: [uid] }]), own);
 }
 
 /** Everyone the viewer blocked, the latest first, with their profiles (GET /me/blocks). */

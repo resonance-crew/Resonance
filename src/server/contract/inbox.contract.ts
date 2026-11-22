@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ApiFailure } from '@/lib/api/v1/http';
 import type { DataRepos, TxRepos, UnitOfWork } from '@/server/ports/uow';
-import { decodeCursor, encodeCursor, type Instant } from '@/server/ports/time';
+import { compareInstants, decodeCursor, encodeCursor, type Instant } from '@/server/ports/time';
 
 /**
  * Phase 2 inbox (2a-inbox): what every adapter's inbox reads and read marks
@@ -163,6 +163,41 @@ export function describeInboxContract(name: string, make: () => InboxHarness | P
       expect(await h.readAt(h.uid('r1'))).not.toBeNull();
       expect(await h.readAt(h.uid('r2'))).toBe(t('000003'));
       expect(await h.readAt(h.uid('r3'))).toBeNull();
+    });
+
+    it('bell listRowsChangedAfter: only theirs changed after a read’s mark — read, made, its readers changed — oldest change first; countRows', async () => {
+      await h.seedBell(h.uid('c1'), { userId: a, type: 'note', payload: {}, createdAt: t('000001') });
+      await h.seedBell(h.uid('c2'), { userId: a, type: 'resonance_tap', payload: { fromUserIds: [b, c] }, createdAt: t('000002') });
+      await h.seedBell(h.uid('c3'), { userId: b, type: 'note', payload: {}, createdAt: t('000002') });
+      const page = await h.data.bell.listRows(a, 20);
+      expect(page.mark).toBeTruthy();
+      expect(await h.data.bell.countRows(a)).toBe(2);
+      expect((await h.data.bell.listRowsChangedAfter(a, 20, page.mark!)).rows).toEqual([]);
+
+      await h.data.bell.markRead(a, [h.uid('c1')]);
+      await h.data.bell.markRead(b, [h.uid('c3')]);
+      await h.uow.run(async (tx) => {
+        await tx.bell.getRow(h.uid('c2'));
+        tx.bell.setRowReaders(h.uid('c2'), [c]);
+      });
+      await h.uow.run(async (tx) => {
+        await tx.bell.getRow(h.uid('c4'));
+        tx.bell.putRow(h.uid('c4'), { userId: a, type: 'read_summary', payload: { cardId: 'x', readers: 3 }, atMs: Date.parse(t('000004')) });
+      });
+      const changed = await h.data.bell.listRowsChangedAfter(a, 20, page.mark!);
+      expect(changed.rows.map((r) => r.id)).toEqual([h.uid('c1'), h.uid('c2'), h.uid('c4')]);
+      expect(changed.rows[0].readAt).not.toBeNull();
+      expect(changed.rows[1].payload).toEqual({ fromUserIds: [c] });
+      // Only the row made since has a time it was made after the mark.
+      const madeAfter = (r: { madeAt?: Instant | null }) => !!r.madeAt && compareInstants(r.madeAt, page.mark!) > 0;
+      expect(changed.rows.map(madeAfter)).toEqual([false, false, true]);
+      expect(changed.mark).toBeTruthy();
+      expect(await h.data.bell.countRows(a)).toBe(3);
+      expect((await h.data.bell.listRowsChangedAfter(a, 20, changed.mark!)).rows).toEqual([]);
+      // As many as the limit: more may have changed, no mark.
+      const one = await h.data.bell.listRowsChangedAfter(a, 1, page.mark!);
+      expect(one.rows).toHaveLength(1);
+      expect(one.mark).toBeNull();
     });
 
     it('bell markReadBefore: their unread rows made up to the time, not after it, not anyone else’s', async () => {

@@ -14,7 +14,9 @@ import { counterOf, type RealtimeTopic } from '@/server/ports/realtime';
 import { otherInPair } from '@/server/domain/conversations';
 import { bellChanged, conversationRead, type Touch } from '@/server/domain/realtimeInbox';
 import type { ConversationRow } from '@/server/ports/repos/conversations';
-import { decodeCursor, encodeCursor, isInstant, toInstant, type Instant } from '@/server/ports/time';
+import { compareInstants, decodeCursor, encodeCursor, isInstant, toInstant, type Instant } from '@/server/ports/time';
+import type { ListedBellRow } from '@/server/ports/repos/bell';
+import { EARLY_MAX_AGE_S } from '@/lib/api/v1/signalTag';
 import { AUTHOR_FIELDS } from './viewer';
 
 // Phase 2 inbox (2a-inbox): the reads the clients' Firestore listeners made
@@ -198,31 +200,102 @@ function upTo(before: string): Instant {
   return toInstant(ms, 999);
 }
 
-/** GET /me/bell: `uid`'s bell rows, newest first, with the people they name. */
-export async function listBellIn(ctx: ServerCtx, uid: string, limit: number, pageToken?: string | null): Promise<BellPageBody> {
-  const page = await ctx.data.bell.listRows(uid, limit, pageToken ?? undefined);
-  const named = bellPeople(page.rows);
-  const rows = named.length ? await ctx.data.users.rowsOf(named, AUTHOR_FIELDS) : new Map();
-  const people = named.map((id) => briefOf(id, rows.get(id))).filter((p): p is AuthorBody => p !== null);
+export interface BellQueryInput {
+  /** `true`: answer an `updatedCursor` (implied by `updatedAfter`). */
+  changes?: boolean;
+  /** An answer's `updatedCursor`: only the rows changed since it, when the server can tell them all. */
+  updatedAfter?: string | null;
+}
+
+/**
+ * A bell answer's `updatedCursor`: where its read stood (the store's time), how many rows the viewer had then,
+ * and when it was issued (the server's clock, in seconds) — opaque to clients.
+ */
+const bellCursor = (mark: Instant, count: number, issuedS: number) => encodeCursor({ t: mark, id: `bell.${count}.${issuedS}` });
+
+function bellSince(cursor: string): { t: Instant; count: number; issuedS: number } {
+  const at = decodeCursor(cursor);
+  const m = at ? /^bell\.(\d{1,9})\.(\d{1,12})$/.exec(at.id) : null;
+  if (!at || !m) {
+    throw new ApiFailure('invalid_request', 'The request does not match the contract.', [{ path: 'updatedAfter', message: 'Not a valid cursor.' }]);
+  }
+  return { t: at.t, count: Number(m[1]), issuedS: Number(m[2]) };
+}
+
+/** Rows as the bell answers them, newest first, with the people they name — `named` rows' people only, when given. */
+async function bellBody(ctx: ServerCtx, rows: ListedBellRow[], named: ListedBellRow[] = rows) {
+  const ids = bellPeople(named);
+  const found = ids.length ? await ctx.data.users.rowsOf(ids, AUTHOR_FIELDS) : new Map();
+  const newestFirst = [...rows].sort((a, b) => compareInstants(b.createdAt, a.createdAt) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
   return {
-    items: page.rows.map((r) => ({ id: r.id, type: r.type, payload: presentBellPayload(r.payload), readAt: r.readAt, createdAt: r.createdAt })),
-    people,
+    items: newestFirst.map((r) => ({ id: r.id, type: r.type, payload: presentBellPayload(r.payload), readAt: r.readAt, createdAt: r.createdAt })),
+    people: ids.map((id) => briefOf(id, found.get(id))).filter((p): p is AuthorBody => p !== null),
+  };
+}
+
+/**
+ * GET /me/bell: `uid`'s bell rows, newest first, with the people they name.
+ *
+ * With `changes`, the answer carries an `updatedCursor`; with `updatedAfter` (an earlier answer's), only the
+ * rows changed since it (`delta: true`) — a read per changed row, the rows' count, and the people of the rows
+ * made since and of tap rows (the client holds the others'), not the newest page and its people again (an open
+ * bell after a row is marked read: two reads, not forty). A row's every change stamps its `editedAt`
+ * (repos/bell); a row that went is told by the count — the rows now must be those then plus those made since,
+ * else something went (an untapped reader's last row, a purged account's rows) and the newest page is answered
+ * whole, as it is when more than `limit` changed, and for a cursor ten minutes old (EARLY_MAX_AGE_S: what no
+ * stamp tells — a renamed person, an older app's own `readAt` write — shows that late at most).
+ */
+export async function listBellIn(ctx: ServerCtx, uid: string, limit: number, pageToken?: string | null, q: BellQueryInput = {}): Promise<BellPageBody> {
+  const bell = ctx.data.bell;
+  const issuedS = Math.floor(ctx.clock.now() / 1000);
+  if (q.updatedAfter) {
+    const since = bellSince(q.updatedAfter);
+    const age = issuedS - since.issuedS;
+    if (age >= 0 && age < EARLY_MAX_AGE_S) {
+      const [count, changed] = await Promise.all([bell.countRows(uid), bell.listRowsChangedAfter(uid, limit, since.t)]);
+      const after = (t: Instant | null | undefined) => !!t && compareInstants(t, since.t) > 0;
+      const made = changed.rows.filter((r) => after(r.madeAt)).length;
+      if (changed.mark && count === since.count + made) {
+        // New rows' people, and a tap row's (rung again, a new reader comes first among them); any other row
+        // changed is one the client holds, with its person.
+        const body = await bellBody(ctx, changed.rows, changed.rows.filter((r) => after(r.madeAt) || Array.isArray(r.payload.fromUserIds)));
+        return { ...body, nextPageToken: null, delta: true, updatedCursor: bellCursor(changed.mark, count, issuedS) };
+      }
+    }
+  }
+  const cursor = !pageToken && (q.changes || !!q.updatedAfter);
+  // The count before the page: a row made between the two is in the page and not the count, so the next delta
+  // finds one too many and reads whole — never one missed.
+  const count = cursor ? await bell.countRows(uid) : null;
+  const page = await bell.listRows(uid, limit, pageToken ?? undefined);
+  const body = await bellBody(ctx, page.rows);
+  return {
+    ...body,
     nextPageToken: page.next,
+    ...(cursor ? { updatedCursor: page.mark && count !== null ? bellCursor(page.mark, count, issuedS) : null } : {}),
   };
 }
 
 /**
  * POST /notifications/read: these rows of `uid`'s (anyone else's ignored), or
  * theirs up to `before`, read now (`readAt` the server's time). Answers how
- * many were unread; their bell is signalled when any was.
+ * many were unread; their bell is signalled when any was — the reader's own
+ * touch before the response when `own` asks for its counters (signalWithOwn):
+ * their client's pull right after finds its `bell` moved, never an early 304
+ * for the bell as it was.
  */
-export async function markBellReadIn(ctx: ServerCtx, uid: string, input: { ids?: string[] | null; before?: string | null }): Promise<number> {
+export async function markBellReadIn(
+  ctx: ServerCtx,
+  uid: string,
+  input: { ids?: string[] | null; before?: string | null },
+  own?: (signals: OwnSignals) => void,
+): Promise<number> {
   const bell = ctx.data.bell;
   const marked = input.ids?.length
     ? await bell.markRead(uid, [...new Set(input.ids)])
     : input.before
       ? await bell.markReadBefore(uid, upTo(input.before), BELL_READ_BEFORE_SCAN)
       : 0;
-  if (marked) await signal(ctx, bellChanged(uid));
+  if (marked) await signalWithOwn(ctx, uid, bellChanged(uid), own);
   return marked;
 }

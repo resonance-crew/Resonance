@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { BatchResponse, MulticastMessage } from 'firebase-admin/messaging';
 import { fakeAdminDb } from '../../../test/fakeAdminDb';
 import {
@@ -78,6 +78,9 @@ describe('ringTap', () => {
       readAt: null,
       createdAt: Timestamp.fromMillis(NOW),
       pushedAt: Timestamp.fromMillis(NOW),
+      // The commit's own time, the bell's change stamps (repos/bell BELL_EDITED_AT, BELL_MADE_AT).
+      editedAt: FieldValue.serverTimestamp(),
+      madeAt: FieldValue.serverTimestamp(),
     });
     docs['notifications/rtap_walk_20261119'].readAt = ago(0);
     expect(await ringTap(db, 'carol', 'walk', NOW + 60_000)).toMatchObject({ handle: 'carol', others: 1 });

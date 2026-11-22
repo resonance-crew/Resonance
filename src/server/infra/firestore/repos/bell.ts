@@ -10,6 +10,22 @@ import type { AdminDb } from '../db';
 
 export const NOTIFICATIONS = 'notifications';
 
+/**
+ * A bell row's change time: every server write to what the bell shows of a row (made, read, rung again, its
+ * readers changed) stamps it with the commit's own time, so GET /me/bell?updatedAfter= reads only the rows
+ * changed since an answer (`userId ==`, `editedAt >`: the composite index notifications userId ASC, editedAt
+ * ASC). `madeAt`, the same time on the write that makes the row, tells a new row from a changed one — with
+ * the rows' count, what says a row went (app/inbox listBellIn). Never shown to a client. An older client's
+ * own `readAt` write (firestore.rules) stamps neither: such a change shows on the next whole read.
+ */
+export const BELL_EDITED_AT = 'editedAt';
+export const BELL_MADE_AT = 'madeAt';
+
+/** The stamps of a write that changes a row. */
+export const bellEdited = () => ({ [BELL_EDITED_AT]: FieldValue.serverTimestamp() });
+/** The stamps of a write that makes a row. */
+export const bellMade = () => ({ [BELL_EDITED_AT]: FieldValue.serverTimestamp(), [BELL_MADE_AT]: FieldValue.serverTimestamp() });
+
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 const strOrNull = (v: unknown) => (typeof v === 'string' ? v : null);
 const millis = (v: unknown): number | null => (v instanceof Timestamp ? v.toMillis() : null);
@@ -44,6 +60,7 @@ function listedOf(snap: DocumentSnapshot): ListedBellRow | null {
     payload: payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Record<string, unknown>) : {},
     createdAt,
     readAt: instantOf(snap.get('readAt')),
+    madeAt: instantOf(snap.get(BELL_MADE_AT)),
   };
 }
 
@@ -52,7 +69,7 @@ async function readNow(db: AdminDb, snaps: DocumentSnapshot[], uid: string): Pro
   const unread = snaps.filter((s) => s.exists && s.get('userId') === uid && s.get('readAt') == null);
   if (!unread.length) return 0;
   const batch = db.batch();
-  for (const s of unread) batch.update(s.ref, { readAt: FieldValue.serverTimestamp() });
+  for (const s of unread) batch.update(s.ref, { readAt: FieldValue.serverTimestamp(), ...bellEdited() });
   await batch.commit();
   return unread.length;
 }
@@ -60,7 +77,7 @@ async function readNow(db: AdminDb, snaps: DocumentSnapshot[], uid: string): Pro
 /** A row written already pushed: unread, made and pushed at `atMs`. */
 function pushedRow(row: PushedRow) {
   const at = Timestamp.fromMillis(row.atMs);
-  return { userId: row.userId, type: row.type, payload: row.payload, readAt: null, createdAt: at, pushedAt: at };
+  return { userId: row.userId, type: row.type, payload: row.payload, readAt: null, createdAt: at, pushedAt: at, ...bellMade() };
 }
 
 export function bellTx(db: AdminDb, tx: Transaction): BellTxRepo {
@@ -76,10 +93,10 @@ export function bellTx(db: AdminDb, tx: Transaction): BellTxRepo {
       tx.set(ref(id), pushedRow(row));
     },
     bumpTapRow(id, fromUserIds, atMs) {
-      tx.update(ref(id), { 'payload.fromUserIds': fromUserIds, readAt: null, createdAt: Timestamp.fromMillis(atMs) });
+      tx.update(ref(id), { 'payload.fromUserIds': fromUserIds, readAt: null, createdAt: Timestamp.fromMillis(atMs), ...bellEdited() });
     },
     setRowReaders(id, fromUserIds) {
-      tx.update(ref(id), { 'payload.fromUserIds': fromUserIds });
+      tx.update(ref(id), { 'payload.fromUserIds': fromUserIds, ...bellEdited() });
     },
     deleteRow(id) {
       tx.delete(ref(id));
@@ -146,7 +163,24 @@ export function bellData(db: AdminDb): BellData {
       const rows = snap.docs.map(listedOf).filter((r): r is ListedBellRow => r !== null);
       const last = snap.docs[snap.docs.length - 1];
       const lastAt = last ? instantOf(last.get('createdAt')) : null;
-      return { rows, next: snap.size === limit && last && lastAt ? encodeCursor({ t: lastAt, id: last.id }) : null };
+      return { rows, next: snap.size === limit && last && lastAt ? encodeCursor({ t: lastAt, id: last.id }) : null, mark: instantOf(snap.readTime) };
+    },
+    async listRowsChangedAfter(uid, limit, since) {
+      // `editedAt` is a commit's own time (serverTimestamp), and a query sees every commit up to its readTime:
+      // a change it doesn't see has an editedAt after that readTime, so the readTime is the next mark.
+      const snap = await db
+        .collection(NOTIFICATIONS)
+        .where('userId', '==', uid)
+        .where(BELL_EDITED_AT, '>', timestampOf(since))
+        .orderBy(BELL_EDITED_AT, 'asc')
+        .limit(limit)
+        .get();
+      const rows = snap.docs.map(listedOf).filter((r): r is ListedBellRow => r !== null);
+      return { rows, mark: snap.size >= limit ? null : instantOf(snap.readTime) };
+    },
+    async countRows(uid) {
+      const snap = await db.collection(NOTIFICATIONS).where('userId', '==', uid).count().get();
+      return snap.data().count;
     },
     async markRead(uid, ids) {
       if (!ids.length) return 0;

@@ -4,6 +4,15 @@ import type { BellData, BellRow, BellTxRepo, ListedBellRow, PushedRow } from '@/
 import { compareInstants, decodeCursor, encodeCursor, isInstant, toInstant, type Instant } from '@/server/ports/time';
 import type { MemoryState, Row } from '../state';
 import type { MemoryTx } from '../uow';
+import { editStamp, markOf } from './conversations';
+
+/** A changed row's stamp, as Firestore's (repos/bell BELL_EDITED_AT): a server time after every one handed out. */
+export const bellEdited = (state: MemoryState): Row => ({ editedAt: editStamp(state) });
+/** A new row's stamps (BELL_EDITED_AT, BELL_MADE_AT): one server time. */
+export function bellMade(state: MemoryState): Row {
+  const at = editStamp(state);
+  return { editedAt: at, madeAt: at };
+}
 
 /**
  * `bell` over memory: the `notifications` table (times as epoch ms), and the
@@ -47,12 +56,21 @@ function listedOf(id: string, row: Row): ListedBellRow | null {
     payload: payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Record<string, unknown>) : {},
     createdAt,
     readAt: anyInstant(row.readAt),
+    madeAt: isInstant(row.madeAt) ? row.madeAt : null,
   };
 }
 
 const byPosition = (a: { t: Instant; id: string }, b: { t: Instant; id: string }) => compareInstants(a.t, b.t) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
-const pushedRow = (row: PushedRow): Row => ({ userId: row.userId, type: row.type, payload: row.payload, readAt: null, createdAt: row.atMs, pushedAt: row.atMs });
+const pushedRow = (row: PushedRow, state: MemoryState): Row => ({
+  userId: row.userId,
+  type: row.type,
+  payload: row.payload,
+  readAt: null,
+  createdAt: row.atMs,
+  pushedAt: row.atMs,
+  ...bellMade(state),
+});
 
 export function bellTx(tx: MemoryTx): BellTxRepo {
   const payloadOf = (id: string) => (tx.state.get('notifications', id)?.payload as Row | undefined) ?? {};
@@ -64,13 +82,13 @@ export function bellTx(tx: MemoryTx): BellTxRepo {
       tx.merge('notifications', id, { pushedAt: serverNow() });
     },
     putRow(id, row) {
-      tx.put('notifications', id, pushedRow(row));
+      tx.put('notifications', id, pushedRow(row, tx.state));
     },
     bumpTapRow(id, fromUserIds, atMs) {
-      tx.merge('notifications', id, { payload: { ...payloadOf(id), fromUserIds }, readAt: null, createdAt: atMs });
+      tx.merge('notifications', id, { payload: { ...payloadOf(id), fromUserIds }, readAt: null, createdAt: atMs, ...bellEdited(tx.state) });
     },
     setRowReaders(id, fromUserIds) {
-      tx.merge('notifications', id, { payload: { ...payloadOf(id), fromUserIds } });
+      tx.merge('notifications', id, { payload: { ...payloadOf(id), fromUserIds }, ...bellEdited(tx.state) });
     },
     deleteRow(id) {
       tx.delete('notifications', id);
@@ -82,7 +100,7 @@ export function bellData(state: MemoryState): BellData {
   return {
     async insertIfAbsent(id, row) {
       if (state.get('notifications', id)) return 'exists';
-      state.put('notifications', id, pushedRow(row));
+      state.put('notifications', id, pushedRow(row, state));
       return 'inserted';
     },
     async listRowIdsNaming(uid) {
@@ -108,14 +126,26 @@ export function bellData(state: MemoryState): BellData {
         .filter((r) => !from || byPosition({ t: r.createdAt, id: r.id }, from) < 0)
         .slice(0, limit);
       const last = rows[rows.length - 1];
-      return { rows, next: rows.length === limit && last ? encodeCursor({ t: last.createdAt, id: last.id }) : null };
+      return { rows, next: rows.length === limit && last ? encodeCursor({ t: last.createdAt, id: last.id }) : null, mark: markOf(state) };
+    },
+    async listRowsChangedAfter(uid, limit, since) {
+      const changed = state
+        .rows('notifications', (row) => row.userId === uid && isInstant(row.editedAt) && compareInstants(row.editedAt, since) > 0)
+        .sort((a, b) => compareInstants(a.row.editedAt as Instant, b.row.editedAt as Instant))
+        .slice(0, limit)
+        .map(({ id, row }) => listedOf(id, row))
+        .filter((r): r is ListedBellRow => r !== null);
+      return { rows: changed, mark: changed.length >= limit ? null : markOf(state) };
+    },
+    async countRows(uid) {
+      return state.rows('notifications', (row) => row.userId === uid).length;
     },
     async markRead(uid, ids) {
       let n = 0;
       for (const id of new Set(ids)) {
         const row = state.get('notifications', id);
         if (!row || row.userId !== uid || row.readAt != null) continue;
-        state.merge('notifications', id, { readAt: serverNow() });
+        state.merge('notifications', id, { readAt: serverNow(), ...bellEdited(state) });
         n++;
       }
       return n;
@@ -125,7 +155,7 @@ export function bellData(state: MemoryState): BellData {
         .filter((r) => compareInstants(r.createdAt, before) <= 0)
         .slice(0, scan)
         .filter((r) => r.readAt === null);
-      for (const r of due) state.merge('notifications', r.id, { readAt: serverNow() });
+      for (const r of due) state.merge('notifications', r.id, { readAt: serverNow(), ...bellEdited(state) });
       return due.length;
     },
     async getSummaryCards(ids) {

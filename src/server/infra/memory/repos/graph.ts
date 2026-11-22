@@ -19,6 +19,7 @@ import {
 import type { GraphCard, GraphData, GraphTxRepo, Reach } from '@/server/ports/repos/graph';
 import type { MemoryState, Row } from '../state';
 import type { MemoryTx } from '../uow';
+import { bellMade } from './bell';
 
 /**
  * The graph aggregate over memory. Tables, named after the collections, rows
@@ -174,6 +175,7 @@ export function graphTx(tx: MemoryTx): GraphTxRepo {
         payload: { fromUserId: b.from, fromHandle: b.fromHandle, cardId: b.cardId, ...(b.anonymous ? { anonymous: true } : {}) },
         readAt: null,
         createdAt: now(),
+        ...bellMade(tx.state),
       });
     },
     setInviteStatus(inviteId, status) {
@@ -181,7 +183,7 @@ export function graphTx(tx: MemoryTx): GraphTxRepo {
     },
     ringInviteAccepted(to, payload) {
       const id = `bell_${crypto.randomUUID().replace(/-/g, '').slice(0, 15)}`;
-      tx.put('notifications', id, { userId: to, type: 'invite_accepted', payload, readAt: null, createdAt: now() });
+      tx.put('notifications', id, { userId: to, type: 'invite_accepted', payload, readAt: null, createdAt: now(), ...bellMade(tx.state) });
       return id;
     },
     answerLetters(a, b, requestHeld) {

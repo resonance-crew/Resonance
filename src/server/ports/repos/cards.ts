@@ -34,8 +34,11 @@ export interface CardsTxRepo {
 
   /** Write what readTakeBack read (origins takeBack); an empty plan writes nothing. */
   takeBack(plan: TakeBackPlan): void;
-  /** Reach the original's author with `card` as this transaction leaves it (resonate reachOriginal): the bell's id, or null. */
-  reachOriginal(cardId: string, card: CardRow, plan: ReachPlan): string | null;
+  /**
+   * Reach the original's author with `card` as this transaction leaves it (resonate reachOriginal): the bell's id,
+   * or null. A connection it makes is added to `made` (the two, to signal once the transaction has committed).
+   */
+  reachOriginal(cardId: string, card: CardRow, plan: ReachPlan, made?: string[][]): string | null;
   /** Change the card's visibility / byline, stamping `updatedAt` — and, given `restate`, its list summary of that story. */
   setAudience(id: string, patch: AudiencePatch, restate?: { story: unknown }): void;
   /** Update the pending edit's visibility / byline. */
@@ -83,6 +86,8 @@ export interface EditedContent {
 /** What taking a resonance back writes, read first (opaque to services: the repository's own plan). */
 export interface TakeBackPlan {
   readonly __takeBack: true;
+  /** The pairs (`connections/{pair}`) whose connection writing this plan ends: both people's lists change (a `graph` signal). */
+  readonly ends: readonly string[];
 }
 
 /** What a resonance's reach depends on, read first (opaque but for what restoring asks of the original). */

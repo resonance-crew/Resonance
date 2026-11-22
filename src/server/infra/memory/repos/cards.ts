@@ -11,6 +11,7 @@ import { cardVisible } from '@/server/domain/visibility';
 import { compareInstants, instantParts, toInstant } from '@/server/ports/time';
 import type { MemoryState } from '../state';
 import { MemoryTx, TxTracker } from '../uow';
+import { bellMade } from './bell';
 
 /**
  * Tables, named after the collections: `cards` (Card rows by id — times as
@@ -81,7 +82,7 @@ function cardsWriteTx(tx: MemoryTx): CardsTxRepo {
         const connection = tx.get('connections', id);
         return { pair: id, ends: !!connection && !Object.keys(reasons).length, reasons, cards: (row.resonanceCards as unknown[]).filter((c) => c !== cardId) };
       });
-      const plan: MemoryTakeBack = { __takeBack: true, plans };
+      const plan: MemoryTakeBack = { __takeBack: true, plans, ends: plans.filter((p) => p.ends).map((p) => p.pair) };
       return plan;
     },
     async answersTo(uid, originalId, limit) {
@@ -132,7 +133,7 @@ function cardsWriteTx(tx: MemoryTx): CardsTxRepo {
         } else tx.merge('connectionOrigins', p.pair, { reasons: p.reasons, resonanceCards: p.cards });
       }
     },
-    reachOriginal(cardId, card, plan) {
+    reachOriginal(cardId, card, plan, made) {
       const r = plan as MemoryReach;
       const o = r.original;
       if (!reachable(card) || card.authorId !== r.from || card.referenceCardId !== r.originalId || !properlyPublished(card.publishedAt)) return null;
@@ -149,6 +150,7 @@ function cardsWriteTx(tx: MemoryTx): CardsTxRepo {
         tx.merge('connectionOrigins', pair, { userIds, reasons: { ...kept, [resonanceKey(r.from, cardId)]: reason }, resonanceCards: [...new Set([...cards, cardId])] });
       } else if (named && !r.rang) {
         tx.put('connections', pair, { userIds, establishedAt: now });
+        made?.push([r.from, o.authorId]);
         tx.put('connectionOrigins', pair, { userIds, reasons: { [resonanceKey(r.from, cardId)]: reason }, resonanceCards: [cardId] });
       }
       if (r.rang) return null;
@@ -159,6 +161,7 @@ function cardsWriteTx(tx: MemoryTx): CardsTxRepo {
         payload: { fromUserId: r.from, fromHandle: String(r.me?.handle), cardId: r.originalId, ...(named ? {} : { anonymous: true }) },
         readAt: null,
         createdAt: now,
+        ...bellMade(tx.state),
       });
       return id;
     },
