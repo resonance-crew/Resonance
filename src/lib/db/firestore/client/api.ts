@@ -22,7 +22,10 @@ export class ApiError extends Error {
  * an App Check token when one is at hand. JSON in, JSON out; a non-2xx
  * answer throws an ApiError.
  */
-export async function callApi<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+export async function callApi<T>(
+  path: string,
+  init: { method?: string; body?: unknown; /** Sees a successful answer's headers before its body is read. */ onHeaders?: (headers: Headers) => void } = {},
+): Promise<T> {
   ensureAppCheck();
   const user = getFirebaseClientAuth().currentUser;
   // The App Check token rides along when one is at hand (lib/auth/firebase/appCheck).
@@ -36,6 +39,7 @@ export async function callApi<T>(path: string, init: { method?: string; body?: u
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
     credentials: 'same-origin',
   });
+  if (res.ok) init.onHeaders?.(res.headers);
   return answer<T>(res);
 }
 
@@ -57,4 +61,21 @@ async function answer<T>(res: Response): Promise<T> {
     throw new ApiError(res.status, json?.error?.code ?? 'error', json?.error?.message ?? `Request failed (${res.status})`);
   }
   return json as T;
+}
+
+/**
+ * The writer's own signal counters a write's answer carries
+ * (`X-Resonance-Signals`, `{ topic: n }`: server app/inbox signalWithOwn), or
+ * null — for client/signals `pokeOwn`.
+ */
+export function ownSignalsOf(headers: Headers): Record<string, number> | null {
+  const raw = headers.get('X-Resonance-Signals');
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    return Object.fromEntries(Object.entries(parsed as Record<string, unknown>).filter((e): e is [string, number] => typeof e[1] === 'number'));
+  } catch {
+    return null;
+  }
 }

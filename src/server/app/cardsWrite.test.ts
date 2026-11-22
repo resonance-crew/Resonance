@@ -144,6 +144,8 @@ describe('a pen name, on memory', () => {
     const made = await createProfileIn(ctx, nina, { handle: 'Nina', region: 'TW', primaryLocale: 'en' });
     expect(made).toMatchObject({ created: true, named: true, me: { handle: 'Nina', initials: 'NI' } });
     expect(ctx.state.get('handles', 'nina')).toMatchObject({ uid: 'nina' });
+    // No empty phone hash on a new profile (audit L10).
+    expect(ctx.state.get('users', 'nina')).not.toHaveProperty('phoneHash');
     // Idempotent.
     expect(await createProfileIn(ctx, nina, { handle: 'Other', region: 'JP', primaryLocale: 'en' })).toMatchObject({ created: false, named: false });
     // Someone else can't take it, in any case.

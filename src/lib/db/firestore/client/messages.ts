@@ -3,8 +3,8 @@
 import type { Conversation, Message } from '@/lib/db/types';
 import type { ConversationBody, ConversationListBody, MessagePageBody, ThreadMessageBody } from '@/lib/api/v1/schemas';
 import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
-import { ApiError, callApi, callApiForm } from './api';
-import { pokeSignal, watchSignal } from './signals';
+import { ApiError, callApi, callApiForm, ownSignalsOf } from './api';
+import { pokeOwn, pokeSignal, watchSignal } from './signals';
 import { linkPreviewOf } from '@/lib/links/previewShape';
 import { isReactionId, type ReactionId } from '@/lib/design/reactions';
 
@@ -224,7 +224,7 @@ export async function sendMessage(
   toUserId: string,
   text: string,
   extras: MessageExtras = {},
-): Promise<{ conversationId: string; id: string }> {
+): Promise<{ conversationId: string; id: string; signals?: Record<string, number> | null }> {
   const uid = requireUid();
   if (extras.as && extras.as !== uid) throw new Error('Signed in as someone else');
   const trimmed = text.trim();
@@ -232,8 +232,10 @@ export async function sendMessage(
   if (!trimmed && !extras.cardRef && !extras.image && !extras.sticker) throw new Error('Message is empty');
   if (trimmed.length > MESSAGE_MAX_LENGTH) throw new Error('Message too long');
   if (extras.album && !extras.image) throw new Error('An album holds pictures');
-  return callApi('/api/v1/messages', {
+  let signals: Record<string, number> | null = null;
+  const sent = await callApi<{ conversationId: string; id: string }>('/api/v1/messages', {
     method: 'POST',
+    onHeaders: (h) => (signals = ownSignalsOf(h)),
     body: {
       to: toUserId,
       text: trimmed,
@@ -246,6 +248,8 @@ export async function sendMessage(
       album: extras.album ?? null,
     },
   });
+  // The sender's own counters after the send (pokeOwn: the thread and the list pulled once, not twice).
+  return signals ? { ...sent, signals } : sent;
 }
 
 /**
@@ -305,12 +309,15 @@ const pairPath = (pairId: string) => `/api/v1/conversations/${encodeURIComponent
  * Zero the viewer's own unread counter on a conversation (POST
  * /api/v1/conversations/{pair}/read). The server raises the viewer's own
  * `inbox` signal, so the list and the header's badge pull it again; this
- * browser pokes them at once besides.
+ * browser pulls them at once instead, once (the answer's own counters, pokeOwn).
  */
 export async function readConversation(pairId: string): Promise<void> {
   requireUid();
-  await callApi(`${pairPath(pairId)}/read`, { method: 'POST' });
-  pokeSignal('inbox');
+  let signals: Record<string, number> | null = null;
+  await callApi(`${pairPath(pairId)}/read`, { method: 'POST', onHeaders: (h) => (signals = ownSignalsOf(h)) });
+  // No counters (nothing was unread, so nothing was touched; or an older server): the list is pulled once anyway.
+  if (signals) pokeOwn(['inbox', `thread:${pairId}`], signals);
+  else pokeSignal('inbox');
 }
 
 /** The answer that, for this viewer, there is no such thing (404), or it isn't theirs to read (403). */
@@ -369,16 +376,37 @@ function messagesPath(pairId: string, q: Record<string, string>): string {
   return `${pairPath(pairId)}/messages?${new URLSearchParams(q).toString()}`;
 }
 
+/** How long an open thread goes on incremental reads before it reads its whole window again. */
+export const THREAD_FULL_READ_MS = 10 * 60_000;
+
+/** Newest first: send time (to the microsecond, as the API writes it), then id. */
+const newestFirst = (a: ThreadMessageBody, b: ThreadMessageBody) =>
+  a.sentAt === b.sentAt ? (a.id < b.id ? 1 : a.id > b.id ? -1 : 0) : a.sentAt < b.sentAt ? 1 : -1;
+
 /**
  * Follow an open thread: its newest {@link THREAD_WINDOW} messages (newest
- * first, each with its cursor), read again whenever the conversation's
+ * first, each with its cursor), pulled again whenever the conversation's
  * counter moves on the viewer's signal channel (`threads[pair]`: a message, a
- * reaction, an unsend, a preview, 停止分享), on the minute's safety pull, and
- * at once after this browser sent one ({@link pokeSignal}). Each read is the
- * same GET, so one that changed nothing is a 304. When more came since the
- * last read than the window holds, the messages between are caught up with
- * `after=` pages, so nothing is skipped. A refusal (404: the conversation was
- * deleted, or isn't there) reaches `onError` as an ApiError ({@link isGone}).
+ * reaction, an unsend, a preview, 停止分享), on the safety pulls, and at once
+ * after this browser sent one ({@link pokeSignal}).
+ *
+ * The first read is the window (`limit=50&changes=1`). Every pull after it asks only
+ * what happened since (`after=` the newest held, `updatedAfter=` the last
+ * answer's `updatedCursor`): the messages that came, and the ones that
+ * changed — so a reaction costs the server a read or two, not fifty. What
+ * came is added to the window and what changed replaces the copy held; the
+ * window handed on is the one a whole read would give (with anything that
+ * came on top, so the history keeps every message). The whole window is read
+ * again only when the incremental answer can't vouch for itself — no
+ * `updatedCursor` (an older server), as many changes as it could hold, more
+ * new messages than the catch-up pages read —, and every
+ * {@link THREAD_FULL_READ_MS} besides (a change no `editedAt` tells of). A
+ * link's preview, written after the send, is one of the changes: it sets
+ * `editedAt` and touches the thread (server app/links `unfurlMessageIn`).
+ * When a whole read finds more came since the last read than the window
+ * holds, the messages between are caught up with `after=` pages, so nothing
+ * is skipped. A refusal (404: the conversation was deleted, or isn't there)
+ * reaches `onError` as an ApiError ({@link isGone}).
  */
 export function followThread(
   pairId: string,
@@ -389,25 +417,69 @@ export function followThread(
   let stopped = false;
   let running = false;
   let again = false;
-  let held = new Set<string>();
+  /** The window as last handed on, newest first (at most `max`). */
+  let held: ThreadMessageBody[] = [];
   let newer: string | null = null;
-  const read = async () => {
-    const page = await callApi<MessagePageBody>(messagesPath(pairId, { limit: String(max) }));
+  let changesFrom: string | null = null;
+  let fullAt = 0;
+
+  const catchUp = async (from: string): Promise<{ between: ThreadMessageBody[]; newest: string | null; complete: boolean }> => {
+    const between: ThreadMessageBody[] = [];
+    let after: string | null = from;
+    let newest: string | null = from;
+    for (let i = 0; after && i < CATCH_UP_PAGES; i++) {
+      const next: MessagePageBody = await callApi<MessagePageBody>(messagesPath(pairId, { after, limit: String(PAGE_MAX) }));
+      between.push(...next.messages);
+      newest = next.newerCursor ?? newest;
+      after = next.hasNewer ? next.newerCursor : null;
+    }
+    return { between, newest, complete: after === null };
+  };
+
+  const whole = async (): Promise<ThreadMessageBody[]> => {
+    const page = await callApi<MessagePageBody>(messagesPath(pairId, { limit: String(max), changes: '1' }));
     let messages = page.messages;
-    if (newer && held.size && messages.length >= max && !messages.some((m) => held.has(m.id))) {
+    const had = new Set(held.map((m) => m.id));
+    if (newer && had.size && messages.length >= max && !messages.some((m) => had.has(m.id))) {
       // More than a window came: catch up from where the last read ended, so the history keeps every one.
-      const between: ThreadMessageBody[] = [];
-      let after: string | null = newer;
-      for (let i = 0; after && i < CATCH_UP_PAGES; i++) {
-        const next: MessagePageBody = await callApi<MessagePageBody>(messagesPath(pairId, { after, limit: String(PAGE_MAX) }));
-        between.push(...next.messages);
-        after = next.hasNewer ? next.newerCursor : null;
-      }
+      const { between } = await catchUp(newer);
       const seen = new Set(messages.map((m) => m.id));
       messages = [...messages, ...between.filter((m) => !seen.has(m.id))];
     }
-    held = new Set(messages.map((m) => m.id));
+    held = messages.slice().sort(newestFirst).slice(0, max);
     newer = page.newerCursor;
+    changesFrom = page.updatedCursor ?? null;
+    fullAt = Date.now();
+    return messages;
+  };
+
+  /** What happened since the last answer, or null when only a whole read can say. */
+  const since = async (): Promise<ThreadMessageBody[] | null> => {
+    const page = await callApi<MessagePageBody>(messagesPath(pairId, { after: newer!, updatedAfter: changesFrom!, limit: String(PAGE_MAX) }));
+    if (!page.updated || !page.updatedCursor || page.updated.length >= PAGE_MAX) return null;
+    let came = page.messages;
+    let newest = page.newerCursor ?? newer;
+    if (page.hasNewer && page.newerCursor) {
+      const rest = await catchUp(page.newerCursor);
+      if (!rest.complete) return null;
+      came = [...rest.between, ...came];
+      newest = rest.newest;
+    }
+    const byId = new Map(held.map((m) => [m.id, m]));
+    for (const m of came) byId.set(m.id, m);
+    // A change to a message the window holds; one older than it is the history's (never heard again, as before).
+    for (const m of page.updated) if (byId.has(m.id)) byId.set(m.id, m);
+    const merged = [...byId.values()].sort(newestFirst);
+    held = merged.slice(0, max);
+    newer = newest;
+    changesFrom = page.updatedCursor;
+    return merged;
+  };
+
+  const read = async (): Promise<ThreadEntry[]> => {
+    const now = Date.now();
+    const incremental = held.length > 0 && newer && changesFrom && now - fullAt < THREAD_FULL_READ_MS;
+    const messages = (incremental ? await since() : null) ?? (await whole());
     return messages.map(apiEntry);
   };
   const pull = () => {

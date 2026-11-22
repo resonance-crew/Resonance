@@ -8,7 +8,8 @@ import type { RateLimiter } from '@/server/ports/rateLimit';
  */
 export type ChargeWindows = (uid: string, spends: readonly Spend[], now: number) => Promise<boolean>;
 
-const REFUSAL = 'Too many requests. Please try again later.';
+/** The 429's message, the same from every limiter. */
+export const REFUSAL = 'Too many requests. Please try again later.';
 
 /**
  * The v1 transport's failure and its response (lib/api/v1/http), loaded at

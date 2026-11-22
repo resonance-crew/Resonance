@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { deleteDoc, doc, getDoc, setDoc, setLogLevel, updateDoc, onSnapshot, type Firestore } from 'firebase/firestore';
+import { collection, deleteDoc, doc, documentId, getDoc, getDocs, limit, query, setDoc, setLogLevel, updateDoc, onSnapshot, where, type Firestore } from 'firebase/firestore';
 
 // firestore.rules `match /signals/{uid}` (Phase 2's signal channel) against the
 // emulator: a signed-in person reads their own document — and listens to it —
@@ -44,6 +44,17 @@ describe('signals/{uid}', () => {
     await assertSucceeds(
       new Promise<void>((done, fail) => {
         const stop = onSnapshot(doc(as('alice'), 'signals', 'alice'), () => (stop(), done()), fail);
+      }),
+    );
+  });
+
+  it('is a get, never a query — its owner\'s own document asked by a query included (audit L15)', async () => {
+    await assertFails(getDocs(query(collection(as('alice'), 'signals'), where(documentId(), '==', 'alice'))));
+    await assertFails(getDocs(query(collection(as('alice'), 'signals'), where(documentId(), '==', 'alice'), limit(1))));
+    await assertFails(getDocs(collection(as('alice'), 'signals')));
+    await assertFails(
+      new Promise<void>((done, fail) => {
+        const stop = onSnapshot(query(collection(as('alice'), 'signals'), where(documentId(), '==', 'alice')), () => (stop(), done()), fail);
       }),
     );
   });

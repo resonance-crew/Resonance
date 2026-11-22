@@ -216,7 +216,7 @@ export function describeCardsWriteContract(name: string, make: MakeWriteHarness)
         expect(await tx.users.getProfile('zoe')).toBeNull();
         tx.users.createProfile('zoe', {
           handle: 'Zoe ', bio: '', region: 'TW', primaryLocale: 'en', autoTranslateTo: ['zh-TW'], verified: false,
-          phoneHash: '', avatarSeed: '1', initials: 'ZO', accentColor: 'sage',
+          avatarSeed: '1', initials: 'ZO', accentColor: 'sage',
         });
       });
       const row = (await h.peek('users/zoe'))!;

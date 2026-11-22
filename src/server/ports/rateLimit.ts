@@ -1,6 +1,6 @@
-import type { Bucket, Spend } from '@/server/domain/rateLimit';
+import type { AddressBucket, Bucket, Spend } from '@/server/domain/rateLimit';
 
-export type { Bucket, Spend };
+export type { AddressBucket, Bucket, Spend };
 
 /**
  * Per-user fixed windows (src/server/domain/rateLimit.ts `LIMITS`): one window per
@@ -14,4 +14,13 @@ export interface RateLimiter {
   spendAll(uid: string, spends: readonly Spend[], now?: number): Promise<void>;
   /** For the routes outside /api/v1: the 429 response to return, or null to go ahead. */
   limited(uid: string, bucket: Bucket | readonly Spend[], weight?: number): Promise<Response | null>;
+}
+
+/**
+ * Per-address fixed windows (domain/rateLimit `ADDRESS_LIMITS`), for the
+ * routes that answer before anyone is known: best-effort, per instance.
+ */
+export interface AddressLimiter {
+  /** Spend one of `address`'s `bucket` (no address: one shared bucket), or throw the 429 `rate_limited` ApiFailure. */
+  spend(address: string | null, bucket: AddressBucket, now?: number): Promise<void>;
 }

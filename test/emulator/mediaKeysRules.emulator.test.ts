@@ -77,6 +77,13 @@ describe('users.avatarKey', () => {
     for (const avatarKey of BAD_KEYS) await assertFails(updateDoc(me, { avatarUrl: `${BASE}/${KEY}`, avatarKey }));
   });
 
+  it("reads a dot in the key as a dot: a key names its own URL, never one a character off (audit L13)", async () => {
+    const me = doc(as('alice'), 'users', 'alice');
+    const near = `${BASE}/${KEY.replace('.webp', 'Xwebp')}`;
+    await assertFails(updateDoc(me, { avatarUrl: near, avatarKey: KEY }));
+    await assertSucceeds(updateDoc(me, { avatarUrl: `${BASE}/${KEY}`, avatarKey: KEY }));
+  });
+
   it("is never anyone else's to write", async () => {
     await assertFails(updateDoc(doc(as('bob'), 'users', 'alice'), { avatarKey: 'image/2026-10/old.webp' }));
   });
@@ -94,6 +101,12 @@ describe('cards.media.key', () => {
     const ref = doc(collection(db, 'cards'));
     await assertSucceeds(setDoc(ref, draft('alice', { media: cover({ key: KEY }) })));
     await assertSucceeds(setDoc(ref, { media: cover({ key: KEY, label: 'snow' }), updatedAt: serverTimestamp() }, { merge: true }));
+  });
+
+  it('reads a dot in the key as a dot (audit L13)', async () => {
+    const db = as('alice');
+    const near = `${BASE}/${KEY.replace('.webp', 'Xwebp')}`;
+    await assertFails(setDoc(doc(collection(db, 'cards')), draft('alice', { media: { type: 'image', url: near, key: KEY } })));
   });
 
   it('refuses a URL, a path that climbs, a malformed key, or the key of another picture', async () => {

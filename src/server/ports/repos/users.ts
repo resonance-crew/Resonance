@@ -43,7 +43,6 @@ export interface NewProfile {
   primaryLocale: string;
   autoTranslateTo: string[];
   verified: boolean;
-  phoneHash: string;
   avatarSeed: string;
   initials: string;
   accentColor: string;

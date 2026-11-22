@@ -58,7 +58,7 @@
  *       edit): the rules then refuse a new card under that id, which would take those over
  *   npx tsx scripts/backfill.ts link-previews [--missing] [--apply] [--emulator]
  *       published cards get the previews of their stories' standalone links (fetches the pages;
- *       --apply against production needs LINK_PREVIEW_SECRET or FIREBASE_PRIVATE_KEY — the deployment's —
+ *       --apply against production needs LINK_PREVIEW_SECRET — the deployment's pinned value —
  *       to sign their pictures); --missing also asks again for every link that has no preview yet
  *       (after previews learn a site, as YouTube's videos in round 5); a dry run also lists every published
  *       paragraph whose card-ness the words rule changed (round 16: a lone link with words of its own reads as
@@ -289,9 +289,9 @@ async function main() {
       // The pictures' paths are signed by this process: with a key the deployment doesn't have, they 404.
       const { linkPreviewKeys } = await import('../src/lib/links/previewSecret');
       const keys = linkPreviewKeys();
-      const source = !keys ? null : keys.source === 'env' ? 'LINK_PREVIEW_SECRET' : 'a key derived from FIREBASE_PRIVATE_KEY';
+      const source = keys ? 'LINK_PREVIEW_SECRET' : null;
       if (apply && !useEmulator && !source) {
-        throw new Error('Set LINK_PREVIEW_SECRET (or FIREBASE_PRIVATE_KEY) as the deployment has it: the pictures would be signed with a key it does not know.');
+        throw new Error('Set LINK_PREVIEW_SECRET as the deployment has it: the pictures would be signed with a key it does not know.');
       }
       console.log(`pictures signed with ${source ?? 'the development key (emulators only)'}`);
       const { backfillLinkPreviews } = await import('./backfills/linkPreviews');

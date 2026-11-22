@@ -1660,6 +1660,14 @@ export const MessagePage = named(
     newerCursor: z.string().nullable(),
     /** An `after` page that came back full: ask again with `newerCursor` right away. */
     hasNewer: z.boolean(),
+    /**
+     * Asked with `updatedAfter`: the messages changed since that answer — a reaction, an unsend, a link
+     * preview, 停止分享 — of any age, oldest change first, each as it is now. As many as `limit`: more may
+     * have changed, so read the newest page again instead.
+     */
+    updated: z.array(ThreadMessage).optional(),
+    /** Asked for (`changes=1` or `updatedAfter`): pass as `updatedAfter` to hear only what changed after this answer. Null: read the newest page again. */
+    updatedCursor: z.string().nullable().optional(),
   }),
   'MessagePage',
   "A page of a thread's messages.",
@@ -1734,9 +1742,17 @@ export const MessagesQuery = z
   .object({
     before: z.string().min(1).max(512).nullish(),
     after: z.string().min(1).max(512).nullish(),
+    /** An answer's `updatedCursor`: also say which messages changed since it (`updated`). Not with `before`. */
+    updatedAfter: z.string().min(1).max(512).nullish(),
+    /**
+     * `1`: answer an `updatedCursor` (implied by `updatedAfter`). Asked for, because it is where the store
+     * stood at the read: an answer carrying it is never the same twice, so never a 304.
+     */
+    changes: z.enum(['0', '1']).nullish(),
     limit: z.coerce.number().int().min(1).max(THREAD_PAGE_MAX).default(THREAD_PAGE),
   })
-  .refine((q) => !(q.before && q.after), { message: 'Send `before` or `after`, not both.', path: ['after'] });
+  .refine((q) => !(q.before && q.after), { message: 'Send `before` or `after`, not both.', path: ['after'] })
+  .refine((q) => !(q.before && q.updatedAfter), { message: 'Send `before` or `updatedAfter`, not both.', path: ['updatedAfter'] });
 
 export type ConversationBody = z.infer<typeof Conversation>;
 export type ConversationListBody = z.infer<typeof ConversationList>;

@@ -132,7 +132,7 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
     const res = await post({ to: 'bob', text: '  hi  ', extra: 'ignored' });
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ conversationId: 'alice_bob', id: 'm1' });
-    expect(sendMessage).toHaveBeenCalledWith(CTX, 'alice', { to: 'bob', text: 'hi' }, expect.any(Promise));
+    expect(sendMessage).toHaveBeenCalledWith(CTX, 'alice', { to: 'bob', text: 'hi' }, expect.any(Promise), expect.any(Function));
     // The words sent go along: without a link, nothing is unfurled.
     expect(afterMessageSent).toHaveBeenCalledWith(CTX, SENT, 'hi');
   });
@@ -140,7 +140,7 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
   it('passes the message it answers and the sender\'s own id on to the service', async () => {
     const res = await post({ to: 'bob', text: 'hi', replyTo: 'm0', clientId: 'client-0123456789abcdef' });
     expect(res.status).toBe(201);
-    expect(sendMessage).toHaveBeenCalledWith(CTX, 'alice', { to: 'bob', text: 'hi', replyTo: 'm0', clientId: 'client-0123456789abcdef' }, expect.any(Promise));
+    expect(sendMessage).toHaveBeenCalledWith(CTX, 'alice', { to: 'bob', text: 'hi', replyTo: 'm0', clientId: 'client-0123456789abcdef' }, expect.any(Promise), expect.any(Function));
   });
 
   it('answers a message sent again exactly as the first time, and leaves the after-work to the service\'s own flag', async () => {
@@ -174,10 +174,10 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
 
   it('passes a sticker and an album place on to the service (round 22), refusing ones not well-formed before sending anything', async () => {
     expect((await post({ to: 'bob', text: '', sticker: { pack: 'twine', id: 'thanks' } })).status).toBe(201);
-    expect(sendMessage).toHaveBeenLastCalledWith(CTX, 'alice', { to: 'bob', text: '', sticker: { pack: 'twine', id: 'thanks' } }, expect.any(Promise));
+    expect(sendMessage).toHaveBeenLastCalledWith(CTX, 'alice', { to: 'bob', text: '', sticker: { pack: 'twine', id: 'thanks' } }, expect.any(Promise), expect.any(Function));
     const album = { id: 'album-0123456789abcdef', index: 1, count: 3 };
     expect((await post({ to: 'bob', text: '', image: 'pic1', album })).status).toBe(201);
-    expect(sendMessage).toHaveBeenLastCalledWith(CTX, 'alice', { to: 'bob', text: '', image: 'pic1', album }, expect.any(Promise));
+    expect(sendMessage).toHaveBeenLastCalledWith(CTX, 'alice', { to: 'bob', text: '', image: 'pic1', album }, expect.any(Promise), expect.any(Function));
     sendMessage.mockClear();
 
     const malformed = [

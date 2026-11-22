@@ -49,7 +49,7 @@ vi.mock('@/lib/db/firestore/client/messages', () => ({
 }));
 
 const pokes = vi.hoisted(() => [] as string[]);
-vi.mock('@/lib/db/firestore/client/signals', () => ({ pokeSignal: (topic: string) => pokes.push(topic) }));
+vi.mock('@/lib/db/firestore/client/signals', () => ({ pokeSignal: (topic: string) => pokes.push(topic), pokeOwn: (topics: string[]) => pokes.push(...topics) }));
 
 const mockUseAuth = vi.fn();
 vi.mock('@/components/providers/AuthProvider', () => ({ useAuth: () => mockUseAuth() }));

@@ -43,25 +43,25 @@ describe("a drawn card's version", () => {
 describe('the key it is made with', () => {
   const PEM = '-----BEGIN PRIVATE KEY-----\\nMIIEv\\n-----END PRIVATE KEY-----\\n';
 
-  it("is derived from the link-preview secret, else the service account's key — never either as it is, nor the link pictures' key", () => {
+  it("is derived from the link-preview secret — never the secret as it is, nor the link pictures' key, nor anything of the service account's", () => {
     const fromSecret = shareVersionKey({ LINK_PREVIEW_SECRET: 's3cret', NODE_ENV: 'production' });
-    const fromPem = shareVersionKey({ FIREBASE_PRIVATE_KEY: PEM, NODE_ENV: 'production' });
     expect(fromSecret).toHaveLength(32);
-    expect(fromPem).toHaveLength(32);
-    expect(fromSecret!.equals(fromPem!)).toBe(false);
     expect(fromSecret!.equals(Buffer.from('s3cret'))).toBe(false);
     expect(fromSecret!.equals(signingKey({ LINK_PREVIEW_SECRET: 's3cret', NODE_ENV: 'production' }))).toBe(false);
-    expect(fromPem!.equals(signingKey({ FIREBASE_PRIVATE_KEY: PEM, NODE_ENV: 'production' }))).toBe(false);
     expect(shareVersionKey({ LINK_PREVIEW_SECRET: 'other', NODE_ENV: 'production' })!.equals(fromSecret!)).toBe(false);
+    // The service account's key alone keys nothing: outside production the fixed key, as with nothing set.
+    expect(shareVersionKey({ FIREBASE_PRIVATE_KEY: PEM, NODE_ENV: 'test' })).toEqual(shareVersionKey({ NODE_ENV: 'test' }));
   });
 
-  it('is a fixed one outside production, and none — an unkeyed version, logged once — in a production without either', () => {
+  it("is a fixed one outside production, and none — an unkeyed version, logged once — in a production without the secret, the service account's key or not", () => {
     expect(shareVersionKey({ NODE_ENV: 'test' })).toEqual(shareVersionKey({ NODE_ENV: 'development' }));
     expect(shareVersionKey({ NODE_ENV: 'production', FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080' })).not.toBeNull();
     const warned = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const said = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(shareVersionKey({ NODE_ENV: 'production' })).toBeNull();
-    expect(shareVersionKey({ NODE_ENV: 'production' })).toBeNull();
+    expect(shareVersionKey({ NODE_ENV: 'production', FIREBASE_PRIVATE_KEY: PEM })).toBeNull();
     expect(warned).toHaveBeenCalledTimes(1);
     warned.mockRestore();
+    said.mockRestore();
   });
 });

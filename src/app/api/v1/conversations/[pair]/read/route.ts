@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
 import { ConversationIdParam } from '@/lib/api/v1/schemas';
 import { serverCtx } from '@/server/ctx';
-import { markConversationReadIn } from '@/server/app/inbox';
+import { OWN_SIGNALS_HEADER, markConversationReadIn, type OwnSignals } from '@/server/app/inbox';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +15,8 @@ export const POST = withUser(async (user, _req, ctx: RouteContext<'pair'>) => {
   const pair = parse(ConversationIdParam, await routeParam(ctx, 'pair'));
   const server = serverCtx();
   await server.limits.spend(user.id, 'markRead');
-  await markConversationReadIn(server, user.id, pair);
-  return new NextResponse(null, { status: 204 });
+  const own: { signals?: OwnSignals } = {};
+  await markConversationReadIn(server, user.id, pair, (signals) => (own.signals = signals));
+  // The reader's own counters after the read mark: their client takes them as heard (client/signals pokeOwn).
+  return new NextResponse(null, { status: 204, headers: own.signals ? { [OWN_SIGNALS_HEADER]: JSON.stringify(own.signals) } : {} });
 });

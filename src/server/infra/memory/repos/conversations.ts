@@ -75,6 +75,20 @@ function nextStamp(state: MemoryState, at: Date): Instant {
   return toInstant(ms, micros);
 }
 
+/** The latest server time handed out (where a read now stands: every later change gets a later one); the epoch before any. */
+function markOf(state: MemoryState): Instant {
+  const last = lastStamp.get(state);
+  return last ? toInstant(last.ms, last.micros) : toInstant(0);
+}
+
+/** A change's server time (`editedAt`): after every one handed out (from 1 ms past the epoch when none was). */
+export function editStamp(state: MemoryState): Instant {
+  return nextStamp(state, new Date(1));
+}
+
+/** As Firestore's EDITED_AT (repos/conversations): every change to a message already sent sets it. */
+export const EDITED_AT = 'editedAt';
+
 function headOf(row: Row | null): ConversationHead | null {
   if (!row) return null;
   const last = row.lastMessage;
@@ -226,6 +240,7 @@ export function conversationsTx(tx: MemoryTx): ConversationsTxRepo {
   const rows: Rows = (table, where) => tx.rows(table, where);
   const origins = new Map<string, Row | null>();
   let stamp: Instant | null = null;
+  let editAt: Instant | null = null;
   // One server time for the whole transaction, as a commit has.
   const serverTime = (at: Date) => (stamp ??= nextStamp(tx.state, at));
   // Writes later in the same transaction see the conversation as this one left it (as Firestore applies them in order).
@@ -242,6 +257,8 @@ export function conversationsTx(tx: MemoryTx): ConversationsTxRepo {
     const row = pendingMessage.get(key) ?? messageNow(pair, id);
     if (!row) throw new Error(`No message ${key} to update`);
     change(row);
+    // The transaction's one change time (its server time when it has one already).
+    row[EDITED_AT] = editAt ??= stamp ?? editStamp(tx.state);
     pendingMessage.set(key, row);
     tx.put(MESSAGES, key, row);
   };
@@ -341,7 +358,7 @@ export function conversationsTx(tx: MemoryTx): ConversationsTxRepo {
       });
     },
     unsendMessage(pair, messageId, senderId, sentAt, at) {
-      const row = { senderId, sentAt, unsentAt: serverTime(at) };
+      const row = { senderId, sentAt, unsentAt: serverTime(at), [EDITED_AT]: serverTime(at) };
       pendingMessage.set(`${pair}/${messageId}`, row);
       tx.put(MESSAGES, `${pair}/${messageId}`, row);
     },
@@ -442,7 +459,7 @@ export function conversationsData(state: MemoryState): ConversationsData {
         .filter((m) => !after || byPosition({ t: m.sentAt, id: m.id }, after) < 0)
         .slice(0, limit);
       const last = list[list.length - 1];
-      return { messages: list, next: list.length === limit && last ? encodeCursor({ t: last.sentAt, id: last.id }) : null };
+      return { messages: list, next: list.length === limit && last ? encodeCursor({ t: last.sentAt, id: last.id }) : null, mark: markOf(state) };
     },
     async listMessagesAfter(pair, limit, after) {
       const at = decodeCursor(after);
@@ -452,7 +469,18 @@ export function conversationsData(state: MemoryState): ConversationsData {
         .filter((m) => byPosition({ t: m.sentAt, id: m.id }, at) > 0)
         .slice(0, limit);
       const newest = oldestFirst[oldestFirst.length - 1];
-      return { messages: oldestFirst.reverse(), next: oldestFirst.length === limit && newest ? encodeCursor({ t: newest.sentAt, id: newest.id }) : null };
+      return {
+        messages: oldestFirst.reverse(),
+        next: oldestFirst.length === limit && newest ? encodeCursor({ t: newest.sentAt, id: newest.id }) : null,
+        mark: markOf(state),
+      };
+    },
+    async listMessagesChangedAfter(pair, limit, since) {
+      const changed = rows(MESSAGES, (row, id) => id.startsWith(`${pair}/`) && isInstant(row[EDITED_AT]) && compareInstants(row[EDITED_AT], since) > 0)
+        .sort((a, b) => compareInstants(a.row[EDITED_AT] as Instant, b.row[EDITED_AT] as Instant))
+        .slice(0, limit)
+        .map(({ id, row }) => messageOf(id.slice(pair.length + 1), row));
+      return { messages: changed, mark: changed.length >= limit ? null : markOf(state) };
     },
     async listConversations(uid, limit, before) {
       let at: { t: Instant; id: string } | null = null;
@@ -496,7 +524,8 @@ export function conversationsData(state: MemoryState): ConversationsData {
         .map((q) => ({ id: q.id, emptied: isMap(q.row.replyTo) && q.row.replyTo.unsent === true }));
     },
     async emptyQuotes(pair, quoteIds, unsentId, senderId) {
-      for (const id of quoteIds) state.merge(MESSAGES, `${pair}/${id}`, { replyTo: unsentQuote(unsentId, senderId) });
+      const at = editStamp(state);
+      for (const id of quoteIds) state.merge(MESSAGES, `${pair}/${id}`, { replyTo: unsentQuote(unsentId, senderId), [EDITED_AT]: at });
     },
     async unsentCopiesOf(pair) {
       return rows(UNSENT_MESSAGES, (row) => row.pair === pair).map(({ id, row }) => unsentCopyOf(id, row));

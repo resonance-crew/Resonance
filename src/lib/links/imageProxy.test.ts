@@ -37,22 +37,13 @@ describe('the signing key', () => {
     expect(signingKey({ LINK_PREVIEW_SECRET: '  shh  ' }).toString()).toBe('shh');
   });
 
-  it('is derived from the Firebase private key otherwise, and is not the key itself', () => {
-    const key = signingKey({ FIREBASE_PRIVATE_KEY: PEM });
-    expect(key).toHaveLength(32);
-    expect(key.equals(signingKey({ FIREBASE_PRIVATE_KEY: PEM }))).toBe(true);
-    expect(key.toString()).not.toContain('PRIVATE');
-    expect(key.equals(Buffer.from(PEM))).toBe(false);
-    // Another account's key signs differently.
-    expect(key.equals(signingKey({ FIREBASE_PRIVATE_KEY: PEM.replace('MIIE', 'MIIF') }))).toBe(false);
-  });
-
-  it('reads a private key whose new lines are written as \\n (how it sits in an environment variable)', () => {
-    expect(signingKey({ FIREBASE_PRIVATE_KEY: PEM.replace(/\n/g, '\\n') }).equals(signingKey({ FIREBASE_PRIVATE_KEY: PEM }))).toBe(true);
-  });
-
-  it('ignores a blank setting', () => {
-    expect(signingKey({ LINK_PREVIEW_SECRET: '   ', FIREBASE_PRIVATE_KEY: PEM }).equals(signingKey({ FIREBASE_PRIVATE_KEY: PEM }))).toBe(true);
+  it("is never derived from the Firebase private key: with only that set, the development key outside production, none in production", () => {
+    const dev = signingKey({});
+    expect(signingKey({ FIREBASE_PRIVATE_KEY: PEM }).equals(dev)).toBe(true);
+    expect(signingKey({ LINK_PREVIEW_SECRET: '   ', FIREBASE_PRIVATE_KEY: PEM }).equals(dev)).toBe(true);
+    const said = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(() => signingKey({ NODE_ENV: 'production', FIREBASE_PRIVATE_KEY: PEM })).toThrow(/LINK_PREVIEW_SECRET/);
+    said.mockRestore();
   });
 
   it('is a fixed development key only where nothing is secret: tests, dev and the emulators', () => {
@@ -63,7 +54,9 @@ describe('the signing key', () => {
   });
 
   it('fails closed in production with no secret at all, rather than sign with a key anyone can read', () => {
+    const said = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(() => signingKey({ NODE_ENV: 'production' })).toThrow(/LINK_PREVIEW_SECRET/);
+    said.mockRestore();
   });
 });
 

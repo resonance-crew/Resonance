@@ -128,6 +128,39 @@ export const LIMITS = {
 
 export type Bucket = keyof typeof LIMITS;
 
+/**
+ * Per-address budgets for the routes that answer before anyone is known
+ * (POST /api/v1/auth/refresh and /logout read the refresh token's row to
+ * learn whose it is): spent BEFORE that read, so a script sending made-up
+ * tokens costs no Firestore read past the budget. Kept in each instance's
+ * memory (infra/memory/addressBudget.ts) — a Firestore window would itself
+ * cost a transaction — so it is a brake per instance, not an exact count;
+ * a Vercel Firewall rate-limit rule on /api/v1/auth/* is the stronger
+ * complement. Wide enough for many devices behind one address (a carrier's
+ * NAT, a school): a device refreshes once every 15 minutes while in use.
+ */
+export const ADDRESS_LIMITS = {
+  authRefresh: { max: 300, windowMs: 10 * 60 * 1000 },
+  authLogout: { max: 60, windowMs: 10 * 60 * 1000 },
+} as const satisfies Record<string, { max: number; windowMs: number }>;
+
+export type AddressBucket = keyof typeof ADDRESS_LIMITS;
+
+/**
+ * One unit of a fixed window `{ since, used }` (undefined: none yet) spent
+ * at `now`: the window to keep, or null when it has no room left (the
+ * window kept as it was).
+ */
+export function spendFixedWindow(
+  window: { since: number; used: number } | undefined,
+  limit: { max: number; windowMs: number },
+  now: number,
+): { since: number; used: number } | null {
+  if (!window || now - window.since >= limit.windowMs) return { since: now, used: 1 };
+  if (window.used >= limit.max) return null;
+  return { since: window.since, used: window.used + 1 };
+}
+
 /** A bucket and what to spend of it (1 when left out). */
 export type Spend = readonly [bucket: Bucket, weight?: number];
 

@@ -5,25 +5,23 @@ import { hkdfSync } from 'node:crypto';
  * so the picture signatures (`imageSigning.signingKey`) and the drawn cards'
  * versions (`linkImage/version.shareVersionKey`) can't drift apart.
  *
- * Two keys, two sources:
+ * One source: `LINK_PREVIEW_SECRET`. Either the value
+ * `scripts/ops/link-preview-secret.ts` prints — `derived-v1:<link>.<share>`,
+ * the two keys exactly as they were once derived from the Firebase service
+ * account's private key, base64url, which production and preview are pinned to
+ * (docs/release/owed.md, 2026-11-22: every stored preview picture is signed
+ * with that link key) — or any other text, which is (as it always was) the
+ * picture key as it is, and the share key's HKDF input.
  *
- * - `env`: `LINK_PREVIEW_SECRET` is set. Either the value
- *   `scripts/ops/link-preview-secret.ts` prints — `derived-v1:<link>.<share>`,
- *   the two keys exactly as they are derived today, base64url — or any other
- *   text, which is (as it always was) the picture key as it is, and the share
- *   key's HKDF input.
- * - `derived`: it isn't, and both keys are HKDF-SHA256 of the Firebase service
- *   account's private key (salt "resonance", infos below). Kept on purpose:
- *   every link-preview picture stored so far is signed with that key, and
- *   without it they would all 404. But rotating or moving the service account
- *   would orphan them just the same, so a production process says so once
- *   (docs/release/owed.md: set the derived value in Vercel, then drop this).
- *
- * Neither: null — the callers decide (a fixed key outside production; in
- * production the pictures fail closed and the versions go unkeyed).
+ * Unset: null — never derived from FIREBASE_PRIVATE_KEY any more, so rotating
+ * or moving the service account can't change, or leak through, these keys. The
+ * callers decide: outside production a fixed development key (tests, the
+ * emulator stacks, `next dev`); in production the pictures fail closed and the
+ * versions go unkeyed, and the process says so once. `derivedKeys` stays only
+ * for the ops script, which prints and checks the pinned value.
  */
 
-export type LinkPreviewSecretSource = 'env' | 'derived';
+export type LinkPreviewSecretSource = 'env';
 
 export interface LinkPreviewKeys {
   source: LinkPreviewSecretSource;
@@ -43,13 +41,17 @@ export const DERIVED_PREFIX = 'derived-v1:';
 
 const hkdf = (input: string, info: string) => Buffer.from(hkdfSync('sha256', input, SALT, info, 32));
 
-/** A production process that holds real data (not the emulators). */
-export const isProductionProcess = (env: Env) => env.NODE_ENV === 'production' && !env.FIRESTORE_EMULATOR_HOST;
+/** A production process that holds real data (not the emulators): a production build off the emulators, or Vercel's production. */
+export const isProductionProcess = (env: Env) =>
+  (env.NODE_ENV === 'production' && !env.FIRESTORE_EMULATOR_HOST) || env.VERCEL_ENV === 'production';
 
 /** The Firebase private key as PEM (an environment variable writes its new lines as `\n`). */
 const pemOf = (env: Env) => env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n').trim() || '';
 
-/** Both keys as `FIREBASE_PRIVATE_KEY` derives them; null without one. Byte-for-byte what was signed before. */
+/**
+ * Both keys as `FIREBASE_PRIVATE_KEY` derives them; null without one. Byte-for-byte what was signed before.
+ * For scripts/ops/link-preview-secret.ts only: the running site never derives its keys.
+ */
 export function derivedKeys(env: Env): { link: Buffer; share: Buffer } | null {
   const pem = pemOf(env);
   return pem ? { link: hkdf(pem, LINK_INFO), share: hkdf(pem, SHARE_INFO) } : null;
@@ -71,27 +73,26 @@ function decodeDerivedSecret(value: string): { link: Buffer; share: Buffer } {
 }
 
 let cached: { from: string; keys: LinkPreviewKeys } | null = null;
-let warnedDerived = false;
+let warnedUnset = false;
 
+/** The keys `LINK_PREVIEW_SECRET` names, or null when it is unset (see above). Throws on a malformed `derived-v1:` value. */
 export function linkPreviewKeys(env: Env = process.env): LinkPreviewKeys | null {
   const explicit = env.LINK_PREVIEW_SECRET?.trim() || '';
-  const pem = explicit ? '' : pemOf(env);
-  if (!explicit && !pem) return null;
-  const from = explicit ? `env\n${explicit}` : `pem\n${pem}`;
-  if (cached?.from !== from) {
-    let keys: LinkPreviewKeys;
-    if (explicit.startsWith(DERIVED_PREFIX)) keys = { source: 'env', ...decodeDerivedSecret(explicit) };
-    else if (explicit) keys = { source: 'env', link: Buffer.from(explicit), share: hkdf(explicit, SHARE_INFO) };
-    else keys = { source: 'derived', ...derivedKeys(env)! };
-    cached = { from, keys };
+  if (!explicit) {
+    if (isProductionProcess(env) && !warnedUnset) {
+      warnedUnset = true;
+      console.error(
+        '[link-preview] LINK_PREVIEW_SECRET is not set: preview pictures are neither signed nor served and drawn cards ' +
+          'are versioned unkeyed. Set it to the deployment\'s pinned derived-v1 value (docs/release/owed.md).',
+      );
+    }
+    return null;
   }
-  if (cached.keys.source === 'derived' && isProductionProcess(env) && !warnedDerived) {
-    warnedDerived = true;
-    console.warn(
-      '[link-preview] LINK_PREVIEW_SECRET is not set: link-preview keys are derived from FIREBASE_PRIVATE_KEY, ' +
-        'so rotating the service account would orphan every stored preview picture. Set it to what ' +
-        '`npx tsx scripts/ops/link-preview-secret.ts` prints (docs/release/owed.md).',
-    );
+  if (cached?.from !== explicit) {
+    const keys: LinkPreviewKeys = explicit.startsWith(DERIVED_PREFIX)
+      ? { source: 'env', ...decodeDerivedSecret(explicit) }
+      : { source: 'env', link: Buffer.from(explicit), share: hkdf(explicit, SHARE_INFO) };
+    cached = { from: explicit, keys };
   }
   return cached.keys;
 }

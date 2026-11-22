@@ -17,7 +17,7 @@ import {
   sendMessage,
   uploadChatImage,
 } from '@/lib/db/firestore/client/messages';
-import { pokeSignal } from '@/lib/db/firestore/client/signals';
+import { pokeOwn } from '@/lib/db/firestore/client/signals';
 import type { Conversation, MessageReplyQuote } from '@/lib/db/types';
 import { patchLive } from './live';
 import type { StickerRef } from '@/lib/stickers/catalog';
@@ -68,9 +68,9 @@ export function outboxOf(uid: string, pairId: string, to: string): Outbox {
           as: uid,
         });
       // The thread (and the list) read it back at once, not a signal's round trip later: the bubble stops
-      // saying it is on its way as soon as the server has it.
-      pokeSignal(`thread:${pairId}`);
-      pokeSignal('inbox');
+      // saying it is on its way as soon as the server has it — once: the answer's own counters say the
+      // listener's copy of this touch needs no second pull (pokeOwn).
+      pokeOwn([`thread:${pairId}`, 'inbox'], sent.signals ?? null);
       return sent.id;
     });
     outboxes.set(key, box);
