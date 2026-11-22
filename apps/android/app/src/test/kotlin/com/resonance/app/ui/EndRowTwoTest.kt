@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
@@ -49,10 +50,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Row 2 under the capsule, 收藏 beside the tags (a phone) or the capsule (wide; round 28 §S2–§S4), and the note
- * field's envelope (round 26 §U1.2, the note in place item 2) as their twins draw them — the web's, where iOS differs (the screens' review: Android's stood apart from both). 收藏 a bare glyph in the
+ * The faces' line over the capsule (round 30 §S1; row 2 under it until then), 收藏 beside the tags (a phone) or the
+ * capsule (wide; round 28 §S2–§S4) as their twins draw them — the web's, where iOS differs (the screens' review: Android's stood apart from both). 收藏 a bare glyph in the
  * muted text ink with the one pen, its glyph 12 in from the row's end in its 48 box (the web's 44 button, centred, on
- * the row's end); a face 12 in from the row's start (the web's 6 + 6); the envelope muted at 18. Drawn for real and
+ * the row's end); a face 12 in from the row's start (the web's 6 + 6). Drawn for real and
  * measured pixel by pixel.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -256,14 +257,69 @@ class EndRowTwoTest {
         assertTrue("the glyph ends $seen px in, expected $expected", abs(seen - expected) <= 1)
     }
 
-    @Test fun theNotesEnvelopeIsMutedAtEighteen() {
-        var muted = Color.Unspecified
+    /** A reader's end as the page stacks it: the tags (收藏 at their end on a phone), their air, the faces' line, the capsule. */
+    private fun readerEnd(width: Int, names: List<String>, twoLines: Boolean = false, wide: Boolean = false) {
+        val toggle = toggle()
         compose.setContent {
-            muted = Tokens.TextMuted
-            Box(Modifier.background(Color.White).testTag("lead")) { NoteLeadGlyph() }
+            Column(Modifier.width(width.dp)) {
+                StoryTagsRow(names, if (wide) null else toggle, Modifier.padding(bottom = endRowAir(reader = true).dp).testTag("tagsRow"))
+                ReaderEndStack(
+                    capsuleWidth = (if (wide) 420 else width).dp,
+                    faces = { Box(Modifier.size(28.dp).testTag("face")) },
+                    firstLine = { Box(Modifier.size((if (wide) 420 else width).dp, 48.dp).testTag("capsule")) },
+                    bookmark = if (wide) ({ BookmarkButton(saved = false, glyphEnd = BylineGlyphEnd) {} }) else null,
+                    secondLine = if (twoLines) ({ Box(Modifier.size(width.dp, 48.dp).testTag("second")) }) else null,
+                ) { Box(Modifier.size(width.dp, 10.dp).testTag("note")) }
+            }
         }
-        val lead = map("lead")
-        assertEquals((18 * density).toInt(), lead.width)
-        assertTrue("the envelope is drawn in the muted text ink", near(ink(lead), muted))
+    }
+
+    @Test fun theFacesLineStandsRightOverTheCapsuleSixteenUnderTheTags() {
+        // Round 30 §S1 (「把它移到共振按鈕的上方」): tags → 16 → the faces' line (48) → 0 → the capsule — 64 from the
+        // tags to the capsule, a face or none; the note's place under the capsule (it keeps its own 12 over the field).
+        readerEnd(335, tags(2))
+        val tagsRow = compose.onNodeWithTag("tagsRow").getBoundsInRoot()
+        val capsule = compose.onNodeWithTag("capsule").getBoundsInRoot()
+        val face = compose.onNodeWithTag("face").getBoundsInRoot()
+        val note = compose.onNodeWithTag("note").getBoundsInRoot()
+        assertEquals(16f + Row2Height.value, (capsule.top - tagsRow.bottom).value, 0.5f)
+        assertEquals(64f, (capsule.top - tagsRow.bottom).value, 0.5f)
+        // The face centred in its 48 line, 12 in, and wholly over the capsule.
+        assertEquals(capsule.top.value - Row2Height.value / 2, (face.top.value + face.bottom.value) / 2, 0.5f)
+        assertEquals(12f, face.left.value, 0.5f)
+        assertTrue(face.bottom.value <= capsule.top.value)
+        assertEquals(capsule.bottom.value, note.top.value, 0.5f)
+        // Every other end keeps the 40 under the tags.
+        assertEquals(40f, endRowAir(reader = false), 0f)
+    }
+
+    @Test fun noTagsTheFacesLineStartsSixteenUnderTheStory() {
+        // Wide, no tags: the tags' row is empty, and the end row starts its 16 under what stood above it.
+        readerEnd(680, emptyList(), wide = true)
+        val tagsRow = compose.onNodeWithTag("tagsRow").getBoundsInRoot()
+        val capsule = compose.onNodeWithTag("capsule").getBoundsInRoot()
+        // (The tag is inside the row's padding: the tags' own bounds, empty here.)
+        assertEquals(0f, (tagsRow.bottom - tagsRow.top).value, 0.5f)
+        assertEquals(tagsRow.bottom.value + 16f + Row2Height.value, capsule.top.value, 0.5f)
+    }
+
+    @Test fun onTwoLinesTheFacesStandOverTheFirstAndTheNoteUnderTheSecond() {
+        readerEnd(300, tags(1), twoLines = true)
+        val capsule = compose.onNodeWithTag("capsule").getBoundsInRoot()
+        val second = compose.onNodeWithTag("second").getBoundsInRoot()
+        val face = compose.onNodeWithTag("face").getBoundsInRoot()
+        val note = compose.onNodeWithTag("note").getBoundsInRoot()
+        assertTrue(face.bottom.value <= capsule.top.value)
+        assertEquals(EndRowLayout.LINE_GAP, (second.top - capsule.bottom).value, 0.5f)
+        assertEquals(second.bottom.value, note.top.value, 0.5f)
+    }
+
+    @Test fun wide收藏StaysCentredOnTheCapsulesLineNotTheFaces() {
+        // Round 28's place, unchanged (§S1): at the column's end, centred on the capsule; nothing ends the faces' line.
+        readerEnd(680, tags(2), wide = true)
+        val capsule = compose.onNodeWithTag("capsule").getBoundsInRoot()
+        val mark = compose.onNodeWithContentDescription("收藏").getBoundsInRoot()
+        assertEquals(680f, mark.right.value, 0.5f)
+        assertEquals((capsule.top.value + capsule.bottom.value) / 2, (mark.top.value + mark.bottom.value) / 2, 0.5f)
     }
 }

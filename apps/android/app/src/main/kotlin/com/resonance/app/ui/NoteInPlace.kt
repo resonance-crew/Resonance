@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
@@ -68,10 +67,8 @@ import com.resonance.design.AppFonts
 import com.resonance.design.ComposerCapsule
 import com.resonance.design.LayoutClass
 import com.resonance.design.LocalWindowLayout
-import com.resonance.design.OrganicIcon
 import com.resonance.design.composerFades
 import com.resonance.design.fieldHintStyle
-import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.inlineBarTop
 import com.resonance.design.lineHeightOf
@@ -208,12 +205,14 @@ internal fun noteMaxLines(phone: Boolean, shortWindow: Boolean): Int = when {
 }
 
 /**
- * The note's field in place (round 26, the note in place, item 2): the composer's input capsule — the envelope in the
- * lead column (48), the words, and 寄出 as its end segment (the paper plane, tonal at rest, solid only with words) —
- * [NoteInPlaceGap] under row 2, as wide as the column on a phone and min(the story's column, 680) wider, from where the
- * capsule starts. One line 48, growing to [noteMaxLines], then scrolling inside; no ⤢. Focused, the page brings the
+ * The note's field in place (round 26, the note in place, item 2; round 30 §S2–§S4): the composer's input capsule — no
+ * envelope, the words [NoteWordsStart] in, and 寄出 as its end segment (the paper plane, tonal at rest, solid only with
+ * words) — [NoteInPlaceGap] under the capsule of answers (under its second line when it takes two), across the story's
+ * column from its start to its end at every width (no 680 cap: wide, 寄出 ends on the column's edge, where 收藏 and the
+ * byline's ⋯ end). One line 48, growing to [noteMaxLines], then scrolling inside; no ⤢. Focused, the page brings the
  * field's block 12 above the keyboard (nothing floats). Under it the one [NoteLine] and, near the cap, the count —
- * nothing with nothing to say; with [mayNote] false, the wait line alone in its place.
+ * nothing with nothing to say; with [mayNote] false, the wait line alone in its place. Everything in the note's place
+ * starts [NoteWordsStart] in: the words, the line under them, the wait line.
  */
 @Composable
 internal fun NoteInPlace(
@@ -236,7 +235,7 @@ internal fun NoteInPlace(
                 BasicText(
                     L10n.Card.Note.waitForReply,
                     style = AppFonts.body(14f, lineHeight = 1.5f, color = Tokens.TextMuted),
-                    modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+                    modifier = Modifier.fillMaxWidth().padding(start = NoteWordsStart).semantics { liveRegion = LiveRegionMode.Polite },
                 )
                 return@Column
             }
@@ -247,12 +246,12 @@ internal fun NoteInPlace(
             var lineHeight by remember { mutableIntStateOf(0) }
             val lineShown = line != null || count != null
             NoteCapsule(
-                state, noteMaxLines(phone, shortWindow), onSend, Modifier.widthIn(max = NoteFieldMax).fillMaxWidth(),
+                state, noteMaxLines(phone, shortWindow), onSend, Modifier.fillMaxWidth(),
                 lineBelow = { if (lineShown) lineHeight else 0 }, onRoom = onRoom,
             )
             if (lineShown) {
                 Row(
-                    Modifier.onSizeChanged { lineHeight = it.height }.widthIn(max = NoteFieldMax).fillMaxWidth().padding(top = 6.dp),
+                    Modifier.onSizeChanged { lineHeight = it.height }.fillMaxWidth().padding(start = NoteWordsStart, top = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.Top,
                 ) {
@@ -282,7 +281,7 @@ internal fun NoteInPlace(
     }
 }
 
-/** The capsule itself: the envelope, the words (`note-field`, the flows' id), 寄出. */
+/** The capsule itself: the words (`note-field`, the flows' id) [NoteWordsStart] in, no envelope (round 30 §S4), 寄出. */
 @Composable
 private fun NoteCapsule(
     state: NoteFieldState,
@@ -365,7 +364,9 @@ private fun NoteCapsule(
         seed = 23.0,
         // From the second line Send is the block on the last row, as the composer's (never grown, nothing riding).
         block = composerTools(state.text, lines, expanded = false).block,
-        leading = { NoteLeadGlyph() },
+        // No envelope (round 30 §S4): the words start 16 in; the thread's composer keeps its ＋.
+        leading = null,
+        fieldStart = NoteWordsStart,
     ) { vertical ->
         val scroll = rememberScrollState()
         Box(
@@ -412,30 +413,22 @@ private fun NoteCapsule(
 }
 
 /**
- * The envelope in the field's lead column (item 2): what the field is, a mark and not a button — the muted text ink at
- * [NoteLeadGlyphSize], the web's and iOS's (never the capsule's label brown), with the icon's own pen as the web's.
+ * Where the words start in the field, and where the line under it and the wait line start (round 30 §S4: the envelope's
+ * lead column is gone; the web's and iOS's 16).
  */
-@Composable
-internal fun NoteLeadGlyph(modifier: Modifier = Modifier) {
-    OrganicIcon(IconName.Note, modifier, size = NoteLeadGlyphSize, color = Tokens.TextMuted)
-}
+internal val NoteWordsStart: Dp = 16.dp
 
-/** The envelope's size: the web's 18 (NoteInPlace.module.css `.glyph`), iOS's `NoteFieldCapsule.leadGlyph`. */
-internal val NoteLeadGlyphSize: Dp = 18.dp
-
-/** Under row 2, to the field (item 2). */
+/** Under the capsule of answers, to the field (round 30 §S2: it was under row 2, which now stands over the capsule). */
 internal val NoteInPlaceGap: Dp = 12.dp
-
-/** The field's widest, on a tablet: the story's column or this, whichever is narrower. */
-internal val NoteFieldMax: Dp = 680.dp
 
 /** How far over the keyboard the field's block stands once the page has brought it there. */
 internal val NoteKeyboardClearance: Dp = 12.dp
 
 /**
  * With the bar aside, how far under the status bar the field stands when the page has more room over it than the
- * [NoteInPlaceGap] under row 2: half that gap, so the page's top edge falls in the air between row 2 and the field and
- * neither row 2 (a cut sliver of its faces) nor the field's pen line meets the status bar.
+ * [NoteInPlaceGap] under the capsule: half that gap, so the page's top edge falls in the air between the capsule and the
+ * field and neither the capsule (a cut sliver of its foot) nor the field's pen line meets the status bar (round 30 §S2:
+ * re-aimed from row 2, which stood there until the faces' line moved over the capsule).
  */
 internal val NoteRevealAir: Dp = NoteInPlaceGap / 2
 
@@ -451,8 +444,9 @@ private const val NOTE_KEYBOARD_SETTLE_MILLIS = 120L
  * fits under the bar (a phone on its side, the keyboard up: about 28 between the header's line and the keyboard on a
  * 411-tall window), so the bar steps aside while the keyboard is up and only the status bar stands over the page; there
  * the rect, where the room allows, is the whole viewport, from [NoteRevealAir] over the field under the status bar to
- * the keyboard — what shows over the field starts in the air under row 2, never in a sliver of it (round 26's relook:
- * the lower edges of row 2's faces cut thin under the status bar's paper).
+ * the keyboard — what shows over the field starts in the air under the capsule, never in a sliver of it (round 26's
+ * relook: the lower edges of row 2's faces cut thin under the status bar's paper; since round 30 the capsule stands
+ * there, the faces' line over it).
  */
 internal data class NoteReveal(val barAside: Boolean, val above: Float, val below: Float) {
     fun rect(width: Float): Rect = Rect(0f, -above, width, below)
@@ -463,9 +457,9 @@ internal data class NoteReveal(val barAside: Boolean, val above: Float, val belo
  * [barBottom], the status bar's foot at [statusBottom], the field [field] tall, the line under it [line] (0 without
  * one): the field and its line where both fit under the bar, else the field alone; where not even the field fits, the
  * same under the status bar with the bar aside — and there, when the block brought 12 over the keyboard would leave
- * more than [air] over the field (the page's top edge in row 2 under the status bar — or, where row 2 would show whole,
- * in the capsule over it, which never fits too), the field stands [air] under the status bar instead and the room
- * left goes under the block, over the keyboard.
+ * more than [air] over the field (the page's top edge in the capsule under the status bar — or, where the capsule would
+ * show whole, in the faces' line over it, which never fits too), the field stands [air] under the status bar instead
+ * and the room left goes under the block, over the keyboard.
  */
 internal fun noteReveal(keyboardTop: Float, barBottom: Float, statusBottom: Float, field: Float, line: Float, clearance: Float, air: Float): NoteReveal {
     val block = field + line + clearance
@@ -475,7 +469,7 @@ internal fun noteReveal(keyboardTop: Float, barBottom: Float, statusBottom: Floa
     if (block <= underBar) return NoteReveal(false, barBottom, block)
     if (alone <= underBar) return NoteReveal(false, barBottom, alone)
     val shown = if (block <= underStatus) block else alone
-    // What the page would show over the field, under the status bar: past [air], row 2's foot (its faces' lower edges) cut thin.
+    // What the page would show over the field, under the status bar: past [air], the capsule's foot cut thin.
     return if (underStatus - shown > air) NoteReveal(true, statusBottom + air, underStatus - air)
     else NoteReveal(true, statusBottom, shown)
 }

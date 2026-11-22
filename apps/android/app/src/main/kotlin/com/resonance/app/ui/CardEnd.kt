@@ -29,7 +29,7 @@ internal enum class EndRowForm { Full, Short, TwoLines }
  * Where 收藏 stands at a story's end (round 28 §S2–§S4; the owner, 2026-11-21: 「收藏按鈕不應該放在這裡」 — under the
  * capsule): [Wide] — a column the capsule stands in at its own width (≥ [SegmentedLayout.SPREAD_BELOW], a tablet) —
  * at the end of the capsule's own row, the content column's end; [Phone] — the capsule spans the column — at the end of
- * the tags' row, on their first line. Row 2 under the capsule is the faces' alone either way.
+ * the tags' row, on their first line. The faces' line over the capsule (round 30) is the faces' alone either way.
  */
 internal enum class EndRowPlacement { Wide, Phone }
 
@@ -89,7 +89,7 @@ internal object EndRowLayout {
     }
 
     /**
-     * How wide the capsule stands (dp) — and row 2 under it, as wide: a phone's column whole (the bar spans it), a wider
+     * How wide the capsule stands (dp) — and the faces' line over it, as wide: a phone's column whole (the bar spans it), a wider
      * one the segments' own widths, never past the room beside 收藏 ([capsuleRoom]). Two lines span that room.
      */
     fun capsuleWidth(labels: List<Float>, column: Float, form: EndRowForm): Float {

@@ -108,6 +108,14 @@ internal fun StoryTagsRow(tags: List<String>, bookmark: BookmarkToggle?, modifie
     }
 }
 
+/**
+ * The air under the tags' row (or the story, with no tags) to what ends the story (dp): a reader's end row starts with
+ * the faces' line, 16 under it, the capsule right under that line — 16 + 48 = 64 to the capsule with no face yet, as
+ * with faces (round 30 §S1; the capsule stood 40 under them). The author's own taps, a shared 私人卡's line and the
+ * trashed card's end keep 40.
+ */
+internal fun endRowAir(reader: Boolean): Float = if (reader) 16f else 40f
+
 /** A flow's first line's height (px): what [EndBeside] centres its end on. */
 internal val FirstLineHeight = HorizontalAlignmentLine { a, b -> minOf(a, b) }
 

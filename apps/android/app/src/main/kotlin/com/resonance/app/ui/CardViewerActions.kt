@@ -60,20 +60,22 @@ import kotlinx.coroutines.launch
 
 /**
  * The end of someone else's story (round 26 §U1–§U4; the web's ReadAfterArea → CardViewerActions, iOS's twin) — three
- * answers and two quiet things, the owner's: 「三種回饋的操作…其他被動的就包括分享和收藏」.
+ * answers and two quiet things, the owner's: 「三種回饋的操作…其他被動的就包括分享和收藏」. Top to bottom (round 30): the
+ * faces' line, the capsule, the note's field.
  *
  * - **Row 1, the capsule** ([SegmentedActionBar], the paper puppets standing on it): **共振** — a switch, tonal at rest,
  *   on in the solid face with two waves in phase, its words unchanged; it opens nothing — · **寄小紙條**, opening the note's field
- *   in place under row 2 (never a dialog) · **用卡片回應** (the old 共振: write a card in answer, or pick one —
+ *   in place under the capsule (never a dialog) · **用卡片回應** (the old 共振: write a card in answer, or pick one —
  *   [ResonatePicker]; 修改 with a draft, 已回應 once published). All three tonal at rest. Narrow, in English or with large
  *   text the reply says 寫卡片; still too wide, two lines ([EndRowLayout]). No segment is ever hidden.
  * - **收藏** ([bookmark], the page's — round 28 §S2): on a wide column at the end of the capsule's own row, the
  *   content column's end, centred on the capsule's (first) line, the capsule's words weighed in the room left
  *   ([EndRowLayout.capsuleRoom]); on a phone the page draws it at the end of the tags' row ([StoryTagsRow]).
  *   Share and ⋯ stay where the page has them (the bar, the byline).
- * - **Row 2**, right under it, 48 tall and as wide: the faces of the viewer's connections who resonated (their own
- *   first while on), one button opening the list ([TapFacesButton], [ReaderTapList]) — nothing at its end (§S4).
- * - **The note's field** ([NoteInPlace]), 12 under row 2 when open.
+ * - **The faces' line** ("row 2" until round 30, which moved it), right over the capsule, 0 between, 48 tall and as
+ *   wide: the faces of the viewer's connections who resonated (their own first while on), one button opening the list
+ *   ([TapFacesButton], [ReaderTapList]) — nothing at its end. Always there, faces or none, so the capsule never moves.
+ * - **The note's field** ([NoteInPlace]), 12 under the capsule when open, the column's width.
  *
  * The tap flips at once and goes on ([TapSwitch]); a refusal flips it back with 沒送出去，再試一次. [onTapChanged] hands the
  * page the tap as it is now, so the page shows it on its way back. [onRow] reports where row 1 is (the reading
@@ -309,22 +311,16 @@ fun CardViewerActions(
                 mascotKey = "respond",
             )
         }
-        Column(Modifier.fillMaxWidth()) {
+        ReaderEndStack(
+            capsuleWidth = capsule.dp,
+            faces = { TapFacesButton(faces, session.uid, author = false, onOpen = { openList = true }, selfOpens = faces.offersPassages && !translated()) },
+            firstLine = firstLine,
             // Wide: 收藏 ends the capsule's row at the column's end, its glyph where the byline's ⋯ ends (§S2).
-            if (wide && bookmark != null) EndBeside(
-                main = firstLine,
-                end = { BookmarkButton(bookmark.saved, glyphEnd = BylineGlyphEnd) { bookmark.toggle() } },
-                modifier = Modifier.fillMaxWidth(),
-            ) else firstLine()
-            if (twoLines) {
-                // 寄小紙條 · 寫卡片 on the second line.
-                Spacer(Modifier.height(EndRowLayout.LINE_GAP.dp))
-                SegmentedActionBar(listOf(noteSegment, replySegment), Modifier.width(capsule.dp), seed = 73.0)
-            }
-            // Row 2: the faces at its start, under 共振, and nothing else (§S4). Always there, so nothing moves as faces come.
-            EndRowTwo(Modifier.width(capsule.dp)) {
-                TapFacesButton(faces, session.uid, author = false, onOpen = { openList = true }, selfOpens = faces.offersPassages && !translated())
-            }
+            bookmark = if (wide && bookmark != null) ({ BookmarkButton(bookmark.saved, glyphEnd = BylineGlyphEnd) { bookmark.toggle() } }) else null,
+            // 寄小紙條 · 寫卡片 on the second line.
+            secondLine = if (twoLines) ({ SegmentedActionBar(listOf(noteSegment, replySegment), Modifier.width(capsule.dp), seed = 73.0) }) else null,
+        ) {
+            // The note's field, 12 under the capsule (its second line when it takes two), across the column (§S2, §S3).
             NoteInPlace(
                 note, mayNote = mayNote, reducedMotion = reduced,
                 onSend = { words ->
@@ -384,7 +380,7 @@ fun CardViewerActions(
     )
 }
 
-/** Row 2's height (§U1.2: 44 on the web and iOS, 48 here, a finger's). */
+/** The faces' line's height (§U1.2: 44 on the web and iOS, 48 here, a finger's) — over the capsule since round 30. */
 internal val Row2Height = 48.dp
 
 /**
@@ -405,13 +401,41 @@ internal val Row2GlyphEnd = 12.dp
 internal val BookmarkGlyph = 20.dp
 
 /**
- * Row 2 (§U1.2, round 28 §S4): as wide as the capsule ([modifier] gives the width), [Row2Height] tall — [faces] at its
- * start, the first face [Row2FacesStart] in, and nothing at its end (收藏 ends the capsule's row or the tags').
+ * The faces' line (§U1.2, round 28 §S4; "row 2" while it stood under the capsule — round 30 §S1 stands it right over
+ * it, 0 between): as wide as the capsule ([modifier] gives the width), [Row2Height] tall — [faces] at its start, the
+ * first face [Row2FacesStart] in, and nothing at its end (收藏 ends the capsule's row or the tags').
  */
 @Composable
 internal fun EndRowTwo(modifier: Modifier, faces: @Composable () -> Unit) {
     Row(modifier.height(Row2Height), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.padding(start = Row2FacesStart)) { faces() }
+    }
+}
+
+/**
+ * A reader's end, top to bottom (round 30 §S1, §S2): the faces' line ([EndRowTwo], [faces] at its start), 0 between,
+ * the capsule's (first) line — with [bookmark] at the column's end when wide ([EndBeside]) — its [secondLine]
+ * [EndRowLayout.LINE_GAP] under it when it takes two, and the [note]'s place under them ([NoteInPlace] keeps its own
+ * 12 over the field). Heard in that order: the faces, 共振, 寄小紙條, 用卡片回應, 收藏, the field.
+ */
+@Composable
+internal fun ReaderEndStack(
+    capsuleWidth: androidx.compose.ui.unit.Dp,
+    faces: @Composable () -> Unit,
+    firstLine: @Composable () -> Unit,
+    bookmark: (@Composable () -> Unit)?,
+    secondLine: (@Composable () -> Unit)?,
+    note: @Composable () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        // Always there, faces or none, so the capsule never moves as faces come (the reader's own sliding in).
+        EndRowTwo(Modifier.width(capsuleWidth), faces)
+        if (bookmark != null) EndBeside(main = firstLine, end = bookmark, modifier = Modifier.fillMaxWidth()) else firstLine()
+        if (secondLine != null) {
+            Spacer(Modifier.height(EndRowLayout.LINE_GAP.dp))
+            secondLine()
+        }
+        note()
     }
 }
 
