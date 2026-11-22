@@ -30,7 +30,9 @@ import java.time.LocalTime
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -52,7 +54,8 @@ enum class BusyVerb { Publish, Leave }
 
 /**
  * The save state the writer's bar says after its title (round 8 §2.1): [Saving] once a write has
- * been on its way past [WriteModel.SAVING_SHOWN_MS] (a quicker one goes straight to the next word),
+ * been on its way past [WriteModel.SAVING_SHOWN_MS] (a quicker one goes straight to the next word) and
+ * until every write handed over is answered,
  * [Saved] after a draft's write, [SavedLive] after a published card's write to its pending edit
  * (and from the start when it opens with one), [Failed] when the last write didn't land.
  */
@@ -174,6 +177,9 @@ fun WritingApi.writerCalls(): WriterCalls {
  * the trash.') is read again, and the writer says so ([trashed]) back on the writing step, keeping
  * what is typed; [restore] takes it out and writes it. The twin of iOS's WriteModel. It owns its
  * scope so the last save still lands after the screen is gone ([leave]).
+ *
+ * A save is handed to the store at once and only its answer is waited on ([issue]): with no network an
+ * answer never comes until it is back, and the words typed meanwhile must be on the device all the same.
  */
 class WriteModel(
     private val drafts: DraftStore?,
@@ -321,10 +327,19 @@ class WriteModel(
     val canGenerate: Boolean get() = values.story.isNotBlank() && !mediaBusy
 
     private var saveJob: Job? = null
-    /** Writes run one after another, so a slow create can't race the next update. */
+    /**
+     * Held while a save is handed over (a moment: never across its answer) and across a discard or a delete, which
+     * first wait for every write on its way — so no save is handed over behind one of those before it is answered.
+     */
     private val writes = Mutex()
-    /** What the last successful write stored; an unchanged working copy isn't written again (and opening a card writes nothing). */
+    /** What the last write the server took stored (已儲存, and what publishing stands on); opening a card writes nothing. */
     private var lastSaved: DraftValues? = opened?.values
+    /** What the last write handed to the store holds — on the device from that moment; an unchanged working copy isn't handed over again. */
+    private var lastStored: DraftValues? = opened?.values
+    /** The answers to the writes handed over, read one after another in the order the writes were made: the last of them (null: none yet). */
+    private var answers: Job? = null
+    /** Writes handed over that the server hasn't answered yet. */
+    private var unanswered = 0
     /** Why the last write didn't land (null: it did). */
     private var lastFailure: Exception? = null
     /** Done with this card (published, its changes applied or dropped): nothing more is written into it. */
@@ -403,7 +418,7 @@ class WriteModel(
             else -> LeaveQuestion.Draft
         }
 
-    /** What is on screen differs from what was last written, and is worth writing (a blank new card isn't). */
+    /** What is on screen differs from what the server last took, and is worth writing (a blank new card isn't). */
     val needsSave: Boolean get() = values != lastSaved && !(draftId == null && values.isEmpty)
 
     /** ✓ shows: while writing, and not for a card in the trash. */
@@ -487,8 +502,8 @@ class WriteModel(
 
     private fun scheduleSave() {
         saveJob?.cancel()
-        // Only the wait can be cancelled: a write that has begun always finishes, so
-        // a create can't lose its id and a second save can't create a duplicate draft.
+        // Only the wait can be cancelled: a write handed over always finishes, and a new card's id is the
+        // writer's from that moment — a create can't lose its id and a second save can't create a duplicate draft.
         saveJob = scope.launch {
             delay(AUTOSAVE_DELAY_MS)
             saveSaying()
@@ -512,55 +527,100 @@ class WriteModel(
         scope.launch { saveSaying() }
     }
 
-    private suspend fun save(force: Boolean = false): String? = writes.withLock { withContext(NonCancellable) { write(force) } }
+    /**
+     * Hands what is on screen to the store now ([issue]), then waits for the server's answers to everything handed
+     * over. With no network that wait doesn't end before it is back — the words are on the device all the same, and
+     * the next save is handed over behind them without waiting for it.
+     */
+    private suspend fun save(force: Boolean = false): String? {
+        writes.withLock { issue(force) }
+        answers?.join()
+        return draftId
+    }
 
-    private suspend fun write(force: Boolean): String? {
-        val drafts = drafts ?: return draftId
-        if (closed || trashed) return draftId
+    /**
+     * Hands the working copy to the store — Firestore's queue or the draft outbox, which keep it on the device from
+     * that moment and send it behind every write made before it — without waiting for the server: the answer is read
+     * in its turn ([answers]), so a save made offline (unanswered until the network is back) holds no later one back,
+     * and an app killed meanwhile loses nothing handed over. The twin of iOS's `store()`.
+     *
+     * Nothing new to keep, nothing is handed over (unless [force]d: 儲存修改 writes the buffer it applies); nor for
+     * a card in the trash, or one done with. A new card's id is the writer's from here on, so the save after its
+     * create is an update of the same draft — and 下一步 can open the step while the server's yes is on its way.
+     */
+    private fun issue(force: Boolean) {
+        val drafts = drafts ?: return
+        if (closed || trashed) return
         val v = values
-        if (v.isEmpty && draftId == null) return null
-        if (v == lastSaved && !force) return draftId
+        if (v.isEmpty && draftId == null) return
+        if (v == lastStored && !force) return
+        val kept = draftId
+        // A live card: the revision waits privately in its buffer.
+        val edit = isPublished && kept != null
+        val id = kept ?: drafts.newDraftId().also {
+            draftId = it
+            onCreated(it)
+        }
+        val write: suspend () -> Unit = when {
+            edit -> suspend { drafts.saveEdit(id, v) }
+            kept != null -> suspend { drafts.update(id, v) }
+            else -> suspend { drafts.create(id, v, locale(), referenceCardId) }
+        }
+        lastStored = v
+        unanswered++
         // Said in the bar only once it runs long; whether it went through, always.
         val shown = scope.launch {
             delay(SAVING_SHOWN_MS)
             savingShown = true
         }
-        try {
-            val id = draftId
-            if (isPublished && id != null) {
-                // A live card: the revision waits privately in its buffer.
-                drafts.saveEdit(id, v)
-                hasPendingEdit = true
-            } else if (id != null) {
-                drafts.update(id, v)
-            } else {
-                // The id is the writer's from the moment the create is issued (the draft is on the device
-                // then), so 下一步 can open the step while the server's yes is still on its way.
-                val created = drafts.newDraftId()
-                draftId = created
-                onCreated(created)
-                try {
-                    drafts.create(created, v, locale(), referenceCardId)
-                } catch (e: Exception) {
-                    // Refused: no document under that id, and the next save creates one afresh.
-                    if (draftId == created) draftId = null
-                    throw e
-                }
+        // Begun where it stands — the store has the write before this returns — and never cancelled: a write
+        // that has begun always finishes.
+        val answer = CompletableDeferred<Exception?>()
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            withContext(NonCancellable) {
+                answer.complete(
+                    try {
+                        write()
+                        null
+                    } catch (e: Exception) {
+                        e
+                    },
+                )
             }
-            lastSaved = v
-            lastFailure = null
-            writeFailed = false
-            savedAt = LocalTime.now()
-            draftId?.let(onWrote)
-        } catch (e: Exception) {
-            // Kept in memory; the next edit (or leaving) tries again.
-            lastFailure = e
-            writeFailed = true
-        } finally {
-            shown.cancel()
-            savingShown = false
         }
-        return draftId
+        val before = answers
+        answers = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            withContext(NonCancellable) {
+                before?.join()
+                val failure = answer.await()
+                shown.cancel()
+                if (failure == null) taken(id, v, edit) else refused(v, id.takeIf { kept == null }, failure)
+                unanswered--
+                if (unanswered == 0) savingShown = false
+            }
+        }
+    }
+
+    /** The server took a write: its words are kept there. */
+    private fun taken(id: String, v: DraftValues, edit: Boolean) {
+        if (edit) hasPendingEdit = true
+        lastSaved = v
+        lastFailure = null
+        writeFailed = false
+        savedAt = LocalTime.now()
+        onWrote(id)
+    }
+
+    /**
+     * A write was refused (kept in memory; the next edit, or leaving, tries again): its words count as unwritten —
+     * unless a later write holds newer ones already — and a draft it was to create ([created]) has no document
+     * under that id, so the next save creates one afresh.
+     */
+    private fun refused(v: DraftValues, created: String?, e: Exception) {
+        if (created != null && draftId == created) draftId = null
+        if (lastStored == v) lastStored = lastSaved
+        lastFailure = e
+        writeFailed = true
     }
 
     /**
@@ -591,6 +651,8 @@ class WriteModel(
         val drafts = drafts ?: return false
         if (editing || isPublished || closed || trashed || !values.isEmpty) return false
         val gone = writes.withLock {
+            // Behind every write on its way, so none of them makes it again.
+            answers?.join()
             withContext(NonCancellable) {
                 try {
                     drafts.delete(id)
@@ -603,6 +665,7 @@ class WriteModel(
         if (gone) {
             draftId = null
             lastSaved = null
+            lastStored = null
             closed = true
             onWrote(id)
         }
@@ -796,6 +859,7 @@ class WriteModel(
                 // The buffer was gone by then (applied or dropped elsewhere): the words on screen may not be
                 // live and are kept nowhere — owed a save again, so a retry or leaving writes them.
                 lastSaved = null
+                lastStored = null
                 publishError = failed
                 return@working null
             }
@@ -814,12 +878,17 @@ class WriteModel(
         if (pending) return null
         return working(BusyVerb.Leave, L10n.Safety.actionError) {
             saveJob?.cancel()
-            // Behind any autosave in flight, so a straggling write can't re-create the buffer.
-            writes.withLock { drafts.discardEdit(id) }
+            writes.withLock {
+                // Behind every write on its way, so a straggling one can't re-create the buffer — and no save is
+                // handed over until this is answered (one that waited on it finds the card done with).
+                answers?.join()
+                drafts.discardEdit(id)
+                closed = true
+            }
             onWrote(id)
             hasPendingEdit = false
             lastSaved = values
-            closed = true
+            lastStored = values
             slug ?: id
         }
     }
