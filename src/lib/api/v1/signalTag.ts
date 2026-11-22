@@ -5,7 +5,8 @@ import { OWN, VARY, cacheControl, etagOf } from './cache';
 
 /**
  * An early 304 for the lists the signal channel covers (GET /conversations:
- * `inbox`; GET /me/bell: `bell`), before the list is read at all.
+ * `inbox`; GET /me/bell: `bell`; GET /me/connections: `graph`), before the
+ * list is read at all.
  *
  * The body's own ETag (cache.ts) can only be compared once the list has been
  * read — 50 conversations and their people's profiles, every time a client
