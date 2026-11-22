@@ -5,10 +5,17 @@
   scroll-margin-top: 42vh;
 }
 
-/* The end row (round 26 §U1; the owner, 2026-11-21): the capsule's row — the capsule at its own width, the card's
-   passive actions (收藏, and after a long story its share and ⋯) at the column's end, as the byline's are — then
-   right under it (0 between) the faces' line. On a phone the capsule spans the column and the page keeps the
-   passive actions at the end of its tags. */
+/* With the faces' line (a signed-in reader's) the end row starts 16 under what stands above it — the tags' row, or
+   the story — where the capsule alone stands 40 under it: the line is the capsule's own, so it sits close (round 30).
+   With a face on it: 24 of air, the faces (28), 8, the capsule; with none the capsule is 60 under the tags. */
+.container[data-faces-line] {
+  margin-top: -24px;
+}
+
+/* The end row (round 26 §U1; the owner, 2026-11-21 and 2026-11-22): the faces' line, then right under it (0 between)
+   the capsule's row — the capsule at its own width, the card's passive actions (收藏, and after a long story its
+   share and ⋯) at the column's end, as the byline's are. On a phone the capsule spans the column and the page keeps
+   the passive actions at the end of its tags. Nothing stands under the capsule but the note, when it is open. */
 .end {
   display: flex;
   flex-direction: column;
@@ -57,14 +64,15 @@
   margin-left: auto;
 }
 
-/* The faces' line, a signed-in reader's: 44 tall with no face on it too, so theirs slides in without moving the page. */
-.second {
+/* The faces' line, a signed-in reader's, above the capsule: 44 tall with no face on it too, so theirs slides in
+   without moving the capsule. */
+.facesLine {
   display: flex;
   align-items: center;
   min-height: 44px;
 }
 
-/* The faces start under the 共振 segment's glyph. */
+/* The faces start over the 共振 segment's glyph. */
 .faces {
   display: inline-flex;
   align-items: center;

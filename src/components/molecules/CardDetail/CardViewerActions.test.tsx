@@ -14,7 +14,8 @@ import { ReadAfterArea } from './ReadAfterArea';
 /**
  * Round 26 §U1: the end of a story for a reader — the capsule's three answers (共振 · 寄小紙條 · 用卡片回應), all
  * tonal at rest, its row ended by the card's passive actions (收藏, as the page hands them over wherever the capsule
- * stands at its own width — the owner, 2026-11-21), then the faces' line, the note in place under it. Rendered
+ * stands at its own width — the owner, 2026-11-21), the faces' line right above it and the note in place right under
+ * it (round 30 — the owner, 2026-11-22: 「把共振…使用者头像，把它移到共振按钮的上方」). Rendered
  * through ReadAfterArea (the card page's host) with the card page's one signed-in answer in SWR, as the page has it.
  */
 
@@ -276,11 +277,29 @@ describe('the end row: three answers in one capsule (§U1)', () => {
     expect(push).toHaveBeenCalledWith('/card/my-answer');
   });
 
-  it('keeps the order 共振 → 寄小紙條 → 用卡片回應 → 收藏 → faces for the keyboard: the capsule’s row, then the line under it', async () => {
+  it('keeps the order faces → 共振 → 寄小紙條 → 用卡片回應 → 收藏 for the keyboard: the faces’ line, then the capsule’s row under it', async () => {
     renderPage({ ...NO_TAPS, faces: [face('dora'), face('eli')] });
     const faces = await screen.findByRole('button', { name: /who resonated/ });
     const order = [...document.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent);
-    expect(order.slice(0, 5)).toEqual(['Resonate', 'Note', 'Card', 'Bookmark', faces.getAttribute('aria-label')]);
+    expect(order.slice(0, 5)).toEqual([faces.getAttribute('aria-label'), 'Resonate', 'Note', 'Card', 'Bookmark']);
+  });
+
+  it('stands the faces’ line right above the capsule’s row, and the note right under the capsule: nothing between a button and what it opens', async () => {
+    renderPage({ ...NO_TAPS, faces: [face('dora')] });
+    const faces = await screen.findByRole('button', { name: /who resonated/ });
+    const line = faces.closest('[class*="facesLine"]') as HTMLElement;
+    // The line, then the capsule's row, in one end row…
+    expect(line.nextElementSibling).toContainElement(capsule());
+    expect(line.nextElementSibling?.nextElementSibling).toBeNull();
+    // …which starts 24 closer to what stands above it than the capsule alone does (CSS: `.container[data-faces-line]`).
+    const endRow = document.querySelector('[data-end-row]') as HTMLElement;
+    expect(endRow).toHaveAttribute('data-faces-line');
+    const css = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/CardViewerActions.module.css'), 'utf8');
+    expect(css).toMatch(/\.container\[data-faces-line\]\s*\{\s*margin-top: -24px;\s*\}/);
+    // The open note is the very next thing after the end row's two lines.
+    await user().click(within(capsule()).getByRole('button', { name: 'Note' }));
+    const field = await screen.findByRole('textbox', { name: 'Send the author a little note' });
+    expect(line.parentElement?.nextElementSibling).toContainElement(field);
   });
 
   it('ends the capsule’s row with what the page hands it, and keeps the faces’ line for the faces alone', async () => {
@@ -289,13 +308,13 @@ describe('the end row: three answers in one capsule (§U1)', () => {
     // In the capsule's own row, after it — never on the line under it.
     expect(save.closest('[class*="ends"]')?.previousElementSibling).toContainElement(capsule());
     const faces = await screen.findByRole('button', { name: /who resonated/ });
-    expect(faces.closest('[class*="second"]')?.querySelectorAll('button')).toHaveLength(1);
+    expect(faces.closest('[class*="facesLine"]')?.querySelectorAll('button')).toHaveLength(1);
   });
 
-  it('keeps the faces’ line for a signed-in reader with no face on it, so theirs slides in without moving the page', async () => {
+  it('keeps the faces’ line for a signed-in reader with no face on it, so theirs slides in without moving the capsule', async () => {
     renderPage();
     await screen.findByRole('button', { name: 'Bookmark' });
-    expect(document.querySelector('[class*="second"]')).not.toBeNull();
+    expect(document.querySelector('[class*="facesLine"]')).not.toBeNull();
   });
 
   it('saves to the box from the capsule row’s end: a glyph alone, pressed while saved, and says so', async () => {
@@ -316,7 +335,9 @@ describe('the end row: three answers in one capsule (§U1)', () => {
       expect(push).toHaveBeenLastCalledWith('/signin');
     }
     expect(screen.queryByRole('button', { name: 'Bookmark' })).toBeNull();
-    expect(document.querySelector('[class*="second"]')).toBeNull();
+    expect(document.querySelector('[class*="facesLine"]')).toBeNull();
+    // …so the capsule stays where it stood: the end row is not pulled up.
+    expect(document.querySelector('[data-end-row]')).not.toHaveAttribute('data-faces-line');
     expect(screen.queryByRole('textbox')).toBeNull();
   });
 

@@ -1,5 +1,6 @@
-/* The note in place (round 26, SETTLED): 12 under the end row's second line, the column's width on a phone and
-   min(the story's column, 680) wider, starting where the capsule and the story start. Opens and closes in 150 ms
+/* The note in place (round 26, SETTLED; round 30): 12 under the capsule, its own button, and the story's column
+   wide at every width — its end on the column's end, where 收藏 and the byline's ⋯ end (a 680 cap once left it
+   short of a column wider than that). Opens and closes in 150 ms
    (SETTLED 2): closing, its one row folds from its height to none and the 12 above it with it, fading, so what is
    under it moves up with it (`data-closing`, NoteInPlace keeps it drawn that long); nothing moves under reduced
    motion. */
@@ -7,7 +8,6 @@
   display: grid;
   grid-template-rows: 1fr;
   width: 100%;
-  max-width: 680px;
   margin-top: 12px;
   animation: noteIn 150ms ease-out;
   transition:
@@ -45,24 +45,14 @@
   }
 }
 
-/* The envelope's column at the capsule's start, where the composer's ＋ stands: 44 × 48, the glyph 18, muted —
-   it says what the field is, and does nothing. */
-.glyph {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 48px;
-}
-
-/* The text: no frame of its own (the capsule is its frame), 16 (iOS Safari doesn't zoom into it), one line centred
+/* The text: 16 from the capsule's start — no envelope before it (round 30: the segment above says what the field
+   is) —, no frame of its own (the capsule is its frame), 16 (iOS Safari doesn't zoom into it), one line centred
    in 48 by its own padding — (48 − its line) / 2 above and below — growing to three lines on a phone, then
    scrolling. The element + class outrank the field's own rules. */
 .field {
   flex: 1;
   min-width: 0;
-  padding: 0 10px 0 0;
+  padding: 0 10px 0 16px;
   font-size: 16px;
   line-height: 1.5;
   cursor: text;
@@ -119,8 +109,8 @@
   gap: 12px;
   min-height: 18px;
   margin-top: 6px;
-  /* Under the text, past the envelope's 44 column. */
-  padding-inline: 44px 4px;
+  /* Under the text, which starts 16 in. */
+  padding-inline: 16px 4px;
   font-size: 13px;
   line-height: 1.4;
 }
@@ -165,7 +155,8 @@
   align-items: center;
   min-height: 48px;
   margin: 0;
-  padding-inline: 4px;
+  /* Where the field's words start. */
+  padding-inline: 16px 4px;
   font-size: 14px;
   line-height: 1.45;
   color: var(--color-text-muted);

@@ -67,8 +67,9 @@ export const ENDS_GAP = 12;
  * the capsule moves (the owner, 2026-11-20) —), 寄小紙條 (the note, written in
  * place under the row, never in a dialog) and 用卡片回應 (a card of one's own; 修改 with a draft, 已回應 once
  * published) — its row ended, at the column's end, by the card's passive actions (`trailing`: 收藏, and its share
- * and ⋯ after a long story) wherever the capsule stands at its own width — then, right under it, the second line:
- * the faces of who resonated, under 共振. The note opens 12 under that.
+ * and ⋯ after a long story) wherever the capsule stands at its own width. Right above it (0 between) the faces' line:
+ * the faces of who resonated, over 共振 — above the capsule since round 30 (the owner, 2026-11-22: 「把共振…使用者头像，
+ * 把它移到共振按钮的上方」), so that the note opens right under its own button, 12 under the capsule.
  * Tapping 共振 fills the segment and slides the viewer's face in; on a card with passages (round 27 §U1) a press that
  * turns it on also asks, 240 ms later, which part stayed with them — a small centred dialog the tap never waits on.
  * Nothing here is the author's.
@@ -268,8 +269,8 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
     onClick: onReply,
   };
 
-  // The second line is the faces' alone, and a signed-in reader's (§U1.4): there with no face on it too, so the
-  // reader's own slides in without moving the page.
+  // The faces' line is the faces' alone, and a signed-in reader's (§U1.4): there with no face on it too, so the
+  // reader's own slides in without moving the capsule under it.
   const faces =
     user && tap ? (
       <TapFaces
@@ -284,8 +285,13 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
     ) : null;
 
   return (
-    <div ref={containerRef} className={styles.container} data-end-row="">
+    <div ref={containerRef} className={styles.container} data-end-row="" data-faces-line={user ? '' : undefined}>
       <div className={styles.end} data-fit={fit}>
+        {user && (
+          <div className={styles.facesLine}>
+            <span className={styles.faces}>{faces}</span>
+          </div>
+        )}
         <div className={styles.row}>
           <div ref={firstBar} className={styles.bars}>
             {fit === 'split' ? (
@@ -305,11 +311,6 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
           </div>
           {trailing && <span ref={endsRef} className={styles.ends}>{trailing}</span>}
         </div>
-        {user && (
-          <div className={styles.second}>
-            <span className={styles.faces}>{faces}</span>
-          </div>
-        )}
       </div>
 
       {user && (

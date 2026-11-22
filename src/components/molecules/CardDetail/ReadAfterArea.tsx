@@ -24,10 +24,10 @@ export interface ReadAfterAreaProps {
 
 /**
  * The「讀後區」— everything a reader can do after finishing a story (round 26 §U1): the three answers in one capsule
- * (共振, 寄小紙條, 用卡片回應), the card's passive actions ending its row, the faces under it, and the note written in place under those — never a
+ * (共振, 寄小紙條, 用卡片回應), the card's passive actions ending its row, the faces' line right above it (round 30), and the note written in place right under it — never a
  * dialog over the story (SETTLED, the owner's: 「不要做成 pop ups，因為它會擋住這個畫面上其他東西」). It fades in only
  * when scrolled to, so reading itself carries no pressure. The paper puppets stand on the capsule alone (its
- * `role="group"`, lib/mascots/reading): the second line and the note never move their ground.
+ * `role="group"`, lib/mascots/reading): the faces' line and the note never move their ground.
  */
 export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author, tap, trailing, translated, script }: ReadAfterAreaProps) {
   const { user, loading } = useAuth();
