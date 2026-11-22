@@ -2,9 +2,9 @@
 
 import type { BlockListBody } from '@/lib/api/v1/schemas';
 import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
-import { callApi } from './api';
+import { callApi, ownSignalsOf } from './api';
 import { rememberPeople } from './reads';
-import { pokeSignal } from './signals';
+import { pokeOwn } from './signals';
 
 /**
  * Blocking (封鎖). The block list lives at `users/{uid}/blocks/{blockedUid}`
@@ -89,21 +89,24 @@ export async function listMyBlocks(): Promise<BlockedUser[]> {
 export async function blockUser(otherUid: string): Promise<void> {
   const uid = requireUid();
   if (otherUid === uid) throw new Error('Cannot block yourself');
+  let signals: Record<string, number> | null = null;
   try {
-    await callApi(`/api/v1/me/blocks/${encodeURIComponent(otherUid)}`, { method: 'PUT' });
+    await callApi(`/api/v1/me/blocks/${encodeURIComponent(otherUid)}`, { method: 'PUT', onHeaders: (h) => (signals = ownSignalsOf(h)) });
   } finally {
     invalidateBlocks();
   }
-  pokeSignal('graph');
+  // The blocker's own `graph` counter after the block: pulled once, now, and not again when the listener hears it.
+  pokeOwn(['graph'], signals);
 }
 
 /** Unblock: the block goes, nothing else — a connection is never restored (DELETE /api/v1/me/blocks/{uid}). */
 export async function unblockUser(otherUid: string): Promise<void> {
   requireUid();
+  let signals: Record<string, number> | null = null;
   try {
-    await callApi(`/api/v1/me/blocks/${encodeURIComponent(otherUid)}`, { method: 'DELETE' });
+    await callApi(`/api/v1/me/blocks/${encodeURIComponent(otherUid)}`, { method: 'DELETE', onHeaders: (h) => (signals = ownSignalsOf(h)) });
   } finally {
     invalidateBlocks();
   }
-  pokeSignal('graph');
+  pokeOwn(['graph'], signals);
 }

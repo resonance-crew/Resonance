@@ -69,8 +69,9 @@ export function outboxOf(uid: string, pairId: string, to: string): Outbox {
         });
       // The thread (and the list) read it back at once, not a signal's round trip later: the bubble stops
       // saying it is on its way as soon as the server has it — once: the answer's own counters say the
-      // listener's copy of this touch needs no second pull (pokeOwn).
-      pokeOwn([`thread:${pairId}`, 'inbox'], sent.signals ?? null);
+      // listener's copy of this touch needs no second pull (pokeOwn). A reply that answered their letter connected
+      // the two: the connections too (its counter is in the answer only then).
+      pokeOwn([`thread:${pairId}`, 'inbox', ...(sent.signals && 'graph' in sent.signals ? (['graph'] as const) : [])], sent.signals ?? null);
       return sent.id;
     });
     outboxes.set(key, box);

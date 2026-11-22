@@ -33,6 +33,13 @@ vi.mock('@/lib/db/firestore/client/reads', () => {
   // A profile's connection is asked of the profile (reads.test covers how); here as the connections would answer it.
   isConnectedTo: (_handle: string, other: string) => isConnected('me', other),
   listMyConnectionUids: vi.fn(),
+  // The connections' watcher, as the graph signal's (its skipped safety pulls: connectionsQuiet.test).
+  watchConnections: (uid: string, fn: () => void) => {
+    const key = `${uid}|graph`;
+    if (!signals.watchers.has(key)) signals.watchers.set(key, new Set());
+    signals.watchers.get(key)!.add(fn);
+    return () => signals.watchers.get(key)!.delete(fn);
+  },
   resolveCardId: vi.fn(),
   };
 });
