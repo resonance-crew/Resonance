@@ -341,7 +341,7 @@ export async function runFlows(platform: FlowPlatform, ctx: CaptureContext, { ta
  */
 async function runSession(platform: FlowPlatform, ctx: CaptureContext, device: Device, flows: string[], outDir: string): Promise<FlowResult[]> {
   const dir = join(outDir, '_session');
-  const files = writeSessionFlows(join(dir, 'flows'), FLOWS_DIR, flows);
+  writeSessionFlows(join(dir, 'flows'), FLOWS_DIR, flows);
   const steps = new Map<string, { seed: number; prepare: number }>();
   let last: string[] | null = null;
   let fatal: unknown = null;
@@ -364,7 +364,7 @@ async function runSession(platform: FlowPlatform, ctx: CaptureContext, device: D
   });
   const report = join(dir, 'report.xml');
   const env = Object.entries(flowEnv(ctx.ports)).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
-  const args = ['--device', device.id, 'test', ...files, ...env, '-e', `HOOK_URL=${hook.url}`, '--format', 'junit', '--output', report,
+  const args = ['--device', device.id, 'test', join(dir, 'flows'), ...env, '-e', `HOOK_URL=${hook.url}`, '--format', 'junit', '--output', report,
     '--test-output-dir', join(dir, 'out'), '--debug-output', join(dir, 'debug'), '--no-ansi'];
   ctx.log(`  ${flows.length} flows in one Maestro session (VISUAL_FLOWS_SESSION=1)`);
   const started = Date.now();

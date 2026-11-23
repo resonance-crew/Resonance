@@ -2,7 +2,7 @@ import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync }
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { BEFORE_JS, hookServer, parseJunit, withHook, writeSessionFlows } from './flowSession';
+import { BEFORE_JS, hookServer, parseJunit, sessionConfig, withHook, writeSessionFlows } from './flowSession';
 
 const FLOWS = join(process.cwd(), 'maestro/flows');
 const dirs: string[] = [];
@@ -42,6 +42,9 @@ describe('a session’s copy of a flow', () => {
     expect(existsSync(join(dir, 'common/launch.yaml'))).toBe(true);
     expect(existsSync(join(dir, 'assets/paper.png'))).toBe(true);
     expect(readFileSync(join(dir, 'before.js'), 'utf8')).toBe(BEFORE_JS);
+    // The folder runs its own flows, in this order, a failure stopping nothing.
+    expect(readFileSync(join(dir, 'config.yaml'), 'utf8')).toBe(sessionConfig(['tap', 'send-picture']));
+    expect(sessionConfig(['tap', 'send-picture'])).toBe('flows:\n  - "*"\nexecutionOrder:\n  continueOnFailure: true\n  flowsOrder:\n    - tap\n    - send-picture\n');
   });
 });
 

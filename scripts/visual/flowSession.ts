@@ -56,6 +56,11 @@ export function parseJunit(xml: string): CaseResult[] {
   return out;
 }
 
+/** The session folder's Maestro config: its top-level flows (not common/'s), in the runner's order, none stopping the rest. */
+export function sessionConfig(flows: readonly string[]): string {
+  return ['flows:', '  - "*"', 'executionOrder:', '  continueOnFailure: true', '  flowsOrder:', ...flows.map((f) => `    - ${f}`), ''].join('\n');
+}
+
 /** The session's copies of the flows, with the hook and copies of what they read (`common/`, `assets/`). */
 export function writeSessionFlows(dir: string, flowsDir: string, flows: readonly string[]): string[] {
   rmSync(dir, { recursive: true, force: true });
@@ -64,6 +69,10 @@ export function writeSessionFlows(dir: string, flowsDir: string, flows: readonly
   // assets/ left send-picture's paper.png "not found in workspace", and the whole session stopped before its first flow).
   for (const shared of ['common', 'assets']) cpSync(join(flowsDir, shared), join(dir, shared), { recursive: true });
   writeFileSync(join(dir, 'before.js'), BEFORE_JS);
+  // Maestro is given the folder, not the files: given files, its workspace is those files alone, and a flow's picture
+  // beside them (send-picture's assets/paper.png) is "not found in workspace". The folder's config runs its flows in
+  // this order, each whatever the last one did.
+  writeFileSync(join(dir, 'config.yaml'), sessionConfig(flows));
   return flows.map((flow) => {
     const file = join(dir, `${flow}.yaml`);
     writeFileSync(file, withHook(readFileSync(join(flowsDir, `${flow}.yaml`), 'utf8'), flow));
