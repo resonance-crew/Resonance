@@ -74,4 +74,25 @@ import Testing
         #expect(thread.contains("session.kept.save(window.messages, as: .thread(pair), uid: uid)"))
         #expect(thread.contains("session.kept.remove(.thread(pair), uid: uid)"))
     }
+
+    /// Post-merge review: a kept window (ids 1–50) and the server's newest window (200–249), no overlap — nothing is
+    /// paged with `after=` from the kept one; the server's window takes its place whole.
+    @Test func aKeptWindowIsReplacedNotCaughtUpFrom() {
+        func entries(_ ids: ClosedRange<Int>) -> [MessageHistory<ThreadCursor>.Entry] {
+            ids.map { n in
+                .init(ChatMessage(id: "m\(n)", senderId: "bob", text: "\(n)", sentAt: Date(timeIntervalSince1970: Double(n))),
+                      cursor: .api("c\(n)"))
+            }
+        }
+        var history = MessageHistory<ThreadCursor>()
+        history.mergeWindow(entries(1...50), authoritative: false)
+        let server = entries(200...249)
+        #expect(!history.overlaps(server))
+        #expect(!ThreadModel.catchesUp(overlaps: history.overlaps(server), heldOnlyKept: true))
+        // A window the server sent before still catches up as it did.
+        #expect(ThreadModel.catchesUp(overlaps: false, heldOnlyKept: false))
+        #expect(!ThreadModel.catchesUp(overlaps: true, heldOnlyKept: false))
+        history.mergeWindow(server, authoritative: true)
+        #expect(history.messages.map(\.id) == (200...249).map { "m\($0)" })
+    }
 }

@@ -46,11 +46,10 @@ struct PickedPeople: View {
     /// How many rows stand in for the people while they are read (round 32 §P3, the owner: 「先跳出一个很高的弹窗，再
     /// 根据内容缩回实际高度」): as many as the marks say picked the sentence, so the dialog opens at the height the
     /// rows will take (a row of a name alone is 60, as a loading row) — not always two, which made a dialog of one
-    /// person open a row too tall and shrink, one of three grow. With more than the marks show, enough to fill the
-    /// list's cap, which the people read will fill too; never none.
+    /// person open a row too tall and shrink, one of three grow. As many as the faces the marks draw (three at most),
+    /// with more behind them too — the web's and Android's count (post-merge review); never none.
     static func loadingRows(_ passage: Passage, cap: CGFloat) -> Int {
-        if passage.more { return max(passage.people, Int((cap / TapListMetrics.dialogRow).rounded(.up))) }
-        return max(1, passage.people)
+        max(1, min(passage.people, FaceStack.maxFaces))
     }
 
     /// How long a press waits for the first page before the dialog opens without it (the web's 300 ms).

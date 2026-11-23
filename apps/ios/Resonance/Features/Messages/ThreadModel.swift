@@ -390,7 +390,20 @@ final class ThreadModel {
         // later it came after the ID token, a third of a second on.
         LaunchTrace.mark("thread drawn from the cache")
         history.mergeWindow(apiEntries(messages, origin: session.config.origin), authoritative: false)
+        heldOnlyKept = true
         historyChanged()
+    }
+
+    /// What is held came only from the device's kept window (``drawKept(_:)``), not yet from the server.
+    @ObservationIgnored private var heldOnlyKept = false
+
+    /// Whether the server's newest window, not overlapping what is held, is caught up to with `after=` pages from the
+    /// newest held: only when what is held came from the server (post-merge review, round 32). A kept window from a
+    /// cold start is no thread to catch up from — paging up to 20×100 messages after it showed days-old messages
+    /// meanwhile, and a cursor of a conversation made again threw and never merged the window — so the server's window
+    /// takes its place (``MessageHistory/mergeWindow(_:authoritative:)`` restarts on no overlap).
+    nonisolated static func catchesUp(overlaps: Bool, heldOnlyKept: Bool) -> Bool {
+        !overlaps && !heldOnlyKept
     }
 
     /// Whether the cache's thread may still be drawn when it arrives: the same listening, the screen still there, and
@@ -434,7 +447,8 @@ final class ThreadModel {
             let entries = apiEntries(window.messages, origin: origin)
             // Kept for the next cold start's first frame (§P7, ``drawKept(_:)``): the newest window as the server says it.
             if let uid = session.uid { session.kept.save(window.messages, as: .thread(pair), uid: uid) }
-            if !history.overlaps(entries), let newestHeld = history.messages.last.flatMap({ apiCursors[$0.id] }) {
+            if Self.catchesUp(overlaps: history.overlaps(entries), heldOnlyKept: heldOnlyKept),
+               let newestHeld = history.messages.last.flatMap({ apiCursors[$0.id] }) {
                 var cursor = newestHeld
                 var newer: [MessageHistory<ThreadCursor>.Entry] = []
                 for _ in 0..<20 {
@@ -447,6 +461,7 @@ final class ThreadModel {
                 history.mergeNewer(newer)
             }
             let merged = history.mergeWindow(entries, authoritative: true)
+            heldOnlyKept = false
             if merged == .restarted { forgetPaging() }
             let wasFailed = listenFailed
             listenFailed = false
