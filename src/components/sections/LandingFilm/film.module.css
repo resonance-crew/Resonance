@@ -1294,6 +1294,12 @@
   transform: translateY(calc(100% + 14px));
   opacity: 0;
 }
+/* …but once the film is over its arrow stays where ▶ left the page (the track's very end, the stage just let go), and
+   sinks away only when the visitor goes on (runtime/index.ts, data-onward) */
+.film[data-film='film'][data-released]:not([data-onward]) .lip[data-ended] {
+  transform: none;
+  opacity: 1;
+}
 .lipRow {
   position: relative;
   display: flex;

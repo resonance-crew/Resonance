@@ -40,3 +40,31 @@ describe('the film’s stage on a phone whose address bar hides', () => {
     expect(decl(rule('.grain'), 'inset')).toBe('calc(-1 * var(--bar)) 0 0 0');
   });
 });
+
+/**
+ * The end's arrow (the owner, 2026-11-23: 「看到最後不會出現那個往下滑的箭頭提醒」). ▶ plays on through the night's
+ * hold to the track's very end, where the stage lets go and the player sinks away: the arrow, which lives in the
+ * player, went with it a few seconds after it came. It stays there now, and leaves only once the visitor goes on.
+ */
+describe('the arrow on to the stories, once the film is over', () => {
+  it('stays where ▶ left the page, the stage let go, until the visitor scrolls on', () => {
+    const sinks = rule(".film[data-film='film'][data-released] .lip");
+    expect(decl(sinks, 'opacity')).toBe('0');
+    const stays = rule(".film[data-film='film'][data-released]:not([data-onward]) .lip[data-ended]");
+    expect(decl(stays, 'opacity')).toBe('1');
+    expect(decl(stays, 'transform')).toBe('none');
+    // the arrow itself shows whenever the film is over
+    expect(decl(rule('.lip[data-ended] .lipNext'), 'opacity')).toBe('1');
+  });
+
+  it('is let go a little past the track’s end, where ▶ rests (runtime/index.ts)', async () => {
+    const src = readFileSync(join(__dirname, 'runtime/index.ts'), 'utf8');
+    expect(src).toMatch(/const on = yS >= TRACK_SVH \+ ONWARD_SVH;/);
+    expect(src).toContain("root.toggleAttribute('data-onward', on)");
+    expect(src).toContain("root.removeAttribute('data-onward')");
+    const { ONWARD_SVH } = await import('./runtime/index');
+    // ▶ rests within half a svh of the end (the release's own margin): the arrow must still be there
+    expect(ONWARD_SVH).toBeGreaterThan(0);
+    expect(ONWARD_SVH).toBeLessThan(0.5);
+  });
+});
