@@ -110,9 +110,11 @@ extension PickedPeople {
     }
 
     /// The author's answer's picked sentences as the story washes them (§U1: only the author's tap carries any; a
-    /// sentence with no one left to show is none).
-    static func passages(_ tap: CardTap?, language: Strings.Language = Strings.shared.language) -> [StoryPassageMarks.Passage] {
-        (tap?.picked ?? []).filter { !$0.people.isEmpty }.map { picked in
+    /// sentence with no one left to show is none). `words`: the translation's pieces while it shows (round 31 §R2,
+    /// ``TranslatedPassages``) — each sentence in its piece's words, one the translation lacks left out.
+    static func passages(_ tap: CardTap?, words: [TapPassage]? = nil,
+                         language: Strings.Language = Strings.shared.language) -> [StoryPassageMarks.Passage] {
+        TranslatedPassages.picked(tap?.picked ?? [], words: words).filter { !$0.people.isEmpty }.map { picked in
             StoryPassageMarks.Passage(id: picked.id, text: picked.text, faces: picked.people.prefix(FaceStack.maxFaces).map(TapFaces.face),
                                       spoken: spoken(picked.people, more: picked.more, language: language))
         }
@@ -120,7 +122,8 @@ extension PickedPeople {
 
     /// Whether the page washes its story (§U1; Wave 2 #3b: 「像按讚一樣大家都可以看到誰按」 — readers too, whatever the
     /// server sends in `picked`): a published card readers have (never a draft or a private card), not in the trash,
-    /// read in its own words (never a translation).
+    /// read in its own words — or, since round 31 §R2, in a translation that says its passages (`translated`: one that
+    /// says none).
     static func washes(_ detail: CardDetail, trashed: Bool, translated: Bool) -> Bool {
         let card = detail.card
         return !trashed && !translated && detail.tap != nil && card.publishedAt != nil && card.visibility != ._private
