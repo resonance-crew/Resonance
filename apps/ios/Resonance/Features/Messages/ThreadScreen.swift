@@ -113,6 +113,12 @@ struct ThreadScreen: View {
     @State private var keyboardAsk = 0
     @FocusState private var searchFocused: Bool
 
+    /// Whether the thread's shapes stand in for its messages: until who it is with is known, and until the first read
+    /// answers — unless messages are held already (the account's cache drew them, §P7), which then show at once.
+    nonisolated static func showsSkeleton(ready: Bool, threadReady: Bool, held: Bool) -> Bool {
+        !ready || (!threadReady && !held)
+    }
+
     var body: some View {
         dialogs(screen)
             .toolbar(.hidden, for: .navigationBar)
@@ -485,8 +491,9 @@ struct ThreadScreen: View {
                         // Under the search's list of matches the thread is out of sight: out of VoiceOver's reach too.
                         .accessibilityHidden(searching && showResults)
                 }
-                // Who it is with, or the first read, still on its way: the thread's shapes until the messages take their place.
-                if !ready || !model.threadReady {
+                // Who it is with, or the first read, still on its way: the thread's shapes until the messages take their place
+                // — the cache's kept ones too, drawn before the first read answers (round 32 §P7).
+                if Self.showsSkeleton(ready: ready, threadReady: model.threadReady, held: !model.rows.isEmpty) {
                     ThreadSkeleton(bottomRoom: bottomRoom).transition(.opacity)
                 }
                 if ready && searching && showResults {

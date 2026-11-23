@@ -96,6 +96,7 @@ final class CardModel {
     }
 
     func load() async {
+        LaunchTrace.mark("card request")
         guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
@@ -114,6 +115,7 @@ final class CardModel {
             embeds = detail.embeds?.cards ?? []
             linkPreviews = StoryLinks.previews(detail.linkPreviews, origin: origin)
             placeholder = nil
+            LaunchTrace.mark("card drawn")
             phase = .loaded
             onLoaded(detail.card)
             embeds.forEach(onLoaded)

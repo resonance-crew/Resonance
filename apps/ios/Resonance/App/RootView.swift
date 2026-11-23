@@ -62,6 +62,8 @@ struct RootView: View {
         // The skeletons' lines measured on the interface's script: a Chinese line holding Han is taller.
         .environment(\.skeletonHan, Strings.shared.language == .zhTW)
         .launchCover(ready: launchReady, covering: $launchCovering)
+        .onAppear { LaunchTrace.mark("first frame (root)") }
+        .onChange(of: launchCovering) { _, covering in if !covering { LaunchTrace.mark("launch cover gone") } }
         #if DEBUG
         .modifier(DebugWindow())
         #endif

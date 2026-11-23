@@ -46,6 +46,10 @@ final class PushCenter {
     }
 
     var opened: Opened?
+    /// The last push opened and when (``open(userInfo:now:)``: the same tap handed over twice opens once).
+    @ObservationIgnored private var lastOpened: (key: String, at: Date)?
+    /// How long apart the two hand-overs of one tap may come.
+    static let sameTap: TimeInterval = 10
     private(set) var token: String?
     /// The account signed in (the session sets it): a chat push for anyone else stays quiet while
     /// the app is open. With the app closed the system shows it (the server's push for iOS carries
@@ -249,8 +253,13 @@ final class PushCenter {
 
     /// A tapped push's data (FCM's `data`, at the top of the payload). An empty id names nothing (a
     /// message's push has no bell row; an older server sent "").
-    func open(userInfo info: [AnyHashable: Any]) {
+    func open(userInfo info: [AnyHashable: Any], now: Date = .now) {
         let value = { (key: String) in (info[key] as? String).flatMap { $0.isEmpty ? nil : $0 } }
+        // A cold start hands the tapped push over twice: at the scene's connection (before the first frame, so the
+        // tabs open straight onto its page) and again to the delegate's `didReceive`. Once is opened.
+        let key = [info["route"] as? String ?? "", value("notificationId") ?? "", value("messageId") ?? ""].joined(separator: "|")
+        if let last = lastOpened, last.key == key, now.timeIntervalSince(last.at) < Self.sameTap { return }
+        lastOpened = (key, now)
         open(route: info["route"] as? String ?? "", notificationId: value("notificationId"), fromUserId: value("fromUserId"),
              chat: ChatPush(userInfo: info))
     }
@@ -260,6 +269,7 @@ final class PushCenter {
 /// menu bar is built past it (``buildMenu(with:)``, MacApp.swift).
 final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        LaunchTrace.mark("didFinishLaunching")
         UNUserNotificationCenter.current().delegate = self
         // The emulator build's Firebase project is a stand-in with no FCM behind it.
         if !AppConfig.current.usesEmulator { Messaging.messaging().delegate = self }
@@ -274,6 +284,18 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
         Messaging.messaging().apnsToken = deviceToken
     }
 
+    /// A cold start from a tapped push (round 32 §P7): the scene's connection carries the tap before the first frame —
+    /// well before the delegate's `didReceive` (~0.5 s later, after the tabs had opened the feed and its requests) — so
+    /// the tabs open straight onto its page. SwiftUI's own scene delegate is kept (no `delegateClass`).
+    func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        if let response = options.notificationResponse {
+            LaunchTrace.mark("push at the scene's connection")
+            PushCenter.shared.open(userInfo: response.notification.request.content.userInfo)
+        }
+        return UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+    }
+
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         PushCenter.shared.tokenChanged(fcmToken)
     }
@@ -285,6 +307,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationC
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        LaunchTrace.mark("push tapped")
         PushCenter.shared.open(userInfo: response.notification.request.content.userInfo)
     }
 }

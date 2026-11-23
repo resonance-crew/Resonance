@@ -167,4 +167,25 @@ import Testing
         try FileManager.default.copyItem(at: bobs, to: folder.appending(path: "published.json"))
         #expect(cache.value(.published, uid: "alice") == nil)
     }
+
+    /// Round 32 §P7: a conversation's newest messages are kept per account and per conversation — what a cold start
+    /// opened by a tapped push draws before the network answers — and nobody else's account reads them.
+    @Test func aThreadsNewestMessagesAreKeptForItsAccountAndConversation() async throws {
+        let cache = makeCache()
+        cache.retainOnly("alice")
+        let messages = try JSONDecoder().decode([Components.Schemas.ThreadMessage].self, from: Data("""
+        [{"id":"m1","cursor":"c1","senderId":"bob","text":"明天一起去散步嗎？","sentAt":"2026-11-20T03:04:05.123456Z"},
+         {"id":"m2","cursor":"c2","senderId":"alice","text":"好","sentAt":"2026-11-20T03:05:05.000000Z","unsentAt":"2026-11-20T03:06:00.000000Z"}]
+        """.utf8))
+        cache.save(messages, as: .thread("alice_bob"), uid: "alice")
+        let kept = await cache.load(.thread("alice_bob"), uid: "alice")
+        #expect(kept == messages)
+        #expect(await cache.load(.thread("alice_carol"), uid: "alice") == nil)
+        // The pair never becomes a path: its digest names the file.
+        #expect(!APICache.Key<[Components.Schemas.ThreadMessage]>.thread("../x").name.contains("/"))
+        // Another account signed in: hers are gone, and nothing is drawn for him.
+        cache.retainOnly("bob")
+        #expect(await cache.load(.thread("alice_bob"), uid: "bob") == nil)
+        #expect(await cache.load(.thread("alice_bob"), uid: "alice") == nil)
+    }
 }
