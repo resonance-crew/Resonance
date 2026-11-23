@@ -103,7 +103,8 @@ nonisolated enum TapPassageRules {
     static func offers(_ passages: [TapPassage]) -> Bool { passages.count >= fewest }
 
     /// Whether a press on 共振 opens the dialog: only one that turned it on, on a card with passages, while the story on
-    /// screen is the author's own words (never its translation). Taking the tap back opens nothing.
+    /// screen is the author's own words or a translation that says them (round 31 §R1; `translated`: a translation that
+    /// says fewer than two of them). Taking the tap back opens nothing.
     static func opens(turningOn: Bool, passages: [TapPassage], translated: Bool) -> Bool {
         turningOn && offers(passages) && !translated
     }

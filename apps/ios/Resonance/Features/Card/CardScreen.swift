@@ -74,6 +74,16 @@ struct CardScreen: View {
 
     /// The translation, while it shows in place of the story (round 25 §F2: title and story only).
     private var shownStory: CardModel.ReadStory? { translator?.showing == true ? translator?.story : nil }
+    /// A translation on its way that will swap in by itself (自動翻譯 on, not yet come): the screenshots' dialog waits for it.
+    private var translationComing: Bool {
+        guard let translator, !translator.keptOriginal else { return false }
+        return translator.phase == .working || (translator.phase == .idle && TranslationSettings.shared.autoTranslate)
+    }
+    /// What the page reads the card's passages in (round 31 §R): nil on the original, the translation's pieces while it
+    /// shows.
+    private var shownWords: [TapPassage]? {
+        TranslatedPassages.words(translated: shownStory != nil, translation: translator?.passages)
+    }
     /// A tablet's window: the card's share and ⋯ end the byline row, not the bar (round 8 §10.1).
     private var actionsInByline: Bool { CardPageLayout.actionsInByline(window: window.width) }
     /// How far the lists under the story reach out of the article's column on either side: on a
@@ -114,10 +124,13 @@ struct CardScreen: View {
             // A story with a table of contents slides over from the centre to make room for its rail.
             .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: layout)
             #if DEBUG
-            // `-visualEnd YES` (the release screenshots' round 26 screens): once the card is in, its end in view.
-            .task(id: model?.phase == .loaded) {
-                guard model?.phase == .loaded, UserDefaults.standard.bool(forKey: "visualEnd") else { return }
+            // `-visualEnd YES` (the release screenshots' round 26 screens): once the card is in, its end in view — after
+            // an automatic translation on its way has swapped in (round 31's `card-passages-translated`): scrolled
+            // first, the byline gone, it would only be offered by the toast.
+            .task(id: model?.phase == .loaded && !translationComing) {
+                guard model?.phase == .loaded, !translationComing, UserDefaults.standard.bool(forKey: "visualEnd") else { return }
                 try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled else { return }
                 proxy.scrollTo(Self.pageEnd, anchor: .center)
             }
             #endif
@@ -432,13 +445,15 @@ struct CardScreen: View {
     }
 
     /// What the author's own page hands its story (round 29 §U1): nil on every other page, and on the author's when the
-    /// card is in the trash, private, or shown in a translation. The faces stand in the left margin when the white left
-    /// of the column is ≥ 70 (to the page's edge; a contents rail on the right only shifts the column), else in the line
-    /// after the sentence (§S1, §S10).
+    /// card is in the trash or private. The faces stand in the left margin when the white left of the column is ≥ 70
+    /// (to the page's edge; a contents rail on the right only shifts the column), else in the line after the sentence
+    /// (§S1, §S10). In a translation (round 31 §R2) each picked sentence the translation says is marked at its piece,
+    /// `words` (``TranslatedPassages``); a translation that says none marks nothing.
     private func passageMarks(_ detail: CardDetail, blocks: [StoryBlock], story: StoryTypography, script: StoryScript, trashed: Bool,
-                              translated: Bool) -> StoryPassageMarks? {
-        guard PickedPeople.washes(detail, trashed: trashed, translated: translated), !Self.isPrivate(detail.card) else { return nil }
-        let passages = PickedPeople.passages(detail.tap?.value1)
+                              words: [TapPassage]?) -> StoryPassageMarks? {
+        guard PickedPeople.washes(detail, trashed: trashed, translated: words?.isEmpty == true),
+              !Self.isPrivate(detail.card) else { return nil }
+        let passages = PickedPeople.passages(detail.tap?.value1, words: words)
         return StoryPassageMarks(passages: passages, room: PassageFaces.room(layout, width: width ?? window.contentWidth),
                                  reading: story.scale(.body), latinCompact: script == .latin && window.layoutClass == .compact) { id in
             guard let passage = passages.first(where: { $0.id == id }) else { return }
@@ -449,9 +464,10 @@ struct CardScreen: View {
     /// The left margin, when the author's picked sentences' faces stand in it (round 29 §S10): the paper puppets take
     /// no place there, as beside a contents rail on the right.
     private var marginFaces: CGRect? {
+        let words = shownWords
         guard let detail = model?.detail, model?.phase == .loaded,
-              PickedPeople.washes(detail, trashed: TrashedCardBanner.shows(detail), translated: shownStory != nil),
-              !PickedPeople.passages(detail.tap?.value1).isEmpty else { return nil }
+              PickedPeople.washes(detail, trashed: TrashedCardBanner.shows(detail), translated: words?.isEmpty == true),
+              !PickedPeople.passages(detail.tap?.value1, words: words).isEmpty else { return nil }
         let pageWidth = width ?? window.contentWidth
         let room = PassageFaces.room(layout, width: pageWidth)
         guard PassageFaces.place(room: room) == .margin else { return nil }
@@ -533,7 +549,8 @@ struct CardScreen: View {
                 }
                 // The author's own page (round 29 §U1): the sentences readers picked, washed, with who picked each.
                 .storyPassages(passageMarks(detail, blocks: blocks, story: story, script: type.script, trashed: trashed,
-                                            translated: translatedCopy))
+                                            words: TranslatedPassages.words(translated: translatedCopy,
+                                                                            translation: translator?.passages)))
                 .id(translatedCopy)
                 .transition(.opacity)
                 }
@@ -666,7 +683,8 @@ struct CardScreen: View {
     /// 用卡片回應) — 收藏 at their row's end when wide (a phone's is in the tags' row above, round 28) — and the note in place when
     /// it is open (``CardEndRow``); the card's share and ⋯ are in the bar or the byline already. It fades in once scrolled to; its coming into view is the story read through (§U7).
     private func endRow(_ model: CardModel, _ detail: CardDetail, script: StoryScript, translated: Bool) -> some View {
-        CardEndRow(detail: detail, bookmark: bookmark, script: script, translated: translated) { Task { await model.load() } }
+        CardEndRow(detail: detail, bookmark: bookmark, script: script, translated: translated,
+                   translationWords: translator?.passages, translationComing: translationComing) { Task { await model.load() } }
             .id(Self.pageEnd)
             .revealedOnScroll()
             .onScrollVisibilityChange(threshold: 0.3) { [reading] visible in if visible { reading.sawEnd() } }

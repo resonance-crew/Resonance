@@ -93,6 +93,8 @@ nonisolated enum StoryTranslationRule {
     /// The translation as the page draws it, once it came.
     private(set) var title: String?
     private(set) var story: CardModel.ReadStory?
+    /// The card's passages as the translation says them (round 31 §R): nil when the answer placed none.
+    private(set) var passages: [TapPassage]?
     /// The reader chose the original (顯示原文): an automatic translation never swaps in again this visit.
     private(set) var keptOriginal = false
 
@@ -121,6 +123,7 @@ nonisolated enum StoryTranslationRule {
             let title = answer.title, text = answer.story
             let read = await Task.detached(priority: .userInitiated) { CardModel.read(title: title, story: text) }.value
             self.title = title
+            passages = answer.passages
             story = read
             // The page went while the model answered (its request task cancelled): the translation is kept for a
             // return, but nothing swaps in, is announced or offered over another screen.

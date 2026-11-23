@@ -22,7 +22,7 @@ import SwiftUI
 ///
 /// Tapping 共振 fills the segment and slides the face in; a failure flips it back with 「沒送出去，再試一次」. On a card
 /// that offers passages (round 27 §U1), a press that turned it on opens ``TapPassages`` 240 ms later — the tap never
-/// waits on it — unless the story on screen is its translation.
+/// waits on it — on the translation too when it says two of them at least (round 31 §R1: its rows the translation's words).
 struct CardEndRow: View {
     let detail: CardDetail
     /// Whether the reader keeps this card: the page's, read here once, drawn here (wide) or in the page's tags row (a
@@ -30,8 +30,13 @@ struct CardEndRow: View {
     let bookmark: CardBookmark
     /// The story's script: the passages are set in its type.
     let script: StoryScript
-    /// The translation shows in place of the story: no passages are offered (they are the author's own words).
+    /// The translation shows in place of the story.
     let translated: Bool
+    /// The card's passages as the translation on screen says them (round 31 §R1, ``TranslatedPassages``): the dialog's
+    /// rows take these words, in the card's order and ids, those it lacks left out; fewer than two offer no dialog, as before.
+    let translationWords: [TapPassage]?
+    /// A translation on its way that swaps in by itself: the screenshots' `-visualTap passages` waits for it.
+    let translationComing: Bool
     /// Reads the card again: a pick refused because its passages changed or the tap went, and (Wave 2 #3b) after each
     /// tap and pick the server took, so the reader's face and wash show on the story at once.
     let reload: () -> Void
@@ -72,11 +77,13 @@ struct CardEndRow: View {
     @State private var column: CGFloat = 0
 
     init(detail: CardDetail, bookmark: CardBookmark, script: StoryScript = .cjk, translated: Bool = false,
-         reload: @escaping () -> Void = {}) {
+         translationWords: [TapPassage]? = nil, translationComing: Bool = false, reload: @escaping () -> Void = {}) {
         self.detail = detail
         self.bookmark = bookmark
         self.script = script
         self.translated = translated
+        self.translationWords = translationWords
+        self.translationComing = translationComing
         self.reload = reload
         _tap = State(initialValue: TapState(detail.tap?.value1))
     }
@@ -144,7 +151,7 @@ struct CardEndRow: View {
         // Escape leave the tap on with no passage.
         .organicModal(isPresented: $passagesOpen, seed: 37, maxWidth: TapListMetrics.readerWidth(compact: compact),
                       closeLabel: L10n.Card.Tap.passageSkip, clipsToPaper: true) {
-            TapPassages(passages: tap.passages, picked: tap.passage, script: script, onChoose: choosePassage) {
+            TapPassages(passages: passageRows, picked: tap.passage, script: script, onChoose: choosePassage) {
                 passagesOpen = false
             }
         }
@@ -181,7 +188,7 @@ struct CardEndRow: View {
         // 收藏's one read, wherever the page draws it.
         .task(id: cardId) { await bookmark.load(cardId, from: session.bookmarks) }
         #if DEBUG
-        .task { await visualState() }
+        .task(id: translationComing) { if !translationComing { await visualState() } }
         #endif
     }
 
@@ -196,6 +203,8 @@ struct CardEndRow: View {
         guard defaults.string(forKey: "visualTap") != nil || defaults.string(forKey: "visualNote") != nil
             || defaults.string(forKey: "visualTaps") != nil else { return }
         try? await Task.sleep(for: .milliseconds(600))
+        // The page went, or a translation swapped in meanwhile (`-autoTranslateStories YES`): its own run opens it.
+        guard !Task.isCancelled else { return }
         let visualTap = defaults.string(forKey: "visualTap")
         if ["on", "passages", "picked"].contains(visualTap), !tap.on {
             let viewer = session.me.map(Author.viewer)
@@ -205,9 +214,9 @@ struct CardEndRow: View {
         // `-visualTap passages`: the dialog open after the press (card-passages); `-visualTap picked`: its second row
         // pressed and held in its ink and check (card-passage-picked). Nothing is sent.
         if visualTap == "passages" || visualTap == "picked", offersPassages {
-            if visualTap == "picked", tap.passages.count > 1 {
+            if visualTap == "picked", passageRows.count > 1 {
                 passagesHeld = true
-                tap.pick(tap.passages[1].id)
+                tap.pick(passageRows[1].id)
             }
             passagesOpen = true
         }
@@ -322,7 +331,7 @@ struct CardEndRow: View {
         let api = session.reading, id = cardId, toasts = session.toasts
         let send = Task { try? await (turningOn ? api.tap(id) : api.untap(id)) }
         tapSend = send
-        let opens = TapPassageRules.opens(turningOn: turningOn, passages: tap.passages, translated: translated)
+        let opens = TapPassageRules.opens(turningOn: turningOn, passages: tap.passages, translated: saysTooFew)
         if opens {
             passagesHeld = false
             passagePicked = false
@@ -356,8 +365,17 @@ struct CardEndRow: View {
         }
     }
 
-    /// The card offers passages to this reader (two at least).
-    private var offersPassages: Bool { TapPassageRules.offers(tap.passages) && !translated }
+    /// What the page reads the passages in: nil on the original, the translation's pieces while it shows.
+    private var passageWords: [TapPassage]? { TranslatedPassages.words(translated: translated, translation: translationWords) }
+
+    /// The card offers passages to this reader (two at least) — in a translation, two at least said in it.
+    private var offersPassages: Bool { TranslatedPassages.offers(tap.passages, words: passageWords) }
+
+    /// The dialog's rows: the card's passages, in the translation's words while it shows (round 31 §R1).
+    private var passageRows: [TapPassage] { TranslatedPassages.rows(tap.passages, words: passageWords) }
+
+    /// The translation on screen says fewer than two of the card's passages: nothing is offered (as before round 31).
+    private var saysTooFew: Bool { TranslatedPassages.saysTooFew(tap.passages, words: passageWords) }
 
     /// A press on a passage's row: shown chosen at once (or cleared), the dialog closing 300 ms later; the request goes
     /// once the tap's own has answered. Refused because the options changed or the tap went (400, 409): read the card
