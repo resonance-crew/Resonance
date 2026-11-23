@@ -9,6 +9,7 @@ import { isReservedId } from '@/lib/db/firestore/reservedId';
 import type { Card, User } from '@/lib/db/types';
 import { CARD_SIGNATURES, unlistedForStrangers } from '@/lib/recommend/collections';
 import { anonymousBySlugCard, docIdOk, properlyPublished } from '@/server/domain/cards';
+import { filmTodayOf } from '@/server/domain/filmToday';
 import type { CardPage, CardsData, CardsTxRepo, FilmWindowRow, PageStart, ReachPlan, TakeBackPlan } from '@/server/ports/repos/cards';
 import type { AdminDb } from '../db';
 import { mapCard, mapUser, sanitize } from '../mapper';
@@ -668,6 +669,15 @@ export function cardsData(db: AdminDb): CardsData {
         ...(typeof pin.answer === 'string' ? { answer: pin.answer } : {}),
         ...(pin.until instanceof Date ? { until: pin.until } : {}),
       };
+    },
+
+    async filmToday() {
+      const snap = await db.doc('config/landingFilmToday').get();
+      return snap.exists ? filmTodayOf(snap.data()) : null;
+    },
+
+    async saveFilmToday(today) {
+      await db.doc('config/landingFilmToday').set({ ...today });
     },
 
     async partVectors(ids, channel, perCard) {

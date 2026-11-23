@@ -3,6 +3,7 @@ import type { ListCard } from '@/lib/api/v1/summary';
 import { blankCard, thinCard, unlistedCard, wordless } from '@/lib/cards/blank';
 import type { Card, User } from '@/lib/db/types';
 import { docIdOk, properlyPublished } from '@/server/domain/cards';
+import { filmTodayOf } from '@/server/domain/filmToday';
 import type { CardPage, CardsData, CardsTxRepo, FilmWindowRow, PageStart, ReachPlan, TakeBackPlan } from '@/server/ports/repos/cards';
 import { summarize } from '@/lib/api/v1/summary';
 import { TRANSLATION_TARGETS } from '@/lib/text/translation';
@@ -471,6 +472,12 @@ export function cardsData(state: MemoryState): CardsData {
         ...(typeof pin.answer === 'string' ? { answer: pin.answer } : {}),
         ...(isDate(pin.until) ? { until: pin.until } : {}),
       };
+    },
+    async filmToday() {
+      return filmTodayOf(state.get('config', 'landingFilmToday'));
+    },
+    async saveFilmToday(today) {
+      state.put('config', 'landingFilmToday', { ...today });
     },
     async partVectors(ids, channel, perCard) {
       const out = new Map<string, number[][]>();
