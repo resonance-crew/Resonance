@@ -626,6 +626,11 @@ final class WriteModel {
             next.anonymous = isPublished ? openedAnonymous : false
         }
         values = next
+        // Kept at once, not after the typing pause (round 32 §P6): the choice is a step's last move before its button
+        // more often than not, and 發布 then waited for this save before asking to publish. Nothing changed, nothing
+        // is written (`store`); publishing still saves whatever is left (`saveNow`).
+        store()
+        drafts?.sendNow()
     }
 
     /// What a 私人卡's 公開發表 starts the step at (round 12 §3): 公開 — 匿名公開 for a card already marked

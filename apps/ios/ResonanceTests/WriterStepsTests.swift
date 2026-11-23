@@ -1261,4 +1261,20 @@ private final class IllustrationStub: URLProtocol {
         await model.generateCover()
         #expect(model.values.imageFrame == nil)
     }
+
+    /// §P6 (the server lane's audit): a card type chosen is kept at once, so 發布 finds it saved and asks only to
+    /// publish — no save of its own first; choosing the type already chosen writes nothing.
+    @Test func aChosenTypeIsKeptAtOnceAndPublishingSendsNoSaveOfItsOwn() async {
+        let store = RecordingDraftStore()
+        let server = ServerCalls()
+        let model = WriteModel(drafts: store, writing: writing(), calls: server.calls, opened: card(visibility: "private"))
+        model.choose(.connections)
+        #expect(store.writes.count == 1)
+        #expect(store.writes.last?.values.visibility == "connections")
+        model.choose(.connections)
+        #expect(store.writes.count == 1)
+        #expect(await model.publish() == "a-walk")
+        #expect(store.writes.count == 1)
+        #expect(server.published == ["card-1"])
+    }
 }
