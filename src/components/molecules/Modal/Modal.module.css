@@ -63,6 +63,9 @@
    height the same on every screen, so the scroll region's cap above it can count on it (TapPassages). */
 .closeRow[data-quiet] > button {
   min-height: 44px;
+  /* Hung past the foot's end by the small button's own side padding (OrganicButton .sm, 18), so its words end on
+     the column's end as the apps' quiet word does; the padding stays its touch room. */
+  margin-inline-end: -18px;
 }
 
 /* ModalActions: a choice's foot. Right-aligned, the verb rightmost; a pair
