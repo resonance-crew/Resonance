@@ -124,10 +124,13 @@ struct CardScreen: View {
             // A story with a table of contents slides over from the centre to make room for its rail.
             .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: layout)
             #if DEBUG
-            // `-visualEnd YES` (the release screenshots' round 26 screens): once the card is in, its end in view.
-            .task(id: model?.phase == .loaded) {
-                guard model?.phase == .loaded, UserDefaults.standard.bool(forKey: "visualEnd") else { return }
+            // `-visualEnd YES` (the release screenshots' round 26 screens): once the card is in, its end in view — after
+            // an automatic translation on its way has swapped in (round 31's `card-passages-translated`): scrolled
+            // first, the byline gone, it would only be offered by the toast.
+            .task(id: model?.phase == .loaded && !translationComing) {
+                guard model?.phase == .loaded, !translationComing, UserDefaults.standard.bool(forKey: "visualEnd") else { return }
                 try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled else { return }
                 proxy.scrollTo(Self.pageEnd, anchor: .center)
             }
             #endif
