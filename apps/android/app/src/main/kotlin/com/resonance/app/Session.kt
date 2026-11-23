@@ -41,6 +41,7 @@ import com.resonance.kit.reading.CardCache
 import com.resonance.kit.reading.CardPageLoader
 import com.resonance.kit.reading.CardReads
 import com.resonance.kit.reading.FeedLoader
+import com.resonance.kit.reading.cardsByKey
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
@@ -208,6 +209,14 @@ class Session(
      */
     val cardCache = CardCache()
     val cardPages = CardPageLoader(reading, cardCache)
+
+    init {
+        // A bell pull reads its rows' cards (and covers) in the background, as the screen would: it opens on them.
+        notifications.extrasSource = NotificationsStore.ExtrasSource(
+            person = { uid -> conversations.person(uid) ?: notifications.readPerson(uid) },
+            cards = { ids -> reading.cardsByKey(ids).also { read -> read.values.filterNotNull().forEach(cardCache::rememberPreview) } },
+        )
+    }
     /** Reads of others' cards told to the server (never shown): asked once per account and card while the app runs. */
     val cardReads = CardReads(reading::countRead)
 
