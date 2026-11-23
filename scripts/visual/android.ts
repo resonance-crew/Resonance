@@ -40,8 +40,9 @@ import { shotName, type Account, type Screen, type Variant } from './screens';
 import { withRestart } from './retry';
 import { logSays, readyNote, readyOn, readyToken, restOfWait, waitReady, type Ready } from './ready';
 import { buildIfChanged, stampFile, type BuildInputs } from './buildStamp';
-import { CommandTimeout, ROOT, SEED_PASSWORD, execTimed, ignorePath, pixelsApart, settle, shotPath, sleep, type Capture, type CaptureContext, type Rect } from './util';
+import { CommandTimeout, ROOT, SEED_PASSWORD, execTimed, ignorePath, shotPath, sleep, type Capture, type CaptureContext, type Rect } from './util';
 import { devicesFor, groups, plan, stateOf, type DeviceState } from './variants';
+import { apartBoxOf, encodeFrame, parseScreencap, sameFrame, settleFrames, type Frame } from './frames';
 import { stopwatch, type Stopwatch } from './timings';
 
 const execFileAsync = promisify(execFile);
@@ -87,8 +88,12 @@ export async function adb(serial: string, ...args: string[]): Promise<string> {
 
 export const shell = (serial: string, command: string) => adb(serial, 'shell', command);
 
-async function screencap(serial: string): Promise<Buffer> {
-  return (await adbTimed(serial, ['exec-out', 'screencap', '-p'], true)) as Buffer;
+/**
+ * The screen's pixels as they are (`screencap` without `-p`: the AVD no longer encodes a PNG of every frame looked at,
+ * about half a second each at 1080 × 2424); the frame kept is encoded once, on this side (frames.ts).
+ */
+async function screencap(serial: string): Promise<Frame> {
+  return parseScreencap((await adbTimed(serial, ['exec-out', 'screencap'], true)) as Buffer);
 }
 
 async function booted(serial: string): Promise<boolean> {
@@ -181,13 +186,23 @@ export async function holdStill(serial: string, ctx: CaptureContext) {
  * night mode, a broadcast that came while it was still starting) and the real time shows.
  */
 async function demoBar(serial: string) {
-  const demo = (command: string, extras = '') => shell(serial, `am broadcast -a com.android.systemui.demo -e command ${command} ${extras}`);
-  await demo('enter');
-  await demo('clock', '-e hhmm 0941');
-  await demo('battery', '-e level 100 -e plugged false -e powersave false');
-  await demo('network', '-e wifi show -e level 4 -e fully true');
-  await demo('network', '-e mobile hide');
-  await demo('notifications', '-e visible false');
+  await shell(serial, demoBarCommand());
+}
+
+/**
+ * The demo mode's broadcasts, in their order, as one shell command (one adb call, not six: about 0.8 s a capture), each
+ * only after the last succeeded, as when they were sent one by one.
+ */
+export function demoBarCommand(): string {
+  const demo = (command: string, extras = '') => `am broadcast -a com.android.systemui.demo -e command ${command}${extras ? ` ${extras}` : ''}`;
+  return [
+    demo('enter'),
+    demo('clock', '-e hhmm 0941'),
+    demo('battery', '-e level 100 -e plugged false -e powersave false'),
+    demo('network', '-e wifi show -e level 4 -e fully true'),
+    demo('network', '-e mobile hide'),
+    demo('notifications', '-e visible false'),
+  ].join(' && ');
 }
 
 /** Gboard's package: the keyboard every capture that raises one shows. */
@@ -334,23 +349,13 @@ export function textFields(xml: string): Rect[] {
   return fields;
 }
 
-const inside = (x: number, y: number, r: Rect) => x >= r.x && y >= r.y && x < r.x + r.width && y < r.y + r.height;
-
-/** Where two frames differ (any channel of any pixel), outside `ignore`: one box round all of it, or null where nothing does. */
+/** Where two PNGs differ (any channel of any pixel), outside `ignore` (frames.ts `apartBoxOf`, on their pixels). */
 export function apartBox(a: Buffer, b: Buffer, ignore: Rect[] = []): Rect | null {
-  const pa = PNG.sync.read(a);
-  const pb = PNG.sync.read(b);
-  if (pa.width !== pb.width || pa.height !== pb.height) return { x: 0, y: 0, width: Math.max(pa.width, pb.width), height: Math.max(pa.height, pb.height) };
-  let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
-  for (let y = 0; y < pa.height; y++) {
-    for (let x = 0; x < pa.width; x++) {
-      const i = (y * pa.width + x) * 4;
-      if (pa.data[i] === pb.data[i] && pa.data[i + 1] === pb.data[i + 1] && pa.data[i + 2] === pb.data[i + 2] && pa.data[i + 3] === pb.data[i + 3]) continue;
-      if (ignore.some((r) => inside(x, y, r))) continue;
-      x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
-    }
-  }
-  return x1 < 0 ? null : { x: x0, y: y0, width: x1 - x0 + 1, height: y1 - y0 + 1 };
+  const frame = (png: Buffer): Frame => {
+    const { data, width, height } = PNG.sync.read(png);
+    return { data, width, height };
+  };
+  return apartBoxOf(frame(a), frame(b), ignore);
 }
 
 /**
@@ -386,9 +391,9 @@ export function caretBlink(box: Rect | null, fields: Rect[]): Rect | null {
  * 20261118-235458: the tablet's thread-keyboard and dark card-note-open never did).
  */
 async function steady(serial: string, ignore: Rect[] = [], ready = false): Promise<Shot> {
-  const same = async (a: Buffer, b: Buffer) => {
-    if (a.equals(b) || pixelsApart(a, b) === 0) return true;
-    const box = apartBox(a, b, ignore);
+  const same = async (a: Frame, b: Frame) => {
+    if (sameFrame(a, b)) return true;
+    const box = apartBoxOf(a, b, ignore);
     if (!box) return true;
     const blink = caretBlink(box, box.width <= CARET_MAX.width && box.height <= CARET_MAX.height ? textFields((await hierarchy(serial)) ?? '') : []);
     if (!blink) return false;
@@ -399,13 +404,14 @@ async function steady(serial: string, ignore: Rect[] = [], ready = false): Promi
   for (;;) {
     // After the app's ready signal (ready.ts) the frames are looked at closer together and held 1 s, not 3.5:
     // the skeleton check below is the same either way.
-    const shot = await settle(() => screencap(serial), { intervalMs: ready ? 500 : 1000, timeoutMs: 45_000, same });
+    const shot = await settleFrames(() => screencap(serial), { intervalMs: ready ? 500 : 1000, timeoutMs: 45_000, same });
     await sleep(ready ? 1000 : 3500);
     const again = await screencap(serial);
-    const still = await same(again, shot.png);
+    const still = await same(again, shot.frame);
     const loading = still && stillLoading((await hierarchy(serial)) ?? '');
-    if (still && !loading) return { png: again, settled: shot.settled };
-    if (Date.now() > end) return { png: again, settled: false };
+    // Only the frame kept becomes a PNG.
+    if (still && !loading) return { png: await encodeFrame(again), settled: shot.settled };
+    if (Date.now() > end) return { png: await encodeFrame(again), settled: false };
   }
 }
 
@@ -432,7 +438,7 @@ async function shoot(serial: string, ctx: CaptureContext, screen: Screen, first:
   const ignore: Rect[] = [];
   const settled = await steady(serial, ignore, !!ready?.ready);
   timing.lap('settle');
-  const look = await secondLook(settled, () => steady(serial, ignore), { key, ignore, glance: () => screencap(serial) });
+  const look = await secondLook(settled, () => steady(serial, ignore), { key, ignore, glance: async () => encodeFrame(await screencap(serial)) });
   timing.lap('second-look');
   return { ...look, ignore, ready, timing };
 }

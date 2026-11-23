@@ -12,8 +12,8 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PNG } from 'pngjs';
 import { compareImages } from './diff';
+import { decodePng } from './judge';
 import { SCREENS, type Platform } from './screens';
 import { baselineDir as currentBaseline } from './baselines';
 import { ignorePath, readJson, sleep, type Rect } from './util';
@@ -30,11 +30,13 @@ export const LOOKS = 3;
 const allowances = new Map(SCREENS.filter((s) => s.maxDiff != null).map((s) => [s.id, s.maxDiff!]));
 const allowanceOf = (key: string) => allowances.get(key.split('/').pop()!.split('@')[0]);
 
-/** Whether two captures show the same page, by the comparison's rule. */
-export function samePicture(a: Buffer, b: Buffer, ignore: Rect[] = [], allowance?: number): boolean {
+/**
+ * Whether two captures show the same page, by the comparison's rule. Decoded by libvips where it gives the very pixels
+ * pngjs would (judge.ts `decodePng`: about 3× faster; pngjs for the rest), so the answer is pngjs's own.
+ */
+export async function samePicture(a: Buffer, b: Buffer, ignore: Rect[] = [], allowance?: number): Promise<boolean> {
   if (a.equals(b)) return true;
-  const pa = PNG.sync.read(a);
-  const pb = PNG.sync.read(b);
+  const [pa, pb] = await Promise.all([decodePng(a), decodePng(b)]);
   if (pa.width !== pb.width || pa.height !== pb.height) return false;
   const { ratio, areas } = compareImages(pa.data, pb.data, pa.width, pa.height, ignore);
   return !areas.length || (allowance != null && ratio <= allowance);
@@ -48,12 +50,12 @@ export function samePicture(a: Buffer, b: Buffer, ignore: Rect[] = [], allowance
  * looked at again — a machine's first run, a new screen, the extended set's first run — or a capture
  * taken before load would be the baseline the next run trusts.
  */
-export function wantsSecondLook(key: string, png: Buffer, ignore: Rect[] = [], baselineDir = currentBaseline()): boolean {
+export async function wantsSecondLook(key: string, png: Buffer, ignore: Rect[] = [], baselineDir = currentBaseline()): Promise<boolean> {
   const file = join(baselineDir, key);
   const platform = key.split('/')[0];
   if (!existsSync(file)) return platform !== 'web' || existsSync(join(baselineDir, platform));
   const skip = [...ignore, ...(readJson<Rect[]>(ignorePath(file)) ?? [])];
-  return !samePicture(readFileSync(file), png, skip, allowanceOf(key));
+  return !(await samePicture(readFileSync(file), png, skip, allowanceOf(key)));
 }
 
 export type SecondLookOptions = {
@@ -88,22 +90,22 @@ export const lookNote = (look: Look) => (!look.settled ? '  (never settled)' : l
 export async function secondLook(first: Shot, retake: () => Promise<Shot>, options: SecondLookOptions): Promise<Look> {
   const { key, ignore = [], baselineDir = currentBaseline(), wait = sleep } = options;
   const waitMs = options.waitMs ?? SECOND_LOOK_MS[key.split('/')[0] as Platform] ?? 5000;
-  if (!wantsSecondLook(key, first.png, ignore, baselineDir)) return { ...first, retaken: false };
+  if (!(await wantsSecondLook(key, first.png, ignore, baselineDir))) return { ...first, retaken: false };
   const allowance = allowanceOf(key);
   if (options.glance && !existsSync(join(baselineDir, key))) {
     await wait(waitMs);
-    if (samePicture(first.png, await options.glance(), ignore, allowance)) return { ...first, retaken: false };
+    if (await samePicture(first.png, await options.glance(), ignore, allowance)) return { ...first, retaken: false };
   }
   let current = first;
   let retaken = false;
   for (let look = 1; look < LOOKS; look++) {
     await wait(waitMs);
     const next = await retake();
-    if (samePicture(current.png, next.png, ignore, allowance)) return { png: next.png, settled: current.settled && next.settled, retaken };
+    if (await samePicture(current.png, next.png, ignore, allowance)) return { png: next.png, settled: current.settled && next.settled, retaken };
     retaken = true;
     current = next;
     // It turned into the baseline's page: the first look was simply early.
-    if (!wantsSecondLook(key, current.png, ignore, baselineDir)) return { ...current, retaken };
+    if (!(await wantsSecondLook(key, current.png, ignore, baselineDir))) return { ...current, retaken };
   }
   return { png: current.png, settled: false, retaken };
 }

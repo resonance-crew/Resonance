@@ -2,7 +2,21 @@ import { PNG } from 'pngjs';
 import { describe, expect, it } from 'vitest';
 import en from '../../src/messages/en.json';
 import zhTW from '../../src/messages/zh-TW.json';
-import { GBOARD_PACKAGE, GRADLE_RUN_FLAGS, androidInputs, apartBox, caretBlink, keysOn, stillLoading, textFields } from './android';
+import { GBOARD_PACKAGE, GRADLE_RUN_FLAGS, androidInputs, demoBarCommand, apartBox, caretBlink, keysOn, stillLoading, textFields } from './android';
+
+describe('the status bar’s demo mode in one adb call', () => {
+  it('sends the six broadcasts in their old order, each only after the last succeeded', () => {
+    const parts = demoBarCommand().split(' && ');
+    expect(parts).toEqual([
+      'am broadcast -a com.android.systemui.demo -e command enter',
+      'am broadcast -a com.android.systemui.demo -e command clock -e hhmm 0941',
+      'am broadcast -a com.android.systemui.demo -e command battery -e level 100 -e plugged false -e powersave false',
+      'am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4 -e fully true',
+      'am broadcast -a com.android.systemui.demo -e command network -e mobile hide',
+      'am broadcast -a com.android.systemui.demo -e command notifications -e visible false',
+    ]);
+  });
+});
 
 describe('the debug APK’s Gradle run leaves nothing resident', () => {
   it('runs without a daemon and compiles Kotlin in that process, the flags kept out of the fingerprint', () => {
