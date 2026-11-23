@@ -119,6 +119,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.SingletonImageLoader
 import com.resonance.design.ImageRevealKind
 import com.resonance.design.RevealImage
@@ -1276,7 +1277,10 @@ private fun MirrorLine(mirror: Mirror?, reduced: Boolean, gap: Dp, lead: Dp = 0.
  */
 @Composable
 private fun Preview(session: Session, model: WriteModel, compact: Boolean, pad: Dp, underBar: Boolean, pickCover: () -> Unit, dismissKeyboard: () -> Unit) {
-    val content = previewContent(model, session.me)
+    // The profile as state (never session.me's one-off read): a preview first drawn before the profile arrives —
+    // the step opened right after launch — takes the handle and face when it does, instead of keeping 「?」 and no name.
+    val profile by session.profile.collectAsStateWithLifecycle()
+    val content = previewContent(model, (profile as? Session.Profile.Loaded)?.me)
     // The card's own family (round 9 §8): its cover's hue, else a stable one from its id — so a coverless card,
     // and its cover buttons, wear one of the six rather than always the first.
     val family = previewFamily(model.values.accentHue, model.draftId)
