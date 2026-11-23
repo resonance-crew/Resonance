@@ -22,11 +22,33 @@ struct PickedPeople: View {
     @Environment(\.openRoute) private var openRoute
     @State private var people: TapPeople?
 
-    /// The sentence a dialog is about: its pick's id and its words.
+    /// The sentence a dialog is about: its pick's id and its words — and, from the page's marks, how many picked it
+    /// (`people`, the faces the server sent with it) and whether there are more than those (`more`).
     struct Passage: Equatable, Identifiable {
         let id: String
         let text: String
+        var people: Int = 0
+        var more = false
     }
+
+    /// The sentence `id` as the author's answer marks it: its words, and who picked it as far as the marks know.
+    static func passage(_ tap: CardTap?, id: String, text: String) -> Passage {
+        let picked = tap?.picked?.first { $0.id == id }
+        return Passage(id: id, text: text, people: picked?.people.count ?? 0, more: picked?.more ?? false)
+    }
+
+    /// How many rows stand in for the people while they are read (round 32 §P3, the owner: 「先跳出一个很高的弹窗，再
+    /// 根据内容缩回实际高度」): as many as the marks say picked the sentence, so the dialog opens at the height the
+    /// rows will take (a row of a name alone is 60, as a loading row) — not always two, which made a dialog of one
+    /// person open a row too tall and shrink, one of three grow. With more than the marks show, enough to fill the
+    /// list's cap, which the people read will fill too; never none.
+    static func loadingRows(_ passage: Passage, cap: CGFloat) -> Int {
+        if passage.more { return max(passage.people, Int((cap / TapListMetrics.dialogRow).rounded(.up))) }
+        return max(1, passage.people)
+    }
+
+    /// The list's cap: at most 420, and half the window.
+    static func listCap(window: CGFloat) -> CGFloat { min(420, window * 0.5) }
 
     /// The dialog's width: a phone's 400, a tablet's and the Mac's 480 (the reader's list's, ``TapListMetrics``).
     static func width(compact: Bool) -> CGFloat { TapListMetrics.readerWidth(compact: compact) }
@@ -63,28 +85,31 @@ struct PickedPeople: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, 12)
                 .accessibilityIdentifier("tap-picked-passage")
-            if let people {
-                ScrollView {
+            // The list from the first frame (§P3): while the people are read — before the read has even begun — the rows
+            // the marks promise stand in their place, so nothing appears later that changes the dialog's height.
+            let cap = Self.listCap(window: window.height)
+            ScrollView {
+                if let people {
                     TapRows(people: people.people, line: Self.line(for:)) { person in
                         onClose()
                         openRoute(Self.route(for: person))
                     }
-                    TapListState(people: people)
-                    if people.next != nil {
-                        OrganicButton(L10n.Home.moreBtn, variant: .tonal, size: .sm) { Task { await people.more() } }
-                            .loading(people.loadingMore)
-                            .fixedSize()
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 12)
-                    }
                 }
-                .scrollIndicators(.hidden)
-                .scrollBounceBehavior(.basedOnSize)
-                .scrollEdgeFades()
-                .frame(maxHeight: min(420, window.height * 0.5))
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, -12)
+                TapListState(people: people, loadingRows: Self.loadingRows(passage, cap: cap))
+                if let people, people.next != nil {
+                    OrganicButton(L10n.Home.moreBtn, variant: .tonal, size: .sm) { Task { await people.more() } }
+                        .loading(people.loadingMore)
+                        .fixedSize()
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 12)
+                }
             }
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollEdgeFades()
+            .frame(maxHeight: cap)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, -12)
             ModalCloseButton(L10n.Native.close, action: onClose)
                 // The flows' way out (maestro/flows/tap-picked.yaml): the backdrop is named 關閉 too.
                 .accessibilityIdentifier("tap-picked-close")

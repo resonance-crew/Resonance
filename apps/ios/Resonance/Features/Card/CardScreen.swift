@@ -457,7 +457,7 @@ struct CardScreen: View {
         return StoryPassageMarks(passages: passages, room: PassageFaces.room(layout, width: width ?? window.contentWidth),
                                  reading: story.scale(.body), latinCompact: script == .latin && window.layoutClass == .compact) { id in
             guard let passage = passages.first(where: { $0.id == id }) else { return }
-            openPicked(PickedPeople.Passage(id: passage.id, text: passage.text))
+            openPicked(PickedPeople.passage(detail.tap?.value1, id: passage.id, text: passage.text))
         }
     }
 
@@ -574,7 +574,7 @@ struct CardScreen: View {
                     guard let first = PassageLeaves.marks(blocks, sentences: sentences).values.flatMap({ $0 }).min(by: { $0.order < $1.order }),
                           let text = sentences.first(where: { $0.0 == first.id })?.1 else { return }
                     try? await Task.sleep(for: .milliseconds(600))
-                    openPicked(PickedPeople.Passage(id: first.id, text: text))
+                    openPicked(PickedPeople.passage(detail.tap?.value1, id: first.id, text: text))
                 }
                 #endif
                 // A phone's 收藏 ends the tags' row (round 28 §S3): the tags wrap in their own column, 收藏 on their

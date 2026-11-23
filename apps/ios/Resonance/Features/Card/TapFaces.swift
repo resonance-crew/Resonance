@@ -185,18 +185,20 @@ struct TapRows: View {
     }
 }
 
-/// While the list is read: two rows' shapes; when it couldn't be, a line and 重試.
+/// While the list is read: rows' shapes (two, or as many as the caller knows are coming — `loadingRows`); when it
+/// couldn't be, a line and 重試. A list not asked for yet (`people` nil) is one on its way.
 struct TapListState: View {
-    let people: TapPeople
+    let people: TapPeople?
+    var loadingRows = 2
 
     var body: some View {
-        switch people.phase {
+        switch people?.phase ?? .loading {
         case .loading:
             VStack(spacing: 0) {
-                ForEach(0..<2, id: \.self) { i in
+                ForEach(0..<max(1, loadingRows), id: \.self) { i in
                     HStack(spacing: 12) {
                         SkeletonBlock(width: TapListMetrics.dialogFace, circle: true)
-                        SkeletonBlock(width: i == 0 ? 112 : 88, height: 14)
+                        SkeletonBlock(width: i % 2 == 0 ? 112 : 88, height: 14)
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 12)
@@ -209,7 +211,7 @@ struct TapListState: View {
         case .failed:
             VStack(alignment: .leading, spacing: 8) {
                 ModalError(L10n.Native.loadError)
-                OrganicButton(L10n.Native.retry, variant: .tonal, size: .sm) { Task { await people.load() } }
+                OrganicButton(L10n.Native.retry, variant: .tonal, size: .sm) { Task { await people?.load() } }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
