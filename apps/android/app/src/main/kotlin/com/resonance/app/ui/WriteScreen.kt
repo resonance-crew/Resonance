@@ -1629,12 +1629,13 @@ internal fun Modifier.heightChanges(onChange: (Int) -> Unit): Modifier = compose
 }
 
 /**
- * 卡片類型 (round 8 §2.2): what the card is, as one segmented choice — 公開 · 匿名公開 · 草稿 — with
- * no pen line (its options are buttons): a quiet paper-dark track shows the control's extent, the
+ * 卡片類型 (round 8 §2.2): what the card is, as one segmented choice — 公開 · 連結的人 · 匿名公開 · 私人卡
+ * — with no pen line (its options are buttons): a quiet paper-dark track shows the control's extent, the
  * chosen side wears the tonal peach with the deep label (4.8:1), the others a muted ink deep enough
  * to read on the track. No line under it: the preview's byline above follows the choice (匿名 with
- * the「·」avatar). A card kept for connections only (older ones) shows none chosen, and keeps its
- * audience until one is.
+ * the「·」avatar). A card both anonymous and for connections only (older ones) shows none chosen, and
+ * keeps its audience until one is. Four don't fit a phone's row with their icons: the icons go, the
+ * words stay ([Segment.iconDroppable], the web's `iconDroppable`).
  */
 @Composable
 private fun AudienceChoice(model: WriteModel) {
@@ -1650,6 +1651,7 @@ private fun AudienceChoice(model: WriteModel) {
                     textColor = if (on) Tokens.ButtonOnTonal else VisibilityInk,
                     press = Tokens.TowardInk.copy(alpha = 0.05f),
                     selected = on,
+                    iconDroppable = true,
                 ) { model.choose(audience) }
             },
             fill = Tokens.CreamDark,
@@ -1658,15 +1660,17 @@ private fun AudienceChoice(model: WriteModel) {
     }
 }
 
-/** A choice's words in 卡片類型: 公開 · 匿名公開 · 草稿. */
+/** A choice's words in 卡片類型: 公開 · 連結的人 · 匿名公開 · 私人卡. */
 internal fun audienceLabel(audience: Audience): String = when (audience) {
     Audience.Public -> L10n.Write.Visibility.public
+    Audience.Connections -> L10n.Write.Visibility.connections
     Audience.Anonymous -> L10n.Write.Visibility.anonymous
     Audience.Private -> L10n.Write.Visibility.draft
 }
 
 private fun audienceIcon(audience: Audience): IconName = when (audience) {
     Audience.Public -> IconName.Globe
+    Audience.Connections -> IconName.Users
     Audience.Anonymous -> IconName.Mask
     Audience.Private -> IconName.Lock
 }

@@ -158,8 +158,8 @@ internal object PassageBand {
     val wordsInset: Dp = ModalPaperInset + TapRowMeasure.Dialog.inset
 }
 
-/** The list's tallest before it scrolls inside: min(420, 55 % of the window's height) — the reader list's cap. */
-internal fun passagesListMax(windowHeight: Dp): Dp = min(420f, windowHeight.value * 0.55f).dp
+/** The list's tallest before it scrolls inside: min(560, 70 % of the window's height) — Wave 2 #3a: three passages of about 100 characters each (the web's too). */
+internal fun passagesListMax(windowHeight: Dp): Dp = min(560f, windowHeight.value * 0.7f).dp
 
 /**
  * The dialog (§U1.3): a centred [OrganicModal] — never a bottom sheet, never a popover — [readerListWidth] wide (400 on a

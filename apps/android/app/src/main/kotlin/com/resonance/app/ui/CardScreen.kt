@@ -256,7 +256,26 @@ class CardPageModel(private val session: Session, private val key: String, previ
      */
     fun tapped(tap: com.resonance.api.models.CardTap) {
         val d = detail ?: return
-        val next = d.copy(tap = tap)
+        keep(tappedDetail(d, tap))
+        // The server's faces and washes after it (Wave 2 #3b): the reader's face, and their sentence's wash and face,
+        // appear without leaving the page — read again after every tap and pick that went through, the last one winning.
+        tapRead?.cancel()
+        tapRead = viewModelScope.launch {
+            val fresh = try {
+                session.reading.card(d.card.slug ?: d.card.id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // What the end row drew stays; the next read says how it is.
+                return@launch
+            }
+            detail?.let { now -> servedTapDetail(now, fresh)?.let(::keep) }
+        }
+    }
+
+    private var tapRead: Job? = null
+
+    private fun keep(next: com.resonance.api.models.CardDetail) {
         detail = next
         session.cardCache.page(key)?.let { session.cardCache.rememberPage(key, it.copy(detail = next)) }
     }
@@ -334,6 +353,21 @@ class CardPageModel(private val session: Session, private val key: String, previ
     }
 
     companion object {
+        /**
+         * The page's card with the end row's [tap] (round 26 §U1): the faces, the passages and the pick it drew — and the
+         * picked sentences' washes as the page had them ([CardTap.picked] is the server's alone to say: the end row never
+         * draws them), until the read after it ([servedTapDetail]) brings the server's.
+         */
+        internal fun tappedDetail(d: com.resonance.api.models.CardDetail, tap: com.resonance.api.models.CardTap): com.resonance.api.models.CardDetail =
+            d.copy(tap = if (tap.picked == null) tap.copy(picked = d.tap?.picked) else tap)
+
+        /**
+         * The page's card with the tap as the server read it after a tap or a pick ([fresh]; Wave 2 #3b): its faces, its
+         * pick and every picked sentence's people, the rest of the page as it is — null when [fresh] is another card.
+         */
+        internal fun servedTapDetail(d: com.resonance.api.models.CardDetail, fresh: com.resonance.api.models.CardDetail): com.resonance.api.models.CardDetail? =
+            if (fresh.card.id != d.card.id) null else d.copy(tap = fresh.tap)
+
         /** The page's card as [move] leaves it (what [drawNow] shows before the server has answered). */
         internal fun moved(d: com.resonance.api.models.CardDetail, move: CardMove, now: java.time.Instant = java.time.Instant.now()): com.resonance.api.models.CardDetail = when (move) {
             CardMove.Trash -> d.copy(card = d.card.copy(trashedAt = now.toString(), purgeAt = null))
@@ -472,10 +506,11 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     // with contents, an expanded window sets their rail beside the article (round 8 §10.1: the author is under the title).
     val columns = LocalWindowLayout.current.cardPage(rail = phase == "loaded" && headings.isNotEmpty())
     val railed = columns.railStart != null
-    // The author's own published page, the story as written (round 29 §U1): the sentences readers picked, washed, with
-    // their faces — in the left margin where the white left of the column is 70 or more (§S10), else in the line.
-    val ownPicked = detail?.let { d -> ownPickedPassages(d, original = shownBlocks === blocks) }
-    val passageMarks = remember(shownBlocks, ownPicked) { passageMarks(shownBlocks, ownPicked) }
+    // A published page, the story as written (round 29 §U1; every reader's since Wave 2 #3b): the sentences readers
+    // picked, washed, with their faces — in the left margin where the white left of the column is 70 or more (§S10),
+    // else in the line.
+    val picked = detail?.let { d -> pickedPassages(d, original = shownBlocks === blocks) }
+    val passageMarks = remember(shownBlocks, picked) { passageMarks(shownBlocks, picked) }
     val passageRoom = passageRoom(columns.start)
     val passagesInMargin = passageMarks.isNotEmpty() && passageInMargin(passageRoom)
     var pickedOpen by remember(key) { mutableStateOf<String?>(null) }
@@ -694,10 +729,11 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                     Modifier.onGloballyPositioned { endRowCoords = it }.padding(bottom = 40.dp),
                                     launchOpen = DebugLaunch.CardEnd.Taps in launchEnd,
                                 )
-                                // Who resonated with one sentence (§S4), opened by its faces or its wash.
-                                passageMarks.firstOrNull { it.id == pickedOpen }?.let { mark ->
-                                    PickedPeople(session, card.id, mark, type, d.anonymous, onDismiss = { pickedOpen = null }, open = open)
-                                }
+                            }
+                            // Who resonated with one sentence (§S4), opened by its faces or its wash — on the author's page
+                            // and, since Wave 2 #3b, a reader's alike (their rows open the person's profile: no note).
+                            passageMarks.firstOrNull { it.id == pickedOpen }?.let { mark ->
+                                PickedPeople(session, card.id, mark, type, d.anonymous, onDismiss = { pickedOpen = null }, open = open)
                             }
                         }
                     }

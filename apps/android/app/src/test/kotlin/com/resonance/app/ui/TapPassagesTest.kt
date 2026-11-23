@@ -338,8 +338,36 @@ class TapPassagesTest {
         )
     }
 
-    @Test fun theListScrollsInsideAtMostFourHundredTwentyOrMoreThanHalfTheWindow() {
-        assertEquals(420f, passagesListMax(900.dp).value)
-        assertEquals(330f, passagesListMax(600.dp).value, 0.01f)
+    @Test @Config(qualifiers = "w320dp-h568dp")
+    fun threeHundredCharacterPassagesOnTheSmallestPhoneWrapWholeInsideTheirScroll() {
+        // Wave 2 #3a: 2–3 whole sentences, about 100 characters each.
+        val long = List(3) { i ->
+            TapPassage("p$i", "清晨六點的城市還沒醒，我站在陽台上，看著對面的窗一扇一扇亮起來，像有人在替這一天慢慢點燈。".repeat(2).take(100) + "。$i")
+        }
+        compose.setContent {
+            CompositionLocalProvider(LocalWindowLayout provides WindowLayout(320.dp)) {
+                TapPassages(long, null, StoryScript.Cjk, reducedMotion = true, onPick = {}, onDismiss = {})
+            }
+        }
+        compose.waitForIdle()
+        val list = compose.onNodeWithTag("tap-passages", useUnmergedTree = true).getBoundsInRoot()
+        // The list stops at 70 % of the window and scrolls inside; nothing runs past the window's sides.
+        assertTrue((list.bottom - list.top).value <= 568f * 0.7f + 0.5f)
+        assertTrue(list.left.value >= -0.5f && list.right.value <= 320f + 0.5f)
+        // Each sentence in full (never 「…」), on several lines, within its row.
+        long.forEachIndexed { i, p ->
+            val node = compose.onNodeWithText(p.text, useUnmergedTree = true).fetchSemanticsNode()
+            val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            node.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+            val layout = results.single()
+            assertFalse("passage $i is cut", layout.hasVisualOverflow)
+            assertTrue("passage $i wraps", layout.lineCount >= 3)
+        }
+    }
+
+    @Test fun theListScrollsInsideAtMostFiveHundredSixtyOrSeventyPercentOfTheWindow() {
+        // Wave 2 #3a: three passages of about 100 characters each — the web's min(560, 70 %).
+        assertEquals(560f, passagesListMax(900.dp).value)
+        assertEquals(420f, passagesListMax(600.dp).value, 0.01f)
     }
 }

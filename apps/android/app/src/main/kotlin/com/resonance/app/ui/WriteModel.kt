@@ -98,19 +98,22 @@ enum class ResonanceLine { Reaches, Quiet }
 
 /**
  * 卡片類型 (round 8 §2.2; round 7's 誰可以看見): what the card is, as one choice — 公開 (under the
- * writer's pen name), 匿名公開, 草稿 ([Private]: its writer's alone, finished or not). Anonymity is
- * for being read: only the writer reading it needs no other name.
+ * writer's pen name), 連結的人 ([Connections]: under it, for their connections alone — back since
+ * Wave 2), 匿名公開, 私人卡 ([Private]: its writer's alone, finished or not). Anonymity is for being
+ * read: only the writer reading it needs no other name; and 連結的人 is always named (an anonymous card
+ * for connections only would say whose it is — the server refuses it).
  */
-enum class Audience { Public, Anonymous, Private }
+enum class Audience { Public, Connections, Anonymous, Private }
 
 /**
- * Which of the three a card's values show chosen: public under a name, public anonymous, private
- * (either way). A card kept for connections only (older ones) shows none, and keeps its audience
- * until one is picked.
+ * Which of the four a card's values show chosen: public under a name, for connections under a name,
+ * public anonymous, private (either way). A card both anonymous and for connections only (older ones,
+ * published before the server refused the pair) shows none, and keeps its audience until one is picked.
  */
 internal fun audienceOf(visibility: String, anonymous: Boolean): Audience? = when (visibility) {
     "public" -> if (anonymous) Audience.Anonymous else Audience.Public
     "private" -> Audience.Private
+    "connections" -> if (anonymous) null else Audience.Connections
     else -> null
 }
 
@@ -359,14 +362,14 @@ class WriteModel(
     val title: String
         get() = writerTitle(editing, liveSeen)
 
-    /** Who the card is for, as the step shows it chosen (null: kept for connections, none chosen). */
+    /** Who the card is for, as the step shows it chosen (null: an older card anonymous and for connections, none chosen). */
     val audience: Audience? get() = audienceOf(values.visibility, values.anonymous)
 
     /**
      * The step's one button (round 8 §2.3): a card readers have is updated (儲存修改), or made a 草稿
      * again (轉為草稿) when that is chosen; a 草稿 is published by its choice (發布 · 匿名發布), or kept
-     * one (儲存). A card kept for connections only (older ones, none of the three chosen) reads as
-     * publishing — or, live, as an update.
+     * one (儲存); 連結的人 is published as 公開 is (發布, never 匿名發布). An older card both anonymous and
+     * for connections only (none of the four chosen) reads as publishing — or, live, as an update.
      */
     val stepVerb: StepVerb get() = stepVerbOf(liveSeen, audience)
 
@@ -381,7 +384,7 @@ class WriteModel(
 
     /**
      * A live card's 「按下之後，讀者看到的就會是這個版本…」: only for a card readers have whose choice keeps
-     * it theirs (公開 · 匿名公開; an older card kept for connections, none chosen, still has them).
+     * it theirs (公開 · 連結的人 · 匿名公開; an older card anonymous and for connections, none chosen, still has them).
      */
     val showsUpdateHint: Boolean get() = liveSeen && values.visibility != "private"
 
@@ -494,6 +497,8 @@ class WriteModel(
      */
     fun choose(audience: Audience) = when (audience) {
         Audience.Public -> setAudience("public", anonymous = false)
+        // Named, always — also coming from 匿名公開: who and under whose name in one change.
+        Audience.Connections -> setAudience("connections", anonymous = false)
         Audience.Anonymous -> setAudience("public", anonymous = true)
         Audience.Private -> setAudience("private", anonymous = isPublished && values.anonymous)
     }
@@ -1192,7 +1197,7 @@ internal fun writerTitle(editing: Boolean, seen: Boolean): String = when {
     else -> L10n.Write.editTitle
 }
 
-/** The step's one button for a card readers have or not ([seen]) and what is chosen ([audience]; null: kept for connections). */
+/** The step's one button for a card readers have or not ([seen]) and what is chosen ([audience]; null: an older card anonymous and for connections). */
 internal fun stepVerbOf(seen: Boolean, audience: Audience?): StepVerb = when {
     seen -> if (audience == Audience.Private) StepVerb.MakeDraft else StepVerb.Update
     audience == Audience.Private -> StepVerb.Save

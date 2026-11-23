@@ -10,7 +10,7 @@ import java.io.File
 /**
  * An anonymous card is public or only its author's — never for connections only, which would say
  * whose it is — so turning a card kept for connections anonymous in the publish panel makes it
- * public; under a name, every audience stands. 卡片類型's three are 公開 · 匿名公開 · 草稿, with no
+ * public; under a name, every audience stands. 卡片類型's four are 公開 · 連結的人 · 匿名公開 · 私人卡, with no
  * line under them (round 8 §2.2), and the ⋯'s one visibility row turns a card readers have into a
  * 草稿 (round 8 §1.2).
  */
@@ -37,8 +37,9 @@ class PublishVisibilityTest {
         assertEquals("private", anonymousVisibility("private", anonymous = false))
     }
 
-    @Test fun theThreeChoicesAreWhatTheCardIs() {
-        assertEquals(listOf("公開", "匿名公開", "私人卡"), Audience.entries.map(::audienceLabel))
+    @Test fun theFourChoicesAreWhatTheCardIs() {
+        // 連結的人 is back (Wave 2), between 公開 and 匿名公開.
+        assertEquals(listOf("公開", "連結的人", "匿名公開", "私人卡"), Audience.entries.map(::audienceLabel))
         assertEquals("卡片類型", com.resonance.kit.l10n.L10n.Write.Visibility.label)
     }
 
