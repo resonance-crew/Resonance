@@ -35,6 +35,8 @@ import com.resonance.kit.api.TapApi
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
 import com.resonance.kit.story.StoryScript
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -198,5 +200,76 @@ class PickedPeopleTest {
         } finally {
             server.shutdown()
         }
+    }
+
+    // Round 32 §P3: the dialog opens at its final height
+
+    private val paper = androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.PaneTitle)
+
+    private class Shown(val list: TapPeople, val expected: List<Author>?)
+
+    private var shown: androidx.compose.runtime.MutableState<Shown?>? = null
+
+    /** The paper's height while the first page is on its way, and once it has answered with [people]. */
+    private fun heights(people: List<TapPerson>, expected: List<Author>?): Pair<Float, Float> {
+        val answer = CompletableDeferred<Unit>()
+        val list = TapPeople { answer.await(); TapList(people, nextPageToken = null) }
+        val state = shown
+        if (state == null) {
+            val made = androidx.compose.runtime.mutableStateOf<Shown?>(Shown(list, expected))
+            shown = made
+            compose.setContent {
+                CompositionLocalProvider(LocalWindowLayout provides WindowLayout(390.dp)) {
+                    made.value?.let { now ->
+                        androidx.compose.runtime.key(now) {
+                            LaunchedEffect(now.list) { now.list.first() }
+                            PickedPeopleDialog(now.list, sentence, StoryType.of(StoryScript.Cjk, LayoutClass.Compact), false, onDismiss = {}, expected = now.expected) {}
+                        }
+                    }
+                }
+            }
+        } else {
+            compose.runOnIdle { state.value = null }
+            compose.waitForIdle()
+            compose.runOnIdle { state.value = Shown(list, expected) }
+        }
+        compose.waitForIdle()
+        val reading = compose.onNode(paper, useUnmergedTree = true).getBoundsInRoot().let { (it.bottom - it.top).value }
+        answer.complete(Unit)
+        compose.waitForIdle()
+        assertTrue(list.loaded)
+        val read = compose.onNode(paper, useUnmergedTree = true).getBoundsInRoot().let { (it.bottom - it.top).value }
+        return reading to read
+    }
+
+    @Test fun whileItsPeopleAreReadTheRowsStandAsTheyWillForOneTwoAndThree() {
+        for (n in 1..3) {
+            val people = listOf("gus", "bob", "ann").take(n).map { row(it) }
+            val (reading, read) = heights(people, expected = people.map { it.author })
+            assertEquals("$n: the first frame is the final height", read, reading, 0.5f)
+        }
+    }
+
+    @Test fun theCauseThreeShapesOfSixtyAreNotOnePersonsRow() {
+        // What drew the tall-then-short flash: the loading state's three 60-tall shapes, whoever was coming.
+        val (reading, read) = heights(listOf(row("gus")), expected = null)
+        assertTrue("three shapes ($reading) taller than one row ($read)", reading - read >= 100f)
+    }
+
+    @Test fun thePressWaitsForTheFirstPageAShortWhileAtMost() = runBlocking {
+        val answered = TapPeople { TapList(listOf(row("gus")), nextPageToken = null) }
+        val job = launch { answered.first() }
+        awaitPickedFirstPage(answered)
+        assertTrue("waited for the page", answered.loaded)
+        job.join()
+        // A page that never comes: the dialog opens after the wait, with the sentence's faces as its rows.
+        val never = TapPeople { kotlinx.coroutines.awaitCancellation() }
+        val hanging = launch { never.first() }
+        val start = System.nanoTime()
+        awaitPickedFirstPage(never, wait = 50)
+        assertTrue((System.nanoTime() - start) / 1_000_000 < 1_000)
+        assertTrue(!never.loaded)
+        hanging.cancel()
+        assertEquals(300L, PICKED_OPEN_WAIT_MS)
     }
 }

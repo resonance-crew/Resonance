@@ -322,7 +322,18 @@ internal data class TapRowMeasure(val height: Dp, val face: Dp, val inset: Dp, v
 
 /** The list's rows: banded, each the face, the pen name and the excerpt; the rows' shapes while read. */
 @Composable
-internal fun TapRows(list: TapPeople, measure: TapRowMeasure, lines: (TapPerson) -> TapRowLines, onRow: (TapPerson) -> Unit) {
+internal fun TapRows(
+    list: TapPeople,
+    measure: TapRowMeasure,
+    lines: (TapPerson) -> TapRowLines,
+    /**
+     * Who the first page will hold, when the page already knows (round 32 §P3: a picked sentence's faces): while it is
+     * read, those rows as they will stand — the face, the pen name — not three shapes of another height, so the dialog
+     * opens at its height. Null: the three shapes.
+     */
+    expected: List<Author>? = null,
+    onRow: (TapPerson) -> Unit,
+) {
     val rowHeight = measure.height
     val face = measure.face
     val people = list.people
@@ -332,6 +343,14 @@ internal fun TapRows(list: TapPeople, measure: TapRowMeasure, lines: (TapPerson)
             Column(Modifier.fillMaxWidth().padding(horizontal = measure.inset), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 BasicText(L10n.Native.loadError, style = AppFonts.body(14f, lineHeight = 1.5f, color = Tokens.TextMuted))
                 OrganicButton(L10n.Native.retry, variant = ButtonVariant.Tonal, small = true) { scope.launch { list.first() } }
+            }
+        }
+        !list.loaded && !expected.isNullOrEmpty() -> Column(Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = L10n.Home.moreLoading }) {
+            val keys = expected.map { "tap:" + it.id }
+            val below = bandsBelow(keys, ListBands.EndKey)
+            expected.forEachIndexed { i, a ->
+                val source = remember(a.id) { MutableInteractionSource() }
+                TapRow(TapPerson(a, null), TapRowLines.NONE, measure, keys[i], below[i], source, onClick = null)
             }
         }
         !list.loaded -> Column(Modifier.clearAndSetSemantics { contentDescription = L10n.Home.moreLoading }) {
@@ -348,43 +367,56 @@ internal fun TapRows(list: TapPeople, measure: TapRowMeasure, lines: (TapPerson)
             val below = bandsBelow(keys, ListBands.EndKey)
             people.forEachIndexed { i, p ->
                 val source = remember(p.author.id) { MutableInteractionSource() }
-                val said = lines(p)
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = rowHeight)
-                        .listBand(keys[i], below[i], source, { false }, cut = true)
-                        .plainClickable(role = Role.Button) { onRow(p) }
-                        .padding(horizontal = measure.inset, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(measure.gap),
-                ) {
-                    HandDrawnAvatar(p.author.initials, p.author.avatarUrl, p.author.accent(), face, p.author.avatarSeedValue())
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        BasicText(p.author.handle, style = AppFonts.body(measure.handle, 600, lineHeight = 1.4f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        // The pick (the author's own sentence: here it may be cut), or 選一段; then the note's first line.
-                        if (said.quote != null) BasicText(
-                            L10n.Card.Tap.passageQuote(said.quote),
-                            style = AppFonts.body(13f, lineHeight = 1.45f, color = Tokens.TextMuted),
-                            maxLines = 2, overflow = TextOverflow.Ellipsis,
-                        )
-                        else if (said.pick) BasicText(
-                            L10n.Card.Tap.passagePick,
-                            style = AppFonts.body(13f, lineHeight = 1.45f, color = Tokens.ButtonOnTonal),
-                            maxLines = 2, overflow = TextOverflow.Ellipsis,
-                        )
-                        if (said.excerpt != null) BasicText(
-                            said.excerpt,
-                            style = AppFonts.body(13f, lineHeight = 1.45f, color = Tokens.TextMuted),
-                            maxLines = 2, overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
+                TapRow(p, lines(p), measure, keys[i], below[i], source) { onRow(p) }
             }
             if (list.failed) BasicText(
                 L10n.Native.loadError,
                 style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.TextMuted),
                 modifier = Modifier.padding(horizontal = measure.inset, vertical = 8.dp),
+            )
+        }
+    }
+}
+
+/** One row of who resonated: the face, the pen name and the row's [said] lines; [onClick] null — a row being read, not pressable yet. */
+@Composable
+private fun TapRow(
+    p: TapPerson,
+    said: TapRowLines,
+    measure: TapRowMeasure,
+    topKey: String,
+    bottomKey: String,
+    source: MutableInteractionSource,
+    onClick: (() -> Unit)?,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = measure.height)
+            .listBand(topKey, bottomKey, source, { false }, cut = true)
+            .then(if (onClick != null) Modifier.plainClickable(role = Role.Button, onClick = onClick) else Modifier)
+            .padding(horizontal = measure.inset, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(measure.gap),
+    ) {
+        HandDrawnAvatar(p.author.initials, p.author.avatarUrl, p.author.accent(), measure.face, p.author.avatarSeedValue())
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            BasicText(p.author.handle, style = AppFonts.body(measure.handle, 600, lineHeight = 1.4f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // The pick (the author's own sentence: here it may be cut), or 選一段; then the note's first line.
+            if (said.quote != null) BasicText(
+                L10n.Card.Tap.passageQuote(said.quote),
+                style = AppFonts.body(13f, lineHeight = 1.45f, color = Tokens.TextMuted),
+                maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+            else if (said.pick) BasicText(
+                L10n.Card.Tap.passagePick,
+                style = AppFonts.body(13f, lineHeight = 1.45f, color = Tokens.ButtonOnTonal),
+                maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+            if (said.excerpt != null) BasicText(
+                said.excerpt,
+                style = AppFonts.body(13f, lineHeight = 1.45f, color = Tokens.TextMuted),
+                maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
         }
     }
