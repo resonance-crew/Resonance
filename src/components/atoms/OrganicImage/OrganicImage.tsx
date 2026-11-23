@@ -6,6 +6,7 @@ import { wobRect } from '@/lib/design/wobRect';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import { brokenImage } from '@/lib/images/broken';
 import { coverImageBox, type CoverFrame } from '@/lib/images/coverFrame';
+import { useRevealRef } from '@/components/atoms/RevealImg/RevealImg';
 
 /** How long a picture that failed waits before its one more try. */
 export const IMAGE_RETRY_MS = 3000;
@@ -116,6 +117,21 @@ export function OrganicImage({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per src, as the element mounts
   }, [src]);
   const shimmering = !!src && settled !== src;
+  // A picture that lands after its box is on screen comes in blur-to-sharp (lib/images/reveal); its shimmer stays
+  // under it until it is sharp, and only then the grain is laid on. One the browser already had settles above.
+  const settleTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(settleTimer.current), []);
+  const revealRef = useRevealRef<HTMLImageElement>(
+    'cover',
+    (ms) => {
+      const landed = src;
+      if (!landed) return;
+      window.clearTimeout(settleTimer.current);
+      if (ms > 0) settleTimer.current = window.setTimeout(() => setSettled(landed), ms);
+      else setSettled(landed);
+    },
+    imgRef,
+  );
 
   const mag = Math.min(w, h) * 0.05;
   // The wobble pushes the path both inward and outward of the box edge. The
@@ -142,12 +158,19 @@ export function OrganicImage({
     // eslint-disable-next-line @next/next/no-img-element
     <img
       key={retryOf === src ? 'retry' : 'first'}
-      ref={imgRef}
+      ref={revealRef}
       src={src}
       {...(thumbSrc && thumbSrc !== src && retryOf !== src
         ? { srcSet: `${thumbSrc} ${THUMB_W}w, ${src} ${COVER_W}w`, sizes }
         : null)}
-      onLoad={() => setSettled(src)}
+      onLoad={(e) => {
+        // The reveal settles it (after its blur). React hears the load before the reveal's own listener, so look
+        // once that has run: a picture it isn't revealing settles here.
+        const img = e.currentTarget;
+        window.setTimeout(() => {
+          if (!img.hasAttribute('data-reveal')) setSettled(src);
+        }, 0);
+      }}
       onError={() => failed(src)}
       alt={alt}
       loading={priority ? 'eager' : 'lazy'}

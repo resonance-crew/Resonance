@@ -8,6 +8,7 @@ import type { LinkPreview } from '@/lib/db/types';
 import { parseLink } from '@/lib/links/linkify';
 import { useStoryBlock } from './useStoryBlock';
 import styles from './StoryLinkCard.module.css';
+import { RevealImg } from '@/components/atoms/RevealImg/RevealImg';
 
 export type StoryLinkCardProps =
   | { preview: LinkPreview; url?: undefined }
@@ -84,8 +85,7 @@ export function StoryLinkCard({ preview, url }: StoryLinkCardProps) {
           style={block.d ? { clipPath: `path('${block.d}')` } : undefined}
           data-clipped={block.d ? '' : undefined}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element -- our own /api/link-image route, clipped by the card's outline */}
-          <img
+          <RevealImg reveal="thumb"
             key={image.attempt}
             ref={imageRef}
             className={styles.image}

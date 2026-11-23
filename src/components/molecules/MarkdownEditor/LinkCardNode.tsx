@@ -12,6 +12,7 @@ import { normalizeLink } from '@/lib/links/url';
 import { LinkCard } from '@/lib/markdown/editorSchema';
 import { NodeRemoveButton } from './NodeRemoveButton';
 import styles from './MarkdownEditor.module.css';
+import { RevealImg } from '@/components/atoms/RevealImg/RevealImg';
 
 /** What a link card in the writer does when it is pressed: opens the link editor on it (卡片 chosen). */
 export const LinkCardActionContext = createContext<(() => void) | null>(null);
@@ -68,8 +69,7 @@ function LinkCardView({ node, selected, deleteNode, editor, getPos }: NodeViewPr
         {block.layers}
         {preview?.image && (
           <span className={cardStyles.picture} style={block.d ? { clipPath: `path('${block.d}')` } : undefined} data-clipped={block.d ? '' : undefined}>
-            {/* eslint-disable-next-line @next/next/no-img-element -- our own /api/link-image route, as the reader's card */}
-            <img className={cardStyles.image} src={preview.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
+            <RevealImg reveal="thumb" className={cardStyles.image} src={preview.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
           </span>
         )}
         <span className={cardStyles.text}>

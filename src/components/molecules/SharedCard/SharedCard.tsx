@@ -15,6 +15,7 @@ import { readMinutes } from '@/lib/readTime';
 import { coverImageBox } from '@/lib/images/coverFrame';
 import type { Card, User } from '@/lib/db/types';
 import styles from './SharedCard.module.css';
+import { RevealImg } from '@/components/atoms/RevealImg/RevealImg';
 
 /** A card's palette family (StoryCard's): by its cover's hue, or the first. */
 function paletteOf(accentHue: number | undefined): number {
@@ -86,8 +87,7 @@ export function SharedCardContent({ card, author, titleId }: SharedCardContentPr
       </span>
       {cover ? (
         <span className={styles.cover}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <RevealImg reveal="thumb"
             src={cover}
             alt=""
             loading="lazy"

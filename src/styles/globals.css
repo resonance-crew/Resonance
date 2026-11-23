@@ -173,6 +173,29 @@ textarea:lang(zh-TW)::placeholder {
   .res-shape-fade-in { animation: none; }
 }
 
+/* Blur-to-sharp (lib/images/reveal): a picture that lands after its box is on
+   screen comes in from a soft blur and a fade (or the fade alone). The script
+   sets data-reveal with --reveal-ms / --reveal-blur and takes all three away
+   when the animation ends, so no filter stays on a picture once it is sharp. */
+@keyframes resRevealBlur {
+  from { filter: blur(var(--reveal-blur, 10px)); opacity: 0; }
+  40% { opacity: 1; }
+  to { filter: blur(0); opacity: 1; }
+}
+@keyframes resRevealFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+[data-reveal='blur'] {
+  animation: resRevealBlur var(--reveal-ms, 320ms) cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
+}
+[data-reveal='fade'] {
+  animation: resRevealFade var(--reveal-ms, 240ms) ease-out backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] { animation: none; }
+}
+
 /* Until it is measured — the server's HTML, a browser still loading its
    scripts or running none — an organic shape's host stands in as a plain
    rounded shape of the same fill and pen (data-shape-pending, with

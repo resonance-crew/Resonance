@@ -5,6 +5,7 @@ import { useImageRetry } from '@/lib/hooks/useImageRetry';
 import type { MessageLinkPreview } from '@/lib/db/types';
 import { messageLinkProps, type MessageLink, type OnMessageLink } from './MessageBubble';
 import styles from './Thread.module.css';
+import { RevealImg } from '@/components/atoms/RevealImg/RevealImg';
 
 export interface LinkPreviewPartProps {
   preview: MessageLinkPreview;
@@ -33,8 +34,7 @@ export function LinkPreviewPart({ preview, link, afterWords, onLink }: LinkPrevi
     <a className={styles.previewPart} {...messageLinkProps(link, onLink)}>
       {preview.image && !picture.hidden && (
         <span className={styles.picture} data-after-words={afterWords || undefined}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <RevealImg reveal="thumb"
             key={picture.attempt}
             src={preview.image}
             alt=""

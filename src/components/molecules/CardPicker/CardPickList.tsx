@@ -11,6 +11,7 @@ import { INK } from '@/lib/design/strokes';
 import type { Card } from '@/lib/db/types';
 import { useEdgeFades } from '@/lib/hooks/useEdgeFades';
 import styles from './CardPickList.module.css';
+import { RevealImg } from '@/components/atoms/RevealImg/RevealImg';
 
 export interface CardPickListProps {
   cards: Card[];
@@ -197,8 +198,7 @@ function PickThumb({ src, hue, seed, chosen }: { src?: string; hue: number; seed
     <span className={styles.thumb} data-thumb>
       <span className={styles.thumbFace} style={{ clipPath: clip }}>
         {src ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={src} alt="" width={THUMB} height={THUMB} loading="lazy" decoding="async" className={styles.thumbImg} />
+          <RevealImg reveal="thumb" src={src} alt="" width={THUMB} height={THUMB} loading="lazy" decoding="async" className={styles.thumbImg} />
         ) : (
           <span className={styles.thumbFallback} style={{ background: `oklch(var(--hue-accent) ${hue})` }} />
         )}
