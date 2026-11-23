@@ -8,7 +8,8 @@ import { mapCard } from '@/lib/db/firestore/mapper';
 // The resonance tap (共振, round 26 §R1) through the services, on an
 // in-memory Firestore: what a tap writes (and never: an ask marker), the
 // order its checks answer in, one ring per reader and card ever, the faces a
-// reader and an author see — a reader only their connections, never a count —
+// reader and an author see — everyone, as a like is seen (Wave 2 #3b), minus
+// blocks, never a count —
 // whether a note would be taken, and the author's list with its note excerpts.
 // The emulator suites (apiV1Taps, anonymousBlocks) hold the same against the
 // real Firestore and its indexes.
@@ -120,12 +121,12 @@ describe('cardTap (CardDetail.tap)', () => {
     ...tap('walk', 'fay', 20),
   });
 
-  it("shows a reader the people they are connected with who resonated, newest first — never a stranger, never a number", async () => {
+  it("shows a reader everyone who resonated, newest first — strangers too (Wave 2 #3b), never a number", async () => {
     const { db, docs } = world(tapped());
     const view = await cardTap(db, 'alice', cardOf(docs, 'walk'), { pass: false });
     expect(view).toMatchObject({ mine: false, more: true, mayNote: true });
-    expect(handles(view!.faces)).toEqual(['dora', 'carol', 'eli']);
-    expect(view!.faces[0]).toEqual({
+    expect(handles(view!.faces)).toEqual(['gus', 'dora', 'carol']);
+    expect(view!.faces[1]).toEqual({
       id: 'dora', handle: 'dora', initials: 'DO', accentColor: 'oklch(90% 0.05 200)', avatarUrl: null, avatarSeed: null, verified: false, region: null,
     });
     // Theirs first once they resonated; a tap taken back leaves at once.
@@ -133,10 +134,75 @@ describe('cardTap (CardDetail.tap)', () => {
     docs['resonanceTaps/walk_dora'].on = false;
     const mine = await cardTap(db, 'alice', cardOf(docs, 'walk'), { pass: false });
     expect(mine).toMatchObject({ mine: true, more: true });
-    expect(handles(mine!.faces)).toEqual(['alice', 'carol', 'eli']);
+    expect(handles(mine!.faces)).toEqual(['alice', 'gus', 'carol']);
     // Exactly three: no blank disc.
     docs['resonanceTaps/walk_fay'].on = false;
+    docs['resonanceTaps/walk_eli'].on = false;
     expect(await cardTap(db, 'alice', cardOf(docs, 'walk'), { pass: false })).toMatchObject({ mine: true, more: false });
+  });
+
+  it("leaves out of a reader's faces anyone across a block with the reader — and on a named card with its author — either way", async () => {
+    const { db, docs } = world(tapped());
+    docs['users/alice/blocks/gus'] = { blockedUid: 'gus' };
+    docs['users/dora/blocks/alice'] = { blockedUid: 'alice' };
+    expect(handles((await cardTap(db, 'alice', cardOf(docs, 'walk'), { pass: false }))!.faces)).toEqual(['carol', 'eli', 'fay']);
+    // The author's blocks take a face off a named card, as the author's own list.
+    docs['users/bob/blocks/carol'] = { blockedUid: 'carol' };
+    docs['users/eli/blocks/bob'] = { blockedUid: 'bob' };
+    const named = await cardTap(db, 'alice', cardOf(docs, 'walk'), { pass: false });
+    expect(handles(named!.faces)).toEqual(['fay']);
+    expect(named!.more).toBe(false);
+  });
+
+  it("on an anonymous card a reader's faces never turn on the author's blocks — only the reader's own", async () => {
+    const taps = { ...tap('masked', 'gus', 1), ...tap('masked', 'carol', 2), ...tap('masked', 'eli', 3) };
+    const plain = world(taps);
+    const before = await cardTap(plain.db, 'alice', cardOf(plain.docs, 'masked'), { pass: false });
+    // Whoever its author blocked, or was blocked by, a reader's answer is byte for byte the same.
+    for (const block of ['users/bob/blocks/gus', 'users/carol/blocks/bob', 'users/bob/blocks/alice', 'users/alice/blocks/bob']) {
+      const { db, docs } = world({ ...taps, [block]: { blockedUid: 'x' } });
+      expect(await cardTap(db, 'alice', cardOf(docs, 'masked'), { pass: false }), block).toEqual(before);
+    }
+    expect(handles(before!.faces)).toEqual(['gus', 'carol', 'eli']);
+    // The reader's own block takes that face off, as on any card.
+    const { db, docs } = world({ ...taps, 'users/alice/blocks/gus': { blockedUid: 'gus' } });
+    expect(handles((await cardTap(db, 'alice', cardOf(docs, 'masked'), { pass: false }))!.faces)).toEqual(['carol', 'eli']);
+  });
+
+  it("shows a reader the picked sentences with their pickers — theirs the moment they pick, minus blocks, never the author's blocks on an anonymous card", async () => {
+    const story = 'The rain stopped at dusk. We walked home without a word.\n\nShe kept the umbrella open anyway.';
+    const pick = (text: string) => ({ passage: { id: `p${text.length.toString(16).padStart(7, '0')}`, text } });
+    const one = pick('The rain stopped at dusk.');
+    const two = pick('She kept the umbrella open anyway.');
+    const seed = (id: string, extra: Record<string, unknown> = {}) => ({
+      [`cards/${id}`]: card('bob', { story, ...extra }),
+      ...tap(id, 'gus', 1, one),
+      ...tap(id, 'carol', 2, one),
+      ...tap(id, 'dora', 3, two),
+      ...tap(id, 'eli', 4),
+    });
+    const { db, docs } = world({ ...seed('pw'), ...seed('pm', { anonymous: true }) });
+    const view = await cardTap(db, 'alice', cardOf(docs, 'pw'), { pass: false });
+    expect(view!.picked!.map((p) => [p.text, handles(p.people), p.more])).toEqual([
+      ['The rain stopped at dusk.', ['gus', 'carol'], false],
+      ['She kept the umbrella open anyway.', ['dora'], false],
+    ]);
+    // Their own pick stands first in its sentence's faces as soon as it is kept, whatever its tap's age.
+    docs['resonanceTaps/pw_alice'] = { cardId: 'pw', userId: 'alice', on: true, at: ago(9999), rangAt: null, ...two };
+    const mine = await cardTap(db, 'alice', cardOf(docs, 'pw'), { pass: false });
+    expect(handles(mine!.picked![1].people)).toEqual(['alice', 'dora']);
+    // A block with the reader either way, or with a named card's author, takes the picker off; a sentence left with none goes.
+    docs['users/alice/blocks/gus'] = { blockedUid: 'gus' };
+    docs['users/bob/blocks/dora'] = { blockedUid: 'dora' };
+    const blocked = await cardTap(db, 'alice', cardOf(docs, 'pw'), { pass: false });
+    expect(blocked!.picked!.map((p) => handles(p.people))).toEqual([['carol'], ['alice']]);
+    // On the anonymous card the author's block changes nothing a reader sees.
+    const masked = await cardTap(db, 'carol', cardOf(docs, 'pm'), { pass: false });
+    expect(masked!.picked!.map((p) => handles(p.people))).toEqual([['carol', 'gus'], ['dora']]);
+    delete docs['users/bob/blocks/dora'];
+    expect(await cardTap(db, 'carol', cardOf(docs, 'pm'), { pass: false })).toEqual(masked);
+    // A card with no picks answers no `picked` at all, as before.
+    expect(await cardTap(db, 'alice', cardOf(docs, 'walk'), { pass: false })).not.toHaveProperty('picked');
   });
 
   it("shows the author the three newest of everyone — strangers too — minus anyone across a block, either way", async () => {
@@ -201,15 +267,26 @@ describe('listTaps (GET /cards/{id}/taps)', () => {
     expect(second.nextPageToken).toBeNull();
   });
 
-  it('never gives a note on an anonymous card, and gives a reader their connections alone, in one page', async () => {
+  it('never gives a note on an anonymous card, nor any to a reader, who pages everyone with each pick (Wave 2 #3b)', async () => {
     const { db } = world({
-      ...tap('masked', 'carol', 2),
+      ...tap('masked', 'carol', 2, { passage: { id: 'aaaa0001', text: 'The words she chose' } }),
       ...tap('masked', 'gus', 1),
+      ...tap('masked', 'alice', 3, { passage: { id: 'aaaa0002', text: 'Her own pick' } }),
       'notes/n1': { cardId: 'masked', fromUserId: 'carol', toUserId: 'bob', text: 'whose is this?', createdAt: ago(2) },
     });
     const author = await listTaps(db, 'bob', 'masked');
-    expect(author.people.map((p) => [p.author.handle, p.note])).toEqual([['gus', null], ['carol', null]]);
-    expect(await listTaps(db, 'alice', 'masked')).toEqual({ people: [{ author: expect.objectContaining({ handle: 'carol' }), note: null }], nextPageToken: null });
+    expect(author.people.map((p) => [p.author.handle, p.note])).toEqual([['gus', null], ['carol', null], ['alice', null]]);
+    expect(await listTaps(db, 'alice', 'masked')).toEqual({
+      people: [
+        { author: expect.objectContaining({ handle: 'alice' }), note: null, passage: { text: 'Her own pick' } },
+        { author: expect.objectContaining({ handle: 'gus' }), note: null },
+        { author: expect.objectContaining({ handle: 'carol' }), note: null, passage: { text: 'The words she chose' } },
+      ],
+      nextPageToken: null,
+    });
+    // ?passage= gives a reader that sentence's people alone, their own row too when it is theirs.
+    expect((await listTaps(db, 'alice', 'masked', null, 'aaaa0001')).people.map((p) => p.author.handle)).toEqual(['carol']);
+    expect((await listTaps(db, 'alice', 'masked', null, 'aaaa0002')).people.map((p) => p.author.handle)).toEqual(['alice']);
   });
 
   it('is not_found wherever CardDetail.tap is null', async () => {

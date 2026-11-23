@@ -295,13 +295,16 @@ export const TapPicked = named(
     id: z.string(),
     /** The sentence, as it was picked (whitespace read as one space): one piece of one block of the story as it is now. */
     text: z.string(),
-    /** Who picked it, newest first, at most 3 — never the author, never across a block either way. */
+    /**
+     * Who picked it, newest first, at most 3 — never the author, never across a block either way with the viewer (and,
+     * on a named card, with its author). A reader's own pick puts them first.
+     */
     people: z.array(Author),
     /** Others picked it too (a boolean, never a count): the list says who. */
     more: z.boolean(),
   }),
   'TapPicked',
-  "A sentence of the author's story that readers picked after they resonated, and the faces of who picked it (round 29).",
+  "A sentence of the author's story that readers picked after they resonated, and the faces of who picked it (round 29; every reader sees them since Wave 2).",
 );
 
 export const CardTap = named(
@@ -309,9 +312,10 @@ export const CardTap = named(
     /** The viewer resonated with this card (共振, the tap) and hasn't taken it back. Always false for its author. */
     mine: z.boolean(),
     /**
-     * Who resonated, as faces, at most 3, newest first. A reader sees themselves first (when `mine`), then the
-     * people they are connected with who resonated — never strangers. The card's author sees the 3 newest of
-     * everyone who resonated. Never a count.
+     * Who resonated, as faces, at most 3, newest first. A reader sees themselves first (when `mine`), then everyone
+     * else who resonated (Wave 2: as a like is seen; before, their connections only), minus anyone across a block with
+     * them either way — and on a named card with its author. The card's author sees the 3 newest of everyone who
+     * resonated, minus their blocks either way. Never a count.
      */
     faces: z.array(Author),
     /** More people than these 3 faces. Never shown as a number (since round 29 not drawn either: say it, if anything). */
@@ -330,9 +334,9 @@ export const CardTap = named(
     /** Beside `passages`: the id of the passage the reader picked, when it is one of them now; else null. */
     passage: z.string().nullable().optional(),
     /**
-     * For the card's author only (round 29): each sentence readers picked that is in the story now — whether or not it
-     * is still one of the card's passages —, in the story's order, with up to 3 of its pickers. Absent for every reader,
-     * and for the author while there is none to show.
+     * Each sentence readers picked that is in the story now — whether or not it is still one of the card's passages —,
+     * in the story's order, with up to 3 of its pickers (round 29 for the author; Wave 2 for every reader too, read from
+     * the newest taps, the reader's own pick always among them). Absent while there is none to show.
      */
     picked: z.array(TapPicked).optional(),
   }),
@@ -663,8 +667,8 @@ export const TapPerson = named(
     /** Their latest note on this card, for the card's author on a named card only (open their conversation); else null. */
     note: TapNote.nullable(),
     /**
-     * The passage this person picked (round 27): on the rows of the card's author's list; on a reader's list only on
-     * their own row. Absent or null: no pick (every other row of a reader's list). Kept as they picked it, so it stays
+     * The passage this person picked (round 27): on every row of the list, the author's and a reader's alike (Wave 2;
+     * before, a reader's list carried only their own). Absent or null: no pick. Kept as they picked it, so it stays
      * after an edit.
      */
     passage: TapPassageQuote.nullable().optional(),
@@ -676,16 +680,16 @@ export const TapList = named(
   z.object({
     /** Newest first. */
     people: z.array(TapPerson),
-    /** Pass back as `pageToken` for the next page (the author's list, 30 a page); null at the end. */
+    /** Pass back as `pageToken` for the next page (30 a page, the author's list and a reader's); null at the end. */
     nextPageToken: z.string().nullable(),
   }),
   'TapList',
-  'Who resonated with a card (共振): everyone, for its author; the people you are connected with, for a reader.',
+  'Who resonated with a card (共振): everyone you may see, for its author and for a reader alike (a reader: themselves first; notes for the author alone).',
 );
 
 export const TapListQuery = z.object({
   pageToken: z.string().min(1).max(512).nullish(),
-  /** Round 29: the author's list of one picked sentence's people (a `TapPicked.id`); changes nothing for a reader. */
+  /** Round 29: the list of one picked sentence's people (a `TapPicked.id`) — the author's, and since Wave 2 a reader's. */
   passage: z.string().regex(/^[0-9a-f]{8}$/, 'Not a passage id.').nullish(),
 });
 

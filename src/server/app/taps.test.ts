@@ -94,7 +94,7 @@ describe('the taps services on memory', () => {
     expect(ctx.state.get('resonanceTaps', 'walk_carol')).toBeNull();
   });
 
-  it('who resonated: a reader sees themselves and their connections; the author everyone but across a block', async () => {
+  it("who resonated: a reader sees themselves then everyone (an anonymous card never turning on its author's blocks); the author everyone but across a block", async () => {
     const { ctx } = world();
     await setTapIn(ctx, 'carol', 'masked', true);
     ctx.clock.advance(1000);
@@ -104,7 +104,7 @@ describe('the taps services on memory', () => {
 
     const asAlice = await cardTapIn(ctx, 'alice', (await ctx.data.taps.visibleCard('alice', 'masked'))!, { pass: false });
     expect(asAlice).toMatchObject({ mine: true, more: false, mayNote: true });
-    expect(asAlice!.faces.map((f) => f.handle)).toEqual(['alice', 'carol']);
+    expect(asAlice!.faces.map((f) => f.handle)).toEqual(['alice', 'dan', 'carol']);
 
     const list = await listTapsIn(ctx, 'bob', 'masked');
     expect(list.people.map((p) => p.author.handle)).toEqual(['alice', 'carol']);

@@ -368,7 +368,7 @@ export function buildOpenApi(): Json {
       '/cards/{key}/tap': {
         put: {
           operationId: 'tapCard',
-          summary: 'Resonate with a card (共振, the tap): its author is told once, ever, and your face shows to your connections',
+          summary: 'Resonate with a card (共振, the tap): its author is told once, ever, and your face shows to its readers',
           description:
             'Checked in this order: the contract (`400`); your budget (`429`); the card (`404` for one you can\'t read, a ' +
             "draft, one in the trash, or someone else's 私人卡 shared with you in a conversation — a card is never resonated " +
@@ -398,9 +398,9 @@ export function buildOpenApi(): Json {
           operationId: 'setTapPassage',
           summary: 'Say which part of a card stayed with you, after you resonated: one of its passages, or none (round 27)',
           description:
-            "Pick one of `CardDetail.tap.passages` (its `id`), or send `passage: null` to clear your pick. Only the card's " +
-            'author learns it — their list of who resonated shows each pick (`TapPerson.passage`); a reader sees only their ' +
-            'own. Nothing rings and nothing is counted. Checked in this order: the contract (`400`); your budget (`429`, the ' +
+            "Pick one of `CardDetail.tap.passages` (its `id`), or send `passage: null` to clear your pick. Since Wave 2 the " +
+            "card's readers see it as its author does — the sentence marked in the story with your face (`CardDetail.tap.picked`) " +
+            'and your row of who resonated (`TapPerson.passage`); read the card again to show it. Nothing rings and nothing is counted. Checked in this order: the contract (`400`); your budget (`429`, the ' +
             "tap's); the card (`404` wherever `CardDetail.tap` is null: one you can't read, a draft, one in the trash, your " +
             'own, a named card across a block either way — an anonymous card is answered exactly as without a block); your ' +
             'tap on it is on (`409 conflict` otherwise: resonate first); the passage is one the card offers now (`400` ' +
@@ -414,11 +414,11 @@ export function buildOpenApi(): Json {
         description:
           "The card's author gets everyone, newest first, 30 a page (pass `nextPageToken` back as `pageToken`), each with " +
           'the excerpt of the latest note they left on a named card (`note`; open your conversation with them) — never across ' +
-          'a block, and never a note on an anonymous card. A reader gets the faces of `CardDetail.tap` without its cap: ' +
-          'themselves first, then the people they are connected with, in one page, with no notes. `404` wherever ' +
-          '`CardDetail.tap` is null. `429` is documented for a budget to come; nothing answers it yet. With `passage` ' +
-          "(round 29), the author's pages hold only the people who picked that sentence (`CardDetail.tap.picked`), the " +
-          'same rows, order and page size; a reader is answered the same with it or without.',
+          'a block, and never a note on an anonymous card. A reader (Wave 2) gets everyone they may see, the same pages: ' +
+          'themselves first, then everyone else who resonated, minus anyone across a block with them (and on a named card with ' +
+          'its author), each with their pick, never a note. `404` wherever `CardDetail.tap` is null. `429` is documented for a ' +
+          "budget to come; nothing answers it yet. With `passage` (round 29; a reader's too since Wave 2), the pages hold only " +
+          'the people who picked that sentence (`CardDetail.tap.picked`), the same rows, order and page size.',
         parameters: [
           cardId,
           { name: 'pageToken', in: 'query', required: false, description: "A page's `nextPageToken`", schema: { type: 'string', maxLength: 512 } },
