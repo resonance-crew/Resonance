@@ -36,4 +36,10 @@ export interface IVectorStore {
    * picks only — a private card's vectors never reach anyone else's.
    */
   listByCards(cardIds: string[]): Promise<VectorRecord[]>;
+  /**
+   * Every record written or changed after `since` (`updatedAt`), whatever its visibility, vectors included — what
+   * the packed pool (src/server/app/recommendPack.ts) lays over itself; null when there are more than `max` (the
+   * pool is then read whole). A store without it never reads the pack.
+   */
+  listChangedSince?(since: Date, max: number): Promise<VectorRecord[] | null>;
 }

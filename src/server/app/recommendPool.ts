@@ -1,6 +1,8 @@
 import { poolStats, type PoolStats } from '@/lib/recommend/match';
 import type { ServerCtx } from '@/server/ctx';
+import type { PrivateObjectStore } from '@/server/ports/objects';
 import type { VectorRecord, VectorStore } from '@/server/ports/vectors';
+import { PACK_SKEW_MS, overlay, readPack, writePack } from './recommendPack';
 
 /**
  * The pool's numbers kept for a pool too big to read whole at each build
@@ -20,6 +22,30 @@ export const recordModel = (r: Pick<VectorRecord, 'embedModel'>) => r.embedModel
 /** The pool's public records of the current model, by card author (never the reader's own). */
 export async function publicPool(store: VectorStore, embedModel: string): Promise<VectorRecord[]> {
   return (await store.listByVisibility('public')).filter((r) => recordModel(r) === embedModel);
+}
+
+/** At most this many parts changed since the pack are laid over it; more, and the pool is read whole (P0 #7). */
+export const PACK_CHANGES_MAX = 2000;
+
+/**
+ * The public pool from its pack (src/server/app/recommendPack.ts, P0 #7) with every change since laid over it —
+ * one private object and the few parts written since, in place of every part document — or, with no usable pack
+ * (none, stale, another model, unreadable) or a store that can't say what changed, publicPool as before. A pack that
+ * fails to read is never an error: the pool is read whole.
+ */
+export async function packedPublicPool(store: VectorStore, embedModel: string, pack: PrivateObjectStore | null | undefined, now: number): Promise<VectorRecord[]> {
+  if (pack && store.listChangedSince) {
+    try {
+      const found = await readPack(pack, embedModel, now);
+      if (found) {
+        const changed = await store.listChangedSince(new Date(found.at - PACK_SKEW_MS), PACK_CHANGES_MAX);
+        if (changed) return overlay(found.records, changed, embedModel, recordModel);
+      }
+    } catch (e) {
+      console.warn('[recommend] the packed pool could not be read; reading it whole', e instanceof Error ? e.message : e);
+    }
+  }
+  return publicPool(store, embedModel);
 }
 
 /** How long an instance keeps the public pool it read (B1): a card published since joins the next read. */
@@ -53,12 +79,14 @@ function keepMemo(store: VectorStore, embedModel: string, memo: PoolMemo) {
  * every reader: each build still drops the reader's own cards and the ones
  * held back from them after it, and a card made private or trashed since is
  * still refused when its picks are served (present, stillPublic). A read that
- * fails is not kept; two builds asking at once share one read.
+ * fails is not kept; two builds asking at once share one read. With `pack`
+ * (the private bucket), the read is the packed pool and what changed since
+ * (packedPublicPool, P0 #7).
  */
-export function cachedPublicPool(store: VectorStore, embedModel: string, now: number = Date.now()): Promise<VectorRecord[]> {
+export function cachedPublicPool(store: VectorStore, embedModel: string, now: number = Date.now(), pack?: PrivateObjectStore | null): Promise<VectorRecord[]> {
   const known = memoOf(store, embedModel, now);
   if (known) return known.records;
-  const memo: PoolMemo = { until: now + POOL_MEMO_MS, records: publicPool(store, embedModel) };
+  const memo: PoolMemo = { until: now + POOL_MEMO_MS, records: packedPublicPool(store, embedModel, pack, now) };
   keepMemo(store, embedModel, memo);
   memo.records.catch(() => {
     if (poolMemos.get(store)?.get(embedModel) === memo) poolMemos.get(store)!.delete(embedModel);
@@ -74,14 +102,27 @@ export function cachedPoolStats(store: VectorStore, embedModel: string, records:
   return memo.stats;
 }
 
-/** Work the pool's numbers out and keep them (the warm-up cron, daily). */
-export async function refreshPoolStatsIn(ctx: ServerCtx, embedModel: string): Promise<{ cards: number; parts: number }> {
+/**
+ * Work the pool's numbers out and keep them, and pack the pool for every instance's next read (the warm-up cron,
+ * daily; P0 #7). The pack is best effort: without the private bucket, or when writing it fails, the instances read
+ * the pool whole as before. `packed` is its size in bytes, 0 when none was written.
+ */
+export async function refreshPoolStatsIn(ctx: ServerCtx, embedModel: string): Promise<{ cards: number; parts: number; packed: number }> {
   const store = ctx.vectors;
+  // Taken before the read: whatever is written while it runs is read again over the pack.
+  const at = ctx.clock.now();
   const records = await publicPool(store, embedModel);
   const stats = poolStats(records);
   // The builds that follow (the cron's own, right after) take this read rather than making it again.
   keepMemo(store, embedModel, { until: Date.now() + POOL_MEMO_MS, records: Promise.resolve(records), stats });
   const cards = new Set(records.map((r) => r.cardId)).size;
   await ctx.data.recommend.putPoolStats({ ...stats, cards, embedModel });
-  return { cards, parts: records.length };
+  let packed = 0;
+  if (ctx.chatObjects && records.length) {
+    packed = await writePack(ctx.chatObjects, embedModel, at, records).catch((e) => {
+      ctx.log.warn('[recommend] the pool could not be packed', e instanceof Error ? e.message : e);
+      return 0;
+    });
+  }
+  return { cards, parts: records.length, packed };
 }
