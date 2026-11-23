@@ -146,15 +146,15 @@ describe('the agy review, several batches at once', () => {
     expect(all).toEqual([{ key: 'web/phone/a@light-zh-TW.png', verdict: 'unsure', note: 'Not judged: agy: not logged in' }]);
   });
 
-  it('runs three at once by default, VISUAL_AGY_PARALLEL setting how many (1: one after the other)', () => {
+  it('runs two at once by default, VISUAL_AGY_PARALLEL setting how many (1: one after the other)', () => {
     const was = process.env.VISUAL_AGY_PARALLEL;
     try {
       delete process.env.VISUAL_AGY_PARALLEL;
-      expect(agyParallel()).toBe(3);
+      expect(agyParallel()).toBe(2);
       process.env.VISUAL_AGY_PARALLEL = '1';
       expect(agyParallel()).toBe(1);
       process.env.VISUAL_AGY_PARALLEL = 'x';
-      expect(agyParallel()).toBe(3);
+      expect(agyParallel()).toBe(2);
     } finally {
       if (was == null) delete process.env.VISUAL_AGY_PARALLEL;
       else process.env.VISUAL_AGY_PARALLEL = was;

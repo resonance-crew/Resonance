@@ -1,5 +1,5 @@
 /**
- * The flows of one platform in one Maestro session (`VISUAL_FLOWS_SESSION=1`): one `maestro test` with every flow,
+ * The flows of one platform in one Maestro session (by default; `VISUAL_FLOWS_SESSION=0` runs them one by one): one `maestro test` with every flow,
  * instead of one per flow — Maestro's JVM started and the device's driver connected once, not 24 times (some 3–4 s of
  * JVM alone each; flows.ts maestroArgs already keeps the driver from being reinstalled).
  *

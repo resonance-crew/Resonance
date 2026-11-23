@@ -294,10 +294,14 @@ export const runAgy: AgyRunner = (args) =>
     child.on('close', (status) => resolve({ status, stdout: Buffer.concat(out).toString('utf8'), stderr: Buffer.concat(err).toString('utf8') }));
   });
 
-/** How many `agy` batches run at once (`VISUAL_AGY_PARALLEL`, default 3; 1 is one after the other, as before). */
+/**
+ * How many `agy` batches run at once (`VISUAL_AGY_PARALLEL`, default 2; 1 is one after the other, as before). Each
+ * `agy` holds about 1 GB while it judges: three at once took 3 GB in run 20261123-121931's review, and two, with the
+ * review already going on beside the later phases, keep most of the gain on a 24 GB machine (the PM, 2026-11-23).
+ */
 export function agyParallel(): number {
   const set = Number(process.env.VISUAL_AGY_PARALLEL);
-  return Number.isFinite(set) && set >= 1 ? Math.floor(set) : 3;
+  return Number.isFinite(set) && set >= 1 ? Math.floor(set) : 2;
 }
 
 /** A failure that says the service is turning calls away (rate, quota): then the batches go one at a time. */
@@ -332,7 +336,7 @@ export type AgyOptions = { runner?: AgyRunner; limit?: number; size?: number; mo
 
 /**
  * Antigravity's CLI, headless (`agy -p`), from the repository (its workspace, so it may read the images there), in
- * batches (VISUAL_AGY_BATCH, default 10), several at once (`agyParallel`, default 3): a release's 116 changed captures
+ * batches (VISUAL_AGY_BATCH, default 10), several at once (`agyParallel`, default 2): a release's 116 changed captures
  * took 12 batches one after the other, 34 min (run 20261123-073642). Each batch answers VERDICT_SCHEMA; a capture a
  * batch left out, or a batch that failed, is "unsure" with the reason. A batch turned away for its rate or quota
  * (`RATE_LIMITED`) is tried once more, and from then on the batches go one at a time. Verdicts are written to

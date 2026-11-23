@@ -3,11 +3,19 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import zhTW from '../../src/messages/zh-TW.json';
 import { STICKER_PACKS } from '../../src/lib/stickers/catalog';
-import { STACKS, flowSettings, flowTags, flowsToRun, forPlatform, forStack, maestroArgs, withTags } from './flows';
+import { STACKS, flowSettings, flowTags, flowsInSession, flowsToRun, forPlatform, forStack, maestroArgs, withTags } from './flows';
 
 const FLOWS = join(process.cwd(), 'maestro/flows');
 const read = (flow: string) => readFileSync(join(FLOWS, `${flow}.yaml`), 'utf8');
 const all = flowsToRun([]);
+
+describe('a platform’s flows in one Maestro session', () => {
+  it('is the default, VISUAL_FLOWS_SESSION=0 running them one by one as before', () => {
+    expect(flowsInSession({})).toBe(true);
+    expect(flowsInSession({ VISUAL_FLOWS_SESSION: '1' })).toBe(true);
+    expect(flowsInSession({ VISUAL_FLOWS_SESSION: '0' })).toBe(false);
+  });
+});
 
 describe('Maestro’s driver, put on the device once a run', () => {
   it('reinstalls it for the first flow only, every later flow going on with the one there', () => {

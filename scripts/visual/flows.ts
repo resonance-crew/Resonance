@@ -301,7 +301,7 @@ export async function runFlows(platform: FlowPlatform, ctx: CaptureContext, { ta
   try {
     // One Maestro session for them all (flowSession.ts), when asked; what it leaves without a verdict runs as before.
     let left = flows;
-    if (process.env.VISUAL_FLOWS_SESSION === '1' && flows.length > 1) {
+    if (flowsInSession() && flows.length > 1) {
       results.push(...(await runSession(platform, ctx, device, flows, outDir)));
       left = flows.filter((f) => !results.some((r) => r.flow === f));
       if (left.length) ctx.log(`  the session gave no verdict for ${left.join(', ')}: run one by one`);
@@ -336,6 +336,15 @@ export async function runFlows(platform: FlowPlatform, ctx: CaptureContext, { ta
 }
 
 /**
+ * Whether a platform's flows run in one Maestro session (flowSession.ts): by default, since its device runs on
+ * 2026-11-23 (48 of 48 passed; the flows 572 → 425 s on Android, 694 → 470 s on iOS); `VISUAL_FLOWS_SESSION=0` runs
+ * them one by one, each a `maestro test` of its own, as before.
+ */
+export function flowsInSession(env: Record<string, string | undefined> = process.env): boolean {
+  return env.VISUAL_FLOWS_SESSION !== '0';
+}
+
+/**
  * One platform's flows in one `maestro test` (flowSession.ts): the runner's hook reseeds and readies the device before
  * each, as the loop in runFlows does. Answers the flows the session's report gives a verdict for.
  */
@@ -366,7 +375,7 @@ async function runSession(platform: FlowPlatform, ctx: CaptureContext, device: D
   const env = Object.entries(flowEnv(ctx.ports)).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
   const args = ['--device', device.id, 'test', join(dir, 'flows'), ...env, '-e', `HOOK_URL=${hook.url}`, '--format', 'junit', '--output', report,
     '--test-output-dir', join(dir, 'out'), '--debug-output', join(dir, 'debug'), '--no-ansi'];
-  ctx.log(`  ${flows.length} flows in one Maestro session (VISUAL_FLOWS_SESSION=1)`);
+  ctx.log(`  ${flows.length} flows in one Maestro session (VISUAL_FLOWS_SESSION=0: one by one)`);
   const started = Date.now();
   try {
     await new Promise<void>((done) => {

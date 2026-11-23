@@ -367,7 +367,7 @@ diff. It answers a JSON schema (`review/verdict.schema.json`): `ok`, `intended`,
 the reason. Needs `agy` installed and logged in (`agy --version`; headless runs use the cached
 login and stop with "authentication required" otherwise).
 
-Three batches run at once (`VISUAL_AGY_PARALLEL`, default 3; 1 runs them one after the other — a release's 116
+Two batches run at once (`VISUAL_AGY_PARALLEL`, default 2 — each `agy` holds about 1 GB; 1 runs them one after the other — a release's 116
 changed captures took 12 batches in a row, 34 min, run 20261123-073642). A batch turned away for its rate or quota
 (a 429, `RESOURCE_EXHAUSTED`, "rate limit", "quota") is tried once more and the rest go one at a time. In `capture
 --review` the review doesn't wait for the run's end: as each phase ends, its platforms' changed and new captures
