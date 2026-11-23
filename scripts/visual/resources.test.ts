@@ -17,6 +17,10 @@ const PS = `
   105   100  400000  50.0 /x/ms-playwright/chromium_headless_shell-1200/chrome-mac/headless_shell --headless
   106   100 3500000 150.0 /Users/u/Library/Android/sdk/emulator/qemu/darwin-aarch64/qemu-system-aarch64 -avd visual-phone -port 5600
   107   100  800000  90.0 /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project Resonance.xcodeproj
+  108   107  300000  95.0 /Applications/Xcode.app/…/swift-frontend -frontend -c Feed.swift
+  109   100  150000   3.0 node /opt/homebrew/bin/agy -p You are reviewing … the next screen … Chromium … gradle
+  110   109  220000   1.0 /Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/java -classpath /Users/u/.maestro/lib/* maestro.cli.AppKt mcp
+  111   109  900000  20.0 /Applications/Antigravity.app/Contents/Resources/bin/language_server --stdio
   200     1  600000   2.0 /Library/Developer/CoreSimulator/Volumes/iOS/…/SpringBoard.app/SpringBoard -- /Users/u/Library/Developer/CoreSimulator/Devices/459A5F8B-784E-4D04-A742-0A85F28363C2/data
   201     1  500000   2.0 /Library/…/SpringBoard -- /Users/u/Library/Developer/CoreSimulator/Devices/11111111-2222-3333-4444-555555555555/data
   202     1  300000   4.0 /Users/u/Resonance/apps/ios/build/visual-mac/Build/Products/Debug-maccatalyst/Resonance.app/Contents/MacOS/Resonance -emulator YES
@@ -28,8 +32,13 @@ describe('what a run costs, by part', () => {
   it('tells the run’s own parts apart, its simulators and Mac app beside them, the machine’s build daemons said apart, nobody else’s counted', () => {
     const groups = classify(parsePs(PS), 100, { '459A5F8B-784E-4D04-A742-0A85F28363C2': 'Visual iPhone' });
     expect(Object.keys(groups).sort()).toEqual(
-      ['android-emulator', 'chromium', 'firebase-cli', 'firestore-emulator', 'harness', 'mac-app', 'machine:gradle-daemons', 'next', 'sim:Visual iPhone', 'xcodebuild'].sort(),
+      ['agy', 'android-emulator', 'chromium', 'firebase-cli', 'firestore-emulator', 'harness', 'mac-app', 'machine:gradle-daemons', 'next', 'sim:Visual iPhone', 'xcodebuild'].sort(),
     );
+    // agy with its own helpers (a Maestro MCP server, its language server), whatever words its prompt carries.
+    expect(groups.agy).toEqual({ rssMb: Math.round(1_270_000 / 1024), cpu: 24, n: 3 });
+    // A compile under the build is the build's.
+    expect(groups.xcodebuild.n).toBe(2);
+    expect(groups.harness.n).toBe(1);
     expect(groups.next).toEqual({ rssMb: Math.round(2_400_000 / 1024), cpu: 110, n: 2 });
     expect(groups['firestore-emulator'].rssMb).toBe(Math.round(700_000 / 1024));
     expect(groups['sim:Visual iPhone'].n).toBe(1);
@@ -78,6 +87,17 @@ describe('what a run costs, by part', () => {
     expect(summary.map((s) => s.phase)).toEqual(['stack', 'web+mac', 'all']);
     expect(lines[0]).toMatch(/^Resources \(stack, /);
     expect(lines.at(-1)).toMatch(/^Resources \(whole run, /);
+  });
+
+  it('two marks close together each give their own phase its name (the ios line said twice, compare never: run 20261123-101910)', async () => {
+    const runDir = mkdtempSync(join(tmpdir(), 'visual-resources-'));
+    dirs.push(runDir);
+    const lines: string[] = [];
+    const sampler = startSampler(runDir, { log: (l) => lines.push(l), everyMs: 10_000, phase: 'ios' });
+    sampler.mark('compare');
+    sampler.mark('review');
+    await sampler.stop();
+    expect(lines.map((l) => /^Resources \(([^,]+),/.exec(l)?.[1])).toEqual(['ios', 'compare', 'review', 'whole run']);
   });
 
   it('samples nothing when turned off (VISUAL_SAMPLE_S=0)', async () => {

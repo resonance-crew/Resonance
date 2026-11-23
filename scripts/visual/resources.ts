@@ -62,6 +62,8 @@ export function parseCompressed(text: string): number | null {
 
 /** What one of the run's own processes is, by its command line. */
 const OWN: [string, RegExp][] = [
+  // First: agy's command line carries the whole review prompt, whose words would match the others.
+  ['agy', /(^|\/)agy(\s|$)/],
   ['firestore-emulator', /cloud-firestore-emulator|firestore-emulator|java .*firestore/i],
   ['android-emulator', /qemu-system|\/emulator\/emulator|netsimd|\bemulator -avd\b/],
   ['gradle', /gradle|GradleDaemon|KotlinCompileDaemon|kotlin-daemon/i],
@@ -70,7 +72,6 @@ const OWN: [string, RegExp][] = [
   ['chromium', /chrom(e|ium)|headless_shell/i],
   ['next', /\bnext\b|next-server|next-router-worker|dev-emulator\.mjs|\.next-visual/],
   ['firebase-cli', /firebase|emulators-at\.mjs/],
-  ['agy', /(^|\/)agy(\s|$)|antigravity/i],
 ];
 
 /** The machine's build daemons, whoever started them (never stopped by a run, said apart). */
@@ -88,12 +89,18 @@ const SIM_DEVICE = /CoreSimulator\/Devices\/([0-9A-F-]{36})\//;
  */
 export function classify(procs: Proc[], self: number, simulators: Record<string, string> = {}): Record<string, Group> {
   const children = new Map<number, number[]>();
+  const byPid = new Map(procs.map((p) => [p.pid, p]));
   for (const p of procs) children.set(p.ppid, [...(children.get(p.ppid) ?? []), p.pid]);
-  const own = new Set<number>([self]);
+  // The run's own processes, each by what it runs itself, else in its parent's part (next's workers are next's, a
+  // compile under xcodebuild the build's); everything under agy is agy's (its MCP servers — one runs Maestro — and its
+  // language server), whatever it runs.
+  const own = new Map<number, string>([[self, 'harness']]);
   for (const queue = [self]; queue.length; ) {
-    for (const c of children.get(queue.shift()!) ?? []) {
+    const parent = queue.shift()!;
+    for (const c of children.get(parent) ?? []) {
       if (own.has(c)) continue;
-      own.add(c);
+      const inherited = own.get(parent)!;
+      own.set(c, inherited === 'agy' ? 'agy' : (OWN.find(([, re]) => re.test(byPid.get(c)!.args))?.[0] ?? inherited));
       queue.push(c);
     }
   }
@@ -106,7 +113,7 @@ export function classify(procs: Proc[], self: number, simulators: Record<string,
   };
   for (const p of procs) {
     if (own.has(p.pid)) {
-      add(OWN.find(([, re]) => re.test(p.args))?.[0] ?? 'harness', p);
+      add(own.get(p.pid)!, p);
       continue;
     }
     const udid = SIM_DEVICE.exec(p.args)?.[1];
@@ -225,7 +232,7 @@ export function startSampler(runDir: string, { log, simulators = [], everyMs = s
   let current = phase;
   let busy: Promise<void> = Promise.resolve();
   let stopped = false;
-  const take = async (count: number) => {
+  const take = async (count: number, phase: string) => {
     if (count % 12 === 0) sims = await harnessSimulators(simulators);
     const [ps, swap, level, vm] = await Promise.all([
       read('ps', ['-axww', '-o', 'pid=,ppid=,rss=,pcpu=,args=']),
@@ -236,7 +243,7 @@ export function startSampler(runDir: string, { log, simulators = [], everyMs = s
     const groups = classify(parsePs(ps), process.pid, sims);
     const sample: Sample = {
       t: Math.round((Date.now() - started) / 100) / 10,
-      phase: current,
+      phase,
       freePct: /^\d+$/.test(level.trim()) ? +level.trim() : null,
       swapMb: parseSwap(swap),
       compressedMb: parseCompressed(vm),
@@ -248,8 +255,11 @@ export function startSampler(runDir: string, { log, simulators = [], everyMs = s
     appendFileSync(file, JSON.stringify(sample) + '\n');
   };
   let count = 0;
+  // Each sample is of the phase the run was in when it was asked for (a mark changes `current` at once, so two marks
+  // close together never give the first phase's name to the second).
   const tick = () => {
-    busy = busy.then(() => take(count++)).catch(() => {});
+    const phase = current;
+    busy = busy.then(() => take(count++, phase)).catch(() => {});
   };
   tick();
   const timer = setInterval(tick, everyMs);
@@ -264,10 +274,8 @@ export function startSampler(runDir: string, { log, simulators = [], everyMs = s
       // The phase that ends gets a last sample of its own.
       tick();
       const was = current;
-      busy = busy.then(() => {
-        ended(was);
-        current = next;
-      });
+      current = next;
+      busy = busy.then(() => ended(was));
     },
     async stop() {
       if (stopped) return summarize(samples);
