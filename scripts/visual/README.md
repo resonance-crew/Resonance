@@ -41,7 +41,21 @@ visual/runs/<id>/_diff/…png                                         changed pi
 visual/runs/<id>/results.json   index.html                          the comparison and its report (open in a browser)
 visual/runs/<id>/review/REVIEW.md   verdicts.json                   the review brief and the model's verdicts
 visual/runs/<id>/_logs/                                             emulators, dev server, app builds
+visual/runs/<id>/_resources.jsonl   _resources.json                 what the run cost the machine, every 5 s, by phase
+visual/runs/<id>/_timings.jsonl   _timings.json                     each capture's steps, each sign-in and build, by device
 ```
+
+**What a run costs** (`resources.ts`, `timings.ts`). Every few seconds (`VISUAL_SAMPLE_S`, default 5; `0` turns it
+off) the run notes each of its parts' resident memory and CPU — `next`, `firestore-emulator`, `firebase-cli`,
+`chromium`, `android-emulator`, `sim:Visual iPhone`, `mac-app`, `xcodebuild`, `gradle`, `maestro`, `agy`, the
+`harness` itself — with the machine's swap, compressed memory and free share, by the phase it is in (`stack`,
+`web+mac`, `android`, `ios`, `flows`, `compare`, `review`); the machine's build daemons are said apart
+(`machine:gradle-daemons`, `machine:xcode-build-service`: anyone's, never the run's). Each phase's peaks are said as
+it ends (`Resources (android, 412 s): the run's peak 9.8 GB (android-emulator 7.1 GB, next 1.9 GB, …) · swap …`) and
+kept in `_resources.json`. Each capture writes its steps (`hints`, `launch`, `ready`, `demo-bar`, `settle`,
+`second-look`, `checks`, `write`, `quit`), each sign-in launch and build its own line, and the run ends with each
+device's medians (`Timings android/phone: 6 captures, median 7.9 s (launch 1.4 s · ready 2.1 s · …)`). Nothing is
+asked but `ps`, `sysctl` and `vm_stat`.
 
 ## Baselines: main's, a round's, a branch's
 

@@ -42,6 +42,7 @@ import { logSays, readyNote, readyOn, readyToken, restOfWait, waitReady, type Re
 import { buildIfChanged, stampFile, type BuildInputs } from './buildStamp';
 import { CommandTimeout, ROOT, SEED_PASSWORD, execTimed, ignorePath, pixelsApart, settle, shotPath, sleep, type Capture, type CaptureContext, type Rect } from './util';
 import { devicesFor, groups, plan, stateOf, type DeviceState } from './variants';
+import { stopwatch, type Stopwatch } from './timings';
 
 const execFileAsync = promisify(execFile);
 
@@ -408,24 +409,32 @@ async function steady(serial: string, ignore: Rect[] = [], ready = false): Promi
   }
 }
 
-async function shoot(serial: string, ctx: CaptureContext, screen: Screen, first: boolean, key: string): Promise<Look & { ignore: Rect[]; ready: Ready | null }> {
+async function shoot(serial: string, ctx: CaptureContext, screen: Screen, first: boolean, key: string): Promise<Look & { ignore: Rect[]; ready: Ready | null; timing: Stopwatch }> {
+  const timing = stopwatch();
   // Its hints unspent for its account on the stack (hints.ts), before the app reads the profile.
   await unspendHints(ctx, screen);
+  timing.lap('hints');
   // The launch says when its screen is quiet (ready.ts): a token of its own, logcat emptied of the last launch's.
   const token = readyOn() ? readyToken() : null;
   if (token) await adb(serial, 'logcat', '-c').catch(() => '');
   await launch(serial, ctx, screen.as, screen.route, [...(screen.app?.android ?? []), ...(token ? ['--es', 'visualReadyToken', token] : [])]);
+  timing.lap('launch');
   // A cold start reads the account and the page over the network (an account's first launch also signs in): the
   // signal, or else the fixed wait as before.
   const fixed = first ? 8000 : 4000;
   const ready = token ? await waitReady(async () => logSays(await adb(serial, 'logcat', '-d', '-s', 'VisualReady:I', '-v', 'raw').catch(() => ''), token)) : null;
   if (ready) await restOfWait(ready, fixed);
   else await sleep(fixed);
+  timing.lap('ready');
   await demoBar(serial);
+  timing.lap('demo-bar');
   // A caret's box found by either look is skipped by both, and by the comparison with the baseline.
   const ignore: Rect[] = [];
-  const look = await secondLook(await steady(serial, ignore, !!ready?.ready), () => steady(serial, ignore), { key, ignore, glance: () => screencap(serial) });
-  return { ...look, ignore, ready };
+  const settled = await steady(serial, ignore, !!ready?.ready);
+  timing.lap('settle');
+  const look = await secondLook(settled, () => steady(serial, ignore), { key, ignore, glance: () => screencap(serial) });
+  timing.lap('second-look');
+  return { ...look, ignore, ready, timing };
 }
 
 /**
@@ -507,7 +516,7 @@ async function captureDevice(id: string, serial: string, ctx: CaptureContext): P
       const name = shotName(screen, v);
       const key = `android/${id}/${name}`;
       if (screen.keyboard) await softKeyboard(serial, true);
-      let look: Look & { ignore: Rect[]; ready: Ready | null };
+      let look: Look & { ignore: Rect[]; ready: Ready | null; timing: Stopwatch };
       try {
         look = await shoot(serial, ctx, screen, first, key);
       } finally {
@@ -518,6 +527,8 @@ async function captureDevice(id: string, serial: string, ctx: CaptureContext): P
       writeFileSync(file, look.png);
       // The caret's box, which the comparison skips (steady).
       if (look.ignore.length) writeFileSync(ignorePath(file), JSON.stringify(look.ignore));
+      look.timing.lap('write');
+      look.timing.done(ctx.runDir, key);
       if (!look.settled) unsettled.push(key);
       if (look.retaken) ctx.retaken.push(key);
       ctx.log(`  ${key}${lookNote(look)}${readyNote(look.ready)}`);

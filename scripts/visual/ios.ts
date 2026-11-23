@@ -24,6 +24,7 @@ import { screensFor, shotName, type Account, type Variant } from './screens';
 import { CommandTimeout, ROOT, SEED_PASSWORD, execTimed, run, settle, shotPath, sleep, type Capture, type CaptureContext } from './util';
 import { devicesFor, groups, plan, stateOf } from './variants';
 import { MAESTRO, maestroEnv } from './flows';
+import { stopwatch, type Stopwatch } from './timings';
 
 export const BUNDLE_ID = 'com.resonance.stories';
 const IOS_DIR = join(ROOT, 'apps/ios');
@@ -266,19 +267,34 @@ function launchReady(udid: string, args: string[], stream: LogStream | null): ((
   return () => waitReady(() => stream.says(token));
 }
 
-async function shoot(udid: string, ctx: CaptureContext, key: string, ready: (() => Promise<Ready>) | null): Promise<Look & { ready: Ready | null }> {
-  const file = join(ctx.runDir, '_logs', `ios-${udid}.png`);
-  const frame = () => {
-    run('xcrun', ['simctl', 'io', udid, 'screenshot', '--type=png', file], {}, SIMCTL_TIMEOUT_MS);
-    return Promise.resolve(readFileSync(file));
-  };
+/** One capture's looks after its launch (`timing` has the launch's laps already; this adds the ready wait and the looks). */
+export async function shootAfterLaunch(
+  frame: () => Promise<Buffer>,
+  key: string,
+  ready: (() => Promise<Ready>) | null,
+  timing: Stopwatch,
+): Promise<Look & { ready: Ready | null }> {
   // A launch draws its cover, restores the account and asks the stack: never judged before its ready signal, or
   // else the 4 s it always waited (ready.ts).
   const said = ready ? await ready() : null;
   if (said) await restOfWait(said, 4000);
   else await sleep(4000);
+  timing.lap('ready');
   const take = (fast: boolean) => settle(frame, { timeoutMs: 40_000, intervalMs: fast ? 500 : 1000 });
-  return { ...(await secondLook(await take(!!said?.ready), () => take(false), { key, glance: frame })), ready: said };
+  const first = await take(!!said?.ready);
+  timing.lap('settle');
+  const look = await secondLook(first, () => take(false), { key, glance: frame });
+  timing.lap('second-look');
+  return { ...look, ready: said };
+}
+
+function shoot(udid: string, ctx: CaptureContext, key: string, ready: (() => Promise<Ready>) | null, timing: Stopwatch): Promise<Look & { ready: Ready | null }> {
+  const file = join(ctx.runDir, '_logs', `ios-${udid}.png`);
+  const frame = () => {
+    run('xcrun', ['simctl', 'io', udid, 'screenshot', '--type=png', file], {}, SIMCTL_TIMEOUT_MS);
+    return Promise.resolve(readFileSync(file));
+  };
+  return shootAfterLaunch(frame, key, ready, timing);
 }
 
 export const captureIos: Capture = async (ctx) => {
@@ -317,16 +333,25 @@ export const captureIos: Capture = async (ctx) => {
           // Its full 10 s, as ever, not cut short by the ready signal (ready.ts): this launch isn't captured, it
           // settles the account on the device — the sign-in and what the app keeps after it — and nothing yet shows
           // that the app is done with that when its screen first goes quiet.
+          const signIn = stopwatch();
           launch(udid, launchArgs(ctx, account, null, v));
+          signIn.lap('launch');
           await sleep(10_000);
+          signIn.lap('wait');
+          signIn.done(ctx.runDir, `ios/${id}/${account ?? 'signed-out'}@${v.theme}-${v.locale}`, 'sign-in');
           for (const screen of screens) {
+            const timing = stopwatch();
             // Its hints unspent for its account on the stack (hints.ts), before the app reads the profile.
             await unspendHints(ctx, screen);
+            timing.lap('hints');
             const ready = launchReady(udid, launchArgs(ctx, account, screen.route, v, screen.app?.ios), stream);
+            timing.lap('launch');
             const name = shotName(screen, v);
             const key = `ios/${id}/${name}`;
-            const look = await shoot(udid, ctx, key, ready);
+            const look = await shoot(udid, ctx, key, ready, timing);
             writeFileSync(shotPath(ctx.runDir, 'ios', id, name), look.png);
+            timing.lap('write');
+            timing.done(ctx.runDir, key);
             if (!look.settled) unsettled.push(key);
             if (look.retaken) ctx.retaken.push(key);
             ctx.log(`  ${key}${lookNote(look)}${readyNote(look.ready)}`);

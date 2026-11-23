@@ -46,6 +46,9 @@ import type { Platform } from './screens';
 import { DEVICE_STATES, EXTRA_VARIANTS, VARIANT_SETS, estimate, variantSetOf } from './variants';
 import { watchdog } from './watchdog';
 import { PHASES, buildOrder } from './phases';
+import { startSampler } from './resources';
+import { writeTiming, writeTimingsSummary } from './timings';
+import { HARNESS_SIMULATORS } from './devices';
 import type { Result } from './compare';
 
 /** Every platform, in the order the report lists them. */
@@ -132,6 +135,8 @@ async function capture(args: string[]) {
   writeJson(join(runDir, 'run.json'), info);
   let stack: Stack | undefined;
   const dog = watchdog((why) => abort(why));
+  // What the run costs the machine, every few seconds, by phase (resources.ts): `_resources.jsonl` / `_resources.json`.
+  const sampler = startSampler(runDir, { log, simulators: HARNESS_SIMULATORS });
   // Every line the run says is progress (each capture, build, boot and phase says one).
   const say = (line: string) => {
     dog.progress();
@@ -165,21 +170,25 @@ async function capture(args: string[]) {
     // one fails its phase.
     const headStart: Promise<unknown>[] = [];
     for (const platform of buildOrder(platforms)) {
-      if (platform === 'mac') headStart.push((await import('./mac')).build(ctx));
-      if (platform === 'android') headStart.push((await import('./android')).build(ctx));
-      if (platform === 'ios') headStart.push((await import('./ios')).build(ctx));
+      const started = Date.now();
+      const timed = (p: Promise<void>) => p.then(() => writeTiming(runDir, { key: `build/${platform}`, kind: 'build', totalMs: Date.now() - started, steps: {}, at: new Date().toISOString() }));
+      if (platform === 'mac') headStart.push(timed((await import('./mac')).build(ctx)));
+      if (platform === 'android') headStart.push(timed((await import('./android')).build(ctx)));
+      if (platform === 'ios') headStart.push(timed((await import('./ios')).build(ctx)));
     }
     headStart.forEach((p) => p.catch(() => {}));
     for (const phase of PHASES) {
       const here = phase.filter((p) => platforms.includes(p));
       if (!here.length) continue;
       say(`\n== ${here.join(' + ')}`);
+      sampler.mark(here.join('+'));
       // Each platform with its own slice (--ios-only …), else the run's.
       const unsettled = await Promise.all(here.map(async (platform) => (await capturer(platform))({ ...ctx, ...sliceOf(info, platform) })));
       info.unsettled.push(...unsettled.flat());
       writeJson(join(runDir, 'run.json'), info);
     }
     if (args.includes('--flows')) {
+      sampler.mark('flows');
       info.flowsFailed = await flows(runDir, platforms, stack.devUrl, list(flag(args, 'tags')), set === 'extended', say);
       writeJson(join(runDir, 'run.json'), info);
     }
@@ -195,8 +204,14 @@ async function capture(args: string[]) {
     }
     lock.release();
   }
+  sampler.mark('compare');
   let results = await finish(runDir);
-  if (args.includes('--review')) results = await review(runDir, ['--agy'], results);
+  if (args.includes('--review')) {
+    sampler.mark('review');
+    results = await review(runDir, ['--agy'], results);
+  }
+  await sampler.stop();
+  for (const line of writeTimingsSummary(runDir)) log(line);
   await gate(runDir, results);
 }
 

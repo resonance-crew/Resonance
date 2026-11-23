@@ -15,12 +15,13 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { PNG } from 'pngjs';
 import { unspendHints } from './hints';
-import { BUNDLE_ID, XCODE_RUN_SETTINGS, ensureIslands, inXcodeLine, launchArgs, prepareProject, runLogged, xcodeInputs } from './ios';
+import { BUNDLE_ID, XCODE_RUN_SETTINGS, ensureIslands, inXcodeLine, launchArgs, prepareProject, runLogged, shootAfterLaunch, xcodeInputs } from './ios';
+import { stopwatch, type Stopwatch } from './timings';
 import { buildIfChanged, stampFile } from './buildStamp';
-import { LOG_STREAM_ARGS, logStream, readyNote, readyOn, readyToken, restOfWait, waitReady, type LogStream, type Ready } from './ready';
-import { lookNote, secondLook, type Look } from './secondLook';
+import { LOG_STREAM_ARGS, logStream, readyNote, readyOn, readyToken, waitReady, type LogStream, type Ready } from './ready';
+import { lookNote, type Look } from './secondLook';
 import { shotName } from './screens';
-import { ROOT, run, settle, shotPath, sleep, type Capture, type CaptureContext } from './util';
+import { ROOT, run, shotPath, sleep, type Capture, type CaptureContext } from './util';
 import { devicesFor, groups, plan, stateOf } from './variants';
 
 const MAC_BUNDLE_ID = `${BUNDLE_ID}.macdev`;
@@ -138,18 +139,14 @@ function readyArgs(stream: LogStream | null): { args: string[]; wait: () => Prom
   return { args: ['-visualReadyToken', token], wait: () => waitReady(() => stream.says(token)) };
 }
 
-async function shoot(window: MacWindow, ctx: CaptureContext, key: string, size: Size, ready: (() => Promise<Ready>) | null): Promise<Look & { ready: Ready | null }> {
+function shoot(window: MacWindow, ctx: CaptureContext, key: string, size: Size, ready: (() => Promise<Ready>) | null, timing: Stopwatch): Promise<Look & { ready: Ready | null }> {
   const file = join(ctx.runDir, '_logs', 'mac-window.png');
   const frame = () => {
     run('screencapture', ['-o', '-x', '-t', 'png', '-l', String(window.id), file]);
     return Promise.resolve(cut(readFileSync(file), size));
   };
-  // Its ready signal (ready.ts), or the 4 s it always waited.
-  const said = ready ? await ready() : null;
-  if (said) await restOfWait(said, 4000);
-  else await sleep(4000);
-  const take = (fast: boolean) => settle(frame, { timeoutMs: 40_000, intervalMs: fast ? 500 : 1000 });
-  return { ...(await secondLook(await take(!!said?.ready), () => take(false), { key, glance: frame })), ready: said };
+  // Its ready signal (ready.ts), or the 4 s it always waited; then the looks, as on iOS.
+  return shootAfterLaunch(frame, key, ready, timing);
 }
 
 export const captureMac: Capture = async (ctx) => {
@@ -170,25 +167,35 @@ export const captureMac: Capture = async (ctx) => {
     for (const { variant: v, account, screens } of groups(plan('mac', id, set, ctx.only))) {
       // The account signs in on a launch of its own; a screen's launch only restores it.
       // Its full 10 s, as ever, not cut short by the ready signal (ios.ts says why).
+      const signInTime = stopwatch();
       const signIn = await launch(launchArgs(ctx, account, null, v), size);
+      signInTime.lap('launch');
       await sleep(10_000);
       quit(signIn.pid);
+      signInTime.lap('wait');
+      signInTime.done(ctx.runDir, `mac/${id}/${account ?? 'signed-out'}@${v.theme}-${v.locale}`, 'sign-in');
       for (const screen of screens) {
+        const timing = stopwatch();
         // Its hints unspent for its account on the stack (hints.ts), before the app reads the profile.
         await unspendHints(ctx, screen);
+        timing.lap('hints');
         const screenReady = readyArgs(stream);
         const window = await launch([...launchArgs(ctx, account, screen.route, v, screen.app?.mac ?? screen.app?.ios), ...(screenReady?.args ?? [])], size);
+        timing.lap('launch');
+        const name = shotName(screen, v);
+        const key = `mac/${id}/${name}`;
         try {
-          const name = shotName(screen, v);
-          const key = `mac/${id}/${name}`;
-          const look = await shoot(window, ctx, key, size, screenReady?.wait ?? null);
+          const look = await shoot(window, ctx, key, size, screenReady?.wait ?? null, timing);
           writeFileSync(shotPath(ctx.runDir, 'mac', id, name), look.png);
+          timing.lap('write');
           if (!look.settled) unsettled.push(key);
           if (look.retaken) ctx.retaken.push(key);
           ctx.log(`  ${key}${lookNote(look)}${readyNote(look.ready)}`);
         } finally {
           quit(window.pid);
           await sleep(1000);
+          timing.lap('quit');
+          timing.done(ctx.runDir, key);
         }
       }
     }
