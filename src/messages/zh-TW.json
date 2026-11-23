@@ -757,12 +757,13 @@
     "visibility": {
       "label": "卡片類型",
       "public": "公開",
-      "connections": "僅連結的人",
+      "connections": "連結的人",
       "private": "只有自己",
       "draft": "私人卡",
       "anonymous": "匿名公開",
       "publicLine": "所有人都看得到，署名 {handle}",
       "anonymousLine": "所有人都看得到，但不會知道是你寫的",
+      "connectionsLine": "只有和你連結的人看得到，署名 {handle}",
       "sharedWarning": "這張卡片曾私下分享給別人，他們會知道是你寫的"
     },
     "ai": {

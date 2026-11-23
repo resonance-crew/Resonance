@@ -1363,7 +1363,7 @@ public enum L10n {
             public static var label: String { Strings.shared.string("write.visibility.label") }
             /// Public
             public static var `public`: String { Strings.shared.string("write.visibility.public") }
-            /// Connections only
+            /// Connections
             public static var connections: String { Strings.shared.string("write.visibility.connections") }
             /// Only me
             public static var `private`: String { Strings.shared.string("write.visibility.private") }
@@ -1375,6 +1375,8 @@ public enum L10n {
             public static func publicLine(handle: String) -> String { Strings.shared.format("write.visibility.publicLine", ["handle": handle]) }
             /// Anyone can read it, but no one will know it's yours
             public static var anonymousLine: String { Strings.shared.string("write.visibility.anonymousLine") }
+            /// Only your connections can read it, signed {handle}
+            public static func connectionsLine(handle: String) -> String { Strings.shared.format("write.visibility.connectionsLine", ["handle": handle]) }
             /// You once shared this card privately — whoever you sent it to will know you wrote it
             public static var sharedWarning: String { Strings.shared.string("write.visibility.sharedWarning") }
         }

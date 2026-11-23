@@ -757,12 +757,13 @@
     "visibility": {
       "label": "Card type",
       "public": "Public",
-      "connections": "Connections only",
+      "connections": "Connections",
       "private": "Only me",
       "draft": "Private",
       "anonymous": "Anonymous",
       "publicLine": "Anyone can read it, signed {handle}",
       "anonymousLine": "Anyone can read it, but no one will know it's yours",
+      "connectionsLine": "Only your connections can read it, signed {handle}",
       "sharedWarning": "You once shared this card privately — whoever you sent it to will know you wrote it"
     },
     "ai": {

@@ -1365,7 +1365,7 @@ object L10n {
             val label: String get() = Strings.string("write.visibility.label")
             /** Public */
             val public: String get() = Strings.string("write.visibility.public")
-            /** Connections only */
+            /** Connections */
             val connections: String get() = Strings.string("write.visibility.connections")
             /** Only me */
             val private: String get() = Strings.string("write.visibility.private")
@@ -1377,6 +1377,8 @@ object L10n {
             fun publicLine(handle: String): String = Strings.format("write.visibility.publicLine", mapOf("handle" to handle))
             /** Anyone can read it, but no one will know it's yours */
             val anonymousLine: String get() = Strings.string("write.visibility.anonymousLine")
+            /** Only your connections can read it, signed {handle} */
+            fun connectionsLine(handle: String): String = Strings.format("write.visibility.connectionsLine", mapOf("handle" to handle))
             /** You once shared this card privately — whoever you sent it to will know you wrote it */
             val sharedWarning: String get() = Strings.string("write.visibility.sharedWarning")
         }
