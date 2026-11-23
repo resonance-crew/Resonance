@@ -64,3 +64,6 @@ paths:
 Core entities live in `src/lib/db/types.ts`: `Card` (with `translations`, `tags`, `slug`, counters), `User` (`handle`/`handleLower`), `Connection`, `Invite`, `Resonance`, `CardLink`, `Notification`. `src/lib/adapters/` converts Firestore data to UI models.
 
 After editing `firebase/firestore.rules` or `firebase/firestore.indexes.json`, deploy from the `firebase/` directory (that's where `firebase.json` lives — the command fails at repo root): `cd firebase && firebase deploy --only firestore:rules,firestore:indexes`.
+
+
+Round 32 §P6: after a publish (or a kept 私人卡) the web writer seeds the card page's SWR cache with what it just wrote, under its author's own key and with their own profile as the byline (`usePrefillOwnCard`, `src/lib/data/ownCardPrefill.ts`; only when the signed-in profile is the author's) — the page's server render carries public cards only, so a 連結的人 / 匿名公開 card drew a skeleton until its signed-in read answered; the page still reads it again as it opens. The writer saves the step's audience the moment it is chosen, and publishing writes only what isn't stored yet (`savedDraftId`).

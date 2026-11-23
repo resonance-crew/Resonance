@@ -62,3 +62,6 @@ An album rings once, for its first picture (`index` 0): its words, else `app.not
 A resent `clientId` pushes and unfurls nothing.
 The plain push carries the message's own `apns-collapse-id` (its id, when ≤ 64), merging nothing but letting an unsend replace it.
 **An unsend** (`pushUnsend`, after POST …/unsend's response) re-reads the message (unsent, from that sender), stays silent across a block or a mute as above, and never says the words: a `chat-push` Android device gets data only, `type: 'unsend'`, `conversationId, messageId, fromUserId, toUserId` (it redraws its notification without that line, or removes it); every other device, only while the unsent message is still the conversation's newest (`lastMessage.unsent` with its sender and time), a quiet replacement — the same `tag` / `threadId` / collapse id, `type: 'message'`, body `app.notifications.messageUnsent` ({handle}), no sound, Android notification priority `min`, iOS `interruption-level: passive` and `apns-priority: 5`.
+
+
+Round 32: the plain chat push's data (iOS, and Android builds that don't draw their own) carries `toUserId`, `fromHandle` and `sentAt` too, as the data-only push did — an app draws from its kept thread only when `toUserId` is the signed-in account; nothing the notification doesn't already show.

@@ -48,3 +48,4 @@ npm run test:release   # the release and ops scripts' tests; `npm test` runs the
 ```
 
 Seed the emulators with known test accounts: `npx tsx scripts/seed-emulator.ts`. In a `dev:emulator` browser, sign in from devtools with `await window.__emulatorSignIn(email, password)` (values in the seed script) — that helper exists only in emulator builds.
+npx tsx scripts/perf/write-paths.ts   # (run under `npm run emulators:at`) times the write paths (publish by audience, save, edit, 共振 tap/pick, note, reply, chat) and a notification's first reads on the emulator, step by step; PROBE_RTT_MS adds latency to every awaited call, PROBE_SLUG_MS simulates the slug model, PROBE_ROUNDS the median's runs (round 32 §P6)
