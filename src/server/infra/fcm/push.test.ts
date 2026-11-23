@@ -113,7 +113,8 @@ describe('toMulticast, kind by kind, against the messages lib/push built before 
     const system: MulticastMessage = {
       tokens: ['tok-en'],
       notification: { title: '小明', body: 'hi there' },
-      data: { type: 'message', route, fromUserId: 'bob', conversationId: 'alice_bob', messageId: 'm1' },
+      // Round 32 §P7: whose it is, who sent it and when, as the data-only kind says them.
+      data: { type: 'message', route, fromUserId: 'bob', toUserId: 'alice', fromHandle: '小明', sentAt: String(NOW), conversationId: 'alice_bob', messageId: 'm1' },
       android: { priority: 'high', notification: { channelId: 'messages', tag: 'alice_bob' } },
       apns: { headers: { 'apns-collapse-id': 'm1' }, payload: { aps: { sound: 'default', threadId: 'alice_bob', mutableContent: true } } },
     };
@@ -133,7 +134,7 @@ describe('toMulticast, kind by kind, against the messages lib/push built before 
     same(system, {
       tokens: ['tok-en'],
       notification: { title: '小明', body: 'hi' },
-      data: { type: 'message', route: '/messages/%E5%B0%8F%E6%98%8E', fromUserId: 'bob', conversationId: 'alice_bob', messageId: 'm1', ...face },
+      data: { type: 'message', route: '/messages/%E5%B0%8F%E6%98%8E', fromUserId: 'bob', toUserId: 'alice', fromHandle: '小明', sentAt: String(NOW), conversationId: 'alice_bob', messageId: 'm1', ...face },
       android: { priority: 'high', notification: { channelId: 'messages', tag: 'alice_bob' } },
       apns: { headers: { 'apns-collapse-id': 'm1' }, payload: { aps: { sound: 'default', threadId: 'alice_bob', mutableContent: true } } },
     });
@@ -152,7 +153,7 @@ describe('toMulticast, kind by kind, against the messages lib/push built before 
     const quiet: MulticastMessage = {
       tokens: ['tok-en'],
       notification: { title: '小明', body: 'Thanks' },
-      data: { type: 'message', route: '/messages/%E5%B0%8F%E6%98%8E', fromUserId: 'bob', conversationId: 'alice_bob', messageId: 's2' },
+      data: { type: 'message', route: '/messages/%E5%B0%8F%E6%98%8E', fromUserId: 'bob', toUserId: 'alice', fromHandle: '小明', sentAt: String(NOW), conversationId: 'alice_bob', messageId: 's2' },
       android: { priority: 'normal' as const, notification: { channelId: 'messages', tag: 'alice_bob', priority: 'low' as const, defaultSound: false } },
       apns: { headers: { 'apns-collapse-id': 's2' }, payload: { aps: { threadId: 'alice_bob', 'interruption-level': 'passive', mutableContent: true } } },
     };
