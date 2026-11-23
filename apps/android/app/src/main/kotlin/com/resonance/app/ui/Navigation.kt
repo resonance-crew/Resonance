@@ -343,8 +343,27 @@ internal fun MutableList<Route>.popPage() {
 
 /** A tab's back stack, saved with the activity: its routes are [Serializable] (no reflection). */
 @Composable
-private fun rememberRouteStack(root: Route): NavBackStack<Route> =
-    rememberSerializable(serializer = NavBackStackSerializer(Route.serializer())) { NavBackStack(root) }
+private fun rememberRouteStack(root: Route, page: Route? = null): NavBackStack<Route> =
+    rememberSerializable(serializer = NavBackStackSerializer(Route.serializer())) { if (page == null) NavBackStack(root) else NavBackStack(root, page) }
+
+/** The push a cold start was opened by, and the page it names (null: none the app shows — its tab, or a debug place). */
+internal class LaunchedPush(val opened: PushCenter.Opened, val route: Route?)
+
+/** Where the tabs start (round 32 §P7): the [tab] on screen and the page on its stack over its root, if any. */
+internal data class ColdStart(val tab: Tab, val page: Route?) {
+    fun pageOn(t: Tab): Route? = page.takeIf { t == tab }
+}
+
+/**
+ * The tabs' first state for a cold start opened on [route] (a tapped push's page): what [MainTabs]' open would have
+ * made of it a frame later, on fresh stacks — a conversation on the Messages tab over its list (beside it, in panes,
+ * on an expanded window: the same stack), any other page over the feed. None: the feed, as ever.
+ */
+internal fun coldStart(route: Route?): ColdStart = when (route) {
+    null -> ColdStart(Tab.Feed, null)
+    is Route.Thread -> ColdStart(Tab.Messages, route)
+    else -> ColdStart(Tab.Feed, route)
+}
 
 /**
  * A tab's pages, each decorated with its own saved state (scroll, fields) and its own
@@ -383,8 +402,15 @@ private fun rememberStackEntries(
  */
 @Composable
 fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
-    var tab by rememberSaveable { mutableStateOf(Tab.Feed) }
-    val stacks: Map<Tab, NavBackStack<Route>> = Tab.entries.associateWith { rememberRouteStack(Route.Root(it)) }
+    SideEffect { com.resonance.kit.visual.LaunchTrace.mark("tabs composed") }
+    // A cold start from a tapped push (round 32 §P7): its page is in the stacks from the first composition — drawn in the
+    // tabs' first frame, its requests started then — not pushed a frame later over a feed composed for nothing.
+    val launched = remember {
+        PushCenter.opened.value?.let { o -> LaunchedPush(o, pushedRoute(Route.fromPath(o.route), o.fromUserId) { session.notifications.sender(o.notificationId) }) }
+    }
+    val start = remember { coldStart(launched?.route) }
+    var tab by rememberSaveable { mutableStateOf(start.tab) }
+    val stacks: Map<Tab, NavBackStack<Route>> = Tab.entries.associateWith { rememberRouteStack(Route.Root(it), start.pageOn(it)) }
     val stack: NavBackStack<Route> = stacks.getValue(tab)
     // The window as it is now (a rotation, a fold or a split resizes it without a new activity).
     val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
@@ -427,8 +453,14 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
         val opened = tappedPush ?: return@LaunchedEffect
         PushCenter.consume()
         opened.notificationId?.let { session.notifications.markRead(it) }
+        // The cold start's push is on the stacks already ([coldStart]).
+        if (launched != null && launched.opened === opened && launched.route != null) {
+            com.resonance.kit.visual.LaunchTrace.mark("push route opened ${opened.route} (in the first composition)")
+            return@LaunchedEffect
+        }
         // A push names the sender by pen name, and by uid when it carries `fromUserId`.
         val route = pushedRoute(Route.fromPath(opened.route), opened.fromUserId) { session.notifications.sender(opened.notificationId) }
+        com.resonance.kit.visual.LaunchTrace.mark("push route opened ${opened.route}")
         val debugPlace = if (BuildConfig.DEBUG && opened.notificationId == null) debugLaunchPlace(opened.route) else null
         when {
             route != null -> open(route)
