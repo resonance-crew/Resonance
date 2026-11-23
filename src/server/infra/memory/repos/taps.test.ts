@@ -21,6 +21,9 @@ describeTapsContract('memory', () => {
         readCount: 0,
       });
     },
+    async seedConnection(a, b) {
+      ctx.state.put('connections', a < b ? `${a}_${b}` : `${b}_${a}`, { userIds: [a, b].sort() });
+    },
     readCount: async (id) => Number(ctx.state.get('cards', id)?.readCount),
   };
 });

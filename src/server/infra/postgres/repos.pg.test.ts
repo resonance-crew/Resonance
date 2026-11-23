@@ -37,6 +37,9 @@ describe.skipIf(!PG_TEST_URL)(`PostgreSQL repositories${PG_TEST_URL ? '' : ` —
           readCount: 0,
         });
       },
+      async seedConnection(a, b) {
+        await db.docs.put('connections', pairKey(a, b), { userIds: [a, b].sort() });
+      },
       readCount: async (id) => Number((await db.docs.get('cards', id))?.readCount),
     };
   });

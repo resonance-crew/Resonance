@@ -217,6 +217,26 @@ export function tapsData(db: AdminDb): TapsData {
         ),
       ];
     },
+    async connectedAmong(uid, uids) {
+      // Each pair by id (P0 #6), its userIds only: one read a person, there or not, never the viewer's whole list.
+      const ids = [...new Set(uids)].filter((id) => docIdOk(id) && id !== uid);
+      const out = new Set<string>();
+      if (!docIdOk(uid)) return out;
+      for (let i = 0; i < ids.length; i += 100) {
+        const chunk = ids.slice(i, i + 100);
+        const snaps = await db.getAll(...chunk.map((id) => db.doc(`connections/${pairOf(uid, id)}`)), { fieldMask: ['userIds'] });
+        snaps.forEach((s, j) => {
+          const both = s.exists ? s.get('userIds') : null;
+          if (Array.isArray(both) && both.includes(uid) && both.includes(chunk[j])) out.add(chunk[j]);
+        });
+      }
+      return out;
+    },
+    async tapsOn(cardId, limit) {
+      // Equalities alone, no order: every tap that is on, `at` or not, as tapsOnBy reads them.
+      const page = await db.collection(TAPS).where('cardId', '==', cardId).where('on', '==', true).limit(limit).get();
+      return { tappers: page.docs.map(tapperOf).filter((t): t is Tapper => !!t), full: page.size >= limit };
+    },
     async tapsOnBy(cardId, uids) {
       // Only the taps that are on (B4): a query per 30 uids, side by side — billed by what it finds.
       const chunks: string[][] = [];

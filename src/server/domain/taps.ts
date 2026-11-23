@@ -16,6 +16,13 @@ export const CARD_READS = 'cardReads';
 /** How many people a page of the author's list holds. */
 export const TAP_PAGE = 30;
 
+/**
+ * How many of a card's taps a reader's people are read from directly (src/server/app/taps.ts readerPeople): a card
+ * with fewer taps on is read whole and its tappers checked against the reader's connections by id; a card with this
+ * many or more falls back to every connection of the reader's. Bounds what a popular card costs over the old read.
+ */
+export const READER_TAP_SCAN = 40;
+
 /** How much of a note the author's list shows: its first line, at most this many characters. */
 export const TAP_NOTE_EXCERPT = 80;
 

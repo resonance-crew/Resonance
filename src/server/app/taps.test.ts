@@ -4,7 +4,7 @@ import type { Bucket, RateLimiter } from '@/server/ports/rateLimit';
 import { memoryCtx } from '@/server/infra/memory/ctx';
 import { countCardReadIn } from './cardReads';
 import { reportReadingIn } from './reading';
-import { cardTapIn, listTapsIn, setTapIn } from './taps';
+import { cardTapIn, listTapsIn, readerPeople, setTapIn } from './taps';
 
 // The taps aggregate's services on the memory context — no Firestore at all:
 // a tap turned on, asked again (nothing changes, nothing rings), taken back
@@ -111,6 +111,37 @@ describe('the taps services on memory', () => {
     expect(list.people.every((p) => p.note === null)).toBe(true);
     expect(list.nextPageToken).toBeNull();
     expect(await cardTapIn(ctx, 'alice', (await ctx.data.taps.visibleCard('alice', 'masked'))!, { pass: true })).toBeNull();
+  });
+
+  it('a reader\'s people (P0 #6): the same set whether the card has few taps (read whole) or many (read by connections)', async () => {
+    const { ctx } = world();
+    // alice is connected to carol and to every even uNN; tappers are everyone, on `masked` a few, on `walk` many.
+    const many = Array.from({ length: 45 }, (_, i) => `u${String(i).padStart(2, '0')}`);
+    ctx.state.seed('users', Object.fromEntries(many.map((u) => [u, profile(u)])));
+    ctx.state.seed('connections', Object.fromEntries(many.filter((_, i) => i % 2 === 0).map((u) => [u < 'alice' ? `${u}_alice` : `alice_${u}`, { userIds: ['alice', u].sort() }])));
+    // A pair document that names someone else does not connect them.
+    ctx.state.seed('connections', { alice_zed: { userIds: ['bob', 'zed'] } });
+    const tap = async (cardId: string, uids: string[]) => {
+      for (const u of uids) {
+        ctx.clock.advance(1000);
+        ctx.state.put('resonanceTaps', `${cardId}_${u}`, { cardId, userId: u, on: true, at: new Date(ctx.clock.now()), rangAt: null });
+      }
+    };
+    await tap('masked', ['carol', 'dan', 'u00', 'u01', 'u02', 'zed', 'bob']);
+    await tap('walk', [...many, 'carol', 'alice']);
+    const spy = { connectionsOf: 0, connectedAmong: 0 };
+    const taps = ctx.data.taps;
+    const real = { connectionsOf: taps.connectionsOf.bind(taps), connectedAmong: taps.connectedAmong.bind(taps) };
+    taps.connectionsOf = async (uid) => (spy.connectionsOf++, real.connectionsOf(uid));
+    taps.connectedAmong = async (uid, uids) => (spy.connectedAmong++, real.connectedAmong(uid, uids));
+
+    const uids = async (cardId: string) => (await readerPeople(ctx, 'alice', (await ctx.data.taps.visibleCard('alice', cardId))!)).people.map((p) => p.uid);
+    // A few taps: read whole, checked by pair; newest first; never bob (the author), dan or zed (not connected).
+    expect(await uids('masked')).toEqual(['u02', 'u00', 'carol']);
+    expect(spy).toEqual({ connectionsOf: 0, connectedAmong: 1 });
+    // Many: by the reader's connections, as before — alice first (her own tap), then every connected tapper, newest first.
+    expect(await uids('walk')).toEqual(['alice', 'carol', ...many.filter((_, i) => i % 2 === 0).reverse()]);
+    expect(spy).toEqual({ connectionsOf: 1, connectedAmong: 1 });
   });
 
   it('a reading report: a session counted once however often it reports, at most once a day in days', async () => {

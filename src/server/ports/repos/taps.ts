@@ -136,6 +136,16 @@ export interface TapsData {
   ownTap(cardId: string, uid: string): Promise<{ on: boolean; passage: TapPick | null }>;
   /** Everyone `uid` is connected with (valid ids, once each, never `uid`). */
   connectionsOf(uid: string): Promise<string[]>;
+  /**
+   * Who among `uids` is connected with `uid` (connections/{pair} read by id, whose `userIds` hold both): the
+   * reader's people on a card with few taps, without reading every connection they have (P0 #6).
+   */
+  connectedAmong(uid: string, uids: string[]): Promise<Set<string>>;
+  /**
+   * At most `limit` of the card's taps that are on, in no order — every one of them when `full` is false (the
+   * reader's people on a card with few taps, checked against their connections by id; P0 #6).
+   */
+  tapsOn(cardId: string, limit: number): Promise<{ tappers: Tapper[]; full: boolean }>;
   /** The taps of `uids` on the card that are on, in no order (a query per 30 of them, side by side). */
   tapsOnBy(cardId: string, uids: string[]): Promise<Tapper[]>;
   /**
