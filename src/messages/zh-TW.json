@@ -473,12 +473,12 @@
     "tap": {
       "label": "共振",
       "selfOnly": "你共振了",
-      "facesReader": "你連結的人裡，與這張卡片共振的：{names}",
+      "facesReader": "與這張卡片共振的人：{names}",
       "facesAuthor": "與這張卡片共振的人：{names}",
       "more": "還有其他人",
       "send": "寄出",
       "failed": "沒送出去，再試一次",
-      "passageTitle": "悄悄告訴作者，哪一段讓你有共鳴",
+      "passageTitle": "哪一段讓你有共鳴",
       "passageSkip": "略過",
       "passagePick": "選一段",
       "passageQuote": "「{text}」",
@@ -763,7 +763,6 @@
       "anonymous": "匿名公開",
       "publicLine": "所有人都看得到，署名 {handle}",
       "anonymousLine": "所有人都看得到，但不會知道是你寫的",
-      "connectionsLine": "只有和你連結的人看得到，署名 {handle}",
       "sharedWarning": "這張卡片曾私下分享給別人，他們會知道是你寫的"
     },
     "ai": {
