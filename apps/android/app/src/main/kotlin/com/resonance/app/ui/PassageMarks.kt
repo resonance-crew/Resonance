@@ -4,6 +4,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.resonance.api.models.CardDetail
 import com.resonance.api.models.FeedCard
+import com.resonance.api.models.TapPassage
 import com.resonance.api.models.TapPicked
 import com.resonance.kit.api.isTrashed
 import com.resonance.kit.l10n.L10n
@@ -251,10 +252,15 @@ internal fun rememberStoryPassages(
 /**
  * The sentences a card's page washes (round 29 §U1; every reader's since Wave 2 #3b — 「像按讚一樣大家都可以看到誰按」):
  * whatever `tap.picked` the server sends, to the author or a reader alike, only on a published card that readers can
- * see — out of the trash, never one kept private (the web's `card.visibility !== 'private'`, iOS's `!isPrivate`) — and
- * only while the story shows as written ([original]: not a translation). Anything else is null: the story drawn bare.
+ * see — out of the trash, never one kept private (the web's `card.visibility !== 'private'`, iOS's `!isPrivate`) — the
+ * story as written ([original]) or, in translation (round 31 §R2), each picked id the translation's answer places
+ * ([translation]), with that piece's words, its people as they are; a picked id it lacks (or an answer with no
+ * `passages`) is not drawn. Anything else is null: the story drawn bare.
  */
-internal fun pickedPassages(detail: CardDetail, original: Boolean): List<TapPicked>? =
+internal fun pickedPassages(detail: CardDetail, original: Boolean, translation: List<TapPassage>? = null): List<TapPicked>? =
     detail.takeIf { d ->
-        !d.card.isTrashed && d.card.publishedAt != null && d.card.visibility != FeedCard.Visibility.`private` && original
-    }?.tap?.picked
+        !d.card.isTrashed && d.card.publishedAt != null && d.card.visibility != FeedCard.Visibility.`private`
+    }?.tap?.picked?.let { picked ->
+        if (original) picked
+        else translation?.associateBy { it.id }?.let { pieces -> picked.mapNotNull { p -> pieces[p.id]?.let { p.copy(text = it.text) } } }
+    }

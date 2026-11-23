@@ -70,11 +70,27 @@ internal object TapPassagesTiming {
 }
 
 /**
- * Whether a press opens the dialog (§U1.1, §U1.9): only one that turned the tap **on**, on a card offering two passages
- * at least, while the story is not shown in translation. Taking the tap back opens nothing.
+ * The rows the dialog offers (§U1.3; round 31 §R1): the card's passages on a card offering two at least — while the
+ * story shows in translation ([translated]), those of them the translation's answer places ([translation], by id), in
+ * the card's order and with its ids, each in the translation's words — two at least, as for the original (the web's
+ * `PASSAGES_MIN`); a translation that places fewer (or an answer from before round 31, with no `passages`) offers
+ * nothing, as before round 31.
  */
-internal fun passagesOpenOnPress(turnedOn: Boolean, faces: TapFaces, translated: Boolean): Boolean =
-    turnedOn && faces.offersPassages && !translated
+internal fun offeredPassages(faces: TapFaces, translated: Boolean, translation: List<TapPassage>? = null): List<TapPassage> {
+    if (!faces.offersPassages) return emptyList()
+    if (!translated) return faces.passages
+    val pieces = translation.orEmpty().associateBy { it.id }
+    // The original's rule (the web's PASSAGES_MIN): two at least, or no dialog in translation.
+    return faces.passages.mapNotNull { p -> pieces[p.id]?.let { p.copy(text = it.text) } }.takeIf { it.size >= 2 }.orEmpty()
+}
+
+/**
+ * Whether a press opens the dialog (§U1.1, §U1.9; round 31 §R1): only one that turned the tap **on**, on a card offering
+ * two passages at least — in translation, only when the translation places two of them at least ([offeredPassages]).
+ * Taking the tap back opens nothing.
+ */
+internal fun passagesOpenOnPress(turnedOn: Boolean, faces: TapFaces, translated: Boolean, translation: List<TapPassage>? = null): Boolean =
+    turnedOn && offeredPassages(faces, translated, translation).isNotEmpty()
 
 /** A press on a row (§U1.7): that row's pick — or, pressed when it is the pick already, none. */
 internal fun nextPick(current: String?, pressed: String): String? = if (current == pressed) null else pressed

@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.resonance.api.models.CardDetail
 import com.resonance.api.models.CardTap
+import com.resonance.api.models.TranslationResponse
 import com.resonance.app.DebugLaunch
 import com.resonance.app.DraftService
 import com.resonance.app.Session
@@ -101,8 +102,11 @@ fun CardViewerActions(
     launch: Set<DebugLaunch.CardEnd> = emptySet(),
     /** The note's field asks the page's bar to step aside (true) — no room under it over the keyboard — or come back. */
     onNoteRoom: (Boolean) -> Unit = {},
-    /** The story shows in translation now (round 25 §F): the passages, the author's own words, are not offered then (§U1.9). */
-    translated: () -> Boolean = { false },
+    /**
+     * The translation the story shows now (round 25 §F), or null: the original. In translation the dialog offers the
+     * passages its answer places, in its words and its script (round 31 §R1); none when it places none.
+     */
+    translation: () -> TranslationResponse? = { null },
     /** The card is to be read again (round 27 §U1.6: a pick refused because the passages or the tap changed). */
     onStale: () -> Unit = {},
     /** The page's 收藏 ([rememberCardBookmark]): drawn here on a wide column, in the tags' row on a phone (round 28). */
@@ -191,7 +195,17 @@ fun CardViewerActions(
     }
     // The tap's PUT failed (it is off again), or it was taken back: the dialog goes with it.
     LaunchedEffect(switch.on) { if (!switch.on) passagesOpen = false }
-    val script = remember(detail.card.title, detail.story) { com.resonance.kit.story.StoryScripts.storyType(detail.card.title, detail.story).script }
+    // The dialog's rows: the card's passages, or the translation's words for them while it shows (round 31 §R1) — in
+    // the script of what the page shows (a Chinese story read in English takes Latin type).
+    val shownTranslation = translation()
+    val script = remember(detail.card.title, detail.story, shownTranslation) {
+        val (title, story) = shownTranslation?.let { it.title to it.story } ?: (detail.card.title to detail.story)
+        com.resonance.kit.story.StoryScripts.storyType(title, story).script
+    }
+    val offered = offeredPassages(faces, shownTranslation != null, shownTranslation?.passages)
+    val offers = offered.isNotEmpty()
+    // A swap to a translation that places none of them: the dialog goes (it comes back only by a press or the own row).
+    LaunchedEffect(offers) { if (!offers) passagesOpen = false }
 
     // The note in place.
     val note = remember(cardId) { NoteFieldState(session.noteDrafts?.text(cardId).orEmpty(), mayNote) }
@@ -229,6 +243,7 @@ fun CardViewerActions(
         if (DebugLaunch.CardEnd.Taps in launch) openList = true
         // `passages`: 共振 pressed, the dialog open; `passage-picked`: held open on the second row pressed (§V2).
         val picked = DebugLaunch.CardEnd.PassagePicked in launch
+        // Under 自動翻譯 the rows become the translation's once it shows (`card-passages-translated`, round 31 §V).
         if ((DebugLaunch.CardEnd.Passages in launch || picked) && faces.offersPassages) {
             // Shown on, never sent: a stored tap would stay on the run's stack for the next variants (§V2).
             fromPress = switch.showOnForCapture()
@@ -272,12 +287,13 @@ fun CardViewerActions(
         ) {
             haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
             val job = switch.flip()
-            if (passagesOpenOnPress(switch.on, faces, translated())) {
+            if (passagesOpenOnPress(switch.on, faces, shownTranslation != null, shownTranslation?.passages)) {
                 tapJob = job
                 scope.launch {
                     delay(TapPassagesTiming.openDelay(reduced))
                     // Still on, and still offered, once the segment has filled.
-                    if (switch.on && !translated()) {
+                    val now = translation()
+                    if (switch.on && offeredPassages(faces, now != null, now?.passages).isNotEmpty()) {
                         pickShown = null
                         holdPicked = false
                         fromPress = true
@@ -318,7 +334,7 @@ fun CardViewerActions(
             capsuleWidth = capsule.dp,
             // The faces over 共振 stand centred on its segment (round 29 §S11), on the capsule's first line.
             facesCentre = segmentCentre(firstSegments, capsule.dp),
-            faces = { TapFacesButton(faces, session.uid, author = false, onOpen = { openList = true }, selfOpens = faces.offersPassages && !translated()) },
+            faces = { TapFacesButton(faces, session.uid, author = false, onOpen = { openList = true }, selfOpens = offers) },
             firstLine = firstLine,
             // Wide: 收藏 ends the capsule's row at the column's end, its glyph where the byline's ⋯ ends (§S2).
             bookmark = if (wide && bookmark != null) ({ BookmarkButton(bookmark.saved, glyphEnd = BylineGlyphEnd) { bookmark.toggle() } }) else null,
@@ -346,7 +362,6 @@ fun CardViewerActions(
         }
     }
     // Who resonated, behind the faces: the phone's dialog on every device (the owner's look, 2026-11-19).
-    val offers = faces.offersPassages && !translated()
     if (openList && !faces.isEmpty && (offers || !faces.selfOnly(session.uid))) {
         ReaderTapList(
             session, cardId, onDismiss = { openList = false }, open = open,
@@ -362,8 +377,8 @@ fun CardViewerActions(
             },
         )
     }
-    if (passagesOpen && switch.on && faces.offersPassages) TapPassages(
-        faces.passages,
+    if (passagesOpen && switch.on && offers) TapPassages(
+        offered,
         picked = passagesMarked(pickShown, currentPick, fromPress),
         script = script,
         reducedMotion = reduced,

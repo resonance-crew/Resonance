@@ -15,6 +15,8 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import com.resonance.app.DebugLaunch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import com.resonance.app.AppearanceStore
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.ui.platform.LocalView
@@ -509,7 +511,9 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     // A published page, the story as written (round 29 §U1; every reader's since Wave 2 #3b): the sentences readers
     // picked, washed, with their faces — in the left margin where the white left of the column is 70 or more (§S10),
     // else in the line.
-    val picked = detail?.let { d -> pickedPassages(d, original = shownBlocks === blocks) }
+    // In translation (round 31 §R2): those the translation's answer places, on its words.
+    val translatedPassages = detail?.let { d -> model.translator?.takeIf { it.isFor(d.card.title, d.story) && it.showing }?.translation?.passages }
+    val picked = detail?.let { d -> remember(d.tap?.picked, shownBlocks === blocks, translatedPassages) { pickedPassages(d, original = shownBlocks === blocks, translatedPassages) } }
     val passageMarks = remember(shownBlocks, picked) { passageMarks(shownBlocks, picked) }
     val passageRoom = passageRoom(columns.start)
     val passagesInMargin = passageMarks.isNotEmpty() && passageInMargin(passageRoom)
@@ -637,6 +641,9 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                     if (launchEnd.isEmpty() || launchEnd == setOf(DebugLaunch.CardEnd.Picked)) return@LaunchedEffect
                     // The story laid out (its pictures' places) before the row is found.
                     delay(LAUNCH_END_SETTLE_MS)
+                    // Under 自動翻譯 (`card-passages-translated`, round 31 §V): the translation in before the line scrolls
+                    // away — once out of view an answer would not swap the story in, and the rows would stay the original's.
+                    withTimeoutOrNull(LAUNCH_END_TRANSLATION_MS) { snapshotFlow { model.translator?.state == TranslateState.Working }.first { !it } }
                     // The note's field open, the keyboard up: the field has brought itself over the keyboard (and asked
                     // the bar aside where it must) — centring the row now would push it back under the keyboard.
                     val noteOpen = DebugLaunch.CardEnd.Note in launchEnd || DebugLaunch.CardEnd.Lines in launchEnd
@@ -717,7 +724,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                 },
                                 launch = launchEnd,
                                 onNoteRoom = { barAside = it },
-                                translated = { model.translator?.takeIf { it.isFor(card.title, d.story) }?.showing == true },
+                                translation = { model.translator?.takeIf { it.isFor(card.title, d.story) && it.showing }?.translation },
                                 onStale = { model.refresh(changes, session.lastCardChange, retry = true) },
                                 bookmark = bookmark,
                             )
@@ -1290,6 +1297,9 @@ internal fun easesProgress(jump: Float, scrolling: Boolean, interrupted: Boolean
 
 /** How long a screenshot's card page waits for its story to be laid out before its end is brought into view. */
 private const val LAUNCH_END_SETTLE_MS = 700L
+
+/** How long, at most, a screenshot's card page under 自動翻譯 waits for the translation before bringing its end into view. */
+private const val LAUNCH_END_TRANSLATION_MS = 15_000L
 
 /** The smallest change of the reading progress that eases rather than snaps (2 % of the story). */
 internal const val PROGRESS_JUMP = 0.02f
