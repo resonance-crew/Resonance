@@ -213,6 +213,40 @@ import UIKit
         for piece in g.pieces { #expect(abs(piece.height - (lineBox - 6)) < 0.01) }
     }
 
+    /// Wave 2 #3a: a passage is now 2–3 whole sentences, ~100 characters — over four lines on a phone. Washed line by
+    /// line, its faces still glued after its last character on the line it ends on; in the margin, by its first line.
+    @Test func aHundredCharacterPassageOverFourLinesKeepsItsFacesWhereTheyStand() throws {
+        let lead = "那天下午我終於把最後一個箱子拆開。"
+        let passage = "箱子堆滿了客廳，我坐在地上，第一次覺得安靜是屬於自己的。窗外有人在慢慢地收衣服，風把一件白襯衫吹得鼓起來，像是誰在那裡輕輕地呼吸。我想起小時候的房間，牆上貼著褪色的地圖，每一個城市都是我還沒去過的地方。"
+        #expect(passage.count >= 90)
+        let leaf = lead + passage + "後來天就黑了。"
+        let start = (lead as NSString).length, length = (passage as NSString).length
+        #expect(PassageRange.find(leaf, passage).map { ($0.start, $0.end) } ?? (0, 0) == (start, start + length))
+        // A phone, in the line.
+        let style = ProseStyle.body(StoryTypography(script: .cjk, layout: .compact))
+        let text = style.attributed([InlineRun(leaf)])
+        let gap = PassageFaces.lineRoom(count: 3, size: 24)
+        let wash = PassageWash(id: "long", range: NSRange(location: start, length: length), gap: gap)
+        let kerned = PassageWash.kerned(text, [wash])
+        let (lm, container, kept) = laidOut(kerned, width: 335, font: style.font, lineHeight: style.lineHeight)
+        _ = kept
+        let g = try #require(PassageWash.geometry(of: wash, layoutManager: lm, container: container, origin: .zero, width: 335))
+        #expect(g.pieces.count >= 4, "\(g.pieces.count) lines")
+        let slot = try #require(g.slot)
+        let last = try #require(g.pieces.last)
+        #expect(slot.midY > last.minY && slot.midY < last.maxY)
+        #expect(slot.maxX <= 335 + 0.5, "\(slot)")
+        // Wide, in the margin: nothing moves, the faces by the first line.
+        let wide = ProseStyle.body(StoryTypography(script: .cjk, layout: .expanded))
+        let plain = wide.attributed([InlineRun(leaf)])
+        let marginWash = PassageWash(id: "long", range: wash.range, gap: 0)
+        let (wlm, wcontainer, wkept) = laidOut(plain, width: 580, font: wide.font, lineHeight: wide.lineHeight)
+        _ = wkept
+        let m = try #require(PassageWash.geometry(of: marginWash, layoutManager: wlm, container: wcontainer, origin: .zero, width: 580))
+        #expect(m.slot == nil && m.pieces.count >= 2)
+        #expect(abs(m.startLine.midY - m.pieces[0].midY) < 0.5)
+    }
+
     @Test func inTheMarginNothingInTheStoryMoves() throws {
         let style = ProseStyle.body(StoryTypography(script: .cjk, layout: .expanded))
         let text = style.attributed([InlineRun("箱子堆滿了客廳，我坐在地上，第一次覺得安靜是屬於自己的。窗外有人在慢慢地收衣服。")])

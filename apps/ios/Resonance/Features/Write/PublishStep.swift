@@ -8,7 +8,7 @@ import UIKit
 /// panel grown into a page (publishing is still two taps: ✓ → 發布). Top to bottom: the mirror line
 /// (first publication only), the card as a list will show it with its cover edited on the picture
 /// itself (round 7 §1.3; what went wrong with a cover said there too, round 8 §3), 標籤, 卡片類型 — one
-/// choice of 公開 · 匿名公開 · 草稿, no line under it: the preview's byline follows the choice (round 8
+/// choice of 公開 · 連結的人 · 匿名公開 · 草稿, no line under it: the preview's byline follows the choice (round 8
 /// §2.2) —, a line saying whether a resonance reaches its original, then the foot: one button whose
 /// verb follows the card and the choice (§2.3), and 捨棄修改 beside it only for a published card's
 /// revision. Every choice is the model's own value and autosaves with the draft or the live card's
@@ -248,11 +248,14 @@ struct PublishStep: View {
             label(L10n.Write.Visibility.label)
             // A segmented choice with no pen line (its options are buttons): a quiet paper-dark track
             // shows the control's extent, the chosen segment wears the tonal peach with the deep label.
-            // Anonymity is a way of being shared, so it is one of the three; 草稿 is the author's alone. A
-            // card kept for connections only (older ones) shows none chosen and keeps its audience until
-            // one is. No line under it: the preview's byline above already follows the choice.
+            // Anonymity is a way of being shared, so it is one of the four; 連結的人 is always named; 草稿 is
+            // the author's alone. A card both anonymous and for connections only (older ones) shows none
+            // chosen and keeps its audience until one is. No line under it: the preview's byline above
+            // already follows the choice. Four don't fit a phone's row with their glyphs: the glyphs go,
+            // the words stay (the web's `iconDroppable`).
             SegmentedActionBar([
                 audienceOption(.public, L10n.Write.Visibility.`public`, icon: .globe),
+                audienceOption(.connections, L10n.Write.Visibility.connections, icon: .users),
                 audienceOption(.anonymous, L10n.Write.Visibility.anonymous, icon: .mask),
                 audienceOption(.private, L10n.Write.Visibility.draft, icon: .lock),
             ], fill: Tokens.creamDark)
@@ -269,7 +272,7 @@ struct PublishStep: View {
         return SegmentSpec(id: audience.rawValue, icon: icon, label: label,
                            fill: chosen ? Tokens.buttonTonal : nil,
                            ink: chosen ? Tokens.buttonOnTonal : Tokens.segmentIdleInk,
-                           pressInk: Tokens.towardInk.opacity(0.05), selected: chosen) {
+                           pressInk: Tokens.towardInk.opacity(0.05), iconDroppable: true, selected: chosen) {
             model.choose(audience)
         }
     }
