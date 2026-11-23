@@ -518,10 +518,11 @@ describe('CardEditor — editing a published card', () => {
     expect(await screen.findByRole('region', { name: en.write.publishPanel.updateTitle })).toBeInTheDocument();
     expect(screen.getByText(en.write.publishPanel.updateHint)).toBeInTheDocument();
     // Anonymous for everyone, then a 草稿: a live card keeps its anonymity while it is private, and the
-    // one button says what that does (轉為草稿), the hint about readers gone with them.
+    // one button says what that does (轉為草稿), the hint about readers unseen with them (round 32 §P4: it keeps its
+    // room, hidden and unread, so the card types under it never move).
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.anonymous }));
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
-    expect(screen.queryByText(en.write.publishPanel.updateHint)).toBeNull();
+    expect(screen.getByText(en.write.publishPanel.updateHint)).toHaveAttribute('aria-hidden', 'true');
     await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.makeDraft }));
 
     await waitFor(() =>
