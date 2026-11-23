@@ -1,9 +1,12 @@
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const run = vi.fn();
 vi.mock('./util', async (importOriginal) => ({ ...(await importOriginal<typeof import('./util')>()), run: (...a: unknown[]) => run(...a), sleep: async () => {} }));
 
-const { devServerEnv, seed } = await import('./stack');
+const { devServerEnv, seed, startSeeder, SeederGone } = await import('./stack');
 
 describe('seed', () => {
   beforeEach(() => {
@@ -11,14 +14,14 @@ describe('seed', () => {
     run.mockImplementation(() => '');
   });
 
-  it('runs the seed once more when the emulator cancels a write, and goes on', async () => {
-    run.mockImplementationOnce(() => {
-      throw Object.assign(new Error('Command failed: npx tsx scripts/seed-emulator.ts'), { stderr: 'Error: 1 CANCELLED: call already cancelled.\n    at …' });
-    });
+  it('seeds once more when the emulator cancels a write, and goes on', async () => {
+    let calls = 0;
+    const once = async () => {
+      if (++calls === 1) throw Object.assign(new Error('the seed failed'), { stderr: 'Error: 1 CANCELLED: call already cancelled.\n    at …' });
+    };
     const lines: string[] = [];
-    await seed((l) => lines.push(l));
-    expect(run).toHaveBeenCalledTimes(2);
-    expect(run.mock.calls[1][2]).toMatchObject({ SEED_RESET: '1', SEED_PICKS: 'none' });
+    await seed((l) => lines.push(l), 2, 0, once);
+    expect(calls).toBe(2);
     expect(lines).toEqual([
       'Seeding the test world (scripts/seed-emulator.ts)…',
       '  the seed failed (Error: 1 CANCELLED: call already cancelled.): once more',
@@ -27,22 +30,64 @@ describe('seed', () => {
   });
 
   it('stops the run when the seed fails twice', async () => {
-    run.mockImplementation(() => {
+    let calls = 0;
+    const once = async () => {
+      calls++;
       throw new Error('Command failed: npx tsx scripts/seed-emulator.ts');
-    });
-    let stopped: unknown;
-    try {
-      await seed(() => {});
-    } catch (error) {
-      stopped = error;
-    }
-    expect(String(stopped)).toContain('Command failed');
-    expect(run).toHaveBeenCalledTimes(2);
+    };
+    await expect(seed(() => {}, 2, 0, once)).rejects.toThrow('Command failed');
+    expect(calls).toBe(2);
   });
 
-  it('seeds once when the first seed works', async () => {
-    await seed(() => {});
-    expect(run).toHaveBeenCalledTimes(1);
+  it('seeds in a process of its own, with the stack’s seed environment, when the kept-loaded seeder is off', async () => {
+    const was = process.env.VISUAL_SEED_RESIDENT;
+    process.env.VISUAL_SEED_RESIDENT = '0';
+    try {
+      await seed(() => {});
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run.mock.calls[0].slice(0, 2)).toEqual(['npx', ['tsx', 'scripts/seed-emulator.ts']]);
+      expect(run.mock.calls[0][2]).toMatchObject({ SEED_RESET: '1', SEED_PICKS: 'none' });
+    } finally {
+      if (was == null) delete process.env.VISUAL_SEED_RESIDENT;
+      else process.env.VISUAL_SEED_RESIDENT = was;
+    }
+  });
+});
+
+describe('the kept-loaded seeder', () => {
+  /** A stand-in for seedServer.ts: answers each `seed` line as `answer` says. */
+  function fakeServer(answer: (n: number) => string | null) {
+    const child = new EventEmitter() as EventEmitter & { stdin: PassThrough; stdout: PassThrough; stderr: PassThrough; kill: (s?: string) => boolean };
+    child.stdin = new PassThrough();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    let n = 0;
+    child.kill = () => (child.emit('exit', null), true);
+    child.stdin.on('data', (chunk: Buffer) => {
+      for (const line of chunk.toString().split('\n').filter(Boolean)) {
+        if (line !== 'seed') continue;
+        const said = answer(++n);
+        // The seed's own words come first, then the answer.
+        if (said != null) setTimeout(() => child.stdout.write(`Seeded 4 users into demo-resonance.\n${said}\n`), 1);
+      }
+    });
+    return child as unknown as ChildProcessWithoutNullStreams;
+  }
+
+  it('answers each seed in turn, a failed one as an error the retry sees, its own words passed over', async () => {
+    const seeder = startSeeder(() => fakeServer((n) => (n === 2 ? 'error "1 CANCELLED"' : 'ok')));
+    await seeder.seed();
+    await expect(seeder.seed()).rejects.toThrow('the seed failed: "1 CANCELLED"');
+    await seeder.seed();
+    seeder.stop();
+  });
+
+  it('says it is gone — not the world’s fault — when the server stops or never answers', async () => {
+    const quiet = startSeeder(() => fakeServer(() => null), 30);
+    await expect(quiet.seed()).rejects.toBeInstanceOf(SeederGone);
+    const stopped = startSeeder(() => fakeServer(() => 'ok'));
+    stopped.stop();
+    await expect(stopped.seed()).rejects.toBeInstanceOf(SeederGone);
   });
 });
 

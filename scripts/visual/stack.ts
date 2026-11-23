@@ -6,7 +6,7 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import type { ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { PORTS, ROOT, run, sleep, startGroup, stopGroup, waitForPort } from './util';
 
 export type Stack = { devUrl: string; stop: () => void };
@@ -49,11 +49,11 @@ export const seedEnv = () => ({ ...emulatorPorts(), EMULATOR_DEV_PORT: String(PO
  * the seed stopped there and so did every flow after it. SEED_RESET makes a second seed start from an empty database
  * again, so it can simply be run again; a seed that fails twice is a real fault and stops the run.
  */
-export async function seed(log: (line: string) => void, attempts = 2, pause = 2_000) {
+export async function seed(log: (line: string) => void, attempts = 2, pause = 2_000, once: () => Promise<void> = seedOnce) {
   for (let attempt = 1; ; attempt++) {
     log(attempt === 1 ? 'Seeding the test world (scripts/seed-emulator.ts)…' : 'Seeding the test world again…');
     try {
-      run('npx', ['tsx', 'scripts/seed-emulator.ts'], seedEnv());
+      await once();
       return;
     } catch (error) {
       if (attempt >= attempts) throw error;
@@ -62,6 +62,88 @@ export async function seed(log: (line: string) => void, attempts = 2, pause = 2_
       await sleep(pause);
     }
   }
+}
+
+/** One seed: by the kept-loaded seeder while it answers (`VISUAL_SEED_RESIDENT=0`: never), else a process of its own. */
+async function seedOnce(): Promise<void> {
+  if (process.env.VISUAL_SEED_RESIDENT !== '0') {
+    seeder ??= startSeeder();
+    try {
+      return await seeder.seed();
+    } catch (error) {
+      // A seed the world refused is a seed that failed; a seeder gone is replaced by the old way from now on.
+      if (!(error instanceof SeederGone)) throw error;
+      seeder = null;
+      process.env.VISUAL_SEED_RESIDENT = '0';
+    }
+  }
+  run('npx', ['tsx', 'scripts/seed-emulator.ts'], seedEnv());
+}
+
+/** The seeder process stopped, or never answered: not the world's fault. */
+export class SeederGone extends Error {}
+
+export type Seeder = { seed: () => Promise<void>; stop: () => void };
+
+let seeder: Seeder | null = null;
+
+/** Stops the kept-loaded seeder, if one runs (the stack's stop). */
+export function stopSeeder() {
+  seeder?.stop();
+  seeder = null;
+}
+
+/**
+ * The seed kept loaded (seedServer.ts), on the stack's emulators: `seed()` asks for one more world and waits for its
+ * answer — `ok`, or `error <why>` (thrown, so the caller's retry runs) — at most `timeoutMs`.
+ */
+export function startSeeder(
+  spawnServer: () => ChildProcessWithoutNullStreams = () =>
+    spawn('npx', ['tsx', 'scripts/visual/seedServer.ts'], { cwd: ROOT, env: { ...process.env, ...seedEnv() }, stdio: ['pipe', 'pipe', 'pipe'] }),
+  timeoutMs = 120_000,
+): Seeder {
+  const child = spawnServer();
+  const waiting: { done: (line: string) => void }[] = [];
+  let gone = false;
+  let buffer = '';
+  child.stdout.on('data', (chunk: Buffer) => {
+    buffer += chunk.toString('utf8');
+    for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
+      const line = buffer.slice(0, i).trim();
+      buffer = buffer.slice(i + 1);
+      // Only its answers: the seed's own words (its `Seeded … users`) go by.
+      if (line === 'ok' || line.startsWith('error ')) waiting.shift()?.done(line);
+    }
+  });
+  child.stderr.on('data', () => {});
+  const end = () => {
+    gone = true;
+    for (const w of waiting.splice(0)) w.done('gone');
+  };
+  child.on('exit', end);
+  child.on('error', end);
+  return {
+    seed: () =>
+      new Promise<void>((resolve, reject) => {
+        if (gone) return reject(new SeederGone('the seeder is not running'));
+        const timer = setTimeout(() => {
+          child.kill('SIGKILL');
+          reject(new SeederGone(`the seeder gave no answer within ${Math.round(timeoutMs / 1000)} s`));
+        }, timeoutMs);
+        waiting.push({
+          done: (line) => {
+            clearTimeout(timer);
+            if (line === 'ok') resolve();
+            else if (line === 'gone') reject(new SeederGone('the seeder stopped'));
+            else reject(Object.assign(new Error(`the seed failed: ${line.slice(6)}`), { stderr: line.slice(6) }));
+          },
+        });
+        child.stdin.write('seed\n');
+      }),
+    stop: () => {
+      if (!gone) child.kill('SIGTERM');
+    },
+  };
 }
 
 /**
@@ -84,6 +166,7 @@ export async function startStack(logDir: string, log: (line: string) => void): P
     if (fixed !== text) writeFileSync(nextEnv, fixed);
   };
   const stop = () => {
+    stopSeeder();
     children.reverse().forEach(stopGroup);
     restoreNextEnv();
   };

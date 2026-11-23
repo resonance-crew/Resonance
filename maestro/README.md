@@ -104,7 +104,7 @@ error): every file here passes it.
 The runner starts its own stack (ports `VISUAL_AUTH_PORT` / `VISUAL_FIRESTORE_PORT` /
 `VISUAL_DEV_PORT`, default 9299 / 8280 / 3150), builds and installs the Debug app, brings up the
 harness's own phone (booting it if needed, and shutting down only what it booted), reseeds before
-each flow and runs `maestro test` on it. The reseed empties the stack's database first (`SEED_RESET=1`), so
+each flow and runs `maestro test` on it. The reseed (kept loaded: scripts/visual/README.md, Data and time) empties the stack's database first (`SEED_RESET=1`), so
 nothing one flow wrote — a connection, a bookmark, a sent message — carries into the next. It prints `Flows <run> <platform>: N passed · M failed`
 and exits non-zero on a failure. Everything lands in `visual/flows/<run>/<platform>/` (git-ignored):
 `<flow>.xml` (JUnit), `<flow>/maestro.log`, and `<flow>/` with Maestro's commands, logs, the

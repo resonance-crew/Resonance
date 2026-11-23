@@ -483,7 +483,12 @@ change near one of those states (`capture android --device phone-large --only se
   iOS status bar is overridden to 9:41 with full bars on 2026-09-01 (`simctl status_bar`), Android's
   is in demo mode at 09:41 with no notification icons (said again before each capture).
 - **Data and time**: `scripts/seed-emulator.ts` seeds a fresh world before every run with its clock
-  pinned (`SEED_NOW`, 2026-09-01 12:00 Taipei, in `stack.ts`), so every date on a screen is the same.
+  pinned (`SEED_NOW`, 2026-09-01 12:00 Taipei, in `stack.ts`), so every date on a screen is the same. The stack keeps
+  the seed loaded (`seedServer.ts`, `stack.ts` `startSeeder`: the script's own `seedWorld`, asked again for each
+  flow) and empties the database through the Firestore emulator's own endpoint (`wipeFirestore`): a reseed after a
+  flow took 3.4 s and takes some 0.2 s, the world the same document for document (102 documents, 4 accounts, compared
+  against the old way after a flow's writes). `VISUAL_SEED_RESIDENT=0` seeds in a process of its own as before; a
+  seeder that stops or never answers is replaced by that way for the rest of the run.
 - **Motion is never captured mid-way.** Web: `reducedMotion: 'reduce'`, CSS animations finished and
   the caret hidden by Playwright. iOS and Mac: the debug-only `-visualCapture YES` turns UIKit and
   SwiftUI animations off and hides scroll indicators (Mac also `-AppleShowScrollBars WhenScrolling`).
