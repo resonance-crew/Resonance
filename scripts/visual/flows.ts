@@ -24,7 +24,8 @@ import { basename, dirname, join } from 'node:path';
 import { LockBusy, acquire, resourcesFor } from './lock';
 import { startStack, seed, type Stack } from './stack';
 import { PORTS, ROOT, SEED_PASSWORD, VISUAL_DIR, sleep, type CaptureContext } from './util';
-import { stopwatch } from './timings';
+import { stopwatch, writeTiming } from './timings';
+import { hookServer, parseJunit, writeSessionFlows } from './flowSession';
 
 export type FlowPlatform = 'ios' | 'android';
 export type FlowResult = { flow: string; passed: boolean; seconds: number };
@@ -299,7 +300,14 @@ export async function runFlows(platform: FlowPlatform, ctx: CaptureContext, { ta
   const device = platform === 'ios' ? await iosDevice(ctx, kind) : await androidDevice(ctx, kind);
   const results: FlowResult[] = [];
   try {
-    for (const [i, flow] of flows.entries()) {
+    // One Maestro session for them all (flowSession.ts), when asked; what it leaves without a verdict runs as before.
+    let left = flows;
+    if (process.env.VISUAL_FLOWS_SESSION === '1' && flows.length > 1) {
+      results.push(...(await runSession(platform, ctx, device, flows, outDir)));
+      left = flows.filter((f) => !results.some((r) => r.flow === f));
+      if (left.length) ctx.log(`  the session gave no verdict for ${left.join(', ')}: run one by one`);
+    }
+    for (const [i, flow] of left.entries()) {
       const timing = stopwatch();
       await seed(ctx.log);
       timing.lap('seed');
@@ -310,7 +318,7 @@ export async function runFlows(platform: FlowPlatform, ctx: CaptureContext, { ta
       let passed: boolean;
       try {
         // Maestro's driver put on the device for the first flow only (maestroArgs).
-        passed = await maestroTest(device.id, flow, outDir, ctx.ports, join(outDir, flow, 'maestro.log'), i === 0);
+        passed = await maestroTest(device.id, flow, outDir, ctx.ports, join(outDir, flow, 'maestro.log'), i === 0 && left === flows);
       } finally {
         timing.lap('maestro');
         await device.afterFlow?.(tags);
@@ -325,6 +333,71 @@ export async function runFlows(platform: FlowPlatform, ctx: CaptureContext, { ta
   } finally {
     await device.close();
   }
+  return results;
+}
+
+/**
+ * One platform's flows in one `maestro test` (flowSession.ts): the runner's hook reseeds and readies the device before
+ * each, as the loop in runFlows does. Answers the flows the session's report gives a verdict for.
+ */
+async function runSession(platform: FlowPlatform, ctx: CaptureContext, device: Device, flows: string[], outDir: string): Promise<FlowResult[]> {
+  const dir = join(outDir, '_session');
+  const files = writeSessionFlows(join(dir, 'flows'), FLOWS_DIR, flows);
+  const steps = new Map<string, { seed: number; prepare: number }>();
+  let last: string[] | null = null;
+  let fatal: unknown = null;
+  const hook = await hookServer(async (flow) => {
+    if (last) await device.afterFlow?.(last);
+    last = null;
+    const t0 = Date.now();
+    try {
+      await seed(ctx.log);
+    } catch (error) {
+      // A seed that fails twice stops the run, as it does one flow at a time.
+      fatal = error;
+      throw error;
+    }
+    const t1 = Date.now();
+    const tags = tagsOf(flow);
+    await device.prepareFlow(tags);
+    last = tags;
+    steps.set(flow, { seed: t1 - t0, prepare: Date.now() - t1 });
+  });
+  const report = join(dir, 'report.xml');
+  const env = Object.entries(flowEnv(ctx.ports)).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
+  const args = ['--device', device.id, 'test', ...files, ...env, '-e', `HOOK_URL=${hook.url}`, '--format', 'junit', '--output', report,
+    '--test-output-dir', join(dir, 'out'), '--debug-output', join(dir, 'debug'), '--no-ansi'];
+  ctx.log(`  ${flows.length} flows in one Maestro session (VISUAL_FLOWS_SESSION=1)`);
+  const started = Date.now();
+  try {
+    await new Promise<void>((done) => {
+      const child = spawn(MAESTRO, args, { cwd: ROOT, env: maestroEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
+      const out: Buffer[] = [];
+      child.stdout.on('data', (b: Buffer) => out.push(b));
+      child.stderr.on('data', (b: Buffer) => out.push(b));
+      child.on('close', () => {
+        writeFileSync(join(dir, 'maestro.log'), Buffer.concat(out));
+        done();
+      });
+    });
+  } finally {
+    await hook.close();
+    if (last) await device.afterFlow?.(last);
+  }
+  if (fatal) throw fatal;
+  const cases = existsSync(report) ? parseJunit(readFileSync(report, 'utf8')) : [];
+  const timingsDir = basename(ctx.runDir) === '_flows' ? dirname(ctx.runDir) : ctx.runDir;
+  const results: FlowResult[] = [];
+  for (const flow of flows) {
+    const c = cases.find((x) => x.flow === flow);
+    if (!c) continue;
+    const s = steps.get(flow);
+    const timing = { seed: s?.seed ?? 0, prepare: s?.prepare ?? 0, maestro: c.seconds * 1000 };
+    writeTiming(timingsDir, { key: `${platform}/flows/${flow}`, kind: 'flow', totalMs: timing.seed + timing.prepare + timing.maestro, steps: timing, at: new Date().toISOString() });
+    results.push({ flow, passed: c.passed, seconds: c.seconds });
+    ctx.log(`  ${c.passed ? 'pass' : 'FAIL'}  ${platform}/${flow}  (${c.seconds} s in the session; seed ${(timing.seed / 1000).toFixed(1)} s · prepare ${(timing.prepare / 1000).toFixed(1)} s)${c.passed ? '' : `  see ${join(dir, 'maestro.log')}`}`);
+  }
+  ctx.log(`  the session: ${Math.round((Date.now() - started) / 1000)} s for ${results.length} flows`);
   return results;
 }
 
