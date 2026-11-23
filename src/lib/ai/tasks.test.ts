@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
-import { embed, IMAGE_TIMEOUT_MS } from './openai';
+import { embed, IMAGE_TIMEOUT_MS, signatureModel } from './openai';
 import {
   CONCEPT_TIMEOUT_MS,
   PASSAGES_PROMPT,
+  passagesInput,
   PASSAGES_TIMEOUT_MS,
   pickPassages,
   READING_MAX_CHARS,
@@ -119,7 +120,26 @@ describe('OpenAI calls', () => {
     expect(requests[1].signal).toBeInstanceOf(AbortSignal);
   });
 
-  it("abandon the tap passages' pick past PASSAGES_TIMEOUT_MS: llmModel, reasoning low, Structured Outputs (round 27)", async () => {
+  it("give the tap passages' pick the card's through line as a guide, marked as not the author's words (Wave 2 #3a)", async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        requests.push({ url, body: JSON.parse(String(init.body)), signal: init.signal });
+        return new Response(JSON.stringify({ choices: [{ message: { content: '{"passages":[]}' } }] }), { status: 200 });
+      }),
+    );
+    const out = await pickPassages('雨後', '下了一整天的雨。', { insight: '  一個人走也沒關係  ' });
+    expect(out.model).toBe(signatureModel());
+    const messages = requests[0].body.messages as { content: string }[];
+    expect(messages[1].content).toBe(passagesInput('雨後', '下了一整天的雨。', '一個人走也沒關係'));
+    expect(messages[1].content).toMatch(/through line.*never to be copied\): 一個人走也沒關係$/);
+    // The prompt asks for whole sentences, the heart of the story, never a plain event or dialogue, the whole story covered.
+    for (const rule of [/WHOLE sentences/, /15 to 100 characters/, /8 to 60 words/, /plain event/, /dialogue or quoted speech/, /Cover the whole story/, /through line/]) {
+      expect(PASSAGES_PROMPT).toMatch(rule);
+    }
+  });
+
+  it("abandon the tap passages' pick past PASSAGES_TIMEOUT_MS: signatureModel, reasoning medium, Structured Outputs (round 27, Wave 2 #3a)", async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, init: RequestInit) => {
@@ -132,7 +152,8 @@ describe('OpenAI calls', () => {
     expect(out.passages).toEqual(['下了一整天的雨', '我一個人走回家']);
     expect(timeout).toHaveBeenCalledWith(PASSAGES_TIMEOUT_MS);
     expect(requests[0].signal).toBeInstanceOf(AbortSignal);
-    expect(requests[0].body.reasoning_effort).toBe('low');
+    expect(requests[0].body.reasoning_effort).toBe('medium');
+    expect(requests[0].body.model).toBe(signatureModel());
     expect((requests[0].body.response_format as { type: string }).type).toBe('json_schema');
     const messages = requests[0].body.messages as { content: string }[];
     expect(messages[0].content).toBe(PASSAGES_PROMPT);

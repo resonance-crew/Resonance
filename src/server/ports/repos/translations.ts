@@ -55,6 +55,8 @@ export interface PassageSource {
   fields: Record<string, unknown>;
   /** `tapPassages` as stored, `undefined` when the field is absent. */
   tapPassages: unknown;
+  /** The card's through line (`signature.coreInsight`, its reading's) when it has one: the pick's guide (Wave 2 #3a). */
+  insight: string | null;
 }
 
 /** `cards.tapPassages` as made: the story's hash, the items (none: settled), the model; its `at` the write's time. */
@@ -62,6 +64,8 @@ export interface TapPassagesValue {
   of: string;
   items: { id: string; text: string }[];
   model: string;
+  /** PASSAGES_VERSION when made (Wave 2 #3a). */
+  v: number;
 }
 
 /** A story's kept translation (`cards/{id}/translations/{to}`), when its title and story are text. */

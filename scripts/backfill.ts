@@ -72,11 +72,15 @@
  *       into English for a Chinese story, 繁體中文 for a Latin-script one, both for Japanese or Korean), as a
  *       publish makes them — one small OpenAI call each, two at a time; needs OPENAI_API_KEY to apply (on the
  *       emulator no model is asked: every card answers `offline`) — production runs are the owner's call
- *   npx tsx scripts/backfill.ts tap-passages [--apply] [--emulator]
- *       published cards long enough get their tap passages (round 27: up to three sentences of the story, word for
- *       word, a reader may pick after 共振), as a publish makes them — one small OpenAI call each, two at a time;
- *       needs OPENAI_API_KEY to apply (on the emulator no model is asked: the offline pick) — production runs are
- *       the owner's call (docs/release/owed.md)
+ *   npx tsx scripts/backfill.ts tap-passages [--preview N] [--limit N] [--apply] [--emulator]
+ *       published cards long enough get their tap passages (round 27: up to three passages of the story, word for
+ *       word, a reader may pick after 共振; Wave 2 #3a: 1–3 whole sentences, ~100 characters, on the reading model),
+ *       as a publish makes them — one OpenAI call each, two at a time — when they have none, were made from an older
+ *       story, or by an older version of the pick (PASSAGES_VERSION, stored as `tapPassages.v`). A dry run by default:
+ *       it counts them by what they hold; --preview N asks the model for N of them and prints the new pick beside the
+ *       current one, writing nothing (card ids only); --limit N caps an apply. Needs OPENAI_API_KEY to preview or apply
+ *       (on the emulator no model is asked: the offline pick) — production runs are the owner's call
+ *       (docs/release/owed.md)
  *   npx tsx scripts/backfill.ts story-translations [--apply] [--emulator]
  *       every story a reader may translate (published, public, not in the trash) gets its kept translation
  *       (cards/{id}/translations/{to}) into each language it may go into, made now as the card page's translate
@@ -286,7 +290,15 @@ async function main() {
     }
     case 'tap-passages': {
       const { backfillTapPassages } = await import('./backfills/tapPassages');
-      await backfillTapPassages(db, { apply });
+      const number = (flag: string) => {
+        const at = args.indexOf(flag);
+        const n = at >= 0 ? Number(args[at + 1]) : NaN;
+        return Number.isInteger(n) && n >= 0 ? n : undefined;
+      };
+      const preview = number('--preview');
+      // A preview asks the model (OPENAI_API_KEY) and writes nothing; on the emulator no model is asked.
+      const pick = preview && !useEmulator ? (await import('../src/lib/ai/tasks')).pickPassages : undefined;
+      await backfillTapPassages(db, { apply, limit: number('--limit'), preview, pick });
       return;
     }
     case 'summary-translations': {

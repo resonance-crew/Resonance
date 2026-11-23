@@ -21,7 +21,7 @@ import { backfillCardTombstones } from '../../scripts/backfills/cardTombstones';
 import { backfillRecommendIndex } from '../../scripts/backfills/recommendIndex';
 import { backfillCoverThumbs } from '../../scripts/backfills/coverThumbs';
 import { backfillTapPassages } from '../../scripts/backfills/tapPassages';
-import { passagesHash } from '@/lib/cards/tapPassages';
+import { passagesHash, PASSAGES_VERSION } from '@/lib/cards/tapPassages';
 import { PASSAGE_STORY, PASSAGE_TITLE, passageItems } from './tapPassageStory';
 import { avatarColorFor, LEGACY_AVATAR_COLOR } from '@/lib/design/avatarColors';
 import type { PreviewFetch } from '@/lib/links/preview';
@@ -978,27 +978,47 @@ describe('cover-thumbs (B2)', () => {
   });
 });
 
-describe('tap-passages (round 27)', () => {
+describe('tap-passages (round 27, Wave 2 #3a)', () => {
   const card = (id: string, extra: Record<string, unknown> = {}) =>
     db.doc(`cards/${id}`).set({ authorId: 'alice', thoughtCore: PASSAGE_TITLE, story: PASSAGE_STORY, visibility: 'public', publishedAt: joined('2026-11-01T00:00:00Z'), ...extra });
 
-  it('counts, then makes the passages of published cards long enough without current ones, once', async () => {
+  it('counts, then makes the passages of published cards long enough without current ones — an older version too — once', async () => {
     await Promise.all([
       card('old'),
       card('stale', { tapPassages: { of: passagesHash('an older story'), items: [] } }),
-      card('done', { tapPassages: { of: passagesHash(PASSAGE_STORY), items: passageItems() } }),
+      // Round 27's pick of this very story (no `v`): made again by the new version.
+      card('roundTwentySeven', { tapPassages: { of: passagesHash(PASSAGE_STORY), items: passageItems() } }),
+      card('done', { tapPassages: { of: passagesHash(PASSAGE_STORY), items: passageItems(), v: PASSAGES_VERSION } }),
       card('short', { story: '一句話而已。' }),
       card('draft', { publishedAt: null }),
       card('trashed', { trashedAt: joined('2026-11-10T00:00:00Z') }),
       card('givenUp', { tapPassages: { failed: { of: passagesHash(PASSAGE_STORY), tries: 3 } } }),
     ]);
-    const dry = await backfillTapPassages(db, { apply: false, log: quiet });
-    expect(dry.candidates).toBe(2);
+    const lines: string[] = [];
+    const dry = await backfillTapPassages(db, { apply: false, log: (l) => lines.push(l) });
+    expect(dry.candidates).toBe(3);
+    expect(lines.join('\n')).toMatch(new RegExp(`prompt version ${PASSAGES_VERSION}`));
+    expect(lines.join('\n')).toMatch(/none 1/);
+    expect(lines.join('\n')).toMatch(/stale story 1/);
+    expect(lines.join('\n')).toMatch(/v1 1/);
     expect((await data('cards/old'))!.tapPassages).toBeUndefined();
+
+    // A preview asks the model and prints, writing nothing.
     const pick = vi.fn(async () => ({ passages: passageItems().map((p) => p.text), model: 'm' }));
+    const printed: string[] = [];
+    await backfillTapPassages(db, { apply: false, preview: 2, pick, pauseMs: 0, log: (l) => printed.push(l) });
+    expect(pick).toHaveBeenCalledTimes(2);
+    expect(printed.join('\n')).toMatch(/next: 「/);
+    expect((await data('cards/old'))!.tapPassages).toBeUndefined();
+    expect((await data('cards/roundTwentySeven'))!.tapPassages.v).toBeUndefined();
+
+    // --limit caps an apply; the rest are left for the next run.
+    pick.mockClear();
+    expect(await backfillTapPassages(db, { apply: true, log: quiet, pauseMs: 0, pick, limit: 1 })).toMatchObject({ candidates: 3, made: 1 });
     const run = await backfillTapPassages(db, { apply: true, log: quiet, pauseMs: 0, pick });
     expect(run).toMatchObject({ candidates: 2, made: 2 });
-    expect((await data('cards/old'))!.tapPassages).toMatchObject({ of: passagesHash(PASSAGE_STORY), items: passageItems(), model: 'm' });
+    expect((await data('cards/old'))!.tapPassages).toMatchObject({ of: passagesHash(PASSAGE_STORY), items: passageItems(), model: 'm', v: PASSAGES_VERSION });
+    expect((await data('cards/roundTwentySeven'))!.tapPassages).toMatchObject({ v: PASSAGES_VERSION });
     expect((await backfillTapPassages(db, { apply: false, log: quiet })).candidates).toBe(0);
   });
 });

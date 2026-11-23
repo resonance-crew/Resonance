@@ -1,4 +1,4 @@
-import { offlinePassages, passagesHash } from '@/lib/cards/tapPassages';
+import { offlinePassages, passagesHash, PASSAGES_VERSION } from '@/lib/cards/tapPassages';
 
 /**
  * A story long enough to offer tap passages (round 27), and the value the
@@ -17,5 +17,5 @@ export const passageItems = () => offlinePassages(PASSAGE_STORY, { title: PASSAG
 export const withPassages = () => ({
   thoughtCore: PASSAGE_TITLE,
   story: PASSAGE_STORY,
-  tapPassages: { of: passagesHash(PASSAGE_STORY), items: passageItems(), model: 'offline' },
+  tapPassages: { of: passagesHash(PASSAGE_STORY), items: passageItems(), model: 'offline', v: PASSAGES_VERSION },
 });
