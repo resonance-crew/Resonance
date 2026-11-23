@@ -1,3 +1,4 @@
+import { budgetFirst } from './budget';
 import { ApiFailure } from '@/lib/api/v1/http';
 import { fallbackLocale, type MessageAlbum } from '@/lib/api/v1/messageParts';
 import { CARD_VISIBILITY_FIELDS, cardVisible } from '@/lib/api/v1/present';
@@ -35,20 +36,8 @@ export class NoteLimitReached extends ApiFailure {
 /** The refusal for someone without a pen name (lib/api/v1/conversations hasPenName). */
 export const noPenName = () => new ApiFailure('forbidden', 'Choose a pen name first.');
 
-/** See src/lib/api/v1/conversations.ts `budgetFirst`. */
-export async function budgetFirst<T>(spent: Promise<void>, send: () => Promise<T>): Promise<T> {
-  // Handled from the start: refused while the send's reads run, it is awaited below all the same.
-  spent.catch(() => {});
-  let result: T;
-  try {
-    result = await send();
-  } catch (e) {
-    await spent;
-    throw e;
-  }
-  await spent;
-  return result;
-}
+/** See src/lib/api/v1/conversations.ts `budgetFirst` (its home is ./budget, which the other writes share). */
+export { budgetFirst };
 
 /** What a note's card is read with: whose it is and who may read it (no story). */
 const NOTE_CARD_FIELDS = CARD_VISIBILITY_FIELDS;

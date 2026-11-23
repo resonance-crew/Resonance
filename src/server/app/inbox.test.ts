@@ -121,6 +121,20 @@ describe('the touches every inbox write makes', () => {
     await expect(markConversationReadIn(ctx, 'carol', 'bob_carol')).rejects.toMatchObject({ code: 'not_found' });
   });
 
+  // BE-7: the read mark's budget runs beside the read of the row; the mark is written only once it is spent.
+  it('reading a thread writes its mark only once the budget beside it is spent', async () => {
+    connect();
+    await sendMessageIn(ctx, 'alice', { to: 'bob', text: 'hi' });
+    let spend!: () => void;
+    const spent = new Promise<void>((r) => (spend = r));
+    const marking = markConversationReadIn(ctx, 'bob', PAIR, undefined, spent);
+    await new Promise((r) => setTimeout(r, 5));
+    expect((await getConversationIn(ctx, 'bob', PAIR)).unread).toBe(1);
+    spend();
+    await marking;
+    expect((await getConversationIn(ctx, 'bob', PAIR)).unread).toBe(0);
+  });
+
   it('reading the bell: own rows only, by id or up to a time; the bell touched when any was unread', async () => {
     ctx.state.seed('notifications', {
       n1: { userId: 'bob', type: 'note', payload: { fromUserId: 'alice' }, readAt: null, createdAt: Date.parse('2026-11-20T01:00:00Z') },

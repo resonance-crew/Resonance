@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ApiFailure } from '@/lib/api/v1/http';
 import { LIMITS } from '@/server/domain/rateLimit';
 import { describeWriterContract } from '@/server/contract/writer.contract';
@@ -67,5 +67,32 @@ describe('the writer, a whole session on memory', () => {
     expect(e).toBeInstanceOf(ApiFailure);
     expect((e as ApiFailure).code).toBe('rate_limited');
     expect(ctx.state.get('cards', id)!.story).toBe('起');
+  });
+
+  // BE-7: the autosave spent its budget, then read the card: two round trips one after the other, every 1.5 s. The
+  // budget runs beside the read now, and nothing is written until it is spent. BE-6: the read leaves the words out.
+  it('spends the budget beside the read, writes only once it is spent, and reads the card without its words', async () => {
+    const base = memoryCtx();
+    const id = 'P1o2I3u4Y5t6R7e8W9q0';
+    await createDraftIn(base, 'alice', { id, thoughtCore: '', story: '很長的故事', tags: [], visibility: 'private' });
+    let spend!: () => void;
+    const spent = new Promise<void>((r) => (spend = r));
+    let reads = 0;
+    const ctx = memoryCtx({
+      state: base.state,
+      limits: { ...base.limits, spend: () => spent },
+      uow: { run: (fn, o) => base.uow.run((tx) => fn({ ...tx, writer: { ...tx.writer, getDraftHead: (cid: string) => (reads++, tx.writer.getDraftHead(cid)) } }), o) },
+    });
+    const head = await base.uow.run((tx) => tx.writer.getDraftHead(id));
+    expect(head).toMatchObject({ authorId: 'alice' });
+    expect(head).not.toHaveProperty('story');
+
+    const save = saveDraftIn(ctx, 'alice', id, { rev: 1, story: '改過' });
+    await vi.waitFor(() => expect(reads).toBe(1));
+    // read while the budget is still out — and nothing written yet
+    expect(base.state.get('cards', id)!.story).toBe('很長的故事');
+    spend();
+    await expect(save).resolves.toMatchObject({ applied: true });
+    expect(base.state.get('cards', id)!.story).toBe('改過');
   });
 });

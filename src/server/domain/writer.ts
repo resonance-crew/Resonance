@@ -257,3 +257,9 @@ export function groupRowOf(id: string, data: Record<string, unknown>): MapGroupR
 
 const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
 const dateOf = (v: unknown) => (v instanceof Date && !Number.isNaN(v.getTime()) ? v : null);
+
+/**
+ * What an autosave reads of the card it writes (`getDraftHead`): whose it is, whether it is published or in the trash,
+ * its draft's rev, its cover and its audience — never its words (BE-6).
+ */
+export const DRAFT_HEAD_FIELDS = ['authorId', 'publishedAt', 'trashedAt', 'draftRev', 'media', 'visibility', 'anonymous'] as const;

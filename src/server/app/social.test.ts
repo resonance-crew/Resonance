@@ -151,6 +151,19 @@ describe('bookmarks', () => {
     expect((await getCardDetail(ctx, 'alice', 'bobNamed')).bookmarked).toBe(false);
   });
 
+  // BE-7: the budget runs beside the card's read, and the bookmark is written only once it is spent.
+  it('writes the bookmark only once the budget beside it is spent', async () => {
+    const ctx = world();
+    let spend!: () => void;
+    const spent = new Promise<void>((r) => (spend = r));
+    const saving = putBookmarkIn(ctx, 'alice', 'bobNamed', spent);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(ctx.state.rows('users/alice/bookmarks')).toEqual([]);
+    spend();
+    await saving;
+    expect((await getCardDetail(ctx, 'alice', 'bobNamed')).bookmarked).toBe(true);
+  });
+
   it("one the viewer can't read is not_found, as GET /cards answers it — an absent one alike", async () => {
     const ctx = world();
     for (const id of ['bobPrivate', 'bobConn', 'missing']) expect((await failure(putBookmarkIn(ctx, 'alice', id))).code, id).toBe('not_found');

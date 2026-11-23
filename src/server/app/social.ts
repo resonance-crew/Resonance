@@ -62,8 +62,10 @@ export async function lookupUsersIn(ctx: ServerCtx, ids: readonly string[]): Pro
  * neither does it here. Bookmarking again keeps the first time. Never counted,
  * never told to the author.
  */
-export async function putBookmarkIn(ctx: ServerCtx, uid: string, cardId: string): Promise<void> {
+export async function putBookmarkIn(ctx: ServerCtx, uid: string, cardId: string, spent?: Promise<void>): Promise<void> {
   const card = await visibleCardById(ctx, uid, cardId, CARD_VISIBILITY_FIELDS);
+  // The saver's budget, spent beside the card's read (BE-7): awaited before the write.
+  await spent;
   await ctx.data.social.putBookmark(uid, card.id);
 }
 
