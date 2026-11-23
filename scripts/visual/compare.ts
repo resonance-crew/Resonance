@@ -56,6 +56,8 @@ export type RunInfo = {
    * one run takes each platform's slice, and `only` / `devices` are the rest's.
    */
   slices?: Partial<Record<Platform, Slice>>;
+  /** `--changed`: where each platform's changes were counted from, and the platforms left out (changed.ts). */
+  changed?: { since: Partial<Record<Platform, string | null>>; skipped: Platform[] };
 };
 
 export type Slice = { only: string[]; devices: string[] };

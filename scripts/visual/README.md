@@ -26,6 +26,8 @@ npm run visual -- promote --from r30/base --reason "<the owner's words>"   # a m
 npm run visual -- baselines                  # main's and every branch's baseline, and which one this checkout uses
 npm run visual -- prune --dry-run            # which old runs `prune` would remove (and the GB): never the newest 20 (--keep N), one a baseline or an accept log names, visual/latest, or one maybe running (prune.ts)
 npm run visual -- capture web ios android --web-only card --web-device phone --ios-only card,thread --android-device phone   # one run, each platform its own slice
+npm run visual -- capture --only card --changed --dry-run   # which platforms a change since their baseline can move (run / skip, and the files), capturing nothing
+npm run visual -- capture --only card --changed            # the same slice, only on those platforms (opt-in; never with --flows)
 ```
 
 Every command prints `Run <id>: …`; pass that id with `--run` (the default, `visual/latest`, is
@@ -78,6 +80,30 @@ copied), with `branch.json` saying when; a name becomes a folder with every byte
 `baseline`), and `compare`, `review` and `accept` of a run use that one, from whichever checkout; runs from
 before had main's. Only main itself (or `VISUAL_BASELINE=main`) accepts into main's — a branch's pictures reach
 it by `promote` (below). Each baseline's `meta.json` starts its trailer range at its own accepts.
+
+## Only the platforms a change can move: `--changed`
+
+`capture --changed` (opt-in, slices only: `changed.ts`) leaves out the platforms whose screens can't have moved since
+their baseline. It counts what changed from each platform's own baseline commit (its `meta.json`, through `git
+merge-base` with HEAD; `--since <ref>` for another) to the working tree — commits since, staged, unstaged and untracked
+files — and reads each path for what it can move, taking a platform whenever in doubt:
+
+| Changed | Takes |
+| --- | --- |
+| `src/components`, `src/styles`, `src/i18n`, `src/app` (not `api`), `public` (not `stickers`) | the web |
+| `apps/android` | Android |
+| `apps/ios` | iOS and the Mac |
+| `apps/shared`, `native`, the design system's resources under `apps/ios` | all three apps |
+| `src/app/api`, `src/server`, `src/lib`, `src/messages`, `src/middleware.ts`, `public/stickers`, the seed, `firebase`, `scripts/visual` | every platform |
+| tests, docs and other Markdown, `designs`, `test`, `maestro`, `.github`, `.claude`, `infra` | none |
+| anything else (`package.json`, `next.config.ts`, a new folder…) | every platform |
+
+Before anything starts it says, per platform, run or skip, from which commit and the first files that take it;
+`--dry-run` stops there. A platform with no baseline commit, or one git doesn't know, is taken; with nothing to take, it
+says so and captures nothing. Refused with `--flows` (a release takes everything), and nothing outside the repository
+is seen: after a new Xcode, Android system image or macOS, capture without it. On the last 400 commits of main (each
+taken alone) it would have taken every platform for 210, none for 59, Android alone for 48, iOS and the Mac for 46,
+the web alone for 26 and the three apps for 6.
 
 ## When to run what
 
