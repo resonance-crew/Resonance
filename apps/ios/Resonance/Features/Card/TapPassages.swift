@@ -19,35 +19,63 @@ struct TapPassages: View {
     @Environment(\.window) private var window
     /// The dialog clips to its paper (CardEndRow opens it so): the rows' ink runs to the paper's edges.
     @Environment(\.modalPaperClips) private var paperClips
+    /// What the modal's stage leaves the dialog (``EnvironmentValues/modalRoom``): its scroll is capped so it always fits.
+    @Environment(\.modalRoom) private var room
     @AccessibilityFocusState private var focused: String?
+    /// The foot's height (18 above 略過's 44, more at large text sizes), as laid out.
+    @State private var foot: CGFloat = TapPassageRules.footGap + ModalMetrics.minButtonHeight
 
     var body: some View {
         let ids = passages.map { "passage:\($0.id)" }
         let below = ListBands.below(ids, after: ListBands.endKey)
         let reach = TapPassageRules.reach(clipped: paperClips)
+        let shown = Array(passages.prefix(TapPassageRules.most).enumerated())
         VStack(alignment: .leading, spacing: 0) {
-            ModalTitle(L10n.Card.Tap.passageTitle).padding(.bottom, 10)
+            // One scroll region (round 32 §P1, the owner: 「把标题放进同一个滚动容器内」): the title is its first child and
+            // scrolls away with the rows; the foot stands outside it, at the dialog's bottom, never moving.
             ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(Array(passages.prefix(TapPassageRules.most).enumerated()), id: \.element.id) { i, passage in
+                VStack(alignment: .leading, spacing: 0) {
+                    ModalTitle(L10n.Card.Tap.passageTitle)
+                        .padding(.bottom, TapPassageRules.titleGap)
+                        .padding(.horizontal, reach)
+                    ForEach(shown, id: \.element.id) { i, passage in
                         row(passage, index: i, top: ids[i], bottom: below[i], reach: reach)
+                            // §P2: a rule between two rows (never above the first), from the words' start to their end.
+                            .background(alignment: .top) {
+                                if TapPassageRules.ruled(index: i) { rule(reach: reach) }
+                            }
                     }
                 }
             }
             .scrollIndicators(.hidden)
             .scrollBounceBehavior(.basedOnSize)
             .scrollEdgeFades()
-            .frame(maxHeight: TapPassageRules.listHeight(window: window.height))
+            .frame(maxHeight: TapPassageRules.regionHeight(window: window.height, room: room, foot: foot))
             .fixedSize(horizontal: false, vertical: true)
             // Out to the paper's edges and past them by the wobble's swing (``TapPassageRules/reach(clipped:)``): the
             // rows' bands run edge to edge, clipped to the paper; their words keep the dialog's own inset.
             .padding(.horizontal, -reach)
-            ModalCloseButton(L10n.Card.Tap.passageSkip, action: onSkip)
+            // 略過, quiet (§P1, the owner: 「去掉背景底色、去掉阴影」): its words alone at the foot's end — the link
+            // dialog's 移除連結 (``QuietTextButton``), a finger's 44 tall — 18 under the last row.
+            QuietTextButton(L10n.Card.Tap.passageSkip, hang: .trailing, minHeight: ModalMetrics.minButtonHeight, action: onSkip)
                 .accessibilityIdentifier("tap-passage-skip")
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.top, TapPassageRules.footGap)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { foot = $0 }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tap-passages")
         .onAppear { focused = picked ?? passages.first?.id }
+    }
+
+    /// The rule between two rows (§P2): the house's divider (``WavyDivider``: the divider ink, the light pen), inset to
+    /// the words, centred on the seam; under a pressed or held row's wash, which is see-through, it stays drawn.
+    private func rule(reach: CGFloat) -> some View {
+        WavyDivider(seed: 71)
+            .padding(.horizontal, reach)
+            .offset(y: -TapPassageRules.ruleHeight / 2)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     private func row(_ passage: TapPassage, index: Int, top: String, bottom: String, reach: CGFloat) -> some View {
@@ -142,6 +170,24 @@ nonisolated enum TapPassageRules {
     /// The list scrolls inside at most min(560, 70 % of the window's height) (Wave 2 #3a: passages of 2–3 whole
     /// sentences, ~100 characters each, wrapped in full — the web's cap too).
     static func listHeight(window: CGFloat) -> CGFloat { min(560, window * 0.7) }
+
+    /// The one scroll region's cap (round 32 §P1): the title and the rows scroll inside at most ``listHeight(window:)``,
+    /// and never more than what the modal's stage leaves the dialog (`room`) less its foot — so the whole dialog always
+    /// fits and the backdrop never scrolls it, 略過 included. Outside a modal (`room` nil), the window's cap alone.
+    static func regionHeight(window: CGFloat, room: CGFloat?, foot: CGFloat) -> CGFloat {
+        let cap = listHeight(window: window)
+        guard let room else { return cap }
+        return max(0, min(cap, room - foot))
+    }
+
+    /// Under the title, before the first row.
+    static let titleGap: CGFloat = 10
+    /// Between the last row and 略過 (a dialog's foot gap, ``ModalCloseButton``'s).
+    static let footGap: CGFloat = 18
+    /// Whether the row at `index` has a rule above it (§P2): between two rows, never above the first.
+    static func ruled(index: Int) -> Bool { index > 0 }
+    /// The rule's box (``WavyDivider``'s), centred on the seam between two rows.
+    static let ruleHeight: CGFloat = 6
 
     /// A pick's request refused: the options changed or the tap went (400, 409) → the dialog closes quietly and the card
     /// is read again; anything else → 「沒送出去，再試一次」, the tap kept on with no passage.

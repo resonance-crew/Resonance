@@ -154,6 +154,7 @@ final class FeedModel {
     /// start the kept feed shows at once and this returns once the server
     /// has answered behind it.
     func load() async {
+        LaunchTrace.mark("feed request")
         if phase == .idle, showKept() {
             await revalidate()
             return

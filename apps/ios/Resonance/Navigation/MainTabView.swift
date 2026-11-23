@@ -176,7 +176,9 @@ enum TabTap: Equatable {
 /// (``MessagesPanes``). ⌘1…⌘4 choose a tab, ⌘N writes.
 struct MainTabView: View {
     @Environment(SessionStore.self) private var session
-    @State private var tab: AppTab = .feed
+    /// The tab the app opens on: home's — or Messages when a tapped push is already waiting with a conversation (a cold
+    /// start from a message's push, round 32 §P7), so home never opens, nor asks for its feed, under the thread.
+    @State private var tab: AppTab = MainTabView.firstTab(PushCenter.shared.opened, signedIn: PushCenter.shared.signedIn)
     /// The tabs chosen so far: their screens are made and kept.
     @State private var visited: Set<AppTab> = []
     @State private var paths: [AppTab: [Route]] = [:]
@@ -462,8 +464,10 @@ struct MainTabView: View {
             open(url)
         }
         // A tapped push: its page, or the notifications when it has none (also after a cold start).
+        .onAppear { LaunchTrace.mark("tabs appeared") }
         .onChange(of: push.opened, initial: true) { _, opened in
             guard let opened else { return }
+            LaunchTrace.mark("route opened (push)")
             push.opened = nil
             // A message sent to the account signed in before this one: nothing of it is opened here.
             guard opened.isFor(session.uid) else { return }
@@ -575,6 +579,15 @@ struct MainTabView: View {
             return
         }
         paths[tab, default: []].append(route)
+    }
+
+    /// The first tab for a push waiting as the tabs open (`opened`): a conversation's (`/messages/<handle>`) opens on
+    /// Messages, whose stack it belongs to (``open(_:)``); anything else on home, as before.
+    /// A message pushed to another account opens nothing here (``PushCenter/Opened/isFor(_:)``): home, as ever.
+    static func firstTab(_ opened: PushCenter.Opened?, signedIn: String?) -> AppTab {
+        guard let opened, opened.isFor(signedIn), let path = opened.route.split(separator: "?").first else { return .feed }
+        let parts = path.split(separator: "/")
+        return parts.count == 2 && parts[0] == "messages" ? .messages : .feed
     }
 
     /// A push's link names the sender by pen name; a conversation opens by

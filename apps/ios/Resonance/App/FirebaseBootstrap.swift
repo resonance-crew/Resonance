@@ -61,6 +61,7 @@ enum FirebaseBootstrap {
         }
         AppCheck.appCheck().token(forcingRefresh: false) { token, _ in
             if let token { AppCheckHeader.set(token.token) }
+            LaunchTrace.mark(token == nil ? "app check: none" : "app check token")
         }
     }
 

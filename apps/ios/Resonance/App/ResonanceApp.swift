@@ -9,6 +9,7 @@ struct ResonanceApp: App {
     @State private var session: SessionStore
 
     init() {
+        LaunchTrace.mark("app init")
         // Before any picture is asked for: the decoded pictures' memory cache, capped (ImageMemory).
         ImageMemory.apply()
         AppFonts.register()

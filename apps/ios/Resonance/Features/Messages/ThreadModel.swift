@@ -72,7 +72,9 @@ final class ThreadModel {
     /// by `ChatMessage.key`.
     private(set) var messages: [ChatMessage] = []
     /// `messages` laid out in Messenger's runs, with the day and time labels that lead them.
-    private(set) var rows: [ThreadRow] = []
+    private(set) var rows: [ThreadRow] = [] {
+        didSet { if !rows.isEmpty { LaunchTrace.mark("thread messages") } }
+    }
     /// The first snapshot of messages has arrived (or there is no conversation yet).
     private(set) var threadReady = false
     /// The listeners failed (not "no conversation"): what was read stays; they listen again on `resume()`.
@@ -323,6 +325,7 @@ final class ThreadModel {
         watchOutbox()
         syncViewing()
         listening += 1
+        LaunchTrace.mark(session.livePaths.conversations ? "thread attach (api)" : "thread attach (firestore)")
         if session.livePaths.conversations { return attachAPI(pairId) }
         let run = listening
         let origin = session.config.origin
@@ -370,7 +373,30 @@ final class ThreadModel {
     private func attachAPI(_ pairId: String) {
         inbox = InboxAPI(client: session.api)
         subscription = session.signals.observe([.thread(pairId)]) { [weak self] _ in self?.pullThread() }
+        drawKept(pairId)
         pullThread()
+    }
+
+    /// The thread as this device last read it, drawn at once (round 32 §P7, the owner: 「冷启动后点击推送通知 → 进入
+    /// 目标页并显示出消息的耗时」): a tapped push's cold start had nothing to show until the ID token and the network's
+    /// answer came (seconds on an iPad). Read from the signed-in account's kept answers (``APICache``: its own only,
+    /// emptied on sign-out), and drawn only while nothing better is held: the network's answer,
+    /// whenever it comes, is the truth (it merges over this, reads the thread, finds an opened note).
+    private func drawKept(_ pair: String) {
+        guard let uid = session.uid,
+              Self.drawsKept(run: listening, listening: listening, closed: closed, ready: threadReady, held: !history.isEmpty),
+              let messages = session.kept.value(.thread(pair), uid: uid), !messages.isEmpty else { return }
+        // At once, in this pass (``APICache/value(_:uid:)``, a first frame's read: a window of 50 is a few KB) — read a hop
+        // later it came after the ID token, a third of a second on.
+        LaunchTrace.mark("thread drawn from the cache")
+        history.mergeWindow(apiEntries(messages, origin: session.config.origin), authoritative: false)
+        historyChanged()
+    }
+
+    /// Whether the cache's thread may still be drawn when it arrives: the same listening, the screen still there, and
+    /// neither the network's answer nor anything else held yet.
+    nonisolated static func drawsKept(run: Int, listening: Int, closed: Bool, ready: Bool, held: Bool) -> Bool {
+        run == listening && !closed && !ready && !held
     }
 
     /// Asks for the thread again (one read at a time; one asked for meanwhile runs after it).
@@ -393,10 +419,12 @@ final class ThreadModel {
     /// since), what came after the newest held is read first (`after=`), so nothing between is skipped.
     private func readThread(_ inbox: InboxAPI, pair: String, run: Int) async {
         let origin = session.config.origin
+        LaunchTrace.mark("thread request")
         do {
             async let reading = inbox.conversation(pair)
             async let newest = inbox.messages(pair, limit: ChatPaging.liveLimit)
             let (conversation, window) = try await (reading, newest)
+            LaunchTrace.mark("thread answered")
             guard run == listening, !closed else { return }
             guard let conversation, let window else { return noConversationAPI(pair) }
             conversationExists = true
@@ -404,6 +432,8 @@ final class ThreadModel {
             unreadForMe = conversation.unread
             letterChanged(conversation.request.map { $0.value1.from }.flatMap { $0.isEmpty ? nil : $0 })
             let entries = apiEntries(window.messages, origin: origin)
+            // Kept for the next cold start's first frame (§P7, ``drawKept(_:)``): the newest window as the server says it.
+            if let uid = session.uid { session.kept.save(window.messages, as: .thread(pair), uid: uid) }
             if !history.overlaps(entries), let newestHeld = history.messages.last.flatMap({ apiCursors[$0.id] }) {
                 var cursor = newestHeld
                 var newer: [MessageHistory<ThreadCursor>.Entry] = []
@@ -438,6 +468,8 @@ final class ThreadModel {
 
     /// The API's one 404 for "no conversation (yet, or any more)": no messages, not an error — as a refused listener.
     private func noConversationAPI(_ pair: String) {
+        // Gone (deleted, or never made): nothing of it is drawn on the next cold start either.
+        if let uid = session.uid { session.kept.remove(.thread(pair), uid: uid) }
         threadReady = true
         listenFailed = false
         let had = conversationExists || !history.isEmpty

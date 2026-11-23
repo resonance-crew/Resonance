@@ -179,3 +179,10 @@ extension APICache.Key where Value == [String] {
     /// the live list has arrived.
     public static var blocked: Self { .init(name: "blocked", daily: false) }
 }
+
+extension APICache.Key where Value == [Components.Schemas.ThreadMessage] {
+    /// A conversation's newest messages (GET /conversations/{pair}/messages), as the thread last read them: what a
+    /// cold start opened by a tapped push draws before the network answers (round 32 §P7). Named by a digest of the
+    /// pair, as the account's folder is.
+    public static func thread(_ pair: String) -> Self { .init(name: "thread-\(APICache.folder(pair))", daily: false) }
+}

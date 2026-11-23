@@ -410,7 +410,9 @@ final class SessionStore {
     nonisolated static func idToken(forceRefresh: Bool = false) async throws -> String? {
         guard let user = Auth.auth().currentUser else { return nil }
         do {
-            return try await user.getIDTokenResult(forcingRefresh: forceRefresh).token
+            let token = try await user.getIDTokenResult(forcingRefresh: forceRefresh).token
+            LaunchTrace.mark("id token")
+            return token
         } catch let error as NSError where forceRefresh && error.domain == AuthErrorDomain
             && [AuthErrorCode.userNotFound.rawValue, AuthErrorCode.userTokenExpired.rawValue,
                 AuthErrorCode.invalidUserToken.rawValue, AuthErrorCode.userDisabled.rawValue].contains(error.code) {
@@ -422,6 +424,7 @@ final class SessionStore {
     private func apply(_ newUID: String?) {
         guard newUID != uid || phase == .restoring else { return }
         let wasRestoring = phase == .restoring
+        if wasRestoring { LaunchTrace.mark(newUID == nil ? "session restored (signed out)" : "session restored") }
         let previous = uid
         uid = newUID
         // Only this account's answers are kept from now on: the last one's
@@ -540,6 +543,7 @@ final class SessionStore {
     /// first note, message or card published (`PushCenter.reachedOut`).
     private func land(_ next: Landing) {
         let arrived = next == .tabs && landing != .tabs
+        if arrived { LaunchTrace.mark("landing: tabs") }
         landing = next
         if arrived, phase == .signedIn { Task { await push.registerIfAllowed() } }
     }

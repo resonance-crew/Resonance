@@ -3,6 +3,7 @@ import Foundation
 import ResonanceAPI
 import ResonanceKit
 import StoryFormat
+import SwiftUI
 import Testing
 @testable import Resonance
 
@@ -104,7 +105,7 @@ import Testing
         let source = try String(contentsOf: url, encoding: .utf8)
         let marks = try #require(source.range(of: "private func passageMarks(")).upperBound
         let body = String(source[marks...].prefix(900))
-        #expect(body.contains("openPicked(PickedPeople.Passage("))
+        #expect(body.contains("openPicked(PickedPeople.passage("))
         #expect(!body.contains("isOwner"))
         let gate = try String(contentsOf: url.deletingLastPathComponent().appendingPathComponent("PickedPeople.swift"), encoding: .utf8)
         let washes = try #require(gate.range(of: "static func washes(")).upperBound
@@ -156,5 +157,47 @@ import Testing
         #expect(source.contains("let pickedPassage = picked"))
         #expect(source.contains("if let pickedPassage {"))
         #expect(!source.contains("if let picked {"))
+    }
+
+    // MARK: Round 32 §P3 (the owner: 「先跳出一个很高的弹窗，再根据内容缩回实际高度」)
+
+    /// The cause, on iOS: while the people were read the list drew two loading rows whatever the sentence's count, so a
+    /// sentence one person picked opened a row (60) too tall and shrank when the list came, one three picked grew. The
+    /// loading rows are now as many as the marks say picked it — and laid out, they are exactly the loaded rows' height.
+    @Test func theLoadingRowsTakeTheLoadedRowsHeight() {
+        for n in 1...3 {
+            let passage = PickedPeople.Passage(id: "p", text: "t", people: n, more: false)
+            #expect(PickedPeople.loadingRows(passage, cap: 420) == n)
+            let loading = dialogSize(TapListState(people: nil, loadingRows: n), width: 400)
+            let names = ["gus", "bob", "hana"].prefix(n).map { person($0) }
+            let loaded = dialogSize(TapRows(people: Array(names), line: PickedPeople.line(for:)) { _ in }, width: 400)
+            #expect(loading.height == loaded.height, "\(n): \(loading.height) vs \(loaded.height)")
+        }
+        // More than the marks show: enough rows to fill the list's cap, which the page read fills too.
+        #expect(PickedPeople.loadingRows(.init(id: "p", text: "t", people: 3, more: true), cap: 420) == 7)
+        // Never none (a sentence opened before its marks knew anyone).
+        #expect(PickedPeople.loadingRows(.init(id: "p", text: "t"), cap: 420) == 1)
+        #expect(PickedPeople.listCap(window: 2000) == 420 && PickedPeople.listCap(window: 600) == 300)
+    }
+
+    /// The marks hand the dialog the count: the page opens it with what the author's answer says about the sentence.
+    @Test func theDialogIsOpenedWithWhatTheMarksKnow() throws {
+        var tap = Fixture.tap(faces: ["gus", "bob", "hana"])
+        tap.picked = [picked("p1", "一", people: ["gus"]), picked("p2", "二", people: ["gus", "bob", "hana"], more: true)]
+        #expect(PickedPeople.passage(tap, id: "p1", text: "一") == .init(id: "p1", text: "一", people: 1, more: false))
+        #expect(PickedPeople.passage(tap, id: "p2", text: "二") == .init(id: "p2", text: "二", people: 3, more: true))
+        #expect(PickedPeople.passage(nil, id: "p3", text: "三").people == 0)
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Resonance/Features/Card/PickedPeople.swift").standardized
+        let source = try String(contentsOf: url, encoding: .utf8)
+        // The list stands from the first frame — not only once the read has begun.
+        #expect(source.contains("TapListState(people: list, loadingRows: Self.loadingRows(passage, cap: cap))"))
+        // The page asks at the press and waits at most 300 ms (the web's): read by then, the dialog's first layout has them.
+        #expect(PickedPeople.firstPageWait == .milliseconds(300))
+        #expect(source.contains("private var list: TapPeople? { people ?? preloaded }"))
+        let page = try String(contentsOf: url.deletingLastPathComponent().appendingPathComponent("CardScreen.swift"), encoding: .utf8)
+        #expect(page.contains("await firstAnswer(within: PickedPeople.firstPageWait) { await reading.value }"))
+        #expect(page.contains("preloaded: pickedPeople"))
+        #expect(!source.contains("            if let people {\n                ScrollView {"))
     }
 }

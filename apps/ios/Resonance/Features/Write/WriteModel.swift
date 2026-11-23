@@ -626,6 +626,11 @@ final class WriteModel {
             next.anonymous = isPublished ? openedAnonymous : false
         }
         values = next
+        // Kept at once, not after the typing pause (round 32 §P6): the choice is a step's last move before its button
+        // more often than not, and 發布 then waited for this save before asking to publish. Nothing changed, nothing
+        // is written (`store`); publishing still saves whatever is left (`saveNow`).
+        store()
+        drafts?.sendNow()
     }
 
     /// What a 私人卡's 公開發表 starts the step at (round 12 §3): 公開 — 匿名公開 for a card already marked
@@ -671,6 +676,11 @@ final class WriteModel {
     /// 更新這張卡片's hint (「按下之後，讀者看到的就會是這個版本…」) is about readers: said for a card they
     /// have now, while the choice keeps it theirs.
     var showsUpdateHint: Bool { readersSee && !keepsDraft }
+
+    /// Whether the step keeps the hint's room (round 32 §P4, the owner: 「切卡片类型时按钮位置保持稳定」): whenever readers
+    /// have the card, whatever is chosen — the hint stands above 卡片類型, so coming and going with 私人卡 it moved the
+    /// whole step under the finger. While 私人卡 is chosen its room stays, unwritten (``showsUpdateHint`` false).
+    var reservesUpdateHint: Bool { readersSee }
 
     /// The button publishes — to readers, for the first time: a draft shared, or a published 草稿 made
     /// public again. What its failure says: 沒發布成功 for these, 沒儲存成功 for every other.
