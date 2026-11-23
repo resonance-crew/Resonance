@@ -47,7 +47,7 @@ final class PushCenter {
 
     var opened: Opened?
     /// The last push opened and when (``open(userInfo:now:)``: the same tap handed over twice opens once).
-    @ObservationIgnored private var lastOpened: (key: String, at: Date)?
+    @ObservationIgnored private var lastOpened: (payload: NSDictionary, at: Date)?
     /// How long apart the two hand-overs of one tap may come.
     static let sameTap: TimeInterval = 10
     private(set) var token: String?
@@ -256,10 +256,11 @@ final class PushCenter {
     func open(userInfo info: [AnyHashable: Any], now: Date = .now) {
         let value = { (key: String) in (info[key] as? String).flatMap { $0.isEmpty ? nil : $0 } }
         // A cold start hands the tapped push over twice: at the scene's connection (before the first frame, so the
-        // tabs open straight onto its page) and again to the delegate's `didReceive`. Once is opened.
-        let key = [info["route"] as? String ?? "", value("notificationId") ?? "", value("messageId") ?? ""].joined(separator: "|")
-        if let last = lastOpened, last.key == key, now.timeIntervalSince(last.at) < Self.sameTap { return }
-        lastOpened = (key, now)
+        // tabs open straight onto its page) and again to the delegate's `didReceive` — the very same payload. Once is
+        // opened.
+        let payload = NSDictionary(dictionary: info)
+        if let last = lastOpened, last.payload.isEqual(payload), now.timeIntervalSince(last.at) < Self.sameTap { return }
+        lastOpened = (payload, now)
         open(route: info["route"] as? String ?? "", notificationId: value("notificationId"), fromUserId: value("fromUserId"),
              chat: ChatPush(userInfo: info))
     }
