@@ -4,9 +4,10 @@ import { useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import useSWR from 'swr';
 import { AvatarGroup, type AvatarGroupMember } from '@/components/atoms/AvatarGroup/AvatarGroup';
+import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { Modal } from '@/components/molecules/Modal/Modal';
 import { DialogScroll } from '@/components/sections/AppHeader/BellList';
-import { TAP_FACES_MAX, type AuthorBody, type CardTapBody } from '@/lib/api/v1/schemas';
+import { TAP_FACES_MAX, type AuthorBody, type CardTapBody, type TapListBody } from '@/lib/api/v1/schemas';
 import { listTaps } from '@/lib/db/firestore/client/taps';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { TapPeople, TapPeopleSkeleton, type TapOwnRow } from './TapPeople';
@@ -37,7 +38,7 @@ export function facesNames(faces: AuthorBody[], viewerId: string | undefined, lo
 /**
  * What a screen reader says of a reader's faces (§U2.4), as the apps say it: the faces drawn, then 還有其他人 when
  * there are others (nothing on screen says it since round 29 §S5) — and, when the first face is the viewer's own, 你共振了 before it:
- * 「你共振了，你連結的人裡，與這張卡片共振的：小安、阿明，還有其他人」.
+ * 「你共振了，與這張卡片共振的人：小安、阿明，還有其他人」.
  */
 export function readerFacesLabel(
   shown: { faces: AuthorBody[]; more: boolean },
@@ -152,14 +153,40 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving, onOwnRow }:
 }
 
 /**
- * The reader's one page of people (themselves, then their connections), read as the list opens. Keyed by the viewer
+ * The reader's people (themselves, then everyone they may see — Wave 2 #3b), read as the list opens, 30 a page. Keyed by the viewer
  * too, as every answer about who someone is connected with: another account in this tab (signed in from another
  * one) never sees the last one's people.
  */
 function ReaderList({ cardId, viewerId, own, onPick }: { cardId: string; viewerId: string; own: TapOwnRow; onPick: () => void }) {
+  const tHome = useTranslations('home');
+  // The first page under the key the page reads again after a pick (lib/data/taps); later pages beside it.
   const { data } = useSWR(['taps', cardId, viewerId], () => listTaps(cardId), { revalidateOnFocus: false });
+  const [more, setMore] = useState<{ people: TapListBody['people']; next: string | null; loading: boolean } | null>(null);
   if (!data) return <TapPeopleSkeleton />;
-  return <TapPeople people={data.people} own={own} onPick={onPick} />;
+  const people = [...data.people, ...(more?.people ?? [])];
+  const next = more ? more.next : data.nextPageToken;
+  const loadMore = async () => {
+    if (!next || more?.loading) return;
+    setMore((m) => ({ people: m?.people ?? [], next, loading: true }));
+    try {
+      const page = await listTaps(cardId, next);
+      setMore((m) => ({ people: [...(m?.people ?? []), ...page.people], next: page.nextPageToken, loading: false }));
+    } catch {
+      setMore((m) => (m ? { ...m, loading: false } : m));
+    }
+  };
+  return (
+    <>
+      <TapPeople people={people} own={own} onPick={onPick} endKey={next ? 'taps:more' : undefined} />
+      {next && (
+        <div className={styles.more}>
+          <OrganicButton variant="tonal" size="sm" loading={!!more?.loading} onClick={() => void loadMore()}>
+            {tHome('moreBtn')}
+          </OrganicButton>
+        </div>
+      )}
+    </>
+  );
 }
 
 /**

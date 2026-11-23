@@ -177,11 +177,34 @@ describe('PublishStep', () => {
     expect(screen.queryByText(en.write.publishPanel.insightLoading)).not.toBeInTheDocument();
   });
 
-  // Anonymity is only a question for a card others read: one choice of three, never a switch beside them.
-  it('offers three audiences — a card kept for connections shows none chosen, and 匿名公開 makes it public and anonymous in one change', async () => {
+  // 連結的人 is always named: choosing it from 匿名公開 writes both fields in one change, never anonymous for connections.
+  it('連結的人 publishes under the pen name to connections only, in one change from 匿名公開', async () => {
+    const onAudience = vi.fn();
+    renderWithIntl(<Step start={{ visibility: 'public', anonymous: true }} onAudience={onAudience} />);
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.connections }));
+    expect(onAudience).toHaveBeenCalledTimes(1);
+    expect(onAudience).toHaveBeenLastCalledWith({ visibility: 'connections', anonymous: false });
+    expect(screen.getByRole('button', { name: en.write.visibility.connections })).toHaveAttribute('aria-pressed', 'true');
+    // The verb is 發布 (never 匿名發布), and the preview's byline is the pen name again.
+    expect(screen.getByRole('button', { name: en.write.publishPanel.publish })).toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: en.write.previewCaption })).queryByText(en.write.publishPanel.anonymousName)).toBeNull();
+    await echoSettled();
+  });
+
+  it('a card both anonymous and for connections (older ones) shows no audience chosen', async () => {
+    renderWithIntl(<Step start={{ visibility: 'connections', anonymous: true }} />);
+    for (const name of [en.write.visibility.public, en.write.visibility.connections, en.write.visibility.anonymous, en.write.visibility.draft]) {
+      expect(screen.getByRole('button', { name })).toHaveAttribute('aria-pressed', 'false');
+    }
+    await echoSettled();
+  });
+
+  // Anonymity is only a question for a card others read: one choice of four, never a switch beside them.
+  it('offers four audiences — a card kept for connections shows 連結的人 chosen, and 匿名公開 makes it public and anonymous in one change', async () => {
     const onAudience = vi.fn();
     renderWithIntl(<Step start={{ visibility: 'connections' }} onAudience={onAudience} />);
     const segment = (name: string) => screen.getByRole('button', { name });
+    expect(segment(en.write.visibility.connections)).toHaveAttribute('aria-pressed', 'true');
     for (const name of [en.write.visibility.public, en.write.visibility.anonymous, en.write.visibility.draft]) {
       expect(segment(name)).toHaveAttribute('aria-pressed', 'false');
     }

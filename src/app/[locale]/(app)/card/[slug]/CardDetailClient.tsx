@@ -298,10 +298,11 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   // Someone else's 私人卡 the viewer reads at all was shared with them in a message (api/v1/sharedCards): theirs
   // to read, and only to read — no note, no resonance, no bookmark (the server would refuse each).
   const sharedPrivate = !isOwner && (!card.publishedAt || card.visibility === 'private');
-  // The sentences readers picked, on the author's own published card alone (round 29 §U1): never a draft, a private
-  // card, the trash or a translation (the server answers `picked` to the author only, too).
-  const ownPicked =
-    isOwner && !trashed && !!card.publishedAt && card.visibility !== 'private' && !tr.shown && lists.tap?.picked?.length
+  // The sentences readers picked (round 29 for the author; Wave 2 #3b for every reader too — 「像按讚一樣大家都可以看到誰按」):
+  // on a published card only, never a draft, a private card, someone's 私人卡 shared in a thread, the trash or a
+  // translation. The server answers `picked` to whoever may see it, each with the pickers their blocks let through.
+  const shownPicked =
+    !trashed && !sharedPrivate && !!card.publishedAt && card.visibility !== 'private' && !tr.shown && lists.tap?.picked?.length
       ? lists.tap.picked
       : undefined;
 
@@ -443,10 +444,10 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               key={`story-${tr.swaps}`}
               className={`${styles.story}${swapClass}`}
               data-mascot="story"
-              data-passages={ownPicked ? '' : undefined}
+              data-passages={shownPicked ? '' : undefined}
             >
-              {/* The author's picked sentences: their washes and who picked them (round 29); nothing for anyone else. */}
-              <PassageMarks cardId={card.id} picked={ownPicked} script={type.script} storyRef={storyRef}>
+              {/* The picked sentences: their washes and who picked them, for the author and every reader (Wave 2 #3b). */}
+              <PassageMarks cardId={card.id} picked={shownPicked} script={type.script} storyRef={storyRef}>
                 {/* Signed in, the embedded cards came with the lists; the link previews come with the card. */}
                 <CardEmbedSourceContext.Provider value={lists.embeds}>
                   <StoryLinkPreviewsContext.Provider value={card.linkPreviews ?? null}>

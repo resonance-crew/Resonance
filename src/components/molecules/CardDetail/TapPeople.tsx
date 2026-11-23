@@ -72,12 +72,11 @@ export function TapPeople({ people, own, onPick, endKey = BAND_END_KEY, quotes =
 }
 
 /**
- * A row's second line, round 27: the author's list quotes each person's pick (§U2), a reader's list only their own —
- * their pick, or 選一段 when the card has passages and they picked none (§U3). Null: no such line.
+ * A row's second line, round 27: every list quotes each person's pick (§U2; a reader's too since Wave 2 #3b), and a
+ * reader's own row says their pick, or 選一段 when the card has passages and they picked none (§U3). Null: no such line.
  */
 function rowQuote(person: TapPersonBody, own: TapOwnRow | null | undefined, quotes = true): { quote: string } | { pick: true } | null {
-  if (own === undefined) return quotes && person.passage?.text ? { quote: person.passage.text } : null;
-  if (!own) return null;
+  if (!own) return quotes && person.passage?.text ? { quote: person.passage.text } : null;
   const text = own.quote === undefined ? person.passage?.text : own.quote;
   if (text) return { quote: text };
   return own.offer ? { pick: true } : null;

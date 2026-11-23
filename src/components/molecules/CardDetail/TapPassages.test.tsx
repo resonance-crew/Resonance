@@ -60,9 +60,9 @@ describe('TapPassages (§U1)', () => {
 
   it('is a dialog named by its title, the passages as rows in full, 略過 alone at its foot', async () => {
     renderDialog();
-    const dialog = await screen.findByRole('dialog', { name: '悄悄告訴作者，哪一段讓你有共鳴' });
+    const dialog = await screen.findByRole('dialog', { name: '哪一段讓你有共鳴' });
     expect(dialog.querySelector('[data-tap-passages]')).not.toBeNull();
-    expect(within(dialog).getByRole('heading', { name: '悄悄告訴作者，哪一段讓你有共鳴' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('heading', { name: '哪一段讓你有共鳴' })).toBeInTheDocument();
     const r = rows(dialog);
     expect(r.map((b) => b.getAttribute('data-passage'))).toEqual(['14fecaaf', '8b3a1c4d', '85007cbf']);
     expect(r.map((b) => b.getAttribute('data-testid'))).toEqual(['tap-passage-0', 'tap-passage-1', 'tap-passage-2']);

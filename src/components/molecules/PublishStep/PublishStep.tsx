@@ -26,24 +26,29 @@ import styles from './PublishStep.module.css';
 
 /**
  * What a card is, as the step offers it (卡片類型, round 8 §2.2): shared under
- * the author's pen name, shared with no name on it, or a 私人卡 — the author's
- * alone, finished or not (`private`: a draft, or a published card made
- * private, which people see as one). Anonymity is only ever a question for a
- * card others read, so it is one of the three, not a switch beside them (an
- * anonymous card is public or private, never for connections only — the
- * server refuses that).
+ * the author's pen name, shared under it with their connections alone (連結的人,
+ * back since Wave 2 — the round 26 audit's 5.1), shared with no name on it, or
+ * a 私人卡 — the author's alone, finished or not (`private`: a draft, or a
+ * published card made private, which people see as one). Anonymity is only
+ * ever a question for a card others read, so it is one of the four, not a
+ * switch beside them (an anonymous card is public or private, never for
+ * connections only — the server refuses that: 連結的人 is always named).
  */
-export type Audience = 'public' | 'anonymous' | 'private';
+export type Audience = 'public' | 'connections' | 'anonymous' | 'private';
 
-export const AUDIENCES: readonly Audience[] = ['public', 'anonymous', 'private'];
+export const AUDIENCES: readonly Audience[] = ['public', 'connections', 'anonymous', 'private'];
 
-const AUDIENCE_ICON: Record<Audience, IconName> = { public: 'globe', anonymous: 'mask', private: 'lock' };
+const AUDIENCE_ICON: Record<Audience, IconName> = { public: 'globe', connections: 'users', anonymous: 'mask', private: 'lock' };
 
-/** The audience a card's two fields make — none for one kept for connections only (older cards). */
+/**
+ * The audience a card's two fields make — none for one both anonymous and for
+ * connections only (published before the server refused that: it keeps it
+ * until another is chosen).
+ */
 export function audienceOf(visibility: Visibility, anonymous: boolean): Audience | null {
   if (visibility === 'private') return 'private';
   if (visibility === 'public') return anonymous ? 'anonymous' : 'public';
-  return null;
+  return anonymous ? null : 'connections';
 }
 
 /**
@@ -54,6 +59,7 @@ export function audienceOf(visibility: Visibility, anonymous: boolean): Audience
  */
 export function audienceFields(audience: Audience, current: { anonymous: boolean; live: boolean }): { visibility: Visibility; anonymous: boolean } {
   if (audience === 'private') return { visibility: 'private', anonymous: current.live ? current.anonymous : false };
+  if (audience === 'connections') return { visibility: 'connections', anonymous: false };
   return { visibility: 'public', anonymous: audience === 'anonymous' };
 }
 
@@ -456,8 +462,10 @@ export function PublishStep({
                 a quiet paper-dark track shows the control's extent, and the
                 chosen side wears the tonal peach with the deep terracotta
                 label (4.8:1); the others keep a muted ink deep enough to read
-                on the track. A card kept for connections only (older ones)
-                shows none chosen and keeps its audience until one is. */}
+                on the track. A card both anonymous and for connections only
+                (older ones) shows none chosen and keeps its audience until one
+                is. Four don't fit a phone's row with their icons: the icons go,
+                the words stay. */}
             <SegmentedActionBar
               fill="var(--color-cream-dark)"
               segments={AUDIENCES.map((a) => {
@@ -473,6 +481,7 @@ export function PublishStep({
                   textColor: ink,
                   hoverOverlay: 'color-mix(in oklch, var(--toward-ink) 5%, transparent)',
                   pressed: chosen,
+                  iconDroppable: true,
                   onClick: () => onAudienceChange(audienceFields(a, { anonymous, live: updating })),
                 } satisfies SegmentSpec;
               })}

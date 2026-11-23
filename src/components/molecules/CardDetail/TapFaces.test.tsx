@@ -68,7 +68,7 @@ describe('TapFaces', () => {
   it('is one button, its faces spoken and never written, and nothing drawn for more (round 29 §S5: no blank disc)', () => {
     const { container } = renderFaces({ mine: true, faces: [face('alice'), face('dora'), face('eli')], more: true, mayNote: true }, { zh: true });
     // The viewer's own face first is said first, as the apps say it (iOS TapState.spoken, Android facesLabel).
-    const button = screen.getByRole('button', { name: '你共振了，你連結的人裡，與這張卡片共振的：dora、eli，還有其他人' });
+    const button = screen.getByRole('button', { name: '你共振了，與這張卡片共振的人：dora、eli，還有其他人' });
     // On screen: only faces (their initials) — no sentence, no number.
     expect(button.textContent).toBe('ALDOEL');
     expect(container.querySelector('[data-more]')).toBeNull();
@@ -78,7 +78,7 @@ describe('TapFaces', () => {
 
   it('says there are others when only the viewer’s face is drawn — never an empty list of names', () => {
     renderFaces({ mine: true, faces: [face('alice')], more: true, mayNote: true }, { zh: true });
-    expect(screen.getByRole('button', { name: '你共振了，你連結的人裡，與這張卡片共振的：還有其他人' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '你共振了，與這張卡片共振的人：還有其他人' })).toBeInTheDocument();
   });
 
   // The owner, 2026-11-19: 「我在想这个直接做成这个 model 会不会好一点呢」 — a phone's list was a dialog already; tablets,
@@ -90,7 +90,7 @@ describe('TapFaces', () => {
     phone(onPhone);
     listTaps.mockResolvedValueOnce({ people: [person('dora'), person('eli')], nextPageToken: null });
     renderFaces({ mine: false, faces: [face('dora'), face('eli')], more: false, mayNote: true });
-    const button = screen.getByRole('button', { name: /who resonated: dora, eli$/ });
+    const button = screen.getByRole('button', { name: /Resonated with this card: dora, eli$/ });
     await user().click(button);
     const dialog = await screen.findByRole('dialog');
     expect(button).toHaveAttribute('aria-expanded', 'true');
@@ -116,7 +116,7 @@ describe('TapFaces', () => {
   it('closes on Escape and gives the focus back to the faces', async () => {
     listTaps.mockResolvedValueOnce({ people: [person('alice'), person('dora')], nextPageToken: null });
     renderFaces({ mine: true, faces: [face('alice'), face('dora')], more: false, mayNote: true });
-    const button = screen.getByRole('button', { name: /who resonated/ });
+    const button = screen.getByRole('button', { name: /Resonated with this card/ });
     await user().click(button);
     await within(await screen.findByRole('dialog')).findAllByRole('link');
     await user().keyboard('{Escape}');
@@ -133,7 +133,7 @@ describe('TapFaces', () => {
           <TapFaces cardId="c1" tap={tap} viewerId={viewerId} />
         </SWRConfig>,
       );
-      await user().click(screen.getByRole('button', { name: /who resonated/ }));
+      await user().click(screen.getByRole('button', { name: /Resonated with this card/ }));
       const rows = await within(screen.getByRole('dialog')).findAllByRole('link');
       const hrefs = rows.map((r) => r.getAttribute('href'));
       page.unmount();
@@ -162,7 +162,7 @@ describe('TapFaces: the reader’s own row on a card with passages (round 27 §U
     return screen.findByRole('dialog');
   };
 
-  it('quotes the reader’s pick on their own row alone, and opens the passages’ dialog from it', async () => {
+  it('quotes the reader’s pick on their own row and everyone’s on theirs (Wave 2 #3b), and opens the passages’ dialog from their own', async () => {
     const onOwnRow = vi.fn();
     listTaps.mockResolvedValueOnce({
       people: [
@@ -174,9 +174,9 @@ describe('TapFaces: the reader’s own row on a card with passages (round 27 §U
     const dialog = await open({ mine: true, faces: [face('alice'), face('dora')], more: false, mayNote: true, passages: PASSAGES, passage: '8b3a1c4d' }, onOwnRow);
     const own = await within(dialog).findByRole('button', { name: /alice/ });
     expect(own).toHaveTextContent(`“${PASSAGES[1].text}”`);
-    // dora's pick is never shown to alice (M3), whatever came.
+    // dora's pick is shown to alice too since Wave 2 #3b (「大家都可以看到誰按」): her row quotes it, and leads to her page.
     const dora = within(dialog).getByRole('link');
-    expect(dora).not.toHaveTextContent(PASSAGES[0].text);
+    expect(dora).toHaveTextContent(PASSAGES[0].text);
     await user().click(own);
     expect(onOwnRow).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('dialog')).toBeNull();

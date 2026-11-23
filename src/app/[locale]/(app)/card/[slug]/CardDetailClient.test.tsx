@@ -1180,8 +1180,27 @@ describe('the sentences readers picked', () => {
     expect(within(dialog).getByRole('heading', { name: 'People this part stayed with' })).toBeInTheDocument();
   });
 
+  // Wave 2 #3b (the owner: 「讓讀者也能夠看到自己與別人按的共振高亮與人頭」): a reader the server answers `picked` to sees
+  // the same washes and faces, and opens the sentence's people from them, as the author does.
+  it('shows a reader the washes and faces the server answers them, and the sentence’s people from either', async () => {
+    as('me');
+    const c = card('pub1', { story: STORY });
+    vi.mocked(getCardById).mockResolvedValue(c);
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(c);
+    answer({ isOwner: false, tap: { ...tapWithPicks, mayNote: true } });
+    renderPage({ seed: seed() });
+    const faces = await screen.findByRole('button', { name: 'This part stayed with gus, bob' });
+    expect(faces).toHaveAttribute('data-passage-faces', PICKED);
+    const marks = [...document.querySelectorAll(`mark[data-passage="${PICKED}"]`)];
+    expect(marks.map((m) => m.textContent).join('')).toBe('the street is still blue.');
+    await userEvent.setup({ pointerEventsCheck: 0 }).click(faces);
+    const dialog = await screen.findByRole('dialog', { name: 'People this part stayed with' });
+    expect(within(dialog).getByText('“the street is still blue.”')).toBeInTheDocument();
+    expect(callApi).toHaveBeenCalledWith(`/api/v1/cards/pub1/taps?passage=${PICKED}`);
+  });
+
   it.each([
-    ['a reader', 'me', {}, card('pub1', { story: STORY })],
+    ['a reader answered no picks', 'me', { isOwner: false, tap: { ...tapWithPicks, picked: undefined } }, card('pub1', { story: STORY })],
     ['its author, on a private card', 'a1', {}, card('pub1', { story: STORY, visibility: 'private' })],
     ['its author, on a draft', 'a1', {}, card('pub1', { story: STORY, publishedAt: null as unknown as Date })],
     [
