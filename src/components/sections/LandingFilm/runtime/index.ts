@@ -32,6 +32,8 @@ declare global {
 }
 
 const Y_KEY = 'resonance:film-y';
+/** How far past the stage's letting go (svh) the visitor goes before the end's arrow leaves with the player. */
+export const ONWARD_SVH = 0.2;
 
 function readStore(store: Storage | undefined, key: string): string | null {
   try {
@@ -474,6 +476,7 @@ export function startFilm(root: HTMLElement, { model, style }: { model: FilmMode
   let frames = 0;
   let longFrames = 0;
   let released = false;
+  let onward = false;
   let warmed = false;
   let endedAt = -1;
   let stilled = false;
@@ -559,6 +562,14 @@ export function startFilm(root: HTMLElement, { model, style }: { model: FilmMode
     if (rel !== released) {
       released = rel;
       root.toggleAttribute('data-released', rel);
+    }
+    // the visitor has gone on past the stage's letting go: until then the end's arrow stays, even with the stage let go
+    // (▶ plays on through the night's hold to the track's very end, where the player sinks away — the arrow with it,
+    // a few seconds after it came: the owner, 2026-11-23, 「看到最後不會出現那個往下滑的箭頭提醒」)
+    const on = yS >= TRACK_SVH + ONWARD_SVH;
+    if (on !== onward) {
+      onward = on;
+      root.toggleAttribute('data-onward', on);
     }
     checkPaper();
     // the film is over once its last act has played out: the player gives way to the arrow down (Player.tsx)
@@ -695,6 +706,7 @@ export function startFilm(root: HTMLElement, { model, style }: { model: FilmMode
     root.removeEventListener('click', onCardClick);
     root.removeAttribute('data-ready');
     root.removeAttribute('data-released');
+    root.removeAttribute('data-onward');
     root.removeAttribute('data-paper');
     root.removeAttribute('data-dusk');
     header?.style.removeProperty('--film-night-band');
