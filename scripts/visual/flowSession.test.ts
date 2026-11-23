@@ -32,12 +32,13 @@ describe('a session’s copy of a flow', () => {
     expect(() => withHook('- launchApp\n', 'f')).toThrow(/no header/);
   });
 
-  it('writes the copies beside links to common/ and assets/ and the hook script, so the flows’ own paths hold', () => {
+  it('writes the copies beside copies of common/ and assets/ (Maestro follows no link out of its workspace) and the hook script', () => {
     const dir = join(mkdtempSync(join(tmpdir(), 'visual-session-')), 'flows');
     dirs.push(join(dir, '..'));
     const files = writeSessionFlows(dir, FLOWS, ['tap', 'send-picture']);
     expect(files).toEqual([join(dir, 'tap.yaml'), join(dir, 'send-picture.yaml')]);
-    expect(lstatSync(join(dir, 'common')).isSymbolicLink()).toBe(true);
+    expect(lstatSync(join(dir, 'common')).isSymbolicLink()).toBe(false);
+    expect(lstatSync(join(dir, 'assets/paper.png')).isFile()).toBe(true);
     expect(existsSync(join(dir, 'common/launch.yaml'))).toBe(true);
     expect(existsSync(join(dir, 'assets/paper.png'))).toBe(true);
     expect(readFileSync(join(dir, 'before.js'), 'utf8')).toBe(BEFORE_JS);

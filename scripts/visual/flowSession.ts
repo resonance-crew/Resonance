@@ -4,7 +4,7 @@
  * JVM alone each; flows.ts maestroArgs already keeps the driver from being reinstalled).
  *
  * Every flow still starts from a fresh world and a ready device, as when each was a run of its own: the flows run as
- * copies (in `<out>/_session/flows/`, beside links to `common/` and `assets/`, so their relative paths hold) whose
+ * copies (in `<out>/_session/flows/`, beside copies of `common/` and `assets/`, so their relative paths hold) whose
  * header gains one `onFlowStart` command — `before.js`, which asks this runner over HTTP to put back what the last
  * flow's tags changed, reseed (stack.ts `seed`) and ready the device (`prepareFlow`), and fails the flow if it can't.
  * The repository's flows are never changed, and run alone (the MCP, the old way) they know nothing of it.
@@ -13,7 +13,7 @@
  * a flow the report doesn't name (the session ended early) is run again the old way by the caller.
  */
 import { createServer, type Server } from 'node:http';
-import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** What the runner does before each flow (the hook's answer waits for it). */
@@ -56,11 +56,13 @@ export function parseJunit(xml: string): CaseResult[] {
   return out;
 }
 
-/** The session's copies of the flows, with the hook and links to what they read (`common/`, `assets/`). */
+/** The session's copies of the flows, with the hook and copies of what they read (`common/`, `assets/`). */
 export function writeSessionFlows(dir: string, flowsDir: string, flows: readonly string[]): string[] {
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
-  for (const shared of ['common', 'assets']) symlinkSync(join(flowsDir, shared), join(dir, shared));
+  // Copies, not links: Maestro looks for a flow's files inside its workspace and follows no link out of it (a linked
+  // assets/ left send-picture's paper.png "not found in workspace", and the whole session stopped before its first flow).
+  for (const shared of ['common', 'assets']) cpSync(join(flowsDir, shared), join(dir, shared), { recursive: true });
   writeFileSync(join(dir, 'before.js'), BEFORE_JS);
   return flows.map((flow) => {
     const file = join(dir, `${flow}.yaml`);

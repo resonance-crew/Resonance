@@ -7,7 +7,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { PORTS, ROOT, run, sleep, startGroup, stopGroup, waitForPort } from './util';
+import { PORTS, ROOT, portsFree, run, sleep, startGroup, stopGroup, waitForPort } from './util';
 
 export type Stack = { devUrl: string; stop: () => void };
 
@@ -172,6 +172,11 @@ export async function startStack(logDir: string, log: (line: string) => void): P
   };
   process.once('SIGINT', () => (stop(), process.exit(130)));
   try {
+    // A stack that just went down on these ports (the run before this one, queued behind it) may still hold them: run
+    // 20261123-122718's Firestore emulator exited at once, started a second after the last run's stopped.
+    if (!(await portsFree([PORTS.auth, PORTS.firestore, PORTS.firestore + 1, PORTS.firestore + 2, PORTS.firestore + 3, PORTS.dev], 30_000))) {
+      log(`  something still listens on the stack's ports after 30 s: starting anyway`);
+    }
     log(`Starting emulators on auth ${PORTS.auth} / firestore ${PORTS.firestore}…`);
     children.push(startGroup('node', ['scripts/emulators-at.mjs'], emulatorsEnv(), join(logDir, 'emulators.log')));
     await waitForPort(PORTS.auth, 90_000);

@@ -19,11 +19,10 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { createConnection } from 'node:net';
 import { basename, dirname, join } from 'node:path';
 import { LockBusy, acquire, resourcesFor } from './lock';
 import { startStack, seed, type Stack } from './stack';
-import { PORTS, ROOT, SEED_PASSWORD, VISUAL_DIR, sleep, type CaptureContext } from './util';
+import { PORTS, ROOT, SEED_PASSWORD, VISUAL_DIR, portsFree, type CaptureContext } from './util';
 import { stopwatch, writeTiming } from './timings';
 import { hookServer, parseJunit, writeSessionFlows } from './flowSession';
 
@@ -489,20 +488,6 @@ async function main() {
     lock.release();
   }
   if (failed) process.exitCode = 1;
-}
-
-async function portsFree(ports: number[], timeoutMs: number) {
-  const end = Date.now() + timeoutMs;
-  const open = (port: number) =>
-    new Promise<boolean>((done) => {
-      const socket = createConnection({ port, host: '127.0.0.1' });
-      socket.once('connect', () => (socket.destroy(), done(true)));
-      socket.once('error', () => done(false));
-    });
-  while (Date.now() < end) {
-    if (!(await Promise.all(ports.map(open))).some(Boolean)) return;
-    await sleep(500);
-  }
 }
 
 if (require.main === module) {
