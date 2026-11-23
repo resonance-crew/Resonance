@@ -159,6 +159,55 @@ describe('調整位置 on a picture cover', () => {
   });
 });
 
+/** The slot beside the preview's picture, as the publish step lays them: what 完成 keeps is what the preview draws. */
+function SlotAndPreview({ start }: { start?: CardMedia }) {
+  const [media, setMedia] = useState<CardMedia | undefined>(start);
+  const cover = useCoverEditor({ media, story: 'A story to draw from', accentHue: 140, onChange: (m) => setMedia(m) });
+  return (
+    <>
+      <CoverFrame cover={cover} />
+      <div data-testid="preview">{media?.url && <OrganicImage src={cover.partial ?? media.url} ratio={0.62} frame={cover.partial ? undefined : media.frame} />}</div>
+    </>
+  );
+}
+
+describe('調整封面 on an AI-made cover (round 32 §P5)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // The owner, 2026-11-24: 「调整封面裁切范围后，预览区没有更新，仍然显示旧的裁切范围」 (an AI-made cover). On the web the
+  // drawn cover takes the same path as an upload — its URL into media, the frame beside it, the preview reading both —
+  // and this pins it: each 完成 moves what the preview draws, the first time and every time after.
+  it('the preview draws each new framing at once, as it does an uploaded picture’s', async () => {
+    const AI = 'https://img.example/image/2026-11/ai.webp';
+    const ndjson = `${JSON.stringify({ type: 'done', publicUrl: AI, key: 'image/2026-11/ai.webp', thumbUrl: AI.replace('.webp', '-w960.webp') })}\n`;
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(ndjson, { status: 200 })));
+    renderWithIntl(<SlotAndPreview start={COVER} />);
+    // 更換封面 → 生成圖片: the story's illustration replaces the photo
+    fireEvent.click(screen.getByRole('button', { name: en.write.coverChange }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: en.write.mediaGenerate }));
+    const drawn = () => screen.getByTestId('preview').querySelector('img') as HTMLImageElement;
+    await waitFor(() => expect(drawn()).toHaveAttribute('src', AI));
+    expect(drawn()).not.toHaveAttribute('data-frame');
+
+    const adjust = async (key: string) => {
+      const dialog = await openDialog();
+      const stage = within(dialog).getByRole('group', { name: en.write.coverFrame.stage });
+      fireEvent.keyDown(stage, { key: '+' });
+      fireEvent.keyDown(stage, { key, shiftKey: true });
+      fireEvent.click(within(dialog).getByRole('button', { name: en.write.coverFrame.done }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      return drawn().getAttribute('style');
+    };
+    const first = await adjust('ArrowRight');
+    expect(drawn()).toHaveAttribute('data-frame');
+    expect(drawn()).toHaveAttribute('src', AI);
+    // framed again from where the first left it: the preview follows again
+    const second = await adjust('ArrowLeft');
+    expect(second).not.toBe(first);
+    expect(drawn()).toHaveAttribute('src', AI);
+  });
+});
+
 describe('the stage’s maths', () => {
   it('a stored frame opens where it was and comes back the same', () => {
     // (a frame inside what the picture allows: at ×1.3 the 0.62 crop is 0.70 of its width, so cx ∈ [0.35, 0.65], cy ∈ [0.38, 0.62])
