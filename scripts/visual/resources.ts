@@ -87,7 +87,7 @@ const SIM_DEVICE = /CoreSimulator\/Devices\/([0-9A-F-]{36})\//;
  * Each part's memory and CPU. `self` is this process (the harness); `simulators` names the harness's own simulators by
  * UDID (the others' are left out: another session's).
  */
-export function classify(procs: Proc[], self: number, simulators: Record<string, string> = {}): Record<string, Group> {
+export function classify(procs: Proc[], self: number, simulators: Record<string, string> = {}, devicesHeld = true): Record<string, Group> {
   const children = new Map<number, number[]>();
   const byPid = new Map(procs.map((p) => [p.pid, p]));
   for (const p of procs) children.set(p.ppid, [...(children.get(p.ppid) ?? []), p.pid]);
@@ -116,10 +116,13 @@ export function classify(procs: Proc[], self: number, simulators: Record<string,
       add(own.get(p.pid)!, p);
       continue;
     }
+    // The harness's devices are the run's while it holds their locks; once it let them go (its compare and review),
+    // another run may have them, so they are said apart as the machine's.
+    const device = (name: string) => add(devicesHeld ? name : `machine:${name}`, p);
     const udid = SIM_DEVICE.exec(p.args)?.[1];
-    if (udid && simulators[udid]) add(`sim:${simulators[udid]}`, p);
-    else if (/build\/visual-mac\//.test(p.args)) add('mac-app', p);
-    else if (/qemu-system.*(visual-phone|visual-tablet)/.test(p.args)) add('android-emulator', p);
+    if (udid && simulators[udid]) device(`sim:${simulators[udid]}`);
+    else if (/build\/visual-mac\//.test(p.args)) device('mac-app');
+    else if (/qemu-system.*(visual-phone|visual-tablet)/.test(p.args)) device('android-emulator');
     else {
       const machine = MACHINE.find(([, re]) => re.test(p.args))?.[0];
       if (machine) add(machine, p);
@@ -193,7 +196,12 @@ export function phaseLine(s: PhaseSummary): string {
   return `Resources (${s.phase}, ${s.seconds} s): the run's peak ${gb(s.peakRunMb)} (${parts || 'nothing yet'})${others} · swap ${gb(s.swapMb.start)} → max ${gb(s.swapMb.max)} · free ≥ ${s.minFreePct ?? '?'} %`;
 }
 
-export type Sampler = { mark: (phase: string) => void; stop: () => Promise<PhaseSummary[]> };
+export type Sampler = {
+  mark: (phase: string) => void;
+  /** The run let its devices' locks go: from now on the harness's simulators, AVDs and Mac app are the machine's. */
+  releaseDevices: () => void;
+  stop: () => Promise<PhaseSummary[]>;
+};
 
 async function read(command: string, args: string[]): Promise<string> {
   try {
@@ -223,16 +231,17 @@ export const sampleEveryMs = () => Number(process.env.VISUAL_SAMPLE_S ?? 5) * 10
  * until [Sampler.mark] names the next; `log` is told each phase's line as it ends.
  */
 export function startSampler(runDir: string, { log, simulators = [], everyMs = sampleEveryMs(), phase = 'stack' }: { log: (line: string) => void; simulators?: readonly string[]; everyMs?: number; phase?: string }): Sampler {
-  if (!everyMs) return { mark: () => {}, stop: async () => [] };
+  if (!everyMs) return { mark: () => {}, releaseDevices: () => {}, stop: async () => [] };
   const file = join(runDir, '_resources.jsonl');
   mkdirSync(dirname(file), { recursive: true });
   const samples: Sample[] = [];
   const started = Date.now();
   let sims: Record<string, string> = {};
   let current = phase;
+  let devicesHeld = true;
   let busy: Promise<void> = Promise.resolve();
   let stopped = false;
-  const take = async (count: number, phase: string) => {
+  const take = async (count: number, phase: string, held: boolean) => {
     if (count % 12 === 0) sims = await harnessSimulators(simulators);
     const [ps, swap, level, vm] = await Promise.all([
       read('ps', ['-axww', '-o', 'pid=,ppid=,rss=,pcpu=,args=']),
@@ -240,7 +249,7 @@ export function startSampler(runDir: string, { log, simulators = [], everyMs = s
       read('sysctl', ['-n', 'kern.memorystatus_level']),
       read('vm_stat', []),
     ]);
-    const groups = classify(parsePs(ps), process.pid, sims);
+    const groups = classify(parsePs(ps), process.pid, sims, held);
     const sample: Sample = {
       t: Math.round((Date.now() - started) / 100) / 10,
       phase,
@@ -259,7 +268,8 @@ export function startSampler(runDir: string, { log, simulators = [], everyMs = s
   // close together never give the first phase's name to the second).
   const tick = () => {
     const phase = current;
-    busy = busy.then(() => take(count++, phase)).catch(() => {});
+    const held = devicesHeld;
+    busy = busy.then(() => take(count++, phase, held)).catch(() => {});
   };
   tick();
   const timer = setInterval(tick, everyMs);
@@ -269,6 +279,9 @@ export function startSampler(runDir: string, { log, simulators = [], everyMs = s
     if (s && phase !== 'all') log(phaseLine(s));
   };
   return {
+    releaseDevices() {
+      devicesHeld = false;
+    },
     mark(next) {
       if (stopped || next === current) return;
       // The phase that ends gets a last sample of its own.

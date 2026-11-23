@@ -39,6 +39,13 @@ describe('what a run costs, by part', () => {
     // A compile under the build is the build's.
     expect(groups.xcodebuild.n).toBe(2);
     expect(groups.harness.n).toBe(1);
+    // Once the run let its devices' locks go, the harness's devices may be another run's: said apart.
+    const after = classify(parsePs(PS), 100, { '459A5F8B-784E-4D04-A742-0A85F28363C2': 'Visual iPhone' }, false);
+    expect(after['machine:sim:Visual iPhone']).toBeDefined();
+    expect(after['machine:mac-app']).toBeDefined();
+    expect(after['sim:Visual iPhone']).toBeUndefined();
+    // The AVD this run booted is its own child: still the run's.
+    expect(after['android-emulator']).toBeDefined();
     expect(groups.next).toEqual({ rssMb: Math.round(2_400_000 / 1024), cpu: 110, n: 2 });
     expect(groups['firestore-emulator'].rssMb).toBe(Math.round(700_000 / 1024));
     expect(groups['sim:Visual iPhone'].n).toBe(1);

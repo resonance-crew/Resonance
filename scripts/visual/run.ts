@@ -207,6 +207,7 @@ async function capture(args: string[]) {
       }
     }
     lock.release();
+    sampler.releaseDevices();
   }
   sampler.mark('compare');
   let results = await finish(runDir);
