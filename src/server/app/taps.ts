@@ -30,15 +30,19 @@ export async function setTapIn(ctx: ServerCtx, uid: string, cardId: string, on: 
   if (!published(card)) throw notFound();
   if (card.authorId === uid) throw new ApiFailure('invalid_request', 'You cannot resonate with your own card.');
   const author = card.authorId;
-  if (on) {
-    // Read alike for every card, whatever stands between the two: only a named card's answer turns on them.
-    const gate = await taps.tapGate(uid, author);
-    if (!gate.penName) throw noPenName();
-    if (card.anonymous !== true && gate.blocked) throw new ApiFailure('blocked', 'You cannot resonate with this card.');
-  }
+  // Read alike for every card, whatever stands between the two: only a named card's answer turns on them. Read beside
+  // the transaction's reads (round 32 §P6: it was a round trip of its own before them), and judged before anything
+  // there is — as it was before the transaction began.
+  const gate = on ? taps.tapGate(uid, author) : null;
+  gate?.catch(() => {});
   return ctx.uow.run(
     async (tx) => {
       const [tap, fresh, linked] = await Promise.all([tx.taps.getTap(card.id, uid), tx.taps.getTapCard(card.id), tx.taps.connected(uid, author)]);
+      if (gate) {
+        const { penName, blocked } = await gate;
+        if (!penName) throw noPenName();
+        if (card.anonymous !== true && blocked) throw new ApiFailure('blocked', 'You cannot resonate with this card.');
+      }
       // The budget answers before anything is written.
       await spent;
       if (!tappable(fresh, uid) || fresh.authorId !== author || !cardVisible(fresh, uid, () => linked)) throw notFound();
@@ -328,12 +332,25 @@ export async function listTapsIn(ctx: ServerCtx, viewerId: string, cardId: strin
 // --- the passage a reader picked (round 27) --------------------------------------------------------------------------
 
 /** See src/lib/api/v1/taps.ts `setTapPassage`. */
-export async function setTapPassageIn(ctx: ServerCtx, uid: string, cardId: string, passage: string | null): Promise<TapPassageResponseBody> {
+export async function setTapPassageIn(
+  ctx: ServerCtx,
+  uid: string,
+  cardId: string,
+  passage: string | null,
+  /** The tap's budget, spent beside this (budgetFirst) — awaited before anything is written. */
+  spent: Promise<void> = Promise.resolve(),
+): Promise<TapPassageResponseBody> {
   const card = await ctx.data.taps.visibleCard(uid, cardId);
-  if ((await tapViewOf(ctx, uid, card)) !== 'reader') throw notFound();
+  // tapViewOf's 'reader', its block read beside the transaction's reads (round 32 §P6) and judged before them.
+  if (!published(card) || card.authorId === uid) throw notFound();
+  const blocked = card.anonymous !== true ? ctx.data.taps.blockedEitherWay(uid, card.authorId) : Promise.resolve(false);
+  blocked.catch(() => {});
   return ctx.uow.run(
     async (tx) => {
       const [tap, fresh, linked] = await Promise.all([tx.taps.getTap(card.id, uid), tx.taps.getPassageCard(card.id), tx.taps.connected(uid, card.authorId)]);
+      if (await blocked) throw notFound();
+      // The budget answers before anything is written.
+      await spent;
       if (!tappable(fresh, uid) || fresh.authorId !== card.authorId || !cardVisible(fresh, uid, () => linked)) throw notFound();
       if (tap?.on !== true) throw new ApiFailure('conflict', 'Resonate with this card first.');
       if (passage === null) {

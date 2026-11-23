@@ -4,7 +4,9 @@ import type { Bucket, RateLimiter } from '@/server/ports/rateLimit';
 import { memoryCtx } from '@/server/infra/memory/ctx';
 import { countCardReadIn } from './cardReads';
 import { reportReadingIn } from './reading';
-import { cardTapIn, listTapsIn, setTapIn } from './taps';
+import { passagesHash } from '@/lib/cards/tapPassages';
+import type { ServerCtx } from '@/server/ctx';
+import { cardTapIn, listTapsIn, setTapIn, setTapPassageIn } from './taps';
 
 // The taps aggregate's services on the memory context — no Firestore at all:
 // a tap turned on, asked again (nothing changes, nothing rings), taken back
@@ -152,4 +154,70 @@ describe('the taps services on memory', () => {
     expect(await countCardReadIn(tight.ctx, 'alice', 'walk')).toBe(false);
     expect(tight.ctx.state.get('cards', 'walk')!.readCount).toBe(0);
   });
+
+  // Round 32 §P6: 共振 and its pick answered after three or four round trips one after another; the gate's and the
+  // block's reads (and the pick's budget) now go beside the transaction's own reads, judged before any write.
+  describe('round trips', () => {
+    function deferred<T>() {
+      let resolve!: (v: T) => void;
+      const promise = new Promise<T>((r) => (resolve = r));
+      return { promise, resolve };
+    }
+    /** Notes when a transaction begins. */
+    function watchTx(ctx: ServerCtx) {
+      const began = { count: 0 };
+      const run = ctx.uow.run.bind(ctx.uow);
+      ctx.uow.run = ((fn, opts) => {
+        began.count += 1;
+        return run(fn, opts);
+      }) as typeof ctx.uow.run;
+      return began;
+    }
+    const tick = () => new Promise((r) => setTimeout(r, 0));
+
+    it("a tap's transaction reads beside the pen name and block gate, and still answers the gate's refusals first", async () => {
+      const { ctx } = world();
+      const began = watchTx(ctx);
+      const gate = deferred<{ penName: boolean; blocked: boolean }>();
+      const real = ctx.data.taps.tapGate.bind(ctx.data.taps);
+      ctx.data.taps.tapGate = (async (uid: string, author: string) => {
+        const answer = await real(uid, author);
+        await gate.promise;
+        return answer;
+      }) as typeof ctx.data.taps.tapGate;
+      const tapping = setTapIn(ctx, 'dan', 'walk', true);
+      await tick();
+      expect(began.count).toBe(1); // before the gate answered
+      gate.resolve({ penName: true, blocked: true });
+      expect(await code(tapping)).toBe('blocked');
+      expect(ctx.state.get('resonanceTaps', 'walk_dan')).toBeNull();
+    });
+
+    it('a pick reads beside its budget and the block, writes nothing across a block or past the budget', async () => {
+      const { ctx } = world();
+      const story = 'The rain stopped at six. We walked home the long way. Nobody said a word about it.';
+      ctx.state.merge('cards', 'walk', { story, tapPassages: { of: passagesHash(story), items: [{ id: 'p1', text: 'The rain stopped at six.' }, { id: 'p2', text: 'We walked home the long way.' }] } });
+      await setTapIn(ctx, 'alice', 'walk', true);
+      const began = watchTx(ctx);
+      const budget = deferred<void>();
+      const picking = setTapPassageIn(ctx, 'alice', 'walk', 'p1', budget.promise);
+      await tick();
+      expect(began.count).toBe(1); // before the budget answered
+      expect(ctx.state.get('resonanceTaps', 'walk_alice')).not.toHaveProperty('passage.id', 'p1');
+      budget.resolve();
+      expect(await picking).toEqual({ passage: 'p1' });
+      expect(ctx.state.get('resonanceTaps', 'walk_alice')).toMatchObject({ passage: { id: 'p1' } });
+
+      const refused = Promise.reject(new ApiFailure('rate_limited', 'Slow down.'));
+      refused.catch(() => {});
+      expect(await code(setTapPassageIn(ctx, 'alice', 'walk', 'p2', refused))).toBe('rate_limited');
+      expect(ctx.state.get('resonanceTaps', 'walk_alice')).toMatchObject({ passage: { id: 'p1' } });
+
+      // Across a block on a named card: as absent as no card, nothing written.
+      ctx.state.merge('resonanceTaps', 'walk_dan', { cardId: 'walk', userId: 'dan', on: true, at: new Date(NOW), rangAt: null });
+      expect(await code(setTapPassageIn(ctx, 'dan', 'walk', 'p1'))).toBe('not_found');
+      expect(ctx.state.get('resonanceTaps', 'walk_dan')).not.toHaveProperty('passage');
+    });
+  });
 });
+
