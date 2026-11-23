@@ -41,6 +41,8 @@ export interface TapPassagesOptions {
   markAfter?: Promise<unknown>;
   /** False: a failure marks nothing (the daily cron, whose own run is the retry). */
   markOwed?: boolean;
+  /** Waited for (bounded) before the card is read: publishing's reading, which writes the pick's guide (Wave 2 #3a). */
+  insightAfter?: Promise<unknown>;
 }
 
 /** A failure worth trying again (a timeout, a server error, a cut answer) — a refusal is an answer: none. */
@@ -67,5 +69,6 @@ export function makeTapPassagesIn(ctx: ServerCtx, id: string, opts: TapPassagesO
     mayCall: opts.mayCall,
     markAfter: opts.markAfter,
     markOwed: opts.markOwed,
+    insightAfter: opts.insightAfter,
   });
 }

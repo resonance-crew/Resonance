@@ -188,8 +188,9 @@ internal data class TapRowLines(val quote: String? = null, val pick: Boolean = f
 
 /**
  * The lines for [person]'s row. The author's list ([author]): every row's pick, then its note's first line (none on an
- * anonymous card). A reader's list: their own row alone ([viewerId]) — their pick, or 選一段 when the card offers
- * passages ([offersPassages]) — and no other row ever a second line, on a named card or an anonymous one (M3).
+ * anonymous card). A reader's list: their own row ([viewerId]) — their pick, or 選一段 when the card offers passages
+ * ([offersPassages]) — and, since Wave 2 #3b (everyone's picks are seen, 「像按讚一樣」), every other row's pick as the
+ * server sent it; never a note on a reader's list, on a named card or an anonymous one (M3: the server sends none).
  */
 internal fun tapRowLines(
     person: TapPerson,
@@ -201,7 +202,7 @@ internal fun tapRowLines(
 ): TapRowLines {
     val listed = person.passage?.text?.takeIf { it.isNotBlank() }
     if (author) return TapRowLines(quote = listed, excerpt = tapRowExcerpt(person, anonymous))
-    if (viewerId == null || person.author.id != viewerId) return TapRowLines.NONE
+    if (viewerId == null || person.author.id != viewerId) return listed?.let { TapRowLines(quote = it) } ?: TapRowLines.NONE
     // On a card offering passages the page knows the reader's pick before the list does (the list may have been read
     // while the pick's request was still on its way): the own row says the page's, as the web's.
     val quote = if (offersPassages && pagePick != null) pagePick.text?.takeIf { it.isNotBlank() } else listed

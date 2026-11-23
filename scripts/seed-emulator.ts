@@ -29,7 +29,7 @@ async function main() {
   const { getFirestore, Timestamp } = await import('firebase-admin/firestore');
   const { translationHash } = await import('../src/lib/api/v1/translationHash');
   const { summaryHash } = await import('../src/lib/api/v1/summaryTranslations');
-  const { offlinePassages, passagesHash } = await import('../src/lib/cards/tapPassages');
+  const { offlinePassages, passagesHash, PASSAGES_VERSION } = await import('../src/lib/cards/tapPassages');
   const { summarize } = await import('../src/lib/api/v1/summary');
 
   const app = initializeApp({ projectId: EMULATOR_PROJECT_ID }, 'seed');
@@ -151,7 +151,7 @@ async function main() {
   {
     const rich = (await db.doc('cards/rich-story').get()).data()!;
     const items = offlinePassages(rich.story, { title: rich.thoughtCore });
-    await db.doc('cards/rich-story').update({ tapPassages: { of: passagesHash(rich.story), items, model: 'offline', at: at(45) } });
+    await db.doc('cards/rich-story').update({ tapPassages: { of: passagesHash(rich.story), items, model: 'offline', v: PASSAGES_VERSION, at: at(45) } });
   }
 
   // A story in English (carol's), weeks old so it sits at the feed's end: the one a 繁體中文 reader can translate.

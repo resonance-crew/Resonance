@@ -1,4 +1,4 @@
-import { offersPassages, offlinePassages, passagesHash, PASSAGES_TRIES_MAX, verifyPassages, type TapPassageItem } from '@/lib/cards/tapPassages';
+import { offersPassages, offlinePassages, passagesCurrent, passagesHash, PASSAGES_TRIES_MAX, PASSAGES_VERSION, verifyPassages, type TapPassageItem } from '@/lib/cards/tapPassages';
 import type { ServerCtx } from '@/server/ctx';
 import type { PassageSource } from '@/server/ports/repos/translations';
 
@@ -11,8 +11,8 @@ import type { PassageSource } from '@/server/ports/repos/translations';
 export type TapPassagesResult = 'made' | 'unchanged' | 'none' | 'removed' | 'not-found' | 'over-budget' | 'failed' | 'given-up' | 'moved';
 
 export interface MakeTapPassagesDeps {
-  /** The model call: up to three of the story's own sentences, and the model's name. */
-  pick: (title: string, story: string) => Promise<{ passages: readonly unknown[]; model: string }>;
+  /** The model call: up to three of the story's own passages, and the model's name; `insight` the card's through line. */
+  pick: (title: string, story: string, opts?: { insight?: string | null }) => Promise<{ passages: readonly unknown[]; model: string }>;
   /** A failure that is an answer (the model's refusal): settled as none, never tried again for this text. */
   refused: (e: unknown) => boolean;
   /** Against the emulators: no model is asked, the offline pick is used instead. */
@@ -23,7 +23,16 @@ export interface MakeTapPassagesDeps {
   markAfter?: Promise<unknown>;
   /** False: a failure marks nothing (the daily cron, whose own run is the retry). */
   markOwed?: boolean;
+  /**
+   * Waited for (at most `insightWaitMs`) before the card is read: publishing's reading, which writes the through
+   * line the pick is guided by (Wave 2 #3a). Past the wait the pick goes on without it.
+   */
+  insightAfter?: Promise<unknown>;
+  insightWaitMs?: number;
 }
+
+/** How long a publish's pick waits for the card's reading before it picks without the through line. */
+export const INSIGHT_WAIT_MS = 45_000;
 
 /**
  * Whether the card's story is one to make passages for: offersPassages, the
@@ -34,6 +43,14 @@ const qualifies = (s: PassageSource) => offersPassages({ ...s.fields, story: s.s
 
 /** See src/lib/api/v1/tapPassagesMake.ts `makeTapPassages`. */
 export async function makeTapPassagesIn(ctx: ServerCtx, id: string, deps: MakeTapPassagesDeps): Promise<TapPassagesResult> {
+  if (deps.insightAfter) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      deps.insightAfter.catch(() => {}),
+      new Promise((resolve) => (timer = setTimeout(resolve, deps.insightWaitMs ?? INSIGHT_WAIT_MS))),
+    ]);
+    if (timer) clearTimeout(timer);
+  }
   const source = await ctx.data.translations.getPassageSource(id);
   if (!source) return 'not-found';
   const stored = source.tapPassages as { of?: unknown; failed?: { of?: unknown; tries?: unknown } } | undefined;
@@ -44,7 +61,8 @@ export async function makeTapPassagesIn(ctx: ServerCtx, id: string, deps: MakeTa
   }
   const { title, story } = source;
   const of = passagesHash(story);
-  if (stored && stored.of === of) return 'unchanged';
+  // Current: made from this text by this version (Wave 2 #3a: an older version's pick is made again).
+  if (passagesCurrent(stored as { of?: unknown; v?: unknown } | undefined, of)) return 'unchanged';
   const tries = stored?.failed?.of === of && typeof stored.failed.tries === 'number' ? stored.failed.tries : 0;
   if (tries >= PASSAGES_TRIES_MAX) return 'given-up';
 
@@ -67,7 +85,7 @@ export async function makeTapPassagesIn(ctx: ServerCtx, id: string, deps: MakeTa
       return 'over-budget';
     }
     try {
-      const answer = await deps.pick(title, story);
+      const answer = await deps.pick(title, story, { insight: source.insight });
       items = verifyPassages(story, answer.passages, { title });
       model = answer.model;
     } catch (e) {
@@ -86,7 +104,7 @@ export async function makeTapPassagesIn(ctx: ServerCtx, id: string, deps: MakeTa
       const now = await tx.translations.getPassageSource(id);
       if (!now) return 'not-found';
       if (!qualifies(now) || passagesHash(now.story) !== of) return 'moved';
-      tx.translations.putTapPassages(id, { of, items: items.map((i) => ({ id: i.id, text: i.text })), model });
+      tx.translations.putTapPassages(id, { of, items: items.map((i) => ({ id: i.id, text: i.text })), model, v: PASSAGES_VERSION });
       return items.length ? 'made' : 'none';
     },
     { label: 'tapPassages' },

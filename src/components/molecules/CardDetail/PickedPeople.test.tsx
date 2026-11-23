@@ -24,6 +24,8 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 const listTaps = vi.fn((..._a: unknown[]): Promise<TapListBody> => Promise.resolve({ people: [], nextPageToken: null }));
 vi.mock('@/lib/db/firestore/client/taps', () => ({ listTaps: (...a: unknown[]) => listTaps(...a) }));
+// The list is keyed by the viewer (Wave 2 #3b: readers read it too).
+vi.mock('@/components/providers/AuthProvider', () => ({ useAuth: () => ({ user: { id: 'viewer' } }) }));
 
 const face = (id: string): AuthorBody => ({ id, handle: id, initials: id.slice(0, 2).toUpperCase(), accentColor: 'x', avatarUrl: null, avatarSeed: '3', verified: false, region: null });
 const SENTENCE = '箱子堆滿了客廳，我坐在地上，第一次覺得安靜是屬於自己的。';

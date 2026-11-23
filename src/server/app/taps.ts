@@ -6,7 +6,7 @@ import { PICKED_CANDIDATES, PICKED_SCAN, pickedFaces, pickedIn } from '@/lib/car
 import { presentTapPassages } from '@/lib/api/v1/tapPassages';
 import type { Card } from '@/lib/db/types';
 import type { ServerCtx } from '@/server/ctx';
-import { READER_TAP_SCAN, TAP_PAGE, noteExcerpt, type TapOutcome } from '@/server/domain/taps';
+import { TAP_PAGE, noteExcerpt, type TapOutcome } from '@/server/domain/taps';
 import type { TapPick, Tapper } from '@/server/ports/repos/taps';
 import type { PageCursor } from '@/server/ports/time';
 
@@ -77,39 +77,112 @@ async function authorPeople(ctx: ServerCtx, card: Card, limit: number, after: Pa
 }
 
 /**
- * The people a reader sees: themselves first when their tap is on, then the
- * people they are connected with whose tap is on, newest first. On a named
- * card, anyone with a block between them and the reader is left out; on an
- * anonymous card nothing here turns on a block. (Exported for its test.)
+ * Who of `tappers` a reader may see (Wave 2 #3b, the owner: 「像按讚一樣大家都可以看到誰按」): never the author
+ * and never the reader (their own row is put first by the caller), never anyone with a block between them and the
+ * reader either way — on every card, the reader's own blocks being the reader's to know — and on a named card never
+ * anyone with a block between them and the author either way, as the author's own list reads. On an anonymous card
+ * nothing here reads the author's blocks: what a reader sees there must not change with whom its author blocked
+ * (safety.md, the tap), or a face missing from it would name the author.
  */
-export async function readerPeople(
+async function readerVisible(ctx: ServerCtx, viewerId: string, card: Card, tappers: Tapper[], blocks: ReaderBlocks): Promise<Tapper[]> {
+  const taps = ctx.data.taps;
+  const named = card.anonymous !== true;
+  const viewerBlocks = await blocks.viewer;
+  const first = tappers.filter((t) => t.uid !== card.authorId && t.uid !== viewerId && !viewerBlocks.has(t.uid));
+  if (!first.length) return [];
+  const authorBlocks = named ? await blocks.author() : null;
+  const head = authorBlocks ? first.filter((t) => !authorBlocks.has(t.uid)) : first;
+  if (!head.length) return [];
+  const uids = head.map((t) => t.uid);
+  const [blockViewer, blockAuthor] = await Promise.all([
+    taps.blockersOf(uids, viewerId),
+    named ? taps.blockersOf(uids, card.authorId) : Promise.resolve(new Set<string>()),
+  ]);
+  return head.filter((t) => !blockViewer.has(t.uid) && !blockAuthor.has(t.uid));
+}
+
+/** The blocks a reader's view turns on: theirs, and — read once, only when asked, on a named card — its author's. */
+interface ReaderBlocks {
+  viewer: Promise<ReadonlySet<string>>;
+  author: () => Promise<ReadonlySet<string>>;
+}
+
+function readerBlocks(ctx: ServerCtx, viewerId: string, card: Card, viewerBlocks?: Promise<ReadonlySet<string>>): ReaderBlocks {
+  let author: Promise<ReadonlySet<string>> | null = null;
+  return {
+    viewer: viewerBlocks ?? ctx.data.taps.blockedBy(viewerId),
+    author: () => (author ??= ctx.data.taps.blockedBy(card.authorId)),
+  };
+}
+
+/**
+ * One page of the people a reader sees (`readerVisible`), newest first, from `after`; on the first page the reader
+ * themselves first while their tap is on (with `passage`, while their pick is that one). With `passage`, only the
+ * taps whose pick has that id (the author's `?passage=` alike, round 29).
+ */
+async function readerPage(
   ctx: ServerCtx,
   viewerId: string,
   card: Card,
-  viewerBlocks?: Promise<ReadonlySet<string>>,
-): Promise<{ mine: boolean; pick: TapPick | null; people: Tapper[] }> {
+  own: { on: boolean; passage: TapPick | null },
+  blocks: ReaderBlocks,
+  limit: number,
+  after?: PageCursor,
+  passage?: string,
+): Promise<{ people: Tapper[]; next: PageCursor | null; full: boolean }> {
+  const page = await ctx.data.taps.tapsOnPage(card.id, limit, after, passage);
+  const people = await readerVisible(ctx, viewerId, card, page.tappers, blocks);
+  const first = after == null;
+  const mineHere = own.on && (!passage || own.passage?.id === passage);
+  return {
+    people: first && mineHere ? [{ uid: viewerId, at: Number.MAX_SAFE_INTEGER, passage: own.passage }, ...people] : people,
+    next: page.next,
+    full: page.full,
+  };
+}
+
+/** Taps a reader's answer reads at most for its faces and picked sentences: one page, newest first. */
+export const READER_SCAN = 30;
+
+/**
+ * What a reader sees of who resonated (Wave 2 #3b), from one page of the newest READER_SCAN taps that are on: the
+ * faces — themselves first when their tap is on, then the others `readerVisible` lets through, newest first, with a
+ * profile — and the picked sentences, each with its newest PICKED_CANDIDATES pickers let through the same way, the
+ * reader's own pick laid first whatever its age (so it shows the moment they pick). Only the people the answer can
+ * show are asked about blocks and profiles: the first few faces and each sentence's candidates.
+ */
+async function readerView(
+  ctx: ServerCtx,
+  viewerId: string,
+  card: Card,
+  own: { on: boolean; passage: TapPick | null },
+  blocks: ReaderBlocks,
+): Promise<{ faces: AuthorBody[]; more: boolean; picked: TapPickedBody[] }> {
   const taps = ctx.data.taps;
-  // The card's few taps first, each checked against the reader's connections by id (P0 #6): a reader with hundreds
-  // of connections opening a card three people tapped reads a handful of documents, not every connection they have.
-  // Only a card with READER_TAP_SCAN or more taps on reads the reader's connections and their taps, as before.
-  const [own, scan] = await Promise.all([taps.ownTap(card.id, viewerId), taps.tapsOn(card.id, READER_TAP_SCAN)]);
-  const { on: mine, passage: pick } = own;
-  let found: Tapper[];
-  if (!scan.full) {
-    const candidates = scan.tappers.filter((t) => t.uid !== viewerId && t.uid !== card.authorId);
-    const linked = candidates.length ? await taps.connectedAmong(viewerId, candidates.map((t) => t.uid)) : new Set<string>();
-    found = candidates.filter((t) => linked.has(t.uid));
-  } else {
-    const others = (await taps.connectionsOf(viewerId)).filter((id) => id !== card.authorId);
-    found = await taps.tapsOnBy(card.id, others);
+  const scan = await taps.tapsOnPage(card.id, READER_SCAN);
+  const viewerBlocks = await blocks.viewer;
+  const others = scan.tappers.filter((t) => t.uid !== viewerId && t.uid !== card.authorId && !viewerBlocks.has(t.uid));
+  const faceHead = others.slice(0, TAP_FACES_MAX + 4);
+  const story = typeof card.story === 'string' ? card.story : '';
+  const mine: Tapper[] = own.on && own.passage ? [{ uid: viewerId, at: Number.MAX_SAFE_INTEGER, passage: own.passage }] : [];
+  const sentences = story.trim() ? pickedIn(story, [...mine, ...others.filter((t) => t.passage)]) : [];
+  const asked = [...new Map([...faceHead, ...sentences.flatMap((x) => x.pickers.slice(0, PICKED_CANDIDATES))].map((t) => [t.uid, t])).values()];
+  const visible = await readerVisible(ctx, viewerId, card, asked, blocks);
+  const allowed = new Set(visible.map((t) => t.uid));
+  const found = await taps.profiles([...(own.on ? [viewerId] : []), ...allowed]);
+  if (own.on) allowed.add(viewerId);
+  const faceOf = (uid: string) => (allowed.has(uid) ? (found.get(uid) ?? null) : null);
+
+  const known = [...(own.on ? [viewerId] : []), ...faceHead.map((t) => t.uid)].map(faceOf).filter((f): f is AuthorBody => f != null);
+  const faces = known.slice(0, TAP_FACES_MAX);
+  const more = known.length > TAP_FACES_MAX || others.length > faceHead.length || scan.full;
+
+  const picked: TapPickedBody[] = [];
+  for (const x of sentences) {
+    const got = pickedFaces(x, faceOf, scan.full);
+    if (got) picked.push({ id: x.id, text: x.text, people: got.people, more: got.more });
   }
-  found.sort((a, b) => b.at - a.at || (a.uid < b.uid ? -1 : 1));
-  let people = found;
-  if (card.anonymous !== true && found.length) {
-    const [blocked, blockers] = await Promise.all([viewerBlocks ?? taps.blockedBy(viewerId), taps.blockersOf(found.map((t) => t.uid), viewerId)]);
-    people = found.filter((t) => !blocked.has(t.uid) && !blockers.has(t.uid));
-  }
-  return { mine, pick, people: mine ? [{ uid: viewerId, at: Number.MAX_SAFE_INTEGER, passage: pick }, ...people] : people };
+  return { faces, more, picked };
 }
 
 /** On a named card: whether a block stands between reader and author, and whether POST /notes would take a note now. */
@@ -189,19 +262,24 @@ export async function cardTapIn(
   }
   // A reader: on a named card, the blocks either way and whether a note would be taken in one read, beside their people.
   const named = card.anonymous !== true;
-  const [standing, { mine, pick, people }] = await Promise.all([
+  const blocks = readerBlocks(ctx, viewerId, card, opts.blocked);
+  const [standing, own] = await Promise.all([
     named ? readerStanding(ctx, viewerId, card) : { blocked: false, mayNote: true },
-    readerPeople(ctx, viewerId, card, opts.blocked),
+    ctx.data.taps.ownTap(card.id, viewerId),
   ]);
   if (standing.blocked) return null;
   const mayNote = standing.mayNote;
-  const { faces, more } = await firstFaces(ctx, people, TAP_FACES_MAX);
+  const mine = own.on;
+  const pick = own.passage;
+  const { faces, more, picked } = await readerView(ctx, viewerId, card, own, blocks);
+  // Picked sentences (Wave 2 #3b: every reader sees them, as the author does): only where there is one to show.
+  const withPicked = picked.length ? { picked } : {};
   // The card's passages (round 27): the same for every reader, on the story alone; their own pick while it is one.
   // Both absent while the card offers none: a short card's answer is as it was before passages.
   const passages = presentTapPassages(card);
-  if (!passages.length) return { mine, faces, more, mayNote };
+  if (!passages.length) return { mine, faces, more, mayNote, ...withPicked };
   const passage = pick && passages.some((p) => p.id === pick.id) ? pick.id : null;
-  return { mine, faces, more, mayNote, passages, passage };
+  return { mine, faces, more, mayNote, passages, passage, ...withPicked };
 }
 
 /** The excerpt of the latest note each of `uids` left the author on the card; notes with no words left out. */
@@ -216,16 +294,18 @@ export async function listTapsIn(ctx: ServerCtx, viewerId: string, cardId: strin
   const card = await taps.visibleCard(viewerId, cardId);
   const view = await tapViewOf(ctx, viewerId, card);
   if (!view) throw notFound();
-  // `passage` is the author's alone (round 29): a reader's answer is the same with it or without.
+  // A reader (Wave 2 #3b): pages of everyone they may see, each row with its pick, never a note; `passage` filters
+  // to one picked sentence's people, as the author's.
   if (view === 'reader') {
-    const { people } = await readerPeople(ctx, viewerId, card);
-    const found = await taps.profiles(people.map((p) => p.uid));
-    // Only their own row carries a pick (round 27): no one else's is a reader's to learn, on any card.
+    const blocks = readerBlocks(ctx, viewerId, card);
+    const own = await taps.ownTap(card.id, viewerId);
+    const page = await readerPage(ctx, viewerId, card, own, blocks, TAP_PAGE, pageToken || undefined, passage || undefined);
+    const found = await taps.profiles(page.people.map((p) => p.uid));
     return {
-      people: people
+      people: page.people
         .filter((p) => found.has(p.uid))
-        .map((p) => ({ author: found.get(p.uid)!, note: null, ...(p.uid === viewerId && p.passage ? { passage: { text: p.passage.text } } : {}) })),
-      nextPageToken: null,
+        .map((p) => ({ author: found.get(p.uid)!, note: null, ...(p.passage ? { passage: { text: p.passage.text } } : {}) })),
+      nextPageToken: page.full ? page.next : null,
     };
   }
   const page = await authorPeople(ctx, card, TAP_PAGE, pageToken || undefined, await taps.blockedBy(card.authorId), passage || undefined);

@@ -334,12 +334,13 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(!model.needsSave)
     }
 
-    /// 誰可以看見 is one choice of three (round 7 §1.1): each writes both fields in one change, so no
-    /// write is ever anonymous and for connections only; a card kept for connections shows none chosen.
+    /// 卡片類型 is one choice of four (Wave 2: 連結的人 back): each writes both fields in one change, so no
+    /// write is ever anonymous and for connections only; a named connections card shows 連結的人 chosen, an
+    /// anonymous one (older cards) none.
     @Test func anonymousOnAConnectionsDraftGoesPublicInTheSameWrite() async {
         let store = RecordingDraftStore()
         let model = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls, opened: card(visibility: "connections"))
-        #expect(model.audience == nil)
+        #expect(model.audience == .connections)
         model.choose(.anonymous)
         #expect(model.values.anonymous)
         #expect(model.values.visibility == "public")
@@ -350,10 +351,61 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         model.choose(.public)
         #expect(model.values.visibility == "public" && !model.values.anonymous)
         #expect(model.audience == .public)
-        // A connections card left alone keeps its audience: none chosen.
-        let kept = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls, opened: card(visibility: "connections"))
+        // An anonymous connections card (older ones) left alone keeps its audience: none chosen.
+        let kept = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls,
+                              opened: card(published: true, visibility: "connections", anonymous: true))
         #expect(kept.values.visibility == "connections")
         #expect(kept.audience == nil)
+        // 連結的人 from it: for connections and named, in one change.
+        kept.choose(.connections)
+        #expect(kept.values.visibility == "connections" && !kept.values.anonymous)
+        #expect(kept.audience == .connections)
+    }
+
+    /// Wave 2's fit: the four card types with their glyphs don't fit the narrowest phone's column (375 less a 16
+    /// gutter a side) in English, so the glyphs go — a bar whose segments are all droppable tries its words alone
+    /// before anything is cut — and the words alone fit there, whole, on the tight air.
+    @Test func theFourCardTypesDropTheirGlyphsBeforeTheirWordsOnTheNarrowestPhone() throws {
+        let font = AppFonts.uiFont(.body, size: 14, weight: .semibold)
+        func width(_ words: String) -> CGFloat { ceil((words as NSString).size(withAttributes: [.font: font]).width) }
+        let column: CGFloat = 375 - 32
+        for labels in [["Public", "Connections", "Anonymous", "Private"], ["公開", "連結的人", "匿名公開", "私人卡"]] {
+            let words = labels.map(width)
+            let withGlyphs = words.reduce(0) { $0 + $1 + 16 + 6 + 24 }
+            let wordsTight = words.reduce(0) { $0 + $1 + 16 }
+            #expect(wordsTight <= column, "\(labels): \(wordsTight)")
+            if labels[0] == "Public" { #expect(withGlyphs > column, "\(withGlyphs)") }
+        }
+        let spec = SegmentSpec(id: "connections", icon: .users, label: "Connections", iconDroppable: true) {}
+        #expect(spec.iconDroppable && SegmentedActionBar.wordsAlone(spec).icon == nil)
+        #expect(SegmentedActionBar.wordsAlone(spec).label == "Connections")
+        // Never the glyph alone: none of the card types collapses.
+        #expect(!spec.collapsible)
+        let source = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Resonance/Features/Write/PublishStep.swift").standardized, encoding: .utf8)
+        #expect(source.contains("audienceOption(.connections, L10n.Write.Visibility.connections, icon: .users)"))
+        #expect(source.contains("iconDroppable: true"))
+    }
+
+    /// 連結的人 (Wave 2): from 匿名公開 it writes `connections` and named together; 發布 (never 匿名發布), the
+    /// step's title as for 公開, and a resonance's line is the quiet one of any card that isn't public.
+    @Test func connectionsWritesBothFieldsAndPublishesNamed() async {
+        let store = RecordingDraftStore()
+        let draft = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls, opened: card())
+        draft.choose(.anonymous)
+        draft.choose(.connections)
+        #expect(draft.values.visibility == "connections")
+        #expect(!draft.values.anonymous)
+        #expect(draft.audience == .connections)
+        #expect((draft.stepTitle, draft.verbTitle) == (L10n.Write.PublishPanel.title, L10n.Write.PublishPanel.publish))
+        #expect(!draft.keepsDraft && draft.publishes)
+        draft.store()
+        #expect(store.writes.last?.values.visibility == "connections")
+        #expect(store.writes.allSatisfy { !($0.values.anonymous && $0.values.visibility == "connections") })
+        #expect(!WriteModel.reaches(visibility: "connections", anonymous: false))
+        #expect(WriteModel.audience(visibility: "connections", anonymous: false) == .connections)
+        #expect(WriteModel.audience(visibility: "connections", anonymous: true) == nil)
+        #expect(WriteModel.Audience.allCases == [.public, .connections, .anonymous, .private])
     }
 
     /// 只有自己 names a draft — nothing of 匿名公開 tried on the way is left — and keeps a live card's
@@ -405,7 +457,7 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect((draft.stepTitle, draft.verbTitle) == (L10n.Write.PublishPanel.saveTitle, L10n.Write.PublishPanel.save))
         #expect(!draft.showsUpdateHint)
 
-        // For connections (none chosen): it reads as publishing.
+        // For connections (連結的人): it reads as publishing.
         let connections = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card(visibility: "connections"))
         #expect((connections.stepTitle, connections.verbTitle) == (L10n.Write.PublishPanel.title, L10n.Write.PublishPanel.publish))
 

@@ -37,7 +37,7 @@ import java.io.File
 
 /**
  * The faces of who resonated (round 26 §U2 — the owner: 「直接放那個頭像就好」): the viewer's own face first while their tap
- * is on, then their connections; at most three and nothing after them — no blank disc for "more" since round 29 §S5
+ * is on, then everyone else who did (Wave 2 #3b; was their connections); at most three and nothing after them — no blank disc for "more" since round 29 §S5
  * (the owner: 「不要把當有第四、第五個的時候顯示成灰色」), never a number; one button opening the list unless the only face is
  * the viewer's; what a screen reader hears (「還有其他人」 when there are more), nothing on screen.
  */
@@ -108,7 +108,7 @@ class TapFacesTest {
         assertEquals(TapFaces(false, listOf(dora, eli, fay), more = false), off)
         // No stray disc, and a screen reader hears no 「還有其他人」.
         assertFalse(off.showsMore)
-        assertEquals("你連結的人裡，與這張卡片共振的：小安、阿明、fay", facesLabel(off, "alice", author = false))
+        assertEquals("與這張卡片共振的人：小安、阿明、fay", facesLabel(off, "alice", author = false))
     }
 
     @Test fun onlyTheViewersOwnFaceOpensNothing() {
@@ -122,13 +122,13 @@ class TapFacesTest {
 
     @Test fun aScreenReaderHearsWhoNeverAnyNumber() {
         val faces = TapFaces(false, listOf(dora, eli), more = true)
-        assertEquals("你連結的人裡，與這張卡片共振的：小安、阿明，還有其他人", facesLabel(faces, "alice", author = false))
+        assertEquals("與這張卡片共振的人：小安、阿明，還有其他人", facesLabel(faces, "alice", author = false))
         val mine = TapFaces(true, listOf(alice, dora), more = false)
-        assertEquals("你共振了，你連結的人裡，與這張卡片共振的：小安", facesLabel(mine, "alice", author = false))
+        assertEquals("你共振了，與這張卡片共振的人：小安", facesLabel(mine, "alice", author = false))
         // The author's line names everyone who tapped.
         assertEquals("與這張卡片共振的人：小安、阿明，還有其他人", facesLabel(faces, "bob", author = true))
         Strings.language = Strings.Language.En
-        assertEquals("People you're connected with who resonated: 小安, 阿明, and others", facesLabel(faces, "alice", author = false))
+        assertEquals("Resonated with this card: 小安, 阿明, and others", facesLabel(faces, "alice", author = false))
         assertFalse(facesLabel(faces, "alice", author = false).any { it.isDigit() })
     }
 

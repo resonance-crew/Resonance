@@ -176,7 +176,7 @@ describe('the end row: three answers in one capsule (§U1)', () => {
 
   it('tapping 共振 opens nothing: the segment fills (two waves, its words unchanged) and the viewer’s face slides in first', async () => {
     const { container } = renderPage({ ...NO_TAPS, faces: [face('dora')] });
-    await screen.findByRole('button', { name: /People you're connected with who resonated: dora/ });
+    await screen.findByRole('button', { name: /Resonated with this card: dora/ });
     await user().click(within(capsule()).getByRole('button', { name: 'Resonate' }));
 
     // Its words stay (the owner, 2026-11-20: 已共振 moved the wave beside it): on is told by aria-pressed and the face.
@@ -279,14 +279,14 @@ describe('the end row: three answers in one capsule (§U1)', () => {
 
   it('keeps the order faces → 共振 → 寄小紙條 → 用卡片回應 → 收藏 for the keyboard: the faces’ line, then the capsule’s row under it', async () => {
     renderPage({ ...NO_TAPS, faces: [face('dora'), face('eli')] });
-    const faces = await screen.findByRole('button', { name: /who resonated/ });
+    const faces = await screen.findByRole('button', { name: /Resonated with this card/ });
     const order = [...document.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent);
     expect(order.slice(0, 5)).toEqual([faces.getAttribute('aria-label'), 'Resonate', 'Note', 'Card', 'Bookmark']);
   });
 
   it('stands the faces’ line right above the capsule’s row, and the note right under the capsule: nothing between a button and what it opens', async () => {
     renderPage({ ...NO_TAPS, faces: [face('dora')] });
-    const faces = await screen.findByRole('button', { name: /who resonated/ });
+    const faces = await screen.findByRole('button', { name: /Resonated with this card/ });
     const line = faces.closest('[class*="facesLine"]') as HTMLElement;
     // The line, then the capsule's row, in one end row…
     expect(line.nextElementSibling).toContainElement(capsule());
@@ -307,7 +307,7 @@ describe('the end row: three answers in one capsule (§U1)', () => {
     const save = await screen.findByRole('button', { name: 'Bookmark' });
     // In the capsule's own row, after it — never on the line under it.
     expect(save.closest('[class*="ends"]')?.previousElementSibling).toContainElement(capsule());
-    const faces = await screen.findByRole('button', { name: /who resonated/ });
+    const faces = await screen.findByRole('button', { name: /Resonated with this card/ });
     expect(faces.closest('[class*="facesLine"]')?.querySelectorAll('button')).toHaveLength(1);
   });
 
@@ -370,7 +370,7 @@ describe('the faces over 共振 (round 29 §S11; the owner, 2026-11-22: centred 
     };
     try {
       const { container } = renderPage({ ...NO_TAPS, faces: ['dora', 'eli', 'fay'].slice(0, n).map(face) });
-      await screen.findByRole('button', { name: /People you're connected with who resonated/ });
+      await screen.findByRole('button', { name: /Resonated with this card/ });
       const slot = container.querySelector<HTMLElement>('[data-tap-centred]');
       expect(slot).not.toBeNull();
       expect(slot!.style.getPropertyValue('--tap-centre')).toBe('60px');
@@ -392,7 +392,7 @@ describe('which part (round 27 §U1): the passages’ dialog after a press that 
     { id: '85007cbf', text: 'I wanted to walk this part of the road more slowly.' },
   ];
   const WITH: CardTapBody = { ...NO_TAPS, passages: PASSAGES, passage: null };
-  const dialog = () => screen.findByRole('dialog', { name: 'Quietly tell the author which part stayed with you' });
+  const dialog = () => screen.findByRole('dialog', { name: 'Which part stayed with you' });
   const press = async () => {
     await act(async () => {});
     await user().click(within(capsule()).getByRole('button', { name: 'Resonate' }));

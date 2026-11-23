@@ -63,6 +63,25 @@ class StoryPassagesTest {
         }
     }
 
+    @Test fun aHundredCharacterPassageOverFourOrFiveLinesKeepsItsFacesAfterItsLastCharacter() {
+        // Wave 2 #3a: 2–3 whole sentences, about 100 characters, on a phone's column.
+        val long = "清晨六點的城市還沒醒，我站在陽台上，看著對面的窗一扇一扇亮起來，像有人在替這一天慢慢點燈。".repeat(3).take(100)
+        val leaf = listOf(InlineRun("開頭幾個字，"), InlineRun(long), InlineRun("後來的事。"))
+        val passage = LeafPassage("long", 6, 6 + long.length)
+        for (width in listOf(300, 340, 360)) {
+            val (layout, spanned) = buildRichLayout(leaf, style, width, one) { t -> markPassages(t, listOf(passage), inLine = true) { 60 } }
+            val first = layout.getLineForOffset(passage.start)
+            val last = layout.getLineForOffset(passage.end - 1)
+            assertTrue("at $width it runs 4 lines or more", last - first + 1 >= 4)
+            // The group right after the last character, on its line.
+            assertEquals("at $width", last, layout.getLineForOffset(passage.end))
+            val (washes, spots) = passagePlaces(layout, spanned, inLine = true, reachPx = 2f, shortPx = 6f, gapPx = 4f, marginPx = 8f)
+            assertEquals(layout.getPrimaryHorizontal(passage.end) + 4f, spots.single().left, 0.5f)
+            assertEquals(last - first + 1, washes.size)
+            for (line in 0 until layout.lineCount) assertEquals(lineBox, (layout.getLineBottom(line) - layout.getLineTop(line)).toFloat(), 1f)
+        }
+    }
+
     @Test fun theLinkAfterTheSentenceKeepsItsWordsAndNoWaveRunsUnderTheFaces() {
         // A sentence ending inside the link: the link is cut round the room.
         val inLink = LeafPassage("b", 28, 33)

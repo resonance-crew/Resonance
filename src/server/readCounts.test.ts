@@ -51,10 +51,12 @@ const MAX = {
   /** …then an open thread's pull after one message came and one changed: the conversation, a new one, a changed one (51 before). */
   threadSince: 3,
   /**
-   * A reader's tap answer on a card three people tapped, the reader with 50 connections: their own tap, the card's
-   * taps, the three pairs by id, the standing and the faces (67 before P0 #6: every connection document first).
+   * A reader's tap answer on a card three people tapped, the reader with 50 connections: their own tap, one page of
+   * the card's taps, the blocks both ways with the reader and — on a named card — with its author, the standing and
+   * the faces; no connection document at all (67 before P0 #6: every connection first; 19 with P0 #6's three pairs
+   * by id; 20 since Wave 2 #3b, where every reader sees every tapper and the author's block list is read instead).
    */
-  cardTapReader: 19,
+  cardTapReader: 20,
   /** GET /cards/{id}?include=resonances,related,links,embeds on a card with none of them. */
   cardDetail: 15,
 } as const;
@@ -204,7 +206,7 @@ describe('read-count ratchets', () => {
     expect(incremental).toBeLessThanOrEqual(MAX.threadSince);
   });
 
-  it('a reader\'s people on a card with a few taps: never every connection of theirs', async () => {
+  it('a reader\'s people on a card with a few taps: never a connection document of theirs', async () => {
     const { fake, ctx } = seeded();
     others.forEach((o, i) => (fake.docs[`connections/${pairWith(o)}`] = { userIds: [ME, o].sort(), establishedAt: ts(T0 + i * 1000) }));
     for (const [i, o] of [others[2], others[3], others[4]].entries()) {

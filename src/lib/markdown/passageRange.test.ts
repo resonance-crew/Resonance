@@ -65,6 +65,9 @@ describe('findPassage', () => {
       '那年我搬到台北，一個人住在**頂樓加蓋**的小房間，夏天熱得睡不著，我常常坐在樓梯間吹風。',
       '最難的是第一個冬天，工作做不好，\n也不敢打電話回家，怕媽媽聽出我的聲音在發抖。每天下班都繞遠路走回去。',
       '後來我學會了煮一鍋湯，分給隔壁的室友，原來一個人的城市，也可以慢慢長出一個家的樣子。日子一天一天過去。',
+      // Wave 2 #3a: the passages together take at most 60 % of a story, so it reads on past them.
+      '我把房間的牆刷成淡黃色，在窗邊種了幾盆香草，週末去市場買菜，跟攤販學說台語。',
+      '後來的冬天，我會先打電話回家，聽媽媽說家裡的貓又胖了。',
     ].join('\n\n');
     // The leaves as a renderer draws them: the marks gone, the soft break kept.
     const leaves = story.split('\n\n').map((p) => p.replaceAll('**', ''));

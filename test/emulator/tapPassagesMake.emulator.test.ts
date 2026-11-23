@@ -6,7 +6,7 @@ import { publishCard } from '@/lib/api/v1/publish';
 import { makeTapPassages } from '@/lib/api/v1/tapPassagesMake';
 import { presentTapPassages } from '@/lib/api/v1/tapPassages';
 import { restoreCard } from '@/lib/api/v1/trash';
-import { offlinePassages, passagesHash, PASSAGES_TRIES_MAX } from '@/lib/cards/tapPassages';
+import { offlinePassages, passagesHash, PASSAGES_TRIES_MAX, PASSAGES_VERSION } from '@/lib/cards/tapPassages';
 import type { IVectorStore } from '@/lib/recommend/vectorStore';
 import { indexOwed, INDEX_OWED_RESERVE_MS, PASSAGES_RESERVE_MS } from '@/lib/recommend/indexOwed';
 import { INDEX_DEADLINE_MS, PASSAGES_TIMEOUT_MS } from '@/lib/ai/tasks';
@@ -71,17 +71,35 @@ describe('makeTapPassages', () => {
     const before = (await data('c1')).updatedAt;
     expect(await makeTapPassages(db, 'c1')).toBe('made');
     const stored = (await data('c1')).tapPassages;
-    expect(stored).toMatchObject({ of: passagesHash(STORY), items: offlinePassages(STORY, { title: TITLE }), model: 'offline' });
+    expect(stored).toMatchObject({ of: passagesHash(STORY), items: offlinePassages(STORY, { title: TITLE }), model: 'offline', v: PASSAGES_VERSION });
     expect(stored.items.length).toBeGreaterThanOrEqual(2);
     expect((await data('c1')).updatedAt).toEqual(before);
     // Made already: nothing asked again.
     expect(await makeTapPassages(db, 'c1', { pick: failing })).toBe('unchanged');
   });
 
+  it('makes again a value stored before whole sentences (no `v`: round 27\'s), for the same text', async () => {
+    await published('c1');
+    // Round 27's value: clauses cut mid-sentence, no version.
+    await db.doc('cards/c1').update({ tapPassages: { of: passagesHash(STORY), items: [{ id: 'old1', text: P1.slice(0, 15) }], model: 'm' } });
+    const pick = vi.fn(async () => ({ passages: [P1, P3], model: 'm2' }));
+    expect(await makeTapPassages(db, 'c1', { pick })).toBe('made');
+    expect(pick).toHaveBeenCalledTimes(1);
+    expect((await data('c1')).tapPassages).toMatchObject({ of: passagesHash(STORY), items: [{ text: P1 }, { text: P3 }], model: 'm2', v: PASSAGES_VERSION });
+    expect(await makeTapPassages(db, 'c1', { pick })).toBe('unchanged');
+  });
+
+  it('keeps only whole sentences of the story: a clause cut mid-sentence is no passage', async () => {
+    await published('c1');
+    const pick = vi.fn(async () => ({ passages: [P1.slice(0, 15), P3.slice(0, 15)], model: 'm' }));
+    expect(await makeTapPassages(db, 'c1', { pick })).toBe('none');
+    expect((await data('c1')).tapPassages).toMatchObject({ of: passagesHash(STORY), items: [] });
+  });
+
   it('makes them again after an applied edit that changes the words, not after one that only changes their formatting', async () => {
     await published('c1');
     expect(await makeTapPassages(db, 'c1')).toBe('made');
-    const pick = vi.fn(async () => ({ passages: [P1.slice(0, 15), P2.slice(0, 15)], model: 'm' }));
+    const pick = vi.fn(async () => ({ passages: [P1, P2], model: 'm' }));
     await db.doc('cards/c1/edits/current').set({ thoughtCore: TITLE, story: STORY.replace('煮一鍋湯', '**煮一鍋湯**'), tags: [], visibility: 'public' });
     await applyCardEdit(db, 'alice', 'c1');
     expect(await makeTapPassages(db, 'c1', { pick })).toBe('unchanged');
@@ -91,7 +109,7 @@ describe('makeTapPassages', () => {
     await applyCardEdit(db, 'alice', 'c1');
     expect(await makeTapPassages(db, 'c1', { pick })).toBe('made');
     expect(pick).toHaveBeenCalledTimes(1);
-    expect((await data('c1')).tapPassages).toMatchObject({ of: passagesHash(changed), items: [{ text: P1.slice(0, 15) }, { text: P2.slice(0, 15) }], model: 'm' });
+    expect((await data('c1')).tapPassages).toMatchObject({ of: passagesHash(changed), items: [{ text: P1 }, { text: P2 }], model: 'm' });
   });
 
   it('stores none for a story too short, and takes them off a card that is no longer published', async () => {
@@ -123,7 +141,7 @@ describe('makeTapPassages', () => {
 
   it('settles a pick with fewer than two of the story\'s own words as none, never asked again for that text', async () => {
     await published('c1');
-    const pick = vi.fn(async () => ({ passages: ['words the model wrote itself', P1.slice(0, 15)], model: 'm' }));
+    const pick = vi.fn(async () => ({ passages: ['words the model wrote itself', P1], model: 'm' }));
     expect(await makeTapPassages(db, 'c1', { pick })).toBe('none');
     expect((await data('c1')).tapPassages).toMatchObject({ of: passagesHash(STORY), items: [] });
     expect(await makeTapPassages(db, 'c1', { pick })).toBe('unchanged');
@@ -158,7 +176,7 @@ describe('makeTapPassages', () => {
     const last = end - INDEX_OWED_RESERVE_MS - 1;
     const clock = { reads: 0 };
     const now = () => (clock.reads++ === 0 ? last : last + INDEX_DEADLINE_MS + 1_000);
-    const pick = vi.fn(async () => ({ passages: [P1.slice(0, 15), P3.slice(0, 15)], model: 'm' }));
+    const pick = vi.fn(async () => ({ passages: [P1, P3], model: 'm' }));
     const run = await indexOwed(db, { end, now, pick });
     expect(run).toMatchObject({ examined: 1, passages: { 'over-budget': 1 } });
     expect(pick).not.toHaveBeenCalled();
@@ -176,7 +194,7 @@ describe('makeTapPassages', () => {
   it(`leaves a text alone after ${PASSAGES_TRIES_MAX} failures, until the story changes`, async () => {
     await published('c1');
     for (let i = 0; i < PASSAGES_TRIES_MAX; i++) expect(await makeTapPassages(db, 'c1', { pick: failing })).toBe('failed');
-    const pick = vi.fn(async () => ({ passages: [P1.slice(0, 15), P3.slice(0, 15)], model: 'm' }));
+    const pick = vi.fn(async () => ({ passages: [P1, P3], model: 'm' }));
     expect(await makeTapPassages(db, 'c1', { pick })).toBe('given-up');
     expect(pick).not.toHaveBeenCalled();
     await db.doc('cards/c1').update({ story: `${STORY}\n\n${P3.replace('湯', '粥')}` });
@@ -187,7 +205,7 @@ describe('makeTapPassages', () => {
     await published('c1');
     const pick = async () => {
       await db.doc('cards/c1').update({ story: STORY.replace('煮一鍋湯', '煮一碗湯') });
-      return { passages: [P1.slice(0, 15), P3.slice(0, 15)], model: 'm' };
+      return { passages: [P1, P3], model: 'm' };
     };
     expect(await makeTapPassages(db, 'c1', { pick })).toBe('moved');
     expect((await data('c1')).tapPassages).toBeUndefined();

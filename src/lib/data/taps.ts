@@ -35,6 +35,15 @@ export function withMine(tap: CardTapBody, on: boolean, me: AuthorBody): CardTap
   const others = tap.faces.filter((f) => f.id !== me.id);
   const next: CardTapBody = { ...tap, mine: on, faces: on ? [me, ...others] : others };
   if (!on && next.passage != null) next.passage = null;
+  // Off takes their pick, and so their face, off the picked sentences too (Wave 2 #3b: readers see them); a sentence
+  // left with no one goes. On adds nothing there: there is no pick yet.
+  if (!on && tap.picked) {
+    const picked = tap.picked
+      .map((p) => ({ ...p, people: p.people.filter((f) => f.id !== me.id) }))
+      .filter((p) => p.people.length > 0 || p.more);
+    if (picked.length) next.picked = picked;
+    else delete next.picked;
+  }
   return next;
 }
 
@@ -75,8 +84,10 @@ export function useTapToggle(cardId: string | undefined, uid: string | undefined
       );
       try {
         await setTap(cardId, on);
-        // Nothing here to flip (an older answer without the tap): the page reads the card again.
+        // Nothing here to flip (an older answer without the tap): the page reads the card again. Taking it back took
+        // the reader off the picked sentences already (withMine); their lists are read again when opened.
         if (!shown) void mutate(key);
+        void mutate(pickedListKey(cardId));
         return null;
       } catch (err) {
         if (turn === latest.current) {
@@ -94,6 +105,11 @@ export function useTapToggle(cardId: string | undefined, uid: string | undefined
     },
     [cardId, uid, mutate],
   );
+}
+
+/** Every cached page of a card's lists of who picked a sentence (PickedPeople's keys), to read again. */
+export function pickedListKey(cardId: string) {
+  return (key: unknown) => Array.isArray(key) && key[0] === 'taps-picked' && key[1] === cardId;
 }
 
 /** Why a pick didn't go through: the card's passages or the tap changed (read the card again, say nothing), or anything else. */
@@ -125,6 +141,10 @@ export function useTapPassage(cardId: string | undefined, uid: string | undefine
       try {
         await setTapPassage(cardId, passage);
         void mutate(['taps', cardId, uid]);
+        // The card again (Wave 2 #3b): their sentence's wash and face in the story, and each sentence's list of who
+        // picked it, as every reader now sees them.
+        if (turn === latest.current) void mutate(key);
+        void mutate(pickedListKey(cardId));
         return null;
       } catch (err) {
         const status = (err as { status?: number }).status;

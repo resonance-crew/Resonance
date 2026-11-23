@@ -54,7 +54,7 @@ describe('TapPeople: the passage on a row (§U2, §U3)', () => {
     }
   });
 
-  it('a reader’s list: their own row alone quotes their pick — never anyone else’s, even if one came', () => {
+  it('a reader’s list quotes every row’s pick, their own as theirs (Wave 2 #3b: everyone sees who picked what)', () => {
     const people: TapPersonBody[] = [
       { author: face('dora'), note: null, passage: { text: FIRST } },
       { author: face('gus'), note: null, passage: { text: SECOND } },
@@ -62,7 +62,7 @@ describe('TapPeople: the passage on a row (§U2, §U3)', () => {
     renderWithIntl(<TapPeople people={people} own={{ id: 'dora', offer: false }} />, zh);
     const [dora, gus] = screen.getAllByRole('link');
     expect(lines(dora)).toEqual(['dora', `「${FIRST}」`]);
-    expect(lines(gus)).toEqual(['gus']);
+    expect(lines(gus)).toEqual(['gus', `「${SECOND}」`]);
   });
 
   it('the reader’s own row on a card with passages: 選一段 with no pick; a press closes the list and opens the dialog', async () => {

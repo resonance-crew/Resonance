@@ -4,7 +4,8 @@
   display: flex;
   flex-direction: column;
   /* The list's cap (§U1.3): the reader list's, and it scrolls inside (DialogScroll reads it). */
-  --dialog-scroll-max: min(420px, 55vh);
+  /* Wave 2 #3a: passages of 1–3 whole sentences, ~100 characters each — the apps' min(560, 70 % of the window) */
+  --dialog-scroll-max: min(560px, 70vh);
   /* The story's own type (§U1.3), as story.css sets it by script: CJK first by default… */
   --passage-face: var(--font-story-sans);
   --passage-leading: var(--story-leading);

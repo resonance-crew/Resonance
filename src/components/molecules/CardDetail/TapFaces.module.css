@@ -28,3 +28,10 @@ span.faces {
   outline: 2px solid var(--color-terracotta);
   outline-offset: 0;
 }
+
+/* A reader's list past its first page (Wave 2 #3b): 顯示更多 under the rows, as one sentence's people. */
+.more {
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
+}

@@ -473,12 +473,12 @@
     "tap": {
       "label": "Resonate",
       "selfOnly": "You resonated",
-      "facesReader": "People you're connected with who resonated: {names}",
+      "facesReader": "Resonated with this card: {names}",
       "facesAuthor": "Resonated with this card: {names}",
       "more": "and others",
       "send": "Send",
       "failed": "Didn't go through, try again",
-      "passageTitle": "Quietly tell the author which part stayed with you",
+      "passageTitle": "Which part stayed with you",
       "passageSkip": "Skip",
       "passagePick": "Pick a part",
       "passageQuote": "“{text}”",
@@ -757,7 +757,7 @@
     "visibility": {
       "label": "Card type",
       "public": "Public",
-      "connections": "Connections only",
+      "connections": "Connections",
       "private": "Only me",
       "draft": "Private",
       "anonymous": "Anonymous",

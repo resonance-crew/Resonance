@@ -6,8 +6,8 @@ import Testing
 @testable import Resonance
 
 /// Who learns the pick (round 27 §U2, §U3; gate 1: 只有作者): the author's list quotes each person's passage under their
-/// name, before the note's excerpt; a reader's list shows a quote on their own row alone — or 選一段 there when the card
-/// offers passages and they picked none — and no other row ever carries one, whatever reached the app.
+/// name, before the note's excerpt; since Wave 2 #3b a reader's list quotes every row's pick too — and 選一段 on their own
+/// row when the card offers passages and they picked none.
 @MainActor @Suite struct TapPassageRowsTests {
     private func person(_ id: String, passage: String? = nil, note: String? = nil) -> TapPerson {
         TapPerson(author: Fixture.author(id), note: note.map { .init(value1: .init(excerpt: $0)) },
@@ -23,13 +23,16 @@ import Testing
         #expect(TapRowLine.of(person("hana"), authorList: true, viewer: "alice", offersPassages: true) == nil)
     }
 
-    @Test func aReadersListQuotesTheirOwnRowAlone() {
+    /// Wave 2 #3b (「像按讚一樣大家都可以看到誰按」): a reader's list quotes everyone's pick the server sends, as the
+    /// author's does; 選一段 is only ever on the reader's own row.
+    @Test func aReadersListQuotesEveryonesPick() {
         #expect(TapRowLine.of(person("dora", passage: "第二段"), authorList: false, viewer: "dora", offersPassages: true)
             == .quote("第二段"))
-        // Another's row: never a quote, nor 選一段, even if one arrived.
-        #expect(TapRowLine.of(person("gus", passage: "第一段"), authorList: false, viewer: "dora", offersPassages: true) == nil)
+        #expect(TapRowLine.of(person("gus", passage: "第一段"), authorList: false, viewer: "dora", offersPassages: true)
+            == .quote("第一段"))
+        // Another's row with no pick: nothing, never 選一段.
         #expect(TapRowLine.of(person("gus"), authorList: false, viewer: "dora", offersPassages: true) == nil)
-        #expect(TapRowLine.of(person("gus", passage: "第一段"), authorList: false, viewer: nil, offersPassages: true) == nil)
+        #expect(TapRowLine.of(person("gus", passage: ""), authorList: false, viewer: "dora", offersPassages: true) == nil)
     }
 
     /// A pick just made is on the page before the list knows it (the list read while the request was on its way — the

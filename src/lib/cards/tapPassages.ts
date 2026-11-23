@@ -24,17 +24,26 @@ import { measure, storyType } from '@/lib/text/script';
 export const PASSAGES_MAX = 3;
 /** Fewer than this left after the check: the card offers none. */
 export const PASSAGES_MIN = 2;
-/** A passage in a CJK story, in code points: two lines of the dialog's 312 text column at most. */
-export const PASSAGE_MIN_CJK = 8;
-export const PASSAGE_MAX_CJK = 36;
-/** A passage in a Latin story: 4–20 words, at most 120 characters. */
-export const PASSAGE_MIN_WORDS = 4;
-export const PASSAGE_MAX_WORDS = 20;
-export const PASSAGE_MAX_CHARS = 120;
 /**
- * How long a story must be (CJK characters and other words, as the mirror counts) to offer passages: three passages
- * at their longest (3 × 36) are then at most 60 % of it, so the pick is still a pick and not the story read back.
+ * What the pick is asked for and kept by (Wave 2 #3a, the owner: 2–3 whole sentences, about 100 characters of the
+ * author's own words — round 27 took one sentence of 8–36). Stored with the pick (`tapPassages.v`): a card whose
+ * passages were made by an older version is made again by the next run that reaches it (the backfill, the cron),
+ * as a changed story is. Raise it whenever the prompt or the rules below change what a pick is.
  */
+export const PASSAGES_VERSION = 2;
+/** A passage in a CJK story, in code points: 1–3 whole sentences, about 100 characters at most. */
+export const PASSAGE_MIN_CJK = 8;
+export const PASSAGE_MAX_CJK = 100;
+/** A passage in a Latin story: 4–60 words, at most 360 characters. */
+export const PASSAGE_MIN_WORDS = 4;
+export const PASSAGE_MAX_WORDS = 60;
+export const PASSAGE_MAX_CHARS = 360;
+/**
+ * The share of a story's plain text (code points) its passages may take together: past it a later one is dropped, so
+ * the pick is still a pick and not the story read back — longer passages ask for a longer story.
+ */
+export const PASSAGES_MAX_SHARE = 0.6;
+/** How long a story must be (CJK characters and other words, as the mirror counts) to offer passages. */
 export const PASSAGES_MIN_UNITS = 180;
 /** Failures for one text before it is left alone until the story changes. */
 export const PASSAGES_TRIES_MAX = 3;
@@ -51,6 +60,8 @@ export interface StoredTapPassages {
   items?: TapPassageItem[];
   model?: string;
   at?: unknown;
+  /** PASSAGES_VERSION when they were made; absent: round 27's (1). */
+  v?: number;
   /** Failures for the text whose hash is `of` (left alone after PASSAGES_TRIES_MAX). */
   failed?: { of?: string; tries?: number };
 }
@@ -85,6 +96,11 @@ export function offersPassages(card: { publishedAt?: unknown; trashedAt?: unknow
   const story = typeof card.story === 'string' ? card.story : '';
   if (!story.trim() || storyTooComplex(story)) return false;
   return passageUnits(story) >= PASSAGES_MIN_UNITS;
+}
+
+/** Whether stored passages are as the current version makes them for this story: the same text, the same version. */
+export function passagesCurrent(stored: { of?: unknown; v?: unknown } | undefined, of: string): boolean {
+  return !!stored && stored.of === of && (typeof stored.v === 'number' ? stored.v : 1) >= PASSAGES_VERSION;
 }
 
 /** Whether one passage's length fits the story's type. */
@@ -132,20 +148,54 @@ export function placeInBlocks(blocks: readonly StoryBlock[], raw: string): { blo
   return { block, start, end: start + text.length, text };
 }
 
+/** A sentence's last mark, with closing quotes or brackets after it. */
+const SENTENCE_END_CJK = /[。！？!?…]+[」』”’"）)]*$/u;
+const SENTENCE_END_LATIN = /[.!?…]+["”’)]*$/u;
+/** Where a sentence may start inside a block: after a sentence's end (and closing marks), then any space. */
+const AFTER_END_CJK = /[。！？!?…][」』”’"）)]*\s*$/u;
+const AFTER_END_LATIN = /[.!?…]["”’)]*\s+$/u;
+/** Opening and closing quotes: a passage that is one quotation from end to end is someone's speech, not the author's line. */
+const OPENS = '「『“"‘\'';
+const CLOSES = '」』”"’\'';
+
+/** Whether `text`, found at [start, end) of `block`, begins and ends where sentences do (a block's edges count). */
+export function wholeSentences(block: string, start: number, end: number, script: 'cjk' | 'latin'): boolean {
+  const text = block.slice(start, end);
+  const endsWell = end === block.length || (script === 'cjk' ? SENTENCE_END_CJK : SENTENCE_END_LATIN).test(text);
+  const startsWell = start === 0 || (script === 'cjk' ? AFTER_END_CJK : AFTER_END_LATIN).test(block.slice(0, start));
+  return endsWell && startsWell;
+}
+
+/** Whether a passage is one quotation from its first mark to its last: dialogue (Wave 2 #3a: never offered). */
+export function quotedSpeech(text: string): boolean {
+  // A stop after the closing quote (「好。」。 / "Fine".) still leaves one quotation.
+  const chars = [...text.trim().replace(/[。.]+$/u, '')];
+  const first = chars[0];
+  const last = chars[chars.length - 1];
+  if (!first || !last || !OPENS.includes(first) || !CLOSES.includes(last)) return false;
+  // One quotation, not two side by side (「…」他說「…」): no closing mark inside — an apostrophe aside (I'm, don’t).
+  return !chars.slice(1, -1).some((c) => CLOSES.includes(c) && c !== "'" && c !== '’');
+}
+
 /**
  * The passages a card offers from what was picked (a model's answer, the
  * offline pick): each string, whitespace read as one and trimmed, must be a
  * contiguous piece of the story's plain text read the same way, within one
  * of its blocks — anything else is dropped. Then, in the story's order: drop
- * one shorter than the floor or longer than the cap, one that overlaps or
- * repeats an earlier one, one that is the title. The first PASSAGES_MAX are
- * kept; fewer than PASSAGES_MIN left is none.
+ * one shorter than the floor or longer than the cap, one that doesn't begin
+ * and end where sentences do (Wave 2 #3a: whole sentences only), one that is
+ * a single quotation (dialogue), one that overlaps or repeats an earlier one,
+ * one that is the title, and one that would take the pick past
+ * PASSAGES_MAX_SHARE of the story. The first PASSAGES_MAX are kept; fewer
+ * than PASSAGES_MIN left is none.
  */
 export function verifyPassages(story: string, picked: readonly unknown[], opts: { title?: string } = {}): TapPassageItem[] {
   const title = squash(opts.title ?? '');
   const blocks = blocksOf(story);
   if (!blocks.length) return [];
   const script = storyType(opts.title ?? '', story).script;
+  const room = Math.floor(codePoints(blocks.map((b) => b.text).join(' ')) * PASSAGES_MAX_SHARE);
+  let taken = 0;
   const found: { block: number; start: number; end: number; text: string }[] = [];
   for (const raw of picked) {
     if (typeof raw !== 'string') continue;
@@ -156,8 +206,11 @@ export function verifyPassages(story: string, picked: readonly unknown[], opts: 
   const kept: typeof found = [];
   for (const f of found) {
     if (!passageFits(f.text, script)) continue;
+    if (!wholeSentences(blocks[f.block].text, f.start, f.end, script) || quotedSpeech(f.text)) continue;
     if (title && f.text === title) continue;
     if (kept.some((k) => k.text === f.text || (k.block === f.block && f.start < k.end && k.start < f.end))) continue;
+    if (taken + codePoints(f.text) > room) continue;
+    taken += codePoints(f.text);
     kept.push(f);
     if (kept.length === PASSAGES_MAX) break;
   }
@@ -168,22 +221,23 @@ export function verifyPassages(story: string, picked: readonly unknown[], opts: 
 /** A sentence's end: CJK and Latin marks, a closing quote after one kept with it. */
 const SENTENCE = /[^。！？!?…]*(?:[。！？!?…]+[」』”’"]?|$)/gu;
 const SENTENCE_LATIN = /[^.!?…]*(?:[.!?…]+["”’)]?(?=\s|$)|$)/gu;
-/** Where a clause may be cut. */
-const CLAUSE = /[，、；：,;:—]/u;
-
 function sentencesOf(paragraph: string, script: 'cjk' | 'latin'): string[] {
   const re = script === 'cjk' ? SENTENCE : SENTENCE_LATIN;
   return (paragraph.match(re) ?? []).map(squash).filter(Boolean);
 }
 
-/** A sentence cut to the cap at its last clause mark that fits (the mark left out), or null. */
-function cutToCap(sentence: string, script: 'cjk' | 'latin'): string | null {
-  if (passageFits(sentence, script)) return sentence;
-  const chars = [...sentence];
-  for (let i = chars.length - 1; i > 0; i--) {
-    if (!CLAUSE.test(chars[i])) continue;
-    const head = squash(chars.slice(0, i).join(''));
-    if (passageFits(head, script)) return head;
+/**
+ * The first run of whole sentences of a paragraph that fits (Wave 2 #3a): from each sentence on, as many of the
+ * ones after it as still fit the cap (three at most), the longest such run that fits — never one that is a lone
+ * quotation; null when none does.
+ */
+function firstRun(sentences: string[], script: 'cjk' | 'latin'): string | null {
+  const join = (xs: string[]) => squash(xs.join(script === 'cjk' ? '' : ' '));
+  for (let i = 0; i < sentences.length; i++) {
+    for (let n = Math.min(3, sentences.length - i); n >= 1; n--) {
+      const run = join(sentences.slice(i, i + n));
+      if (passageFits(run, script) && !quotedSpeech(run)) return run;
+    }
   }
   return null;
 }
@@ -195,7 +249,7 @@ const HAS_LINK = /\]\(/;
 
 /**
  * The pick made without a model (the emulators' `modelsOffline`, the seed):
- * the first sentence that fits — cut to the cap at a clause mark — of each of
+ * the first run of up to three whole sentences that fits of each of
  * the story's three longest prose paragraphs (a quote counts; headings,
  * lists, tables and code don't; one with a link only after those without),
  * through {@link verifyPassages} like any answer, so in the story's order.
@@ -209,13 +263,8 @@ export function offlinePassages(story: string, opts: { title?: string } = {}): T
   const picked: string[] = [];
   for (const p of prose) {
     if (picked.length === PASSAGES_MAX) break;
-    for (const sentence of sentencesOf(p.text, script)) {
-      const cut = cutToCap(sentence, script);
-      if (cut) {
-        picked.push(cut);
-        break;
-      }
-    }
+    const run = firstRun(sentencesOf(p.text, script), script);
+    if (run) picked.push(run);
   }
   return verifyPassages(story, picked, opts);
 }

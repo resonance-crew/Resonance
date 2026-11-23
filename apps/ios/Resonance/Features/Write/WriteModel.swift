@@ -576,22 +576,30 @@ final class WriteModel {
     }
 
     /// 卡片類型, the step's one choice of what the card is (round 8 §2.2): shared under the author's
-    /// pen name, shared with no name on it, or a 草稿 — the author's alone, finished or not. Anonymity
-    /// is for being read by others, so it is a way of being shared, not a switch beside it.
+    /// pen name, shared under it with their connections alone (連結的人, back since Wave 2), shared with
+    /// no name on it, or a 草稿 — the author's alone, finished or not. Anonymity is for being read by
+    /// others, so it is a way of being shared, not a switch beside it (連結的人 is always named).
     enum Audience: String, Equatable, CaseIterable {
         /// 公開: everyone, under the author's pen name.
         case `public`
+        /// 連結的人: the author's connections alone, under the author's pen name.
+        case connections
         /// 匿名公開: everyone, under 匿名.
         case anonymous
         /// 草稿: the author alone (`private`).
         case `private`
     }
 
-    /// The segment chosen: public and named, public and anonymous, or private under either byline —
-    /// none for a card kept for connections only (older ones), which keeps its audience until one is.
-    var audience: Audience? {
-        switch values.visibility {
-        case "public": values.anonymous ? .anonymous : .public
+    /// The segment chosen: public and named, for connections and named, public and anonymous, or
+    /// private under either byline — none for a card both anonymous and for connections only (published
+    /// before the server refused the pair), which keeps its audience until one is.
+    var audience: Audience? { Self.audience(visibility: values.visibility, anonymous: values.anonymous) }
+
+    /// The segment a card's two fields make (the web's `audienceOf`).
+    nonisolated static func audience(visibility: String, anonymous: Bool) -> Audience? {
+        switch visibility {
+        case "public": anonymous ? .anonymous : .public
+        case "connections": anonymous ? nil : .connections
         case "private": .private
         default: nil
         }
@@ -606,6 +614,9 @@ final class WriteModel {
         switch audience {
         case .public:
             next.visibility = "public"
+            next.anonymous = false
+        case .connections:
+            next.visibility = "connections"
             next.anonymous = false
         case .anonymous:
             next.visibility = "public"
@@ -634,8 +645,8 @@ final class WriteModel {
     }
 
     /// 草稿 is chosen: the step keeps the card its author's — saving it, never publishing it — and the
-    /// writer leaves once it is kept, back where it came from (round 8 §2.3). A card kept for
-    /// connections (none chosen) reads as shared.
+    /// writer leaves once it is kept, back where it came from (round 8 §2.3). A card for
+    /// connections (chosen, or kept anonymous from before with none chosen) reads as shared.
     var keepsDraft: Bool { audience == .private }
 
     /// The step's one button (round 8 §2.3): for a card readers have, 儲存修改 — or 轉為草稿 while 草稿 is
@@ -646,7 +657,7 @@ final class WriteModel {
         switch audience {
         case .anonymous?: return L10n.Write.PublishPanel.publishAnonymously
         case .private?: return L10n.Write.PublishPanel.save
-        case .public?, nil: return L10n.Write.PublishPanel.publish
+        case .public?, .connections?, nil: return L10n.Write.PublishPanel.publish
         }
     }
 

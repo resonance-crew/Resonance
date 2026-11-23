@@ -23,6 +23,10 @@ public struct SegmentSpec: Identifiable {
     public var collapsesAt: Int?
     /// Whether it ever drops its words.
     public var collapsible: Bool { collapsesAt != nil }
+    /// A choice's glyph that goes once the bar's words, each beside its glyph, no longer fit in one row (the
+    /// publish step's four card types on a phone, SegmentedActionBar.tsx's `iconDroppable`): the words always
+    /// stay, never cut, never wrapped, never the glyph alone.
+    public var iconDroppable: Bool
     /// One option of a choice (the publish panel's audience): whether it is the chosen one.
     public var selected: Bool?
     /// Working on the last tap: the pen inks where its glyph was, and a tap does nothing.
@@ -34,9 +38,10 @@ public struct SegmentSpec: Identifiable {
 
     public init(id: String, icon: IconName? = nil, iconFilled: Bool = false, label: String, accessibilityLabel: String? = nil,
                 fill: Color? = nil, ink: Color = Tokens.buttonOnTonal, pressInk: Color = Tokens.terracotta.opacity(0.14),
-                collapsible: Bool = false, collapsesAt: Int? = nil, selected: Bool? = nil, working: Bool = false,
-                held: Bool = false, action: @escaping () -> Void) {
+                collapsible: Bool = false, collapsesAt: Int? = nil, iconDroppable: Bool = false, selected: Bool? = nil,
+                working: Bool = false, held: Bool = false, action: @escaping () -> Void) {
         self.id = id
+        self.iconDroppable = iconDroppable
         self.icon = icon
         self.iconFilled = iconFilled
         self.label = label
@@ -100,10 +105,17 @@ public struct SegmentedActionBar: View {
         // The first row whose words all fit: every label, then every label on a little less air, then
         // step by step the collapsible ones as their glyph. The last row is taken whatever it measures.
         // Each row its own candidate (a ForEach here is weighed as one): at most three steps give way.
+        // A bar of droppable glyphs (the publish step's card types) next tries its words alone, on its
+        // air then on a little less, before any step gives way.
         let steps = Self.steps(segments)
+        let drops = segments.contains { $0.iconDroppable && $0.icon != nil }
         ViewThatFits(in: .horizontal) {
             row(through: 0, squeezes: false)
-            row(through: 0, tight: true, squeezes: steps.isEmpty)
+            row(through: 0, tight: true, squeezes: steps.isEmpty && !drops)
+            if drops {
+                row(through: 0, dropsIcons: true, squeezes: false)
+                row(through: 0, tight: true, dropsIcons: true, squeezes: steps.isEmpty)
+            }
             if steps.count > 0 { row(through: steps[0], squeezes: steps.count == 1) }
             if steps.count > 1 { row(through: steps[1], squeezes: steps.count == 2) }
             if steps.count > 2 { row(through: steps[steps.count - 1], squeezes: true) }
@@ -122,13 +134,22 @@ public struct SegmentedActionBar: View {
         return at <= step
     }
 
+    /// A droppable segment as its words alone (its glyph gone, nothing else changed).
+    public nonisolated static func wordsAlone(_ spec: SegmentSpec) -> SegmentSpec {
+        var spec = spec
+        spec.icon = nil
+        return spec
+    }
+
     /// The row with every segment collapsing at or before `step` as its glyph (0: all their words).
     /// `squeezes`: the bar's last row, which ``ViewThatFits`` takes even when it doesn't fit — its
     /// segments then share what there is and the words left end in an ellipsis, never past its edge.
-    private func row(through step: Int, tight: Bool = false, squeezes: Bool) -> some View {
+    /// `dropsIcons`: the droppable segments show their words alone.
+    private func row(through step: Int, tight: Bool = false, dropsIcons: Bool = false, squeezes: Bool) -> some View {
         SegmentRowLayout(flexible: segments.map { !Self.iconOnly($0, through: step) }) {
             ForEach(Array(segments.enumerated()), id: \.element.id) { i, spec in
-                SegmentButton(spec: spec, iconOnly: Self.iconOnly(spec, through: step), tight: tight, squeezes: squeezes,
+                SegmentButton(spec: dropsIcons && spec.iconDroppable ? Self.wordsAlone(spec) : spec,
+                              iconOnly: Self.iconOnly(spec, through: step), tight: tight, squeezes: squeezes,
                               index: i, count: segments.count, barSeed: seed, barFill: fill, seam: seam, height: height)
             }
         }

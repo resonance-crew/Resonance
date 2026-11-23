@@ -815,7 +815,7 @@ public enum L10n {
             public static var label: String { Strings.shared.string("card.tap.label") }
             /// You resonated
             public static var selfOnly: String { Strings.shared.string("card.tap.selfOnly") }
-            /// People you're connected with who resonated: {names}
+            /// Resonated with this card: {names}
             public static func facesReader(names: String) -> String { Strings.shared.format("card.tap.facesReader", ["names": names]) }
             /// Resonated with this card: {names}
             public static func facesAuthor(names: String) -> String { Strings.shared.format("card.tap.facesAuthor", ["names": names]) }
@@ -825,7 +825,7 @@ public enum L10n {
             public static var send: String { Strings.shared.string("card.tap.send") }
             /// Didn't go through, try again
             public static var failed: String { Strings.shared.string("card.tap.failed") }
-            /// Quietly tell the author which part stayed with you
+            /// Which part stayed with you
             public static var passageTitle: String { Strings.shared.string("card.tap.passageTitle") }
             /// Skip
             public static var passageSkip: String { Strings.shared.string("card.tap.passageSkip") }
@@ -1363,7 +1363,7 @@ public enum L10n {
             public static var label: String { Strings.shared.string("write.visibility.label") }
             /// Public
             public static var `public`: String { Strings.shared.string("write.visibility.public") }
-            /// Connections only
+            /// Connections
             public static var connections: String { Strings.shared.string("write.visibility.connections") }
             /// Only me
             public static var `private`: String { Strings.shared.string("write.visibility.private") }

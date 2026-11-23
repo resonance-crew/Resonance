@@ -3,7 +3,8 @@ import ResonanceKit
 import SwiftUI
 
 /// Who resonated with one sentence (round 29 §S4; the owner: 「點選這個highlight的字都可以開啟這個誰共振了這一句。那作者的話
-/// 他可能就可以多看一下那一個人回覆的小紙條」, 「只列這一段的人」): on the author's own page, pressing a picked sentence's faces
+/// 他可能就可以多看一下那一個人回覆的小紙條」, 「只列這一段的人」): on a card's page — the author's, and since Wave 2 #3b a
+/// reader's too (each row then has no note and leads to the person's profile) —, pressing a picked sentence's faces
 /// or its wash opens this centred dialog — the who-resonated dialog's shell and widths (400 on a phone, 480 on a tablet
 /// and the Mac) — with the title, the sentence once in the story's type at 16 × the reading text size on the story's
 /// compact leading (1.8 CJK, 1.6 Latin, §S12: the web's and Android's), muted, in full, then the people who picked that
@@ -117,9 +118,12 @@ extension PickedPeople {
         }
     }
 
-    /// Whether the page washes its story (§U1): the author's own published card, not in the trash, read in its own
-    /// words (never a translation).
+    /// Whether the page washes its story (§U1; Wave 2 #3b: 「像按讚一樣大家都可以看到誰按」 — readers too, whatever the
+    /// server sends in `picked`): a published card readers have (never a draft or a private card), not in the trash,
+    /// read in its own words (never a translation).
     static func washes(_ detail: CardDetail, trashed: Bool, translated: Bool) -> Bool {
-        detail.isOwner && !trashed && !translated && detail.tap != nil
+        let card = detail.card
+        return !trashed && !translated && detail.tap != nil && card.publishedAt != nil && card.visibility != ._private
+            && card.trashedAt == nil
     }
 }

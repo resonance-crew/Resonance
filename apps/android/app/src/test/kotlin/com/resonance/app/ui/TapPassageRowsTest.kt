@@ -116,9 +116,9 @@ class TapPassageRowsTest {
             TapRowLines(quote = gus.passage!!.text),
             tapRowLines(gus, anonymous = true, author = false, viewerId = "gus", offersPassages = false, pagePick = PagePick(null)),
         )
-        // Never another's row, nor the author's list.
+        // Never another's row (it says its own pick, Wave 2 #3b), nor the author's list.
         assertEquals(
-            TapRowLines.NONE,
+            TapRowLines(quote = carol.passage!!.text),
             tapRowLines(carol, anonymous = true, author = false, viewerId = "hana", offersPassages = true, pagePick = PagePick("第二段")),
         )
         assertEquals(
@@ -127,11 +127,14 @@ class TapPassageRowsTest {
         )
     }
 
-    @Test fun aReadersListShowsTheirOwnRowAloneNeverAnothers() {
+    @Test fun aReadersListShowsEveryonesPickNeverANote() {
         // Their own pick.
         assertEquals(TapRowLines(quote = gus.passage!!.text), tapRowLines(gus, anonymous = true, author = false, viewerId = "gus", offersPassages = true))
-        // Someone else's row, even holding a pick and a note: nothing (the server sends none; the app shows none).
-        assertEquals(TapRowLines.NONE, tapRowLines(carol, anonymous = true, author = false, viewerId = "gus", offersPassages = true))
+        // Someone else's row (Wave 2 #3b: everyone's picks are seen): its pick, never its note — on a named card too.
+        assertEquals(TapRowLines(quote = carol.passage!!.text), tapRowLines(carol, anonymous = true, author = false, viewerId = "gus", offersPassages = true))
+        assertEquals(TapRowLines(quote = carol.passage!!.text), tapRowLines(carol, anonymous = false, author = false, viewerId = "gus", offersPassages = true))
+        // Someone else's row with no pick: as before, 60 tall.
+        assertEquals(TapRowLines.NONE, tapRowLines(hana, anonymous = false, author = false, viewerId = "gus", offersPassages = true))
         // Their own row with no pick: 選一段 while the card offers passages; else as today.
         assertEquals(TapRowLines(pick = true), tapRowLines(hana, anonymous = true, author = false, viewerId = "hana", offersPassages = true))
         assertEquals(TapRowLines.NONE, tapRowLines(hana, anonymous = true, author = false, viewerId = "hana", offersPassages = false))
@@ -149,12 +152,13 @@ class TapPassageRowsTest {
         }
     }
 
-    @Test fun theReadersOwnRowSaysTheirQuoteAndNoOtherRowDoes() {
+    @Test fun theReadersListSaysEveryonesQuoteAndNoNote() {
         val rows = mutableListOf<String>()
         showReader("gus", offers = true, listOf(gus, carol), rows)
         compose.waitForIdle()
         compose.onNodeWithText(L10n.Card.Tap.passageQuote(gus.passage!!.text)).assertExists()
-        compose.onAllNodesWithText(L10n.Card.Tap.passageQuote(carol.passage!!.text)).assertCountEquals(0)
+        // Wave 2 #3b: another's pick is seen too — their note never.
+        compose.onNodeWithText(L10n.Card.Tap.passageQuote(carol.passage!!.text)).assertExists()
         compose.onAllNodesWithText("我也是這樣搬出來的").assertCountEquals(0)
         compose.onAllNodesWithText(L10n.Card.Tap.passagePick).assertCountEquals(0)
     }

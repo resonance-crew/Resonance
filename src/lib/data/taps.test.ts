@@ -54,12 +54,12 @@ describe('withMine', () => {
     const on = drawn(withMine(READ, true, alice));
     expect(on.faces).toEqual(['alice', 'dora', 'eli']);
     expect(on.disc).toBe(false);
-    expect(on.name).toBe('你共振了，你連結的人裡，與這張卡片共振的：dora、eli，還有其他人');
+    expect(on.name).toBe('你共振了，與這張卡片共振的人：dora、eli，還有其他人');
 
     const off = drawn(withMine(withMine(READ, true, alice), false, alice));
     expect(off.faces).toEqual(['dora', 'eli', 'fay']);
     expect(off.disc).toBe(false);
-    expect(off.name).toBe('你連結的人裡，與這張卡片共振的：dora、eli、fay');
+    expect(off.name).toBe('與這張卡片共振的人：dora、eli、fay');
   });
 });
 

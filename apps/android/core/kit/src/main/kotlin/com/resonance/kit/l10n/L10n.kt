@@ -817,7 +817,7 @@ object L10n {
             val label: String get() = Strings.string("card.tap.label")
             /** You resonated */
             val selfOnly: String get() = Strings.string("card.tap.selfOnly")
-            /** People you're connected with who resonated: {names} */
+            /** Resonated with this card: {names} */
             fun facesReader(names: String): String = Strings.format("card.tap.facesReader", mapOf("names" to names))
             /** Resonated with this card: {names} */
             fun facesAuthor(names: String): String = Strings.format("card.tap.facesAuthor", mapOf("names" to names))
@@ -827,7 +827,7 @@ object L10n {
             val send: String get() = Strings.string("card.tap.send")
             /** Didn't go through, try again */
             val failed: String get() = Strings.string("card.tap.failed")
-            /** Quietly tell the author which part stayed with you */
+            /** Which part stayed with you */
             val passageTitle: String get() = Strings.string("card.tap.passageTitle")
             /** Skip */
             val passageSkip: String get() = Strings.string("card.tap.passageSkip")
@@ -1365,7 +1365,7 @@ object L10n {
             val label: String get() = Strings.string("write.visibility.label")
             /** Public */
             val public: String get() = Strings.string("write.visibility.public")
-            /** Connections only */
+            /** Connections */
             val connections: String get() = Strings.string("write.visibility.connections")
             /** Only me */
             val private: String get() = Strings.string("write.visibility.private")

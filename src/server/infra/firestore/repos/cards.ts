@@ -384,11 +384,13 @@ export function cardsData(db: AdminDb): CardsData {
    * page ends at the last document the query gave (pageEnd), so a page token,
    * a cursor or a count taken over anonymous cards would name one as theirs.
    */
-  const authorCards = (authorId: string) =>
+  const authorCards = (authorId: string, connections = false) =>
     db
       .collection('cards')
       .where('authorId', '==', authorId)
-      .where('visibility', '==', 'public')
+      // A viewer connected to the author (or the author) reads their cards for connections only too (Wave 2 #2):
+      // an `in` on the same index (authorId, visibility, anonymous, publishedAt desc).
+      .where('visibility', connections ? 'in' : '==', connections ? ['public', 'connections'] : 'public')
       .where('anonymous', '==', false)
       // A real stamp, not ahead of now by more than an hour (properlyPublished, as a range: B11) — a range on a
       // timestamp matches timestamps only, so null and a string publishedAt stay out as `!= null` kept null out.
@@ -464,12 +466,38 @@ export function cardsData(db: AdminDb): CardsData {
     feedPage: (limit, start) =>
       page(db.collection('cards').where('visibility', '==', 'public').where('publishedAt', '!=', null).select(...LIST_FIELDS), limit, start),
 
-    authorPage: (authorId, limit, start) => page(authorCards(authorId), limit, start),
+    authorPage: (authorId, limit, start, scope) => page(authorCards(authorId, scope?.connections === true), limit, start),
 
-    async countAuthorCards(authorId, max) {
+    async countAuthorCards(authorId, max, scope) {
       // An aggregation (B11: a read per thousand index entries, not `max` documents).
-      const counted = await pageQuery(authorCards(authorId)).limit(max).count().get();
+      const counted = await pageQuery(authorCards(authorId, scope?.connections === true)).limit(max).count().get();
       return counted.data().count;
+    },
+
+    async connectionsCards(authorIds, window, limit) {
+      const ids = [...new Set(authorIds)].filter((id) => id && !id.includes('/') && !isReservedId(id));
+      if (!ids.length || limit <= 0) return [];
+      const chunks: string[][] = [];
+      for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
+      // The profile's index (authorId, visibility, anonymous, publishedAt desc), an `in` over 30 authors at a time.
+      const snaps = await Promise.all(
+        chunks.map((chunk) => {
+          let q = db
+            .collection('cards')
+            .where('authorId', 'in', chunk)
+            .where('visibility', '==', 'connections')
+            .where('anonymous', '==', false);
+          if (window.before) q = q.where('publishedAt', '<', Timestamp.fromDate(window.before));
+          if (window.since) q = q.where('publishedAt', '>=', Timestamp.fromDate(window.since));
+          if (!window.before && !window.since) q = q.where('publishedAt', '!=', null);
+          return q.orderBy('publishedAt', 'desc').select(...LIST_FIELDS).limit(limit).get();
+        }),
+      );
+      return snaps
+        .flatMap((s) => s.docs.filter((d) => properlyPublished(d.get('publishedAt'))))
+        .map((d) => listCard(d.id, d.data()))
+        .sort((a, b) => (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0) || (a.id < b.id ? 1 : -1))
+        .slice(0, limit);
     },
 
     async resonancesOf(cardId, limit) {

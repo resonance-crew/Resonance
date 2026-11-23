@@ -148,7 +148,7 @@ internal fun tapIcon(on: Boolean): IconName = if (on) IconName.WavePair else Ico
 
 /**
  * The faces under the capsule (§U2) as the viewer sees them: the viewer's own face first while their tap is on
- * ([mine]), then their connections who tapped (the author's: the newest tappers), all of them as the server gave them,
+ * ([mine]), then everyone who tapped, newest first (Wave 2 #3b: a reader's too, no longer only their connections), all of them as the server gave them,
  * and whether it knows [more]. The server's `CardDetail.tap`, then the viewer's taps drawn at once ([withViewer]).
  * Only the drawing cuts them to [MAX] ([shown]; [showsMore] is said, never drawn — round 29 §S5) — kept whole, a tap turned on and
  * off again gives back the face it pushed out (iOS's TapState keeps them so too).

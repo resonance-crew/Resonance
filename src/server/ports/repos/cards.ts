@@ -128,6 +128,11 @@ export interface CardPage {
   end: PageEnd;
 }
 
+/** Which of an author's named cards a list reads: public ones, and their cards for connections only too. */
+export interface AuthorScope {
+  connections?: boolean;
+}
+
 /** One of an author's own shelves that is a plain query (the trash has its own). */
 export type OwnShelfName = 'published' | 'private' | 'draft';
 
@@ -190,10 +195,19 @@ export interface CardsData {
   listByKeys(keys: string[]): Promise<ListCard[]>;
   /** A page of the latest public published cards, newest first (publishedAt, then id). */
   feedPage(limit: number, start?: PageStart): Promise<CardPage>;
-  /** A page of an author's public, named, published cards, newest first. */
-  authorPage(authorId: string, limit: number, start?: PageStart): Promise<CardPage>;
+  /**
+   * A page of an author's named, published cards, newest first: public ones, and with `connections` (a viewer
+   * connected to the author, or the author) their cards for connections only too (Wave 2 #2).
+   */
+  authorPage(authorId: string, limit: number, start?: PageStart, scope?: AuthorScope): Promise<CardPage>;
   /** How many of those there are, counted up to `max`. */
-  countAuthorCards(authorId: string, max: number): Promise<number>;
+  countAuthorCards(authorId: string, max: number, scope?: AuthorScope): Promise<number>;
+  /**
+   * The named, published cards for connections only of `authorIds` (Wave 2 #2: a viewer's connections, for their
+   * latest feed), newest first, published before `before` (exclusive) and at or after `since` (inclusive) — null
+   * leaves that side open; at most `limit`, read without their stories.
+   */
+  connectionsCards(authorIds: string[], window: { before: Date | null; since: Date | null }, limit: number): Promise<ListCard[]>;
   /** Public published cards answering this one (`referenceCardId`), newest first. */
   resonancesOf(cardId: string, limit: number): Promise<ListCard[]>;
   /** The latest public published cards, newest first. */

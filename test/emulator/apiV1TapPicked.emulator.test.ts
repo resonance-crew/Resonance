@@ -7,15 +7,16 @@ import { listTaps, setTap } from '@/lib/api/v1/taps';
 import { offlinePassages, passagesHash } from '@/lib/cards/tapPassages';
 import { PICKED_FACES_MAX } from '@/lib/cards/tapPicked';
 
-// The author's picked sentences (round 29 §P1, §P2, §S4.4) against the
-// Firestore emulator: CardTap.picked on the author's answer alone — the
-// sentences still in the story, in its order, up to three pickers each,
-// newest first, `more` past them —, never on a reader's, a picker's
-// connection's or a signed-out visitor's; a block either way leaving the
-// person out (and a sentence only they picked); a picker with no profile; an
-// anonymous card; an edit that takes the sentence out; a tap taken back.
-// Then GET /cards/{id}/taps?passage=: the author's pages of one sentence's
-// people, a reader's answer the same with it or without. Every query passes
+// The picked sentences (round 29 §P1, §P2, §S4.4; Wave 2 #3b) against the
+// Firestore emulator: CardTap.picked on the author's answer — the sentences
+// still in the story, in its order, up to three pickers each, newest first,
+// `more` past them — and on every reader's (the reader's own pick first in
+// its sentence), never on a signed-out visitor's; a block either way leaving
+// the person out (and a sentence only they picked) — for a reader on a named
+// card the author's blocks and their own, on an anonymous card their own
+// alone; a picker with no profile; an anonymous card; an edit that takes the
+// sentence out; a tap taken back. Then GET /cards/{id}/taps?passage=: the
+// author's and a reader's pages of one sentence's people. Every query passes
 // test/emulator/indexGuard (the new composite index).
 
 const PROJECT = 'demo-resonance-tap-picked';
@@ -69,6 +70,8 @@ const block = (who: string, whom: string) => set(`users/${who}/blocks/${whom}`, 
 
 const handles = (people: { handle: string }[]) => people.map((p) => p.handle);
 const pickedOf = async (viewer: string, id = 'rich') => (await getCardDetail(db, viewer, id)).tap?.picked;
+/** Each picked sentence as [id, its pickers' handles]. */
+const pickedBy = async (viewer: string, id = 'rich') => (await pickedOf(viewer, id))?.map((p) => [p.id, handles(p.people)]);
 
 // alice writes, as in the seed: gus and bob picked passage [0], carol [1], hana none, no one [2].
 // dora is connected to gus; eli is a stranger.
@@ -97,19 +100,30 @@ describe("CardTap.picked: the author's answer", () => {
     expect(handles((await getCardDetail(db, 'alice', 'rich')).tap!.faces)).toEqual(['gus', 'hana', 'bob']);
   });
 
-  it('is absent for a reader, a picker, a connection of a picker and a signed-out visitor', async () => {
-    for (const viewer of ['eli', 'gus', 'dora']) {
-      const tap = (await getCardDetail(db, viewer, 'rich')).tap!;
-      expect('picked' in tap, viewer).toBe(false);
-    }
+  it('is answered to every reader as to the author — a stranger, a picker (their own pick first), a connection of a picker — never to a signed-out visitor', async () => {
+    const all = [[ITEMS[0].id, ['gus', 'bob']], [ITEMS[1].id, ['carol']]];
+    for (const viewer of ['eli', 'gus', 'dora']) expect(await pickedBy(viewer), viewer).toEqual(all);
+    // bob picked before gus: his own pick comes first in its sentence for him.
+    expect(await pickedBy('bob')).toEqual([[ITEMS[0].id, ['bob', 'gus']], [ITEMS[1].id, ['carol']]]);
     expect(JSON.stringify(await readCardForPage(db, 'rich-slug'))).not.toContain('picked');
   });
 
-  it('is absent while nothing is picked, and leaves a reader’s answer exactly as it was', async () => {
-    const before = (await getCardDetail(db, 'eli', 'rich')).tap;
+  it('is absent while nothing is picked, for the author and a reader, the rest of a reader’s answer as it was', async () => {
+    const { picked: had, ...before } = (await getCardDetail(db, 'eli', 'rich')).tap!;
+    expect(had).toHaveLength(2);
     await Promise.all(['gus', 'carol', 'bob'].map((uid) => db.doc(`resonanceTaps/rich_${uid}`).update({ passage: null })));
     expect((await getCardDetail(db, 'eli', 'rich')).tap).toEqual(before);
     expect('picked' in (await getCardDetail(db, 'alice', 'rich')).tap!).toBe(false);
+  });
+
+  it("for a reader of a named card leaves out anyone with a block either way with the author or with the reader", async () => {
+    await block('alice', 'gus'); // the author's block
+    await block('eli', 'bob'); // the reader's own
+    expect(await pickedBy('eli')).toEqual([[ITEMS[1].id, ['carol']]]);
+    // dora has no block of her own: only the author's thins hers.
+    expect(await pickedBy('dora')).toEqual([[ITEMS[0].id, ['bob']], [ITEMS[1].id, ['carol']]]);
+    await block('carol', 'eli'); // and one the other way
+    expect(await pickedBy('eli')).toBeUndefined();
   });
 
   it('leaves out anyone with a block between them and the author, either way — and a sentence only they picked', async () => {
@@ -144,12 +158,24 @@ describe("CardTap.picked: the author's answer", () => {
     expect((await pickedOf('alice'))!.map((p) => p.id)).toEqual([ITEMS[0].id]);
   });
 
-  it('answers the author of an anonymous card too, and a reader of it the same with picks or without', async () => {
-    const without = (await getCardDetail(db, 'eli', 'masked')).tap;
+  it("answers the author of an anonymous card too, and a reader of it the same whomever its author blocked", async () => {
+    expect('picked' in (await getCardDetail(db, 'eli', 'masked')).tap!).toBe(false);
     await Promise.all([tapped('masked', 'gus', 5, 0), tapped('masked', 'carol', 6, 0)]);
-    expect((await pickedOf('alice', 'masked'))!.map((p) => [p.id, handles(p.people)])).toEqual([[ITEMS[0].id, ['gus', 'carol']]]);
-    // eli is connected to neither picker: nothing of theirs reaches her answer.
-    expect((await getCardDetail(db, 'eli', 'masked')).tap).toEqual(without);
+    expect(await pickedBy('alice', 'masked')).toEqual([[ITEMS[0].id, ['gus', 'carol']]]);
+    // eli is connected to neither picker and sees both, as a like is seen.
+    const open = (await getCardDetail(db, 'eli', 'masked')).tap;
+    expect(open?.picked?.map((p) => [p.id, handles(p.people)])).toEqual([[ITEMS[0].id, ['gus', 'carol']]]);
+    const openList = await listTaps(db, 'eli', 'masked', null, ITEMS[0].id);
+    // A block either way between the author and a picker leaves the picker out of the author's answer alone: a
+    // reader's would otherwise name the author.
+    await block('alice', 'gus');
+    await block('carol', 'alice');
+    expect(await pickedBy('alice', 'masked')).toBeUndefined();
+    expect((await getCardDetail(db, 'eli', 'masked')).tap).toEqual(open);
+    expect(await listTaps(db, 'eli', 'masked', null, ITEMS[0].id)).toEqual(openList);
+    // The reader's own blocks are theirs to know, on an anonymous card too.
+    await block('eli', 'gus');
+    expect(await pickedBy('eli', 'masked')).toEqual([[ITEMS[0].id, ['carol']]]);
   });
 });
 
@@ -189,11 +215,19 @@ describe('GET /cards/{id}/taps?passage=', () => {
     expect(second.nextPageToken).toBeNull();
   });
 
-  it("changes nothing for a reader: a picker's connection, the picker, a stranger", async () => {
-    for (const viewer of ['dora', 'gus', 'eli']) {
-      for (const id of ['rich', 'masked']) {
-        expect(await listTaps(db, viewer, id, null, ITEMS[0].id), `${viewer} ${id}`).toEqual(await listTaps(db, viewer, id));
-      }
+  it("gives a reader that sentence's people too — a picker's connection, a stranger, a picker (own row first) — never a note", async () => {
+    await set('notes/n1', { cardId: 'rich', fromUserId: 'bob', toUserId: 'alice', text: '我也搬過很多次家。', readAt: null, createdAt: minutesAgo(20) });
+    const rows = async (viewer: string, passage?: string) =>
+      (await listTaps(db, viewer, 'rich', null, passage)).people.map((p) => [p.author.handle, p.note, p.passage?.text ?? null]);
+    for (const viewer of ['dora', 'eli']) {
+      expect(await rows(viewer, ITEMS[0].id), viewer).toEqual([['gus', null, ITEMS[0].text], ['bob', null, ITEMS[0].text]]);
+      expect(await rows(viewer, ITEMS[1].id), viewer).toEqual([['carol', null, ITEMS[1].text]]);
+      expect(await rows(viewer, ITEMS[2].id), viewer).toEqual([]);
+      expect(await rows(viewer), viewer).toEqual([['gus', null, ITEMS[0].text], ['hana', null, null], ['bob', null, ITEMS[0].text], ['carol', null, ITEMS[1].text]]);
     }
+    expect(await rows('bob', ITEMS[0].id)).toEqual([['bob', null, ITEMS[0].text], ['gus', null, ITEMS[0].text]]);
+    // Their own row only under their own sentence.
+    expect(await rows('bob', ITEMS[1].id)).toEqual([['carol', null, ITEMS[1].text]]);
+    expect((await listTaps(db, 'eli', 'masked', null, ITEMS[0].id)).people).toEqual([]);
   });
 });

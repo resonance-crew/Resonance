@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import useSWRInfinite from 'swr/infinite';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
+import { useAuth } from '@/components/providers/AuthProvider';
 import { Modal } from '@/components/molecules/Modal/Modal';
 import { DialogScroll } from '@/components/sections/AppHeader/BellList';
 import type { TapListBody, TapPickedBody } from '@/lib/api/v1/schemas';
@@ -57,13 +58,21 @@ export function PickedPeople({ cardId, passage, script, onClose }: PickedPeopleP
   );
 }
 
-/** The sentence's people, a page at a time (the author's list's pages), newest first. */
+/**
+ * The sentence's people, a page at a time (the list's pages), newest first. Keyed by the viewer too (Wave 2 #3b: a
+ * reader reads it as well as the author, each their own blocks' answer), so one account's list never shows the next.
+ */
 function PickedList({ cardId, passage, onPick }: { cardId: string; passage: string; onPick: () => void }) {
   const tHome = useTranslations('home');
+  const viewer = useAuth().user?.id ?? '';
   const { data, size, setSize, isValidating } = useSWRInfinite<TapListBody>(
     (i, prev: TapListBody | null) =>
-      i === 0 ? ['taps-picked', cardId, passage, ''] : prev?.nextPageToken ? ['taps-picked', cardId, passage, prev.nextPageToken] : null,
-    ([, id, p, token]: [string, string, string, string]) => listTaps(id, token || null, p),
+      i === 0
+        ? ['taps-picked', cardId, passage, '', viewer]
+        : prev?.nextPageToken
+          ? ['taps-picked', cardId, passage, prev.nextPageToken, viewer]
+          : null,
+    ([, id, p, token]: [string, string, string, string, string]) => listTaps(id, token || null, p),
     { revalidateOnFocus: false, revalidateFirstPage: false },
   );
   if (!data) return <TapPeopleSkeleton />;

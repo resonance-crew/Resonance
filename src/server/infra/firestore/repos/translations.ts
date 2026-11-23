@@ -14,7 +14,7 @@ const SOURCE_FIELDS = ['thoughtCore', 'story', 'excerpt', 'readMinutes', 'excerp
 const cardRef = (db: AdminDb, id: string) => db.doc(`cards/${id}`);
 
 /** What making a card's tap passages reads of it (round 27: lib/api/v1/tapPassagesMake's mask, offersPassages' fields). */
-const PASSAGE_FIELDS = ['thoughtCore', 'story', 'publishedAt', 'trashedAt', 'tapPassages'];
+const PASSAGE_FIELDS = ['thoughtCore', 'story', 'publishedAt', 'trashedAt', 'tapPassages', 'signature.coreInsight'];
 
 function passageSourceOf(data: DocumentData): PassageSource {
   return {
@@ -22,6 +22,7 @@ function passageSourceOf(data: DocumentData): PassageSource {
     story: typeof data.story === 'string' ? data.story : '',
     fields: data,
     tapPassages: data.tapPassages,
+    insight: typeof data.signature?.coreInsight === 'string' && data.signature.coreInsight.trim() ? data.signature.coreInsight : null,
   };
 }
 
@@ -61,7 +62,7 @@ export function translationsTx(db: AdminDb, tx: Transaction): TranslationsTxRepo
     },
     putTapPassages(id, value) {
       // Never `updatedAt`: nothing the author wrote changed. The whole value, so a failure count goes with it.
-      tx.update(cardRef(db, id), { tapPassages: { of: value.of, items: value.items, model: value.model, at: FieldValue.serverTimestamp() } });
+      tx.update(cardRef(db, id), { tapPassages: { of: value.of, items: value.items, model: value.model, v: value.v, at: FieldValue.serverTimestamp() } });
     },
   };
 }

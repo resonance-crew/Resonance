@@ -165,7 +165,7 @@ class PassageMarksTest {
         assertTrue(passageMarks(blocks, null).isEmpty())
     }
 
-    @Test fun onlyTheAuthorsPublishedCardReadersSeeWearsThePicks() {
+    @Test fun aPublishedCardReadersSeeWearsThePicksForTheAuthorAndReadersAlike() {
         val blocks = StoryParser.parse(story)
         val picked = listOf(TapPicked("a", "我坐在地上，第一次覺得安靜是屬於自己的。", listOf(gus, bob), more = false))
         fun detail(
@@ -185,16 +185,32 @@ class PassageMarksTest {
             coreInsight = null, isOwner = owner, referenceCard = null,
             tap = CardTap(mine = false, faces = emptyList(), more = false, mayNote = false, picked = picked),
         )
-        fun marks(d: CardDetail, original: Boolean = true) = passageMarks(blocks, ownPickedPassages(d, original))
+        fun marks(d: CardDetail, original: Boolean = true) = passageMarks(blocks, pickedPassages(d, original))
         assertEquals(listOf("a"), marks(detail()).map { it.id })
         assertEquals(listOf("a"), marks(detail(FeedCard.Visibility.connections)).map { it.id })
         // Published, then kept private: bare, as on the web and iOS (§U1: never a private card).
         assertTrue(marks(detail(FeedCard.Visibility.`private`)).isEmpty())
         assertTrue(marks(detail(published = false)).isEmpty())
-        assertTrue(marks(detail(owner = false)).isEmpty())
+        // A reader's page draws what the server sent them too (Wave 2 #3b), and nothing when it sent none.
+        assertEquals(listOf("a"), marks(detail(owner = false)).map { it.id })
+        assertTrue(marks(detail(owner = false).let { it.copy(tap = it.tap?.copy(picked = null)) }).isEmpty())
         assertTrue(marks(detail(trashedAt = "2026-10-20T00:00:00Z")).isEmpty())
         // A translation showing: the story is not as written.
         assertTrue(marks(detail(), original = false).isEmpty())
+
+        // Wave 2 #3b: a reader's tap or pick keeps the washes the page has (the end row never says them)…
+        val reader = detail(owner = false)
+        val tapped = CardPageModel.tappedDetail(reader, CardTap(mine = true, faces = listOf(gus), more = false, mayNote = true))
+        assertEquals(picked, tapped.tap?.picked)
+        assertEquals(true, tapped.tap?.mine)
+        // …until the read after it brings the server's: their own sentence's face among them, at once.
+        val served = listOf(TapPicked("a", picked[0].text, listOf(person("me"), gus, bob), more = false))
+        val fresh = reader.copy(tap = CardTap(mine = true, faces = listOf(person("me"), gus), more = false, mayNote = true, picked = served))
+        val after = CardPageModel.servedTapDetail(tapped, fresh)
+        assertEquals(served, after?.tap?.picked)
+        assertEquals(listOf("me", "gus", "bob"), marks(after!!).single().shown.map { it.id })
+        // Another card's answer never lands on this page.
+        assertNull(CardPageModel.servedTapDetail(tapped, fresh.copy(card = fresh.card.copy(id = "c2"))))
     }
 
     @Test fun atMostThreeFacesAndNothingAfterThemSaidWithAndOthers() {

@@ -51,8 +51,9 @@ export const POST = withUser(async (user, req, ctx: RouteContext<'key'>) => {
         server.pages.revalidate(cardPagePaths({ id, slug }));
       })(),
       indexed,
-      // Its tap passages (round 27): a reader's 選一段 after 共振 — a failure is marked owed once the reading settled.
-      makeTapPassagesIn(server, id, { markAfter: indexed }).catch((e) => console.error('[api/v1] tap passages', e)),
+      // Its tap passages (round 27): a reader's 選一段 after 共振 — picked once the reading wrote the through line that
+      // guides them (Wave 2 #3a; at most INSIGHT_WAIT_MS), and a failure is marked owed once the reading settled.
+      makeTapPassagesIn(server, id, { markAfter: indexed, insightAfter: indexed }).catch((e) => console.error('[api/v1] tap passages', e)),
       // Its title and excerpt in the other interface language, for readers who turned auto-translate on (one small call).
       makeSummaryTranslationsIn(server, id).catch((e) => console.error('[api/v1] summary translations', e)),
       // The first time only: the author's connections who asked hear of it, once its slug is settled.

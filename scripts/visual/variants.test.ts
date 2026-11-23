@@ -25,7 +25,8 @@ describe('the variant sets', () => {
     // 任務 #3: update-required, the apps alone — the iPhone's three, the iPad, the Mac, the Android phone's three and
     // the tablet: 485 + 9; round 28: card-end-long, the web's five alone (the apps keep 分享 · ⋯ in the bar): 494 + 5; round 29:
     // card-picked-people on the fourteen: 499 + 14
-    expect(estimate('release').captures).toBe(513);
+    // Wave 2: publish-audience, the web's five alone: 513 + 5
+    expect(estimate('release').captures).toBe(518);
   });
 
   it('adds the device states after the device they run on, and only in the extended set', () => {

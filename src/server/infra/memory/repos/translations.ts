@@ -39,6 +39,10 @@ function passageSourceOf(row: Row): PassageSource {
     story: typeof row.story === 'string' ? row.story : '',
     fields: row,
     tapPassages: row.tapPassages,
+    insight: (() => {
+      const sig = row.signature as { coreInsight?: unknown } | undefined;
+      return typeof sig?.coreInsight === 'string' && sig.coreInsight.trim() ? sig.coreInsight : null;
+    })(),
   };
 }
 

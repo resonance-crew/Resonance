@@ -88,4 +88,42 @@ class SegmentedLayoutTest {
         assertFalse(SegmentedLayout.alone(collapse = 2, icon = true, step = 1))
         assertFalse(SegmentedLayout.alone(collapse = 0, icon = true, step = 2))
     }
+
+    // The publish step's four card types (Wave 2): 公開 · 連結的人 · 匿名公開 · 私人卡, each glyph droppable.
+
+    private val four = listOf(true, true, true, true)
+
+    @Test fun fourCardTypesKeepTheirGlyphsWhileTheyFit() {
+        val labels = listOf(28f, 56f, 56f, 42f)
+        val need = labels.sumOf { own(it).toDouble() }.toFloat()
+        assertEquals(four, SegmentedLayout.shownIcons(labels, four, four, need, spread = true))
+        assertEquals(1f, SegmentedLayout.labelScale(labels, four, four, need, spread = true))
+    }
+
+    @Test fun tooNarrowForEveryGlyphTheGlyphsGoAndTheWordsStayWhole() {
+        // English on a 360 phone (328 of room): Public · Connections · Anonymous · Private.
+        val labels = listOf(45f, 82f, 74f, 50f)
+        val shown = SegmentedLayout.shownIcons(labels, four, four, 328f, spread = true)
+        assertEquals(listOf(false, false, false, false), shown)
+        assertEquals(1f, SegmentedLayout.labelScale(labels, shown, four, 328f, spread = true))
+        val widths = SegmentedLayout.widths(labels, shown, listOf(0, 0, 0, 0), 328f, spread = true)
+        // Every segment at least its words and their padding: nothing cut, the row exactly the room.
+        labels.forEachIndexed { i, w -> assertTrue(widths[i] >= w + 2 * SegmentedLayout.PAD) }
+        assertEquals(328f, widths.sum(), 0.01f)
+        // A glyph that may not go stays.
+        assertEquals(listOf(true, false, false, false), SegmentedLayout.shownIcons(labels, four, listOf(false, true, true, true), 328f, spread = true))
+    }
+
+    @Test fun evenWithoutGlyphsTooWideTheWordsGetSmallerNeverCut() {
+        // 連結的人 at a 1.5 text size on a narrow phone.
+        val labels = listOf(42f, 84f, 84f, 63f)
+        val shown = SegmentedLayout.shownIcons(labels, four, four, 300f, spread = true)
+        val scale = SegmentedLayout.labelScale(labels, shown, four, 300f, spread = true)
+        assertTrue(scale < 1f && scale >= SegmentedLayout.MIN_LABEL_SCALE)
+        val scaled = labels.map { it * scale }
+        val widths = SegmentedLayout.widths(scaled, shown, listOf(0, 0, 0, 0), 300f, spread = true)
+        scaled.forEachIndexed { i, w -> assertTrue(widths[i] >= w + 2 * SegmentedLayout.PAD) }
+        // A bar with nothing droppable keeps its words' size.
+        assertEquals(1f, SegmentedLayout.labelScale(labels, four, listOf(false, false, false, false), 300f, spread = true))
+    }
 }

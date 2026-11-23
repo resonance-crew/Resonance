@@ -198,7 +198,7 @@ export const SCREENS: Screen[] = [
   { id: 'card-passages', route: '/card/rich-story', as: 'dora',
     web: { query: 'visualTap=passages', scrollTo: '[data-end-row]' },
     app: { ios: ['-visualEnd', 'YES', '-visualTap', 'passages'], android: ['--es', 'cardEnd', 'passages'] },
-    expect: "alice's rich story read by dora, who just pressed 共振 (on: the verb's solid face, two waves): a small centred dialog over the dimmed page — its title 悄悄告訴作者，哪一段讓你有共鳴, then three banded rows of alice's own sentences, each wrapped in full in the story's type (never cut, no 「…」), nothing drawn round a row at rest, and the small 略過 at the foot's end, no ✕ — a phone 400 or the column less 16 a side, tablet and desktop 480; never a bottom sheet, never a popover" },
+    expect: "alice's rich story read by dora, who just pressed 共振 (on: the verb's solid face, two waves): a small centred dialog over the dimmed page — its title 哪一段讓你有共鳴, then three banded rows of alice's own sentences, each wrapped in full in the story's type (never cut, no 「…」), nothing drawn round a row at rest, and the small 略過 at the foot's end, no ✕ — a phone 400 or the column less 16 a side, tablet and desktop 480; never a bottom sheet, never a popover" },
   { id: 'card-passage-picked', route: '/card/rich-story', as: 'dora', set: 'extended',
     web: { query: 'visualTap=picked', scrollTo: '[data-end-row]' },
     app: { ios: ['-visualEnd', 'YES', '-visualTap', 'picked'], android: ['--es', 'cardEnd', 'passage-picked'] },
@@ -276,6 +276,9 @@ export const SCREENS: Screen[] = [
   { id: 'publish-cover', route: '/write/harbour-lamp', as: 'alice', web: { query: 'step=publish' },
     app: { ios: ['-writeStep', 'publish'], android: ['--es', 'writeStep', 'publish'] },
     expect: "alice's 港邊的那盞燈 on its publish step (更新這張卡片): the cover with two chips at its foot, 調整位置 left of 更換封面, in the card's own paper and pen" },
+  // Wave 2 #2: 卡片類型 is four again — 公開 · 連結的人 · 匿名公開 · 私人卡 — and on a phone the glyphs give way to keep the words.
+  { id: 'publish-audience', route: '/write/harbour-lamp', as: 'alice', platforms: ['web'], web: { query: 'step=publish', scrollTo: '[data-segment="connections"]' },
+    expect: "alice's 港邊的那盞燈 on its publish step, scrolled to 卡片類型: one bar of four — 公開 (chosen, tonal peach) · 連結的人 · 匿名公開 · 私人卡 — every word whole on one line; on a phone no glyphs, on wide screens each with its glyph (globe · users · mask · lock)" },
   { id: 'cover-frame', route: '/write/harbour-lamp', as: 'alice',
     web: { query: 'step=publish', click: 'button[aria-label="調整位置"], button[aria-label="Adjust"]' },
     app: { ios: ['-writeStep', 'publish', '-coverFrame', 'YES'], android: ['--es', 'writeStep', 'publish', '--ez', 'coverFrame', 'true'] },
