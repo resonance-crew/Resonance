@@ -173,8 +173,8 @@ import Testing
             let loaded = dialogSize(TapRows(people: Array(names), line: PickedPeople.line(for:)) { _ in }, width: 400)
             #expect(loading.height == loaded.height, "\(n): \(loading.height) vs \(loaded.height)")
         }
-        // More than the marks show: enough rows to fill the list's cap, which the page read fills too.
-        #expect(PickedPeople.loadingRows(.init(id: "p", text: "t", people: 3, more: true), cap: 420) == 7)
+        // More than the marks show: the faces' count, as the web and Android draw it (post-merge review).
+        #expect(PickedPeople.loadingRows(.init(id: "p", text: "t", people: 3, more: true), cap: 420) == 3)
         // Never none (a sentence opened before its marks knew anyone).
         #expect(PickedPeople.loadingRows(.init(id: "p", text: "t"), cap: 420) == 1)
         #expect(PickedPeople.listCap(window: 2000) == 420 && PickedPeople.listCap(window: 600) == 300)
