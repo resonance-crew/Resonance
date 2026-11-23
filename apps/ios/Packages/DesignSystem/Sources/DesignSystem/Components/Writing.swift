@@ -74,6 +74,7 @@ public struct HandDrawnImage<Overlay: View>: View {
     let removeLabel: String
     let onRemove: (() -> Void)?
     let overlay: Overlay
+    @Environment(\.displayScale) private var displayScale
 
     public init(_ source: Source, seed: Double = 31, radius: Double = 16, curve: Double = 0.8, blur: CGFloat = 0, wash: Color? = nil,
                 removeLabel: String = "", onRemove: (() -> Void)? = nil, @ViewBuilder overlay: () -> Overlay = { EmptyView() }) {
@@ -93,7 +94,7 @@ public struct HandDrawnImage<Overlay: View>: View {
         GeometryReader { geo in
             // Overscan past the box so the wobble's bulges land on pixels (BLEED 6, more under a blur).
             let bleed = 6 + blur * 2
-            picture
+            picture(CGSize(width: (geo.size.width + bleed * 2) * displayScale, height: (geo.size.height + bleed * 2) * displayScale))
                 .blur(radius: blur)
                 .frame(width: geo.size.width + bleed * 2, height: geo.size.height + bleed * 2)
                 // The frame's own box, inside the overscanned picture.
@@ -123,11 +124,13 @@ public struct HandDrawnImage<Overlay: View>: View {
         .aspectRatio(16 / 10, contentMode: .fit)
     }
 
-    @ViewBuilder private var picture: some View {
+    /// The picture for a `box` (pixels): a remote one decoded at that size through the shared path (audit IOS-10 —
+    /// never the whole cover), a local one (a picture just picked) as it is.
+    @ViewBuilder private func picture(_ box: CGSize) -> some View {
         switch source {
         case let .url(url):
-            LazyImage(url: url) { state in
-                if let image = state.image { image.resizable().scaledToFill() } else { Tokens.creamDark }
+            CoverLazyImage(url: url, fallback: nil, request: { ImageSizeBuckets.request($0, box: box) }) { image, _, _ in
+                if let image { image.resizable().scaledToFill() } else { Tokens.creamDark }
             }
         case let .image(image):
             Image(uiImage: image).resizable().scaledToFill()

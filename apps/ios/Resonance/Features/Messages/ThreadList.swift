@@ -826,6 +826,9 @@ private struct MessagePicture: View {
     @State private var failed = false
     /// Each tap on a picture that couldn't be read asks again.
     @State private var attempt = 0
+    /// It was read after the bubble was drawn (not at hand when it appeared): it comes in blurred (ImageReveal).
+    @State private var arrivedLate = false
+    @Environment(\.imageRevealBudget) private var budget
 
     var body: some View {
         let store = ctx.model.pictures
@@ -835,7 +838,7 @@ private struct MessagePicture: View {
             ZStack {
                 Tokens.creamDark
                 if let shown {
-                    Image(uiImage: shown).resizable().scaledToFill()
+                    Image(uiImage: shown).resizable().scaledToFill().imageReveal(ImageReveal.decide(.cover, atHand: !arrivedLate, budget: budget))
                 } else if failed {
                     OrganicIcon(.image, size: 22, color: Tokens.textMuted)
                 }
@@ -849,6 +852,7 @@ private struct MessagePicture: View {
             }
             failed = false
             let picture = await store.image(image.id, .thumb)
+            arrivedLate = picture != nil
             loaded = picture
             failed = picture == nil && !Task.isCancelled
         }

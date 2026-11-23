@@ -14,6 +14,7 @@ struct ChatPictureViewer: View {
     let store: ChatImageStore
     let onClose: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.imageRevealBudget) private var budget
     @State private var image: UIImage?
     @State private var failed = false
     @State private var attempt = 0
@@ -80,9 +81,15 @@ struct ChatPictureViewer: View {
         failed = false
         if image == nil { image = store.cached(picture.id, .full) ?? store.cached(picture.id, .thumb) }
         if store.cached(picture.id, .full) != nil { return }
-        if image == nil, let thumb = await store.image(picture.id, .thumb) { image = thumb }
+        // What is read now fades in (ImageReveal's viewer: never a blur) — over the loader, or the full picture over
+        // the thread's size already shown (ZoomingPicture cross-dissolves it in an animated update).
+        let fade: Animation? = switch ImageReveal.decide(.viewer, atHand: false, budget: budget) {
+        case let .fade(duration), let .blur(_, duration): .easeOut(duration: duration)
+        case .none: nil
+        }
+        if image == nil, let thumb = await store.image(picture.id, .thumb) { withAnimation(fade) { image = thumb } }
         if let full = await store.image(picture.id, .full) {
-            image = full
+            withAnimation(fade) { image = full }
         } else if image == nil {
             failed = true
         }
@@ -149,7 +156,15 @@ private struct ZoomingPicture: UIViewRepresentable {
     func updateUIView(_ view: ZoomingPictureView, context: Context) {
         view.onPull = onPull
         view.onLetGo = onLetGo
-        if view.image !== image { view.image = image }
+        guard view.image !== image else { return }
+        // A sharper picture over the one shown, in an animated update (the viewer's fade): cross-dissolved.
+        if context.transaction.animation != nil, view.image != nil, !context.transaction.disablesAnimations {
+            UIView.transition(with: view, duration: ImageReveal.strength(.viewer).duration, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+                view.image = image
+            }
+        } else {
+            view.image = image
+        }
     }
 }
 

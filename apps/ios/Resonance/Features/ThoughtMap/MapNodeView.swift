@@ -184,7 +184,8 @@ struct MapNodeView: View, Equatable {
         let clip = WobRectShape(radius: 12, seed: seed + 3, mag: 1.8, options: WobRectOptions(
             curve: 1.3, cornerJitter: 1.4, segmentsH: .count(2), segmentsV: .count(2)))
         return ZStack {
-            RemoteImage(url: url, fallback: url == card.mediaURL ? card.mediaFallbackURL : nil, pixelSize: CGSize(width: 64 * 6, height: 64 * 6))
+            RemoteImage(url: url, fallback: url == card.mediaURL ? card.mediaFallbackURL : nil, pixelSize: CGSize(width: 64 * 6, height: 64 * 6),
+                        reveal: .viewer) // a fade, never a blur: the map's world is scaled and moved (the web's map the same)
                 .frame(width: 64, height: 64)
                 .frame(width: 56, height: 56)
                 .clipShape(clip)

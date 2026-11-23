@@ -135,18 +135,28 @@ public nonisolated enum ImageSizeBuckets {
 /// A remote picture that, when `url` fails, asks once for `fallback` (a list's smaller cover falling back to the
 /// cover itself), never round again. `content` gets the picture and its size, and `failed` once nothing more is
 /// coming; while the fallback is on its way it gets neither, as while loading.
+///
+/// Every remote picture the app draws comes through here (`imageReveal.ios.test.ts` counts the ones that don't): one
+/// that arrives after its box is on screen comes in blurred and sharpens as `reveal` says (``ImageReveal``), its
+/// loading face (`content` with no picture) kept under it until it has; one the memory cache answers is simply there.
 public struct CoverLazyImage<Content: View>: View {
     let url: URL
     let fallback: URL?
     let request: (URL) -> ImageRequest
+    let reveal: ImageReveal.Kind
+    let onPicture: ((CGSize) -> Void)?
     let content: (Image?, CGSize?, Bool) -> Content
     @State private var failed: URL?
+    @Environment(\.imageRevealBudget) private var budget
 
-    public init(url: URL, fallback: URL?, request: @escaping (URL) -> ImageRequest,
+    public init(url: URL, fallback: URL?, request: @escaping (URL) -> ImageRequest, reveal: ImageReveal.Kind = .cover,
+                onPicture: ((CGSize) -> Void)? = nil,
                 @ViewBuilder content: @escaping (_ image: Image?, _ pictureSize: CGSize?, _ failed: Bool) -> Content) {
         self.url = url
         self.fallback = fallback
         self.request = request
+        self.reveal = reveal
+        self.onPicture = onPicture
         self.content = content
     }
 
@@ -156,10 +166,24 @@ public struct CoverLazyImage<Content: View>: View {
         LazyImage(request: request(shown)) { state in
             if state.error != nil, shown == url, next != nil {
                 Color.clear.onAppear { failed = url }
+            } else if let image = state.image {
+                content(image, state.imageContainer?.image.size, false)
+                    .imageReveal(ImageReveal.decide(reveal, atHand: Self.atHand(state.result), budget: budget)) {
+                        content(nil, nil, false)
+                    }
             } else {
-                content(state.image, state.imageContainer?.image.size, state.error != nil)
+                content(nil, nil, state.error != nil)
             }
         }
+        .onCompletion { result in
+            if let onPicture, case let .success(response) = result { onPicture(response.image.size) }
+        }
+    }
+
+    /// Whether the picture was at hand when asked for: the memory cache's (Nuke answers it on the first frame).
+    public nonisolated static func atHand(_ result: Result<ImageResponse, Error>?) -> Bool {
+        guard case let .success(response) = result else { return false }
+        return response.cacheType == .memory
     }
 }
 
@@ -233,18 +257,21 @@ public struct RemoteImage: View {
     let pixelSize: CGSize
     /// Asked for once when `url` fails: a list's smaller cover falls back to the cover itself.
     let fallback: URL?
+    /// How it comes in when it arrives late (a small thumbnail's 4 pt; the thought map's a fade).
+    let reveal: ImageReveal.Kind
 
-    public init(url: URL, fallback: URL? = nil, pixelSize: CGSize) {
+    public init(url: URL, fallback: URL? = nil, pixelSize: CGSize, reveal: ImageReveal.Kind = .thumb) {
         self.url = url
         self.fallback = fallback
         self.pixelSize = pixelSize
+        self.reveal = reveal
     }
 
     public var body: some View {
         let source = ImageSizeBuckets.listSource(url, fallback: fallback, box: pixelSize)
         // An ImageIO thumbnail (audit I2): the whole cover is never decoded first, then shrunk.
         CoverLazyImage(url: source.url, fallback: source.fallback,
-                       request: { ImageSizeBuckets.request($0, box: pixelSize) }) { image, pictureSize, _ in
+                       request: { ImageSizeBuckets.request($0, box: pixelSize) }, reveal: reveal) { image, pictureSize, _ in
             // On the cover's frame when it has one (round 25 §G1): the decoded thumbnail keeps the picture's proportions.
             if let image { FramedCover(image, pictureSize: pictureSize) }
         }
