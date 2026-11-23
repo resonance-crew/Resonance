@@ -2,6 +2,7 @@ import DesignSystem
 import Foundation
 import ResonanceAPI
 import ResonanceKit
+import SwiftUI
 import Testing
 @testable import Resonance
 
@@ -174,5 +175,80 @@ import Testing
         press(three[0].id)
         #expect(state.passage == nil)
         #expect(sent == [three[0].id, nil])
+    }
+
+    // MARK: Round 32 (the owner, after 2.6.0 on the iPad)
+
+    private static let long = [
+        TapPassage(id: "a", text: String(repeating: "箱子堆滿了客廳，我坐在地上，第一次覺得安靜是屬於自己的。", count: 4)),
+        TapPassage(id: "b", text: String(repeating: "你不是失去了一個家，你是多了一個可以回去的地方。", count: 4)),
+        TapPassage(id: "c", text: String(repeating: "The quiet after moving out felt like mine — finally. ", count: 5)),
+    ]
+
+    private func dialog(_ passages: [TapPassage], room: CGFloat?) -> some View {
+        TapPassages(passages: passages, picked: nil, script: .cjk, onChoose: { _ in }, onSkip: {})
+            .environment(\.modalRoom, room)
+    }
+
+    /// §P1 — 「略过固定不动」, 「标题与段落文字合一滚动」: one scroll region (the title its first child, then the rows) and
+    /// the foot outside it, a quiet 略過 — the link dialog's words-alone button, never the tonal pill.
+    @Test func theTitleScrollsWithTheRowsAndTheQuietSkipStaysAtTheFoot() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Resonance/Features/Card/TapPassages.swift").standardized
+        let source = try String(contentsOf: url, encoding: .utf8)
+        let body = try #require(source.range(of: "var body: some View {")).upperBound
+        let view = String(source[body...])
+        let scroll = try #require(view.range(of: "ScrollView {"))
+        let title = try #require(view.range(of: "ModalTitle(L10n.Card.Tap.passageTitle)"))
+        let skip = try #require(view.range(of: "QuietTextButton(L10n.Card.Tap.passageSkip"))
+        #expect(scroll.lowerBound < title.lowerBound && title.lowerBound < skip.lowerBound)
+        // The foot comes after the scroll region closes (its frame cap), not inside it.
+        let cap = try #require(view.range(of: ".frame(maxHeight: TapPassageRules.regionHeight("))
+        #expect(cap.lowerBound < skip.lowerBound)
+        #expect(!view.contains("ModalCloseButton("))
+        #expect(TapPassageRules.footGap == 18 && TapPassageRules.titleGap == 10)
+    }
+
+    /// §P1 — the whole dialog always fits the stage: the region's cap is what the stage leaves less the foot, never
+    /// more than min(560, 70 % of the window); so the backdrop never scrolls it and 略過 never moves.
+    @Test func theDialogAlwaysFitsWhatTheStageLeavesIt() {
+        #expect(TapPassageRules.regionHeight(window: 2000, room: nil, foot: 62) == 560)
+        #expect(TapPassageRules.regionHeight(window: 2000, room: 3000, foot: 62) == 560)
+        #expect(TapPassageRules.regionHeight(window: 600, room: 500, foot: 62) == 420)
+        // An iPhone turned (402 tall less the margins and the paper's air): the stage, not the 70 %, holds it.
+        let room = ModalPaper.room(stage: 380)
+        #expect(abs(room - CGFloat(380 - 2 * 12 - 2 * 32)) < 0.001)
+        #expect(TapPassageRules.regionHeight(window: 402, room: room, foot: 62) == room - 62)
+        // Laid out: long passages in a short room take exactly the room, foot included — never more.
+        for room in [220.0, 300, 480] {
+            let size = dialogSize(dialog(Self.long, room: room), width: 344)
+            #expect(size.height <= room + 0.5, "room \(room): \(size.height)")
+            #expect(size.height >= room - 1, "room \(room): \(size.height)")
+        }
+        // Short passages: as short as they are, with no empty room.
+        let short = [TapPassage(id: "a", text: "第一段"), TapPassage(id: "b", text: "第二段")]
+        #expect(dialogSize(dialog(short, room: 480), width: 344).height < 300)
+    }
+
+    /// §P2 — 「区段与区段之间加上分隔线」: a rule between two rows, never above the first or under the last.
+    @Test func aRuleStandsBetweenTwoRowsOnly() throws {
+        #expect((0..<3).map(TapPassageRules.ruled(index:)) == [false, true, true])
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Resonance/Features/Card/TapPassages.swift").standardized
+        let source = try String(contentsOf: url, encoding: .utf8)
+        // The house's divider (its ink and light pen), inset to the words' start and end — the rows' own inset.
+        let rule = try #require(source.range(of: "private func rule(reach: CGFloat)")).upperBound
+        let body = String(source[rule...].prefix(300))
+        #expect(body.contains("WavyDivider("))
+        #expect(body.contains(".padding(.horizontal, reach)"))
+    }
+
+    /// §P3 — the passages' dialog has no flash: its rows are known when it opens, so its first layout is its last —
+    /// measured twice at the same width it answers the same height (nothing measured later grows or shrinks it).
+    @Test func thePassagesDialogsFirstLayoutIsItsLast() {
+        let first = dialogSize(dialog(Self.long, room: 900), width: 344)
+        let again = dialogSize(dialog(Self.long, room: 900), width: 344)
+        #expect(first == again)
+        #expect(first.height > 200)
     }
 }

@@ -340,11 +340,14 @@ struct OrganicModalStage<Card: View>: View {
                 // (the web's overflow-y: auto); a tap beside the card closes it.
                 ScrollView {
                     OrganicModalCard(seed: seed, maxWidth: maxWidth, clipsToPaper: clipsToPaper, content: card)
+                        // What the stage leaves the card (round 32 §P1): a dialog that must never outgrow it — the
+                        // passages' — caps its own scroll by it, so this backdrop never has to scroll.
+                        .environment(\.modalRoom, ModalPaper.room(stage: geo.size.height))
                         .contentShape(Rectangle())
                         .onTapGesture {}
                         .scaleEffect(shown ? 1 : 0.96)
                         .opacity(shown ? 1 : 0)
-                        .padding(12)
+                        .padding(ModalPaper.margin)
                         .frame(maxWidth: .infinity, minHeight: geo.size.height)
                         .contentShape(Rectangle())
                         .onTapGesture(perform: close)
@@ -402,7 +405,7 @@ struct OrganicModalCard<Content: View>: View {
         let shape = ModalShape(seed: seed)
         let card = VStack(alignment: .leading, spacing: 0) { content() }
             .padding(.horizontal, ModalPaper.inset)
-            .padding(.vertical, 32)
+            .padding(.vertical, ModalPaper.insetV)
             .frame(maxWidth: maxWidth, alignment: .leading)
         if clipsToPaper {
             // The clip's own frame stands ``ModalPaper/bleed`` past the paper's on every side, the paper drawn inside it and
@@ -445,6 +448,13 @@ public nonisolated enum ModalPaper {
     public static let inset: CGFloat = 28
     /// Past the frame, a side: more than the wobble's widest swing out at a dialog's sizes.
     public static let bleed: CGFloat = 16
+    /// The content's inset from the paper's frame, above and below.
+    public static let insetV: CGFloat = 32
+    /// The backdrop's margin round the paper, a side.
+    public static let margin: CGFloat = 12
+    /// The height a dialog's content may take on a stage `stage` tall (the backdrop's margins and the paper's own air
+    /// taken off): what a dialog that must always fit (the passages', round 32 §P1) caps itself by.
+    public static func room(stage: CGFloat) -> CGFloat { max(0, stage - 2 * margin - 2 * insetV) }
     /// The paper's outline in `rect` (the frame), as the dialog seeded `seed` draws it.
     public static func outline(in rect: CGRect, seed: Double) -> Path { ModalShape(seed: seed).path(in: rect) }
 }
@@ -452,6 +462,8 @@ public nonisolated enum ModalPaper {
 extension EnvironmentValues {
     /// The modal this view stands in clips its content to the paper (``ModalPaper``).
     @Entry public var modalPaperClips = false
+    /// The height the modal's stage leaves this dialog's content (``ModalPaper/room(stage:)``); nil outside a modal.
+    @Entry public var modalRoom: CGFloat? = nil
 }
 
 nonisolated struct ModalShape: Shape {
