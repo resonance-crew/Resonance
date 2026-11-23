@@ -43,6 +43,8 @@ export type TranslateState = 'can' | 'working' | 'translated' | 'original' | 'fa
 export interface Translation {
   title: string;
   story: string;
+  /** The card's passages as the translation says them (round 31): by id, the translation's words; absent when none. */
+  passages?: { id: string; text: string }[];
 }
 
 /** The cards kept original for the rest of this visit (顯示原文 under the auto-translate switch). */
@@ -86,8 +88,13 @@ async function askTranslation(key: string, to: TranslationTarget): Promise<Asked
       body: JSON.stringify({ to }),
     });
     if (res.ok) {
-      const body = (await res.json()) as { title?: unknown; story?: unknown };
-      if (typeof body.title === 'string' && typeof body.story === 'string') return { ok: true, translation: { title: body.title, story: body.story } };
+      const body = (await res.json()) as { title?: unknown; story?: unknown; passages?: unknown };
+      if (typeof body.title === 'string' && typeof body.story === 'string') {
+        const passages = Array.isArray(body.passages)
+          ? body.passages.filter((p): p is { id: string; text: string } => !!p && typeof p.id === 'string' && typeof p.text === 'string' && p.text.length > 0)
+          : [];
+        return { ok: true, translation: { title: body.title, story: body.story, ...(passages.length ? { passages } : {}) } };
+      }
       return { ok: false, why: 'failed' };
     }
     if (res.status === 429) return { ok: false, why: 'spent' };

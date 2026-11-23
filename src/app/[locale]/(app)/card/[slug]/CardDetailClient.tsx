@@ -13,6 +13,7 @@ import { publishedDate } from '@/lib/publishedDate';
 import { readMinutes, readSeconds } from '@/lib/readTime';
 import { storyType } from '@/lib/text/script';
 import { CardToc, storyHasContents, tocHeadings, type TocHeading } from '@/components/molecules/CardDetail/CardToc';
+import { tapInTranslation } from '@/components/molecules/CardDetail/translatedPassages';
 import { LatinMarkText } from '@/components/molecules/CardDetail/LatinMarkText';
 import { StoryByline } from '@/components/molecules/CardDetail/StoryByline';
 import { TranslateLine, useStoryTranslation } from '@/components/molecules/CardDetail/TranslateLine';
@@ -214,6 +215,9 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
     onSignIn: () => router.push('/signin'),
   });
   const story = tr.shown?.story ?? data?.card?.story;
+  // In translation (round 31 §R1–§R2): the passages and the picked sentences in the translation's words, by id —
+  // only those the translation says (the server placed them: TranslationResponse.passages).
+  const shownTap = useMemo(() => (tr.shown ? tapInTranslation(lists.tap, tr.shown.passages) : lists.tap), [tr.shown, lists.tap]);
   // What the page reads off the whole story — its reading time, whether it has contents, how its words are
   // set — once per story, not on every render of the page (W21: four scans of it each time).
   const cardStory = data?.card?.story ?? '';
@@ -323,8 +327,8 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   // on a published card only, never a draft, a private card, someone's 私人卡 shared in a thread, the trash or a
   // translation. The server answers `picked` to whoever may see it, each with the pickers their blocks let through.
   const shownPicked =
-    !trashed && !sharedPrivate && !!card.publishedAt && card.visibility !== 'private' && !tr.shown && lists.tap?.picked?.length
-      ? lists.tap.picked
+    !trashed && !sharedPrivate && !!card.publishedAt && card.visibility !== 'private' && shownTap?.picked?.length
+      ? shownTap.picked
       : undefined;
 
   // The card's share and ⋯: under its title (the byline's end) and again at its story's end (round 8 §10.2).
@@ -527,9 +531,10 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
                   initials: author.initials,
                   accentColor: author.accentColor,
                 }}
-                tap={lists.tap}
+                tap={shownTap}
                 trailing={phone === false ? passive : undefined}
-                translated={!!tr.shown}
+                // (in translation the dialog is offered only with the passages the translation says: shownTap's)
+                translated={!!tr.shown && !shownTap?.passages?.length}
                 script={type.script}
               />
             )}
