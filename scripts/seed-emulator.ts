@@ -29,7 +29,8 @@ async function main() {
   const { getFirestore, Timestamp } = await import('firebase-admin/firestore');
   const { translationHash } = await import('../src/lib/api/v1/translationHash');
   const { summaryHash } = await import('../src/lib/api/v1/summaryTranslations');
-  const { offlinePassages, passagesHash, PASSAGES_VERSION } = await import('../src/lib/cards/tapPassages');
+  const { passagesHash, PASSAGES_VERSION } = await import('../src/lib/cards/tapPassages');
+  const { RICH_STORY, RICH_STORY_TITLE, RICH_STORY_PASSAGES } = await import('./seed/pinned');
   const { summarize } = await import('../src/lib/api/v1/summary');
 
   const app = initializeApp({ projectId: EMULATOR_PROJECT_ID }, 'seed');
@@ -126,31 +127,19 @@ async function main() {
   await card(
     'rich-story',
     'alice',
-    '搬家後的第一個安靜夜晚',
-    [
-      '箱子堆滿了客廳，我坐在地上，第一次覺得**安靜是屬於自己的**。窗外有人在*慢慢地*收衣服。',
-      '## 那些帶不走的東西',
-      '有些東西在打包的時候就決定留下了：舊沙發、一面有裂痕的鏡子，還有 [一篇讀過很多次的文章](https://example.com/essay)。',
-      '> 你不是失去了一個家，\n> 你是多了一個可以回去的地方。',
-      '\u00A0',
-      '### 清單',
-      '- 把書按照顏色排好\n- 在窗台放一盆薄荷\n- 寫信給十年前的自己',
-      '1. 先睡一覺\n2. 再說',
-      '延伸閱讀：',
-      '[一場雨後的散步](/card/rain-walk)',
-      '也可以看看 [第一杯自己沖的咖啡](/card/first-coffee) 這張，寫得很溫柔。',
-      '---',
-      'The quiet after moving out felt like mine — *finally*.',
-    ].join('\n\n'),
+    RICH_STORY_TITLE,
+    RICH_STORY,
     45,
     290,
   );
-  // Its tap passages (round 27 §V1): the offline pick the emulators' own publish makes, so the reader's dialog
-  // after 共振 has alice's own sentences to offer (scripts/visual/screens.ts card-passages). Written here whatever
-  // the floor says: the story is the only seeded one near it, and no new card moves the lists' baselines.
+  // Its tap passages (round 27 §V1), so the reader's dialog after 共振 has alice's own sentences to offer
+  // (scripts/visual/screens.ts card-passages). Written here whatever the floor says: the story is the only seeded
+  // one near it, and no new card moves the lists' baselines. PINNED (the owner, 2026-11-23: 「這種資料應該要把它固定
+  // 下來，不能每次都叫 AI 重標」): the words are what passages v2's offline pick made of this story, written out, so a
+  // later change to the pick never moves the screenshots — tapPassages.test.ts says when they drift from it.
   {
     const rich = (await db.doc('cards/rich-story').get()).data()!;
-    const items = offlinePassages(rich.story, { title: rich.thoughtCore });
+    const items = RICH_STORY_PASSAGES;
     await db.doc('cards/rich-story').update({ tapPassages: { of: passagesHash(rich.story), items, model: 'offline', v: PASSAGES_VERSION, at: at(45) } });
   }
 
