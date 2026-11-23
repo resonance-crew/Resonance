@@ -87,9 +87,10 @@ nonisolated enum ChatPictures {
         cache.totalCostLimit = 96 * 1024 * 1024
     }
 
-    /// The picture, if it is at hand now.
+    /// The picture, if it is at hand now: for the thread's size, the full one does as well (one sent from here).
     func cached(_ id: String, _ size: Size) -> UIImage? {
-        cache.object(forKey: Self.key(id, size) as NSString)
+        if let kept = cache.object(forKey: Self.key(id, size) as NSString) { return kept }
+        return size == .thumb ? cache.object(forKey: Self.key(id, .full) as NSString) : nil
     }
 
     /// The picture at `size`, read if it isn't at hand — nil when it couldn't be (offline, the server's
@@ -115,9 +116,9 @@ nonisolated enum ChatPictures {
     }
 
     /// A picture sent from here, drawn from the device under the id the server keeps it by (the
-    /// message's client id) at either size, until the server's own is read.
+    /// message's client id) at either size, until the server's own is read. Kept once, as the full size (which
+    /// `cached` hands the thread's size too): under both keys the one bitmap counted twice against the cap (IOS-10).
     func keep(_ image: UIImage, for id: String) {
-        remember(image, Self.key(id, .thumb))
         remember(image, Self.key(id, .full))
     }
 
