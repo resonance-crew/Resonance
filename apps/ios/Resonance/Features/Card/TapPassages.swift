@@ -138,8 +138,9 @@ nonisolated enum TapPassageRules {
     /// What of a row stands past the paper's frame, a side (none when it stays inside).
     static func overhang(reach: CGFloat) -> CGFloat { max(0, reach - ModalPaper.inset) }
 
-    /// The list scrolls inside at most min(420, 55 % of the window's height) — the reader list's cap.
-    static func listHeight(window: CGFloat) -> CGFloat { min(420, window * 0.55) }
+    /// The list scrolls inside at most min(560, 70 % of the window's height) (Wave 2 #3a: passages of 2–3 whole
+    /// sentences, ~100 characters each, wrapped in full — the web's cap too).
+    static func listHeight(window: CGFloat) -> CGFloat { min(560, window * 0.7) }
 
     /// A pick's request refused: the options changed or the tap went (400, 409) → the dialog closes quietly and the card
     /// is read again; anything else → 「沒送出去，再試一次」, the tap kept on with no passage.
@@ -155,13 +156,13 @@ nonisolated enum TapRowLine: Equatable {
     case quote(String)
     case pick
 
-    /// The author's list: each person's pick. A reader's list: their own row only — every other row none, whatever
-    /// the server sent (it sends none).
+    /// The author's list: each person's pick. A reader's list (Wave 2 #3b: everyone who resonated): every other row
+    /// the pick the server sent for it, the reader's own as the page holds it.
     static func of(_ person: TapPerson, authorList: Bool, viewer: String?, offersPassages: Bool,
                    pagePick: PagePick? = nil) -> TapRowLine? {
         let listed = person.passage?.value1.text
         if authorList { return listed.map(TapRowLine.quote) }
-        guard let viewer, person.author.id == viewer else { return nil }
+        guard let viewer, person.author.id == viewer else { return listed.flatMap { $0.isEmpty ? nil : .quote($0) } }
         // On a card offering passages the page knows the reader's pick before the list does (the list may have been
         // read while the pick's request was still on its way): the own row says the page's, as the web's.
         let text = offersPassages && pagePick != nil ? pagePick?.text : listed

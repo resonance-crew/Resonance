@@ -38,8 +38,9 @@ import Testing
     @Test func theDialogIsTheReaderListsWidthAndScrollsInsideItsCap() {
         #expect(TapListMetrics.readerWidth(compact: true) == 400)
         #expect(TapListMetrics.readerWidth(compact: false) == 480)
-        #expect(TapPassageRules.listHeight(window: 2000) == 420)
-        #expect(TapPassageRules.listHeight(window: 600) == 330)
+        // Wave 2 #3a: ~100-character passages, so min(560, 70 % of the window).
+        #expect(TapPassageRules.listHeight(window: 2000) == 560)
+        #expect(TapPassageRules.listHeight(window: 600) == 420)
         #expect(TapPassageRules.textSize == 16 && TapPassageRules.checkSize == 16)
     }
 

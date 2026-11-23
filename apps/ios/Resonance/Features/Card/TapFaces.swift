@@ -220,8 +220,9 @@ struct TapListState: View {
 }
 
 /// A reader's list of who resonated (§U2.5): a centred dialog on every device — a phone's, a tablet's, the Mac's — with
-/// no visible title (the reader sees only their own connections, and a title would claim everyone), the rows banded,
-/// 60 tall with faces of 36, each leading to that person's page; then the dialog's 關閉 at its foot's end.
+/// no visible title, the rows banded, 60 tall with faces of 36 — since Wave 2 #3b everyone who resonated, newest first,
+/// each with the sentence they picked, paged with 顯示更多 — each leading to that person's page; then the dialog's 關閉 at
+/// its foot's end.
 struct ReaderTapList: View {
     let cardId: String
     /// The card offers passages (round 27 §U3): the reader's own row says their pick or 選一段, and opens the dialog.
@@ -247,6 +248,14 @@ struct ReaderTapList: View {
                         openRoute(TapPersonRow.route(for: person))
                     }
                     TapListState(people: people)
+                    // Wave 2 #3b: everyone who resonated, paged as the author's list is.
+                    if people.next != nil {
+                        OrganicButton(L10n.Home.moreBtn, variant: .tonal, size: .sm) { Task { await people.more() } }
+                            .loading(people.loadingMore)
+                            .fixedSize()
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 12)
+                    }
                 }
                 .scrollIndicators(.hidden)
                 .scrollBounceBehavior(.basedOnSize)

@@ -9,7 +9,7 @@ import Testing
 /// Round 29 §S4 (the owner: 「點選這個highlight的字都可以開啟這個誰共振了這一句。那作者的話他可能就可以多看一下那一個人回覆的
 /// 小紙條」, 「只列這一段的人」): pressing a picked sentence — its faces or its wash — opens a centred dialog of the people who
 /// picked that sentence, newest first, each row as the author's list draws it but without the quote (the sentence is
-/// the head), leading where that person's row in the author's list leads. Only the author's own page washes anything.
+/// the head), leading where that person's row in the author's list leads. Since Wave 2 #3b a reader's page washes too.
 @MainActor @Suite struct PickedPeopleTests {
     private func person(_ id: String, note: String? = nil) -> TapPerson {
         TapPerson(author: Fixture.author(id), note: note.map { .init(value1: .init(excerpt: $0)) }, passage: .init(value1: .init(text: "不該出現的引文")))
@@ -62,15 +62,61 @@ import Testing
         #expect(PickedPeople.passages(nil).isEmpty)
     }
 
-    @Test func onlyTheAuthorsOwnPageInItsOwnWordsWashes() {
+    /// Wave 2 #3b (the owner: 「讓讀者也能夠看到自己與別人按的共振高亮與人頭，像按讚一樣大家都可以看到誰按」): a reader's page
+    /// washes what the server sends in `picked`, as the author's does — never a draft, a private card, one in the trash,
+    /// nor a translation.
+    @Test func everyReadersPageInItsOwnWordsWashesWhatTheServerSent() {
         let card = Fixture.card("rich-story", by: "alice")
-        let author = Fixture.detail(card, tap: Fixture.tap(faces: ["gus"]), isOwner: true)
-        let reader = Fixture.detail(card, tap: Fixture.tap(faces: ["gus"]), isOwner: false)
+        var tap = Fixture.tap(mine: true, faces: ["dora", "gus"])
+        tap.picked = [picked("14fecaaf", "我坐在地上，第一次覺得安靜是屬於自己的。", people: ["dora", "gus"])]
+        let author = Fixture.detail(card, tap: tap, isOwner: true)
+        let reader = Fixture.detail(card, tap: tap, isOwner: false)
         #expect(PickedPeople.washes(author, trashed: false, translated: false))
-        #expect(!PickedPeople.washes(reader, trashed: false, translated: false))
-        #expect(!PickedPeople.washes(author, trashed: true, translated: false))
-        #expect(!PickedPeople.washes(author, trashed: false, translated: true))
-        #expect(!PickedPeople.washes(Fixture.detail(card, tap: nil, isOwner: true), trashed: false, translated: false))
+        #expect(PickedPeople.washes(reader, trashed: false, translated: false))
+        let readerTap = reader.tap?.value1
+        let readerPassages = PickedPeople.passages(readerTap)
+        #expect(readerPassages.map(\.id) == ["14fecaaf"])
+        #expect(readerPassages.first.map { $0.faces.map(\.id) } == ["dora", "gus"])
+        // A reader's answer with no `picked`: nothing washed.
+        let bare = Fixture.detail(card, tap: Fixture.tap(faces: ["gus"]), isOwner: false)
+        let bareTap = bare.tap?.value1
+        let barePassages = PickedPeople.passages(bareTap)
+        #expect(barePassages.isEmpty)
+        // The gates kept.
+        #expect(!PickedPeople.washes(reader, trashed: true, translated: false))
+        #expect(!PickedPeople.washes(reader, trashed: false, translated: true))
+        #expect(!PickedPeople.washes(Fixture.detail(card, tap: nil, isOwner: false), trashed: false, translated: false))
+        #expect(!PickedPeople.washes(Fixture.detail(Fixture.card("p", by: "alice", visibility: "private"), tap: tap, isOwner: true),
+                                     trashed: false, translated: false))
+        var draft = card
+        draft.publishedAt = nil
+        #expect(!PickedPeople.washes(Fixture.detail(draft, tap: tap, isOwner: true), trashed: false, translated: false))
+        var binned = card
+        binned.trashedAt = "2026-11-20T08:00:00.000Z"
+        #expect(!PickedPeople.washes(Fixture.detail(binned, tap: tap, isOwner: false), trashed: false, translated: false))
+    }
+
+    /// The press on a reader's wash opens the same who-picked-this-sentence dialog as the author's: the page's marks
+    /// open it with no owner's gate, and each reader row (no note) leads to that person's profile.
+    @Test func aReadersPressOpensWhoPickedThatSentence() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Resonance/Features/Card/CardScreen.swift").standardized
+        let source = try String(contentsOf: url, encoding: .utf8)
+        let marks = try #require(source.range(of: "private func passageMarks(")).upperBound
+        let body = String(source[marks...].prefix(900))
+        #expect(body.contains("openPicked(PickedPeople.Passage("))
+        #expect(!body.contains("isOwner"))
+        let gate = try String(contentsOf: url.deletingLastPathComponent().appendingPathComponent("PickedPeople.swift"), encoding: .utf8)
+        let washes = try #require(gate.range(of: "static func washes(")).upperBound
+        #expect(!String(gate[washes...].prefix(300)).contains("isOwner"))
+        // Their own face and wash come in without leaving the page: the card is read again after the tap and the pick.
+        let row = try String(contentsOf: url.deletingLastPathComponent().appendingPathComponent("CardEndRow.swift"), encoding: .utf8)
+        let pick = try #require(row.range(of: "_ = try await api.setTapPassage(id, passage: choice)")).upperBound
+        #expect(String(row[pick...].prefix(200)).contains("reload()"))
+        #expect(row.contains("} else if !opens {"))
+        #expect(row.contains("rereadAfterDialog()"))
+        // A reader's row has no note: to the profile.
+        #expect(PickedPeople.route(for: TapPerson(author: Fixture.author("gus"), note: nil, passage: nil)) == .author("gus"))
     }
 
     @Test func aRowHasNoQuoteAndLeadsWhereTheAuthorsListLeads() {

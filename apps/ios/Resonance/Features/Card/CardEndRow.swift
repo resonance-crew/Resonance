@@ -32,7 +32,8 @@ struct CardEndRow: View {
     let script: StoryScript
     /// The translation shows in place of the story: no passages are offered (they are the author's own words).
     let translated: Bool
-    /// Reads the card again (a pick refused because its passages changed or the tap went).
+    /// Reads the card again: a pick refused because its passages changed or the tap went, and (Wave 2 #3b) after each
+    /// tap and pick the server took, so the reader's face and wash show on the story at once.
     let reload: () -> Void
     @Environment(SessionStore.self) private var session
     @Environment(WriteLauncher.self) private var writer
@@ -65,6 +66,8 @@ struct CardEndRow: View {
     @State private var tapSend: Task<Bool?, Never>?
     /// The screenshots' `-visualTap picked`: the dialog held open on its pick, nothing sent.
     @State private var passagesHeld = false
+    /// A pick was sent from the dialog's opening: its answer reads the card again, not the dialog's closing.
+    @State private var passagePicked = false
     /// The story's column, which the capsule's words are weighed in (the note field spans it at every width).
     @State private var column: CGFloat = 0
 
@@ -129,7 +132,7 @@ struct CardEndRow: View {
             }
             .withSession(session)
         }
-        // The reader's list of who resonated: a centred dialog with no title (the reader sees only their connections),
+        // The reader's list of who resonated: a centred dialog with no title (everyone, since Wave 2 #3b),
         // a phone's, a tablet's and the Mac's alike.
         .organicModal(isPresented: $listOpen, seed: 29, maxWidth: TapListMetrics.readerWidth(compact: compact), closeLabel: L10n.Native.close) {
             ReaderTapList(cardId: cardId, offersPassages: offersPassages,
@@ -146,7 +149,13 @@ struct CardEndRow: View {
             }
         }
         .onChange(of: translated) { _, now in if now { passagesOpen = false } }
-        .onChange(of: passagesOpen) { _, open in if open { passagePress.reopen() } }
+        .onChange(of: passagesOpen) { _, open in
+            if open {
+                passagePress.reopen()
+            } else {
+                rereadAfterDialog()
+            }
+        }
         // The note field opens again, focused, on its words: the toast's 再寄一次, or a failure while the page is here.
         .onAppear {
             session.noteSends.host(cardId, true)
@@ -313,8 +322,10 @@ struct CardEndRow: View {
         let api = session.reading, id = cardId, toasts = session.toasts
         let send = Task { try? await (turningOn ? api.tap(id) : api.untap(id)) }
         tapSend = send
-        if TapPassageRules.opens(turningOn: turningOn, passages: tap.passages, translated: translated) {
+        let opens = TapPassageRules.opens(turningOn: turningOn, passages: tap.passages, translated: translated)
+        if opens {
             passagesHeld = false
+            passagePicked = false
             Task {
                 try? await Task.sleep(for: TapPassageRules.delay(TapPassageRules.openDelay, reduceMotion: reduceMotion))
                 if tap.on { passagesOpen = true }
@@ -326,7 +337,22 @@ struct CardEndRow: View {
             if result == nil {
                 passagesOpen = false
                 toasts.show(L10n.Card.Tap.failed)
+            } else if !opens {
+                // Wave 2 #3b: the card read again, so the reader's face and their sentence's wash show (or go) on the
+                // page at once. With the dialog open, it is read once that closes, or once the pick has answered.
+                reload()
             }
+        }
+    }
+
+    /// The passages' dialog closed with nothing sent from it (略過, the backdrop): the card read again once the tap's
+    /// own request has answered (Wave 2 #3b) — a pick reads it again itself, once the server has it.
+    private func rereadAfterDialog() {
+        guard !passagePicked, !passagesHeld else { return }
+        let send = tapSend, reload = reload
+        Task {
+            if let send { _ = await send.value }
+            reload()
         }
     }
 
@@ -342,6 +368,7 @@ struct CardEndRow: View {
         let before = tap.passage
         tap.pick(choice)
         guard !passagesHeld else { return }
+        passagePicked = true
         Task {
             try? await Task.sleep(for: TapPassageRules.delay(TapPassageRules.closeDelay, reduceMotion: reduceMotion))
             passagesOpen = false
@@ -352,6 +379,8 @@ struct CardEndRow: View {
             if let send, await send.value != true { return }
             do {
                 _ = try await api.setTapPassage(id, passage: choice)
+                // Wave 2 #3b: read again, so the sentence's wash and the reader's face beside it show at once.
+                reload()
             } catch {
                 if tap.passage == choice { tap.pick(before) }
                 switch TapPassageRules.refusal(status: (error as? APIFailure)?.status) {
@@ -368,6 +397,7 @@ struct CardEndRow: View {
     /// The reader's own row in the list (§U3): the list closes, then the dialog opens on the pick as it stands.
     private func openPassagesFromList() {
         passagesHeld = false
+        passagePicked = false
         Task {
             // The list's cover goes first (its scrim lifts in 160 ms), so the two never stand at once.
             try? await Task.sleep(for: .milliseconds(reduceMotion ? 200 : 360))
