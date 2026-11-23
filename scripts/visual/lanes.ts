@@ -46,7 +46,7 @@ export class BlockQueue<T> {
  * down by this run (else a third device would run beside the two), and not turned off (`VISUAL_SECOND_PHONE=0`, or
  * `VISUAL_PARALLEL=0`: one device at a time).
  */
-export function secondPhoneWanted({ left, tabletDown, env = process.env }: { left: number; tabletDown: boolean; env?: NodeJS.ProcessEnv }): boolean {
+export function secondPhoneWanted({ left, tabletDown, env = process.env }: { left: number; tabletDown: boolean; env?: Record<string, string | undefined> }): boolean {
   if (env.VISUAL_SECOND_PHONE === '0' || env.VISUAL_PARALLEL === '0') return false;
   return left >= 1 && tabletDown;
 }
