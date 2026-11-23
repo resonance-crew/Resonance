@@ -89,41 +89,46 @@ class SegmentedLayoutTest {
         assertFalse(SegmentedLayout.alone(collapse = 0, icon = true, step = 2))
     }
 
-    // The publish step's four card types (Wave 2): 公開 · 連結的人 · 匿名公開 · 私人卡, each glyph droppable.
+    // The publish step's four card types (2026-11-23): 公開 · 連結的人 · 匿名公開 · 私人卡 as a grid (SegmentGrid) — one
+    // row while each glyph and its whole words fit an equal share, else 2×2, else one to a row; never cut or shrunk.
 
-    private val four = listOf(true, true, true, true)
-
-    @Test fun fourCardTypesKeepTheirGlyphsWhileTheyFit() {
-        val labels = listOf(28f, 56f, 56f, 42f)
-        val need = labels.sumOf { own(it).toDouble() }.toFloat()
-        assertEquals(four, SegmentedLayout.shownIcons(labels, four, four, need, spread = true))
-        assertEquals(1f, SegmentedLayout.labelScale(labels, four, four, need, spread = true))
+    @Test fun fourCardTypesStandInOneRowWhileAnEqualShareHoldsTheWidest() {
+        val naturals = listOf(28f, 56f, 56f, 42f).map { SegmentGrid.natural(it, icon = true) }
+        assertEquals(listOf(4, 2, 1), SegmentGrid.columnSteps(4))
+        assertEquals(4, SegmentGrid.columns(4 * naturals.max(), naturals))
+        assertEquals(4, SegmentGrid.columns(640f, naturals))
     }
 
-    @Test fun tooNarrowForEveryGlyphTheGlyphsGoAndTheWordsStayWhole() {
+    @Test fun onAPhoneTheyStandTwoByTwoEveryGlyphAndWordKept() {
         // English on a 360 phone (328 of room): Public · Connections · Anonymous · Private.
-        val labels = listOf(45f, 82f, 74f, 50f)
-        val shown = SegmentedLayout.shownIcons(labels, four, four, 328f, spread = true)
-        assertEquals(listOf(false, false, false, false), shown)
-        assertEquals(1f, SegmentedLayout.labelScale(labels, shown, four, 328f, spread = true))
-        val widths = SegmentedLayout.widths(labels, shown, listOf(0, 0, 0, 0), 328f, spread = true)
-        // Every segment at least its words and their padding: nothing cut, the row exactly the room.
-        labels.forEachIndexed { i, w -> assertTrue(widths[i] >= w + 2 * SegmentedLayout.PAD) }
-        assertEquals(328f, widths.sum(), 0.01f)
-        // A glyph that may not go stays.
-        assertEquals(listOf(true, false, false, false), SegmentedLayout.shownIcons(labels, four, listOf(false, true, true, true), 328f, spread = true))
+        val en = listOf(45f, 82f, 74f, 50f).map { SegmentGrid.natural(it, icon = true) }
+        assertEquals(2, SegmentGrid.columns(328f, en))
+        // Each cell, half the room, holds its glyph and words whole.
+        en.forEach { assertTrue(it <= 328f / 2) }
+        // 連結的人 at the owner's 1.5 text size: still 2×2, nothing smaller.
+        val zh = listOf(42f, 84f, 84f, 63f).map { SegmentGrid.natural(it, icon = true) }
+        assertEquals(2, SegmentGrid.columns(328f, zh))
     }
 
-    @Test fun evenWithoutGlyphsTooWideTheWordsGetSmallerNeverCut() {
-        // 連結的人 at a 1.5 text size on a narrow phone.
-        val labels = listOf(42f, 84f, 84f, 63f)
-        val shown = SegmentedLayout.shownIcons(labels, four, four, 300f, spread = true)
-        val scale = SegmentedLayout.labelScale(labels, shown, four, 300f, spread = true)
-        assertTrue(scale < 1f && scale >= SegmentedLayout.MIN_LABEL_SCALE)
-        val scaled = labels.map { it * scale }
-        val widths = SegmentedLayout.widths(scaled, shown, listOf(0, 0, 0, 0), 300f, spread = true)
-        scaled.forEachIndexed { i, w -> assertTrue(widths[i] >= w + 2 * SegmentedLayout.PAD) }
-        // A bar with nothing droppable keeps its words' size.
-        assertEquals(1f, SegmentedLayout.labelScale(labels, four, listOf(false, false, false, false), 300f, spread = true))
+    @Test fun atTheLargestTextTheyStackOneToARow() {
+        // 2× text on a 320 phone (288 of room): 連結的人 at 112 is wider than half.
+        val zh = listOf(56f, 112f, 112f, 84f).map { SegmentGrid.natural(it, icon = true) }
+        assertEquals(1, SegmentGrid.columns(288f, zh))
+        zh.forEach { assertTrue(it <= 288f) }
+    }
+
+    @Test fun theGridsSeamsMeetAtTheCellsCorners() {
+        // One row is the bar's seams, seeded seed + i·37 + 11.
+        assertEquals(71.0 + 11, SegmentGrid.downSeed(71.0, 4, 0, 1), 0.0)
+        assertEquals(71.0 + 37 + 11, SegmentGrid.downSeed(71.0, 4, 0, 2), 0.0)
+        // 2×2: a cell's right side and its neighbour's left are one wave, and the cell below shares the seam across.
+        val a = SegmentGrid.region(0, 0, 2, 2, 340f, 96f, 71.0)
+        val b = SegmentGrid.region(0, 1, 2, 2, 340f, 96f, 71.0)
+        val seam = SegmentGrid.down(170f, 0f, 48f, SegmentGrid.downSeed(71.0, 2, 0, 1))
+        seam.forEach { assertTrue(it in a && it in b) }
+        val across = SegmentGrid.across(48f, 0f, 170f, SegmentGrid.acrossSeed(71.0, 2, 1, 0))
+        val below = SegmentGrid.region(1, 0, 2, 2, 340f, 96f, 71.0)
+        across.forEach { assertTrue(it in a && it in below) }
+        assertEquals(4, SegmentGrid.seams(2, 2, 340f, 96f, 71.0).size)
     }
 }

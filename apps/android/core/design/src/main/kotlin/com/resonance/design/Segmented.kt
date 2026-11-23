@@ -83,11 +83,6 @@ class Segment(
     val iconStroke: Float = Tokens.InkStrong.value,
     /** Working on its tap (design note B6): its loader in the glyph's place, its words kept, no tap; heard as busy. */
     val loading: Boolean = false,
-    /**
-     * A choice's glyph that goes once the bar's words, each beside its glyph, no longer fit its room in one row
-     * (the publish step's four card types on a phone, Wave 2; the web's `iconDroppable`): the words stay.
-     */
-    val iconDroppable: Boolean = false,
     /** A switch's state (`aria-pressed`, round 26 §U1: 共振 on or off); null for a plain button. */
     val toggled: Boolean? = null,
     /** What it opens is open (`aria-expanded`, round 26: 寄小紙條's field); null when it opens nothing in place. */
@@ -110,7 +105,7 @@ private val SegmentLabelStyle: androidx.compose.ui.text.TextStyle
 
 /** The words of [segments] measured as a [SegmentedActionBar] draws them (dp): one line, 14 at 600. */
 @Composable
-private fun segmentLabelWidths(segments: List<Segment>): List<Float> {
+internal fun segmentLabelWidths(segments: List<Segment>): List<Float> {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val style = SegmentLabelStyle
@@ -126,10 +121,8 @@ fun segmentCentre(segments: List<Segment>, width: Dp, index: Int = 0): Dp {
     val labels = segmentLabelWidths(segments)
     val room = width.value
     val spread = room < SegmentedLayout.SPREAD_BELOW
-    val droppable = segments.map { it.iconDroppable }
-    val icons = SegmentedLayout.shownIcons(labels, segments.map { it.icon != null }, droppable, room, spread)
-    val scale = SegmentedLayout.labelScale(labels, icons, droppable, room, spread)
-    return SegmentedLayout.centre(labels.map { it * scale }, icons, segments.map { it.collapse }, room, spread, index).dp
+    val icons = segments.map { it.icon != null }
+    return SegmentedLayout.centre(labels, icons, segments.map { it.collapse }, room, spread, index).dp
 }
 
 /**
@@ -165,13 +158,9 @@ fun SegmentedActionBar(
     BoxWithConstraints(modifier) {
         val room = maxWidth.value
         val spread = room < SegmentedLayout.SPREAD_BELOW
-        // Too narrow for every glyph beside its words: the droppable glyphs go, their words stay.
-        val droppable = segments.map { it.iconDroppable }
-        val icons = SegmentedLayout.shownIcons(labelWidths, segments.map { it.icon != null }, droppable, room, spread)
-        // Even without them the words don't fit (a large text size on a narrow phone): smaller, never cut.
-        val scale = SegmentedLayout.labelScale(labelWidths, icons, droppable, room, spread)
-        val labels = labelWidths.map { it * scale }
-        val labelStyle = if (scale < 1f) style.copy(fontSize = style.fontSize * scale) else style
+        val icons = segments.map { it.icon != null }
+        val labels = labelWidths
+        val labelStyle = style
         val collapse = segments.map { it.collapse }
         val widths = SegmentedLayout.widths(labels, icons, collapse, room, spread)
         val step = SegmentedLayout.steps(labels, icons, collapse, room, spread)
@@ -292,39 +281,6 @@ object SegmentedLayout {
 
     /** A segment's own width: its padding, glyph, gap and label — and a dp to spare, so rounding to pixels never cuts the label. */
     private fun natural(label: Float, icon: Boolean, pad: Float) = 2 * pad + label + (if (icon) ICON + GAP else 0f) + 1f
-
-    /**
-     * Which segments draw their glyph: every one that has one ([icons]) — unless the words, each beside its glyph,
-     * need more than [room] in one row, when those that may drop theirs ([droppable]) go without (the web's
-     * `dropsIcons`): the words stay, never cut, never wrapped.
-     */
-    fun shownIcons(labels: List<Float>, icons: List<Boolean>, droppable: List<Boolean>, room: Float, spread: Boolean): List<Boolean> {
-        if (droppable.none { it }) return icons
-        val pad = if (spread) PAD else WIDE_PAD
-        val need = labels.indices.sumOf { natural(labels[it], icons[it], pad).toDouble() }
-        if (need <= room + 0.5f) return icons
-        return icons.mapIndexed { i, on -> on && !droppable[i] }
-    }
-
-    /**
-     * How much a bar whose glyphs may go ([droppable]) shrinks its words so they still fit [room] in one row once
-     * the glyphs are gone ([icons]: those still drawn) — 1 while they fit at their size, never below
-     * [MIN_LABEL_SCALE]: on the narrowest phone at a large text size four card types' words are smaller rather
-     * than cut or wrapped. A bar with nothing droppable keeps its words' size (its own steps and ellipsis answer).
-     */
-    fun labelScale(labels: List<Float>, icons: List<Boolean>, droppable: List<Boolean>, room: Float, spread: Boolean): Float {
-        if (droppable.none { it }) return 1f
-        val pad = if (spread) PAD else WIDE_PAD
-        val words = labels.sum()
-        if (words <= 0f) return 1f
-        val fixed = labels.indices.sumOf { (natural(labels[it], icons[it], pad) - labels[it]).toDouble() }.toFloat()
-        if (fixed + words <= room + 0.5f) return 1f
-        // A little under the exact share: text measured at a smaller size isn't exactly proportional.
-        return ((room - fixed) / words * 0.97f).coerceIn(MIN_LABEL_SCALE, 1f)
-    }
-
-    /** The smallest [labelScale]: words under 0.7 of their size would no longer read as the bar's. */
-    const val MIN_LABEL_SCALE = 0.7f
 
     /** Whether a segment that gives up its words at [collapse] shows its glyph alone at [step] (it has a glyph to show). */
     fun alone(collapse: Int, icon: Boolean, step: Int): Boolean = icon && collapse in 1..step

@@ -637,6 +637,8 @@ object Tokens {
     const val PublishSectionGap = 48f
     /** --publish-section-gap-compact */
     const val PublishSectionGapCompact = 40f
+    /** --publish-hint-gap-compact */
+    const val PublishHintGapCompact = 28f
     /** --publish-label-gap */
     const val PublishLabelGap = 12f
     /** --story-meta-size */

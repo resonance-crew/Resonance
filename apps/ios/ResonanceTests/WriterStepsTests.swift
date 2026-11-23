@@ -319,7 +319,10 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         let live = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: quiet.calls, opened: card(published: true))
         #expect(await live.goNext())
         #expect(!PublishStep.bandUnderBar(live, showsBar: true, compact: true))
-        #expect(PublishStep.topPadding(live, showsBar: true, compact: true) == PenLineGap.fromFoot(Tokens.storyHeadGapCompact))
+        // …closer under the line on a phone (2026-11-23: --publish-hint-gap-compact), a tablet's as before.
+        #expect(PublishStep.topPadding(live, showsBar: true, compact: true) == PenLineGap.fromFoot(Tokens.publishHintGapCompact))
+        #expect(Tokens.publishHintGapCompact < Tokens.storyHeadGapCompact)
+        #expect(PublishStep.topPadding(live, showsBar: true, compact: false) == PenLineGap.fromFoot(Tokens.storyHeadGap))
     }
 
     @Test func theAudienceChosenInTheStepIsSavedAndKeptGoingBack() async {
@@ -362,29 +365,37 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(kept.audience == .connections)
     }
 
-    /// Wave 2's fit: the four card types with their glyphs don't fit the narrowest phone's column (375 less a 16
-    /// gutter a side) in English, so the glyphs go — a bar whose segments are all droppable tries its words alone
-    /// before anything is cut — and the words alone fit there, whole, on the tight air.
-    @Test func theFourCardTypesDropTheirGlyphsBeforeTheirWordsOnTheNarrowestPhone() throws {
-        let font = AppFonts.uiFont(.body, size: 14, weight: .semibold)
-        func width(_ words: String) -> CGFloat { ceil((words as NSString).size(withAttributes: [.font: font]).width) }
-        let column: CGFloat = 375 - 32
-        for labels in [["Public", "Connections", "Anonymous", "Private"], ["公開", "連結的人", "匿名公開", "私人卡"]] {
-            let words = labels.map(width)
-            let withGlyphs = words.reduce(0) { $0 + $1 + 16 + 6 + 24 }
-            let wordsTight = words.reduce(0) { $0 + $1 + 16 }
-            #expect(wordsTight <= column, "\(labels): \(wordsTight)")
-            if labels[0] == "Public" { #expect(withGlyphs > column, "\(withGlyphs)") }
+    /// The four card types (2026-11-23): one row while each glyph and its whole words fit an equal share of the
+    /// column, else 2×2, else one to a row — never cut, shrunk or glyphless. On the narrowest phone (375 less a 16
+    /// gutter a side) they stand 2×2 in both languages, whole, glyphs and all; at the largest accessibility text
+    /// half that column is too little and they stack; a tablet's column keeps them in one row.
+    @Test func theFourCardTypesStandTwoByTwoOnAPhoneAndNeverCutTheirWords() throws {
+        func naturals(_ labels: [String], scale: CGFloat = 1) -> [CGFloat] {
+            let font = AppFonts.uiFont(.body, size: 14 * scale, weight: .semibold)
+            return labels.map { ceil(($0 as NSString).size(withAttributes: [.font: font]).width) + 16 + 6 + 24 }
         }
-        let spec = SegmentSpec(id: "connections", icon: .users, label: "Connections", iconDroppable: true) {}
-        #expect(spec.iconDroppable && SegmentedActionBar.wordsAlone(spec).icon == nil)
-        #expect(SegmentedActionBar.wordsAlone(spec).label == "Connections")
-        // Never the glyph alone: none of the card types collapses.
-        #expect(!spec.collapsible)
+        let phone: CGFloat = 375 - 32
+        for labels in [["Public", "Connections", "Anonymous", "Private"], ["公開", "連結的人", "匿名公開", "私人卡"]] {
+            #expect(SegmentGridGeometry.columns(room: phone, naturals: naturals(labels)) == 2, "\(labels)")
+            #expect(SegmentGridGeometry.columns(room: 700, naturals: naturals(labels)) == 4, "\(labels)")
+            // AX5 is about 3.1× the body size: a stack, each cell the column's width.
+            let largest = naturals(labels, scale: 3.1)
+            #expect(SegmentGridGeometry.columns(room: phone, naturals: largest) == 1, "\(labels)")
+            #expect(largest.max()! <= phone, "\(labels): even one to a row would cut them")
+        }
+        #expect(SegmentGridGeometry.columnSteps(4) == [4, 2, 1])
+        // The seams meet at the cells' corners: a cell's right side and its neighbour's left are one wave.
+        let a = SegmentGridGeometry.region(r: 0, c: 0, cols: 2, rows: 2, w: 170, h: 48, seed: 71)
+        let b = SegmentGridGeometry.region(r: 0, c: 1, cols: 2, rows: 2, w: 170, h: 48, seed: 71)
+        let shared = SegmentGridGeometry.down(x: 0, h: 48, seed: SegmentGridGeometry.downSeed(71, cols: 2, r: 0, c: 1))
+        for p in shared {
+            #expect(a.contains(CGPoint(x: p.x + 170, y: p.y)))
+            #expect(b.contains(p))
+        }
         let source = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appendingPathComponent("../Resonance/Features/Write/PublishStep.swift").standardized, encoding: .utf8)
         #expect(source.contains("audienceOption(.connections, L10n.Write.Visibility.connections, icon: .users)"))
-        #expect(source.contains("iconDroppable: true"))
+        #expect(source.contains("SegmentedGrid(["))
     }
 
     /// 連結的人 (Wave 2): from 匿名公開 it writes `connections` and named together; 發布 (never 匿名發布), the

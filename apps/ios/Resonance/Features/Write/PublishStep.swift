@@ -28,6 +28,8 @@ struct PublishStep: View {
     var onShift: (CGFloat) -> Void = { _ in }
     /// Where the tag field's capsule lies in the step's content (``space``), for the page's tap-away.
     var onTagFieldPlaced: (CGRect) -> Void = { _ in }
+    /// Where 卡片類型 starts in the step's content (``space``): the debug launch's `-writeScrollTo audience`.
+    var onAudiencePlaced: (CGFloat) -> Void = { _ in }
     @Environment(SessionStore.self) private var session
     @Environment(\.window) private var window
 
@@ -86,7 +88,8 @@ struct PublishStep: View {
     static func topPadding(_ model: WriteModel, showsBar: Bool, compact: Bool) -> CGFloat {
         guard showsBar else { return WriteWorkspace.paneTop(row: headingRowHeight) }
         if bandUnderBar(model, showsBar: showsBar, compact: compact) { return 0 }
-        if compact { return PenLineGap.fromFoot(Tokens.storyHeadGapCompact) }
+        // A phone's update hint stands closer under the line (the owner, 2026-11-23: 「可以少一點點」).
+        if compact { return PenLineGap.fromFoot(model.showsUpdateHint ? Tokens.publishHintGapCompact : Tokens.storyHeadGapCompact) }
         return PenLineGap.fromFoot(previewLeads(model) ? Tokens.storyHeadCoverGap : Tokens.storyHeadGap)
     }
 
@@ -102,12 +105,15 @@ struct PublishStep: View {
                                 color: Tokens.UI.textMuted)
                     }
                 }
+                // On a phone the hint is as close over the preview's band as it stands under the bar's line.
+                .padding(.bottom, compact && model.showsUpdateHint && !inlineHeading ? Tokens.publishHintGapCompact - sectionGap : 0)
             }
             if !updating { mirror }
             VStack(alignment: .leading, spacing: sectionGap) {
                 preview
                 tags
                 audience
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.space)).minY } action: { onAudiencePlaced($0) }
             }
             // Publishing, saving or leaving: every control in the step waits (the web's fieldset disabled).
             .disabled(model.pending)
@@ -251,9 +257,9 @@ struct PublishStep: View {
             // Anonymity is a way of being shared, so it is one of the four; 連結的人 is always named; 草稿 is
             // the author's alone. A card both anonymous and for connections only (older ones) shows none
             // chosen and keeps its audience until one is. No line under it: the preview's byline above
-            // already follows the choice. Four don't fit a phone's row with their glyphs: the glyphs go,
-            // the words stay (the web's `iconDroppable`).
-            SegmentedActionBar([
+            // already follows the choice. Four in one row while each glyph and its whole words fit an equal
+            // share, else 2×2, else one to a row — never cut, shrunk or glyphless (SegmentedGrid, the web's twin).
+            SegmentedGrid([
                 audienceOption(.public, L10n.Write.Visibility.`public`, icon: .globe),
                 audienceOption(.connections, L10n.Write.Visibility.connections, icon: .users),
                 audienceOption(.anonymous, L10n.Write.Visibility.anonymous, icon: .mask),
@@ -272,7 +278,7 @@ struct PublishStep: View {
         return SegmentSpec(id: audience.rawValue, icon: icon, label: label,
                            fill: chosen ? Tokens.buttonTonal : nil,
                            ink: chosen ? Tokens.buttonOnTonal : Tokens.segmentIdleInk,
-                           pressInk: Tokens.towardInk.opacity(0.05), iconDroppable: true, selected: chosen) {
+                           pressInk: Tokens.towardInk.opacity(0.05), selected: chosen) {
             model.choose(audience)
         }
     }

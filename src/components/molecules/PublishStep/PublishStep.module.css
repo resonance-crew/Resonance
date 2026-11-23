@@ -95,6 +95,15 @@
   color: var(--color-text-muted);
 }
 
+/* On a phone the one quiet line sits closer to what it speaks of (the owner, 2026-11-23: its air above and below 「可以少一點點」):
+   --publish-hint-gap-compact under the bar's pen line and over the preview's band, where a section gap stood. */
+@media (max-width: 640px) {
+  .hint {
+    margin-top: calc(var(--publish-hint-gap-compact) - var(--story-head-gap-compact));
+    margin-bottom: calc(var(--publish-hint-gap-compact) - var(--section-gap));
+  }
+}
+
 /* The mirror moment: the sparkle beside the echo, or the loader while it is
    read. An answer of nothing folds the line away (its height to none). */
 .insightWrap {

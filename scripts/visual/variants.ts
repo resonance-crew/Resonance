@@ -64,8 +64,12 @@ export type DeviceState = {
   mac?: { width: number; height: number };
 };
 
-/** The Android phone's text-densest screens: the reader, the composer with rows riding and its attach panel, settings, the writer, the bell. */
-const TEXT_DENSE = ['card', 'thread-reply', 'thread-attach', 'settings', 'write-draft', 'notifications'];
+/**
+ * The Android phone's text-densest screens: the reader, the composer with rows riding and its attach panel, settings, the
+ * writer, the bell — and the publish step's four card types (2026-11-23: at font 1.5 their one row shrank its words to
+ * 70 %; the grid stands 2×2, or one to a row at the largest font, never smaller).
+ */
+const TEXT_DENSE = ['card', 'thread-reply', 'thread-attach', 'settings', 'write-draft', 'notifications', 'publish-audience'];
 /** The note written in place under a story's end (round 26 SETTLED 9): its line grows with the type, never clipped. */
 const NOTE_OPEN = 'card-note-open';
 

@@ -25,8 +25,9 @@ describe('the variant sets', () => {
     // 任務 #3: update-required, the apps alone — the iPhone's three, the iPad, the Mac, the Android phone's three and
     // the tablet: 485 + 9; round 28: card-end-long, the web's five alone (the apps keep 分享 · ⋯ in the bar): 494 + 5; round 29:
     // card-picked-people on the fourteen: 499 + 14
-    // Wave 2: publish-audience, the web's five alone: 513 + 5
-    expect(estimate('release').captures).toBe(518);
+    // Wave 2: publish-audience, the web's five alone: 513 + 5; 2026-11-23, the four card types as a grid on the apps
+    // too — the iPhone's three, the iPad, the Mac, the Android phone's three and the tablet: 518 + 9
+    expect(estimate('release').captures).toBe(527);
   });
 
   it('adds the device states after the device they run on, and only in the extended set', () => {
@@ -41,7 +42,7 @@ describe('the variant sets', () => {
   it('takes the large-text states on the text-densest screens, the gallery’s ask among them', () => {
     // round 26 (SETTLED 9): and the note written in place, whose line grows with the type.
     expect(keys('android', 'phone-large', 'extended').sort()).toEqual(
-      ['card', 'thread-reply', 'thread-attach', 'settings', 'write-draft', 'notifications', 'card-note-open'].map((id) => `${id}@light-zh-TW.png`).sort(),
+      ['card', 'thread-reply', 'thread-attach', 'settings', 'write-draft', 'notifications', 'publish-audience', 'card-note-open'].map((id) => `${id}@light-zh-TW.png`).sort(),
     );
     const large = DEVICE_STATES.find((d) => d.id === 'phone-large')!;
     expect(large.android).toEqual({ fontScale: 1.5, density: 504 });
@@ -58,7 +59,8 @@ describe('the variant sets', () => {
     // each of the 8 release devices (the owner, 2026-11-20: Android's 寄出 filled the capsule's end)
     // round 27: card-passage-picked on each of the 8 release devices, as the note's three lines
     // 2026-11-23: home-invite on the apps' 5 release devices and on the iPad turned, the Android tablet upright, the narrow Mac
-    expect(estimate('extended').captures - estimate('release').captures).toBe(82);
+    // 2026-11-23: publish-audience at the Android phone's two large fonts (its one row shrank its words to 70 %)
+    expect(estimate('extended').captures - estimate('release').captures).toBe(84);
     for (const [platform, device] of [['web', 'phone'], ['web', 'desktop'], ['ios', 'iphone'], ['android', 'phone'], ['mac', 'mac']] as const) {
       expect(keys(platform, device, 'extended'), `${platform}/${device}`).toContain('card-note-lines@light-zh-TW.png');
       expect(keys(platform, device, 'release'), `${platform}/${device}`).not.toContain('card-note-lines@light-zh-TW.png');

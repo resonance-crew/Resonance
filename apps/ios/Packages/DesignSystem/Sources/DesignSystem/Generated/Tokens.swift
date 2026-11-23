@@ -445,6 +445,8 @@ public nonisolated enum Tokens {
     public static let publishSectionGap: CGFloat = 48
     /// --publish-section-gap-compact
     public static let publishSectionGapCompact: CGFloat = 40
+    /// --publish-hint-gap-compact
+    public static let publishHintGapCompact: CGFloat = 28
     /// --publish-label-gap
     public static let publishLabelGap: CGFloat = 12
     /// --story-meta-size

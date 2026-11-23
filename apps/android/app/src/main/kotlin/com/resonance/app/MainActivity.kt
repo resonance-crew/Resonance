@@ -37,6 +37,7 @@ import kotlinx.coroutines.launch
  *   --es writeTitle … --es writeStory … --es writeCover <url>   a new card starts with them
  *   --es route /settings/<section>  that page of Settings (profile, account, privacy, notifications, language, appearance, terms, delete)
  *   --es writeStep publish         with --es route /write/<id>: the writer opens on its publish step once the card has loaded
+ *   --es writeScrollTo audience    with writeStep publish: the step scrolled so 卡片類型 stands in view (publish-audience)
  *   --ez coverFrame true           with that step up: 調整封面 opens over the cover's picture once it has loaded
  *   --es scrollToCard <slug>       a person's page (--es route /u/<handle>) scrolls to that card (a tablet: its block) once its cards are in
  *   --es cardEnd end,tap,note,lines,taps the next card page scrolls its end to the middle (round 26) — and 共振 turned on, the note's field open (`lines`: on three lines of words, never kept), the faces' list open (a reader's or the author's)
@@ -129,6 +130,7 @@ class MainActivity : ComponentActivity() {
             DebugLaunch.threadPanel = intent.getStringExtra("threadPanel")
             DebugLaunch.linkDraft = intent.getStringExtra("linkDraft")
             DebugLaunch.writeStep = intent.getStringExtra("writeStep")
+            DebugLaunch.writeScrollTo = intent.getStringExtra("writeScrollTo")
             DebugLaunch.visualUpdate = intent.getStringExtra("visualUpdate")
             // `--ez` from adb, or a string from Maestro's launchApp arguments.
             DebugLaunch.coverFrame = intent.getStringExtra("coverFrame") == "true" || intent.getBooleanExtra("coverFrame", false)
@@ -349,6 +351,15 @@ object DebugLaunch {
 
     /** Takes [writeStep] as a step (once: a writer opened afterwards opens as it would). */
     fun takeWriteStep(): com.resonance.app.ui.WriterStep? = launchStep(writeStep).also { writeStep = null }
+
+    /**
+     * With the publish step opened by [writeStep], the step scrolled so 卡片類型 stands in view (`--es writeScrollTo audience`,
+     * the screenshots' `publish-audience`). Taken once.
+     */
+    var writeScrollTo: String? = null
+
+    /** Takes [writeScrollTo] (once): whether the step scrolls to its card types. */
+    fun takeWriteScrollToAudience(): Boolean = (writeScrollTo?.trim()?.lowercase() == "audience").also { writeScrollTo = null }
 
     /**
      * 調整封面 opens over the publish step's picture cover once it has loaded (`--ez coverFrame true`, the screenshots'

@@ -277,8 +277,11 @@ export const SCREENS: Screen[] = [
     app: { ios: ['-writeStep', 'publish'], android: ['--es', 'writeStep', 'publish'] },
     expect: "alice's 港邊的那盞燈 on its publish step (更新這張卡片): the cover with two chips at its foot, 調整位置 left of 更換封面, in the card's own paper and pen" },
   // Wave 2 #2: 卡片類型 is four again — 公開 · 連結的人 · 匿名公開 · 私人卡 — and on a phone the glyphs give way to keep the words.
-  { id: 'publish-audience', route: '/write/harbour-lamp', as: 'alice', platforms: ['web'], web: { query: 'step=publish', scrollTo: '[data-segment="connections"]' },
-    expect: "alice's 港邊的那盞燈 on its publish step, scrolled to 卡片類型: one bar of four — 公開 (chosen, tonal peach) · 連結的人 · 匿名公開 · 私人卡 — every word whole on one line; on a phone no glyphs, on wide screens each with its glyph (globe · users · mask · lock)" },
+  // 2026-11-23: the four card types as one fused grid (SegmentedGrid) — one row where each glyph and its whole words fit
+  // an equal share, 2×2 on a phone, one to a row at the largest text — on the web and both apps (`-writeScrollTo`).
+  { id: 'publish-audience', route: '/write/harbour-lamp', as: 'alice', web: { query: 'step=publish', scrollTo: '[data-segment="connections"]' },
+    app: { ios: ['-writeStep', 'publish', '-writeScrollTo', 'audience'], android: ['--es', 'writeStep', 'publish', '--es', 'writeScrollTo', 'audience'] },
+    expect: "alice's 港邊的那盞燈 on its publish step, scrolled to 卡片類型: one control of four cells — 公開 (chosen, tonal peach) · 連結的人 · 匿名公開 · 私人卡 — each with its glyph (globe · users · mask · lock) and its whole words on one line, never cut or smaller: in one row on a tablet, the Mac and a desktop, 2×2 on a phone (公開 · 連結的人 over 匿名公開 · 私人卡), the seams cut in the paper meeting at the centre" },
   { id: 'cover-frame', route: '/write/harbour-lamp', as: 'alice',
     web: { query: 'step=publish', click: 'button[aria-label="調整位置"], button[aria-label="Adjust"]' },
     app: { ios: ['-writeStep', 'publish', '-coverFrame', 'YES'], android: ['--es', 'writeStep', 'publish', '--ez', 'coverFrame', 'true'] },

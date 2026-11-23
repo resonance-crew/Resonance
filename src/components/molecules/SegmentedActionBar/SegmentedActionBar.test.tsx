@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, userEvent } from '@/../test/render';
 import { mockElementSize, penLines } from '@/../test/organic';
-import { SegmentedActionBar, collapseStep, dropsIcons, type SegmentSpec } from './SegmentedActionBar';
+import { SegmentedActionBar, collapseStep, type SegmentSpec } from './SegmentedActionBar';
 
 // The bar measures itself and its segments before it draws.
 mockElementSize(120, 44);
@@ -227,16 +227,3 @@ describe('collapseStep', () => {
   });
 });
 
-// The publish step's four card types (Wave 2 #2): on a phone the icons go before any word does.
-describe('dropsIcons', () => {
-  const seg = (natural: number, dropped = false) => ({ natural, icon: 22, dropped });
-  it('keeps the icons while every word beside its icon fits, drops them once not', () => {
-    expect(dropsIcons(400, [seg(90), seg(100), seg(100), seg(90)])).toBe(false);
-    expect(dropsIcons(358, [seg(90), seg(100), seg(100), seg(90)])).toBe(true);
-  });
-  it('weighs a bar already without its icons as it would stand with them, so it never flips back and forth', () => {
-    // 4 × ~73 without icons fits 358, but with them (+ 4 × 22) it would not: they stay off.
-    expect(dropsIcons(358, [seg(68, true), seg(78, true), seg(78, true), seg(68, true)])).toBe(true);
-    expect(dropsIcons(400, [seg(68, true), seg(78, true), seg(78, true), seg(68, true)])).toBe(false);
-  });
-});

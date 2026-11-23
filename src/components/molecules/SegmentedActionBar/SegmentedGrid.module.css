@@ -1,0 +1,85 @@
+/* The publish step's card types as one fused grid (SegmentedGrid.tsx): the column's width, cells of one size. */
+.grid {
+  position: relative;
+  display: grid;
+  width: 100%;
+  /* Before it is measured (the server's HTML): one row over 720, two to a row under. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
+}
+
+@media (min-width: 721px) {
+  .grid:not([data-cols]) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.cell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 48px;
+  padding: clamp(13px, 1.6vw, 16px) clamp(10px, 2vw, 16px);
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: clamp(14px, 1.6vw, 15px);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  /* The others keep a muted ink deep enough to read on the track; the chosen one the deep terracotta (4.8:1). */
+  color: var(--segment-idle-ink);
+  transition: opacity 160ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cell > svg {
+  flex: none;
+}
+
+/* As the bar's segments: a ring inside the cell in its words' own ink, no pen line. */
+.cell:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -4px;
+  border-radius: 12px;
+}
+
+.cell[aria-pressed='true'] {
+  color: var(--button-on-tonal);
+}
+
+.cell:active {
+  opacity: 0.82;
+}
+
+.label {
+  display: block;
+}
+
+/* Measured: as many to a row as fit (lib/design/segmentGrid `gridColumns`); words never wrap or cut. */
+.grid[data-cols='1'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.grid[data-cols='2'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.grid[data-cols='3'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.grid[data-cols='4'] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}

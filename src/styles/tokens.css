@@ -150,6 +150,7 @@
   --writer-title-gap-compact: 32px;
   --publish-section-gap: 48px;     /* between the publish step's sections */
   --publish-section-gap-compact: 40px;
+  --publish-hint-gap-compact: 28px; /* a phone's update hint: the bar's pen line → it, and it → the preview's band */
   --publish-label-gap: 12px;       /* a section's label → its control */
   --story-meta-size: 14px;
   --story-meta-size-compact: 13px;

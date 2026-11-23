@@ -75,6 +75,9 @@ struct WriteScreen: View {
     @State private var publishScroll = ScrollPosition(edge: .top)
     /// The publish step's offset from its top (its content offset past the bar's inset).
     @State private var publishOffset: CGFloat = 0
+    /// Where 卡片類型 starts in the publish step's content (`-writeScrollTo audience`, the screenshots' publish-audience).
+    @State private var audienceTop: CGFloat = 0
+    @State private var followAudienceUntil: Date?
     /// The height the publish step's scroll shows (its content is never shorter: the paper under it takes taps too).
     @State private var publishRoom: CGFloat = 0
     /// The tag field's capsule in the publish step's content: taps there are the field's own.
@@ -283,6 +286,7 @@ struct WriteScreen: View {
             if step == .publish {
                 publishLoaded = true
                 publishScroll.scrollTo(edge: .top)
+                if let until = followAudienceUntil, Date.now < until, audienceTop > 0 { publishScroll.scrollTo(y: max(0, audienceTop - 200)) }
                 UIAccessibility.post(notification: .screenChanged, argument: nil)
             } else if titleHadFocus {
                 titleFocused = true
@@ -608,7 +612,14 @@ struct WriteScreen: View {
                             still.disablesAnimations = true
                             withTransaction(still) { publishScroll.scrollTo(y: max(0, publishOffset + delta)) }
                         },
-                        onTagFieldPlaced: { tagFieldFrame = $0 })
+                        onTagFieldPlaced: { tagFieldFrame = $0 },
+                        onAudiencePlaced: { y in
+                            audienceTop = y
+                            // `-writeScrollTo audience`: from its first placing, for five seconds, 卡片類型 is kept 200
+                            // under the top (the tags above it in view) wherever the cover and the preview settle it.
+                            if WriterLaunch.scrollsToAudience(), followAudienceUntil == nil { followAudienceUntil = .now.addingTimeInterval(5) }
+                            if let until = followAudienceUntil, Date.now < until { publishScroll.scrollTo(y: max(0, y - 200)) }
+                        })
                 .padding(.horizontal, compact ? 20 : window.pad)
                 // A phone's preview band with nothing above it starts right at the bar's line, as home's first card.
                 .padding(.top, PublishStep.topPadding(model, showsBar: showsBar, compact: compact))
@@ -862,6 +873,16 @@ enum WriterLaunch {
     static func opensPublishStep(_ defaults: UserDefaults = .standard) -> Bool {
         #if DEBUG
         defaults.string(forKey: "writeStep") == "publish"
+        #else
+        false
+        #endif
+    }
+
+    /// `-writeScrollTo audience`: with the publish step opened by `-writeStep publish`, the step scrolled so 卡片類型
+    /// stands in view (the release screenshots' `publish-audience`).
+    static func scrollsToAudience(_ defaults: UserDefaults = .standard) -> Bool {
+        #if DEBUG
+        defaults.string(forKey: "writeScrollTo") == "audience"
         #else
         false
         #endif

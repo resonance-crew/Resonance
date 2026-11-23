@@ -8,10 +8,7 @@ import { Icon, type IconName } from '@/components/atoms/Icon';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { SketchLoader } from '@/components/atoms/SketchLoader/SketchLoader';
 import { ModalActions } from '@/components/molecules/Modal/ModalActions';
-import {
-  SegmentedActionBar,
-  type SegmentSpec,
-} from '@/components/molecules/SegmentedActionBar/SegmentedActionBar';
+import { SegmentedGrid, type GridSegment } from '@/components/molecules/SegmentedActionBar/SegmentedGrid';
 import { StoryCard, type Story } from '@/components/molecules/StoryCard/StoryCard';
 import { TagField } from '@/components/molecules/TagField/TagField';
 import { SaveState, type SaveStatus } from '@/components/molecules/CardEditor/SaveState';
@@ -244,6 +241,7 @@ export function PublishStep({
   const captionId = useId();
   const tagsId = useId();
   const headingId = useId();
+  const audienceLabelId = useId();
 
   // ── The mirror: asked once per text, never for an update or an untitled draft ──
   const reflections = useRef<Reflection | null>(null);
@@ -456,34 +454,29 @@ export function PublishStep({
 
         {/* 4 — what the card is: shared under its author's name, shared with none, or a 私人卡 */}
         <div className={styles.group}>
-          <span className={styles.label}>{tVis('label')}</span>
+          <span id={audienceLabelId} className={styles.label}>{tVis('label')}</span>
           <div className={styles.choice}>
             {/* A segmented choice with no pen line (its options are buttons):
                 a quiet paper-dark track shows the control's extent, and the
-                chosen side wears the tonal peach with the deep terracotta
+                chosen cell wears the tonal peach with the deep terracotta
                 label (4.8:1); the others keep a muted ink deep enough to read
                 on the track. A card both anonymous and for connections only
                 (older ones) shows none chosen and keeps its audience until one
-                is. Four don't fit a phone's row with their icons: the icons go,
-                the words stay. */}
-            <SegmentedActionBar
+                is. Four in one row while each glyph and its whole words fit,
+                else 2×2, else one to a row — never cut, shrunk or glyphless
+                (SegmentedGrid, lib/design/segmentGrid). */}
+            <SegmentedGrid
               fill="var(--color-cream-dark)"
+              ariaLabelledBy={audienceLabelId}
               segments={AUDIENCES.map((a) => {
-                const chosen = audience === a;
-                const ink = chosen
-                  ? 'var(--button-on-tonal)'
-                  : 'var(--segment-idle-ink)';
                 return {
                   key: a,
-                  icon: <Icon name={AUDIENCE_ICON[a]} size={16} color={ink} />,
+                  icon: <Icon name={AUDIENCE_ICON[a]} size={16} color="currentColor" />,
                   label: tVis(a === 'private' ? 'draft' : a),
-                  fill: chosen ? 'var(--button-tonal)' : 'transparent',
-                  textColor: ink,
                   hoverOverlay: 'color-mix(in oklch, var(--toward-ink) 5%, transparent)',
-                  pressed: chosen,
-                  iconDroppable: true,
+                  pressed: audience === a,
                   onClick: () => onAudienceChange(audienceFields(a, { anonymous, live: updating })),
-                } satisfies SegmentSpec;
+                } satisfies GridSegment;
               })}
             />
           </div>

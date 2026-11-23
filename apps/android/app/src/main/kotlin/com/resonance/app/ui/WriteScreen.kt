@@ -93,6 +93,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -166,7 +167,7 @@ import com.resonance.design.SaveStateText
 import com.resonance.design.TitleWithStatus
 import com.resonance.design.storyHeadGap
 import com.resonance.design.Segment
-import com.resonance.design.SegmentedActionBar
+import com.resonance.design.SegmentedGrid
 import com.resonance.design.SketchLoader
 import com.resonance.design.StoryCard
 import com.resonance.design.StoryCardContent
@@ -1001,6 +1002,16 @@ private fun PublishStep(
 ) {
     val scope = rememberCoroutineScope()
     val tagAnchor = remember(scroll, scope) { TagFieldAnchor(scroll, scope) }
+    // Debug `--es writeScrollTo audience` (the screenshots' publish-audience): once the step has settled, scrolled so
+    // 卡片類型 stands 200 under the window's top, the tags above it in view.
+    var audienceTop by remember { mutableIntStateOf(0) }
+    val scrollLead = with(LocalDensity.current) { 200.dp.roundToPx() }
+    if (BuildConfig.DEBUG) LaunchedEffect(Unit) {
+        if (DebugLaunch.takeWriteScrollToAudience()) {
+            delay(1200)
+            scroll.scrollTo((scroll.value + audienceTop - scrollLead).coerceAtLeast(0))
+        }
+    }
     val updating = model.isPublished
     val pending = model.pending
     val reduced = LocalContext.current.prefersReducedMotion()
@@ -1014,13 +1025,17 @@ private fun PublishStep(
     // A tablet's preview card first under the bar stands where a card page's cover would (round 11 §4): 8 lower
     // than the line a hint or the mirror would start on — eased, as the mirror folds away above it.
     val gap = publishSectionGap(compact)
+    // A phone's update hint stands closer under the bar's line and over the band (the owner, 2026-11-23: 「可以少一點點」):
+    // `--publish-hint-gap-compact` where the writer's head gap and a section gap stood.
+    val hintLift = if (compact && hint) (Tokens.StoryHeadGapCompact - Tokens.PublishHintGapCompact).dp else 0.dp
+    val hintGap = if (compact) Tokens.PublishHintGapCompact.dp else gap
     val coverLead by animateDpAsState(
         if (bar && !compact && cardFirstUnderBar(hint, mirrorOnScreen = mirrorShows || lineComposed)) writerHead(compact, cover = true) - writerHead(compact) else 0.dp,
         if (reduced) snap() else tween(200, easing = Ease), label = "previewLead",
     )
     // The step's top as the bar comes or goes (round 15), eased with its fade.
     val stepTop by animateDpAsState(
-        if (bar) inlineBarTop() - (if (tucks) HeaderEdgeHeight else 0.dp) + (if (!tucks) writerHead(compact) else 0.dp) else splitTop(),
+        if (bar) inlineBarTop() - (if (tucks) HeaderEdgeHeight else 0.dp) + (if (!tucks) writerHead(compact) - hintLift else 0.dp) else splitTop(),
         if (reduced) snap() else tween(CHROME_FADE_MILLIS, easing = Ease), label = "stepTop",
     )
     // Every section keeps its gap above it, so one that folds away (the mirror with nothing to say) takes its gap along.
@@ -1045,7 +1060,7 @@ private fun PublishStep(
         }
         if (model.showsUpdateHint) {
             BasicText(L10n.Write.PublishPanel.updateHint, style = AppFonts.body(14f, lineHeight = 1.7f, color = Tokens.TextMuted))
-            Spacer(Modifier.height(gap))
+            Spacer(Modifier.height(hintGap))
         }
         // The mirror line over the band: the band starts under the wave, as it does at the end of the line's folding.
         if (tucks && !underBar) Spacer(Modifier.height(HeaderEdgeHeight))
@@ -1061,7 +1076,7 @@ private fun PublishStep(
             Spacer(Modifier.height(gap))
             Tags(model, tagAnchor, dismissKeyboard)
             Spacer(Modifier.height(gap))
-            AudienceChoice(model)
+            AudienceChoice(model, onPlaced = { audienceTop = it })
             // 匿名公開 for a card once shared privately in a message: whoever read it knows who wrote it. A word, never a stop.
             if (model.sharedWarning) {
                 Spacer(Modifier.height(gap))
@@ -1640,15 +1655,18 @@ internal fun Modifier.heightChanges(onChange: (Int) -> Unit): Modifier = compose
  * chosen side wears the tonal peach with the deep label (4.8:1), the others a muted ink deep enough
  * to read on the track. No line under it: the preview's byline above follows the choice (匿名 with
  * the「·」avatar). A card both anonymous and for connections only (older ones) shows none chosen, and
- * keeps its audience until one is. Four don't fit a phone's row with their icons: the icons go, the
- * words stay ([Segment.iconDroppable], the web's `iconDroppable`).
+ * keeps its audience until one is. Four in one row while each glyph and its whole words fit an equal share,
+ * else 2×2, else one to a row — never cut, shrunk or glyphless ([SegmentedGrid], the web's twin).
  */
 @Composable
-private fun AudienceChoice(model: WriteModel) {
+private fun AudienceChoice(model: WriteModel, onPlaced: (Int) -> Unit = {}) {
     val chosen = model.audience
-    Column(verticalArrangement = Arrangement.spacedBy(PublishLabelGap)) {
+    Column(
+        Modifier.onGloballyPositioned { onPlaced(it.positionInRoot().y.toInt()) },
+        verticalArrangement = Arrangement.spacedBy(PublishLabelGap),
+    ) {
         StepLabel(L10n.Write.Visibility.label)
-        SegmentedActionBar(
+        SegmentedGrid(
             Audience.entries.map { audience ->
                 val on = chosen == audience
                 Segment(
@@ -1657,7 +1675,6 @@ private fun AudienceChoice(model: WriteModel) {
                     textColor = if (on) Tokens.ButtonOnTonal else VisibilityInk,
                     press = Tokens.TowardInk.copy(alpha = 0.05f),
                     selected = on,
-                    iconDroppable = true,
                 ) { model.choose(audience) }
             },
             fill = Tokens.CreamDark,

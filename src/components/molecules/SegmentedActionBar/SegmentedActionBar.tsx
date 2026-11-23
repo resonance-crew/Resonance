@@ -40,12 +40,6 @@ export interface SegmentSpec {
    */
   collapsibleLast?: boolean;
   /**
-   * A choice's icon that goes once the bar's words, each beside its icon, no
-   * longer fit its container in one row (the publish step's four card types on
-   * a phone): the words always stay, never cut, never wrapped.
-   */
-  iconDroppable?: boolean;
-  /**
    * It opens something in the page and that is open now (the card page's 寄小紙條 and its note in place, round 26):
    * `aria-expanded`, and `controls` names what it opened (`aria-controls`).
    */
@@ -133,17 +127,6 @@ export function collapseStep(
   return 2;
 }
 
-/**
- * Whether the droppable icons must go to fit `room`: every segment's natural
- * width (as measured now) plus, for a droppable one shown without its icon,
- * the icon and the gap it would take back.
- */
-export function dropsIcons(room: number, widths: { natural: number; icon: number; dropped: boolean }[]): boolean {
-  if (room <= 0) return false;
-  const need = widths.reduce((sum, w) => sum + w.natural + (w.dropped ? w.icon : 0), 0);
-  return need > room + 0.5;
-}
-
 // A gently wobbly vertical boundary, returned as a point list so the fill edge
 // and the stroked divider share *identical* geometry (no bezier mismatch).
 // Runs from -pad to h+pad so the fill polygons overshoot the bar and the outer
@@ -205,11 +188,6 @@ export function SegmentedActionBar({
   // collapsibleLast ones too (step 2) — the verb always keeps its words.
   const [tight, setTight] = useState<0 | 1 | 2>(0);
   const collapsible = segments.some((s) => s.collapsible || s.collapsibleLast);
-  // Too narrow for every icon beside its words: the droppable icons go (the words stay).
-  const [iconsDropped, setIconsDropped] = useState(false);
-  const droppable = segments.some((s) => s.iconDroppable);
-  const dropped = useRef(false);
-  dropped.current = iconsDropped;
   // Read in the measuring callback, which must not change with every render's segment objects.
   const specs = useRef(segments);
   specs.current = segments;
@@ -217,24 +195,11 @@ export function SegmentedActionBar({
   const fit = useCallback(() => {
     const bar = barRef.current;
     const box = bar?.parentElement;
-    if (!bar || !box || (!collapsible && !droppable)) return;
+    if (!bar || !box || !collapsible) return;
     // The room is the container's (the bar spans it on a phone), never the
     // bar's own width, which shrinks with the words it hides.
     const cs = getComputedStyle(box);
     const room = box.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
-    if (droppable) {
-      const next = dropsIcons(
-        room,
-        segRefs.current.map((el, i) => {
-          const spec = specs.current[i];
-          const box = isValidElement<{ size?: number }>(spec?.icon) ? (spec.icon.props.size ?? 16) : 16;
-          const gap = el ? parseFloat(getComputedStyle(el).columnGap) || 0 : 0;
-          return { natural: el ? naturalWidth(el) : 0, icon: box + gap, dropped: !!spec?.iconDroppable && dropped.current };
-        }),
-      );
-      setIconsDropped((cur) => (cur === next ? cur : next));
-    }
-    if (!collapsible) return;
     const iconPad = parseFloat(getComputedStyle(bar).getPropertyValue('--seg-icon-pad'));
     const widths = segRefs.current.map((el, i) => ({
       natural: el ? naturalWidth(el) : 0,
@@ -244,7 +209,7 @@ export function SegmentedActionBar({
     }));
     const next = collapseStep(room, widths);
     setTight((cur) => (cur === next ? cur : next));
-  }, [collapsible, droppable]);
+  }, [collapsible]);
 
   const recompute = useCallback(() => {
     const bar = barRef.current;
@@ -418,7 +383,7 @@ export function SegmentedActionBar({
           data-icon-only={(s.collapsible && tight >= 1) || (s.collapsibleLast && tight >= 2) || undefined}
           style={{ color: s.textColor ?? 'var(--button-on-tonal)' }}
         >
-          {s.iconDroppable && iconsDropped ? null : s.loading && s.icon ? <ButtonLoader size={iconBox} /> : s.icon}
+          {s.loading && s.icon ? <ButtonLoader size={iconBox} /> : s.icon}
           <span
             data-label
             className={styles.label}
