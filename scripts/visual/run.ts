@@ -13,6 +13,8 @@
  *            --review: the agy review straight after (what a release runs, with --flows)
  *            --wait: queue behind another run holding the same devices or ports (lock.ts), instead of refusing
  *            --force-build: build the apps even when their inputs match the last build's (buildStamp.ts)
+ *            --changed [--since <ref>] [--dry-run]: only the platforms a change since their baseline can move (changed.ts;
+ *            opt-in, never with --flows); --dry-run says the plan and captures nothing
  *            a run that stops moving (VISUAL_STALL_MIN) or runs too long (VISUAL_RUN_TIMEOUT_MIN) ends (watchdog.ts)
  *   compare  [--run <id>]          recompute the comparison and the report
  *   review   [--run <id>] [--agy | --gemini] [--all]   --all: unchanged captures too
@@ -41,7 +43,8 @@ import { writeReport } from './report';
 import { agyReviewer, itemsOn, reviewItems, reviewWithAgy, reviewWithGemini, writeReviewPack } from './review';
 import { startStack, type Stack } from './stack';
 import { PORTS, ROOT, RUNS_DIR, VISUAL_DIR, git, ignorePath, listPngs, readJson, writeJson, type Capture } from './util';
-import { MAIN, baselineDir, currentBaselineName, ensureBaseline, listBaselines, runBaselineName } from './baselines';
+import { MAIN, MAIN_BASELINE, baselineDir, baselineFolder, currentBaselineName, ensureBaseline, listBaselines, runBaselineName } from './baselines';
+import { changedPlan, planLines, refusesChanged } from './changed';
 import { applyPromote, planPromote } from './promote';
 import { execFileSync } from 'node:child_process';
 import type { Platform } from './screens';
@@ -101,7 +104,29 @@ async function finish(runDir: string): Promise<Result[]> {
 async function capture(args: string[]) {
   // Always in PHASES' order, whatever order they were named in.
   const named = args.filter((a): a is Platform => PLATFORMS.includes(a as Platform));
-  const platforms = PLATFORMS.filter((p) => !named.length || named.includes(p));
+  let platforms = PLATFORMS.filter((p) => !named.length || named.includes(p));
+  // --changed (opt-in, slices only): the platforms whose screens can't have moved since their baseline are left out
+  // (changed.ts). Without it, nothing here runs and every named platform is captured, as always.
+  let changed: RunInfo['changed'];
+  if (args.includes('--changed')) {
+    const refused = refusesChanged(args);
+    if (refused) {
+      console.error(refused);
+      process.exitCode = 1;
+      return;
+    }
+    const plan = changedPlan(platforms, { baselineDir: plannedBaselineDir(), since: flag(args, 'since') });
+    for (const line of planLines(plan)) log(line);
+    if (args.includes('--dry-run')) return log('--dry-run: nothing captured');
+    const taken = plan.filter((p) => p.run).map((p) => p.platform);
+    if (!taken.length) return log("Nothing to capture: no platform's screens can have moved since its baseline (capture without --changed to take them anyway).");
+    changed = { since: Object.fromEntries(plan.map((p) => [p.platform, p.since])), skipped: plan.filter((p) => !p.run).map((p) => p.platform) };
+    platforms = taken;
+  } else if (args.includes('--dry-run') || args.includes('--since')) {
+    console.error('--dry-run and --since go with --changed (the plan of what --changed would capture). Nothing was captured.');
+    process.exitCode = 1;
+    return;
+  }
   const set = variantSetOf(flag(args, 'variants'));
   // The apps built even when their inputs match the last build's (buildStamp.ts).
   if (args.includes('--force-build')) process.env.VISUAL_FORCE_BUILD = '1';
@@ -130,10 +155,13 @@ async function capture(args: string[]) {
     variants: set,
     // This checkout's baseline (baselines.ts): main's on main, its round's on a round's branches, its own elsewhere.
     baseline: currentBaselineName(),
+    ...(changed ? { changed } : {}),
   };
   baselineDir(log);
   log(`Baseline: ${info.baseline}`);
-  const slices = slicesOf(args, platforms);
+  // A platform --changed left out may have had its own slice named (--ios-only …): read as named, then let go.
+  const slices = slicesOf(args, changed ? [...platforms, ...changed.skipped] : platforms);
+  for (const skipped of changed?.skipped ?? []) delete slices[skipped];
   if (Object.keys(slices).length) info.slices = slices;
   writeJson(join(runDir, 'run.json'), info);
   let stack: Stack | undefined;
@@ -224,6 +252,15 @@ async function capture(args: string[]) {
   await sampler.stop();
   for (const line of writeTimingsSummary(runDir)) log(line);
   await gate(runDir, results);
+}
+
+/**
+ * The baseline a capture here would compare with, without making it: this checkout's own when it exists, else main's,
+ * which a branch's first run clones (baselines.ts) — so --changed --dry-run creates nothing.
+ */
+function plannedBaselineDir(): string {
+  const folder = baselineFolder(currentBaselineName());
+  return existsSync(folder) ? folder : MAIN_BASELINE;
 }
 
 /** The run's locks (lock.ts), or null after saying why it doesn't start (exit code 1). */
