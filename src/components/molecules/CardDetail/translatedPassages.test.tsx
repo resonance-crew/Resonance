@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import useSWR, { SWRConfig } from 'swr';
 import { act, renderWithIntl, screen, userEvent, within } from '@/../test/render';
 import type { AuthorBody, CardTapBody, TapPickedBody } from '@/lib/api/v1/schemas';
 import { cardPageKey } from '@/lib/data/hooks';
 import { RICH_STORY_EN, RICH_STORY_EN_PASSAGES, RICH_STORY_PASSAGES } from '../../../../scripts/seed/pinned';
+import { PassageMarks } from './PassageMarks';
 import { ReadAfterArea } from './ReadAfterArea';
 import { StoryMarkdown, StoryPassagesContext } from './StoryMarkdown';
 import { tapInTranslation } from './translatedPassages';
@@ -144,5 +145,34 @@ describe('the picked sentences in translation (§R2)', () => {
     expect(marks.some((m) => m.dataset.passage === 'old00000')).toBe(false);
     // The third passage was offered but nobody picked it: no mark.
     expect(marks.some((m) => m.dataset.passage === RICH_STORY_PASSAGES[2].id)).toBe(false);
+  });
+});
+
+/**
+ * The card page keys the story's box by the translation's swaps (`story-{n}`): a swap mounts PassageMarks anew in
+ * a new box, whose ref is attached only after PassageMarks' own layout effects. Picks read before the translation
+ * landed must still be drawn on the translation (round 31: they were drawn on neither, found by the release run).
+ */
+function KeyedPage({ swaps, picked, source }: { swaps: number; picked: readonly TapPickedBody[]; source: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  return (
+    <div key={`story-${swaps}`} ref={ref}>
+      <PassageMarks cardId="c1" picked={picked} script="latin" storyRef={ref}>
+        <StoryMarkdown source={source} script="latin" lang="en" />
+      </PassageMarks>
+    </div>
+  );
+}
+
+describe('the picks read before the translation landed (§R2)', () => {
+  it('are marked on the translation the swap mounts', async () => {
+    const original = TAP.picked!;
+    const { container, rerender } = renderWithIntl(<KeyedPage swaps={0} picked={original} source={'箱子堆滿了客廳，我坐在地上，第一次覺得安靜是屬於自己的。'} />);
+    await act(async () => new Promise((r) => requestAnimationFrame(() => r(undefined))));
+    const translated = tapInTranslation(TAP, RICH_STORY_EN_PASSAGES)!.picked!;
+    rerender(<KeyedPage swaps={1} picked={translated} source={RICH_STORY_EN} />);
+    await act(async () => new Promise((r) => requestAnimationFrame(() => r(undefined))));
+    const ids = [...container.querySelectorAll<HTMLElement>('mark[data-passage]')].map((m) => m.dataset.passage);
+    expect(new Set(ids)).toEqual(new Set([RICH_STORY_PASSAGES[0].id, RICH_STORY_PASSAGES[1].id]));
   });
 });

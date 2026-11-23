@@ -73,18 +73,31 @@ export function PassageMarks({ cardId, picked, script, storyRef, children }: Pas
   // Which place: the white left of the column, to the window's edge (§S10; the contents rail on the right plays no
   // part). A window crossing the threshold changes place at once.
   const any = list.length > 0;
+  // The story's box may not be attached yet: the card page keys it by the translation's swaps (story-{n}), so a swap
+  // mounts this anew inside a new box, and a parent's ref is attached after its children's layout effects. Asked
+  // again on the next frame then — never left at no room (round 31: picks read before the translation landed were
+  // drawn on neither story, the original's box gone and the translation's not measured).
   useLayoutEffect(() => {
-    const el = storyRef.current;
-    if (!any || !el) {
+    if (!any) {
       setRoom(null);
       return;
     }
+    let el: HTMLElement | null = null;
+    let frame = 0;
     const measure = () => {
-      setRoom(passageRoom({ columnLeft: el.getBoundingClientRect().left }));
+      if (el) setRoom(passageRoom({ columnLeft: el.getBoundingClientRect().left }));
     };
-    measure();
+    const attach = () => {
+      el = storyRef.current;
+      if (el) measure();
+      else frame = window.requestAnimationFrame(attach);
+    };
+    attach();
     window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', measure);
+    };
   }, [any, storyRef]);
 
   const open = useCallback((id: string) => {
