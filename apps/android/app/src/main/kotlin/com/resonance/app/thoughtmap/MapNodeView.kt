@@ -52,7 +52,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
+import com.resonance.design.ImageRevealKind
+import com.resonance.design.RevealImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import coil3.size.Size
@@ -313,8 +314,10 @@ private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier,
             },
     ) {
         Box(Modifier.size(56.dp).clip(clip)) {
-            AsyncImage(
+            // The map's thumbs only fade in (no blur under the camera's transform); the request keeps crossfade off.
+            RevealImage(
                 model = request,
+                kind = ImageRevealKind.Fade,
                 contentDescription = null,
                 contentScale = CoverFit.scale(frame),
                 alignment = CoverFit.alignment(frame),

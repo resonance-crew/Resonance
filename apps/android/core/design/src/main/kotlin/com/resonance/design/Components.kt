@@ -101,7 +101,6 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.generated.ResonanceColors
@@ -332,8 +331,8 @@ fun HandDrawnAvatar(
         if (image != null) {
             Image(image, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.size(size).clip(shape))
         } else if (imageUrl != null) {
-            AsyncImage(model = imageUrl, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                modifier = Modifier.size(size).clip(shape))
+            RevealImage(model = imageUrl, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.size(size).clip(shape), kind = ImageRevealKind.Avatar)
         }
     }
 }

@@ -119,7 +119,8 @@ import androidx.compose.ui.unit.em
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import coil3.SingletonImageLoader
-import coil3.compose.AsyncImage
+import com.resonance.design.ImageRevealKind
+import com.resonance.design.RevealImage
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
@@ -1316,6 +1317,7 @@ internal fun previewContent(model: WriteModel, me: com.resonance.api.models.Me?)
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BoxScope.CoverSlot(frame: CoverFrame, palette: CardPalette, model: WriteModel, pickCover: () -> Unit, dismissKeyboard: () -> Unit) {
+    val context = LocalContext.current
     val url = model.values.imageUrl
     val partial = model.partialPreview
     val busy = model.mediaBusy

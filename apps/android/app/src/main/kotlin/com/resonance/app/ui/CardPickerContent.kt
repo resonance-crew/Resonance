@@ -38,7 +38,8 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
-import coil3.compose.AsyncImage
+import com.resonance.design.ImageRevealKind
+import com.resonance.design.RevealImage
 import com.resonance.design.Grain
 import com.resonance.design.GrainMode
 import com.resonance.design.Mixes
@@ -278,8 +279,9 @@ private fun PickThumb(url: String?, fallbackUrl: String?, hue: Double, seed: Dou
         // The list's small cover (imageThumbUrl), the cover itself when that one isn't there.
         var shown by remember(url, fallbackUrl) { mutableStateOf(url) }
         shown?.let { picture ->
-            AsyncImage(
+            RevealImage(
                 model = picture, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(shape),
+                kind = ImageRevealKind.Thumb,
                 onError = { if (fallbackUrl != null && picture != fallbackUrl) shown = fallbackUrl },
             )
         }

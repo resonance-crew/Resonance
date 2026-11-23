@@ -42,7 +42,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.geometry.Prng
@@ -153,7 +152,7 @@ fun HandDrawnImage(
             when {
                 bitmap != null -> Image(bitmap, null, picture, contentScale = ContentScale.Crop)
                 else -> Box(picture.background(Tokens.CreamDark)) {
-                    if (url != null) AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    if (url != null) RevealImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 }
             }
         }

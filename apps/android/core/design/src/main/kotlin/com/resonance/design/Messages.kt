@@ -92,7 +92,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
-import coil3.compose.AsyncImage
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.geometry.CornerRadii
@@ -654,7 +653,7 @@ private fun BubblePicture(url: String, bleed: Dp = PictureBleed, frame: CoverFra
             .bleedSides(bleed)
             .background(Tokens.Text.copy(alpha = 0.06f)),
     ) {
-        AsyncImage(
+        RevealImage(
             model = url, contentDescription = null, modifier = Modifier.fillMaxSize(), onError = { onError() },
             contentScale = CoverFit.scale(frame), alignment = CoverFit.alignment(frame),
         )
@@ -771,7 +770,7 @@ fun ColumnScope.ChatPictureSection(
         when (picture) {
             is ChatPictureSource.Local -> Image(picture.preview, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             is ChatPictureSource.Remote -> if (loader != null) key(attempt) {
-                AsyncImage(
+                RevealImage(
                     model = picture.thumb, contentDescription = null, imageLoader = loader,
                     modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
                     onSuccess = { failed = false },

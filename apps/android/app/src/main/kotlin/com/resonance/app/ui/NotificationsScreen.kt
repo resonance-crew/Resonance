@@ -59,7 +59,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.compose.AsyncImage
+import com.resonance.design.ImageRevealKind
+import com.resonance.design.RevealImage
 import com.resonance.api.models.FeedCard
 import com.resonance.app.NotificationsStore
 import com.resonance.app.Person
@@ -409,7 +410,7 @@ private fun CardThumb(card: FeedCard) {
     ThumbFace(card.id) {
         Box(Modifier.fillMaxSize().background(if (cover != null) colors.skeleton else colors.fill), contentAlignment = Alignment.Center) {
             if (cover != null) {
-                AsyncImage(cover, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                RevealImage(cover, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(), kind = ImageRevealKind.Thumb)
             } else {
                 val first = card.title.trim().let { t -> if (t.isEmpty()) "" else String(Character.toChars(t.codePointAt(0))) }
                 BasicText(first, style = AppFonts.style(AppFonts.Family.HeadingCJK, 19f, 600, lineHeight = 1f, color = colors.deep))

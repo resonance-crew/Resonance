@@ -1004,7 +1004,7 @@ private fun ColumnScope.AlbumSection(
                 when (source) {
                     is ChatPictureSource.Local -> androidx.compose.foundation.Image(source.preview, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
                     is ChatPictureSource.Remote -> model.pictureLoader?.let { loader ->
-                        coil3.compose.AsyncImage(
+                        com.resonance.design.RevealImage(
                             model = source.thumb, contentDescription = null, imageLoader = loader,
                             modifier = Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                         )
