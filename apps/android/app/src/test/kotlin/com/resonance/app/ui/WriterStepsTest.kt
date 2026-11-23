@@ -443,6 +443,22 @@ class WriterStepsTest {
      * Round 32 §P4 (the owner: 切卡片類型時畫面上下跳動): the update hint above 卡片類型 came and went with 私人卡, so the
      * grid jumped. Its room now stays for every card readers have, whatever is chosen; only its words fade.
      */
+    /**
+     * Round 32 §P6 (the server lane's audit: publish waited for a second, serial save): a choice in 卡片類型 is handed
+     * to the store at once, not 1.5 s later, and the publish after it hands over nothing more — it sends only the
+     * publish.
+     */
+    @Test fun aChoiceIsSavedAtOnceAndPublishThenSendsOnlyThePublish() = runBlocking {
+        val m = model(draft(written))
+        m.choose(Audience.Connections)
+        // No autosave wait: handed over now.
+        assertEquals(listOf("connections"), store.handed.map { it.third.visibility })
+        val handed = store.handed.size
+        assertEquals("rain-walk", m.finish()?.key)
+        assertEquals(listOf("d1"), calls.published)
+        assertEquals("publish's own save sent nothing more", handed, store.handed.size)
+    }
+
     @Test fun nothingAboveTheCardTypesChangesWithAChoice() {
         for (start in listOf(live(written), live(written.copy(visibility = "connections")), live(written.copy(visibility = "private")), draft(written))) {
             val m = model(start)
