@@ -419,6 +419,78 @@ describe('taking over from the server render', () => {
     });
   });
 
+  // P0 #8: while Auth restores, the cookie's reader's block list (read with the cookie) decides — the story no longer
+  // waits for the SDK's restore and then for the list, and a blocked author's named card still never shows.
+  describe('while Auth restores, by the reader the session cookie was minted for', () => {
+    const restoring = () => mockUseAuth.mockReturnValue({ user: null, loading: true });
+
+    it("shows a named card once that reader's list is known and clear of its author — before Auth has restored", async () => {
+      signIn();
+      restoring();
+      vi.mocked(getCardById).mockReturnValue(new Promise(() => {}));
+      const blocks = deferred<Set<string>>();
+      vi.mocked(getMyBlockedIds).mockReturnValue(blocks.promise);
+      renderPage({ seed: seed() });
+      expect(storyVisible()).toBe(false);
+      await waitFor(() => expect(getMyBlockedIds).toHaveBeenCalledWith('me'));
+      expect(storyVisible()).toBe(false);
+      await act(async () => blocks.resolve(new Set(['someone-else'])));
+      await waitFor(() => expect(storyVisible()).toBe(true));
+    });
+
+    it('never shows the card of an author that reader blocked, at any moment, and reads as not found', async () => {
+      signIn();
+      restoring();
+      vi.mocked(getCardById).mockReturnValue(new Promise(() => {}));
+      const blocks = deferred<Set<string>>();
+      vi.mocked(getMyBlockedIds).mockReturnValue(blocks.promise);
+      const seen: boolean[] = [];
+      const observer = new MutationObserver(() => seen.push(storyVisible()));
+      observer.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+      renderPage({ seed: seed() });
+      seen.push(storyVisible());
+      await waitFor(() => expect(getMyBlockedIds).toHaveBeenCalledWith('me'));
+      await act(async () => blocks.resolve(new Set(['a1'])));
+      expect(await screen.findByText("This card can't be found")).toBeInTheDocument();
+      observer.disconnect();
+      expect(seen.length).toBeGreaterThan(0);
+      expect(seen.every((v) => v === false)).toBe(true);
+      expect(screen.queryByText(STORY)).not.toBeInTheDocument();
+    });
+
+    it("holds again for a restored user who is not the cookie's, until their own list comes — and takes the card away on it", async () => {
+      signIn();
+      restoring();
+      vi.mocked(getCardById).mockReturnValue(new Promise(() => {}));
+      const theirs = deferred<Set<string>>();
+      vi.mocked(getMyBlockedIds).mockImplementation(async (uid?: string) => (uid === 'me' ? new Set<string>() : theirs.promise));
+      const view = renderPage({ seed: seed() });
+      await waitFor(() => expect(storyVisible()).toBe(true));
+
+      mockUseAuth.mockReturnValue({ user: { id: 'other' }, loading: false });
+      view.rerender(
+        <NextIntlClientProvider locale="en" messages={enMessages}>
+          <Providers>
+            <CardDetailClient slug="a-quiet-morning" seed={seed()} />
+          </Providers>
+        </NextIntlClientProvider>,
+      );
+      expect(storyVisible()).toBe(false);
+      await act(async () => theirs.resolve(new Set(['a1'])));
+      expect(await screen.findByText("This card can't be found")).toBeInTheDocument();
+    });
+
+    it("holds an anonymous card and the reader's own until Auth has restored", () => {
+      const base = { signedInHere: true, authLoading: true, viewerId: undefined, markUid: 'me', blocked: new Set<string>(), failed: false };
+      expect(storyGate({ ...base, authorId: 'a1' })).toBe('show');
+      expect(storyGate({ ...base, authorId: '' })).toBe('hold');
+      expect(storyGate({ ...base, authorId: 'me' })).toBe('hold');
+      expect(storyGate({ ...base, authorId: 'a1', blocked: undefined })).toBe('hold');
+      expect(storyGate({ ...base, authorId: 'a1', markUid: null })).toBe('hold');
+      expect(storyGate({ ...base, authorId: 'a1', blocked: new Set(['a1']) })).toBe('blocked');
+    });
+  });
+
   it('shows the story when this browser remembers a sign-in the SDK no longer has', async () => {
     signIn();
     mockUseAuth.mockReturnValue({ user: null, loading: false });

@@ -590,6 +590,25 @@ export function useMyBlockedIds() {
   });
 }
 
+/**
+ * The block list of the reader a page is read for, as `useReadViewer` names them (P0 #8): while Auth restores in a
+ * browser holding a live session cookie, the list of the uid the cookie was minted for, read with that cookie (W10) —
+ * the card page no longer waits for the SDK's restore and then for GET /me/blocks one after the other; once Auth has
+ * restored, its user's (the same key, and so what was read, when it is the same person; another one reads its own,
+ * `data` undefined meanwhile). `viewer` says whose list `data` is.
+ */
+export function useReaderBlockedIds(): { data: Set<string> | undefined; viewer: string | undefined } {
+  const { user, loading } = useAuth();
+  const { uid } = useReadViewer();
+  const viewer = loading ? uid : user?.id;
+  const early = loading;
+  const { data } = useSWR<Set<string>>(viewer ? `blocks:${viewer}` : null, () => getMyBlockedIds(early ? viewer : undefined), {
+    ...LIVE_ON_FOCUS,
+    compare: sameIds,
+  });
+  return { data, viewer };
+}
+
 const myProfileKey = (uid: string) => `profile:${uid}`;
 
 /**

@@ -40,7 +40,7 @@ import { hasSessionMark } from '@/lib/auth/firebase/client';
 import { cardKey } from '@/lib/data/cardPrefill';
 import type { CardSeed } from '@/lib/data/cardSeed';
 import type { Card } from '@/lib/db/types';
-import { useCard, useCardPageLists, useMyBlockedIds, type CardView } from '@/lib/data/hooks';
+import { useCard, useCardPageLists, useReaderBlockedIds, type CardView } from '@/lib/data/hooks';
 import { useCountCardRead } from '@/lib/data/cardReads';
 import { useReadingReport } from '@/lib/data/readingReport';
 import { SectionEdge } from '@/components/atoms/SectionEdge/SectionEdge';
@@ -80,6 +80,13 @@ const wrapStyle = {
  *   reader blocked someone would tell them who wrote it): it shows once that
  *   read answers.
  * - `blocked` — the viewer blocked the author: the page reads as not found.
+ *
+ * While Auth restores in a browser with a live session cookie (P0 #8), the
+ * reader is the uid the cookie was minted for (`markUid`) and `blocked` is that
+ * uid's list, read with the cookie: a named card shows as soon as that list is
+ * known and clear of its author — never before it, and never on another
+ * reader's list (a restored user who isn't the cookie's reads their own, held
+ * until it comes). Their own card, and an anonymous one, still wait for Auth.
  */
 export type StoryGate = 'show' | 'hold' | 'unknown' | 'blocked';
 
@@ -88,6 +95,9 @@ export function storyGate(s: {
   signedInHere: boolean | null;
   authLoading: boolean;
   viewerId: string | undefined;
+  /** While Auth restores: the uid the browser's live session cookie was minted for (sessionMarkUid), or null. */
+  markUid?: string | null;
+  /** The block list of the reader: `viewerId`'s, or while Auth restores `markUid`'s; undefined until known. */
   blocked: Set<string> | undefined;
   /** The card's author; empty on someone else's anonymous card (the server never names them). */
   authorId: string;
@@ -97,13 +107,18 @@ export function storyGate(s: {
   answered?: boolean;
 }): StoryGate {
   const { signedInHere, authLoading, viewerId, blocked, authorId, failed, answered = false } = s;
-  if (viewerId && authorId === viewerId) return 'show';
-  if (viewerId && authorId && blocked?.has(authorId)) return 'blocked';
+  const markUid = authLoading ? (s.markUid ?? null) : null;
+  if (!authLoading && viewerId && authorId === viewerId) return 'show';
+  const reader = authLoading ? markUid : viewerId;
+  if (reader && authorId && blocked?.has(authorId)) return 'blocked';
   if (signedInHere === null) return 'unknown';
   // Nobody signed in in this browser: no block list to wait for. (A viewer
   // restored without the mark still loses the card once their list arrives.)
   if (!signedInHere) return 'show';
-  if (authLoading) return 'hold';
+  if (authLoading) {
+    // The cookie's reader, their list known and clear of a named card's author someone else wrote (P0 #8).
+    return markUid && blocked && authorId && authorId !== markUid ? 'show' : 'hold';
+  }
   if (!viewerId) return 'show';
   if (!blocked) return 'hold';
   // An anonymous card: its read answered (a block never hides one), or failed.
@@ -132,7 +147,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   const router = useRouter();
   const { mutate } = useSWRConfig();
   const { data, isLoading, error, fromServer, mutate: readAgain } = useCard(slug, seed);
-  const { data: blocked } = useMyBlockedIds();
+  const { data: blocked, viewer: blocksOf } = useReaderBlockedIds();
   // False for the server render and hydration (which must draw the same
   // markup), true from then on.
   const inBrowser = useSyncExternalStore(subscribeNever, isBrowser, notBrowser);
@@ -140,6 +155,8 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
     signedInHere: inBrowser ? hasSessionMark() : null,
     authLoading: loading,
     viewerId: user?.id,
+    markUid: inBrowser && loading ? blocksOf : null,
+    // `blocksOf`'s list: the restored user's, or while Auth restores the cookie's reader's (useReaderBlockedIds).
     blocked,
     authorId: data?.card?.authorId ?? '',
     failed: !!error,

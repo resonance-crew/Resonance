@@ -1,7 +1,7 @@
 'use client';
 
 import type { BlockListBody } from '@/lib/api/v1/schemas';
-import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
+import { getFirebaseClientAuth, sessionMarkUid } from '@/lib/auth/firebase/client';
 import { callApi, ownSignalsOf } from './api';
 import { rememberPeople } from './reads';
 import { pokeOwn } from './signals';
@@ -47,8 +47,24 @@ let cache: { uid: string; ids: Promise<Set<string>> } | null = null;
  * — and cached that way. Read once (GET /api/v1/me/blocks) for every list
  * that asks: only the viewer's own block or unblock changes it.
  */
-export async function getMyBlockedIds(): Promise<Set<string>> {
+export async function getMyBlockedIds(cookieUid?: string): Promise<Set<string>> {
   const auth = getFirebaseClientAuth();
+  // The card page (P0 #8): while Auth restores in a browser whose live session cookie was minted for `cookieUid`
+  // (its mark), that cookie's own list, at once — callApi sends the cookie without an ID token (W10) — rather than
+  // the SDK's restore and then this read one after the other. A read that fails is never an empty list here: it
+  // falls back to the read below, after Auth (the page holds the card meanwhile).
+  if (cookieUid && !auth.currentUser && sessionMarkUid() === cookieUid) {
+    if (cache?.uid !== cookieUid) {
+      const ids = readBlocks()
+        .then((blocks) => new Set(blocks.map((b) => b.uid)))
+        .catch(() => {
+          if (cache?.ids === ids) cache = null;
+          return getMyBlockedIds();
+        });
+      cache = { uid: cookieUid, ids };
+    }
+    return cache.ids;
+  }
   await auth.authStateReady();
   const uid = auth.currentUser?.uid;
   if (!uid) return new Set();

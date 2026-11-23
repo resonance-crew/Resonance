@@ -34,7 +34,8 @@ vi.mock('./init', () => ({
 vi.mock('./reads', () => ({ rememberPeople: vi.fn() }));
 vi.mock('./signals', () => ({ pokeOwn: vi.fn() }));
 vi.mock('./api', () => ({ callApi: vi.fn(), ownSignalsOf: () => null }));
-vi.mock('@/lib/auth/firebase/client', () => ({ getFirebaseClientAuth: () => auth }));
+const mark = vi.hoisted(() => ({ uid: null as string | null }));
+vi.mock('@/lib/auth/firebase/client', () => ({ getFirebaseClientAuth: () => auth, sessionMarkUid: () => mark.uid }));
 
 import { callApi } from './api';
 import { rememberPeople } from './reads';
@@ -46,6 +47,7 @@ const bob = { id: 'blocked-author', gone: false, author: null, bio: null, joined
 beforeEach(() => {
   vi.clearAllMocks();
   invalidateBlocks();
+  mark.uid = null;
   vi.mocked(callApi).mockImplementation((async (path: string) =>
     path === '/api/v1/me/blocks'
       ? { blocks: [{ userId: 'blocked-author', blockedAt: '2026-10-01T00:00:00.000Z', person: bob }] }
@@ -118,6 +120,45 @@ describe('blocking', () => {
     vi.mocked(callApi).mockRejectedValueOnce(new Error('offline'));
     await expect(blockUser('carol')).rejects.toThrow('offline');
     await getMyBlockedIds();
+    expect(reads()).toHaveLength(2);
+  });
+});
+
+describe("getMyBlockedIds for the cookie's reader (P0 #8: the card page while Auth restores)", () => {
+  it('reads the list with the session cookie at once, without waiting for the SDK, when the mark names that reader', async () => {
+    auth.reload('me');
+    mark.uid = 'me';
+    const ids = await getMyBlockedIds('me');
+    expect([...ids]).toEqual(['blocked-author']);
+    expect(reads()).toHaveLength(1);
+    // Auth restored as the same person: the same read, not another.
+    auth.restore();
+    expect(await getMyBlockedIds()).toBe(ids);
+    expect(reads()).toHaveLength(1);
+  });
+
+  it('waits for Auth as before when the mark names someone else, or none', async () => {
+    auth.reload('me');
+    mark.uid = 'someone-else';
+    let done = false;
+    const pending = getMyBlockedIds('me').then((ids) => ((done = true), ids));
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    expect(done).toBe(false);
+    expect(reads()).toHaveLength(0);
+    auth.restore();
+    expect([...(await pending)]).toEqual(['blocked-author']);
+  });
+
+  it('never answers an empty list for a cookie read that failed: it reads again once Auth has restored', async () => {
+    auth.reload('me');
+    mark.uid = 'me';
+    vi.mocked(callApi).mockRejectedValueOnce(new Error('401'));
+    let done = false;
+    const pending = getMyBlockedIds('me').then((ids) => ((done = true), ids));
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    expect(done).toBe(false);
+    auth.restore();
+    expect([...(await pending)]).toEqual(['blocked-author']);
     expect(reads()).toHaveLength(2);
   });
 });
