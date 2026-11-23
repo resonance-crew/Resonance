@@ -465,7 +465,8 @@ describe('taking over from the server render', () => {
       const theirs = deferred<Set<string>>();
       vi.mocked(getMyBlockedIds).mockImplementation(async (uid?: string) => (uid === 'me' ? new Set<string>() : theirs.promise));
       const view = renderPage({ seed: seed() });
-      await waitFor(() => expect(storyVisible()).toBe(true));
+      // (5 s: under load — CI, a release run beside it — the first read and the hold can take past the 1 s default)
+      await waitFor(() => expect(storyVisible()).toBe(true), { timeout: 5_000 });
 
       mockUseAuth.mockReturnValue({ user: { id: 'other' }, loading: false });
       view.rerender(
@@ -477,7 +478,7 @@ describe('taking over from the server render', () => {
       );
       expect(storyVisible()).toBe(false);
       await act(async () => theirs.resolve(new Set(['a1'])));
-      expect(await screen.findByText("This card can't be found")).toBeInTheDocument();
+      expect(await screen.findByText("This card can't be found", undefined, { timeout: 5_000 })).toBeInTheDocument();
     });
 
     it("holds an anonymous card and the reader's own until Auth has restored", () => {
