@@ -44,6 +44,7 @@ import { CommandTimeout, ROOT, SEED_PASSWORD, execTimed, ignorePath, shotPath, s
 import { devicesFor, groups, plan, stateOf, type DeviceState } from './variants';
 import { apartBoxOf, encodeFrame, parseScreencap, sameFrame, settleFrames, type Frame } from './frames';
 import { stopwatch, type Stopwatch } from './timings';
+import { BlockQueue, secondPhoneWanted, variantBlocks } from './lanes';
 
 const execFileAsync = promisify(execFile);
 
@@ -55,7 +56,7 @@ const EMULATOR = join(SDK, 'emulator/emulator');
 const ANDROID_DIR = join(ROOT, 'apps/android');
 export const APK = join(ANDROID_DIR, 'app/build/outputs/apk/debug/app-debug.apk');
 
-export type AndroidDevice = { id: string; phone: boolean; avd: string; port: number };
+export type AndroidDevice = { id: string; phone: boolean; avd: string; port: number; readOnly?: boolean };
 
 /** The console port names the device: `emulator-5600`. */
 export const ANDROID_DEVICES: AndroidDevice[] = [
@@ -64,6 +65,12 @@ export const ANDROID_DEVICES: AndroidDevice[] = [
 ];
 
 export const serialOf = (d: AndroidDevice) => `emulator-${d.port}`;
+
+/**
+ * The second phone (lanes.ts): `visual-phone` again, read-only — the emulator's way to run an AVD twice, its writes
+ * kept apart and thrown away when it stops — on a console port of its own. Booted only once the tablet is shut down.
+ */
+export const SECOND_PHONE: AndroidDevice = { id: 'phone', phone: true, avd: 'visual-phone', port: 5604, readOnly: true };
 
 /** How long one adb call may take (`VISUAL_ADB_TIMEOUT_S`, default 2 min; an install 5). */
 const ADB_TIMEOUT_MS = Number(process.env.VISUAL_ADB_TIMEOUT_S || 120) * 1000;
@@ -122,6 +129,12 @@ export async function kill(serial: string, log: (line: string) => void = console
   }
 }
 
+/** Whether adb still lists the emulator (a kill done when it no longer does). */
+async function listedByAdb(serial: string): Promise<boolean> {
+  const listed = await execTimed(ADB, ['devices'], { timeoutMs: 30_000 }).catch(() => null);
+  return !!listed && String(listed.stdout).split('\n').some((line) => line.startsWith(`${serial}\t`));
+}
+
 /** Boots the AVD unless it already runs; answers whether this run booted it. */
 export async function boot(device: AndroidDevice, ctx: CaptureContext): Promise<boolean> {
   const serial = serialOf(device);
@@ -135,7 +148,7 @@ export async function boot(device: AndroidDevice, ctx: CaptureContext): Promise<
   const start = async () => {
     ctx.log(`  booting ${device.avd} as ${serial}…`);
     // -no-snapshot-save: every run boots the same device; -gpu host: our AVDs would draw in software otherwise.
-    const child = spawn(EMULATOR, ['-avd', device.avd, '-port', String(device.port), '-no-window', '-gpu', 'host', '-no-snapshot-save', '-no-boot-anim', '-no-audio'], {
+    const child = spawn(EMULATOR, ['-avd', device.avd, '-port', String(device.port), '-no-window', '-gpu', 'host', '-no-snapshot-save', '-no-boot-anim', '-no-audio', ...(device.readOnly ? ['-read-only'] : [])], {
       detached: true,
       stdio: ['ignore', out, out],
     });
@@ -508,10 +521,10 @@ export const SETTINGS_ON_DISK_MS = 3000;
 const softKeyboard = (serial: string, on: boolean) => shell(serial, `settings put secure show_ime_with_hard_keyboard ${on ? 1 : 0}`);
 
 /** One device (a base device or a state of it, variants.ts) of the AVD on `serial`: its shots, by variant and account. */
-async function captureDevice(id: string, serial: string, ctx: CaptureContext): Promise<string[]> {
+async function captureDevice(id: string, serial: string, ctx: CaptureContext, only?: readonly AndroidGroup[]): Promise<string[]> {
   const unsettled: string[] = [];
   let worn: Variant | null = null;
-  for (const { variant: v, screens } of groups(plan('android', id, ctx.set ?? 'release', ctx.only))) {
+  for (const { variant: v, screens } of only ?? groups(plan('android', id, ctx.set ?? 'release', ctx.only))) {
     if (worn?.theme !== v.theme) await wear(serial, v);
     worn = v;
     await reset(serial, v);
@@ -543,8 +556,13 @@ async function captureDevice(id: string, serial: string, ctx: CaptureContext): P
   return unsettled;
 }
 
-/** An AVD's whole share of the run: the app installed once, then its devices one after the other, each state worn and taken back. */
-async function captureLane(device: AndroidDevice, ids: string[], ctx: CaptureContext): Promise<string[]> {
+type AndroidGroup = ReturnType<typeof groups>[number];
+
+/**
+ * An AVD's whole share of the run: the app installed once, then its devices one after the other, each state worn and
+ * taken back. The phone's own variants come from `queue` when a second phone may share them (lanes.ts), front first.
+ */
+async function captureLane(device: AndroidDevice, ids: string[], ctx: CaptureContext, queue?: BlockQueue<AndroidGroup[]> | null): Promise<string[]> {
   const serial = serialOf(device);
   const unsettled: string[] = [];
   await holdStill(serial, ctx);
@@ -554,7 +572,9 @@ async function captureLane(device: AndroidDevice, ids: string[], ctx: CaptureCon
     const takeBack = state ? await wearState((c) => shell(serial, c), state.android) : null;
     if (state) ctx.log(`  ${id}: ${state.why}`);
     try {
-      unsettled.push(...(await captureDevice(id, serial, ctx)));
+      if (id === device.id && queue) {
+        for (let block = queue.front(); block; block = queue.front()) unsettled.push(...(await captureDevice(id, serial, ctx, block)));
+      } else unsettled.push(...(await captureDevice(id, serial, ctx)));
     } finally {
       await takeBack?.();
     }
@@ -580,7 +600,47 @@ export const captureAndroid: Capture = async (ctx) => {
       // Both AVDs at once (VISUAL_PARALLEL=0: one at a time, for a machine short of memory): the
       // build and the boots overlap, then each device runs its screens beside the other.
       await Promise.all([build(ctx), warmUp(ctx), ...devices.map(async (d) => (await boot(d, ctx)) && started.push(d))]);
-      return (await Promise.all(lanes.map((l) => captureLane(l.device, l.ids, ctx)))).flat();
+      // The phone's variants as blocks a second phone may share once the tablet is done (lanes.ts).
+      const phoneLane = lanes.find((l) => l.device.id === 'phone' && l.ids.includes('phone'));
+      const tabletLane = lanes.find((l) => l.device.id === 'tablet');
+      const blocks = phoneLane && tabletLane ? variantBlocks(groups(plan('android', 'phone', ctx.set ?? 'release', ctx.only))) : [];
+      const queue = blocks.length >= 2 ? new BlockQueue(blocks) : null;
+      const secondPhone = async (): Promise<string[]> => {
+        const tablet = tabletLane!.device;
+        // Down first, and seen gone, or no second phone: never three devices at once.
+        let tabletDown = false;
+        if (started.includes(tablet)) {
+          await shutDown(tablet);
+          tabletDown = !(await listedByAdb(serialOf(tablet)));
+        }
+        if (!secondPhoneWanted({ left: queue!.left, tabletDown })) return [];
+        ctx.log(`  the tablet is done and down: a second phone (${SECOND_PHONE.avd}, read-only, ${serialOf(SECOND_PHONE)}) takes the phone's last variants`);
+        if (!(await boot(SECOND_PHONE, ctx))) {
+          ctx.log(`  ${serialOf(SECOND_PHONE)} was already running: not this run's, left alone`);
+          return [];
+        }
+        started.push(SECOND_PHONE);
+        const serial = serialOf(SECOND_PHONE);
+        const unsettled: string[] = [];
+        try {
+          await holdStill(serial, ctx);
+          await adb(serial, 'install', '-r', '-t', APK);
+          for (let block = queue!.back(); block; block = queue!.back()) unsettled.push(...(await captureDevice('phone', serial, ctx, block)));
+          await shell(serial, `am force-stop ${PACKAGE}`);
+        } finally {
+          await shutDown(SECOND_PHONE);
+        }
+        return unsettled;
+      };
+      return (
+        await Promise.all(
+          lanes.map(async (l) => {
+            const unsettled = await captureLane(l.device, l.ids, ctx, l === phoneLane ? queue : null);
+            if (l === tabletLane && queue) unsettled.push(...(await secondPhone()));
+            return unsettled;
+          }),
+        )
+      ).flat();
     }
     // One AVD at a time: booted, captured and shut down before the next one boots.
     await Promise.all([build(ctx), warmUp(ctx)]);

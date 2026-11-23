@@ -607,6 +607,13 @@ apps beside the first phase and leaves no gap between platforms (round-verify ta
 platform's devices one at a time, for a machine short of memory); an AVD or simulator this run
 booted is shut down when its screens are done (`VISUAL_KEEP_DEVICES=1` keeps the simulators up), and
 nothing else ever is (One run at a time, and the owner's devices).
+**A second phone** (`lanes.ts`): a phone takes three variants and a tablet one, so the tablet's lane used to stand
+idle for most of the phase (run 20261123-073642: the Android tablet 14 min, the iPad 9). Now the phone's work is cut
+by variant; the first phone takes from the front (light zh-TW first, so the first visits keep their old order) and,
+once the tablet is done, shut down and seen gone, a second phone takes from the back — Android `visual-phone` again,
+read-only, as `emulator-5604` (its writes thrown away when it stops); iOS `Visual iPhone 2`, a `simctl clone` of
+`Visual iPhone` made before the iPhone boots (none when it already runs) and deleted when the run is done. Never more
+than two devices at once; `VISUAL_SECOND_PHONE=0` (or `VISUAL_PARALLEL=0`) keeps to one phone.
 The flows still run one platform at a time after the captures: each reseeds (and so empties) the
 stack's database, which would pull the data from under the other platform's flow. The stack's `next dev` builds into `.next-visual/<port>` with its own
 tsconfig, so it never meets another dev server's `.next` and never rewrites `tsconfig.json`, and keeps

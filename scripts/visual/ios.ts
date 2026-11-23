@@ -25,6 +25,7 @@ import { CommandTimeout, ROOT, SEED_PASSWORD, execTimed, run, settle, shotPath, 
 import { devicesFor, groups, plan, stateOf } from './variants';
 import { MAESTRO, maestroEnv } from './flows';
 import { stopwatch, type Stopwatch } from './timings';
+import { BlockQueue, secondPhoneWanted, variantBlocks } from './lanes';
 
 export const BUNDLE_ID = 'com.resonance.stories';
 const IOS_DIR = join(ROOT, 'apps/ios');
@@ -38,6 +39,37 @@ export const IOS_DEVICES: IosDevice[] = [
   { id: 'iphone', phone: true, name: 'Visual iPhone', type: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro' },
   { id: 'ipad', phone: false, name: 'Visual iPad', type: 'com.apple.CoreSimulator.SimDeviceType.iPad-Air-11-inch-M4' },
 ];
+
+/**
+ * The second phone (lanes.ts): a clone of `Visual iPhone` (`simctl clone`, made while it is shut down, so the same
+ * device and the same state), booted once the iPad is done and shut down, deleted when the run is done with it.
+ */
+export const SECOND_IPHONE: IosDevice = { id: 'iphone', phone: true, name: 'Visual iPhone 2', type: IOS_DEVICES[0].type };
+
+type SimListed = { name: string; udid: string; state: string };
+function listed(): SimListed[] {
+  const all = JSON.parse(simctl('list', 'devices', '-j')) as { devices: Record<string, SimListed[]> };
+  return all.devices[RUNTIME] ?? [];
+}
+
+/** Deletes the second phone's clone, wherever a run left one (it is only ever the harness's own). */
+function deleteClone(log: (line: string) => void) {
+  for (const d of listed().filter((d) => d.name === SECOND_IPHONE.name)) {
+    if (d.state === 'Booted') spawnSync('xcrun', ['simctl', 'shutdown', d.udid], { stdio: 'ignore', timeout: SIMCTL_TIMEOUT_MS });
+    spawnSync('xcrun', ['simctl', 'delete', d.udid], { stdio: 'ignore', timeout: SIMCTL_TIMEOUT_MS });
+    log(`  removed the second iPhone's clone ${d.udid}`);
+  }
+}
+
+/** A clone of the harness's iPhone, made only while it is shut down (simctl clones a shut-down device); null otherwise. */
+function cloneIphone(log: (line: string) => void): string | null {
+  deleteClone(log);
+  const source = listed().find((d) => d.name === IOS_DEVICES[0].name);
+  if (!source || source.state !== 'Shutdown') return null;
+  const udid = simctl('clone', source.udid, SECOND_IPHONE.name).trim();
+  log(`  cloned ${source.name} as ${SECOND_IPHONE.name} (${udid}) for the phone's last variants`);
+  return udid;
+}
 
 /** Runs a long tool (xcodegen, xcodebuild) with its output in this run's logs; throws with the log's path. */
 /** A long command (a build) without holding up the captures running beside it; its output to `logFile`. */
@@ -318,8 +350,11 @@ export const captureIos: Capture = async (ctx) => {
   if (!lanes.length || !screensFor('ios', ctx.only, set === 'extended').length) return unsettled;
   mkdirSync(join(ctx.runDir, '_logs'), { recursive: true });
   await build(ctx);
-  // Both simulators at once (VISUAL_PARALLEL=0: one at a time), each booted, captured and shut down.
-  const captureOn = async ({ device, ids }: (typeof lanes)[number]) => {
+  // Both simulators at once (VISUAL_PARALLEL=0: one at a time), each booted, captured and shut down. The iPhone's own
+  // variants come from `queue` when a second iPhone may share them (lanes.ts): the first from the front, the clone
+  // from the back.
+  type IosGroup = ReturnType<typeof groups>[number];
+  const captureOn = async ({ device, ids }: (typeof lanes)[number], queue?: { blocks: BlockQueue<IosGroup[]>; end: 'front' | 'back' }) => {
     const { udid, booted } = await simulator(device, ctx);
     spawnSync('xcrun', ['simctl', 'terminate', udid, BUNDLE_ID], { stdio: 'ignore', timeout: SIMCTL_TIMEOUT_MS });
     simctl('install', udid, APP);
@@ -335,7 +370,10 @@ export const captureIos: Capture = async (ctx) => {
       if (landscape) await turn(udid, true, ctx);
       try {
         let theme: Variant['theme'] | null = null;
-        for (const { variant: v, account, screens } of groups(plan('ios', id, set, ctx.only))) {
+        // The device's groups in one block, or the iPhone's shared blocks one at a time.
+        const own: IosGroup[][] = [groups(plan('ios', id, set, ctx.only))];
+        const next = queue && id === device.id ? () => (queue.end === 'front' ? queue.blocks.front() : queue.blocks.back()) : () => own.shift();
+        for (let block = next(); block; block = next()) for (const { variant: v, account, screens } of block) {
           // The system's appearance too: the app follows its own choice, the status bar the system's.
           if (theme !== v.theme) simctl('ui', udid, 'appearance', v.theme);
           theme = v.theme;
@@ -382,7 +420,30 @@ export const captureIos: Capture = async (ctx) => {
     spawnSync('xcrun', ['simctl', 'terminate', udid, BUNDLE_ID], { stdio: 'ignore', timeout: SIMCTL_TIMEOUT_MS });
     if (booted) shutDown(udid, device.name, ctx.log);
   };
-  if (process.env.VISUAL_PARALLEL === '0') for (const lane of lanes) await captureOn(lane);
-  else await Promise.all(lanes.map(captureOn));
+  if (process.env.VISUAL_PARALLEL === '0') {
+    for (const lane of lanes) await captureOn(lane);
+    return unsettled;
+  }
+  const phoneLane = lanes.find((l) => l.device.id === 'iphone' && l.ids.includes('iphone'));
+  const tabletLane = lanes.find((l) => l.device.id === 'ipad');
+  const blocks = phoneLane && tabletLane && process.env.VISUAL_SECOND_PHONE !== '0' ? variantBlocks(groups(plan('ios', 'iphone', set, ctx.only))) : [];
+  // Cloned before the iPhone boots (a clone wants its source shut down); none when it already runs.
+  const clone = blocks.length >= 2 && process.env.VISUAL_KEEP_DEVICES !== '1' ? cloneIphone(ctx.log) : null;
+  const queue = clone ? { blocks: new BlockQueue(blocks), end: 'front' as const } : undefined;
+  try {
+    await Promise.all(
+      lanes.map(async (lane) => {
+        await captureOn(lane, lane === phoneLane ? queue : undefined);
+        if (lane !== tabletLane || !queue) return;
+        // Down first, and seen down, or no second iPhone: never three simulators at once.
+        const ipad = listed().find((d) => d.name === lane.device.name);
+        if (!secondPhoneWanted({ left: queue.blocks.left, tabletDown: ipad?.state === 'Shutdown' })) return;
+        ctx.log(`  the iPad is done and down: ${SECOND_IPHONE.name} takes the iPhone's last variants`);
+        await captureOn({ device: SECOND_IPHONE, ids: ['iphone'] }, { blocks: queue.blocks, end: 'back' });
+      }),
+    );
+  } finally {
+    if (clone) deleteClone(ctx.log);
+  }
   return unsettled;
 };
