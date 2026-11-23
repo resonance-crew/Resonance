@@ -149,6 +149,19 @@ export function pgTapsData(docs: PgDocs): TapsData {
       const ids = rows.flatMap(({ row }) => (Array.isArray(row.userIds) ? (row.userIds as unknown[]) : []));
       return [...new Set(ids.filter((id): id is string => docIdOk(id) && id !== uid))];
     },
+    async connectedAmong(uid, uids) {
+      const out = new Set<string>();
+      for (const id of new Set(uids)) {
+        if (!docIdOk(id) || id === uid) continue;
+        const both = (await docs.get('connections', pairOf(uid, id)))?.userIds;
+        if (Array.isArray(both) && both.includes(uid) && both.includes(id)) out.add(id);
+      }
+      return out;
+    },
+    async tapsOn(cardId, limit) {
+      const rows = await docs.rows(TAPS, { eq: { cardId, on: true }, limit: Math.max(0, Math.floor(limit)) });
+      return { tappers: rows.map(({ row }) => tapperOf(row)).filter((t): t is Tapper => !!t), full: rows.length >= limit };
+    },
     async tapsOnBy(cardId, uids) {
       if (!uids.length) return [];
       const rows = await docs.rows(TAPS, { eq: { cardId, on: true }, in: { userId: uids } });

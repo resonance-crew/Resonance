@@ -71,7 +71,7 @@ public struct OrganicImage<Placeholder: View>: View {
     }
 }
 
-/// The few longer sides (pixels) a list's pictures are decoded at: the next one up from what is shown.
+/// The few widths and heights (pixels) a list's pictures are decoded at: the next one up from what is shown.
 public nonisolated enum ImageSizeBuckets {
     static let sides: [CGFloat] = [128, 256, 384, 512, 768, 1024, 1280, 1600, 2048, 2560]
 
@@ -81,9 +81,9 @@ public nonisolated enum ImageSizeBuckets {
 
     /// The picture at `url` decoded as an ImageIO thumbnail just large enough to fill `box` (pixels; ×
     /// a cover frame's `zoom`, which shows a smaller part of it) — never the whole 2048 px bitmap for a
-    /// card a third as wide, nor a cover for a 40 pt thumb (audit I2). The longer side is rounded up to
-    /// one of `sides`, so a feed's pictures share a handful of memory-cache keys; the URL, and so the
-    /// disk cache the prefetch fills, stays the same. Nothing laid out yet (an empty box): as it is.
+    /// card a third as wide, nor a cover for a 40 pt thumb (audit I2). Each side is rounded up to one of
+    /// `sides`, so a feed's pictures share a handful of memory-cache keys; the URL, and so the disk cache
+    /// the prefetch fills, stays the same. Nothing laid out yet (an empty box): as it is.
     public static func request(_ url: URL, box: CGSize, zoom: Double = 1) -> ImageRequest {
         var request = ImageRequest(url: url)
         guard let size = decodeSize(box: box, zoom: zoom) else { return request }
@@ -91,21 +91,28 @@ public nonisolated enum ImageSizeBuckets {
         return request
     }
 
-    /// The box (pixels) a picture shown in `box` is decoded to fill: a square whose side is the bucket above the
-    /// longer side shown (× the frame's zoom), which the picture fills. It depends on that bucket alone, so a box
-    /// whose width changes a little (a rotation, Stage Manager, a Mac window or divider dragged) keeps its request
-    /// and cache key, and its cover stays up instead of going back to the skeleton. Nil for a box not laid out yet.
+    /// The box (pixels) a picture shown in `box` is decoded to fill (aspect fill): its width and its height each
+    /// the bucket above that side shown (× the frame's zoom), so the picture has at least the pixels the box shows
+    /// on both axes — and a wide box no longer decodes a square as tall as it is wide (a 1170 × 725 feed card
+    /// fills 1280 × 768, not 1280 × 1280). It depends on the two buckets alone, so a box whose width changes a
+    /// little (a rotation, Stage Manager, a Mac window or divider dragged) keeps its request and cache key, and its
+    /// cover stays up instead of going back to the skeleton. Nil for a box not laid out yet.
     public static func decodeSize(box: CGSize, zoom: Double = 1) -> CGSize? {
         guard box.width > 0, box.height > 0 else { return nil }
-        let needed = neededSide(box: box, zoom: zoom)
-        guard needed.isFinite else { return nil }
-        let side = bucket(needed)
-        return CGSize(width: side, height: side)
+        let scale = clampedZoom(zoom)
+        let width = box.width * scale, height = box.height * scale
+        guard width.isFinite, height.isFinite else { return nil }
+        return CGSize(width: bucket(width), height: bucket(height))
+    }
+
+    /// A cover frame's zoom as the decode reads it (1…2).
+    static func clampedZoom(_ zoom: Double) -> CGFloat {
+        zoom.isFinite ? max(1, min(zoom, 2)) : 1
     }
 
     /// The longer side (pixels) of the picture a `box` shows: the box's, × the frame's zoom (1…2).
     public static func neededSide(box: CGSize, zoom: Double = 1) -> CGFloat {
-        max(box.width, box.height) * max(1, min(zoom, 2))
+        max(box.width, box.height) * clampedZoom(zoom)
     }
 
     /// The smaller cover's longer side (`imageThumbUrl`, B2).

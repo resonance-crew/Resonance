@@ -149,6 +149,19 @@ export function tapsData(state: MemoryState): TapsData {
       const ids = state.rows('connections').flatMap(({ row }) => (Array.isArray(row.userIds) && row.userIds.includes(uid) ? (row.userIds as unknown[]) : []));
       return [...new Set(ids.filter((id): id is string => docIdOk(id) && id !== uid))];
     },
+    async connectedAmong(uid, uids) {
+      const out = new Set<string>();
+      for (const id of new Set(uids)) {
+        if (!docIdOk(id) || id === uid) continue;
+        const both = state.get('connections', pairOf(uid, id))?.userIds;
+        if (Array.isArray(both) && both.includes(uid) && both.includes(id)) out.add(id);
+      }
+      return out;
+    },
+    async tapsOn(cardId, limit) {
+      const rows = state.rows(TAPS, (row) => row.cardId === cardId && row.on === true).slice(0, Math.max(0, limit));
+      return { tappers: rows.map(({ row }) => tapperOf(row)).filter((t): t is Tapper => !!t), full: rows.length >= limit };
+    },
     async tapsOnBy(cardId, uids) {
       const wanted = new Set(uids);
       return state

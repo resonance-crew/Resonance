@@ -130,7 +130,7 @@ async function poolFor(ctx: ServerCtx, embedModel: string, taste: VectorRecord[]
   if (!kept || kept.cards <= EXACT_POOL_MAX || !taste.length) {
     // This instance's read of the pool for a few minutes (B1): the same public records for every reader.
     const store = ctx.vectors;
-    const records = await cachedPublicPool(store, embedModel);
+    const records = await cachedPublicPool(store, embedModel, undefined, ctx.chatObjects);
     // Today's kept numbers spare the build working them out (a part they don't know gets its r(x) against the pool).
     return { records, stats: kept && now - kept.at < POOL_STATS_FRESH_MS ? kept : cachedPoolStats(store, embedModel, records) };
   }

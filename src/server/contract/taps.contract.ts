@@ -17,6 +17,8 @@ export interface TapsHarness {
   card(n: string): string;
   /** A published public card by `authorId` (in the trash when `trashed`), readCount 0. */
   seedCard(id: string, authorId: string, opts?: { trashed?: boolean }): Promise<void>;
+  /** Connect `a` and `b` (connections/{pair} with both in `userIds`). */
+  seedConnection(a: string, b: string): Promise<void>;
   /** The card's committed readCount. */
   readCount(id: string): Promise<number>;
 }
@@ -150,6 +152,29 @@ export function describeTapsContract(name: string, make: () => TapsHarness | Pro
       expect((await h.data.taps.tapsOnPage(id, 10, undefined, 'cccccccc')).tappers).toEqual([]);
       // Without one, everyone that is on, as before.
       expect((await h.data.taps.tapsOnPage(id, 10)).tappers.map((t) => t.uid)).toEqual(['u5', 'u4', 'u3', 'u2', 'u1']);
+    });
+
+    it('tapsOn and connectedAmong (P0 #6): every tap that is on below the limit, full at it; only the pairs that hold both', async () => {
+      const id = h.card('few');
+      await h.seedCard(id, 'alice');
+      await h.uow.run(async (tx) => {
+        for (const [i, uid] of ['u1', 'u2', 'u3', 'u4'].entries()) tx.taps.putTapOn(id, uid, new Date(T0 + i * 1000), null);
+      });
+      await h.uow.run(async (tx) => tx.taps.turnTapOff(id, 'u4'));
+      const few = await h.data.taps.tapsOn(id, 10);
+      expect(few.full).toBe(false);
+      expect(few.tappers.map((t) => t.uid).sort()).toEqual(['u1', 'u2', 'u3']);
+      expect(few.tappers.find((t) => t.uid === 'u2')?.at).toBe(T0 + 1000);
+      const capped = await h.data.taps.tapsOn(id, 3);
+      expect(capped.full).toBe(true);
+      expect(capped.tappers).toHaveLength(3);
+
+      const me = h.card('me');
+      const [a, b, c] = [h.card('ca'), h.card('cb'), h.card('cc')];
+      await h.seedConnection(me, a);
+      await h.seedConnection(b, c);
+      expect([...(await h.data.taps.connectedAmong(me, [a, b, c, me, a, 'no/id']))]).toEqual([a]);
+      expect((await h.data.taps.connectedAmong(me, [])).size).toBe(0);
     });
 
     it('deleteTapsOn and deleteSignalsOn take every row of the card, and only of it', async () => {

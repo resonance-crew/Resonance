@@ -10,6 +10,7 @@ vi.mock('@/server/ctx', () => ({ serverCtx: () => route.ctx }));
 import { GET as getConnections } from '@/app/api/v1/me/connections/route';
 import { signalledJson } from '@/lib/api/v1/signalTag';
 import { getCardDetail } from '@/server/app/cardsRead';
+import { cardTapIn } from '@/server/app/taps';
 import { listBellIn, listConversationsByIdIn, listConversationsIn, listThreadIn, markBellReadIn } from '@/server/app/inbox';
 import { ctxFor } from '@/server/infra/firestore/ctx';
 import { memoryRealtime } from '@/server/infra/memory/adapters';
@@ -49,6 +50,11 @@ const MAX = {
   threadWindow: 51,
   /** …then an open thread's pull after one message came and one changed: the conversation, a new one, a changed one (51 before). */
   threadSince: 3,
+  /**
+   * A reader's tap answer on a card three people tapped, the reader with 50 connections: their own tap, the card's
+   * taps, the three pairs by id, the standing and the faces (67 before P0 #6: every connection document first).
+   */
+  cardTapReader: 19,
   /** GET /cards/{id}?include=resonances,related,links,embeds on a card with none of them. */
   cardDetail: 15,
 } as const;
@@ -196,6 +202,21 @@ describe('read-count ratchets', () => {
     expect(since.messages.map((m) => m.text)).toEqual(['new']);
     expect(since.updated!.map((m) => m.id)).toEqual(['m010']);
     expect(incremental).toBeLessThanOrEqual(MAX.threadSince);
+  });
+
+  it('a reader\'s people on a card with a few taps: never every connection of theirs', async () => {
+    const { fake, ctx } = seeded();
+    others.forEach((o, i) => (fake.docs[`connections/${pairWith(o)}`] = { userIds: [ME, o].sort(), establishedAt: ts(T0 + i * 1000) }));
+    for (const [i, o] of [others[2], others[3], others[4]].entries()) {
+      fake.docs[`resonanceTaps/card1_${o}`] = { cardId: 'card1', userId: o, on: true, at: ts(T0 + i * 1000), rangAt: null };
+    }
+    const card = await ctx.data.taps.visibleCard(ME, 'card1');
+    let faces: string[] = [];
+    const n = await cost(fake, async () => {
+      faces = (await cardTapIn(ctx, ME, card, { pass: false }))!.faces.map((f) => f.handle);
+    });
+    expect(faces).toEqual(['Person4', 'Person3', 'Person2']);
+    expect(n).toBeLessThanOrEqual(MAX.cardTapReader);
   });
 
   it('a card page signed in, with every list it may show', async () => {

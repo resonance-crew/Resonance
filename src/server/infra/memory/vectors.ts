@@ -18,6 +18,8 @@ function cosineDistance(a: number[], b: number[]): number {
 /** An in-memory vector index with every record kept (`records`, to inspect). */
 export interface MemoryVectorStore extends VectorStore {
   readonly records: Map<string, VectorRecord>;
+  /** When each record was last written (ms, by `now`), as Firestore's `updatedAt`. */
+  readonly updatedAt: Map<string, number>;
 }
 
 /**
@@ -25,27 +27,43 @@ export interface MemoryVectorStore extends VectorStore {
  * with an exact COSINE search (1 − cos θ, smallest first) in place of
  * Firestore's KNN. Records go in and come out copied.
  */
-export function memoryVectors(seed: VectorRecord[] = []): MemoryVectorStore {
+export function memoryVectors(seed: VectorRecord[] = [], now: () => number = Date.now): MemoryVectorStore {
   const records = new Map<string, VectorRecord>();
+  const updatedAt = new Map<string, number>();
+  const stamp = (r: VectorRecord) => updatedAt.set(keyOf(r), now());
   const copy = (r: VectorRecord): VectorRecord => ({ ...r, vector: [...r.vector] });
   const ofCard = (cardId: string) => [...records.values()].filter((r) => r.cardId === cardId);
-  for (const r of seed) records.set(keyOf(r), copy(r));
+  for (const r of seed) {
+    records.set(keyOf(r), copy(r));
+    stamp(r);
+  }
   return {
     records,
+    updatedAt,
     async upsert(list) {
       if (!list.length) return;
       const keep = new Set(list.map(keyOf));
       for (const cardId of new Set(list.map((r) => r.cardId))) for (const r of ofCard(cardId)) if (!keep.has(keyOf(r))) records.delete(keyOf(r));
-      for (const r of list) records.set(keyOf(r), copy(r));
+      for (const r of list) {
+        records.set(keyOf(r), copy(r));
+        stamp(r);
+      }
     },
     async deleteByCard(cardId) {
       for (const r of ofCard(cardId)) records.delete(keyOf(r));
     },
     async setVisibility(cardId, visibility) {
-      for (const r of ofCard(cardId)) records.set(keyOf(r), { ...r, visibility });
+      for (const r of ofCard(cardId)) {
+        records.set(keyOf(r), { ...r, visibility });
+        stamp(r);
+      }
     },
     async listByVisibility(visibility, channel) {
       return [...records.values()].filter((r) => r.visibility === visibility && (!channel || r.channel === channel) && r.vector.length > 0).map(copy);
+    },
+    async listChangedSince(since, max) {
+      const found = [...records.values()].filter((r) => (updatedAt.get(keyOf(r)) ?? 0) > since.getTime()).map(copy);
+      return found.length > max ? null : found;
     },
     async listByCards(cardIds) {
       const ids = new Set(cardIds);

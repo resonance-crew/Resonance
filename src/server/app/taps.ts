@@ -6,7 +6,7 @@ import { PICKED_CANDIDATES, PICKED_SCAN, pickedFaces, pickedIn } from '@/lib/car
 import { presentTapPassages } from '@/lib/api/v1/tapPassages';
 import type { Card } from '@/lib/db/types';
 import type { ServerCtx } from '@/server/ctx';
-import { TAP_PAGE, noteExcerpt, type TapOutcome } from '@/server/domain/taps';
+import { READER_TAP_SCAN, TAP_PAGE, noteExcerpt, type TapOutcome } from '@/server/domain/taps';
 import type { TapPick, Tapper } from '@/server/ports/repos/taps';
 import type { PageCursor } from '@/server/ports/time';
 
@@ -80,19 +80,29 @@ async function authorPeople(ctx: ServerCtx, card: Card, limit: number, after: Pa
  * The people a reader sees: themselves first when their tap is on, then the
  * people they are connected with whose tap is on, newest first. On a named
  * card, anyone with a block between them and the reader is left out; on an
- * anonymous card nothing here turns on a block.
+ * anonymous card nothing here turns on a block. (Exported for its test.)
  */
-async function readerPeople(
+export async function readerPeople(
   ctx: ServerCtx,
   viewerId: string,
   card: Card,
   viewerBlocks?: Promise<ReadonlySet<string>>,
 ): Promise<{ mine: boolean; pick: TapPick | null; people: Tapper[] }> {
   const taps = ctx.data.taps;
-  const [own, links] = await Promise.all([taps.ownTap(card.id, viewerId), taps.connectionsOf(viewerId)]);
+  // The card's few taps first, each checked against the reader's connections by id (P0 #6): a reader with hundreds
+  // of connections opening a card three people tapped reads a handful of documents, not every connection they have.
+  // Only a card with READER_TAP_SCAN or more taps on reads the reader's connections and their taps, as before.
+  const [own, scan] = await Promise.all([taps.ownTap(card.id, viewerId), taps.tapsOn(card.id, READER_TAP_SCAN)]);
   const { on: mine, passage: pick } = own;
-  const others = links.filter((id) => id !== card.authorId);
-  const found = await taps.tapsOnBy(card.id, others);
+  let found: Tapper[];
+  if (!scan.full) {
+    const candidates = scan.tappers.filter((t) => t.uid !== viewerId && t.uid !== card.authorId);
+    const linked = candidates.length ? await taps.connectedAmong(viewerId, candidates.map((t) => t.uid)) : new Set<string>();
+    found = candidates.filter((t) => linked.has(t.uid));
+  } else {
+    const others = (await taps.connectionsOf(viewerId)).filter((id) => id !== card.authorId);
+    found = await taps.tapsOnBy(card.id, others);
+  }
   found.sort((a, b) => b.at - a.at || (a.uid < b.uid ? -1 : 1));
   let people = found;
   if (card.anonymous !== true && found.length) {

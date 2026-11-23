@@ -42,6 +42,9 @@ describeTapsContract('Firestore (emulator)', () => {
         readCount: 0,
       });
     },
+    async seedConnection(a, b) {
+      await db.doc(`connections/${a < b ? `${a}_${b}` : `${b}_${a}`}`).set({ userIds: [a, b].sort() });
+    },
     readCount: async (id) => Number((await db.doc(`cards/${id}`).get()).get('readCount')),
   };
 });

@@ -7,6 +7,7 @@ import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
+import java.util.concurrent.TimeUnit
 
 /**
  * The app's HTTP cache for the API: OkHttp keeps what the server lets a private cache keep
@@ -14,9 +15,12 @@ import okhttp3.Response
  * What the server can't know is handled here:
  *
  * - **The viewer's own changes.** After a write — any successful non-GET under /api/v1 except a
- *   push registration, or [invalidate] for writes that go straight to Firestore (drafts,
+ *   push registration, a read mark or a reader's own traces (a read counted, a reading report, a
+ *   translation asked for), or [invalidate] for writes that go straight to Firestore (drafts,
  *   bookmarks) and for a change to the blocks — each address's next read goes to the server
- *   (`Cache-Control: no-cache`), so nothing from before the change comes back from the cache.
+ *   (`Cache-Control: max-age=0`: revalidated with the stored answer's `If-None-Match`, so what
+ *   didn't change comes back as an empty 304), so nothing from before the change comes back
+ *   unchecked from the cache.
  * - **Whose cache it is.** [clear] cancels the calls in flight (none can store an answer after
  *   it) and empties the cache: on sign-out, deletion, or another account.
  *
@@ -49,7 +53,9 @@ class HttpCaching(private val cache: Cache?) {
         // Never read since the latest change (an address first asked for after one counts too):
         // the server answers, not the cache.
         val stale = asked > 0 && (last == null || last < asked)
-        val response: Response = chain.proceed(if (stale) request.newBuilder().cacheControl(CacheControl.FORCE_NETWORK).build() else request)
+        // Revalidated, not refetched: OkHttp sends the stored answer's ETag (`If-None-Match`) and a
+        // 304 is answered from the cache — `no-cache` / FORCE_NETWORK would drop the validator.
+        val response: Response = chain.proceed(if (stale) request.newBuilder().cacheControl(REVALIDATE).build() else request)
         if (response.networkResponse != null) synchronized(readIn) { readIn[key] = asked }
         response
     }
@@ -91,7 +97,18 @@ class HttpCaching(private val cache: Cache?) {
 
     private fun changesReads(url: HttpUrl): Boolean {
         val path = url.encodedPath
-        return path.startsWith("/api/v1/") && !path.startsWith("/api/v1/me/devices/") && !isReadMark(path)
+        return path.startsWith("/api/v1/") && !path.startsWith("/api/v1/me/devices/") && !isReadMark(path) && !isReaderTrace(path)
+    }
+
+    /**
+     * A reader's own traces — a read counted (`POST /cards/{key}/read`), a reading report
+     * (`/cards/{key}/reading`), a translation asked for (`/cards/{key}/translation`): they change
+     * nothing the viewer reads, so one card opened doesn't send the feed, the box and the profile
+     * past the cache (iOS `FreshnessMiddleware.unchanging`, audit I5).
+     */
+    private fun isReaderTrace(path: String): Boolean {
+        val segments = path.removePrefix("/api/v1/").split('/')
+        return segments.size == 3 && segments[0] == "cards" && segments[1].isNotEmpty() && segments[2] in READER_TRACES
     }
 
     /**
@@ -101,4 +118,10 @@ class HttpCaching(private val cache: Cache?) {
      */
     private fun isReadMark(path: String): Boolean =
         path == "/api/v1/notifications/read" || (path.startsWith("/api/v1/conversations/") && path.endsWith("/read"))
+
+    private companion object {
+        val READER_TRACES = setOf("read", "reading", "translation")
+        /** A stale read: asked of the server with the cached answer's validator (a 304 keeps it). */
+        val REVALIDATE: CacheControl = CacheControl.Builder().maxAge(0, TimeUnit.SECONDS).build()
+    }
 }

@@ -1,4 +1,4 @@
-import { FieldValue, type DocumentData, type Firestore, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, type DocumentData, type Firestore, type QueryDocumentSnapshot } from 'firebase-admin/firestore';
 // The path the emulator suites `vi.mock`, so a store made without a database takes theirs.
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import type { Visibility } from '@/lib/db/types';
@@ -129,6 +129,18 @@ export class FirestoreVectorStore implements VectorStore {
       chunks.map((chunk) => this.db().collection(COLLECTION).where('cardId', 'in', chunk).select(...RECORD_FIELDS, 'vector').get()),
     );
     return snaps.flatMap((snap) => snap.docs.map((d) => toRecord(d.data(), true))).filter((r) => r.vector.length > 0);
+  }
+
+  async listChangedSince(since: Date, max: number): Promise<VectorRecord[] | null> {
+    // One range on `updatedAt` alone: its automatic single-field index, no composite one (P0 #7).
+    const snap = await this.db()
+      .collection(COLLECTION)
+      .where('updatedAt', '>', Timestamp.fromDate(since))
+      .select(...RECORD_FIELDS, 'vector')
+      .limit(max + 1)
+      .get();
+    if (snap.size > max) return null;
+    return snap.docs.map((d) => toRecord(d.data(), true));
   }
 
   async nearest(query: VectorQuery): Promise<NearestHit[]> {

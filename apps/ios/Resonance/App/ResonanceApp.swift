@@ -9,6 +9,8 @@ struct ResonanceApp: App {
     @State private var session: SessionStore
 
     init() {
+        // Before any picture is asked for: the decoded pictures' memory cache, capped (ImageMemory).
+        ImageMemory.apply()
         AppFonts.register()
         Strings.shared.load()
         let config = AppConfig.current

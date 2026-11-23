@@ -57,3 +57,25 @@ describe('listByCards', () => {
     }
   });
 });
+
+describe('listChangedSince (P0 #7: what is laid over the packed pool)', () => {
+  it('answers every part written or whose visibility changed after the time, of any visibility, and null past the most', async () => {
+    const store = new FirestoreVectorStore(db);
+    const part = (cardId: string) => ({
+      cardId, authorId: 'a', visibility: 'public' as const, channel: 'insight' as const, part: 0, vector: [1, 0], embedModel: 'm',
+      insightScore: 0.5, coreInsight: '', situation: '', lifeDomain: '', span: '',
+    });
+    await store.upsert([part('before')]);
+    await store.upsert([part('hidden')]);
+    await new Promise((r) => setTimeout(r, 50));
+    const since = new Date();
+    await new Promise((r) => setTimeout(r, 50));
+    await store.upsert([part('after')]);
+    await store.setVisibility('hidden', 'private');
+
+    const changed = await store.listChangedSince(since, 10);
+    expect(changed!.map((r) => [r.cardId, r.visibility]).sort()).toEqual([['after', 'public'], ['hidden', 'private']]);
+    expect(changed![0].vector).toEqual([1, 0]);
+    expect(await store.listChangedSince(since, 1)).toBeNull();
+  });
+});
