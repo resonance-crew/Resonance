@@ -17,6 +17,18 @@ const emulatorPorts = () => ({
 });
 
 /**
+ * The Firestore emulator's Java heap (`VISUAL_FIRESTORE_HEAP`, default 1g): firebase-tools starts it with no `-Xmx`,
+ * so the JVM may grow to a quarter of the machine (6 GB here) for a test world of a few hundred documents. The JVM
+ * reads JAVA_TOOL_OPTIONS whoever starts it; only the emulators' process group gets it (the Auth emulator is Node).
+ * The serial collector keeps the footprint small (G1 sizes itself for ten cores).
+ */
+export function emulatorsEnv(): Record<string, string> {
+  const heap = process.env.VISUAL_FIRESTORE_HEAP || '1g';
+  const own = [process.env.JAVA_TOOL_OPTIONS, `-Xmx${heap}`, '-XX:+UseSerialGC'].filter(Boolean).join(' ');
+  return { ...emulatorPorts(), JAVA_TOOL_OPTIONS: own };
+}
+
+/**
  * The seeded world's "now": a fixed day well in the past, so every date a
  * screen shows is the same on every run (relative times like "3 週前" only
  * appear for the newest things, and the screens show dates past a few days).
@@ -78,7 +90,7 @@ export async function startStack(logDir: string, log: (line: string) => void): P
   process.once('SIGINT', () => (stop(), process.exit(130)));
   try {
     log(`Starting emulators on auth ${PORTS.auth} / firestore ${PORTS.firestore}…`);
-    children.push(startGroup('node', ['scripts/emulators-at.mjs'], emulatorPorts(), join(logDir, 'emulators.log')));
+    children.push(startGroup('node', ['scripts/emulators-at.mjs'], emulatorsEnv(), join(logDir, 'emulators.log')));
     await waitForPort(PORTS.auth, 90_000);
     await waitForPort(PORTS.firestore, 90_000);
     await seed(log);

@@ -74,3 +74,23 @@ describe('the stack’s dev server keeps what it compiled', () => {
     expect(kept.pagesBufferLength).toBeGreaterThanOrEqual(200);
   });
 });
+
+describe('the emulators’ Java keeps to a heap of its own', () => {
+  it('caps the Firestore emulator’s heap (VISUAL_FIRESTORE_HEAP, default 1g) with the serial collector, keeping any JAVA_TOOL_OPTIONS already set', async () => {
+    const { emulatorsEnv } = await import('./stack');
+    const was = { heap: process.env.VISUAL_FIRESTORE_HEAP, tool: process.env.JAVA_TOOL_OPTIONS };
+    try {
+      delete process.env.VISUAL_FIRESTORE_HEAP;
+      delete process.env.JAVA_TOOL_OPTIONS;
+      expect(emulatorsEnv()).toMatchObject({ JAVA_TOOL_OPTIONS: '-Xmx1g -XX:+UseSerialGC', EMULATOR_FIRESTORE_PORT: expect.any(String) });
+      process.env.VISUAL_FIRESTORE_HEAP = '768m';
+      process.env.JAVA_TOOL_OPTIONS = '-Dfoo=1';
+      expect(emulatorsEnv().JAVA_TOOL_OPTIONS).toBe('-Dfoo=1 -Xmx768m -XX:+UseSerialGC');
+    } finally {
+      for (const [k, v] of [['VISUAL_FIRESTORE_HEAP', was.heap], ['JAVA_TOOL_OPTIONS', was.tool]] as const) {
+        if (v == null) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+});

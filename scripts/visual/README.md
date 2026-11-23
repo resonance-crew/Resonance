@@ -560,7 +560,11 @@ and xcodebuild). `--force-build` (or `VISUAL_FORCE_BUILD=1`) builds anyway; `VIS
 reuses the last build without looking. The builds run beside
 the captures, never blocking them: the APK and the simulator app start building as the run starts,
 while the web and the Mac app are captured, and the two Xcode builds (Mac, simulator) take turns, as
-they share the project and Swift's package caches. The web's own captures run in several browser contexts at once (`VISUAL_WEB_PARALLEL`, default 3; 1 takes
+they share the project and Swift's package caches. What the run starts leaves nothing resident behind it: the APK
+builds with `--no-daemon` and the Kotlin compiler in that same process (`GRADLE_RUN_FLAGS`; a build used to leave a
+4 GB Gradle daemon and a Kotlin daemon up for three idle hours, through the Android phase), and the stack's Firestore
+emulator runs in a heap of 1 GB with the serial collector (`VISUAL_FIRESTORE_HEAP`; firebase-tools gives it no
+limit). The web's own captures run in several browser contexts at once (`VISUAL_WEB_PARALLEL`, default 3; 1 takes
 them one by one as before), with the writes its pages make to the shared stack — a read counted once per reader,
 card and day, the bell's panel marking its notifications read, a screen's hints unspent — kept in their old order:
 each screen's first visit by an account runs one at a time in the old order, and only the later visits (the dark

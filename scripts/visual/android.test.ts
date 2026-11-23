@@ -2,7 +2,14 @@ import { PNG } from 'pngjs';
 import { describe, expect, it } from 'vitest';
 import en from '../../src/messages/en.json';
 import zhTW from '../../src/messages/zh-TW.json';
-import { GBOARD_PACKAGE, apartBox, caretBlink, keysOn, stillLoading, textFields } from './android';
+import { GBOARD_PACKAGE, GRADLE_RUN_FLAGS, androidInputs, apartBox, caretBlink, keysOn, stillLoading, textFields } from './android';
+
+describe('the debug APK’s Gradle run leaves nothing resident', () => {
+  it('runs without a daemon and compiles Kotlin in that process, the flags kept out of the fingerprint', () => {
+    expect(GRADLE_RUN_FLAGS).toEqual(['--no-daemon', '-Pkotlin.compiler.execution.strategy=in-process']);
+    for (const flag of GRADLE_RUN_FLAGS) expect(androidInputs().salt).not.toContain(flag);
+  });
+});
 
 // The 2.5.0 release run kept three Android card pages taken before they loaded: a skeleton holds still as long as a
 // page does. The app names its skeletons for TalkBack (L10n.Home.moreLoading), and uiautomator's dump shows that name.

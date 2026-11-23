@@ -218,6 +218,16 @@ async function wear(serial: string, v: Variant) {
 const GRADLE_ARGS = [':app:assembleDebug', '-q'];
 
 /**
+ * How the harness runs Gradle, beside what it builds (not in the fingerprint: the APK is the same either way). Without
+ * them a build left a Gradle daemon (`-Xmx4g`, gradle.properties) and a Kotlin compile daemon resident for three idle
+ * hours — 3–6 GB through the Android phase that came after, the run's peak, on a 24 GB machine already in swap
+ * (2026-11-23). `--no-daemon` gives the build a daemon of its own that ends with it, and the Kotlin compiler runs inside
+ * that one instead of a daemon of its own. Another session's or Android Studio's daemons are theirs: none is stopped.
+ * A rebuild costs some 10–20 s more for the cold JVM; a reused build (buildStamp.ts) nothing.
+ */
+export const GRADLE_RUN_FLAGS = ['--no-daemon', '-Pkotlin.compiler.execution.strategy=in-process'];
+
+/**
  * What goes into the debug APK (buildStamp.ts): the app, the files its Gradle build takes from the rest of the
  * repository (fonts, the design system's resources under apps/ios, strings, stickers, both islands, the Kotlin
  * geometry under native/), this machine's SDK path and Java.
@@ -248,7 +258,7 @@ export function build(ctx: CaptureContext): Promise<void> {
       log: ctx.log,
       build: async () => {
         ctx.log('  building the debug APK (VISUAL_SKIP_BUILD=1 skips it)…');
-        await execFileAsync('./gradlew', GRADLE_ARGS, { cwd: ANDROID_DIR, maxBuffer: 64 << 20 });
+        await execFileAsync('./gradlew', [...GRADLE_ARGS, ...GRADLE_RUN_FLAGS], { cwd: ANDROID_DIR, maxBuffer: 64 << 20 });
       },
     });
   })());
