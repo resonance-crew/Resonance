@@ -18,7 +18,7 @@ import { withRestart } from './retry';
 import { LOG_STREAM_ARGS, logStream, readyNote, readyOn, readyToken, restOfWait, waitReady, type LogStream, type Ready } from './ready';
 import { buildIfChanged, stampFile, toolVersion, type BuildInputs } from './buildStamp';
 import { unspendHints } from './hints';
-import { lookNote, secondLook, type Look } from './secondLook';
+import { lookNote, secondLook, type Look, type Shot } from './secondLook';
 import { PNG } from 'pngjs';
 import { screensFor, shotName, type Account, type Variant } from './screens';
 import { CommandTimeout, ROOT, SEED_PASSWORD, execTimed, run, settle, shotPath, sleep, type Capture, type CaptureContext } from './util';
@@ -267,9 +267,21 @@ function launchReady(udid: string, args: string[], stream: LogStream | null): ((
   return () => waitReady(() => stream.says(token));
 }
 
+/**
+ * How a capture looks at its screen: a settled look (`fast`: frames closer together, after the ready signal) and one
+ * plain frame (the second look's glance at a capture with no baseline).
+ */
+export type Looker = { take: (fast: boolean) => Promise<Shot>; glance: () => Promise<Buffer> };
+
+/** A looker over PNG frames (iOS: `simctl io screenshot`), settled by util's `settle`. */
+export const pngLooker = (frame: () => Promise<Buffer>): Looker => ({
+  take: (fast) => settle(frame, { timeoutMs: 40_000, intervalMs: fast ? 500 : 1000 }),
+  glance: frame,
+});
+
 /** One capture's looks after its launch (`timing` has the launch's laps already; this adds the ready wait and the looks). */
 export async function shootAfterLaunch(
-  frame: () => Promise<Buffer>,
+  looker: Looker,
   key: string,
   ready: (() => Promise<Ready>) | null,
   timing: Stopwatch,
@@ -280,10 +292,9 @@ export async function shootAfterLaunch(
   if (said) await restOfWait(said, 4000);
   else await sleep(4000);
   timing.lap('ready');
-  const take = (fast: boolean) => settle(frame, { timeoutMs: 40_000, intervalMs: fast ? 500 : 1000 });
-  const first = await take(!!said?.ready);
+  const first = await looker.take(!!said?.ready);
   timing.lap('settle');
-  const look = await secondLook(first, () => take(false), { key, glance: frame });
+  const look = await secondLook(first, () => looker.take(false), { key, glance: looker.glance });
   timing.lap('second-look');
   return { ...look, ready: said };
 }
@@ -294,7 +305,7 @@ function shoot(udid: string, ctx: CaptureContext, key: string, ready: (() => Pro
     run('xcrun', ['simctl', 'io', udid, 'screenshot', '--type=png', file], {}, SIMCTL_TIMEOUT_MS);
     return Promise.resolve(readFileSync(file));
   };
-  return shootAfterLaunch(frame, key, ready, timing);
+  return shootAfterLaunch(pngLooker(frame), key, ready, timing);
 }
 
 export const captureIos: Capture = async (ctx) => {

@@ -15,7 +15,8 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { PNG } from 'pngjs';
 import { unspendHints } from './hints';
-import { BUNDLE_ID, XCODE_RUN_SETTINGS, ensureIslands, inXcodeLine, launchArgs, prepareProject, runLogged, shootAfterLaunch, xcodeInputs } from './ios';
+import { BUNDLE_ID, XCODE_RUN_SETTINGS, ensureIslands, inXcodeLine, launchArgs, prepareProject, runLogged, shootAfterLaunch, xcodeInputs, type Looker } from './ios';
+import { encodeFrame, settleFrames, type Frame } from './frames';
 import { stopwatch, type Stopwatch } from './timings';
 import { buildIfChanged, stampFile } from './buildStamp';
 import { LOG_STREAM_ARGS, logStream, readyNote, readyOn, readyToken, waitReady, type LogStream, type Ready } from './ready';
@@ -102,11 +103,24 @@ async function launch(args: string[], size: Size = WINDOW): Promise<MacWindow> {
 }
 
 /** Stops the copy this capture opened, and only it. */
-function quit(pid: number) {
+async function quit(pid: number, { timeoutMs = 10_000, wait = sleep }: { timeoutMs?: number; wait?: (ms: number) => Promise<unknown> } = {}) {
   try {
     process.kill(pid, 'SIGTERM');
   } catch {
-    // already gone
+    return; // already gone
+  }
+  // Gone before the next copy opens (its window is told apart by a pid not seen before): no fixed second.
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end && alive(pid)) await wait(100);
+}
+
+/** Whether a process is still there (signal 0 asks without sending anything). */
+export function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
 
@@ -114,7 +128,12 @@ function quit(pid: number) {
 /** The window's close / minimise / zoom buttons (capture pixels): grey or coloured as macOS thinks the window active. */
 const WINDOW_BUTTONS = { width: 160, height: 64 };
 
-function cut(png: Buffer, size: Size = WINDOW): Buffer {
+/**
+ * The window's capture cut to the size asked for, as pixels: decoded as before (pngjs: the window's PNG carries the
+ * display's colour profile, which pngjs leaves as it is), cut and painted over, never encoded until it is the one kept
+ * (frames.ts) — every frame looked at was encoded with pngjs before, at 2880 × 1800.
+ */
+export function cutFrame(png: Buffer, size: Size = WINDOW): Frame {
   const image = PNG.sync.read(png);
   const width = size.width * 2;
   const height = size.height * 2;
@@ -126,7 +145,7 @@ function cut(png: Buffer, size: Size = WINDOW): Buffer {
   for (let y = 0; y < WINDOW_BUTTONS.height; y++) {
     for (let x = 0; x < WINDOW_BUTTONS.width; x++) out.data.copyWithin((y * out.width + x) * 4, paper, paper + 4);
   }
-  return PNG.sync.write(out);
+  return { data: out.data, width: out.width, height: out.height };
 }
 
 /**
@@ -143,10 +162,18 @@ function shoot(window: MacWindow, ctx: CaptureContext, key: string, size: Size, 
   const file = join(ctx.runDir, '_logs', 'mac-window.png');
   const frame = () => {
     run('screencapture', ['-o', '-x', '-t', 'png', '-l', String(window.id), file]);
-    return Promise.resolve(cut(readFileSync(file), size));
+    return Promise.resolve(cutFrame(readFileSync(file), size));
+  };
+  // Settled on pixels; only the frame kept is encoded.
+  const looker: Looker = {
+    take: async (fast) => {
+      const { frame: kept, settled } = await settleFrames(frame, { timeoutMs: 40_000, intervalMs: fast ? 500 : 1000 });
+      return { png: await encodeFrame(kept), settled };
+    },
+    glance: async () => encodeFrame(await frame()),
   };
   // Its ready signal (ready.ts), or the 4 s it always waited; then the looks, as on iOS.
-  return shootAfterLaunch(frame, key, ready, timing);
+  return shootAfterLaunch(looker, key, ready, timing);
 }
 
 export const captureMac: Capture = async (ctx) => {
@@ -171,7 +198,7 @@ export const captureMac: Capture = async (ctx) => {
       const signIn = await launch(launchArgs(ctx, account, null, v), size);
       signInTime.lap('launch');
       await sleep(10_000);
-      quit(signIn.pid);
+      await quit(signIn.pid);
       signInTime.lap('wait');
       signInTime.done(ctx.runDir, `mac/${id}/${account ?? 'signed-out'}@${v.theme}-${v.locale}`, 'sign-in');
       for (const screen of screens) {
@@ -192,8 +219,7 @@ export const captureMac: Capture = async (ctx) => {
           if (look.retaken) ctx.retaken.push(key);
           ctx.log(`  ${key}${lookNote(look)}${readyNote(look.ready)}`);
         } finally {
-          quit(window.pid);
-          await sleep(1000);
+          await quit(window.pid);
           timing.lap('quit');
           timing.done(ctx.runDir, key);
         }
