@@ -56,7 +56,8 @@ describe('the variant sets', () => {
     // 50, and round 26's note in place: 2 large fonts + the phone sideways + 5 in the dark, and its three lines on
     // each of the 8 release devices (the owner, 2026-11-20: Android's 寄出 filled the capsule's end)
     // round 27: card-passage-picked on each of the 8 release devices, as the note's three lines
-    expect(estimate('extended').captures - estimate('release').captures).toBe(74);
+    // 2026-11-23: home-invite on the apps' 5 release devices and on the iPad turned, the Android tablet upright, the narrow Mac
+    expect(estimate('extended').captures - estimate('release').captures).toBe(82);
     for (const [platform, device] of [['web', 'phone'], ['web', 'desktop'], ['ios', 'iphone'], ['android', 'phone'], ['mac', 'mac']] as const) {
       expect(keys(platform, device, 'extended'), `${platform}/${device}`).toContain('card-note-lines@light-zh-TW.png');
       expect(keys(platform, device, 'release'), `${platform}/${device}`).not.toContain('card-note-lines@light-zh-TW.png');

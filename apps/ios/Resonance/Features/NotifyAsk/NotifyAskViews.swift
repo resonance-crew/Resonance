@@ -133,31 +133,36 @@ struct NotificationInvite: View {
     }
 }
 
-/// Tonight's card's invite on the home feed (§3, the owner's 2026-11-01 call: no card within a card), as ``Look`` says:
-/// - `.band` — a phone's banded feed: a band of its own in the thread's grey (``AsideBand``, round 24), between the
-///   header's pen line above (its paper running up under the bar's wave; the feed paints a pull's gap grey) — or its
-///   own rule under the refresh note — and the first card's top wave below, its words where a card's are
-///   (``bandInset``): the title, 8, the line, 14, then 不用了 · 好，通知我 at the row's end (stacked when they don't fit);
-/// - `.column` — a tablet's banded feed (an iPad upright, a medium window): a borderless card whose edges are the
-///   bands' content edges (where their covers' are; the host lays it in that column, 24 under the bar's foot and 24
-///   over the first card's top rule), 26 over its title (round 24, the owner: 「文字上面的 padding 應該多一點」);
-/// - `.grid` — over a tablet's grid: one wide card spanning every column, outlined as the grid's cards are (their
-///   outline, inset and padding), borderless.
-/// A card is the thread's grey in its organic outline with the grid cards' grain, no pen line (``inviteCard()``): the
-/// words on the left, the two buttons on the right of the same row, centred against them — under the words, at the
-/// end, when there's no room.
+/// Tonight's card's invite on the home feed (§3, the owner's 2026-11-01 call: no card within a card). It takes the
+/// feed's own look (the owner, 2026-11-23: 「卡片已經變成區段的設計了，所以上面這個提醒也應該做成區段…如果…卡片是一塊一塊的…
+/// 兩欄的話，那上方還是要做成這一個卡片的設計」), as ``Look`` says:
+/// - `.band` — a banded feed, a phone's or a tablet's (an iPad upright, a medium window): a band of its own in the
+///   thread's grey (``AsideBand``, round 24), between the header's pen line above (its paper running up under the bar's
+///   wave; the feed paints a pull's gap grey) — or its own rule under the refresh note — and the first card's top wave
+///   below, its words where a card's are (``bandInset`` in, inside the reading measure as ``StoryBand``'s): the title, 8,
+///   the line, 14, then 不用了 · 好，通知我 at the row's end (stacked when they don't fit); `air` over and under them
+///   (a phone's 20, a tablet's the story bands' 32);
+/// - `.grid` — over a tablet's grid of cards: one wide card spanning every column, outlined as the grid's cards are
+///   (their outline, inset and padding), borderless.
+/// A card is the thread's grey in its organic outline with the grid cards' grain, no pen line (``inviteCard()``). Where
+/// there is room (``rowWidth``) the words stand on the left and the two buttons on the right of the same row, centred
+/// against them — under the words, at the end, when there's not.
 struct PicksInvite: View {
-    enum Look { case band, column, grid }
+    enum Look { case band, grid }
     let look: Look
-    /// A phone's band right under the bar (no refresh note above it): its top is the bar's pen line.
+    /// A band right under the bar (no refresh note above it): its top is the bar's pen line.
     var underBar = true
+    /// Over and under a band's words.
+    var air: CGFloat = 20
     @Environment(SessionStore.self) private var session
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var width: CGFloat = 0
 
     /// A banded card's words from the screen's edge: the page's 20 and the card's own 18.
     static let bandInset: CGFloat = 38
-    /// The narrowest a card keeps its buttons beside its words.
+    /// A tablet's band's air: the story bands' own (``StoryBand``'s 32).
+    static let tabletAir: CGFloat = 32
+    /// The narrowest an invite keeps its buttons beside its words.
     static let rowWidth: CGFloat = 640
 
     var body: some View {
@@ -195,20 +200,8 @@ struct PicksInvite: View {
         }
     }
 
-    private func band(working: Bool, no: @escaping () -> Void, yes: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            words
-            actions(working: working, no: no, yes: yes).padding(.top, 14)
-        }
-        .padding(.horizontal, Self.bandInset)
-        .padding(.top, 20)
-        .padding(.bottom, 20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        // The first card's own top wave is its foot.
-        .asideBand(tuck: underBar ? HeaderEdge.height : nil, bottomRule: false)
-    }
-
-    private func card(working: Bool, no: @escaping () -> Void, yes: @escaping () -> Void) -> some View {
+    /// The words and the buttons: beside each other where there is room, else the buttons under the words, at the end.
+    private func inside(working: Bool, no: @escaping () -> Void, yes: @escaping () -> Void) -> some View {
         let beside = width >= Self.rowWidth && !typeSize.isAccessibilitySize
         return Group {
             if beside {
@@ -223,12 +216,29 @@ struct PicksInvite: View {
                 }
             }
         }
-        .padding(.horizontal, 22)
-        .padding(.top, look == .column ? 26 : 22)
-        .padding(.bottom, 22)
         .frame(maxWidth: .infinity, alignment: .leading)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-        .inviteCard()
+    }
+
+    private func band(working: Bool, no: @escaping () -> Void, yes: @escaping () -> Void) -> some View {
+        inside(working: working, no: no, yes: yes)
+            .padding(.horizontal, Self.bandInset)
+            .padding(.vertical, air)
+            // Down a tablet's middle the grey stays full-bleed and the words keep to the reading measure, as a story
+            // band's (``StoryBand``); a phone is never that wide.
+            .frame(maxWidth: Tokens.measure + 2 * Self.bandInset, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            // The first card's own top wave is its foot.
+            .asideBand(tuck: underBar ? HeaderEdge.height : nil, bottomRule: false)
+    }
+
+    private func card(working: Bool, no: @escaping () -> Void, yes: @escaping () -> Void) -> some View {
+        inside(working: working, no: no, yes: yes)
+            .padding(.horizontal, 22)
+            .padding(.top, 22)
+            .padding(.bottom, 22)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .inviteCard()
     }
 }
 

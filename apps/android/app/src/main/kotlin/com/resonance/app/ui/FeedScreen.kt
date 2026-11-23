@@ -163,7 +163,7 @@ fun FeedScreen(session: Session, open: (Route) -> Unit) {
     val view = LocalView.current
     // Bands on a phone, a centred column of them on a medium window, the bordered grid on an expanded one.
     val layout = cardListLayout()
-    // A phone (by its width): the picks invite is a band under the bar; a tablet's is a card (round 24).
+    // A phone (by its width): the picks invite's band keeps a phone's air, its buttons under its words.
     val phone = LocalWindowLayout.current.cls == LayoutClass.Compact
 
     // 外觀's 小紙團 (round 19): the paper puppets' island over the feed, only while it is on.
@@ -197,8 +197,8 @@ fun FeedScreen(session: Session, open: (Route) -> Unit) {
             feed.reload()?.let { view.announce(it.message) }
         },
         refreshEnabled = state.phase != FeedLoader.Phase.Loading,
-        // A band starts at the bar's line (the first card, its skeleton, a phone's picks invite): the pull's gap wears its paper.
-        pullPaper = when (feedPullPaper(layout.isGrid, state.phase, cards.isNotEmpty(), state.refreshFailure != null, picksInvite, phone)) {
+        // A band starts at the bar's line (the first card, its skeleton, the picks invite): the pull's gap wears its paper.
+        pullPaper = when (feedPullPaper(layout.isGrid, state.phase, cards.isNotEmpty(), state.refreshFailure != null, picksInvite)) {
             FeedPullPaper.Skeleton -> CardPalette(null, 0).interior
             FeedPullPaper.FirstCard -> CardPalette.of(cardFamilies(cards.take(1))[0]).interior
             FeedPullPaper.Invite -> Tokens.BubbleTheirs
@@ -220,19 +220,22 @@ fun FeedScreen(session: Session, open: (Route) -> Unit) {
                     }
                 } else {
                     refreshNote(state.refreshFailure, underBar = true)
-                    // The evening card offered to a reader (notification-asks §3), where the refresh note sits (round 24, by the
-                    // device's kind): a phone's a grey band of its own from the bar's line to the first card's wave; a tablet's
-                    // banded feed a borderless card on the cards' content edges; the grid one wide card over its columns.
+                    // The evening card offered to a reader (notification-asks §3), where the refresh note sits, in the feed's
+                    // own look (the owner, 2026-11-23): over bands — a phone's, a tablet's upright — a grey band of its own
+                    // from the bar's line to the first card's wave, its words where the cards' are; over the grid one wide
+                    // card over its columns.
                     val underBar = state.refreshFailure == null
-                    if (picksInvite) when {
-                        layout.isGrid -> notifyInviteItem(
-                            session, picks,
-                            Modifier.padding(horizontal = layout.gridInset)
-                                .padding(top = if (underBar) gridUnderBar else 0.dp, bottom = Tokens.FeedGap.dp),
-                            InviteLook.WideCard,
-                        )
-                        phone -> notifyInviteItem(session, picks, look = feedInviteLook(layout.inset, underBar))
-                        else -> notifyInviteItem(session, picks, Modifier.padding(feedInviteCardRoom(layout.inset, underBar)), FeedInviteCard)
+                    if (picksInvite) {
+                        if (layout.isGrid) {
+                            notifyInviteItem(
+                                session, picks,
+                                Modifier.padding(horizontal = layout.gridInset)
+                                    .padding(top = if (underBar) gridUnderBar else 0.dp, bottom = Tokens.FeedGap.dp),
+                                InviteLook.WideCard,
+                            )
+                        } else {
+                            notifyInviteItem(session, picks, look = feedInviteLook(layout.inset, underBar, tablet = !phone))
+                        }
                     }
                     // A note over the cards parts the first one from the bar: it keeps its own top rule then.
                     storyCards(cards, open, firstUnderBar = state.refreshFailure == null && !picksInvite, layout = layout, leading = leading, entering = entrance)
@@ -288,22 +291,22 @@ internal enum class FeedPullPaper {
     /** The first card's. */
     FirstCard,
 
-    /** A phone's picks invite, the band under the bar (round 24): its grey. */
+    /** The picks invite, the band under the bar (round 24): its grey. */
     Invite,
 }
 
 /**
  * The band that starts at the bar's line, for the gap a pull opens over it (design note B1): the skeleton's first while
- * the feed loads; once it holds cards, a phone's picks invite while it is on the page ([invite]: shown, not merely
+ * the feed loads; once it holds cards, the picks invite's band while it is on the page ([invite]: shown, not merely
  * owed — once the system's no has put it away, the first card is first again), else the first card. None over the
- * bordered [grid], when a refresh note parts the first band from the bar ([noteAbove]), or over a tablet's invite — a
- * card standing on the page's cream, which the gap then is.
+ * bordered [grid] (its invite a card on the page's cream), or when a refresh note parts the first band from the bar
+ * ([noteAbove]).
  */
-internal fun feedPullPaper(grid: Boolean, phase: FeedLoader.Phase, hasCards: Boolean, noteAbove: Boolean, invite: Boolean, phone: Boolean): FeedPullPaper? = when {
+internal fun feedPullPaper(grid: Boolean, phase: FeedLoader.Phase, hasCards: Boolean, noteAbove: Boolean, invite: Boolean): FeedPullPaper? = when {
     grid -> null
     phase == FeedLoader.Phase.Loading -> FeedPullPaper.Skeleton
     phase != FeedLoader.Phase.Loaded || !hasCards || noteAbove -> null
-    invite -> if (phone) FeedPullPaper.Invite else null
+    invite -> FeedPullPaper.Invite
     else -> FeedPullPaper.FirstCard
 }
 

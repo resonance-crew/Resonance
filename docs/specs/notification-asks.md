@@ -61,13 +61,15 @@ and Mac"):
   running up under the bar's wave, as the first card's does) and its foot the first card's own top wave; a pull opens a
   gap of the same grey. Under the refresh note it draws its own top rule (7 turns, amp 1.4, INK_LIGHT, in
   `field-border-hover`; seeds 84 top, 108 foot) and the gap is the page's. Its words where a card's are (38 in).
-- **Tablet, banded feed** (an iPad or Android tablet in portrait): a borderless card — the grey, the card grain, the
-  card's outline, no pen line — its edges on the cards' content edges (where the covers' edges are), 24 under the bar
-  and 24 above the first card's top rule, 26 over its title, 22 on its other sides.
+- **Tablet, banded feed** (an iPad or Android tablet in portrait, a medium window): a band, as a phone's — the owner,
+  2026-11-23: 「卡片已經變成區段的設計了，所以上面這個提醒也應該做成區段…如果…卡片是一塊一塊的…兩欄的話，那上方還是要做成這一個
+  卡片的設計」: the invite takes the feed's own look, not the device's. Edge to edge, the grey running up under the bar's
+  wave, the first card's top wave its foot; its words in the cards' content column (the reading measure, 38 in), the
+  story bands' 32 over and under them, the buttons beside the words where they leave them room.
 - **Tablet or Mac, grid feed**: the wide card spanning every column, in the grid's outline and inset, borderless grey.
 
 Inside: title `notifyAsk.picksTitle` (heading 18) → 8 → line `notifyAsk.picksBody` → 14 → `notifyAsk.no` (tonal) ·
-`notifyAsk.yes` (solid) at the row's end (beside the words on a wide card). iOS `AsideBand` / `PicksInvite`, Android
+`notifyAsk.yes` (solid) at the row's end (beside the words on a wide card and a tablet's band). iOS `AsideBand` / `PicksInvite`, Android
 `Modifier.filledBand` / `NotifyInviteSheet`.
 
 - 好，通知我 → the system question if never asked; on yes (or already allowed) PATCH `picks: true`,

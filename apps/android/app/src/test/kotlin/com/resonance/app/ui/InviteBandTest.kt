@@ -128,17 +128,22 @@ class InviteBandTest {
         assertFalse(parted.bottomRule)
     }
 
-    @Test fun aTabletsPicksInviteStandsOnTheCardsContentEdgesWithMoreAirAboveIt() {
-        // 26 over its title (the conversations' 22), 22 under its buttons.
-        assertEquals(26.dp, FeedInviteCard.top)
-        assertEquals(22.dp, FeedInviteCard.bottom)
-        // Its sides where the cards' content is; 24 under the bar's foot (the list starts at the top of the bar's band), 24 over the first card.
-        val room = feedInviteCardRoom(120.dp, underBar = true)
-        assertEquals(120.dp, room.calculateLeftPadding(LayoutDirection.Ltr))
-        assertEquals(120.dp, room.calculateRightPadding(LayoutDirection.Ltr))
-        assertEquals(HeaderEdgeHeight + 24.dp, room.calculateTopPadding())
-        assertEquals(24.dp, room.calculateBottomPadding())
-        assertEquals(24.dp, feedInviteCardRoom(120.dp, underBar = false).calculateTopPadding())
+    @Test fun aTabletsPicksInviteOverTheBandedFeedIsABandToo() {
+        // The owner, 2026-11-23: the feed's cards are bands there, so the invite is one — its words where the cards' content
+        // is, the story bands' 32 over and under them, the buttons beside them, and the first card's own top rule its foot.
+        val under = feedInviteLook(120.dp, underBar = true, tablet = true)
+        assertTrue(under.underBar)
+        assertEquals(HeaderEdgeHeight + 32.dp, under.top)
+        assertEquals(32.dp, under.bottom)
+        assertTrue(under.beside)
+        assertFalse(under.bottomRule)
+        val parted = feedInviteLook(120.dp, underBar = false, tablet = true)
+        assertFalse(parted.underBar)
+        assertEquals(32.dp, parted.top)
+        // A phone's keeps its 20 and its buttons under its words.
+        val phone = feedInviteLook(38.dp, underBar = true)
+        assertEquals(InviteBandPad, phone.bottom)
+        assertFalse(phone.beside)
     }
 
     // The feed's pull gap follows the band on the page, not the reasons it is owed.
@@ -155,17 +160,17 @@ class InviteBandTest {
         assertFalse(InviteShown(NotifyInvite.Picks, mutableStateOf(false)).shown)
     }
 
-    @Test fun thePullGapWearsTheBandsGreyOnlyWhileAPhonesBandIsFirst() {
+    @Test fun thePullGapWearsTheBandsGreyOnlyWhileTheInvitesBandIsFirst() {
         val loaded = FeedLoader.Phase.Loaded
-        assertEquals(FeedPullPaper.Invite, feedPullPaper(false, loaded, hasCards = true, noteAbove = false, invite = true, phone = true))
+        // Over bands, a phone's or a tablet's.
+        assertEquals(FeedPullPaper.Invite, feedPullPaper(false, loaded, hasCards = true, noteAbove = false, invite = true))
         // Put away (or never owed): the first card is first again, its paper.
-        assertEquals(FeedPullPaper.FirstCard, feedPullPaper(false, loaded, hasCards = true, noteAbove = false, invite = false, phone = true))
-        // A tablet's invite is a card on the page's cream; a refresh note parts the band from the bar; the grid has none.
-        assertNull(feedPullPaper(false, loaded, hasCards = true, noteAbove = false, invite = true, phone = false))
-        assertNull(feedPullPaper(false, loaded, hasCards = true, noteAbove = true, invite = true, phone = true))
-        assertNull(feedPullPaper(true, loaded, hasCards = true, noteAbove = false, invite = true, phone = true))
-        assertNull(feedPullPaper(false, loaded, hasCards = false, noteAbove = false, invite = true, phone = true))
-        assertEquals(FeedPullPaper.Skeleton, feedPullPaper(false, FeedLoader.Phase.Loading, hasCards = false, noteAbove = false, invite = true, phone = true))
+        assertEquals(FeedPullPaper.FirstCard, feedPullPaper(false, loaded, hasCards = true, noteAbove = false, invite = false))
+        // A refresh note parts the band from the bar; the grid has none (its invite a card on the page's cream).
+        assertNull(feedPullPaper(false, loaded, hasCards = true, noteAbove = true, invite = true))
+        assertNull(feedPullPaper(true, loaded, hasCards = true, noteAbove = false, invite = true))
+        assertNull(feedPullPaper(false, loaded, hasCards = false, noteAbove = false, invite = true))
+        assertEquals(FeedPullPaper.Skeleton, feedPullPaper(false, FeedLoader.Phase.Loading, hasCards = false, noteAbove = false, invite = true))
     }
 
     // As drawn.
@@ -245,7 +250,19 @@ class InviteBandTest {
 
     @Test fun aTabletsConversationsInviteIsACardOfTheGreyWithNoPenLineAtAll() = assertBorderlessCard(ConversationsInviteCard)
 
-    @Test fun aTabletsPicksInviteOverTheBandedFeedIsACardOfTheGreyWithNoPenLineAtAll() = assertBorderlessCard(FeedInviteCard)
+    @Test fun aTabletsPicksBandIsTheGreyEdgeToEdgeItsButtonsBesideItsWords() {
+        val drawn = draw(820.dp, Modifier.padding(vertical = 20.dp)) { feedInviteLook(70.dp, underBar = false, tablet = true) }
+        val band = drawn.box
+        // Edge to edge, never a card's outline: the grey at its very corners.
+        assertPaper(drawn, band.left + 2, band.top + px(8.dp), "its start")
+        assertPaper(drawn, band.right - 3, band.bottom - px(4.dp), "its far corner")
+        // Its words where the cards' are; the verb at the end of the words' row, not under them.
+        val title = compose.onNodeWithText(L10n.NotifyAsk.connectionCardsTitle).fetchSemanticsNode().boundsInRoot
+        assertEquals(band.left + px(70.dp), title.left.toInt().toFloat(), 2f)
+        val yes = compose.onNodeWithText(L10n.NotifyAsk.yes).fetchSemanticsNode().boundsInRoot
+        assertEquals(band.right - px(70.dp), yes.right, 2f)
+        assertTrue("the verb under the words", yes.top < title.bottom + px(24.dp))
+    }
 
     @Test fun theGridsWideInviteIsACardOfTheGreyWithNoPenLineAtAll() = assertBorderlessCard(InviteLook.WideCard)
 

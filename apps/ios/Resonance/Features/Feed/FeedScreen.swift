@@ -132,11 +132,11 @@ struct FeedScreen: View {
         if top, let id = picksNotice.reachedTop() { session.toasts.dismiss(id) }
     }
 
-    /// The paper of the band at the bar's line, when the feed's top is one: tonight's card's invite on a
-    /// phone, a grey band of its own (round 24, the owner: 「往下拉的時候，這個底色會斷掉」); else the first
+    /// The paper of the band at the bar's line, when the feed's top is one: tonight's card's invite over
+    /// bands, a grey band of its own (round 24, the owner: 「往下拉的時候，這個底色會斷掉」); else the first
     /// card's family (the list's colouring gives the first card its own preference), or the first
-    /// skeleton's. None over the bordered grid, an empty or failed feed, a refresh note above the cards
-    /// (the band under it draws its own top rule), or a tablet's invite — a card on the page's cream.
+    /// skeleton's. None over the bordered grid (the invite there a card on the page's cream), an empty or
+    /// failed feed, or a refresh note above the cards (the band under it draws its own top rule).
     private var pullPaper: Color? {
         guard window.layoutClass != .expanded else { return nil }
         switch model?.phase ?? .idle {
@@ -146,7 +146,7 @@ struct FeedScreen: View {
             return nil
         case .loaded:
             guard let model, !model.isEmpty, model.refreshFailure == nil else { return nil }
-            if inviting { return window.layoutClass == .compact ? AsideBand.paper : nil }
+            if inviting { return gridded ? nil : AsideBand.paper }
             guard let first = StoryCardList.families(model.cards, splitAt: splitAt(model)).first else { return nil }
             return CardPalette(index: first).interior
         }
@@ -207,10 +207,9 @@ struct FeedScreen: View {
                 }
                 if inviting {
                     // Tonight's card offered to a reader (notification-asks §3), above the cards where the refresh
-                    // note sits (round 24, by the kind of device): a grey band of its own over a phone's bands (the first
-                    // card then starts with its own top wave); over a tablet's bands a borderless card in the bands'
-                    // content column, 24 under the bar's foot and 24 over the first card's top rule; over a tablet's
-                    // grid one wide borderless card, inset as the grid's cards are.
+                    // note sits, in the feed's own look (the owner, 2026-11-23): over bands — a phone's, a tablet's
+                    // upright — a grey band of its own (the first card then starts with its own top wave), its words
+                    // where the cards' are; over a tablet's grid one wide borderless card, inset as the grid's cards are.
                     if gridded {
                         PicksInvite(look: .grid)
                             .padding(.horizontal, window.pad)
@@ -218,16 +217,9 @@ struct FeedScreen: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, model.refreshFailure != nil ? 0 : HeaderChrome.contentTop(width: window.width))
                             .padding(.bottom, Tokens.feedGap - 4)
-                    } else if window.layoutClass == .compact {
-                        PicksInvite(look: .band, underBar: model.refreshFailure == nil)
                     } else {
-                        // Where a band's content is (``StoryBand``): its 38 inside the reading measure, centred.
-                        PicksInvite(look: .column)
-                            .padding(.horizontal, PicksInvite.bandInset)
-                            .frame(maxWidth: Tokens.measure + 2 * PicksInvite.bandInset)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, model.refreshFailure != nil ? 0 : 24)
-                            .padding(.bottom, 24)
+                        PicksInvite(look: .band, underBar: model.refreshFailure == nil,
+                                    air: window.layoutClass == .compact ? 20 : PicksInvite.tabletAir)
                     }
                 }
                 // The scroll anchors on the cards, so picks put on top of them never move the one being read.

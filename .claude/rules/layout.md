@@ -22,6 +22,7 @@ The owner reads three kinds of device, each with its own look — decide by the 
   A margin or padding the owner changes "on phones" changes on phones only.
 - **Tablet** (iPad, Android tablet; portrait or landscape, one pane or two): **cards, in wider margins.** The feed is a grid of framed cards (landscape) or bands whose content keeps the reading column (portrait); lists sit in a column.
   An aside is a **borderless card** — filled (the grey, the card grain), the card's outline, no pen line — inside the content's margins, its edges aligned with the content's edges (the cards' content column, the rows' boxes), with more air above it than a phone gives.
+  Except over a feed of bands: an aside there is a band too, whatever the device (the owner, 2026-11-23, of the picks invite over an upright iPad's feed: 「卡片已經變成區段的設計了，所以上面這個提醒也應該做成區段」 — and over the grid of cards 「還是要做成這一個卡片的設計」) — edge to edge, its words in the cards' content column.
   The first content stands `clamp(width × 4 %, 32, 56)` under the header's pen line (round 15); the header is full width with the tabs as the centred capsule (round 5).
   A banded list (the bell) is cut at the reading column's sides, never run to the window's edges (round 24).
   An iPad in a window narrow enough for a phone's layout is still an iPad: its brand bar never slides away under the status bar (round 24: the window's controls stood over the stories).

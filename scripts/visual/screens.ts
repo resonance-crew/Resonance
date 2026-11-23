@@ -139,6 +139,11 @@ export const SCREENS: Screen[] = [
     expect: 'Sign-in: a cover beside a sheet with the provider buttons' },
   { id: 'home', route: '/home', as: 'alice',
     expect: 'The home feed: story cards in hand-drawn outlines, the header with tabs/bell' },
+  // Tonight's card's invite over the feed (notification-asks §3), forced on by the apps' debug flag (the web has none):
+  // it takes the feed's look — the owner, 2026-11-23: 「卡片已經變成區段的設計了，所以上面這個提醒也應該做成區段」.
+  { id: 'home-invite', route: '/home', as: 'alice', platforms: ['ios', 'android', 'mac'], set: 'extended',
+    app: { ios: ['-notifyInvite', 'picks'], android: ['--es', 'notifyInvite', 'picks'] },
+    expect: "The home feed with 晚上也想讀一張嗎？ above the first card. Over bands (a phone, an iPad or Android tablet upright, a narrow Mac window): a band of the thread's grey from the bar's pen line (no rule of its own there, its grey running up under the bar's wave) to the first card's own top wave, edge to edge — never a card's outline — its title and line where the cards' words are, 不用了 · 好，通知我 under them at the end on a phone, beside them at the row's end on a tablet. Over the grid of framed cards (a tablet turned, the Mac): one wide borderless grey card spanning the columns, its buttons beside its words" },
   { id: 'card', route: '/card/rich-story', as: 'alice',
     expect: "alice's own card 搬家後的第一個安靜夜晚: title, byline, bold/italic, a heading, a quote, lists, an embedded card, a link, a rule, an English line at the end. Round 29: the two sentences readers picked (the first paragraph's 「…第一次覺得安靜是屬於自己的。」 and the second's) on a faint wash of the tap's colour, one rounded piece per line, nothing moved; gus's and bob's faces overlapping after the first, carol's after the second — in the line right after each sentence's last character on a phone (and any window under 820), in the left margin on the tablet and the desktop, the group's right edge 8 left of the column, beside the line where each sentence's wash begins (round 29 §S10; the contents rail on the right untouched); the quote bare (no one picked it); no blank disc, no number" },
   { id: 'card-other', route: '/card/rain-walk', as: 'alice',

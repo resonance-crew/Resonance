@@ -80,14 +80,14 @@ export const DEVICE_STATES: DeviceState[] = [
   // The phone on its side: a short window, where the note's field stops at two lines (round 26 SETTLED 2 and 9).
   { platform: 'android', id: 'phone-landscape', on: 'phone', screens: [NOTE_OPEN], variants: [BASE_VARIANT],
     android: { rotation: 1 }, why: 'the phone turned sideways (the note field\'s two lines in a short window)' },
-  { platform: 'android', id: 'tablet-portrait', on: 'tablet', screens: ['home', 'messages', 'thread', 'thread-stickers', 'card', 'notifications'],
+  { platform: 'android', id: 'tablet-portrait', on: 'tablet', screens: ['home', 'home-invite', 'messages', 'thread', 'thread-stickers', 'card', 'notifications'],
     variants: [BASE_VARIANT], android: { rotation: 1 }, why: 'the Android tablet upright (it was landscape only)' },
   { platform: 'ios', id: 'ipad-landscape', on: 'ipad',
-    screens: ['home', 'messages', 'thread', 'thread-stickers', 'thread-reply', 'card', 'notifications', 'write-draft'],
+    screens: ['home', 'home-invite', 'messages', 'thread', 'thread-stickers', 'thread-reply', 'card', 'notifications', 'write-draft'],
     variants: [BASE_VARIANT], ios: { orientation: 'landscape' }, why: 'the iPad in landscape (#11 the panel beside the capsule; it was upright only)' },
   // The Mac draws the iPad's layouts at 77 %: 600 × 800 points is an iPad window of 780 × 1040 — a windowed iPad's
   // width, the nearest this harness can put an iPad in a window (README, Extended set).
-  { platform: 'mac', id: 'mac-window', on: 'mac', screens: ['home', 'messages', 'thread', 'thread-stickers', 'card'],
+  { platform: 'mac', id: 'mac-window', on: 'mac', screens: ['home', 'home-invite', 'messages', 'thread', 'thread-stickers', 'card'],
     variants: [BASE_VARIANT], mac: { width: 600, height: 800 }, why: 'a narrow window: an iPad in a window (#11, #13)' },
 ];
 

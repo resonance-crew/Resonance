@@ -245,20 +245,24 @@ internal fun LazyListScope.notifyInviteItem(session: Session, invite: InviteShow
 }
 
 /**
- * How an invite is drawn where it lies — by the device's kind, not only its width (round 24, the owner): a phone's is a
- * band of its list ([Band]); a tablet's, one pane or two, a card with no pen line inside the content's own margins
- * ([Card]), or over the bordered grid the grid's wide card ([WideCard]).
+ * How an invite is drawn where it lies (round 24, the owner): a phone's is a band of its list ([Band]); the conversations'
+ * on a tablet, one pane or two, a card with no pen line inside the content's own margins ([Card]). The home feed's takes
+ * the feed's own look (the owner, 2026-11-23: 「卡片已經變成區段的設計了，所以上面這個提醒也應該做成區段…如果…卡片是一塊一塊的…
+ * 兩欄的話，那上方還是要做成這一個卡片的設計」): a [Band] over bands, a phone's or a tablet's, the grid's wide card ([WideCard])
+ * over the bordered grid.
  */
 internal sealed interface InviteLook {
     /**
-     * A phone's: a band of its list, never a card (round 24, the owner: 「做成像是首頁這邊手機上文章…用水平分割線分割的區段…
+     * A band of its list, never a card (round 24, the owner: 「做成像是首頁這邊手機上文章…用水平分割線分割的區段…
      * 裡面有填色…深色一點的灰，這樣就不會在手機的版面上顯得又多一張卡片的感覺」): the thread's grey ([Tokens.BubbleTheirs]) edge to
      * edge with the story bands' grain, parted by their wavy rule in the header's quiet grey ([Tokens.FieldBorderHover]).
      * [words]: where its words stand across it (the list's own content column). [underBar]: its top is the bar's pen
      * line — no rule of its own there, the paper reaching [above] up past its box under the bar, so no pull or stretch
      * ever opens the page's cream between the bar's line and the band — else its own rule along its top. [bottomRule]:
      * its own rule along its foot (false over a card that draws its own top rule). [top]: from its box's top to its
-     * words (its foot keeps 20). Inside: title, 8, the line, 14, then 不用了 · 好，通知我 at the end.
+     * words; [bottom]: under its buttons. Inside: title, 8, the line, 14, then 不用了 · 好，通知我 at the end — or, [beside]
+     * (a tablet's reading column), the buttons at the end of the words' row where they leave the words room
+     * ([WideInviteLayout], as the grid's card).
      */
     data class Band(
         val words: Modifier,
@@ -266,10 +270,12 @@ internal sealed interface InviteLook {
         val top: Dp = InviteBandPad,
         val above: Dp = 0.dp,
         val bottomRule: Boolean = true,
+        val bottom: Dp = InviteBandPad,
+        val beside: Boolean = false,
     ) : InviteLook
 
     /**
-     * A tablet's (round 24, the owner: 「在 iPad 和 Android 平板上…這個通知區塊…應該要做這種沒有 border 的卡片，就是原本的設計，
+     * A tablet's conversations' (round 24, the owner: 「在 iPad 和 Android 平板上…這個通知區塊…應該要做這種沒有 border 的卡片，就是原本的設計，
      * 因為它這時候左邊右邊的 padding 已經變多了」): the thread's grey with the cards' grain in a card's organic outline
      * ([borderlessCard]), no pen line at all, never edge to edge — its item puts it inside the content's margins. 22 at
      * its sides, [top] over the title and [bottom] under the buttons; inside: title, 8, the line, 14, then 不用了 ·
@@ -286,6 +292,9 @@ internal sealed interface InviteLook {
 
 /** A band invite's air inside: above its words and under its buttons. */
 internal val InviteBandPad = 20.dp
+
+/** A tablet's picks band's air: the story bands' own (their 32 over and under their content). */
+internal val InviteBandTabletPad = 32.dp
 
 /** The band invite's rules (wavyLine seeds): along its top, along its foot. */
 internal const val INVITE_TOP_RULE = 84.0
@@ -329,38 +338,26 @@ internal fun conversationsInviteRoom(frame: ConversationsFrame, readable: Modifi
 internal fun conversationsInviteGap(frame: ConversationsFrame): Dp = if (frame.bands) frame.headGap ?: 4.dp else 12.dp
 
 /**
- * The picks invite over a phone's banded feed: its words where the cards' are ([inset]); under the bar its top is the
- * bar's pen line (the list starts at the top of the bar's wavy band, so its words keep that band's height more, and a
- * pull's gap wears its grey: FeedScreen's `pullPaper`), else — a refresh note above it — a rule of its own; its foot is
- * the first card's own top rule.
+ * The picks invite over a banded feed, a phone's or a tablet's: its words where the cards' are ([inset] — a phone's 38, a
+ * tablet's the reading column's), the story bands' 32 over and under them on a [tablet] (a phone's 20), and there the
+ * buttons beside them; under the bar its top is the bar's pen line (the list starts at the top of the bar's wavy band, so
+ * its words keep that band's height more, and a pull's gap wears its grey: FeedScreen's `pullPaper`), else — a refresh
+ * note above it — a rule of its own; its foot is the first card's own top rule.
  */
-internal fun feedInviteLook(inset: Dp, underBar: Boolean): InviteLook.Band = InviteLook.Band(
-    words = Modifier.padding(horizontal = inset),
-    underBar = underBar,
-    top = if (underBar) HeaderEdgeHeight + InviteBandPad else InviteBandPad,
-    bottomRule = false,
-)
-
-/** A tablet's picks invite over the banded feed: more air over its title than the conversations' (26, 22 under its buttons). */
-internal val FeedInviteCard = InviteLook.Card(top = 26.dp, bottom = 22.dp, seed = PICKS_INVITE_SEED)
-
-/** Around the picks invite's card over a tablet's banded feed: 24 under the bar's foot and 24 over the first card's top rule. */
-internal val FeedInviteCardAir = 24.dp
+internal fun feedInviteLook(inset: Dp, underBar: Boolean, tablet: Boolean = false): InviteLook.Band {
+    val air = if (tablet) InviteBandTabletPad else InviteBandPad
+    return InviteLook.Band(
+        words = Modifier.padding(horizontal = inset),
+        underBar = underBar,
+        top = if (underBar) HeaderEdgeHeight + air else air,
+        bottomRule = false,
+        bottom = air,
+        beside = tablet,
+    )
+}
 
 /**
- * Where the picks invite's card stands over a tablet's banded feed (a medium window: the cards full-bleed bands, their
- * content in the centred reading column): its sides on the cards' content edges ([inset], where their covers' edges
- * are), [FeedInviteCardAir] under the bar's foot ([underBar]: the list starts at the top of the bar's wavy band) or
- * under a refresh note, and as much over the first card, which then draws its own top rule.
- */
-internal fun feedInviteCardRoom(inset: Dp, underBar: Boolean): PaddingValues = PaddingValues(
-    start = inset, end = inset,
-    top = (if (underBar) HeaderEdgeHeight else 0.dp) + FeedInviteCardAir,
-    bottom = FeedInviteCardAir,
-)
-
-/**
- * The invite ([InviteLook]: a phone's band of its list, a tablet's borderless card, or the grid's wide card) — its
+ * The invite ([InviteLook]: a band of its list, a tablet's borderless card, or the grid's wide card) — its
  * title, one line, then 不用了 (tonal) · 好，通知我 (solid) at its end. 好，通知我 puts the system's question first when it
  * was never put; on a yes (or with notifications already showing) the switch is saved, the card goes and the toast says
  * what was turned on — a failed save keeps the card, and the toast says so. A system no: the card goes, nothing saved, and the toast leads to the system
@@ -457,9 +454,14 @@ internal fun NotifyInviteSheet(
                         grainInk = GrainInk.current,
                     ),
             ) {
-                Column(look.words.padding(top = look.top, bottom = InviteBandPad)) {
-                    words()
-                    ModalActions(L10n.NotifyAsk.no, onNo, L10n.NotifyAsk.yes, onYes, busy = busy, topPadding = 14.dp)
+                val inside = look.words.padding(top = look.top, bottom = look.bottom)
+                if (look.beside) {
+                    WideInviteLayout(inside, words = words, no = no, yes = yes)
+                } else {
+                    Column(inside) {
+                        words()
+                        ModalActions(L10n.NotifyAsk.no, onNo, L10n.NotifyAsk.yes, onYes, busy = busy, topPadding = 14.dp)
+                    }
                 }
             }
         }
@@ -486,7 +488,7 @@ internal fun NotifyInviteSheet(
 internal val InviteBodyInk: androidx.compose.ui.graphics.Color @Composable @ReadOnlyComposable get() = Tokens.LinkCardMuted
 
 /**
- * A tablet's invite paper (round 24, the owner's 「沒有 border 的卡片」): the thread's grey ([Tokens.BubbleTheirs]) with the
+ * A tablet's card invite paper (round 24, the owner's 「沒有 border 的卡片」): the thread's grey ([Tokens.BubbleTheirs]) with the
  * cards' grain (`grain-card` at 0.2) in a card's organic outline — the grid's cards', its long edges turning as often
  * per dp as theirs ([wideCardOutline]) — and no pen line at all.
  */

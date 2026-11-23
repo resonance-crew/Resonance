@@ -511,11 +511,11 @@ struct StoryBand: ViewModifier {
 }
 
 /// An aside laid as a band of the list it heads — a notification invite atop the conversations or the home feed, on a
-/// phone (and the Mac's conversations) — round 24, the owner: 「做成像是首頁這邊手機上文章會變成使用水平分割線分割的區段…裡面有
+/// phone (and the Mac's conversations), and the feed's over a tablet's bands too (2026-11-23) — round 24, the owner: 「做成像是首頁這邊手機上文章會變成使用水平分割線分割的區段…裡面有
 /// 填色…深色一點的灰，這樣就不會…顯得又多一張卡片的感覺」: the thread's grey (``paper``) from edge to edge of its list, the story
 /// bands' grain over everything (as ``StoryBand``), parted from what is around it by their wavy rule (7 turns, amp 1.4,
 /// at ``Tokens/inkLight``) in the header's quiet grey — never a sheet in a pen line, so it never reads as one more card.
-/// (A tablet's invite is a borderless card instead, by the owner's word.) Its muted words are ``muted``, which clears
+/// (A tablet's conversations invite, and the feed's over the grid, are a borderless card instead, by the owner's word.) Its muted words are ``muted``, which clears
 /// 4.5:1 on this grey (the page's muted ink doesn't, in the light).
 /// With a `tuck` its top is the bar's pen line: no rule there, its paper runs that far up under the bar's wave band (as
 /// the feed's first band does: between the wave's crests the grey shows), and the gap a pull opens over it is the
