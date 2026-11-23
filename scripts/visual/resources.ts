@@ -87,7 +87,11 @@ const SIM_DEVICE = /CoreSimulator\/Devices\/([0-9A-F-]{36})\//;
  * Each part's memory and CPU. `self` is this process (the harness); `simulators` names the harness's own simulators by
  * UDID (the others' are left out: another session's).
  */
-export function classify(procs: Proc[], self: number, simulators: Record<string, string> = {}, devicesHeld = true): Record<string, Group> {
+/** The devices whose locks a run holds (lock.ts): its simulators, its Mac app, its AVDs are its own only then. */
+export type DeviceLocks = ReadonlySet<'ios' | 'mac' | 'android'>;
+export const ALL_DEVICES: DeviceLocks = new Set(['ios', 'mac', 'android']);
+
+export function classify(procs: Proc[], self: number, simulators: Record<string, string> = {}, held: DeviceLocks = ALL_DEVICES): Record<string, Group> {
   const children = new Map<number, number[]>();
   const byPid = new Map(procs.map((p) => [p.pid, p]));
   for (const p of procs) children.set(p.ppid, [...(children.get(p.ppid) ?? []), p.pid]);
@@ -116,13 +120,13 @@ export function classify(procs: Proc[], self: number, simulators: Record<string,
       add(own.get(p.pid)!, p);
       continue;
     }
-    // The harness's devices are the run's while it holds their locks; once it let them go (its compare and review),
-    // another run may have them, so they are said apart as the machine's.
-    const device = (name: string) => add(devicesHeld ? name : `machine:${name}`, p);
+    // The harness's devices are the run's while it holds their locks — a web run holds none, and once a run let them
+    // go (its compare and review) another run may have them — else they are said apart as the machine's.
+    const device = (lock: 'ios' | 'mac' | 'android', name: string) => add(held.has(lock) ? name : `machine:${name}`, p);
     const udid = SIM_DEVICE.exec(p.args)?.[1];
-    if (udid && simulators[udid]) device(`sim:${simulators[udid]}`);
-    else if (/build\/visual-mac\//.test(p.args)) device('mac-app');
-    else if (/qemu-system.*(visual-phone|visual-tablet)/.test(p.args)) device('android-emulator');
+    if (udid && simulators[udid]) device('ios', `sim:${simulators[udid]}`);
+    else if (/build\/visual-mac\//.test(p.args)) device('mac', 'mac-app');
+    else if (/qemu-system.*(visual-phone|visual-tablet)/.test(p.args)) device('android', 'android-emulator');
     else {
       const machine = MACHINE.find(([, re]) => re.test(p.args))?.[0];
       if (machine) add(machine, p);
@@ -230,7 +234,10 @@ export const sampleEveryMs = () => Number(process.env.VISUAL_SAMPLE_S ?? 5) * 10
  * Starts sampling into `runDir` (`_resources.jsonl` as it goes, `_resources.json` once stopped), in phase `phase`
  * until [Sampler.mark] names the next; `log` is told each phase's line as it ends.
  */
-export function startSampler(runDir: string, { log, simulators = [], everyMs = sampleEveryMs(), phase = 'stack' }: { log: (line: string) => void; simulators?: readonly string[]; everyMs?: number; phase?: string }): Sampler {
+export function startSampler(
+  runDir: string,
+  { log, simulators = [], everyMs = sampleEveryMs(), phase = 'stack', holds = ALL_DEVICES }: { log: (line: string) => void; simulators?: readonly string[]; everyMs?: number; phase?: string; holds?: DeviceLocks },
+): Sampler {
   if (!everyMs) return { mark: () => {}, releaseDevices: () => {}, stop: async () => [] };
   const file = join(runDir, '_resources.jsonl');
   mkdirSync(dirname(file), { recursive: true });
@@ -238,10 +245,10 @@ export function startSampler(runDir: string, { log, simulators = [], everyMs = s
   const started = Date.now();
   let sims: Record<string, string> = {};
   let current = phase;
-  let devicesHeld = true;
+  let devicesHeld: DeviceLocks = holds;
   let busy: Promise<void> = Promise.resolve();
   let stopped = false;
-  const take = async (count: number, phase: string, held: boolean) => {
+  const take = async (count: number, phase: string, held: DeviceLocks) => {
     if (count % 12 === 0) sims = await harnessSimulators(simulators);
     const [ps, swap, level, vm] = await Promise.all([
       read('ps', ['-axww', '-o', 'pid=,ppid=,rss=,pcpu=,args=']),
@@ -280,7 +287,7 @@ export function startSampler(runDir: string, { log, simulators = [], everyMs = s
   };
   return {
     releaseDevices() {
-      devicesHeld = false;
+      devicesHeld = new Set();
     },
     mark(next) {
       if (stopped || next === current) return;

@@ -136,7 +136,7 @@ async function capture(args: string[]) {
   let stack: Stack | undefined;
   const dog = watchdog((why) => abort(why));
   // What the run costs the machine, every few seconds, by phase (resources.ts): `_resources.jsonl` / `_resources.json`.
-  const sampler = startSampler(runDir, { log, simulators: HARNESS_SIMULATORS });
+  const sampler = startSampler(runDir, { log, simulators: HARNESS_SIMULATORS, holds: new Set(platforms.filter((p): p is 'ios' | 'mac' | 'android' => p !== 'web')) });
   // --review: agy judges each phase's changed captures as the phase ends, several batches at once (review.ts).
   const reviewer = args.includes('--review') ? agyReviewer(runDir, (line) => log(line)) : null;
   // Every line the run says is progress (each capture, build, boot and phase says one).
