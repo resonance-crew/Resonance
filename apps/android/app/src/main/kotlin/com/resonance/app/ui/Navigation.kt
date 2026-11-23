@@ -359,6 +359,13 @@ internal data class ColdStart(val tab: Tab, val page: Route?) {
  * made of it a frame later, on fresh stacks — a conversation on the Messages tab over its list (beside it, in panes,
  * on an expanded window: the same stack), any other page over the feed. None: the feed, as ever.
  */
+/**
+ * Whether the tabs already show a cold start's [route] (round 32 §P7 review): the [tab] on screen's [stack] ends with
+ * it — as [coldStart] made them. Stacks restored from a recreated activity didn't take it: the push is opened then.
+ */
+internal fun coldStartShows(route: Route?, tab: Tab, stack: List<Route>): Boolean =
+    route != null && coldStart(route).tab == tab && stack.lastOrNull() == route
+
 internal fun coldStart(route: Route?): ColdStart = when (route) {
     null -> ColdStart(Tab.Feed, null)
     is Route.Thread -> ColdStart(Tab.Messages, route)
@@ -453,8 +460,9 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
         val opened = tappedPush ?: return@LaunchedEffect
         PushCenter.consume()
         opened.notificationId?.let { session.notifications.markRead(it) }
-        // The cold start's push is on the stacks already ([coldStart]).
-        if (launched != null && launched.opened === opened && launched.route != null) {
+        // The cold start's push is on the stacks already ([coldStart]) — unless they were restored (the process was
+        // reclaimed and the activity recreated with its saved stacks): then it is opened as any push is.
+        if (launched != null && launched.opened === opened && coldStartShows(launched.route, tab, stacks.getValue(tab))) {
             com.resonance.kit.visual.LaunchTrace.mark("push route opened ${opened.route} (in the first composition)")
             return@LaunchedEffect
         }
