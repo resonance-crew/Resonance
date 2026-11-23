@@ -8,7 +8,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { writeJson } from './util';
 
-export type TimingKind = 'capture' | 'sign-in' | 'build';
+export type TimingKind = 'capture' | 'sign-in' | 'build' | 'flow';
 export type Timing = { key: string; kind: TimingKind; totalMs: number; steps: Record<string, number>; at: string };
 
 export const timingsFile = (runDir: string) => join(runDir, '_timings.jsonl');
@@ -95,7 +95,7 @@ export function writeTimingsSummary(runDir: string): string[] {
   writeJson(join(runDir, '_timings.json'), summary);
   return summary.map((d) => {
     const steps = Object.entries(d.steps).map(([n, ms]) => `${n} ${s(ms)}`).join(' · ');
-    const what = d.kind === 'build' ? `${d.device} ${s(d.medianMs)}` : `${d.device}: ${d.count} ${d.kind === 'sign-in' ? 'sign-ins' : 'captures'}, median ${s(d.medianMs)}`;
+    const what = d.kind === 'build' ? `${d.device} ${s(d.medianMs)}` : `${d.device}: ${d.count} ${d.kind === 'sign-in' ? 'sign-ins' : d.kind === 'flow' ? 'flows' : 'captures'}, median ${s(d.medianMs)}`;
     return `Timings ${what}${steps ? `  (${steps})` : ''}`;
   });
 }

@@ -20,10 +20,11 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { createConnection } from 'node:net';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { LockBusy, acquire, resourcesFor } from './lock';
 import { startStack, seed, type Stack } from './stack';
 import { PORTS, ROOT, SEED_PASSWORD, VISUAL_DIR, sleep, type CaptureContext } from './util';
+import { stopwatch } from './timings';
 
 export type FlowPlatform = 'ios' | 'android';
 export type FlowResult = { flow: string; passed: boolean; seconds: number };
@@ -247,14 +248,24 @@ async function androidDevice(ctx: CaptureContext, kind: FlowDevice): Promise<Dev
   };
 }
 
-function maestroTest(deviceId: string, flow: string, outDir: string, ports: typeof PORTS, logFile: string): Promise<boolean> {
+/**
+ * One flow's `maestro test` arguments. `reinstall`: Maestro puts its driver on the device again first — its default,
+ * on every call (Android's two driver apps, iOS's XCTest runner): the first flow on a device does, so a run never meets
+ * a driver from another Maestro; every later one goes on with the one now there (`--no-reinstall-driver`).
+ */
+export function maestroArgs(deviceId: string, flow: string, outDir: string, ports: typeof PORTS, reinstall: boolean): string[] {
   const env = Object.entries(flowEnv(ports)).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
-  const args = [
+  return [
     '--device', deviceId, 'test', join(FLOWS_DIR, `${flow}.yaml`), ...env,
     '--format', 'junit', '--output', join(outDir, `${flow}.xml`),
     '--test-output-dir', join(outDir, flow), '--debug-output', join(outDir, flow, 'debug'), '--flatten-debug-output',
+    ...(reinstall ? [] : ['--no-reinstall-driver']),
     '--no-ansi',
   ];
+}
+
+function maestroTest(deviceId: string, flow: string, outDir: string, ports: typeof PORTS, logFile: string, reinstall = true): Promise<boolean> {
+  const args = maestroArgs(deviceId, flow, outDir, ports, reinstall);
   return new Promise((done) => {
     const child = spawn(MAESTRO, args, { cwd: ROOT, env: maestroEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
     const out: Buffer[] = [];
@@ -288,20 +299,28 @@ export async function runFlows(platform: FlowPlatform, ctx: CaptureContext, { ta
   const device = platform === 'ios' ? await iosDevice(ctx, kind) : await androidDevice(ctx, kind);
   const results: FlowResult[] = [];
   try {
-    for (const flow of flows) {
+    for (const [i, flow] of flows.entries()) {
+      const timing = stopwatch();
       await seed(ctx.log);
+      timing.lap('seed');
       const tags = tagsOf(flow);
       await device.prepareFlow(tags);
+      timing.lap('prepare');
       const started = Date.now();
       let passed: boolean;
       try {
-        passed = await maestroTest(device.id, flow, outDir, ctx.ports, join(outDir, flow, 'maestro.log'));
+        // Maestro's driver put on the device for the first flow only (maestroArgs).
+        passed = await maestroTest(device.id, flow, outDir, ctx.ports, join(outDir, flow, 'maestro.log'), i === 0);
       } finally {
+        timing.lap('maestro');
         await device.afterFlow?.(tags);
       }
       const seconds = Math.round((Date.now() - started) / 1000);
       results.push({ flow, passed, seconds });
-      ctx.log(`  ${passed ? 'pass' : 'FAIL'}  ${platform}/${flow}  (${seconds} s)${passed ? '' : `  see ${join(outDir, flow, 'maestro.log')}`}`);
+      // In the capture run's own timings when the flows run inside one (`<run>/_flows`), else beside their reports.
+      const t = timing.done(basename(ctx.runDir) === '_flows' ? dirname(ctx.runDir) : ctx.runDir, `${platform}/flows/${flow}`, 'flow');
+      const steps = Object.entries(t.steps).map(([n, ms]) => `${n} ${(ms / 1000).toFixed(1)} s`).join(' · ');
+      ctx.log(`  ${passed ? 'pass' : 'FAIL'}  ${platform}/${flow}  (${seconds} s; ${steps})${passed ? '' : `  see ${join(outDir, flow, 'maestro.log')}`}`);
     }
   } finally {
     await device.close();

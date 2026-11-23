@@ -3,11 +3,23 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import zhTW from '../../src/messages/zh-TW.json';
 import { STICKER_PACKS } from '../../src/lib/stickers/catalog';
-import { STACKS, flowSettings, flowTags, flowsToRun, forPlatform, forStack, withTags } from './flows';
+import { STACKS, flowSettings, flowTags, flowsToRun, forPlatform, forStack, maestroArgs, withTags } from './flows';
 
 const FLOWS = join(process.cwd(), 'maestro/flows');
 const read = (flow: string) => readFileSync(join(FLOWS, `${flow}.yaml`), 'utf8');
 const all = flowsToRun([]);
+
+describe('Maestro’s driver, put on the device once a run', () => {
+  it('reinstalls it for the first flow only, every later flow going on with the one there', () => {
+    const ports = { auth: 9299, firestore: 8280, dev: 3150 };
+    const first = maestroArgs('emulator-5600', 'tap', '/out', ports, true);
+    const later = maestroArgs('emulator-5600', 'tap', '/out', ports, false);
+    expect(first).not.toContain('--no-reinstall-driver');
+    expect(later.filter((a) => a !== '--no-reinstall-driver')).toEqual(first);
+    expect(later.slice(0, 4)).toEqual(['--device', 'emulator-5600', 'test', join(FLOWS, 'tap.yaml')]);
+    expect(later).toContain('AUTH_PORT=9299');
+  });
+});
 
 describe('the flows’ tags', () => {
   it('reads a flow’s tags from its header', () => {
