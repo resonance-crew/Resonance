@@ -366,6 +366,14 @@ diff. It answers a JSON schema (`review/verdict.schema.json`): `ok`, `intended`,
 the reason. Needs `agy` installed and logged in (`agy --version`; headless runs use the cached
 login and stop with "authentication required" otherwise).
 
+Three batches run at once (`VISUAL_AGY_PARALLEL`, default 3; 1 runs them one after the other — a release's 116
+changed captures took 12 batches in a row, 34 min, run 20261123-073642). A batch turned away for its rate or quota
+(a 429, `RESOURCE_EXHAUSTED`, "rate limit", "quota") is tried once more and the rest go one at a time. In `capture
+--review` the review doesn't wait for the run's end: as each phase ends, its platforms' changed and new captures
+(and the film's stills, with the web) go to agy, judged while the next phases and the flows run; the end of the run
+hands over whatever no phase did, and the verdict waits for every batch (`agyReviewer` in review.ts). A run that
+ends early stops the calls still under way.
+
 Checked on 2026-10-31: five captures, one of them a blank messages page left by a capture taken too
 early; the blank one came back `broken` ("the conversation item with bob is missing entirely… the
 screen body blank"), the other four `ok`, in 3 min 15 s.

@@ -24,7 +24,7 @@
  * — so the reviewer can tell an intended change from a regression, and a
  * screen that changed with no trailer naming it stands out.
  */
-import { spawnSync } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { oldestCommit } from './baselineMeta';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
@@ -40,7 +40,7 @@ export type Verdict = {
   note: string;
 };
 
-type Item = {
+export type Item = {
   key: string;
   /** `glance`: a capture only looked at, with no baseline (the landing film's stills, in the run's `_glance/`). */
   status: Result['status'] | 'glance';
@@ -262,24 +262,105 @@ const VERDICT_SCHEMA = {
 
 const VERDICTS = ['ok', 'intended', 'broken', 'unsure'];
 
+/** What one `agy` call came back with. */
+export type AgyAnswer = { status: number | null; stdout: string; stderr: string; error?: string };
+/** Runs `agy` with these arguments from the repository; the review's one way out (a test gives its own). */
+export type AgyRunner = (args: string[]) => Promise<AgyAnswer>;
+
+/** The `agy` calls under way: stopped when the run ends before them (a phase that failed, the watchdog), never left behind. */
+const calls = new Set<ChildProcess>();
+let stopsCalls = false;
+
+/** `agy` itself, without holding up the run: its output read as it comes, never past 64 MB. */
+export const runAgy: AgyRunner = (args) =>
+  new Promise((resolve) => {
+    const child = spawn('agy', args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
+    calls.add(child);
+    child.once('exit', () => calls.delete(child));
+    if (!stopsCalls) {
+      stopsCalls = true;
+      process.once('exit', () => calls.forEach((c) => c.kill('SIGTERM')));
+    }
+    const out: Buffer[] = [];
+    const err: Buffer[] = [];
+    let size = 0;
+    const keep = (into: Buffer[]) => (chunk: Buffer) => {
+      size += chunk.length;
+      if (size <= 64 << 20) into.push(chunk);
+    };
+    child.stdout!.on('data', keep(out));
+    child.stderr!.on('data', keep(err));
+    child.on('error', (error) => resolve({ status: null, stdout: '', stderr: '', error: error.message }));
+    child.on('close', (status) => resolve({ status, stdout: Buffer.concat(out).toString('utf8'), stderr: Buffer.concat(err).toString('utf8') }));
+  });
+
+/** How many `agy` batches run at once (`VISUAL_AGY_PARALLEL`, default 3; 1 is one after the other, as before). */
+export function agyParallel(): number {
+  const set = Number(process.env.VISUAL_AGY_PARALLEL);
+  return Number.isFinite(set) && set >= 1 ? Math.floor(set) : 3;
+}
+
+/** A failure that says the service is turning calls away (rate, quota): then the batches go one at a time. */
+export const RATE_LIMITED = /\b429\b|rate.?limit|quota|resource.?exhausted|too many requests/i;
+
+/** What a batch's call came to: the verdicts it gave, or why it gave none. */
+function readAnswer(run: AgyAnswer): { answered: Verdict[]; failure: string } {
+  let failure = run.error ?? (run.status !== 0 ? (run.stderr || `agy exited ${run.status}`).trim().slice(-300) : '');
+  let answered: Verdict[] = [];
+  if (!failure) {
+    try {
+      const envelope = JSON.parse(run.stdout) as { status?: string; error?: string; structured_output?: { verdicts?: Verdict[] } };
+      answered = envelope.structured_output?.verdicts ?? [];
+      if (envelope.status !== 'SUCCESS') failure = envelope.error || `agy status ${envelope.status}`;
+    } catch {
+      failure = 'agy gave no readable answer';
+    }
+  }
+  return { answered, failure };
+}
+
+export type AgyReviewer = {
+  /** Queues these captures (in batches); answers once they are all judged. */
+  add: (items: Item[]) => Promise<void>;
+  /** Every verdict so far, in the order the captures were added. */
+  verdicts: () => Verdict[];
+  /** Waits for everything queued. */
+  done: () => Promise<Verdict[]>;
+};
+
+export type AgyOptions = { runner?: AgyRunner; limit?: number; size?: number; model?: string };
+
 /**
- * Antigravity's CLI, headless (`agy -p`), one batch at a time, from the
- * repository (its workspace, so it may read the images there). Each batch
- * answers VERDICT_SCHEMA; a capture a batch left out, or a batch that failed,
- * is "unsure" with the reason. Verdicts are written as they come in.
+ * Antigravity's CLI, headless (`agy -p`), from the repository (its workspace, so it may read the images there), in
+ * batches (VISUAL_AGY_BATCH, default 10), several at once (`agyParallel`, default 3): a release's 116 changed captures
+ * took 12 batches one after the other, 34 min (run 20261123-073642). Each batch answers VERDICT_SCHEMA; a capture a
+ * batch left out, or a batch that failed, is "unsure" with the reason. A batch turned away for its rate or quota
+ * (`RATE_LIMITED`) is tried once more, and from then on the batches go one at a time. Verdicts are written to
+ * `review/verdicts.json` as they come in. Captures can be added while others are being judged (`add`): the capture
+ * run hands each phase's captures over as the phase ends, so the review goes on beside the next phase.
  */
-export async function reviewWithAgy(runDir: string, results: Result[], log: (line: string) => void, all = false) {
-  const model = process.env.VISUAL_AGY_MODEL || 'gemini-3.8-flash-medium';
-  const size = Number(process.env.VISUAL_AGY_BATCH || 10);
-  const list = items(runDir, results, all);
+export function agyReviewer(runDir: string, log: (line: string) => void, options: AgyOptions = {}): AgyReviewer {
+  const runner = options.runner ?? runAgy;
+  const size = options.size ?? Number(process.env.VISUAL_AGY_BATCH || 10);
+  const model = options.model ?? (process.env.VISUAL_AGY_MODEL || 'gemini-3.8-flash-medium');
+  let width = options.limit ?? agyParallel();
   const schema = join(runDir, 'review', 'verdict.schema.json');
   writeJson(schema, VERDICT_SCHEMA);
   const notes = releaseNotes(runDir);
-  const verdicts: Verdict[] = [];
-  const save = () => writeJson(join(runDir, 'review', 'verdicts.json'), verdicts);
-  for (let start = 0; start < list.length; start += size) {
-    const batch = list.slice(start, start + size);
-    log(`agy (${model}) ${start + 1}–${start + batch.length} of ${list.length}…`);
+  const order: string[] = [];
+  const byKey = new Map<string, Verdict>();
+  const verdicts = () => order.filter((k) => byKey.has(k)).map((k) => byKey.get(k)!);
+  const save = () => writeJson(join(runDir, 'review', 'verdicts.json'), verdicts());
+  type Batch = { items: Item[]; first: number; retried: boolean; done: () => void };
+  const queue: Batch[] = [];
+  let running = 0;
+  let numbered = 0;
+  const all: Promise<void>[] = [];
+
+  /** Judges a batch; answers false when it went back on the queue (turned away, to be tried once more). */
+  const judge = async (batch: Batch): Promise<boolean> => {
+    const { items: list, first } = batch;
+    log(`agy (${model}) ${first}–${first + list.length - 1} of ${numbered}…`);
     const prompt = `You are reviewing release screenshots of Resonance, a story-card app on web, iPhone, iPad, Mac and Android.
 Open EVERY image file listed below with your file viewer (paths are relative to the repository root) and look at it before
 judging; never judge from the file name. Do not change, create or delete any file, and run no commands.
@@ -289,39 +370,92 @@ ${RUBRIC}
 Release notes since the baseline:
 ${notes}
 
-${batch.map((it, i) => describe(it, start + i + 1, (p) => relative(ROOT, p))).join('\n\n')}
+${list.map((it, i) => describe(it, first + i, (p) => relative(ROOT, p))).join('\n\n')}
 
 Answer with exactly one verdict per capture, its "key" being the capture's key in backticks above, and a note of one or two
 sentences saying what you saw.`;
-    const run = spawnSync(
-      'agy',
-      ['-p', prompt, '--model', model, '--output-format', 'json', '--json-schema', schema, '--print-timeout', '20m'],
-      { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
-    );
-    let answered: Verdict[] = [];
-    let failure = run.error?.message ?? (run.status !== 0 ? (run.stderr || `agy exited ${run.status}`).trim().slice(-300) : '');
-    if (!failure) {
-      try {
-        const envelope = JSON.parse(run.stdout) as { status?: string; error?: string; structured_output?: { verdicts?: Verdict[] } };
-        answered = envelope.structured_output?.verdicts ?? [];
-        if (envelope.status !== 'SUCCESS') failure = envelope.error || `agy status ${envelope.status}`;
-      } catch {
-        failure = 'agy gave no readable answer';
-      }
+    const answer = await runner(['-p', prompt, '--model', model, '--output-format', 'json', '--json-schema', schema, '--print-timeout', '20m']);
+    const { answered, failure } = readAnswer(answer);
+    if (failure && !batch.retried && RATE_LIMITED.test(failure)) {
+      if (width > 1) log(`agy turned a batch away (${failure.slice(0, 80)}): the rest one batch at a time`);
+      width = 1;
+      queue.unshift({ ...batch, retried: true });
+      return false;
     }
-    for (const it of batch) {
+    for (const it of list) {
       const v = answered.find((a) => a.key === it.key);
-      verdicts.push(
+      byKey.set(
+        it.key,
         v && VERDICTS.includes(v.verdict)
           ? { key: it.key, verdict: v.verdict, note: String(v.note ?? '') }
           : { key: it.key, verdict: 'unsure', note: failure ? `Not judged: ${failure}` : 'Not judged: agy left this capture out' },
       );
     }
     save();
-  }
-  save();
-  return verdicts;
+    return true;
+  };
+
+  const pump = () => {
+    while (running < width && queue.length) {
+      const batch = queue.shift()!;
+      running++;
+      void judge(batch)
+        .then(
+          (finished) => {
+            if (finished) batch.done();
+          },
+          (error) => {
+            for (const it of batch.items) byKey.set(it.key, { key: it.key, verdict: 'unsure', note: `Not judged: ${String((error as Error)?.message ?? error)}` });
+            save();
+            batch.done();
+          },
+        )
+        .finally(() => {
+          running--;
+          pump();
+        });
+    }
+  };
+
+  return {
+    add(items) {
+      const fresh = items.filter((it) => !order.includes(it.key));
+      order.push(...fresh.map((it) => it.key));
+      const batches: Promise<void>[] = [];
+      for (let start = 0; start < fresh.length; start += size) {
+        const list = fresh.slice(start, start + size);
+        const first = numbered + 1;
+        numbered += list.length;
+        batches.push(new Promise<void>((done) => queue.push({ items: list, first, retried: false, done })));
+      }
+      pump();
+      const together = Promise.all(batches).then(() => {});
+      all.push(together);
+      return together;
+    },
+    verdicts,
+    async done() {
+      await Promise.all(all);
+      save();
+      return verdicts();
+    },
+  };
 }
+
+/** Every capture that changed or is new (`all`: every capture), judged by agy; see [agyReviewer]. */
+export async function reviewWithAgy(runDir: string, results: Result[], log: (line: string) => void, all = false, options: AgyOptions = {}) {
+  const reviewer = agyReviewer(runDir, log, options);
+  await reviewer.add(items(runDir, results, all));
+  return reviewer.done();
+}
+
+/** The captures to judge on these platforms (the changed and new ones, the film's stills), for a review that goes by phase. */
+export function itemsOn(runDir: string, results: Result[], platforms: readonly string[]): Item[] {
+  return items(runDir, results).filter((it) => platforms.includes(it.key.split('/')[0]));
+}
+
+/** Every capture to judge (changed, new, the stills): what a review by phase hands over last, the reviewer skipping what it has. */
+export const reviewItems = (runDir: string, results: Result[]): Item[] => items(runDir, results);
 
 async function askGemini(it: Item, notes: string): Promise<Verdict> {
   const key = process.env.GEMINI_API_KEY;

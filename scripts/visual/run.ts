@@ -36,7 +36,7 @@ import { describe, foreign, lostDevices, runningDevices, type RunningDevice } fr
 import { gateLines, judgeRun } from './gate';
 import { LockBusy, acquire, resourcesFor, type Lock, type LockHolder } from './lock';
 import { writeReport } from './report';
-import { reviewWithAgy, reviewWithGemini, writeReviewPack } from './review';
+import { agyReviewer, itemsOn, reviewItems, reviewWithAgy, reviewWithGemini, writeReviewPack } from './review';
 import { startStack, type Stack } from './stack';
 import { PORTS, ROOT, RUNS_DIR, VISUAL_DIR, git, ignorePath, listPngs, readJson, writeJson, type Capture } from './util';
 import { MAIN, baselineDir, currentBaselineName, ensureBaseline, listBaselines, runBaselineName } from './baselines';
@@ -137,6 +137,8 @@ async function capture(args: string[]) {
   const dog = watchdog((why) => abort(why));
   // What the run costs the machine, every few seconds, by phase (resources.ts): `_resources.jsonl` / `_resources.json`.
   const sampler = startSampler(runDir, { log, simulators: HARNESS_SIMULATORS });
+  // --review: agy judges each phase's changed captures as the phase ends, several batches at once (review.ts).
+  const reviewer = args.includes('--review') ? agyReviewer(runDir, (line) => log(line)) : null;
   // Every line the run says is progress (each capture, build, boot and phase says one).
   const say = (line: string) => {
     dog.progress();
@@ -186,6 +188,8 @@ async function capture(args: string[]) {
       const unsettled = await Promise.all(here.map(async (platform) => (await capturer(platform))({ ...ctx, ...sliceOf(info, platform) })));
       info.unsettled.push(...unsettled.flat());
       writeJson(join(runDir, 'run.json'), info);
+      // --review: what this phase changed goes to agy now, judged beside the next phases and the flows (review.ts).
+      if (reviewer) void reviewer.add(itemsOn(runDir, await compareRun(runDir, { log: say }), here));
     }
     if (args.includes('--flows')) {
       sampler.mark('flows');
@@ -206,9 +210,12 @@ async function capture(args: string[]) {
   }
   sampler.mark('compare');
   let results = await finish(runDir);
-  if (args.includes('--review')) {
+  if (reviewer) {
+    // Whatever no phase handed over yet (none, unless a phase failed before its turn), then what is still being judged.
     sampler.mark('review');
-    results = await review(runDir, ['--agy'], results);
+    await reviewer.add(reviewItems(runDir, results));
+    await reviewer.done();
+    results = await review(runDir, [], results);
   }
   await sampler.stop();
   for (const line of writeTimingsSummary(runDir)) log(line);
