@@ -1277,4 +1277,18 @@ private final class IllustrationStub: URLProtocol {
         #expect(store.writes.count == 1)
         #expect(server.published == ["card-1"])
     }
+
+    /// Post-merge review: a live card's choice waits for the autosave pause, so 私人卡 tried and taken back writes no
+    /// revision — no buffer, no 捨棄修改 left behind.
+    @Test func aLiveCardsChoiceTakenBackLeavesNoRevision() async {
+        let store = RecordingDraftStore()
+        let model = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls, opened: card(published: true))
+        let opened = model.audience
+        model.choose(.private)
+        model.choose(opened ?? .public)
+        try? await Task.sleep(for: WriteModel.autosaveDelay + .milliseconds(300))
+        #expect(!store.writes.contains { $0.kind == .edit })
+        #expect(!model.hasPendingEdit)
+        #expect(!PublishStep.showsSecondary(model))
+    }
 }
