@@ -18,7 +18,7 @@ vi.mock('@/lib/db/firestore/client/reads', () => {
   getCardBySlugOrId: vi.fn(),
   getCardsByAuthor: vi.fn(),
   getMyDrafts: vi.fn(),
-  getPublicCardsByAuthor: vi.fn(),
+  getPublicAuthorCards: vi.fn(),
   getCurrentUserProfile: vi.fn(),
   getLatestPublishedFeed: vi.fn(),
   getMyResonanceCard: vi.fn(),
@@ -111,7 +111,7 @@ import {
   getCardsByAuthor,
   getMyDrafts,
   getCurrentUserProfile,
-  getPublicCardsByAuthor,
+  getPublicAuthorCards,
   getPublicCardView,
   getPublicFeedPage,
   getRelatedCards,
@@ -985,7 +985,7 @@ describe('profile hooks', () => {
   it('assembles a public profile (connection state, public cards) for another user', async () => {
     vi.mocked(getUserByHandle).mockResolvedValue(user('u2', 'other'));
     vi.mocked(isConnected).mockResolvedValue(true);
-    vi.mocked(getPublicCardsByAuthor).mockResolvedValue([card('p1', 'u2')]);
+    vi.mocked(getPublicAuthorCards).mockResolvedValue({ cards: [summary('p1', 'u2')] });
     vi.mocked(getUsersByIds).mockResolvedValue({});
 
     const { result } = renderHook(() => useProfilePage('other'), { wrapper });
@@ -996,7 +996,7 @@ describe('profile hooks', () => {
     expect(head!.isSelf).toBe(false);
     expect(head!.isConnected).toBe(true);
     expect(cards!.map((c) => c.id)).toEqual(['p1']);
-    expect(getPublicCardsByAuthor).toHaveBeenCalledWith('u2');
+    expect(getPublicAuthorCards).toHaveBeenCalledWith('u2');
     // The three hooks share one lookup of the handle.
     expect(getUserByHandle).toHaveBeenCalledTimes(1);
   });
@@ -1007,20 +1007,20 @@ describe('profile hooks', () => {
     const never = () => new Promise<never>(() => {});
     vi.mocked(getMyBlockedIds).mockImplementation(never);
     vi.mocked(isConnected).mockImplementation(never);
-    vi.mocked(getPublicCardsByAuthor).mockImplementation(never);
+    vi.mocked(getPublicAuthorCards).mockImplementation(never);
 
     const { result } = renderHook(() => useProfilePage('other'), { wrapper });
-    await waitFor(() => expect(getPublicCardsByAuthor).toHaveBeenCalledWith('u2'));
+    await waitFor(() => expect(getPublicAuthorCards).toHaveBeenCalledWith('u2'));
     expect(getMyBlockedIds).toHaveBeenCalled();
     expect(isConnected).toHaveBeenCalledWith('me', 'u2');
-    expect(getPublicCardsByAuthor).toHaveBeenCalledWith('u2');
+    expect(getPublicAuthorCards).toHaveBeenCalledWith('u2');
     expect(result.current.isLoading).toBe(true);
   });
 
   it('shows the viewer their own public profile and skips the connect round-trip', async () => {
     // The looked-up user IS the viewer.
     vi.mocked(getUserByHandle).mockResolvedValue(user('me', 'myself'));
-    vi.mocked(getPublicCardsByAuthor).mockResolvedValue([card('p1', 'me')]);
+    vi.mocked(getPublicAuthorCards).mockResolvedValue({ cards: [summary('p1', 'me')] });
     vi.mocked(getUsersByIds).mockResolvedValue({});
 
     const { result } = renderHook(() => useProfilePage('myself'), { wrapper });
@@ -1036,7 +1036,7 @@ describe('profile hooks', () => {
   it('renders for anonymous visitors (no viewer) without connect reads', async () => {
     mockUseAuth.mockReturnValue({ user: null, loading: false });
     vi.mocked(getUserByHandle).mockResolvedValue(user('u2', 'other'));
-    vi.mocked(getPublicCardsByAuthor).mockResolvedValue([card('p1', 'u2')]);
+    vi.mocked(getPublicAuthorCards).mockResolvedValue({ cards: [summary('p1', 'u2')] });
     vi.mocked(getUsersByIds).mockResolvedValue({});
 
     const { result } = renderHook(() => useProfilePage('other'), { wrapper });
@@ -1055,7 +1055,7 @@ describe('profile hooks', () => {
   it('reports loading (not not-found) while auth is still restoring, and starts the public reads meanwhile', async () => {
     mockUseAuth.mockReturnValue({ user: null, loading: true });
     vi.mocked(getUserByHandle).mockResolvedValue(user('u2', 'other'));
-    vi.mocked(getPublicCardsByAuthor).mockResolvedValue([card('p1', 'u2')]);
+    vi.mocked(getPublicAuthorCards).mockResolvedValue({ cards: [summary('p1', 'u2')] });
     vi.mocked(getUsersByIds).mockResolvedValue({});
 
     const { result, rerender } = renderHook(() => useProfilePage('other'), { wrapper });
@@ -1079,7 +1079,7 @@ describe('profile hooks', () => {
     await waitFor(() => expect(result.current.data).toBeDefined());
     expect(result.current.isLoading).toBe(false);
     expect(result.current.data!.user).toBeNull();
-    expect(getPublicCardsByAuthor).not.toHaveBeenCalled();
+    expect(getPublicAuthorCards).not.toHaveBeenCalled();
   });
 });
 

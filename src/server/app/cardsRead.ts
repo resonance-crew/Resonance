@@ -416,6 +416,37 @@ export async function getPublicRelated(ctx: ServerCtx, id: string): Promise<Card
   return { cards: relatedOf(pool.map((c) => toFeedCard(c, authors.get(c.authorId)))) };
 }
 
+/**
+ * The named public cards answering a card, newest first, for a reader nobody is signed in as (GET
+ * /api/cards/resonances, BE-9): what the browser's own query read through the rules — `referenceCardId`, public,
+ * published, `anonymous == false` — as summaries (LIST_FIELDS) instead of 30 whole documents with their stories, the
+ * same for every visitor and so kept by the CDN. Null for a card no one signed out may read.
+ */
+export async function getPublicResonances(ctx: ServerCtx, id: string): Promise<CardListBody | null> {
+  if (!id || id.includes('/')) return null;
+  const [base, found] = await Promise.all([ctx.data.cards.get(id, PUBLIC_BASE_FIELDS), ctx.data.cards.resonancesOf(id, RESONANCE_LIMIT)]);
+  if (!base || base.visibility !== 'public' || !base.publishedAt || base.trashedAt != null) return null;
+  const named = found.filter((c) => c.anonymous !== true && c.visibility === 'public' && c.publishedAt != null && !inTrash(c));
+  const [authors] = await Promise.all([authorsOf(ctx.data.users, named), ctx.data.cards.withStories(named)]);
+  return { cards: named.map((c) => toFeedCard(c, authors.get(c.authorId))) };
+}
+
+/**
+ * A person's named public cards, newest first (their first 40, as the profile lists them), for a reader nobody is
+ * signed in as (GET /api/cards/by-author, BE-9): the profile's own page of GET /users/{handle}/cards without a viewer,
+ * as summaries — never an anonymous card (ux §6) — instead of 40 whole documents read through the rules. Null for
+ * someone with no profile.
+ */
+export async function getPublicAuthorCards(ctx: ServerCtx, uid: string): Promise<CardListBody | null> {
+  if (!uid || uid.includes('/')) return null;
+  const [row, page] = await Promise.all([ctx.data.users.getRow(uid), ctx.data.cards.authorPage(uid, PUBLIC_PROFILE_CARDS)]);
+  if (!row) return null;
+  const { cards } = await profilePage(ctx, { ...page, cards: page.cards.filter((c) => c.visibility === 'public' && c.publishedAt != null && !inTrash(c)) }, row);
+  return { cards };
+}
+/** A signed-out profile's cards (the web's getPublicCardsByAuthor read 40). */
+const PUBLIC_PROFILE_CARDS = 40;
+
 /** Cards that link to this one — shown to its author only, as on the web. */
 export async function getLinksToCard(ctx: ServerCtx, viewerId: string, id: string): Promise<CardListBody> {
   const card = await visibleCardById(ctx, viewerId, id);

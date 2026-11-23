@@ -11,10 +11,10 @@ import {
   getCurrentUserProfile,
   getMyResonanceCard,
   getPublicCardView,
-  getPublicCardsByAuthor,
+  getPublicAuthorCards,
   getPublicFeedPage,
   getRelatedCards,
-  getResonanceCards,
+  getPublicResonances,
   getUserById,
   getUserByHandle,
   getUsersByIds,
@@ -784,8 +784,11 @@ export function useMyThoughtMap() {
  * Anonymous-readable — drives the card-detail resonance section.
  */
 export function useResonanceCards(cardId: string | undefined) {
+  // Signed out (the card page's public path): the server's summaries, kept by the CDN (BE-9), the blocks as always.
   return useSWR<CardsWithAuthors>(cardId ? `resonanceCards:${cardId}` : null, async () => {
-    return withAuthors(getResonanceCards(cardId!));
+    const [body, blocked] = await Promise.all([getPublicResonances(cardId!), getMyBlockedIds()]);
+    const { cards, authors } = summaryList(body);
+    return { cards: blocked.size ? cards.filter((c) => !blocked.has(c.authorId)) : cards, authors };
   });
 }
 
@@ -1363,7 +1366,8 @@ export function useProfileByHandle(handle: string | undefined) {
  */
 export function useProfileCards(handle: string | undefined) {
   const uid = usePersonByHandle(handle).data?.id;
-  return useSWR<Card[]>(uid ? `profileCards:${uid}` : null, () => getPublicCardsByAuthor(uid!));
+  // A signed-out profile: the server's summaries, kept by the CDN (BE-9) — never an anonymous card.
+  return useSWR<Card[]>(uid ? `profileCards:${uid}` : null, async () => summaryList(await getPublicAuthorCards(uid!)).cards);
 }
 
 /**

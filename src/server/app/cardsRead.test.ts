@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiFailure } from '@/lib/api/v1/http';
 import { memoryCtx } from '@/server/infra/memory/ctx';
-import { getCardDetail, getCardsByKeys, getFeed, getMe, getProfile, readCardForPage } from './cardsRead';
+import { getCardDetail, getCardsByKeys, getFeed, getMe, getProfile, getPublicAuthorCards, getPublicResonances, readCardForPage } from './cardsRead';
 
 // The cards read side as a service on the ports, with no database at all (memoryCtx): what the emulator suites
 // assert through the legacy facades (apiV1Reads, anonymousBlocks, cardPage), here on plain rows.
@@ -102,5 +102,32 @@ describe('the cards read side on memoryCtx', () => {
     expect(profile.cards?.cards.map((c) => c.id)).toEqual(['bobNamed']);
     expect(await getMe(ctx, 'bob')).toMatchObject({ id: 'bob', handle: 'bob', bio: 'bob writes', deletion: null });
     await expect(getMe(ctx, 'nobody')).rejects.toBeInstanceOf(ApiFailure);
+  });
+});
+
+// BE-9: a signed-out profile and a signed-out card page read their lists through the rules — 40 and 30 whole cards
+// with their stories, for every visitor. The server answers them as summaries now (the CDN keeps them a minute):
+// the same cards the rules' queries gave, never an anonymous one, never a story.
+describe('the signed-out lists, from the server', () => {
+  it("answers a person's named public cards, newest first — never an anonymous or a private one, never a story", async () => {
+    const ctx = world();
+    ctx.state.put('cards', 'bobPrivate', card('bob', '2026-11-20T05:00:00Z', { visibility: 'private' }));
+    const body = await getPublicAuthorCards(ctx, 'bob');
+    expect(body!.cards.map((c) => c.id)).toEqual(['bobNamed']);
+    expect(body!.cards[0].author?.handle).toBe('bob');
+    for (const c of body!.cards) expect(c).not.toHaveProperty('story');
+    expect(await getPublicAuthorCards(ctx, 'nobody')).toBeNull();
+  });
+
+  it('answers the named public cards answering a card — not an anonymous answer — and nothing for a card no one signed out may read', async () => {
+    const ctx = world();
+    ctx.state.put('cards', 'reply1', card('alice', '2026-11-21T01:00:00Z', { referenceCardId: 'bobNamed' }));
+    ctx.state.put('cards', 'reply2', card('carol', '2026-11-21T02:00:00Z', { referenceCardId: 'bobNamed', anonymous: true }));
+    ctx.state.put('cards', 'reply3', card('dave', '2026-11-21T03:00:00Z', { referenceCardId: 'carolConn' }));
+    const body = await getPublicResonances(ctx, 'bobNamed');
+    expect(body!.cards.map((c) => c.id)).toEqual(['reply1']);
+    for (const c of body!.cards) expect(c).not.toHaveProperty('story');
+    expect(JSON.stringify(body)).not.toContain('carol');
+    expect(await getPublicResonances(ctx, 'carolConn')).toBeNull();
   });
 });
