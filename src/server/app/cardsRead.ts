@@ -1,6 +1,7 @@
 import { embeddedCardKeys } from '@/lib/api/v1/embeds';
 import { ApiFailure } from '@/lib/api/v1/http';
 import { presentLinkPreviews, toAuthor, toFeedCard, visibilityOf } from '@/lib/api/v1/present';
+import { positionParts, readPageToken } from '@/lib/api/v1/paging';
 import { publicList } from '@/lib/api/v1/publicLists';
 import {
   CARD_KEYS_MAX,
@@ -234,14 +235,60 @@ export async function getFeed(ctx: ServerCtx, viewerId: string | null, limit: nu
     publicList(ctx.data.cards.scope, `feed|${limit}|${start?.pageToken ?? ''}|${start?.cursor ?? ''}`, () => publicFeedPage(ctx, limit, start)),
     viewerId ? ctx.data.users.blockedBy(viewerId) : new Set<string>(),
   ]);
+  const friends = viewerId ? await connectionsCardsOn(ctx, viewerId, limit, start, page.end, blocked) : [];
+  const shown = page.cards.filter((c) => !blockHides(c, blocked));
+  const cards = friends.length ? mergeNewestFirst(shown, friends) : shown;
+  const authors = friends.length ? new Map([...page.authors, ...(await authorsOf(ctx.data.users, friends))]) : page.authors;
   return {
     // A blank card (lib/cards/blank) is left out after the query, as a blocked author's is: the page may run short, never end early.
-    cards: page.cards
-      .filter((c) => !blockHides(c, blocked))
-      .map((c) => toFeedCard(c, page.authors.get(c.authorId)))
-      .filter((c) => !blankFeedCard(c)),
+    cards: cards.map((c) => toFeedCard(c, authors.get(c.authorId))).filter((c) => !blankFeedCard(c)),
     ...page.end,
   };
+}
+
+/** Where a page boundary (a page token, or the older millisecond cursor) stands in time; null when it names none. */
+function boundaryTime(pageToken?: string | null, cursor?: string | null): Date | null {
+  const position = pageToken ? readPageToken(pageToken) : null;
+  if (position) {
+    const { seconds, nanos } = positionParts(position);
+    return new Date(seconds * 1000 + Math.floor(nanos / 1e6));
+  }
+  const ms = cursor ? Number(cursor) : NaN;
+  return Number.isFinite(ms) ? new Date(ms) : null;
+}
+
+/**
+ * The cards for connections only that the viewer's connections published within this page of the latest feed
+ * (Wave 2 #2, 「發布時選擇分享給朋友」: the round 26 audit's 5.1 — the feed lists them): after the page's own start
+ * (the token it was asked with; the first page has none) and from its last card on (the next page's token; the last
+ * page reaches back to the start), so each lands on exactly one page and the public pages and their tokens stay as
+ * everyone's. Named only (the query asks `anonymous == false`: an anonymous card is never for connections), as
+ * they read now — published, out of the trash, listed, readable by the viewer (visibleTo), no block either way.
+ */
+async function connectionsCardsOn(
+  ctx: ServerCtx,
+  viewerId: string,
+  limit: number,
+  start: PageStart | undefined,
+  end: { nextPageToken?: string | null; nextCursor?: string | null },
+  blocked: ReadonlySet<string>,
+): Promise<ListCard[]> {
+  const links = (await ctx.data.taps.connectionsOf(viewerId)).filter((id) => !blocked.has(id));
+  if (!links.length) return [];
+  const window = { before: boundaryTime(start?.pageToken, start?.cursor), since: boundaryTime(end.nextPageToken, end.nextCursor) };
+  const found = (await ctx.data.cards.connectionsCards(links, window, limit)).filter(
+    (c) => !inTrash(c) && !unlistedCard(c) && !blockHides(c, blocked),
+  );
+  if (!found.length) return [];
+  const readable = await visibleTo(ctx.data.users, viewerId, found);
+  await ctx.data.cards.withStories(readable);
+  return readable;
+}
+
+/** Two lists each newest first, as one (a tie: the higher id first, as the feed's query orders). */
+function mergeNewestFirst(a: ListCard[], b: ListCard[]): ListCard[] {
+  const at = (c: ListCard) => c.publishedAt?.getTime() ?? 0;
+  return [...a, ...b].sort((x, y) => at(y) - at(x) || (x.id < y.id ? 1 : x.id > y.id ? -1 : 0));
 }
 
 /**
@@ -472,13 +519,16 @@ export async function getProfile(
   const limit = Math.min(opts.limit ?? DEFAULT_PAGE, PROFILE_COUNT_LIMIT);
   const user = await userByHandle(ctx, handle);
   const isSelf = user.id === viewerId;
+  const connected = isSelf ? Promise.resolve(false) : users.connected(viewerId, user.id);
+  // Their cards for connections only too, for a viewer connected to them and for themselves (Wave 2 #2).
+  const scope = connected.then((c) => ({ connections: isSelf || c }));
   const [blocks, isConnected, cardCount, published, linking, letter] = await Promise.all([
     // The whole block list when the links need it (it answers isBlocked too), else the one document.
     include.has('links') ? users.blockedBy(viewerId) : isSelf ? null : users.hasBlocked(viewerId, user.id).then((b) => (b ? new Set([user.id]) : null)),
-    isSelf ? Promise.resolve(false) : users.connected(viewerId, user.id),
+    connected,
     // The count is an aggregation (B11: a read per thousand index entries, not 40 documents); the page reads its own.
-    cards.countAuthorCards(user.id, PROFILE_COUNT_LIMIT),
-    include.has('cards') ? cards.authorPage(user.id, limit) : null,
+    scope.then((sc) => cards.countAuthorCards(user.id, PROFILE_COUNT_LIMIT, sc)),
+    include.has('cards') ? scope.then((sc) => cards.authorPage(user.id, limit, undefined, sc)) : null,
     include.has('links') ? cardsLinkingToAuthor(ctx, user.id, viewerId) : [],
     opts.preLetterBuild && !isSelf ? users.letterReadsAsConnection(viewerId, user.id) : false,
   ]);
@@ -511,9 +561,13 @@ export async function getProfile(
  */
 export async function getProfileCards(ctx: ServerCtx, viewerId: string, handle: string, limit: number, start?: PageStart): Promise<FeedPageBody> {
   const user = await userByHandle(ctx, handle);
+  const isSelf = user.id === viewerId;
   const [blocked, page] = await Promise.all([
-    user.id === viewerId ? false : ctx.data.users.hasBlocked(viewerId, user.id),
-    ctx.data.cards.authorPage(user.id, limit, start),
+    isSelf ? false : ctx.data.users.hasBlocked(viewerId, user.id),
+    // Their cards for connections only too, for a viewer connected to them and for themselves (Wave 2 #2).
+    (isSelf ? Promise.resolve(true) : ctx.data.users.connected(viewerId, user.id)).then((c) =>
+      ctx.data.cards.authorPage(user.id, limit, start, { connections: c }),
+    ),
   ]);
   if (blocked) return EMPTY_PAGE;
   return profilePage(ctx, page, user.row);

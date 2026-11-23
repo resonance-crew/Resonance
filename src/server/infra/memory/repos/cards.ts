@@ -281,8 +281,12 @@ export function cardsData(state: MemoryState): CardsData {
       .sort((a, b) => (b.row.trashedAt as Date).getTime() - (a.row.trashedAt as Date).getTime() || (a.id < b.id ? -1 : 1));
 
   const publicPublished = (r: Row) => r.visibility === 'public' && r.publishedAt != null;
-  const authorCards = (authorId: string) => (r: Row) =>
-    r.authorId === authorId && r.visibility === 'public' && r.anonymous === false && isDate(r.publishedAt) && r.publishedAt.getTime() <= Date.now() + 60 * 60 * 1000;
+  const authorCards = (authorId: string, connections = false) => (r: Row) =>
+    r.authorId === authorId &&
+    (r.visibility === 'public' || (connections && r.visibility === 'connections')) &&
+    r.anonymous === false &&
+    isDate(r.publishedAt) &&
+    r.publishedAt.getTime() <= Date.now() + 60 * 60 * 1000;
 
   return {
     scope: state,
@@ -311,8 +315,25 @@ export function cardsData(state: MemoryState): CardsData {
       return out;
     },
     feedPage: async (limit, start) => page(publicPublished, limit, start),
-    authorPage: async (authorId, limit, start) => page(authorCards(authorId), limit, start),
-    countAuthorCards: async (authorId, max) => Math.min(max, state.rows<Row>('cards', authorCards(authorId)).length),
+    authorPage: async (authorId, limit, start, scope) => page(authorCards(authorId, scope?.connections === true), limit, start),
+    countAuthorCards: async (authorId, max, scope) => Math.min(max, state.rows<Row>('cards', authorCards(authorId, scope?.connections === true)).length),
+    async connectionsCards(authorIds, window, limit) {
+      const wanted = new Set(authorIds);
+      return state
+        .rows<Row>(
+          'cards',
+          (r) =>
+            wanted.has(r.authorId as string) &&
+            r.visibility === 'connections' &&
+            r.anonymous === false &&
+            isDate(r.publishedAt) &&
+            (!window.before || r.publishedAt.getTime() < window.before.getTime()) &&
+            (!window.since || r.publishedAt.getTime() >= window.since.getTime()),
+        )
+        .sort(newestFirst)
+        .slice(0, limit)
+        .map(({ id, row }) => listRow(id, row));
+    },
     async resonancesOf(cardId, limit) {
       return state
         .rows<Row>('cards', (r) => r.referenceCardId === cardId && publicPublished(r))

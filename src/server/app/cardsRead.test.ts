@@ -94,6 +94,51 @@ describe('the cards read side on memoryCtx', () => {
     expect((await getCardDetail(ctx, 'alice', 'carolConn')).card.author?.handle).toBe('carol');
   });
 
+  // Wave 2 #2 (the round 26 audit's 5.1): a card for connections only is listed for them — the latest feed in its
+  // place by time, on exactly one page, and the author's profile — and for no one else.
+  it("lists a connection's connections-only card in their feed and on the profile, for them alone", async () => {
+    const ctx = world();
+    ctx.state.seed('cards', {
+      carolOld: card('carol', '2026-11-19T00:00:00Z', { visibility: 'connections' }),
+      carolAnon: card('carol', '2026-11-20T05:00:00Z', { visibility: 'connections', anonymous: true }),
+      carolTrashed: card('carol', '2026-11-20T03:30:00Z', { visibility: 'private', trashedAt: at('2026-11-21T00:00:00Z'), trashedFrom: { visibility: 'connections', referenceCardId: null } }),
+    });
+    const ids = async (viewer: string | null) => {
+      const out: string[] = [];
+      let token: string | null = null;
+      for (let n = 0; n < 6; n++) {
+        const page = await getFeed(ctx, viewer, 2, token ? { pageToken: token } : undefined);
+        out.push(...page.cards.map((c) => c.id));
+        token = page.nextPageToken ?? null;
+        if (!token) break;
+      }
+      return out;
+    };
+    const strangers = ['anon1', 'same2', 'same1', 'bobNamed'];
+    expect(await ids('alice')).toEqual(strangers);
+    expect(await ids(null)).toEqual(strangers);
+    ctx.state.put('connections', 'alice_carol', { users: ['alice', 'carol'], userIds: ['alice', 'carol'] });
+    // Each in its place by time, on exactly one page, never the anonymous or the trashed one.
+    expect(await ids('alice')).toEqual(['anon1', 'same2', 'same1', 'bobNamed', 'carolConn', 'carolOld']);
+    expect(await ids('dave')).toEqual(['anon1', 'same2', 'same1']);
+    expect(await ids(null)).toEqual(strangers);
+    // The older millisecond cursor pages them the same.
+    const first = await getFeed(ctx, 'alice', 3);
+    expect(first.cards.map((c) => c.id)).toEqual(['anon1', 'same2', 'same1']);
+    const rest = await getFeed(ctx, 'alice', 10, { cursor: first.nextCursor! });
+    expect(rest.cards.map((c) => c.id)).toEqual(['bobNamed', 'carolConn', 'carolOld']);
+
+    // The profile: counted and listed for a connection and for carol herself, never for a stranger.
+    ctx.state.seed('handles', { carol: { uid: 'carol' } });
+    const asAlice = await getProfile(ctx, 'alice', 'carol', { include: new Set(['cards']) });
+    expect(asAlice.cards?.cards.map((c) => c.id)).toEqual(['carolConn', 'carolOld']);
+    expect(asAlice.cardCount).toBe(2);
+    expect((await getProfile(ctx, 'carol', 'carol', { include: new Set(['cards']) })).cards?.cards.map((c) => c.id)).toEqual(['carolConn', 'carolOld']);
+    const asBob = await getProfile(ctx, 'bob', 'carol', { include: new Set(['cards']) });
+    expect(asBob.cards?.cards).toEqual([]);
+    expect(asBob.cardCount).toBe(0);
+  });
+
   it('answers a profile and the signed-in account from plain rows', async () => {
     const ctx = world();
     const profile = await getProfile(ctx, 'alice', 'BOB', { include: new Set(['cards']) });
