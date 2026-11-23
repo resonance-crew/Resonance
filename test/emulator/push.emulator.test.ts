@@ -362,7 +362,8 @@ describe('pushMessage', () => {
       expect(tokens).toContain(token);
       expect(rest).toEqual({
         notification: { title: '小明', body: '明天一起去散步嗎？' },
-        data: { type: 'message', route, fromUserId: 'alice', conversationId: 'alice_bob', messageId: push.messageId },
+        // What the data-only kind carries for a cold start's first frame too (round 32 §P7): whose, from whom, when.
+        data: { type: 'message', route, fromUserId: 'alice', toUserId: 'bob', fromHandle: '小明', sentAt: expect.any(String), conversationId: 'alice_bob', messageId: push.messageId },
         android: { priority: 'high', notification: { channelId: MESSAGES_CHANNEL, tag: 'alice_bob' } },
         // The message's own collapse id: no two messages merge, and an unsend replaces just this one (pushUnsend).
         apns: { headers: { 'apns-collapse-id': push.messageId }, payload: { aps: { sound: 'default', threadId: 'alice_bob', mutableContent: true } } },
@@ -573,7 +574,7 @@ describe('pushMessage', () => {
       expect(tokens).toEqual(['iphone-zh']);
       expect(rest).toEqual({
         notification: { title: '小明', body: '謝謝你寫下這段散步' },
-        data: { type: 'message', route, fromUserId: 'alice', conversationId: 'alice_bob', messageId: sent.id, kind: 'note' },
+        data: { type: 'message', route, fromUserId: 'alice', toUserId: 'bob', fromHandle: '小明', sentAt, conversationId: 'alice_bob', messageId: sent.id, kind: 'note' },
         android: { priority: 'high', notification: { channelId: MESSAGES_CHANNEL, tag: 'alice_bob' } },
         apns: { headers: { 'apns-collapse-id': sent.id }, payload: { aps: { sound: 'default', threadId: 'alice_bob', mutableContent: true } } },
       });

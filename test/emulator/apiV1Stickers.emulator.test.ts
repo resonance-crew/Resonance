@@ -300,7 +300,7 @@ describe('the push', () => {
     expect(at['iphone-zh'].notification).toEqual({ title: '小明', body: '傳送了一張貼圖：謝謝' });
     expect(at['old-en'].notification).toEqual({ title: '小明', body: 'Sent a sticker: Thanks' });
     // The system's push is a message's as ever (with its sound); `kind` there has only ever meant a note.
-    expect(at['iphone-zh'].data).toEqual({ type: 'message', route: expect.any(String), fromUserId: 'alice', conversationId: PAIR, messageId: sent.id });
+    expect(at['iphone-zh'].data).toEqual({ type: 'message', route: expect.any(String), fromUserId: 'alice', toUserId: expect.any(String), fromHandle: expect.any(String), sentAt: expect.any(String), conversationId: PAIR, messageId: sent.id });
     expect(at['iphone-zh'].apns).toEqual({ headers: { 'apns-collapse-id': sent.id }, payload: { aps: { sound: 'default', threadId: PAIR, mutableContent: true } } });
     expect(at['old-en'].android).toEqual({ priority: 'high', notification: { channelId: MESSAGES_CHANNEL, tag: PAIR } });
   });

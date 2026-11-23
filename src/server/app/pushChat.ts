@@ -163,7 +163,10 @@ export async function pushMessageIn(ctx: ServerCtx, push: MessagePush): Promise<
       // No `notificationId`: no bell row stands behind a message (an empty one crashed older Android builds).
       // (A sticker's kind travels only to the builds that draw their own: `kind` here has meant a note.)
       // The sender's face rides along and iOS may redraw the push under it (`mutable`); a build that can't ignores both.
-      const data = { type: 'message', route, fromUserId: from, conversationId, messageId, ...(sticker ? {} : kind), ...face };
+      // `toUserId`, `fromHandle` and `sentAt` as the data-only kind carries them (round 32 §P7): a tap on it from a cold
+      // start can draw the thread from the account's own cache at once — only while `toUserId` is the one signed in —
+      // the sender named and this message placed; nothing in them the notification doesn't show already.
+      const data = { type: 'message', route, fromUserId: from, toUserId: to, fromHandle: handle, sentAt, conversationId, messageId, ...(sticker ? {} : kind), ...face };
       queue(
         system,
         quiet
