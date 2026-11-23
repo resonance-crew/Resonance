@@ -502,8 +502,10 @@ change near one of those states (`capture android --device phone-large --only se
   (`VisualReady`: Android in logcat, iOS and the Mac in the unified log, subsystem `com.resonance.visual`, read with `log stream` / `simctl spawn … log stream` — the Mac app's sandbox container is closed to every other process). The harness then goes
   on at once to a closer settle (frames 0.5 s apart; Android holds 1 s, not 3.5) instead of the fixed waits
   (Android's 4 s, 8 s on an account's first launch; iOS's and the Mac's 4 s). The sign-in launch iOS and the Mac make
-  for each account keeps its full 10 s: it isn't captured, it settles the account on the device, and nothing yet
-  shows the app is done with that at its first quiet moment.
+  for each account isn't captured, it settles the account on the device: it carries a token too, and the app says
+  `account <t>` once the account it was launched with is signed in and its profile read and kept (or signed out) —
+  `SessionStore`, debug builds only — beside its `ready <t>`; with both said the harness holds 1 s more and goes on
+  (`waitSignedIn`), with either missing it waits the full 10 s as before, and never longer.
   Everything that judges the frame stays as it was — the settle, Android's skeleton names, the second look. A
   launch that says nothing within `VISUAL_READY_TIMEOUT_S` (12) waits out the rest of the old fixed wait and goes
   on exactly as before; each capture's log line says which (`ready in 1.9 s`, `no ready signal`).

@@ -29,6 +29,7 @@ public final class VisualReady: @unchecked Sendable {
     private var answered = 0
     private var generation = 0
     private var said = false
+    private var marked: Set<String> = []
     private var schedule: @Sendable (TimeInterval, @escaping @Sendable () -> Void) -> Void = { _, _ in }
     private var say: @Sendable (String) -> Void = { _ in }
 
@@ -61,11 +62,25 @@ public final class VisualReady: @unchecked Sendable {
             answered = 0
             generation = 0
             said = false
+            marked = []
             enabled = true
         }
     }
 
     public func stop() { lock.withLock { enabled = false } }
+
+    /// Says `<word> <token>` once this launch, when a launch asked for the signal (``start``); nothing otherwise. The
+    /// sign-in launch's `account`: the account it was launched with is settled — signed in with its profile read and
+    /// kept, or signed out (SessionStore) — so the harness stops waiting its fixed 10 s for that
+    /// (scripts/visual/ready.ts `waitSignedIn`).
+    public func mark(_ word: String) {
+        let words: (String, @Sendable (String) -> Void)? = lock.withLock {
+            guard enabled, !marked.contains(word) else { return nil }
+            marked.insert(word)
+            return ("\(word) \(token)", say)
+        }
+        if let (words, say) = words { say(words) }
+    }
 
     public var isEnabled: Bool { lock.withLock { enabled } }
 

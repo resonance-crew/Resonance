@@ -19,7 +19,7 @@ import { BUNDLE_ID, XCODE_RUN_SETTINGS, ensureIslands, inXcodeLine, launchArgs, 
 import { encodeFrame, settleFrames, type Frame } from './frames';
 import { stopwatch, type Stopwatch } from './timings';
 import { buildIfChanged, stampFile } from './buildStamp';
-import { LOG_STREAM_ARGS, logStream, readyNote, readyOn, readyToken, waitReady, type LogStream, type Ready } from './ready';
+import { LOG_STREAM_ARGS, logStream, readyNote, readyOn, readyToken, waitReady, waitSignedIn, type LogStream, type Ready } from './ready';
 import { lookNote, type Look } from './secondLook';
 import { shotName } from './screens';
 import { ROOT, run, shotPath, sleep, type Capture, type CaptureContext } from './util';
@@ -152,10 +152,10 @@ export function cutFrame(png: Buffer, size: Size = WINDOW): Frame {
  * A launch's ready token (ready.ts) and how to wait for its word in the Mac's unified log (`stream`); null when the
  * signal is off. (Not a file: the app's sandbox keeps every other process out of its container.)
  */
-function readyArgs(stream: LogStream | null): { args: string[]; wait: () => Promise<Ready> } | null {
+function readyArgs(stream: LogStream | null): { token: string; args: string[]; wait: () => Promise<Ready> } | null {
   if (!stream) return null;
   const token = readyToken();
-  return { args: ['-visualReadyToken', token], wait: () => waitReady(() => stream.says(token)) };
+  return { token, args: ['-visualReadyToken', token], wait: () => waitReady(() => stream.says(token)) };
 }
 
 function shoot(window: MacWindow, ctx: CaptureContext, key: string, size: Size, ready: (() => Promise<Ready>) | null, timing: Stopwatch): Promise<Look & { ready: Ready | null }> {
@@ -194,10 +194,13 @@ export const captureMac: Capture = async (ctx) => {
     for (const { variant: v, account, screens } of groups(plan('mac', id, set, ctx.only))) {
       // The account signs in on a launch of its own; a screen's launch only restores it.
       // Its full 10 s, as ever, not cut short by the ready signal (ios.ts says why).
+      // The app says when the account is settled (ready.ts `waitSignedIn`); 10 s, as ever, when it doesn't.
       const signInTime = stopwatch();
-      const signIn = await launch(launchArgs(ctx, account, null, v), size);
+      const signInReady = readyArgs(stream);
+      const signIn = await launch([...launchArgs(ctx, account, null, v), ...(signInReady?.args ?? [])], size);
       signInTime.lap('launch');
-      await sleep(10_000);
+      if (signInReady) await waitSignedIn((word) => stream!.says(signInReady.token, word));
+      else await sleep(10_000);
       await quit(signIn.pid);
       signInTime.lap('wait');
       signInTime.done(ctx.runDir, `mac/${id}/${account ?? 'signed-out'}@${v.theme}-${v.locale}`, 'sign-in');

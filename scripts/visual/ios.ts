@@ -15,7 +15,7 @@ import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { HARNESS_SIMULATORS, mayShutDown, noteBooted } from './devices';
 import { withRestart } from './retry';
-import { LOG_STREAM_ARGS, logStream, readyNote, readyOn, readyToken, restOfWait, waitReady, type LogStream, type Ready } from './ready';
+import { LOG_STREAM_ARGS, logStream, readyNote, readyOn, readyToken, restOfWait, waitReady, waitSignedIn, type LogStream, type Ready } from './ready';
 import { buildIfChanged, stampFile, toolVersion, type BuildInputs } from './buildStamp';
 import { unspendHints } from './hints';
 import { lookNote, secondLook, type Look, type Shot } from './secondLook';
@@ -344,10 +344,13 @@ export const captureIos: Capture = async (ctx) => {
           // Its full 10 s, as ever, not cut short by the ready signal (ready.ts): this launch isn't captured, it
           // settles the account on the device — the sign-in and what the app keeps after it — and nothing yet shows
           // that the app is done with that when its screen first goes quiet.
+          // The app says when the account is settled (ready.ts `waitSignedIn`); 10 s, as ever, when it doesn't.
           const signIn = stopwatch();
-          launch(udid, launchArgs(ctx, account, null, v));
+          const signInToken = stream ? readyToken() : null;
+          launch(udid, [...launchArgs(ctx, account, null, v), ...(signInToken ? ['-visualReadyToken', signInToken] : [])]);
           signIn.lap('launch');
-          await sleep(10_000);
+          if (signInToken) await waitSignedIn((word) => stream!.says(signInToken, word));
+          else await sleep(10_000);
           signIn.lap('wait');
           signIn.done(ctx.runDir, `ios/${id}/${account ?? 'signed-out'}@${v.theme}-${v.locale}`, 'sign-in');
           for (const screen of screens) {

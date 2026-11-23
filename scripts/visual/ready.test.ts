@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { logSays, logStream, readyNote, readyToken, restOfWait, waitReady } from './ready';
+import { logSays, logStream, readyNote, readyToken, restOfWait, waitReady, waitSignedIn } from './ready';
 
 const dir = mkdtempSync(join(tmpdir(), 'visual-ready-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -61,5 +61,33 @@ describe('the apps’ ready signal', () => {
     const ready = await waitReady(() => stream.says(token), { timeoutMs: 5000, intervalMs: 50 });
     expect(ready.ready).toBe(true);
     stream.stop();
+  });
+});
+
+describe('an account’s sign-in launch', () => {
+  /** A clock that moves only when the wait sleeps. */
+  const clock = () => {
+    let t = 0;
+    return { now: () => t, sleep: async (ms: number) => void (t += ms), at: () => t };
+  };
+
+  it('goes on 1 s after the app says the account is settled and the screen quiet — both, not either', async () => {
+    const c = clock();
+    const said = (word: string) => (word === 'account' ? c.at() >= 2000 : c.at() >= 3000);
+    const got = await waitSignedIn(said, { sleep: c.sleep, now: c.now });
+    expect(got.ready).toBe(true);
+    expect(c.at()).toBe(3000 + 1000);
+    expect(logSays(`account ${'tok'}\n`, 'tok', 'account')).toBe(true);
+    expect(logSays(`ready tok\n`, 'tok', 'account')).toBe(false);
+  });
+
+  it('waits its full 10 s, as before, when the app never says it (a build from before the signal) — never longer', async () => {
+    const c = clock();
+    const got = await waitSignedIn((word) => word === 'ready', { sleep: c.sleep, now: c.now });
+    expect(got.ready).toBe(false);
+    expect(c.at()).toBe(10_000);
+    const late = clock();
+    await waitSignedIn((word) => late.at() >= 9500 || word === 'never', { sleep: late.sleep, now: late.now });
+    expect(late.at()).toBe(10_000);
   });
 });
