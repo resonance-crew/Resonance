@@ -34,9 +34,9 @@ export interface ModalProps {
   /**
    * For a modal whose foot has nothing else to do — a list, a picker, a
    * notice: the close is drawn there, a small tonal pill at the right, as in the
-   * apps (`ModalCloseRow`).
+   * apps (`ModalCloseRow`). `'quiet'`: its words alone, no fill (the passages' 略過, round 32 §P1).
    */
-  closeButton?: boolean;
+  closeButton?: boolean | 'quiet';
   /**
    * It holds a field a phone's keyboard comes up for: it stays centred in the
    * room the keyboard leaves (the visual viewport), not behind the keyboard.
@@ -372,7 +372,7 @@ export function Modal({
         />
         <div className={styles.content}>
           <ModalPaperContext.Provider value={paper}>{children}</ModalPaperContext.Provider>
-          {closeButton && onClose && <ModalCloseRow label={close} onClose={onClose} />}
+          {closeButton && onClose && <ModalCloseRow label={close} onClose={onClose} quiet={closeButton === 'quiet'} />}
         </div>
         {!closeButton && onClose && (
           <button type="button" className={styles.hiddenClose} onClick={onClose}>

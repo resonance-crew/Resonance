@@ -1,11 +1,17 @@
 /* Which part stayed with the reader (round 27 §U1): the title, then the author's own sentences as bands — the
-   who-resonated list's (TapPeople), running to the paper's edges through the bell's DialogScroll and its --bell-inset. */
+   who-resonated list's (TapPeople), running to the paper's edges through the bell's DialogScroll and its --bell-inset —
+   all in one scroll region (round 32 §P1), 略過 under it at the foot (Modal's quiet close row). */
 .body {
   display: flex;
   flex-direction: column;
-  /* The list's cap (§U1.3): the reader list's, and it scrolls inside (DialogScroll reads it). */
-  /* Wave 2 #3a: passages of 1–3 whole sentences, ~100 characters each — the apps' min(560, 70 % of the window) */
-  --dialog-scroll-max: min(560px, 70vh);
+  /* The region's cap (DialogScroll reads it): never more than the apps' min(560, 70 % of the window) (Wave 2 #3a),
+     and never more than the window leaves (round 32 §P1) — less the backdrop's margin above and below
+     (Modal.module.css .backdrop), the paper's own padding (24 + 22, below) and the foot (18 + the quiet close's 44),
+     and 6 for the region's own 4 under its last band and rounding — so the whole dialog always fits and the backdrop
+     never scrolls: the foot stays at the dialog's bottom. */
+  --passages-room: calc(2 * clamp(12px, 3vw, 32px) + 24px + 22px + 18px + 44px + 6px);
+  --dialog-scroll-max: min(560px, 70vh, calc(100vh - var(--passages-room)));
+  --dialog-scroll-max: min(560px, 70vh, calc(100dvh - var(--passages-room)));
   /* The story's own type (§U1.3), as story.css sets it by script: CJK first by default… */
   --passage-face: var(--font-story-sans);
   --passage-leading: var(--story-leading);
@@ -28,11 +34,15 @@
   }
 }
 
+/* The region's first child (§P1): it scrolls away with the rows. The region reaches past the paper's padding for the
+   bands (--bell-bleed), so the title steps back in to the content's edge, where it always stood; its end clears the
+   drawn bar's gutter as the rows' words do. */
 .title {
   font-family: var(--font-heading);
   font-size: 20px;
   line-height: 1.4;
   margin: 0 0 10px;
+  padding: 0 calc(var(--bell-inset-end) - var(--bell-inset) + var(--bell-bleed)) 0 var(--bell-bleed);
 }
 
 .list {
@@ -41,6 +51,25 @@
   padding: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* A row's place: the rule between it and the row above is laid on their boundary (§P2). */
+.item {
+  position: relative;
+}
+
+/* The rule between two rows (round 32 §P2, the owner: 「左右与文字内容齐平、适当内缩」): the house's quiet wavy rule
+   (Divider, its muted pen at INK_LIGHT) from the words' start to their end — the rows' own insets, so never under
+   the drawn bar's gutter nor out to the paper's edges — centred on the boundary, taking no room. It is laid before
+   the row, so a held row's see-through band washes over it and it stays drawn. */
+.rule {
+  position: absolute;
+  top: 0;
+  left: var(--bell-inset, 20px);
+  right: var(--bell-inset-end, 20px);
+  transform: translateY(-50%);
+  line-height: 0;
+  pointer-events: none;
 }
 
 /* A row is a button: no face of its own — its band is the press — its words on the dialog's own inset. */

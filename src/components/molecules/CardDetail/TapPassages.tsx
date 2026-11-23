@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { BandWash, bandHost, useBandPress } from '@/components/atoms/BandWash/BandWash';
+import { Divider } from '@/components/atoms/Divider/Divider';
 import { Icon } from '@/components/atoms/Icon';
 import { Modal } from '@/components/molecules/Modal/Modal';
 import { DialogScroll } from '@/components/sections/AppHeader/BellList';
@@ -10,6 +11,7 @@ import type { TapPassageBody } from '@/lib/api/v1/schemas';
 import type { StoryScript } from '@/lib/text/script';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { BAND_END_KEY, bandsBelow } from '@/lib/design/listBands';
+import { INK_LIGHT } from '@/lib/design/strokes';
 import { TAP_LIST_DIALOG_WIDTH, TAP_LIST_PHONE_QUERY } from './TapFaces';
 import { PASSAGE_CHOSEN_MS, reducedMotion } from './tapMotion';
 import styles from './TapPassages.module.css';
@@ -37,8 +39,9 @@ export interface TapPassagesProps {
 
 /**
  * After a press that turns 共振 on (round 27 §U1): a small centred dialog asking which part stayed with the reader —
- * the title, then the author's own sentences as banded rows (the who-resonated list's bands), each in the story's type
- * and wrapped in full, never cut; 略過 alone at the foot's end. A press holds the row's ink and draws its check, then
+ * one scroll region holding the title and then the author's own sentences as banded rows (the who-resonated list's
+ * bands), each in the story's type and wrapped in full, never cut, a quiet rule between two rows (round 32 §P1, §P2);
+ * 略過 alone at the foot's end, outside the region — its words alone, pinned to the dialog's bottom. A press holds the row's ink and draws its check, then
  * the dialog closes; the picked row, reopened from the reader's own row, rests chosen and a press on it clears the
  * pick. The tap never waits on it: skipping leaves the tap on with no passage. Never a bottom sheet, never a popover.
  */
@@ -95,17 +98,26 @@ export function TapPassages({ passages, picked, script = 'cjk', onPick, onClose,
       padding="24px 22px 22px"
       ariaLabel={t('passageTitle')}
       closeLabel={t('passageSkip')}
-      closeButton
+      closeButton="quiet"
     >
       <div data-tap-passages="" data-script={script} className={styles.body}>
-        <h3 className={styles.title}>{t('passageTitle')}</h3>
+        {/* One scroll region (round 32 §P1, the owner: 「整个弹窗只有一个统一滚动区，标题随文字滚走」): the title is its first
+            child; 略過 stands under it, outside, at the dialog's foot. */}
         <DialogScroll>
+          <h3 className={styles.title}>{t('passageTitle')}</h3>
           <ul ref={listRef} className={styles.list}>
             {passages.map((p, i) => {
               const on = chosen ? chosen.id === p.id && chosen.on : picked === p.id;
               const inked = chosen ? chosen.id === p.id : picked === p.id;
               return (
-                <li key={p.id}>
+                <li key={p.id} className={styles.item}>
+                  {/* Between two rows only (§P2): the house's quiet wavy rule from the words' start to their end, drawn
+                      on the boundary (it takes no room), under a held row's see-through band. */}
+                  {i > 0 && (
+                    <span className={styles.rule} data-passage-rule="" aria-hidden>
+                      <Divider seed={71 + i} spacing={0} strokeWidth={INK_LIGHT} />
+                    </span>
+                  )}
                   <PassageRow
                     id={p.id}
                     index={i}
