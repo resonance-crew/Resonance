@@ -82,7 +82,14 @@ export interface Resonated {
 const notFound = () => new ApiFailure('not_found', 'No such card.');
 
 /** See src/lib/api/v1/resonate.ts `resonateWith`. */
-export async function resonateWithIn(ctx: ServerCtx, uid: string, targetId: string, cardId: string): Promise<Resonated> {
+export async function resonateWithIn(
+  ctx: ServerCtx,
+  uid: string,
+  targetId: string,
+  cardId: string,
+  /** The author's budget, spent beside this (budgetFirst, round 32 §P6) — awaited before anything is written. */
+  spent: Promise<void> = Promise.resolve(),
+): Promise<Resonated> {
   const target = await ctx.data.graph.visibleCard(uid, targetId);
   if (!target.publishedAt) throw notFound();
   if (target.authorId === uid) throw new ApiFailure('invalid_request', 'You cannot resonate with your own card.');
@@ -125,6 +132,8 @@ export async function resonateWithIn(ctx: ServerCtx, uid: string, targetId: stri
       if (answers.some((id) => id !== cardId)) throw new ApiFailure('conflict', 'Another of your cards already resonates with this one.');
       if (targetNow.referenceCardId === cardId) throw new ApiFailure('invalid_request', 'That card already resonates with this one.');
 
+      // The budget answers before anything is written.
+      await spent;
       tx.graph.pointCard(cardId, targetId);
       // An anonymous card reaches no one (reachable): it still answers.
       return result(true, reachOriginalWith(tx.graph, cardId, answered, reach, now, made));
