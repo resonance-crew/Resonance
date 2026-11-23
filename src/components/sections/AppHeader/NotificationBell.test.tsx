@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { MouseEvent, ReactNode } from 'react';
-import { cleanup, fireEvent, renderWithIntl, screen, userEvent, within } from '@/../test/render';
+import { cleanup, fireEvent, renderWithIntl, screen, userEvent, waitFor, within } from '@/../test/render';
 import type { Card, Notification, User } from '@/lib/db/types';
 import type { BellExtras } from '@/lib/data/hooks';
 import { bellHref, onAnonymousCard } from './bellLink';
@@ -51,10 +51,13 @@ afterEach(() => {
   forgetBellReadHere();
 });
 
-const live = vi.hoisted(() => ({ rows: [] as Notification[], extras: undefined as BellExtras | undefined }));
+const live = vi.hoisted(() => ({ rows: [] as Notification[], extras: undefined as BellExtras | undefined, asked: [] as number[] }));
 vi.mock('@/lib/data/hooks', () => ({
   useNotifications: () => ({ data: live.rows, error: null }),
-  useBellExtras: (items: unknown) => (items ? live.extras : undefined),
+  useBellExtras: (items: unknown[] | undefined) => {
+    if (items) live.asked.push(items.length);
+    return items ? live.extras : undefined;
+  },
 }));
 const markNotificationRead = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('@/lib/db/firestore/client/notifications', () => ({ markNotificationRead }));
@@ -296,6 +299,16 @@ describe('the bell on a phone and wider', () => {
     vi.clearAllMocks();
     live.rows = [namedNote, namedResonance];
     live.extras = { people: {}, cards: {} };
+  });
+
+  // #8: the page (or the dialog) opened later finds the faces and cards read — never empty tiles filling in.
+  it('reads its rows’ faces and cards once the browser is idle, before its list is opened', async () => {
+    windowWhere(BELL_PAGE_QUERY);
+    live.asked = [];
+    renderWithIntl(<NotificationBell />);
+    expect(live.asked).toEqual([]);
+    await waitFor(() => expect(live.asked.at(-1)).toBe(live.rows.length));
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('is a link to the bell’s page, which a phone follows — no dialog', async () => {

@@ -128,6 +128,7 @@ import { getClientDb } from '@/lib/db/firestore/client/init';
 import type { CardDetailBody, CardListBody, FeedCardBody, FeedPageBody, RecommendedFeedBody } from '@/lib/api/v1/schemas';
 import { getMyBlockedIds } from '@/lib/db/firestore/client/blocks';
 import {
+  forgetBellCards,
   hideConversation,
   useBellExtras,
   useCard,
@@ -1472,6 +1473,7 @@ describe('a cover kept smaller for lists', () => {
 });
 
 describe('useBellExtras', () => {
+  beforeEach(() => forgetBellCards());
   const bell = (id: string, payload: Record<string, unknown>): Notification => ({
     id,
     userId: 'me',
@@ -1511,6 +1513,33 @@ describe('useBellExtras', () => {
     await waitFor(() => expect(result.current?.cards.c3).toBeDefined());
     expect(Object.keys(result.current!.cards).sort()).toEqual(['c1', 'c2', 'c3']);
     expect(vi.mocked(callApi).mock.calls.map(([p]) => p)).toEqual(['/api/v1/cards?keys=c1,c2', '/api/v1/cards?keys=c3']);
+  });
+
+  // #8: the header's bell reads the extras while idle; the page opening later asks for no card again, and the
+  // covers were fetched into the browser meanwhile — the rows open on their pictures, not on empty tiles.
+  it('keeps the cards read for the session, so a second bell (the page) asks for none, and warms their covers', async () => {
+    vi.mocked(getUsersByIds).mockResolvedValue({});
+    api({ '/api/v1/cards?keys=': (path: string) => ({ cards: new URL(path, 'http://x').searchParams.get('keys')!.split(',').map((k) => summary(k, 'me', { imageUrl: `https://img/${k}.webp` })) }) });
+    const loaded: string[] = [];
+    const RealImage = globalThis.Image;
+    globalThis.Image = class {
+      decoding = '';
+      set src(v: string) {
+        loaded.push(v);
+      }
+    } as unknown as typeof Image;
+    try {
+      const items = [bell('n1', { cardId: 'c1' }), bell('n2', { cardId: 'c2' })];
+      const header = renderHook(() => useBellExtras(items), { wrapper });
+      await waitFor(() => expect(header.result.current?.cards.c2).toBeDefined());
+      expect(loaded).toEqual(['https://img/c1.webp', 'https://img/c2.webp']);
+      // The page, in a cache of its own: its answer comes from the cards kept, with no request.
+      const page = renderHook(() => useBellExtras(items), { wrapper });
+      await waitFor(() => expect(page.result.current?.cards.c2).toBeDefined());
+      expect(callApi).toHaveBeenCalledTimes(1);
+    } finally {
+      globalThis.Image = RealImage;
+    }
   });
 
   it('keeps the people when the cards fail, and asks nothing with nothing to show', async () => {

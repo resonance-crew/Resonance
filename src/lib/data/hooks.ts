@@ -1182,6 +1182,33 @@ export interface BellExtras {
 const NO_BELL_EXTRAS: BellExtras = { people: {}, cards: {} };
 
 /**
+ * The bell's cards already answered for, by id (null: the viewer can't read it), for one viewer at a time: a new
+ * row asks only for its own card (W21), not the twenty again — whichever bell asks, the header's warming read
+ * or the page's (#8: the page opens on what the header read).
+ */
+let bellCards: { uid: string | null; cards: Map<string, Card | null> } = { uid: null, cards: new Map() };
+function bellCardsOf(uid: string | null): Map<string, Card | null> {
+  if (bellCards.uid !== uid) bellCards = { uid, cards: new Map() };
+  return bellCards.cards;
+}
+
+/** Forgets the bell's cards (tests: each starts with none read). */
+export function forgetBellCards(): void {
+  bellCards = { uid: null, cards: new Map() };
+}
+
+/** The covers of cards just read, fetched into the browser's cache meanwhile, so a row's picture is there as it shows. */
+function warmCovers(cards: Card[]): void {
+  if (typeof Image === 'undefined') return;
+  for (const c of cards) {
+    if (c.media?.type !== 'image' || !c.media.url) continue;
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = c.media.url;
+  }
+}
+
+/**
  * Who each bell row is from (their face) and the card it is about (its cover,
  * or its colours and title), read together: the people through the page's
  * profile cache, the cards in one GET /api/v1/cards?keys= — the viewer's own
@@ -1198,14 +1225,10 @@ export function useBellExtras(items: Notification[] | undefined): BellExtras | u
   const from = idsOf((n) => n.payload.fromUserId ?? (Array.isArray(n.payload.fromUserIds) ? n.payload.fromUserIds[0] : undefined));
   const cardIds = idsOf((n) => n.payload.cardId);
   const key = uid && (from.length || cardIds.length) ? `bell-extras:${uid}:${from.join(',')}|${cardIds.join(',')}` : null;
-  // The cards already answered for, by id (null: the viewer can't read it): a new row asks only for its own
-  // card (W21), not the twenty again. For this viewer, for as long as the bell is drawn.
-  const knownCards = useRef<{ uid: string | null; cards: Map<string, Card | null> }>({ uid, cards: new Map() });
-  if (knownCards.current.uid !== uid) knownCards.current = { uid, cards: new Map() };
   const { data } = useSWR<BellExtras>(
     key,
     async () => {
-      const known = knownCards.current.cards;
+      const known = bellCardsOf(uid);
       const newIds = cardIds.filter((id) => !known.has(id));
       const [people, read] = await Promise.all([
         from.length ? getUsersByIds(from).catch(() => ({})) : {},
@@ -1214,6 +1237,7 @@ export function useBellExtras(items: Notification[] | undefined): BellExtras | u
       if (read) {
         for (const id of newIds) known.set(id, null);
         for (const c of read.cards) known.set(c.id, c);
+        warmCovers(read.cards);
       }
       const cards: Record<string, Card> = {};
       for (const id of cardIds) {
