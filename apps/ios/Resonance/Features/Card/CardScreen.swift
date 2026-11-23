@@ -51,6 +51,10 @@ struct CardScreen: View {
     /// The picked sentence whose people the dialog shows (round 29 §S4), and whether it is open.
     @State private var picked: PickedPeople.Passage?
     @State private var pickedOpen = false
+    /// Who picked it, asked for as the press came (round 32 §P3): the dialog opens with them when they come within
+    /// ``PickedPeople/firstPageWait``, at its whole height at once.
+    @State private var pickedPeople: TapPeople?
+    @State private var pickedOpening: Task<Void, Never>?
     private static let pageSpace = "card.page"
     /// The page's head, where the trash banner stands.
     private static let pageHead = "card.head"
@@ -474,9 +478,26 @@ struct CardScreen: View {
         return CGRect(x: 0, y: 0, width: room, height: 1)
     }
 
+    /// The people are asked for at the press, and the dialog waits for them at most ``PickedPeople/firstPageWait``
+    /// (the web's 300 ms, §P3): come by then, it opens at its final height, notes and all; not yet, it opens with as
+    /// many loading rows as the marks say (``PickedPeople/loadingRows(_:cap:)``) and the read carries on in it.
     private func openPicked(_ passage: PickedPeople.Passage) {
-        picked = passage
-        pickedOpen = true
+        pickedOpening?.cancel()
+        guard let cardId = model?.detail?.card.id else {
+            pickedPeople = nil
+            picked = passage
+            pickedOpen = true
+            return
+        }
+        let people = PickedPeople.people(cardId: cardId, passage: passage.id, api: session.reading)
+        let reading = Task { await people.load() }
+        pickedOpening = Task {
+            _ = await firstAnswer(within: PickedPeople.firstPageWait) { await reading.value }
+            guard !Task.isCancelled else { return }
+            pickedPeople = people
+            picked = passage
+            pickedOpen = true
+        }
     }
 
     private func page(_ model: CardModel, _ detail: CardDetail) -> some View {
@@ -559,7 +580,7 @@ struct CardScreen: View {
                 .organicModal(isPresented: $pickedOpen, seed: 41, maxWidth: PickedPeople.width(compact: window.layoutClass == .compact),
                               closeLabel: L10n.Native.close) {
                     if let pickedPassage {
-                        PickedPeople(cardId: card.id, passage: pickedPassage, script: type.script) {
+                        PickedPeople(cardId: card.id, passage: pickedPassage, script: type.script, preloaded: pickedPeople) {
                             pickedOpen = false
                         }
                         .withSession(session)

@@ -16,11 +16,17 @@ struct PickedPeople: View {
     let passage: Passage
     /// The story's script: the sentence is set in its body face and compact leading.
     let script: StoryScript
+    /// The people as the page asked for them at the press (read, or still on their way): taken as they are, never
+    /// asked for twice.
+    var preloaded: TapPeople?
     let onClose: () -> Void
     @Environment(SessionStore.self) private var session
     @Environment(\.window) private var window
     @Environment(\.openRoute) private var openRoute
     @State private var people: TapPeople?
+    /// The list drawn: the one read here, or from the first frame the page's (`preloaded`) — already read, it is drawn
+    /// in the dialog's first layout, never a frame of loading rows before it.
+    private var list: TapPeople? { people ?? preloaded }
 
     /// The sentence a dialog is about: its pick's id and its words — and, from the page's marks, how many picked it
     /// (`people`, the faces the server sent with it) and whether there are more than those (`more`).
@@ -46,6 +52,9 @@ struct PickedPeople: View {
         if passage.more { return max(passage.people, Int((cap / TapListMetrics.dialogRow).rounded(.up))) }
         return max(1, passage.people)
     }
+
+    /// How long a press waits for the first page before the dialog opens without it (the web's 300 ms).
+    static let firstPageWait: Duration = .milliseconds(300)
 
     /// The list's cap: at most 420, and half the window.
     static func listCap(window: CGFloat) -> CGFloat { min(420, window * 0.5) }
@@ -89,14 +98,14 @@ struct PickedPeople: View {
             // the marks promise stand in their place, so nothing appears later that changes the dialog's height.
             let cap = Self.listCap(window: window.height)
             ScrollView {
-                if let people {
+                if let people = list {
                     TapRows(people: people.people, line: Self.line(for:)) { person in
                         onClose()
                         openRoute(Self.route(for: person))
                     }
                 }
-                TapListState(people: people, loadingRows: Self.loadingRows(passage, cap: cap))
-                if let people, people.next != nil {
+                TapListState(people: list, loadingRows: Self.loadingRows(passage, cap: cap))
+                if let people = list, people.next != nil {
                     OrganicButton(L10n.Home.moreBtn, variant: .tonal, size: .sm) { Task { await people.more() } }
                         .loading(people.loadingMore)
                         .fixedSize()
@@ -117,6 +126,10 @@ struct PickedPeople: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tap-picked")
         .task(id: passage.id) {
+            if let preloaded {
+                people = preloaded
+                return
+            }
             let made = Self.people(cardId: cardId, passage: passage.id, api: session.reading)
             people = made
             await made.load()
