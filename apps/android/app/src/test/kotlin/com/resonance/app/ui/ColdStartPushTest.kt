@@ -1,7 +1,9 @@
 package com.resonance.app.ui
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
@@ -42,7 +44,25 @@ class ColdStartPushTest {
         assert("mutableStateOf(start.tab)" in tabs)
         // …and the effect that opens a push leaves that one (its notification still marked read).
         val effect = source.substringAfter("LaunchedEffect(tappedPush) {").substringBefore("when {")
-        assert("launched.opened === opened" in effect)
+        assert("launched.opened === opened && coldStartShows(launched.route, tab, stacks.getValue(tab))" in effect)
         assert(effect.indexOf("markRead") < effect.indexOf("launched.opened === opened"))
+    }
+
+    /**
+     * The review's case: a push tapped after Android reclaimed the process — the activity recreated with its saved
+     * tabs (the feed, [Root(Feed)]) — must still open its conversation: the restored stacks never took it.
+     */
+    @Test fun restoredStacksThatDidNotTakeThePushStillOpenIt() {
+        val restored = listOf<Route>(Route.Root(Tab.Feed))
+        assertFalse(coldStartShows(thread, Tab.Feed, restored))
+        // Restored on Messages with another conversation on top: opened too.
+        assertFalse(coldStartShows(thread, Tab.Messages, listOf(Route.Root(Tab.Messages), Route.Thread("carol", uid = "carol"))))
+        // Only stacks the cold start made (or that already end with it) leave the push alone.
+        val made = coldStart(thread)
+        assertTrue(coldStartShows(thread, made.tab, listOf(Route.Root(Tab.Messages), made.page!!)))
+        assertFalse(coldStartShows(null, Tab.Feed, restored))
+        // And then the open the effect falls through to puts it on the Messages stack.
+        val messages = mutableListOf<Route>(Route.Root(Tab.Messages)).also { openThread(it, thread) }
+        assertEquals(thread, messages.last())
     }
 }
