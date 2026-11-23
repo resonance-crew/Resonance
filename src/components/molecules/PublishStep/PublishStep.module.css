@@ -95,6 +95,11 @@
   color: var(--color-text-muted);
 }
 
+/* Under 私人卡 the line has nothing to say, but keeps its room (round 32 §P4): the card types below never move. */
+.hint[data-unseen] {
+  visibility: hidden;
+}
+
 /* On a phone the one quiet line sits closer to what it speaks of (the owner, 2026-11-23: its air above and below 「可以少一點點」):
    --publish-hint-gap-compact under the bar's pen line and over the preview's band, where a section gap stood. */
 @media (max-width: 640px) {

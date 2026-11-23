@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithIntl, screen, userEvent, waitFor, within } from '@/../test/render';
 import zhMessages from '@/messages/zh-TW.json';
 import type { TapPassageBody } from '@/lib/api/v1/schemas';
+import { INK_LIGHT } from '@/lib/design/strokes';
 import { PASSAGE_CHOSEN_MS, TapPassages } from './TapPassages';
 
 /**
@@ -152,5 +153,64 @@ describe('TapPassages (§U1)', () => {
     await user().keyboard('{Escape}');
     expect(esc.onClose).toHaveBeenCalled();
     expect(esc.onPick).not.toHaveBeenCalled();
+  });
+
+  // Round 32 §P1 (the owner: 「把标题放进同一个滚动容器内…整个弹窗只有一个统一滚动区，标题随文字滚走，底部「略过」固定」;
+  // 「去掉背景底色、去掉阴影」).
+  it('scrolls the title with the rows in one region, 略過 outside it at the foot, its words alone', async () => {
+    renderDialog();
+    const dialog = await screen.findByRole('dialog');
+    const title = within(dialog).getByRole('heading', { name: '哪一段讓你有共鳴' });
+    const region = title.parentElement!;
+    // The title is the scroll region's first child; the rows are in the same region.
+    expect(region.firstElementChild).toBe(title);
+    for (const row of rows(dialog)) expect(region.contains(row)).toBe(true);
+    expect(region.querySelectorAll('[data-passage]')).toHaveLength(3);
+    // 略過: outside the region, after it, the quiet face (no fill, no pen line), 44 to the touch.
+    const skip = within(dialog).getByRole('button', { name: '略過' });
+    expect(region.contains(skip)).toBe(false);
+    expect(region.compareDocumentPosition(skip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(skip).toHaveAttribute('data-variant', 'quiet');
+    expect(skip.parentElement).toHaveAttribute('data-quiet');
+    const read = (f: string) => readFileSync(join(process.cwd(), f), 'utf8');
+    expect(read('src/components/molecules/Modal/Modal.module.css')).toMatch(/\.closeRow\[data-quiet\] > button \{[^}]*min-height: 44px;/);
+    // The region's cap: the apps' min(560, 70 %) and never more than the window leaves — the backdrop's margin, the
+    // paper's 24 + 22, the foot's 18 + 44 — so the whole dialog fits and its foot never scrolls with the backdrop.
+    const css = read('src/components/molecules/CardDetail/TapPassages.module.css');
+    expect(css).toMatch(/--passages-room: calc\(2 \* clamp\(12px, 3vw, 32px\) \+ 24px \+ 22px \+ 18px \+ 44px \+ 6px\);/);
+    expect(css).toMatch(/--dialog-scroll-max: min\(560px, 70vh, calc\(100dvh - var\(--passages-room\)\)\);/);
+    expect(read('src/components/molecules/Modal/Modal.module.css')).toMatch(/\.backdrop \{[^}]*padding: clamp\(12px, 3vw, 32px\);/);
+  });
+
+  it('keeps the shared close a tonal pill everywhere else', async () => {
+    const { Modal } = await import('@/components/molecules/Modal/Modal');
+    renderWithIntl(
+      <Modal open onClose={vi.fn()} closeButton ariaLabel="x">
+        <p>x</p>
+      </Modal>,
+      { locale: 'zh-TW', messages: zhMessages },
+    );
+    const close = within(await screen.findByRole('dialog')).getByRole('button', { name: '關閉' });
+    expect(close).toHaveAttribute('data-variant', 'tonal');
+    expect(close.parentElement).not.toHaveAttribute('data-quiet');
+  });
+
+  // Round 32 §P2 (the owner: 「区段与区段之间加上分隔线…左右与文字内容齐平、适当内缩」).
+  it('draws a quiet rule between two rows only, from the words’ start to their end, at the light pen', async () => {
+    renderDialog();
+    const dialog = await screen.findByRole('dialog');
+    const items = [...dialog.querySelectorAll('li')];
+    expect(items.map((li) => li.querySelectorAll('[data-passage-rule]').length)).toEqual([0, 1, 1]);
+    for (const li of items.slice(1)) {
+      const rule = li.querySelector('[data-passage-rule]')!;
+      expect(rule).toHaveAttribute('aria-hidden');
+      // before its row: the held row's see-through band washes over it
+      expect(rule.compareDocumentPosition(li.querySelector('[data-passage]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(rule.querySelector('path')).toHaveAttribute('stroke-width', String(INK_LIGHT));
+    }
+    const css = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/TapPassages.module.css'), 'utf8');
+    // the words' own insets (the rows' padding), never the paper's edges nor the drawn bar's gutter; no room taken
+    expect(css).toMatch(/\.rule \{[^}]*position: absolute;[^}]*left: var\(--bell-inset, 20px\);[^}]*right: var\(--bell-inset-end, 20px\);/);
+    expect(css).toMatch(/\.row \{[^}]*padding: 0 var\(--bell-inset-end, 20px\) 0 var\(--bell-inset, 20px\);/);
   });
 });

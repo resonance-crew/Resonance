@@ -372,6 +372,41 @@ describe('CardEditor — the publish step', () => {
     });
   });
 
+  // Round 32 §P6 (the server lane's audit): the card page's server render carries public cards only, so after
+  // publishing a 連結的人 / 匿名公開 card, or keeping a 私人卡, the page drew a skeleton until the browser's own read
+  // answered. The writer now seeds the page's cache with what it just wrote — under its author's own key, with
+  // their own profile as the byline (they are its author, anonymous or not), in their own browser only.
+  it.each([
+    ['連結的人', en.write.visibility.connections, en.write.publishPanel.publish, { visibility: 'connections', anonymous: false }, true],
+    ['匿名公開', en.write.visibility.anonymous, en.write.publishPanel.publishAnonymously, { visibility: 'public', anonymous: true }, true],
+    ['私人卡', en.write.visibility.draft, en.write.publishPanel.save, { visibility: 'private', anonymous: false }, false],
+  ] as const)('opens a %s card’s page on what was just written, as its author’s own', async (_, type, verb, audience, published) => {
+    vi.mocked(publishCard).mockResolvedValue({ id: 'draft-1', slug: 'a-quiet-thought', firstPublish: true });
+    const cache = new Map();
+    renderWithIntl(
+      <SWRConfig value={{ provider: () => cache }}>
+        <Writer locale="en" />
+      </SWRConfig>,
+    );
+    await toPublishStep();
+    await userEvent.click(screen.getByRole('button', { name: type }));
+    await userEvent.click(screen.getByRole('button', { name: verb }));
+    const href = published ? '/card/a-quiet-thought' : '/card/draft-1';
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(href));
+    const seeded = cache.get(published ? 'card:a-quiet-thought:me' : 'card:draft-1:me')?.data;
+    expect(seeded?.card).toMatchObject({
+      id: 'draft-1',
+      authorId: 'me',
+      thoughtCore: 'A quiet thought',
+      story: 'Once there was a long enough story to publish.',
+      ...audience,
+    });
+    expect(seeded.card.publishedAt === null).toBe(!published);
+    // Its own author's byline, and only under its own author's key: nobody else's cache is touched.
+    expect(seeded.author).toMatchObject({ id: 'me', handle: 'my-handle' });
+    expect([...cache.keys()].filter((k) => String(k).startsWith('card:'))).toEqual([published ? 'card:a-quiet-thought:me' : 'card:draft-1:me']);
+  });
+
   // Round 12 §3: a 私人卡's 公開發表 opens the step with 公開 chosen — as if picked there, so it autosaves with the
   // draft — and a card already marked anonymous starts at 匿名公開.
   it('starts the step at 公開 when opened by 公開發表, saving it as a choice', async () => {
@@ -577,10 +612,11 @@ describe('CardEditor — editing a published card', () => {
     expect(await screen.findByRole('region', { name: en.write.publishPanel.updateTitle })).toBeInTheDocument();
     expect(screen.getByText(en.write.publishPanel.updateHint)).toBeInTheDocument();
     // Anonymous for everyone, then a 草稿: a live card keeps its anonymity while it is private, and the
-    // one button says what that does (轉為草稿), the hint about readers gone with them.
+    // one button says what that does (轉為草稿), the hint about readers unseen with them (round 32 §P4: it keeps its
+    // room, hidden and unread, so the card types under it never move).
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.anonymous }));
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
-    expect(screen.queryByText(en.write.publishPanel.updateHint)).toBeNull();
+    expect(screen.getByText(en.write.publishPanel.updateHint)).toHaveAttribute('aria-hidden', 'true');
     await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.makeDraft }));
 
     await waitFor(() =>

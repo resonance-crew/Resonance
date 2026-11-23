@@ -225,6 +225,12 @@
   color: var(--color-text);
 }
 
+/* The writer's preview turns its byline from the pen name to 匿名 and back as the card type changes (round 32 §P4):
+   a CJK name's normal line stood 2 taller than a Latin one's and nudged 卡片類型 below it. One line height for both. */
+.card[data-preview] .authorName {
+  line-height: 1.45;
+}
+
 .readTime {
   font-family: var(--font-body);
   font-size: 12px;
