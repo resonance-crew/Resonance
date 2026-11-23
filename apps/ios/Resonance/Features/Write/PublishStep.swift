@@ -32,6 +32,7 @@ struct PublishStep: View {
     var onAudiencePlaced: (CGFloat) -> Void = { _ in }
     @Environment(SessionStore.self) private var session
     @Environment(\.window) private var window
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var updating: Bool { model.isPublished }
     private var compact: Bool { window.layoutClass == .compact }
@@ -64,7 +65,7 @@ struct PublishStep: View {
     /// at the bar (``topPadding(_:showsBar:compact:)``). With anything above it, the band keeps its
     /// own rule, as a card under another does.
     static func bandUnderBar(_ model: WriteModel, showsBar: Bool, compact: Bool) -> Bool {
-        guard compact, showsBar, !model.showsUpdateHint else { return false }
+        guard compact, showsBar, !model.reservesUpdateHint else { return false }
         switch model.insight {
         case .loading?, .shown?: return false
         case .none?, nil: return true
@@ -73,7 +74,7 @@ struct PublishStep: View {
 
     /// Whether the preview is the step's first thing (no hint, no mirror line on its way or shown).
     static func previewLeads(_ model: WriteModel) -> Bool {
-        guard !model.showsUpdateHint else { return false }
+        guard !model.reservesUpdateHint else { return false }
         switch model.insight {
         case .loading?, .shown?: return false
         case .none?, nil: return true
@@ -89,24 +90,28 @@ struct PublishStep: View {
         guard showsBar else { return WriteWorkspace.paneTop(row: headingRowHeight) }
         if bandUnderBar(model, showsBar: showsBar, compact: compact) { return 0 }
         // A phone's update hint stands closer under the line (the owner, 2026-11-23: 「可以少一點點」).
-        if compact { return PenLineGap.fromFoot(model.showsUpdateHint ? Tokens.publishHintGapCompact : Tokens.storyHeadGapCompact) }
+        if compact { return PenLineGap.fromFoot(model.reservesUpdateHint ? Tokens.publishHintGapCompact : Tokens.storyHeadGapCompact) }
         return PenLineGap.fromFoot(previewLeads(model) ? Tokens.storyHeadCoverGap : Tokens.storyHeadGap)
     }
 
     var body: some View {
         let sectionGap = Self.sectionGap(compact: compact)
         VStack(alignment: .leading, spacing: sectionGap) {
-            if inlineHeading || model.showsUpdateHint {
+            if inlineHeading || model.reservesUpdateHint {
                 VStack(alignment: .leading, spacing: 8) {
                     if inlineHeading { headingRow }
-                    // About readers: not said while the card is being kept to its author.
-                    if model.showsUpdateHint {
+                    // About readers: not said while the card is being kept to its author — but its room is kept
+                    // (round 32 §P4): it stands above 卡片類型, and a choice must never move the choices.
+                    if model.reservesUpdateHint {
                         CSSText(L10n.Write.PublishPanel.updateHint, font: AppFonts.scaledUIFont(.body, size: 14), lineHeight: 1.7,
                                 color: Tokens.UI.textMuted)
+                            .opacity(model.showsUpdateHint ? 1 : 0)
+                            .accessibilityHidden(!model.showsUpdateHint)
+                            .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: model.showsUpdateHint)
                     }
                 }
                 // On a phone the hint is as close over the preview's band as it stands under the bar's line.
-                .padding(.bottom, compact && model.showsUpdateHint && !inlineHeading ? Tokens.publishHintGapCompact - sectionGap : 0)
+                .padding(.bottom, compact && model.reservesUpdateHint && !inlineHeading ? Tokens.publishHintGapCompact - sectionGap : 0)
             }
             if !updating { mirror }
             VStack(alignment: .leading, spacing: sectionGap) {

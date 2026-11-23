@@ -483,8 +483,10 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         live.choose(.private)
         #expect((live.stepTitle, live.verbTitle) == (L10n.Write.PublishPanel.updateTitle, L10n.Write.PublishPanel.makeDraft))
         #expect(!live.showsUpdateHint)
-        // Kept to its author with nothing above it, a phone's band leads under the bar.
-        #expect(PublishStep.bandUnderBar(live, showsBar: true, compact: true))
+        // Round 32 §P4: the hint's room is kept, unwritten, so the step under it doesn't move — the band no longer
+        // leads under the bar while 私人卡 is chosen (it did before: the hint went, and 卡片類型 jumped with it).
+        #expect(live.reservesUpdateHint)
+        #expect(!PublishStep.bandUnderBar(live, showsBar: true, compact: true))
 
         // A published 草稿 (private): a 草稿 to its author — shared again it is published, kept it is saved.
         let kept = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls,
@@ -1170,5 +1172,93 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(CaretFollow.offset(caret: .init(top: 0, bottom: 25), islandTop: 0, viewport: down) == CGFloat(0))
         // Nothing shown yet (laid out with no height): nothing to follow.
         #expect(CaretFollow.offset(caret: .init(top: 2000, bottom: 2025), islandTop: 0, viewport: .init(offset: 0, insetTop: 0, height: 0)) == nil)
+    }
+}
+
+/// Stands in for /api/generate-image: the stream's last line names the stored picture.
+private final class IllustrationStub: URLProtocol {
+    nonisolated(unsafe) static var stored = "file:///nonexistent/generated.webp"
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.path == "/api/generate-image" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let body = Data("{\"type\":\"done\",\"publicUrl\":\"\(Self.stored)\",\"key\":\"k\"}\n".utf8)
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/x-ndjson"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+/// Round 32 (the owner, after 2.6.0 on the iPad): the publish step's card types never move the page (§P4), and
+/// 調整封面 on an AI-drawn cover shows its new framing at once (§P5).
+@MainActor @Suite struct RoundThirtyTwoPublishTests {
+    /// §P4 — 「切卡片类型时画面上下跳动」: on a card readers have, the 更新 hint stands above 卡片類型 and went with 私人卡,
+    /// so the grid jumped by its height each time 私人卡 was pressed or left. Whatever is chosen, nothing above the
+    /// grid changes its room: the hint's room, the step's top, whether the band leads under the bar.
+    @Test func nothingAboveTheCardTypesChangesWithTheType() {
+        for published in [false, true] {
+            for visibility in ["public", "connections", "private"] {
+                let model = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls,
+                                       opened: card(published: published, visibility: visibility))
+                func above() -> [String] {
+                    [true, false].flatMap { compact in
+                        [true, false].map { bar in
+                            "\(model.reservesUpdateHint) \(PublishStep.bandUnderBar(model, showsBar: bar, compact: compact)) "
+                                + "\(PublishStep.previewLeads(model)) \(PublishStep.topPadding(model, showsBar: bar, compact: compact))"
+                        }
+                    }
+                }
+                let first = above()
+                for audience in [WriteModel.Audience.anonymous, .connections, .private, .connections, .private, .public] {
+                    model.choose(audience)
+                    #expect(above() == first, "published \(published), \(visibility) → \(audience)")
+                }
+            }
+        }
+    }
+
+    /// The hint's words are said only while readers keep the card; its room stays either way.
+    @Test func theHintIsUnwrittenNotRemovedWhilePrivateIsChosen() throws {
+        let live = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card(published: true))
+        live.choose(.private)
+        #expect(live.reservesUpdateHint && !live.showsUpdateHint)
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Resonance/Features/Write/PublishStep.swift").standardized
+        let source = try String(contentsOf: url, encoding: .utf8)
+        #expect(source.contains(".opacity(model.showsUpdateHint ? 1 : 0)"))
+        #expect(!source.contains("if model.showsUpdateHint {"))
+        // No scroll is made on a choice: the grid's press only chooses.
+        let step = try String(contentsOf: url.deletingLastPathComponent().appendingPathComponent("WriteScreen.swift"), encoding: .utf8)
+        #expect(!step.contains("onChange(of: model.audience"))
+    }
+
+    /// §P5 — 「调整封面在 AI 生成图片上调整后，预览没有更新」: a cover drawn from the story is framed like any other —
+    /// 完成 writes its frame into the draft, which the preview draws it on (`.coverFraming(model.values.imageFrame)`),
+    /// and the crop it draws moves. (iOS had no AI-only path: this pins that it stays so.)
+    @Test func anAICoversNewFramingIsWhatThePreviewDraws() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [IllustrationStub.self]
+        let configuration = APIConfiguration(origin: URL(string: "https://example.test")!, idToken: { _ in nil })
+        let api = WritingAPI(client: ResonanceClient.make(configuration), configuration: configuration, session: URLSession(configuration: config))
+        let model = WriteModel(drafts: nil, writing: api, calls: ServerCalls().calls, opened: card(published: true))
+        await model.generateCover()
+        #expect(model.values.imageURL?.absoluteString == IllustrationStub.stored)
+        #expect(model.values.imageLabel == L10n.Write.mediaGeneratedLabel)
+        #expect(model.values.imageFrame == nil)
+        // The model's pictures are 1536 × 1024: framed lower right, zoomed.
+        let frame = CoverFraming(cx: 0.7, cy: 0.6, zoom: 1.5, ar: 1536.0 / 1024)
+        model.setCoverFrame(frame)
+        #expect(model.values.imageFrame == frame)
+        let box = CGSize(width: 360, height: 360 * CoverFraming.Box.feed)
+        let picture = CGSize(width: 1536, height: 1024)
+        #expect(CoverLayout.placement(box: box, pictureSize: picture, frame: model.values.imageFrame)
+            != CoverLayout.placement(box: box, pictureSize: picture, frame: nil))
+        // And it is what the draft keeps, on both ways a draft is written.
+        #expect(DraftService.wireMedia(model.values)?.frame?.value1.cx == 0.7)
+        #expect((DraftService.media(model.values)?["frame"] as? [String: Any])?["zoom"] as? Double == 1.5)
+        // A new drawing starts centred again.
+        await model.generateCover()
+        #expect(model.values.imageFrame == nil)
     }
 }

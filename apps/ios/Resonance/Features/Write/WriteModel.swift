@@ -672,6 +672,11 @@ final class WriteModel {
     /// have now, while the choice keeps it theirs.
     var showsUpdateHint: Bool { readersSee && !keepsDraft }
 
+    /// Whether the step keeps the hint's room (round 32 §P4, the owner: 「切卡片类型时按钮位置保持稳定」): whenever readers
+    /// have the card, whatever is chosen — the hint stands above 卡片類型, so coming and going with 私人卡 it moved the
+    /// whole step under the finger. While 私人卡 is chosen its room stays, unwritten (``showsUpdateHint`` false).
+    var reservesUpdateHint: Bool { readersSee }
+
     /// The button publishes — to readers, for the first time: a draft shared, or a published 草稿 made
     /// public again. What its failure says: 沒發布成功 for these, 沒儲存成功 for every other.
     var publishes: Bool { !readersSee && !keepsDraft }
