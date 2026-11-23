@@ -279,14 +279,17 @@ describe('profiles', () => {
     expect((await failure(getProfile(db, 'alice', 'nobody'))).code).toBe('not_found');
   });
 
-  it('lists only public, attributed cards — and none of someone the viewer blocked', async () => {
+  it('lists only attributed cards — public ones, and for a connection the connections-only ones too — and none of someone the viewer blocked', async () => {
     await card('p1', 'bob', 1);
     await card('p2', 'bob', 2, { anonymous: true });
     await card('p3', 'bob', 3, { visibility: 'connections' });
     await card('p4', 'bob', 4, { publishedAt: null });
     await card('q1', 'carol', 1);
-    expect((await getProfileCards(db, 'alice', 'bob', 10)).cards.map((c) => c.id)).toEqual(['p1']);
-    expect((await getProfile(db, 'alice', 'bob')).cardCount).toBe(1);
+    // alice ↔ bob are connected (Wave 2 #2); dana is not.
+    expect((await getProfileCards(db, 'alice', 'bob', 10)).cards.map((c) => c.id)).toEqual(['p1', 'p3']);
+    expect((await getProfile(db, 'alice', 'bob')).cardCount).toBe(2);
+    expect((await getProfileCards(db, 'dana', 'bob', 10)).cards.map((c) => c.id)).toEqual(['p1']);
+    expect((await getProfile(db, 'dana', 'bob')).cardCount).toBe(1);
     expect((await getProfile(db, 'alice', 'carol')).cardCount).toBe(0);
     expect((await getProfileCards(db, 'alice', 'carol', 10)).cards).toEqual([]);
   });
@@ -809,10 +812,13 @@ describe('the profile in one request (GET /users/{handle}?include=)', () => {
         );
       }
     }
-    // Not empty lists: bob's first page is his newest 12 public named cards (the anonymous one is never among them), with a way on.
+    // Not empty lists: bob's first page is his newest 12 named cards (the anonymous one is never among them), with a way
+    // on — for alice, his connection, his connections-only card among them in its place (Wave 2 #2); for dana, a
+    // stranger, public ones only.
     const bob = await getProfile(db, 'alice', 'bob', { include: BOTH });
-    expect(bob.cards?.cards.map((c) => c.id)).toEqual(Array.from({ length: 12 }, (_, i) => `b${i}`));
+    expect(bob.cards?.cards.map((c) => c.id)).toEqual(['b-conn', ...Array.from({ length: 11 }, (_, i) => `b${i}`)]);
     expect(bob.cards?.nextCursor).not.toBeNull();
+    expect((await getProfile(db, 'dana', 'bob', { include: BOTH })).cards?.cards.map((c) => c.id)).toEqual(Array.from({ length: 12 }, (_, i) => `b${i}`));
     expect(bob.links?.cards.map((c) => c.id)).toEqual(['by-dana']); // carol's is left out: alice blocked her
     expect((await getProfile(db, 'dana', 'bob', { include: BOTH })).links?.cards.map((c) => c.id)).toEqual(['by-carol', 'by-dana']);
     expect((await getProfile(db, 'alice', 'carol', { include: BOTH })).cards).toEqual({ cards: [], nextCursor: null, nextPageToken: null });
@@ -822,5 +828,48 @@ describe('the profile in one request (GET /users/{handle}?include=)', () => {
     const profile = await getProfile(db, 'alice', 'bob');
     expect(profile).not.toHaveProperty('cards');
     expect(profile).not.toHaveProperty('links');
+  });
+});
+
+// Wave 2 #2 (「發布時選擇分享給朋友」): a connections-only card in a connection's latest feed, by time and on one page, and
+// on its author's profile for them and the author — through the real query and its index (authorId, visibility,
+// anonymous, publishedAt desc), never for anyone else.
+describe('connections-only cards in lists (Wave 2 #2)', () => {
+  it("lays a connection's connections-only cards into their feed pages by time, and lists them on the profile for them alone", async () => {
+    await card('p1', 'dana', 1);
+    await card('b1', 'bob', 2, { visibility: 'connections' });
+    await card('p2', 'dana', 3);
+    await card('p3', 'dana', 4);
+    await card('b2', 'bob', 5, { visibility: 'connections' });
+    await card('b3', 'bob', 6, { visibility: 'connections', anonymous: true });
+    await card('p4', 'dana', 7);
+    const walk = async (viewer: string) => {
+      const ids: string[] = [];
+      let token: string | null | undefined;
+      for (let n = 0; n < 5; n++) {
+        const page = await getFeed(db, viewer, 2, token ? { pageToken: token } : undefined);
+        ids.push(...page.cards.map((c) => c.id));
+        token = page.nextPageToken;
+        if (!token) break;
+      }
+      return ids;
+    };
+    // alice ↔ bob: bob's named connections cards in their places, never the anonymous one.
+    expect(await walk('alice')).toEqual(['p1', 'b1', 'p2', 'p3', 'b2', 'p4']);
+    // dana is no connection of bob's: the public feed only.
+    expect(await walk('dana')).toEqual(['p1', 'p2', 'p3', 'p4']);
+    const feedCard = (await getFeed(db, 'alice', 2)).cards.find((c) => c.id === 'b1')!;
+    expect(feedCard.visibility).toBe('connections');
+    expect(feedCard.author?.handle).toBe('bob');
+
+    // The profile: for a connection and for bob, counted too; never for a stranger.
+    const asAlice = await getProfile(db, 'alice', 'bob', { include: new Set(['cards']) });
+    expect(asAlice.cards?.cards.map((c) => c.id)).toEqual(['b1', 'b2']);
+    expect(asAlice.cardCount).toBe(2);
+    expect((await getProfileCards(db, 'bob', 'bob', 10)).cards.map((c) => c.id)).toEqual(['b1', 'b2']);
+    const asDana = await getProfile(db, 'dana', 'bob', { include: new Set(['cards']) });
+    expect(asDana.cards?.cards).toEqual([]);
+    expect(asDana.cardCount).toBe(0);
+    expect((await getProfileCards(db, 'dana', 'bob', 10)).cards).toEqual([]);
   });
 });

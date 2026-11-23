@@ -11,9 +11,8 @@ import { PASSAGE_STORY, passageItems, withPassages } from './tapPassageStory';
 // The passage a reader picks after resonating (round 27 §P3–§P4) against the
 // Firestore emulator: the options on CardDetail.tap for a reader (never the
 // author, never a short card), the pick on the tap document and nothing else
-// written, the author's list carrying each pick and a reader's list only
-// their own — asked as a connection of the picker, on a named and an
-// anonymous card —, the checks' order, a stale option refused after an edit
+// written, the author's list and (Wave 2 #3b) every reader's carrying each
+// pick — on a named and an anonymous card —, the checks' order, a stale option refused after an edit
 // while the author keeps the words chosen, and taking the tap back clearing it.
 
 const PROJECT = 'demo-resonance-tap-passages-api';
@@ -136,7 +135,7 @@ describe('PUT /cards/{id}/tap/passage (setTapPassage)', () => {
 
 describe('who resonated, with their picks', () => {
   for (const id of ['long', 'masked']) {
-    it(`gives the author each pick, and a reader only their own row's — asked as the picker's connection (${id})`, async () => {
+    it(`gives the author and every reader each pick, own row first, a stranger's too — never a note to a reader (${id})`, async () => {
       await setTap(db, 'carol', id, true);
       await setTapPassage(db, 'carol', id, first.id);
       await setTap(db, 'gus', id, true);
@@ -148,19 +147,23 @@ describe('who resonated, with their picks', () => {
         ['gus', null],
         ['carol', { text: first.text }],
       ]);
-      // alice is carol's connection: carol's face, never carol's pick.
+      // Wave 2 #3b: a reader sees everyone's row with its pick, as a like is seen — gus is a stranger to alice.
       const alices = await listTaps(db, 'alice', id);
-      expect(alices.people.map((p) => [p.author.handle, p.passage ?? null])).toEqual([
-        ['alice', { text: second.text }],
-        ['carol', null],
+      expect(alices.people.map((p) => [p.author.handle, p.passage ?? null, p.note])).toEqual([
+        ['alice', { text: second.text }, null],
+        ['gus', null, null],
+        ['carol', { text: first.text }, null],
       ]);
       const carols = await listTaps(db, 'carol', id);
       expect(carols.people.map((p) => [p.author.handle, p.passage ?? null])).toEqual([
         ['carol', { text: first.text }],
-        ['alice', null],
+        ['alice', { text: second.text }],
+        ['gus', null],
       ]);
-      // Nor does the reader's tap say anything of anyone else's pick.
-      expect((await getCardDetail(db, 'alice', id)).tap).toMatchObject({ passage: second.id });
+      // A reader's tap carries their own pick, and the picked sentences with everyone's faces.
+      const tap = (await getCardDetail(db, 'alice', id)).tap!;
+      expect(tap).toMatchObject({ passage: second.id });
+      expect(tap.picked?.map((x) => [x.id, x.people.map((a) => a.handle)]).sort()).toEqual([[first.id, ['carol']], [second.id, ['alice']]].sort());
     });
   }
 });

@@ -1,18 +1,20 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
-import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestore';
+import { getFirestore, Query, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { ApiFailure } from '@/lib/api/v1/http';
 import { deleteCard } from '@/lib/api/v1/cards';
 import { getCardDetail } from '@/lib/api/v1/reads';
 import { TAP_PAGE, listTaps, setTap } from '@/lib/api/v1/taps';
 import { reportReading } from '@/lib/api/v1/reading';
 import { ringTap } from '@/lib/push/tapBell';
+import { READER_SCAN } from '@/server/app/taps';
 
 // The resonance tap (共振, round 26 §R1) against the Firestore emulator: the
 // tap document and nothing else written by the PUT, one ring per reader and
-// card ever, CardDetail.tap as a reader and as the author see it, the
-// author's pages (their composite index: test/emulator/indexGuard refuses a
-// query production would), a privately shared card never tapped, and a card
+// card ever, CardDetail.tap as a reader and as the author see it (Wave 2 #3b:
+// a reader sees everyone's face, as a like is seen, minus the blocks), the
+// author's and a reader's pages (their composite index:
+// test/emulator/indexGuard refuses a query production would), a privately shared card never tapped, and a card
 // deleted taking its taps and reading records with it.
 
 const PROJECT = 'demo-resonance-taps';
@@ -114,19 +116,54 @@ describe('CardDetail.tap', () => {
     }
   });
 
-  it("shows a reader their connections' faces (themselves first once they tap), the author everyone's, never a count", async () => {
+  it("shows a reader everyone's faces, a stranger's too (themselves first once they tap), the author everyone's, never a count", async () => {
+    // gus is a stranger to alice: his face is hers to see, as a like is seen (Wave 2 #3b).
     expect((await getCardDetail(db, 'alice', 'walk')).tap).toEqual({
-      mine: false, faces: [expect.objectContaining({ handle: 'dora' }), expect.objectContaining({ handle: 'carol' })], more: false, mayNote: true,
+      mine: false,
+      faces: [expect.objectContaining({ handle: 'gus' }), expect.objectContaining({ handle: 'dora' }), expect.objectContaining({ handle: 'carol' })],
+      more: false,
+      mayNote: true,
     });
     await setTap(db, 'alice', 'walk', true);
     const mine = (await getCardDetail(db, 'alice', 'walk')).tap!;
-    expect([mine.mine, mine.faces.map((f) => f.handle), mine.more]).toEqual([true, ['alice', 'dora', 'carol'], false]);
+    expect([mine.mine, mine.faces.map((f) => f.handle), mine.more]).toEqual([true, ['alice', 'gus', 'dora'], true]);
     const author = (await getCardDetail(db, 'bob', 'walk')).tap!;
     expect([author.mine, author.faces.map((f) => f.handle), author.more, author.mayNote]).toEqual([false, ['alice', 'gus', 'dora'], true, false]);
     expect(JSON.stringify(author)).not.toMatch(/count/i);
+    expect(JSON.stringify(mine)).not.toMatch(/count/i);
   });
 
-  it('finds a reader’s connections’ taps by query, 30 at a time, never reading each connection’s possible tap; the author’s blocks once (B4, B5)', async () => {
+  it("leaves out of a reader's faces and list anyone with a block either way with the reader, and on a named card with the author — never the author's on an anonymous one", async () => {
+    for (const [uid, m] of [['gus', 1], ['dora', 2], ['carol', 3]] as const) {
+      await set(`resonanceTaps/masked_${uid}`, { cardId: 'masked', userId: uid, on: true, at: minutesAgo(m), rangAt: minutesAgo(m) });
+    }
+    const seen = async (id: string) => ({
+      faces: (await getCardDetail(db, 'alice', id)).tap!.faces.map((f) => f.handle),
+      list: (await listTaps(db, 'alice', id)).people.map((p) => p.author.handle),
+    });
+    const all = { faces: ['gus', 'dora', 'carol'], list: ['gus', 'dora', 'carol'] };
+    expect(await seen('walk')).toEqual(all);
+    const openMasked = await seen('masked');
+    expect(openMasked).toEqual(all);
+    for (const [who, whom] of [['bob', 'gus'], ['gus', 'bob']] as const) {
+      await set(`users/${who}/blocks/${whom}`, { blockedUid: whom, createdAt: minutesAgo(0) });
+      // The author's block, either way: gone from a reader's view of the named card…
+      expect(await seen('walk'), `${who} blocked ${whom}`).toEqual({ faces: ['dora', 'carol'], list: ['dora', 'carol'] });
+      // …and the anonymous card's reader answer as with no block, or a missing face would name its author.
+      expect(await seen('masked'), `${who} blocked ${whom}`).toEqual(openMasked);
+      await db.doc(`users/${who}/blocks/${whom}`).delete();
+    }
+    for (const [who, whom] of [['alice', 'dora'], ['dora', 'alice']] as const) {
+      await set(`users/${who}/blocks/${whom}`, { blockedUid: whom, createdAt: minutesAgo(0) });
+      // The reader's own blocks, on every card.
+      for (const id of ['walk', 'masked']) {
+        expect(await seen(id), `${who} blocked ${whom} (${id})`).toEqual({ faces: ['gus', 'carol'], list: ['gus', 'carol'] });
+      }
+      await db.doc(`users/${who}/blocks/${whom}`).delete();
+    }
+  });
+
+  it(`reads a reader's faces from one scan of the newest ${READER_SCAN} taps and their list from one page, never each connection's possible tap; the author's blocks once (B4, B5)`, async () => {
     // 40 more connections (two `in` chunks), every third one's tap on, one off.
     for (let i = 0; i < 40; i++) {
       const uid = `k${String(i).padStart(2, '0')}`;
@@ -135,12 +172,25 @@ describe('CardDetail.tap', () => {
     }
     const getAll = vi.spyOn(db, 'getAll');
     const collection = vi.spyOn(db, 'collection');
+    const get = vi.spyOn(Query.prototype, 'get');
+    type Q = Query & { _queryOptions?: { collectionId?: string; limit?: number } };
+    const tapQueryLimits = () =>
+      (get.mock.contexts as Q[]).filter((q) => q._queryOptions?.collectionId === 'resonanceTaps').map((q) => q._queryOptions?.limit);
+    const tapPaths = () => getAll.mock.calls.flat().map((ref) => (ref as { path?: string }).path ?? '').filter((p) => p.startsWith('resonanceTaps/'));
     try {
       const people = (await listTaps(db, 'alice', 'walk')).people.map((p) => p.author.handle);
-      expect(people).toEqual(['dora', 'carol', ...Array.from({ length: 13 }, (_, n) => `k${String(n * 3).padStart(2, '0')}`)]);
-      const paths = getAll.mock.calls.flat().map((ref) => (ref as { path?: string }).path ?? '');
-      // Only the reader's own tap is read by its path.
-      expect(paths.filter((p) => p.startsWith('resonanceTaps/'))).toEqual(['resonanceTaps/walk_alice']);
+      // Everyone whose tap is on, newest first, the one taken back left out.
+      expect(people).toEqual(['gus', 'dora', 'carol', ...Array.from({ length: 13 }, (_, n) => `k${String(n * 3).padStart(2, '0')}`)]);
+      // Only the reader's own tap is read by its path; the others come from one page of the card's taps.
+      expect(tapPaths()).toEqual(['resonanceTaps/walk_alice']);
+      expect(tapQueryLimits()).toEqual([TAP_PAGE]);
+      getAll.mockClear();
+      get.mockClear();
+      const tap = (await getCardDetail(db, 'alice', 'walk')).tap!;
+      expect([tap.faces.map((f) => f.handle), tap.more]).toEqual([['gus', 'dora', 'carol'], true]);
+      // The faces: one query of at most READER_SCAN taps, and no connection's tap read by its path.
+      expect(tapQueryLimits()).toEqual([READER_SCAN]);
+      expect(tapPaths()).toEqual(['resonanceTaps/walk_alice']);
       getAll.mockClear();
       collection.mockClear();
       await getCardDetail(db, 'bob', 'walk', new Set(['resonances']));
@@ -149,10 +199,11 @@ describe('CardDetail.tap', () => {
     } finally {
       getAll.mockRestore();
       collection.mockRestore();
+      get.mockRestore();
     }
   });
 
-  it(`pages the author's list ${TAP_PAGE} at a time, newest first, through its index`, async () => {
+  it(`pages the author's list and a reader's ${TAP_PAGE} at a time, newest first, through its index — the reader's own row first`, async () => {
     for (let i = 0; i < TAP_PAGE + 2; i++) {
       const uid = `r${String(i).padStart(2, '0')}`;
       await profile(uid);
@@ -164,8 +215,22 @@ describe('CardDetail.tap', () => {
     const second = await listTaps(db, 'bob', 'walk', first.nextPageToken);
     expect(second.people.map((p) => p.author.handle)).toEqual(['r27', 'r28', 'r29', 'r30', 'r31']);
     expect(second.nextPageToken).toBeNull();
-    // A reader: their connections, one page.
-    expect((await listTaps(db, 'alice', 'walk')).people.map((p) => p.author.handle)).toEqual(['dora', 'carol']);
+    // A reader (Wave 2 #3b): everyone, paged alike, never a note.
+    const theirs = await listTaps(db, 'alice', 'walk');
+    expect(theirs.people.map((p) => p.author.handle)).toEqual(first.people.map((p) => p.author.handle));
+    expect(theirs.people.every((p) => p.note === null)).toBe(true);
+    const theirsNext = await listTaps(db, 'alice', 'walk', theirs.nextPageToken);
+    expect(theirsNext.people.map((p) => p.author.handle)).toEqual(['r27', 'r28', 'r29', 'r30', 'r31']);
+    expect(theirsNext.nextPageToken).toBeNull();
+    // Once she taps, her own row first, each person once across the pages.
+    await setTap(db, 'alice', 'walk', true);
+    const one = await listTaps(db, 'alice', 'walk');
+    expect(one.people.slice(0, 4).map((p) => p.author.handle)).toEqual(['alice', 'gus', 'dora', 'carol']);
+    const two = await listTaps(db, 'alice', 'walk', one.nextPageToken);
+    const handles = [...one.people, ...two.people].map((p) => p.author.handle);
+    expect(handles).toHaveLength(TAP_PAGE + 2 + 3 + 1);
+    expect(new Set(handles).size).toBe(handles.length);
+    expect(two.nextPageToken).toBeNull();
   });
 });
 

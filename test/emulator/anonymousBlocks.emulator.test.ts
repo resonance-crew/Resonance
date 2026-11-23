@@ -308,8 +308,8 @@ describe('the passage picked after a tap on an anonymous card', () => {
     expect(answer.pick).toEqual({ passage: first.id });
     expect(answer.detail).toMatchObject({ mine: true, passages: passageItems(), passage: first.id });
     expect(answer.herList.people).toEqual([expect.objectContaining({ passage: { text: first.text } })]);
-    // carol is alice's connection: she sees alice's face, never her pick.
-    expect(answer.carolsList.people.map((p) => [p.author.handle, p.passage ?? null])).toEqual([['alice', null]]);
+    // Wave 2 #3b: carol, a reader, sees alice's face and her pick, as a like is seen — the same across every block.
+    expect(answer.carolsList.people.map((p) => [p.author.handle, p.passage ?? null, p.note])).toEqual([['alice', { text: first.text }, null]]);
     expect([answer.bad, answer.afterOff]).toEqual(['invalid_request', 'conflict']);
   });
 
@@ -328,8 +328,9 @@ describe('the passage picked after a tap on an anonymous card', () => {
   });
 
   // Round 29 §P2: the author's picked sentences and their list of one sentence's people leave her out across a block,
-  // as his faces and his list do; everything she and carol are answered stays as with no block.
-  it("leaves her out of the author's picked sentences alone across a block — her side and carol's the same", async () => {
+  // as his faces and his list do; everything she and carol are answered (Wave 2 #3b: their picked sentences too)
+  // stays as with no block.
+  it("leaves her out of the author's picked sentences alone across a block — her picked sentences and carol's the same", async () => {
     const [, second] = passageItems();
     const answer = await sameInEveryState(async () => {
       await setTap(db, 'alice', 'masked', true);
@@ -344,8 +345,11 @@ describe('the passage picked after a tap on an anonymous card', () => {
       await setTap(db, 'alice', 'masked', false);
       return seen;
     });
-    expect(answer.detail).not.toHaveProperty('picked');
-    expect(answer.carols).not.toHaveProperty('picked');
+    const pickedBy = (tap: { picked?: { id: string; people: { handle: string }[] }[] } | null | undefined) =>
+      tap?.picked?.map((p) => [p.id, p.people.map((a) => a.handle)]);
+    // Wave 2 #3b: a reader sees the picked sentences; on an anonymous card nothing in them turns on the author's blocks.
+    expect(pickedBy(answer.detail)).toEqual([[second.id, ['alice']]]);
+    expect(pickedBy(answer.carols)).toEqual([[second.id, ['alice']]]);
     expect(answer.herList).toEqual(answer.herWholeList);
     expect(answer.carolsList.people.map((p) => p.author.handle)).toEqual(['alice']);
     for (const state of STATES) {
