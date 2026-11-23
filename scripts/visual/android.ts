@@ -69,8 +69,13 @@ export const serialOf = (d: AndroidDevice) => `emulator-${d.port}`;
 /**
  * The second phone (lanes.ts): `visual-phone` again, read-only — the emulator's way to run an AVD twice, its writes
  * kept apart and thrown away when it stops — on a console port of its own. Booted only once the tablet is shut down.
+ * The emulator runs an AVD twice only when every instance is read-only, so in a run that may want it the first phone
+ * boots read-only too (its writes — the app, the settings a run wears — thrown away at its end, as the second's; the
+ * next run installs and sets them again, as it always has). Booted once, within SECOND_PHONE_BOOT_MS: a second phone
+ * that doesn't come is said, and the first phone takes the rest.
  */
 export const SECOND_PHONE: AndroidDevice = { id: 'phone', phone: true, avd: 'visual-phone', port: 5604, readOnly: true };
+export const SECOND_PHONE_BOOT_MS = 150_000;
 
 /** How long one adb call may take (`VISUAL_ADB_TIMEOUT_S`, default 2 min; an install 5). */
 const ADB_TIMEOUT_MS = Number(process.env.VISUAL_ADB_TIMEOUT_S || 120) * 1000;
@@ -136,7 +141,7 @@ async function listedByAdb(serial: string): Promise<boolean> {
 }
 
 /** Boots the AVD unless it already runs; answers whether this run booted it. */
-export async function boot(device: AndroidDevice, ctx: CaptureContext): Promise<boolean> {
+export async function boot(device: AndroidDevice, ctx: CaptureContext, { timeoutMs = BOOT_TIMEOUT_MS, tries = 2 }: { timeoutMs?: number; tries?: number } = {}): Promise<boolean> {
   const serial = serialOf(device);
   if (await booted(serial)) return false;
   if (!existsSync(join(homedir(), '.android/avd', `${device.avd}.avd`))) {
@@ -153,7 +158,7 @@ export async function boot(device: AndroidDevice, ctx: CaptureContext): Promise<
       stdio: ['ignore', out, out],
     });
     child.unref();
-    const end = Date.now() + BOOT_TIMEOUT_MS;
+    const end = Date.now() + timeoutMs;
     while (Date.now() < end) {
       if (await booted(serial)) {
         noteBooted(serial);
@@ -170,9 +175,9 @@ export async function boot(device: AndroidDevice, ctx: CaptureContext): Promise<
       }
     }
     await sleep(5000);
-    throw new CommandTimeout(`${device.avd}'s boot`, BOOT_TIMEOUT_MS);
+    throw new CommandTimeout(`${device.avd}'s boot`, timeoutMs);
   };
-  return withRestart(device.avd, start, () => {}, { log: ctx.log });
+  return withRestart(device.avd, start, () => {}, { log: ctx.log, tries });
 }
 
 /** How long an AVD may take to boot (`VISUAL_BOOT_TIMEOUT_S`, default 5 min). */
@@ -587,7 +592,6 @@ export const captureAndroid: Capture = async (ctx) => {
   const ids = devicesFor('android', ctx.set ?? 'release', ctx.devices);
   // Each AVD with the devices it takes: itself and its states (a state names the AVD it runs on).
   const lanes = ANDROID_DEVICES.map((d) => ({ device: d, ids: ids.filter((id) => id === d.id || stateOf('android', id)?.on === d.id) })).filter((l) => l.ids.length);
-  const devices = lanes.map((l) => l.device);
   const started: AndroidDevice[] = [];
   // Only the emulators this run booted; one that was already running is left as it was.
   const shutDown = async (device: AndroidDevice) => {
@@ -599,12 +603,15 @@ export const captureAndroid: Capture = async (ctx) => {
     if (process.env.VISUAL_PARALLEL !== '0') {
       // Both AVDs at once (VISUAL_PARALLEL=0: one at a time, for a machine short of memory): the
       // build and the boots overlap, then each device runs its screens beside the other.
-      await Promise.all([build(ctx), warmUp(ctx), ...devices.map(async (d) => (await boot(d, ctx)) && started.push(d))]);
-      // The phone's variants as blocks a second phone may share once the tablet is done (lanes.ts).
+      // The phone's variants as blocks a second phone may share once the tablet is done (lanes.ts); the first phone then
+      // boots read-only too (SECOND_PHONE says why).
       const phoneLane = lanes.find((l) => l.device.id === 'phone' && l.ids.includes('phone'));
       const tabletLane = lanes.find((l) => l.device.id === 'tablet');
-      const blocks = phoneLane && tabletLane ? variantBlocks(groups(plan('android', 'phone', ctx.set ?? 'release', ctx.only))) : [];
+      const blocks = phoneLane && tabletLane && process.env.VISUAL_SECOND_PHONE !== '0' ? variantBlocks(groups(plan('android', 'phone', ctx.set ?? 'release', ctx.only))) : [];
       const queue = blocks.length >= 2 ? new BlockQueue(blocks) : null;
+      if (queue && phoneLane) phoneLane.device = { ...phoneLane.device, readOnly: true };
+      const bootDevices = lanes.map((l) => l.device);
+      await Promise.all([build(ctx), warmUp(ctx), ...bootDevices.map(async (d) => (await boot(d, ctx)) && started.push(d))]);
       const secondPhone = async (): Promise<string[]> => {
         const tablet = tabletLane!.device;
         // Down first, and seen gone, or no second phone: never three devices at once.
@@ -615,7 +622,15 @@ export const captureAndroid: Capture = async (ctx) => {
         }
         if (!secondPhoneWanted({ left: queue!.left, tabletDown })) return [];
         ctx.log(`  the tablet is done and down: a second phone (${SECOND_PHONE.avd}, read-only, ${serialOf(SECOND_PHONE)}) takes the phone's last variants`);
-        if (!(await boot(SECOND_PHONE, ctx))) {
+        // Once, and not for long: a second phone that doesn't come costs the run nothing but its wait.
+        let mine: boolean;
+        try {
+          mine = await boot(SECOND_PHONE, ctx, { timeoutMs: SECOND_PHONE_BOOT_MS, tries: 1 });
+        } catch (error) {
+          ctx.log(`  the second phone didn't come (${String((error as Error)?.message ?? error).slice(0, 120)}): the first phone takes the rest`);
+          return [];
+        }
+        if (!mine) {
           ctx.log(`  ${serialOf(SECOND_PHONE)} was already running: not this run's, left alone`);
           return [];
         }
