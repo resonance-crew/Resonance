@@ -533,7 +533,7 @@ function boundary(x: number, h: number, seed: number, pad: number): string {
  * choice (`mode: 'choice'`, the publish panel) the track is cream-dark and the
  * chosen side tonal.
  */
-export function segmentedBar(segments: SegmentSpec[], o: { mode?: 'actions' | 'choice'; seed?: number; fontSize?: number } = {}) {
+export function segmentedBar(segments: SegmentSpec[], o: { mode?: 'actions' | 'choice'; seed?: number; fontSize?: number; pad?: number; width?: number } = {}) {
   const mode = o.mode ?? 'actions';
   const seed = o.seed ?? 71;
   const segEls = segments.map((s) => {
@@ -541,7 +541,7 @@ export function segmentedBar(segments: SegmentSpec[], o: { mode?: 'actions' | 'c
       const ic = icon(s.icons[Math.min(k, s.icons.length - 1)], 16);
       const row = s.iconOnly
         ? html('span', { class: 'seg-state', style: { padding: '0 16px' }, attrs: { 'aria-label': label } }, [ic.el])
-        : html('span', { class: 'seg-state' }, [ic.el, html('span', { text: label })]);
+        : html('span', { class: 'seg-state', style: o.pad != null ? { padding: `0 ${o.pad}px` } : undefined }, [ic.el, html('span', { text: label })]);
       return { row, icon: ic };
     });
     const el = html('span', { class: 'seg', style: { fontSize: o.fontSize ?? 15 } }, states.map((st) => st.row));
@@ -551,7 +551,10 @@ export function segmentedBar(segments: SegmentSpec[], o: { mode?: 'actions' | 'c
   const el = html('div', { class: 'segbar' }, [row]);
   // Size every segment to its widest state (the states share one grid cell, each at its own width).
   measure(el);
-  const widths = segEls.map((s) => Math.ceil(Math.max(...s.states.map((st) => st.row.getBoundingClientRect().width))));
+  const natural = segEls.map((s) => Math.ceil(Math.max(...s.states.map((st) => st.row.getBoundingClientRect().width))));
+  // Stretched to `width` (the app's bar runs the column's width), the room shared out evenly.
+  const extra = o.width ? Math.max(0, o.width - natural.reduce((x, y) => x + y, 0)) : 0;
+  const widths = natural.map((w, i) => w + Math.floor(extra / natural.length) + (i < extra % natural.length ? 1 : 0));
   segEls.forEach((s, i) => css(s.el, { width: widths[i] }));
   const { w, h } = measure(el);
   const lefts = widths.map((_, i) => widths.slice(0, i).reduce((a, b) => a + b, 0));

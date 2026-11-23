@@ -5,6 +5,7 @@
  *                                   [--out docs/media] [--from 0] [--to <end>]
  *                                   [--stills 1.5,8,20 [--stills-dir <dir>]] [--preview [--poster-at 22.6]]
  *                                   [--audio <file> | --silent]
+ *                                   [--page scripts/reels/page --size 1080x1920 --query reel=1 --name reel-1]
  *
  * The page is a pure function of time (`window.__promo.renderAt(t)`), so every
  * frame is set, screenshotted and piped to ffmpeg — no clock, no dropped
@@ -33,9 +34,11 @@ import { build } from 'esbuild';
 import { lightRootCss } from '../../src/lib/design/paletteCss';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const PAGE_DIR = join(ROOT, 'scripts/promo/page');
-const WIDTH = 1920;
-const HEIGHT = 1080;
+const PROMO_PAGE = join(ROOT, 'scripts/promo/page');
+/** The page to render (`--page`) and its stage (`--size`): the tour's by default, the reels' with `--page scripts/reels/page --size 1080x1920`. */
+let PAGE_DIR = PROMO_PAGE;
+let WIDTH = 1920;
+let HEIGHT = 1080;
 const LOCALES = ['zh-TW', 'en'] as const;
 const SCORE = join(ROOT, 'scripts/promo/score.m4a');
 type Locale = (typeof LOCALES)[number];
@@ -53,6 +56,10 @@ interface Options {
   posterAt: number;
   /** The soundtrack, or null for a silent film. */
   audio: string | null;
+  /** The page's own query (`--query reel=1`), added to the locale's. */
+  query: string;
+  /** The MP4's name before `.{locale}.mp4`. */
+  name: string;
 }
 
 function parseArgs(argv: string[]): Options {
@@ -75,6 +82,8 @@ function parseArgs(argv: string[]): Options {
     preview: argv.includes('--preview'),
     posterAt: Number(get('poster-at') ?? 22.6),
     audio: argv.includes('--silent') ? null : resolve(ROOT, get('audio') ?? SCORE),
+    query: get('query') ?? '',
+    name: get('name') ?? 'resonance-intro',
   };
 }
 
@@ -108,7 +117,9 @@ async function servePage(): Promise<{ server: Server; origin: string }> {
       /url\('https:\/\/cdn\.jsdelivr\.net[^']*'\)/,
       "url('/fonts/ChenYuluoyanThin.ttf')",
     ) + lightRootCss();
-  const css = readFileSync(join(PAGE_DIR, 'promo.css'), 'utf8');
+  // The tour's stylesheet, then the page's own (a reel's stage size and pieces), if it has one.
+  const own = join(PAGE_DIR, 'page.css');
+  const css = readFileSync(join(PROMO_PAGE, 'promo.css'), 'utf8') + (PAGE_DIR !== PROMO_PAGE && existsSync(own) ? readFileSync(own, 'utf8') : '');
   const html = `<!doctype html><html><head><meta charset="utf-8">
 <style>${tokens}</style><style>${css}</style></head>
 <body><div id="stage"></div><script src="/main.js"></script></body></html>`;
@@ -116,6 +127,8 @@ async function servePage(): Promise<{ server: Server; origin: string }> {
   const files: Record<string, string> = {
     '/fonts/': join(ROOT, 'apps/shared/fonts'),
     '/badges/': join(ROOT, 'public/badges'),
+    // A page's generated pictures (the reels' sticker frames: scripts/reels/assets.ts).
+    '/assets/': join(PAGE_DIR, '../.assets'),
   };
   const server = createServer((req, res) => {
     const path = decodeURIComponent((req.url ?? '/').split('?')[0]);
@@ -307,18 +320,23 @@ async function write(proc: ChildProcess, buf: Buffer) {
 // ── Main ──────────────────────────────────────────────────────────────
 
 async function main() {
-  const opts = parseArgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  const opts = parseArgs(argv);
+  const pageArg = argv[argv.indexOf('--page') + 1];
+  if (argv.includes('--page')) PAGE_DIR = resolve(ROOT, pageArg);
+  const size = argv.includes('--size') ? argv[argv.indexOf('--size') + 1].split('x').map(Number) : null;
+  if (size) [WIDTH, HEIGHT] = size;
   const { server, origin } = await servePage();
   const { proc: chrome, cdp, profile } = await launchChrome();
   try {
     for (const locale of opts.locales) {
-      const url = `${origin}/?locale=${encodeURIComponent(locale)}`;
+      const url = `${origin}/?locale=${encodeURIComponent(locale)}${opts.query ? `&${opts.query}` : ''}`;
 
       if (opts.stills) {
         mkdirSync(opts.stillsDir, { recursive: true });
         const page = await openPage(cdp, url);
         for (const t of opts.stills) {
-          const file = join(opts.stillsDir, `${locale}-${t.toFixed(2)}.png`);
+          const file = join(opts.stillsDir, `${opts.name === 'resonance-intro' ? '' : `${opts.name}-`}${locale}-${t.toFixed(2)}.png`);
           writeFileSync(file, await page.frame(t));
           console.log(file);
         }
@@ -367,7 +385,7 @@ async function main() {
       mkdirSync(opts.out, { recursive: true });
       const list = join(tmp, 'segments.txt');
       writeFileSync(list, segments.map((s) => `file '${s}'`).join('\n'));
-      const mp4 = join(opts.out, `resonance-intro.${locale}.mp4`);
+      const mp4 = join(opts.out, `${opts.name}.${locale}.mp4`);
       // The joined picture, then the soundtrack laid under it from the same moment (`--from`), both copied.
       const audio = opts.audio && existsSync(opts.audio)
         ? ['-ss', String(opts.from), '-i', opts.audio, '-map', '0:v', '-map', '1:a', '-shortest']

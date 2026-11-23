@@ -54,3 +54,6 @@ apps/android/local.properties
 # Portability exports (scripts/portability): the whole database, never in the repository
 export-*/
 *.memdump
+
+# The reels' sticker frames (scripts/reels/assets.ts)
+scripts/reels/.assets/

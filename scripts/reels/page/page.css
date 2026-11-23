@@ -1,0 +1,117 @@
+/* The reels' stage: 1080 × 1920 instead of the tour's 1920 × 1080 (this sheet follows promo.css). */
+html, body, #stage { width: 1080px; height: 1920px; }
+
+/* ── The headline over the page ──────────────────────────────────── */
+.reel-eyebrow {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 28px 12px 22px;
+  font: 600 30px/1.2 var(--font-body);
+  letter-spacing: 0.08em;
+  color: var(--button-on-tonal);
+}
+.reel-eyebrow > :not(svg.abs) { position: relative; z-index: 1; }
+.reel-title {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 78px;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  color: var(--color-text);
+  white-space: pre-line;
+  text-spacing-trim: trim-both;
+}
+
+/* ── The card page, at the phone's 1× (a reel sets it at video size with zoom) ── */
+.cp { position: relative; width: 390px; padding: 0 22px; font-family: var(--font-body); color: var(--color-text); }
+.cp-title { font-family: var(--font-heading); font-size: 28px; font-weight: 700; line-height: 1.35; letter-spacing: 0.01em; }
+.cp-byline { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+.cp-name { font-size: 16px; font-weight: 600; }
+.cp-meta { font-size: 13px; color: var(--color-text-muted); margin-top: 3px; }
+.cp-story { margin-top: 26px; display: flex; flex-direction: column; gap: 16px; }
+.cp-para { font-size: 17.5px; line-height: 1.85; letter-spacing: 0.02em; text-spacing-trim: trim-both; }
+.cp-pass { border-radius: 4px; padding: 1px 0; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.cp-faces-inline { display: inline-flex; vertical-align: -5px; margin-left: 6px; }
+.cp-faces-inline > * + * { margin-left: -6px; }
+.cp-tags { display: flex; align-items: center; gap: 8px; margin-top: 26px; }
+.cp-faces { display: flex; margin-top: 18px; height: 26px; padding-left: 22px; }
+.cp-faces > * + * { margin-left: -7px; }
+.cp-bar { margin-top: 10px; }
+
+/* The passage dialog (TapPassagePicker), 1× */
+.pp { position: relative; width: 362px; padding: 26px 0 22px; }
+.pp-title { position: relative; z-index: 1; padding: 0 24px; font-family: var(--font-heading); font-size: 21px; font-weight: 700; }
+.pp-rows { position: relative; z-index: 1; margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+.pp-row { position: relative; display: flex; gap: 10px; align-items: flex-start; padding: 10px 22px 10px 24px; font-size: 16.5px; line-height: 1.85; letter-spacing: 0.02em; }
+.pp-row-text { flex: 1; text-spacing-trim: trim-both; }
+.pp-foot { position: relative; z-index: 1; display: flex; justify-content: flex-end; padding: 16px 24px 0; }
+
+/* The end card */
+.end-word { font-family: var(--font-heading); font-weight: 700; font-size: 96px; letter-spacing: -0.02em; color: var(--color-text); }
+.end-line { font-family: var(--font-heading); font-weight: 800; font-size: 64px; letter-spacing: 0.02em; color: var(--color-text); text-align: center; }
+.end-small { font: 500 34px/1.5 var(--font-body); letter-spacing: 0.06em; color: var(--color-text-muted); text-align: center; }
+
+/* ── 2026-11 reels: paper, phone, cards ─────────────────────────── */
+.grain {
+  position: absolute; left: 0; top: 0; width: 1080px; height: 1920px;
+  background: url('/assets/grain.png') 0 0 / 540px 540px repeat;
+  mix-blend-mode: multiply; opacity: 0.55; pointer-events: none;
+}
+.phone-status { display: flex; align-items: center; justify-content: space-between; font: 600 26px/1 var(--font-body); color: var(--color-text); z-index: 3; padding-top: 8px; }
+.phone-island { display: block; border-radius: 999px; background: oklch(22% 0.02 60); }
+.cp { background: var(--color-cream); }
+.cp-top { display: flex; align-items: center; height: 44px; padding: 0 4px; }
+.cp-rule { height: 8px; margin: 0 -22px; }
+.cp-body { padding-top: 18px; padding-bottom: 40px; }
+.quote-card { position: relative; width: 940px; padding: 60px 56px 52px; }
+.quote-card > :not(svg.abs) { position: relative; z-index: 1; }
+.quote-text { font-family: var(--font-heading); font-weight: 700; font-size: 54px; line-height: 1.55; letter-spacing: 0.02em; white-space: pre-line; color: var(--color-text); text-spacing-trim: trim-both; }
+.quote-mark {
+  background-image: linear-gradient(color-mix(in oklch, var(--color-terracotta-light) 55%, transparent), color-mix(in oklch, var(--color-terracotta-light) 55%, transparent));
+  background-repeat: no-repeat; background-size: var(--wash, 0%) 100%;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone; border-radius: 8px; padding: 2px 4px;
+}
+.quote-by { display: flex; align-items: center; gap: 22px; margin-top: 40px; font: 600 34px/1.3 var(--font-body); color: var(--color-text-muted); letter-spacing: 0.04em; }
+.notice { position: relative; display: flex; align-items: center; gap: 30px; width: 920px; padding: 34px 40px; }
+.notice > :not(svg.abs) { position: relative; z-index: 1; }
+.notice-title { font: 700 40px/1.3 var(--font-body); color: var(--color-text); letter-spacing: 0.02em; }
+.notice-sub { font: 500 30px/1.3 var(--font-body); color: var(--color-text-muted); margin-top: 8px; }
+.chat { display: flex; flex-direction: column; gap: 14px; }
+.chat-row { display: flex; align-items: flex-end; gap: 8px; }
+.chat-row.own { justify-content: flex-end; }
+.wr-title { font-family: var(--font-heading); font-size: 26px; font-weight: 700; line-height: 1.35; margin-top: 6px; }
+.wr-story { font-size: 16.5px; line-height: 1.85; letter-spacing: 0.03em; margin-top: 18px; }
+.wr-title.placeholder, .wr-story.placeholder { color: color-mix(in oklch, var(--color-text-muted) 70%, transparent); }
+.wr-caret { display: inline-block; width: 2px; height: 1.1em; vertical-align: -0.15em; margin-left: 1px; background: var(--color-terracotta); }
+.vis-line { text-align: center; font: 600 46px/1.4 var(--font-body); color: var(--color-text); letter-spacing: 0.04em; }
+.end-zh { font: 700 52px/1 var(--font-heading); letter-spacing: 0.3em; color: var(--color-text-muted); }
+.pk-quote { position: relative; z-index: 1; padding: 10px 24px 0; font-size: 16px; line-height: 1.8; color: var(--color-text-muted); }
+.pk-rows { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 16px; padding: 18px 24px 4px; }
+.pk-row { display: flex; gap: 12px; align-items: flex-start; }
+.pk-name { font-size: 16.5px; font-weight: 600; padding-top: 9px; }
+.pk-note { font-size: 15.5px; line-height: 1.65; margin-top: 4px; color: var(--color-text); }
+
+/* ── The weekly carousel (1080 × 1350) ─────────────────────────────── */
+.car-label { display: flex; align-items: center; gap: 14px; font: 700 34px/1 var(--font-body); letter-spacing: 0.12em; color: var(--color-text-muted); }
+.car-page { font: 600 28px/1 var(--font-body); letter-spacing: 0.1em; color: var(--color-text-muted); }
+.car-quote-mark { font: 800 240px/1 var(--font-heading); opacity: 0.35; }
+.car-by { font: 600 36px/1.3 var(--font-body); color: var(--color-text-muted); letter-spacing: 0.06em; }
+.car-title { font: 800 72px/1.3 var(--font-heading); letter-spacing: 0.02em; }
+.car-author { display: flex; align-items: center; gap: 18px; margin-top: 30px; font: 600 36px/1 var(--font-body); }
+.car-story { margin-top: 60px; font: 500 44px/1.9 var(--font-body); letter-spacing: 0.04em; color: var(--color-text-muted); text-spacing-trim: trim-both; }
+.car-story-mark { color: var(--color-text); background: color-mix(in oklch, var(--color-terracotta-light) 50%, transparent); border-radius: 8px; padding: 2px 4px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.car-big { font: 800 68px/1.4 var(--font-heading); letter-spacing: 0.02em; color: var(--color-text); }
+.car-small { font: 500 40px/1.6 var(--font-body); letter-spacing: 0.04em; color: var(--color-text-muted); white-space: pre-line; }
+.car-cta { position: relative; display: flex; flex-direction: column; gap: 26px; padding: 56px 80px; }
+.car-cta > :not(svg.abs) { position: relative; z-index: 1; }
+.car-quote { font: 700 62px/1.75 var(--font-heading); letter-spacing: 0.02em; color: var(--color-text); white-space: pre-line; text-spacing-trim: trim-both; text-wrap: pretty; }
+
+.pp-row-text { flex: 1; text-spacing-trim: trim-both; }
+.pp-row-mark { border-radius: 4px; padding: 1px 0; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+/* 寫一張故事卡: the four audiences as rows */
+.aud-row { position: relative; display: flex; align-items: center; gap: 30px; padding: 28px 40px; }
+.aud-row > :not(svg.abs) { position: relative; z-index: 1; }
+.aud-label { font: 800 52px/1.25 var(--font-heading); letter-spacing: 0.02em; color: var(--color-text); }
+.aud-line { font: 500 32px/1.4 var(--font-body); letter-spacing: 0.03em; color: var(--color-text-muted); margin-top: 6px; }
