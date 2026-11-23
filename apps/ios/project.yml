@@ -27,8 +27,8 @@ packages:
 # its app's): set here once — scripts/release/versions.ts reads and bumps these two lines.
 settings:
   base:
-    MARKETING_VERSION: "2.5.0"
-    CURRENT_PROJECT_VERSION: "16"
+    MARKETING_VERSION: "2.6.0"
+    CURRENT_PROJECT_VERSION: "17"
 targets:
   Resonance:
     type: application
