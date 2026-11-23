@@ -23,6 +23,8 @@
  *   promote  --from <branch> --reason "<the owner's words>" [--only <key|screen>,…] [--allow-unmerged]
  *            a branch's (a round's) accepted pictures into main's baseline, once main has its commits (promote.ts)
  *   baselines                     main's and every branch's baseline, and which one this checkout uses (baselines.ts)
+ *   prune    [--keep N] [--dry-run]   old runs out of visual/runs/: never the newest N (20), one a baseline or an accept
+ *            log names, visual/latest, or one that may still be running (prune.ts)
  *
  * capture, compare and review end with the run's verdict — `Visual PASS|FAIL <id>: …` as the last
  * line, summary.json beside the report, exit code 1 on a FAIL (gate.ts says what fails a run).
@@ -46,6 +48,7 @@ import type { Platform } from './screens';
 import { DEVICE_STATES, EXTRA_VARIANTS, VARIANT_SETS, estimate, variantSetOf } from './variants';
 import { watchdog } from './watchdog';
 import { PHASES, buildOrder } from './phases';
+import { DEFAULT_KEEP, prune } from './prune';
 import { startSampler } from './resources';
 import { writeTiming, writeTimingsSummary } from './timings';
 import { HARNESS_SIMULATORS } from './devices';
@@ -403,6 +406,13 @@ async function main() {
       return baselinesOf();
     case 'plan':
       return planOf(args);
+    case 'prune': {
+      // Old runs out of visual/runs/, never one a baseline or an accept log names, the newest, or one maybe running.
+      const keep = Number(flag(args, 'keep') ?? DEFAULT_KEEP);
+      if (!Number.isInteger(keep) || keep < 0) throw new Error(`--keep takes a whole number, not "${flag(args, 'keep')}"`);
+      prune({ keep, dryRun: args.includes('--dry-run'), log });
+      return;
+    }
     default:
       log('Usage: npm run visual -- capture [web android ios mac] [--only ids] [--device ids] [--variants release|extended] [--no-stack] [--flows] [--review] [--wait] | compare | review [--agy | --gemini] [--all] | accept --reason "<the owner\'s words>" [--only keys] [--runs a,b]  (each with --run <id>) | plan [--variants …]');
       process.exit(command ? 1 : 0);

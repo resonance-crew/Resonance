@@ -24,6 +24,7 @@ npm run visual -- accept --run <id> --only card,web/phone/home@dark-zh-TW.png --
 npm run visual -- accept --runs <id>,<id> --only card --reason "…"   # several runs at once (a retake named after the run it retakes)
 npm run visual -- promote --from r30/base --reason "<the owner's words>"   # a merged round's accepted pictures into main's baseline
 npm run visual -- baselines                  # main's and every branch's baseline, and which one this checkout uses
+npm run visual -- prune --dry-run            # which old runs `prune` would remove (and the GB): never the newest 20 (--keep N), one a baseline or an accept log names, visual/latest, or one maybe running (prune.ts)
 npm run visual -- capture web ios android --web-only card --web-device phone --ios-only card,thread --android-device phone   # one run, each platform its own slice
 ```
 
