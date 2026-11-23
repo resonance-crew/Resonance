@@ -89,15 +89,15 @@ describe('runGroups', () => {
     ]);
   });
 
-  it('takes its width from VISUAL_WEB_PARALLEL, 3 when unset, 1 the old one-by-one', () => {
+  it('takes its width from VISUAL_WEB_PARALLEL, 4 when unset, 1 the old one-by-one', () => {
     const was = process.env.VISUAL_WEB_PARALLEL;
     try {
       delete process.env.VISUAL_WEB_PARALLEL;
-      expect(webParallel()).toBe(3);
+      expect(webParallel()).toBe(4);
       process.env.VISUAL_WEB_PARALLEL = '1';
       expect(webParallel()).toBe(1);
       process.env.VISUAL_WEB_PARALLEL = 'lots';
-      expect(webParallel()).toBe(3);
+      expect(webParallel()).toBe(4);
     } finally {
       if (was == null) delete process.env.VISUAL_WEB_PARALLEL;
       else process.env.VISUAL_WEB_PARALLEL = was;

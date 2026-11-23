@@ -8,7 +8,7 @@
  * cast on stage; its pinned stills go to the run's `_glance/` (looked at, not
  * compared).
  *
- * Several browser contexts capture at once (`VISUAL_WEB_PARALLEL`, default 3), the writes the pages make to the
+ * Several browser contexts capture at once (`VISUAL_WEB_PARALLEL`, default 4), the writes the pages make to the
  * shared stack kept in their old order: webSchedule.ts.
  */
 import { writeFileSync } from 'node:fs';
@@ -200,16 +200,22 @@ async function shootOnce(
   timing.lap('open');
   const ready = async () => {
     await idle.get(page)!();
+    timing.lap('drain');
     await page.evaluate(() => document.fonts.ready);
-    // A shape not yet measured shows its CSS stand-in: wait for the drawn one.
-    await page.waitForFunction(() => !document.querySelector('[data-shape-pending]'), null, { timeout: 15_000 }).catch(() => {});
+    // A shape not yet measured shows its CSS stand-in: wait for the drawn one — any in the picture (the whole page for
+    // a full-page capture, else the window). One the page doesn't lay out until it is scrolled to (the landing film's
+    // story cards, far below its still) never draws: every film still waited out the 15 s for them, for nothing in it.
+    await page.waitForFunction(pendingShapeInPicture, !!screen.fullPage, { timeout: 15_000 }).catch(() => {});
+    timing.lap('shapes');
   };
   await ready();
   if (await page.locator('[data-film-root]').count()) {
     // The landing film: its runtime ready (摺摺 and 點點 live), then the rest of its cast on stage (the others go live
     // on idle, by 20 s at the latest) — film checks say so when one never did.
     await page.waitForFunction(() => (window as { __film?: { ready: boolean } }).__film?.ready, null, { timeout: 60_000 }).catch(() => {});
+    timing.lap('film-ready');
     await page.waitForFunction(() => !document.querySelector('[data-actor]:not([data-live])'), null, { timeout: 30_000 }).catch(() => {});
+    timing.lap('film-cast');
   }
   if (screen.web?.click) {
     // The first one on screen: a phone and a desktop header may both be in the page, CSS showing one.
@@ -240,6 +246,21 @@ async function shootOnce(
   const findings = judgePage(measure, errors.get(page)!, { touch: device.touch, scene: screen.film?.scene });
   timing.lap('checks');
   return { ...look, ignore: look.retaken ? await ignored(page, !!screen.fullPage) : ignore, findings };
+}
+
+/**
+ * Whether no shape in the picture still shows its stand-in (`data-shape-pending`): run in the page. One the page
+ * doesn't draw at all (inside a `display: none` — the landing page's desktop header buttons on a phone: no box, so
+ * never measured, so pending for ever) is in no picture; of the rest, `fullPage` counts every one, else those whose
+ * box meets the window.
+ */
+export function pendingShapeInPicture(fullPage: boolean): boolean {
+  const pending = [...document.querySelectorAll('[data-shape-pending]')].filter((el) => el.getClientRects().length > 0);
+  if (fullPage) return pending.length === 0;
+  return !pending.some((el) => {
+    const r = el.getBoundingClientRect();
+    return r.bottom >= 0 && r.right >= 0 && r.top <= window.innerHeight && r.left <= window.innerWidth;
+  });
 }
 
 /**
