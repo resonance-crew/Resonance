@@ -132,9 +132,12 @@ describe('PublishStep', () => {
     expect(screen.getByText(en.write.publishPanel.updateHint)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: en.write.publishPanel.update })).toHaveAttribute('data-variant', 'solid');
     // Made a 草稿, the card will have no readers to see the new version: nothing to say about them, and
-    // the one button says what it does.
+    // the one button says what it does. (Round 32 §P4: the line keeps its room, unseen and unread, so the card types
+    // under it never move.)
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
-    expect(screen.queryByText(en.write.publishPanel.updateHint)).toBeNull();
+    const hint = screen.getByText(en.write.publishPanel.updateHint);
+    expect(hint).toHaveAttribute('aria-hidden', 'true');
+    expect(hint).toHaveAttribute('data-unseen');
     expect(screen.getByRole('button', { name: en.write.publishPanel.makeDraft })).toBeInTheDocument();
     view.unmount();
     renderWithIntl(<Step start={{ thoughtCore: '  ' }} />);
@@ -164,6 +167,51 @@ describe('PublishStep', () => {
     // A live card's step says what saving does first.
     renderWithIntl(<Step mode="update" liveVisibility="public" />);
     expect(preview()).not.toHaveAttribute('data-first');
+  });
+
+  // Round 32 §P4 (the owner: 「从匿名公开→有连结的人→私人卡→再点回有连结的人时画面会往上跳；再点私人卡画面会往下跳」): the
+  // update hint above the preview came and went with 私人卡 (and the preview's data-under-bar with it), and the
+  // preview's byline changed its line between 匿名 and a pen name — every press moved the grid under the finger.
+  it('changes nothing above 卡片類型 when a type is pressed, and scrolls nothing', async () => {
+    const intoView = vi.fn();
+    Element.prototype.scrollIntoView = intoView;
+    const scrolls = [
+      intoView,
+      vi.spyOn(window, 'scrollTo').mockImplementation(() => {}),
+      vi.spyOn(window, 'scrollBy').mockImplementation(() => {}),
+    ];
+    const scrollTop = vi.fn();
+    const desc = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
+    Object.defineProperty(Element.prototype, 'scrollTop', { configurable: true, get: () => 0, set: scrollTop });
+    try {
+      const view = renderWithIntl(<Step mode="update" liveVisibility="public" />);
+      const grid = screen.getByRole('button', { name: en.write.visibility.connections });
+      // Everything laid out before the grid in the document: its tags, attributes and words (none hidden or dropped).
+      const above = () =>
+        [...view.container.querySelectorAll('*')]
+          .filter((el) => el.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING && !el.contains(grid))
+          // (the grid's own cells before the pressed one: their words stay, their chosen face is the press itself)
+          .filter((el) => !el.closest('[aria-labelledby]')?.contains(grid))
+          .map((el) => `${el.tagName}${el.hasAttribute('data-under-bar') ? '[under-bar]' : ''}${el.children.length ? '' : `:${el.textContent}`}`)
+          .join('|')
+          // what the byline says is allowed to change (匿名 / the pen name), not what stands there
+          .replace(/(:)(my-handle|Anonymous|MH|·)/g, '$1name');
+      const start = above();
+      for (const name of [en.write.visibility.anonymous, en.write.visibility.connections, en.write.visibility.draft, en.write.visibility.connections, en.write.visibility.draft]) {
+        await userEvent.click(screen.getByRole('button', { name }));
+        expect(above()).toBe(start);
+      }
+      for (const s of scrolls) expect(s).not.toHaveBeenCalled();
+      expect(scrollTop).not.toHaveBeenCalled();
+    } finally {
+      if (desc) Object.defineProperty(Element.prototype, 'scrollTop', desc);
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+    // The preview's byline is one height in either script: 匿名 and a Latin pen name stand on the same line.
+    const { readFileSync } = await import('node:fs');
+    const css = readFileSync('src/components/molecules/StoryCard/StoryCard.module.css', 'utf8');
+    expect(css).toMatch(/\.card\[data-preview\] \.authorName \{[^}]*line-height: 1\.45;/);
+    expect(readFileSync('src/components/molecules/PublishStep/PublishStep.module.css', 'utf8')).toMatch(/\.hint\[data-unseen\] \{[^}]*visibility: hidden;/);
   });
 
   it('shows the mirror when React mounts the step twice (dev), not a loading line for good', async () => {

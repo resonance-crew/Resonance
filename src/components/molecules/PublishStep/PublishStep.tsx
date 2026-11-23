@@ -354,11 +354,15 @@ export function PublishStep({
   const title = tPanel(stepTitleKey(mode, visibility, live));
   const audience = audienceOf(visibility, anonymous);
   const verb = stepVerb(mode, visibility, anonymous, live);
-  // About readers: only for a card they have now, which stays theirs.
-  const showsUpdateHint = updating && live !== 'private' && visibility !== 'private';
+  // About readers: only for a card they have now, which stays theirs. Its room is kept while the card is live
+  // whatever type is chosen (round 32 §P4): the line stands above 卡片類型, and coming and going with 私人卡 it moved
+  // the grid under the finger — up, then down — on every press. Under 私人卡 it stays laid out, unseen and unread.
+  const hintRoom = updating && live !== 'private';
+  const showsUpdateHint = hintRoom && visibility !== 'private';
   // Nothing above the preview (no heading of its own, no hint, no mirror line): on a phone its
-  // band is the first thing under the bar, which it meets as the feed's first card does.
-  const underBar = !inlineHeading && !showsUpdateHint && (!insight || insight.state === 'none');
+  // band is the first thing under the bar, which it meets as the feed's first card does. (The hint's room, not
+  // whether it shows: what stands above the grid never changes with the type, §P4.)
+  const underBar = !inlineHeading && !hintRoom && (!insight || insight.state === 'none');
 
   return (
     <section
@@ -398,7 +402,11 @@ export function PublishStep({
         </div>
       )}
       {/* What readers will see changes: said only while there are readers, and they stay. */}
-      {showsUpdateHint && <p className={styles.hint}>{tPanel('updateHint')}</p>}
+      {hintRoom && (
+        <p className={styles.hint} data-unseen={showsUpdateHint ? undefined : ''} aria-hidden={showsUpdateHint ? undefined : true}>
+          {tPanel('updateHint')}
+        </p>
+      )}
 
       {/* 1 — the mirror moment (first publication only) */}
       {!updating && insight && (
