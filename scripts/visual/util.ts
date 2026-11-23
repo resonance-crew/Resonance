@@ -149,6 +149,26 @@ export async function waitForPort(port: number, timeoutMs: number, host = '127.0
   throw new Error(`Nothing listened on ${host}:${port} within ${Math.round(timeoutMs / 1000)} s`);
 }
 
+/**
+ * Waits, at most `timeoutMs`, until nothing listens on any of `ports`: the last stack on them going down (its stop sends
+ * SIGTERM and goes on; the Firestore emulator's JVM takes a moment to let its ports go). The run's port locks keep
+ * every other run off them, so what still listens is that stack. Answers whether they came free.
+ */
+export async function portsFree(ports: number[], timeoutMs: number, wait = sleep): Promise<boolean> {
+  const end = Date.now() + timeoutMs;
+  const open = (port: number) =>
+    new Promise<boolean>((done) => {
+      const socket = createConnection({ port, host: '127.0.0.1' });
+      socket.once('connect', () => (socket.destroy(), done(true)));
+      socket.once('error', () => done(false));
+    });
+  for (;;) {
+    if (!(await Promise.all(ports.map(open))).some(Boolean)) return true;
+    if (Date.now() >= end) return false;
+    await wait(500);
+  }
+}
+
 /** A child in its own process group, so stopping it stops what it started (the emulators' Java, Next's workers). */
 export function startGroup(command: string, args: string[], env: Record<string, string>, logFile: string): ChildProcess {
   mkdirSync(dirname(logFile), { recursive: true });

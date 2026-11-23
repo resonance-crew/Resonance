@@ -516,12 +516,22 @@ final class SessionStore {
         // `-signedOut YES`: the signed-out start, whoever was restored (the release screenshots).
         if config.usesEmulator, defaults.bool(forKey: "signedOut") {
             if Auth.auth().currentUser != nil { signOut() }
+            VisualReady.shared.mark("account")
             return
         }
         guard config.usesEmulator, let email = defaults.string(forKey: "email"),
               let password = defaults.string(forKey: "password"),
               Auth.auth().currentUser?.email?.lowercased() != email.lowercased() else { return }
         Task { await signIn(email: email, password: password) }
+    }
+
+    /// The release screenshots' sign-in launch (scripts/visual/ready.ts `waitSignedIn`): once the account it was launched
+    /// with (`-email`) is signed in and its profile read and kept (or found missing), the app says `account <token>`,
+    /// and the harness stops waiting its fixed 10 s. Nothing unless the launch asked for the signal (VisualReady).
+    private func markSettledForTesting() {
+        guard config.usesEmulator, let email = UserDefaults.standard.string(forKey: "email"),
+              Auth.auth().currentUser?.email?.lowercased() == email.lowercased() else { return }
+        VisualReady.shared.mark("account")
     }
     #endif
 
@@ -559,6 +569,9 @@ final class SessionStore {
                     UserDefaults.standard.removeObject(forKey: Self.profiledKey)
                 }
             }
+            #if DEBUG
+            markSettledForTesting()
+            #endif
         } catch {
             guard uid == asked else { return }
             profile = .failed((error as? APIFailure)?.message ?? error.localizedDescription)

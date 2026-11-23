@@ -27,8 +27,8 @@ export function forgetBooted(id: string) {
 }
 
 /** The harness's own simulators (ios.ts IOS_DEVICES) and emulator consoles (android.ts ANDROID_DEVICES). */
-export const HARNESS_SIMULATORS = ['Visual iPhone', 'Visual iPad'];
-export const HARNESS_EMULATORS = ['emulator-5600', 'emulator-5602'];
+export const HARNESS_SIMULATORS = ['Visual iPhone', 'Visual iPad', 'Visual iPhone 2'];
+export const HARNESS_EMULATORS = ['emulator-5600', 'emulator-5602', 'emulator-5604'];
 
 /**
  * Whether a run may shut `id` down: it booted it, and it is the harness's own (`name`: a

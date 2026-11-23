@@ -8,7 +8,7 @@
  * cast on stage; its pinned stills go to the run's `_glance/` (looked at, not
  * compared).
  *
- * Several browser contexts capture at once (`VISUAL_WEB_PARALLEL`, default 3), the writes the pages make to the
+ * Several browser contexts capture at once (`VISUAL_WEB_PARALLEL`, default 4), the writes the pages make to the
  * shared stack kept in their old order: webSchedule.ts.
  */
 import { writeFileSync } from 'node:fs';
@@ -21,6 +21,7 @@ import { GLANCE_DIR, SEED_PASSWORD, ignorePath, settle, shotPath, type Capture, 
 import { devicesFor, groups, plan } from './variants';
 import { runGroups, schedule, webParallel, type WebGroup } from './webSchedule';
 import { checksPath, consoleNoise, judgePage, measurePage, type Finding } from './webChecks';
+import { stopwatch, type Stopwatch } from './timings';
 
 export type WebDevice = { id: string; phone: boolean; width: number; height: number; touch: boolean };
 
@@ -155,6 +156,7 @@ async function shoot(
   v: Variant,
   device: WebDevice,
   key: string,
+  timing: Stopwatch,
 ): Promise<Look & { ignore: Rect[]; findings: Finding[] }> {
   if (!idle.has(page)) idle.set(page, trackRequests(page));
   if (!errors.has(page)) errors.set(page, trackErrors(page));
@@ -166,7 +168,7 @@ async function shoot(
   page.on('framenavigated', onNavigation);
   try {
     for (let attempt = 1; ; attempt++) {
-      const look = await shootOnce(page, ctx, screen, v, device, key, () => (navigated = false));
+      const look = await shootOnce(page, ctx, screen, v, device, key, () => (navigated = false), timing);
       const blank = look.findings.some((f) => f.check === 'blank');
       if ((!navigated && !blank) || attempt === 3) return look;
       ctx.log(`  ${key}: ${blank ? 'the page came up empty' : 'the page reloaded itself while it was taken'}, taking it again`);
@@ -185,26 +187,35 @@ async function shootOnce(
   key: string,
   /** Called once the page is ready: what navigates after it spoils the capture. */
   watch: () => void,
+  timing: Stopwatch,
 ): Promise<Look & { ignore: Rect[]; findings: Finding[] }> {
   errors.get(page)!.length = 0;
   // Its hints unspent for its account on the stack (hints.ts), before the page reads the profile.
   await unspendHints(ctx, screen);
   await keep(page, screen);
+  timing.lap('hints');
   const route = screen.web?.route ?? screen.route;
   const query = screen.web?.query ? `?${screen.web.query}` : '';
   await open(page, ctx, `${ctx.devUrl}/${v.locale}${route === '/' ? '' : route}${query}`);
+  timing.lap('open');
   const ready = async () => {
     await idle.get(page)!();
+    timing.lap('drain');
     await page.evaluate(() => document.fonts.ready);
-    // A shape not yet measured shows its CSS stand-in: wait for the drawn one.
-    await page.waitForFunction(() => !document.querySelector('[data-shape-pending]'), null, { timeout: 15_000 }).catch(() => {});
+    // A shape not yet measured shows its CSS stand-in: wait for the drawn one — any in the picture (the whole page for
+    // a full-page capture, else the window). One the page doesn't lay out until it is scrolled to (the landing film's
+    // story cards, far below its still) never draws: every film still waited out the 15 s for them, for nothing in it.
+    await page.waitForFunction(pendingShapeInPicture, !!screen.fullPage, { timeout: 15_000 }).catch(() => {});
+    timing.lap('shapes');
   };
   await ready();
   if (await page.locator('[data-film-root]').count()) {
     // The landing film: its runtime ready (摺摺 and 點點 live), then the rest of its cast on stage (the others go live
     // on idle, by 20 s at the latest) — film checks say so when one never did.
     await page.waitForFunction(() => (window as { __film?: { ready: boolean } }).__film?.ready, null, { timeout: 60_000 }).catch(() => {});
+    timing.lap('film-ready');
     await page.waitForFunction(() => !document.querySelector('[data-actor]:not([data-live])'), null, { timeout: 30_000 }).catch(() => {});
+    timing.lap('film-cast');
   }
   if (screen.web?.click) {
     // The first one on screen: a phone and a desktop header may both be in the page, CSS showing one.
@@ -219,6 +230,7 @@ async function shootOnce(
     await ready();
   }
   watch();
+  timing.lap('ready');
   const mask = (screen.mask ?? []).map((s) => page.locator(s));
   const take = () =>
     settle(() => page.screenshot({ fullPage: screen.fullPage, animations: 'disabled', caret: 'hide', mask, scale: 'device' }), {
@@ -226,11 +238,29 @@ async function shootOnce(
       intervalMs: 600,
     });
   const first = await take();
+  timing.lap('settle');
   const ignore = await ignored(page, !!screen.fullPage);
   const look = await secondLook(first, take, { key, ignore });
+  timing.lap('second-look');
   const measure = await measurePage(page, { touch: device.touch, phone: device.phone, frames: screen.web?.frames });
   const findings = judgePage(measure, errors.get(page)!, { touch: device.touch, scene: screen.film?.scene });
+  timing.lap('checks');
   return { ...look, ignore: look.retaken ? await ignored(page, !!screen.fullPage) : ignore, findings };
+}
+
+/**
+ * Whether no shape in the picture still shows its stand-in (`data-shape-pending`): run in the page. One the page
+ * doesn't draw at all (inside a `display: none` — the landing page's desktop header buttons on a phone: no box, so
+ * never measured, so pending for ever) is in no picture; of the rest, `fullPage` counts every one, else those whose
+ * box meets the window.
+ */
+export function pendingShapeInPicture(fullPage: boolean): boolean {
+  const pending = [...document.querySelectorAll('[data-shape-pending]')].filter((el) => el.getClientRects().length > 0);
+  if (fullPage) return pending.length === 0;
+  return !pending.some((el) => {
+    const r = el.getBoundingClientRect();
+    return r.bottom >= 0 && r.right >= 0 && r.top <= window.innerHeight && r.left <= window.innerWidth;
+  });
 }
 
 /**
@@ -278,11 +308,14 @@ async function captureGroup(browser: Browser, ctx: CaptureContext, { device: id,
     for (const screen of screens) {
       const name = shotName(screen, v);
       const key = `web/${device.id}/${name}`;
-      const look = await shoot(page, ctx, screen, v, device, key);
+      const timing = stopwatch();
+      const look = await shoot(page, ctx, screen, v, device, key, timing);
       const file = shotPath(screen.film ? join(ctx.runDir, GLANCE_DIR) : ctx.runDir, 'web', device.id, name);
       writeFileSync(file, look.png);
       if (look.ignore.length) writeFileSync(ignorePath(file), JSON.stringify(look.ignore));
       if (look.findings.length) writeFileSync(checksPath(file), JSON.stringify(look.findings, null, 2));
+      timing.lap('write');
+      timing.done(ctx.runDir, key);
       if (!look.settled) unsettled.push(key);
       if (look.retaken) ctx.retaken.push(key);
       const checks = look.findings.length ? `  (${look.findings.map((f) => f.check).join(', ')})` : '';

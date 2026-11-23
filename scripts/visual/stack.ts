@@ -6,8 +6,8 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import type { ChildProcess } from 'node:child_process';
-import { PORTS, ROOT, run, sleep, startGroup, stopGroup, waitForPort } from './util';
+import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { PORTS, ROOT, portsFree, run, sleep, startGroup, stopGroup, waitForPort } from './util';
 
 export type Stack = { devUrl: string; stop: () => void };
 
@@ -15,6 +15,18 @@ const emulatorPorts = () => ({
   EMULATOR_AUTH_PORT: String(PORTS.auth),
   EMULATOR_FIRESTORE_PORT: String(PORTS.firestore),
 });
+
+/**
+ * The Firestore emulator's Java heap (`VISUAL_FIRESTORE_HEAP`, default 1g): firebase-tools starts it with no `-Xmx`,
+ * so the JVM may grow to a quarter of the machine (6 GB here) for a test world of a few hundred documents. The JVM
+ * reads JAVA_TOOL_OPTIONS whoever starts it; only the emulators' process group gets it (the Auth emulator is Node).
+ * The serial collector keeps the footprint small (G1 sizes itself for ten cores).
+ */
+export function emulatorsEnv(): Record<string, string> {
+  const heap = process.env.VISUAL_FIRESTORE_HEAP || '1g';
+  const own = [process.env.JAVA_TOOL_OPTIONS, `-Xmx${heap}`, '-XX:+UseSerialGC'].filter(Boolean).join(' ');
+  return { ...emulatorPorts(), JAVA_TOOL_OPTIONS: own };
+}
 
 /**
  * The seeded world's "now": a fixed day well in the past, so every date a
@@ -37,11 +49,11 @@ export const seedEnv = () => ({ ...emulatorPorts(), EMULATOR_DEV_PORT: String(PO
  * the seed stopped there and so did every flow after it. SEED_RESET makes a second seed start from an empty database
  * again, so it can simply be run again; a seed that fails twice is a real fault and stops the run.
  */
-export async function seed(log: (line: string) => void, attempts = 2, pause = 2_000) {
+export async function seed(log: (line: string) => void, attempts = 2, pause = 2_000, once: () => Promise<void> = seedOnce) {
   for (let attempt = 1; ; attempt++) {
     log(attempt === 1 ? 'Seeding the test world (scripts/seed-emulator.ts)…' : 'Seeding the test world again…');
     try {
-      run('npx', ['tsx', 'scripts/seed-emulator.ts'], seedEnv());
+      await once();
       return;
     } catch (error) {
       if (attempt >= attempts) throw error;
@@ -50,6 +62,88 @@ export async function seed(log: (line: string) => void, attempts = 2, pause = 2_
       await sleep(pause);
     }
   }
+}
+
+/** One seed: by the kept-loaded seeder while it answers (`VISUAL_SEED_RESIDENT=0`: never), else a process of its own. */
+async function seedOnce(): Promise<void> {
+  if (process.env.VISUAL_SEED_RESIDENT !== '0') {
+    seeder ??= startSeeder();
+    try {
+      return await seeder.seed();
+    } catch (error) {
+      // A seed the world refused is a seed that failed; a seeder gone is replaced by the old way from now on.
+      if (!(error instanceof SeederGone)) throw error;
+      seeder = null;
+      process.env.VISUAL_SEED_RESIDENT = '0';
+    }
+  }
+  run('npx', ['tsx', 'scripts/seed-emulator.ts'], seedEnv());
+}
+
+/** The seeder process stopped, or never answered: not the world's fault. */
+export class SeederGone extends Error {}
+
+export type Seeder = { seed: () => Promise<void>; stop: () => void };
+
+let seeder: Seeder | null = null;
+
+/** Stops the kept-loaded seeder, if one runs (the stack's stop). */
+export function stopSeeder() {
+  seeder?.stop();
+  seeder = null;
+}
+
+/**
+ * The seed kept loaded (seedServer.ts), on the stack's emulators: `seed()` asks for one more world and waits for its
+ * answer — `ok`, or `error <why>` (thrown, so the caller's retry runs) — at most `timeoutMs`.
+ */
+export function startSeeder(
+  spawnServer: () => ChildProcessWithoutNullStreams = () =>
+    spawn('npx', ['tsx', 'scripts/visual/seedServer.ts'], { cwd: ROOT, env: { ...process.env, ...seedEnv() }, stdio: ['pipe', 'pipe', 'pipe'] }),
+  timeoutMs = 120_000,
+): Seeder {
+  const child = spawnServer();
+  const waiting: { done: (line: string) => void }[] = [];
+  let gone = false;
+  let buffer = '';
+  child.stdout.on('data', (chunk: Buffer) => {
+    buffer += chunk.toString('utf8');
+    for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
+      const line = buffer.slice(0, i).trim();
+      buffer = buffer.slice(i + 1);
+      // Only its answers: the seed's own words (its `Seeded … users`) go by.
+      if (line === 'ok' || line.startsWith('error ')) waiting.shift()?.done(line);
+    }
+  });
+  child.stderr.on('data', () => {});
+  const end = () => {
+    gone = true;
+    for (const w of waiting.splice(0)) w.done('gone');
+  };
+  child.on('exit', end);
+  child.on('error', end);
+  return {
+    seed: () =>
+      new Promise<void>((resolve, reject) => {
+        if (gone) return reject(new SeederGone('the seeder is not running'));
+        const timer = setTimeout(() => {
+          child.kill('SIGKILL');
+          reject(new SeederGone(`the seeder gave no answer within ${Math.round(timeoutMs / 1000)} s`));
+        }, timeoutMs);
+        waiting.push({
+          done: (line) => {
+            clearTimeout(timer);
+            if (line === 'ok') resolve();
+            else if (line === 'gone') reject(new SeederGone('the seeder stopped'));
+            else reject(Object.assign(new Error(`the seed failed: ${line.slice(6)}`), { stderr: line.slice(6) }));
+          },
+        });
+        child.stdin.write('seed\n');
+      }),
+    stop: () => {
+      if (!gone) child.kill('SIGTERM');
+    },
+  };
 }
 
 /**
@@ -72,13 +166,19 @@ export async function startStack(logDir: string, log: (line: string) => void): P
     if (fixed !== text) writeFileSync(nextEnv, fixed);
   };
   const stop = () => {
+    stopSeeder();
     children.reverse().forEach(stopGroup);
     restoreNextEnv();
   };
   process.once('SIGINT', () => (stop(), process.exit(130)));
   try {
+    // A stack that just went down on these ports (the run before this one, queued behind it) may still hold them: run
+    // 20261123-122718's Firestore emulator exited at once, started a second after the last run's stopped.
+    if (!(await portsFree([PORTS.auth, PORTS.firestore, PORTS.firestore + 1, PORTS.firestore + 2, PORTS.firestore + 3, PORTS.dev], 30_000))) {
+      log(`  something still listens on the stack's ports after 30 s: starting anyway`);
+    }
     log(`Starting emulators on auth ${PORTS.auth} / firestore ${PORTS.firestore}…`);
-    children.push(startGroup('node', ['scripts/emulators-at.mjs'], emulatorPorts(), join(logDir, 'emulators.log')));
+    children.push(startGroup('node', ['scripts/emulators-at.mjs'], emulatorsEnv(), join(logDir, 'emulators.log')));
     await waitForPort(PORTS.auth, 90_000);
     await waitForPort(PORTS.firestore, 90_000);
     await seed(log);

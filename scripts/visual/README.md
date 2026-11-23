@@ -24,6 +24,7 @@ npm run visual -- accept --run <id> --only card,web/phone/home@dark-zh-TW.png --
 npm run visual -- accept --runs <id>,<id> --only card --reason "…"   # several runs at once (a retake named after the run it retakes)
 npm run visual -- promote --from r30/base --reason "<the owner's words>"   # a merged round's accepted pictures into main's baseline
 npm run visual -- baselines                  # main's and every branch's baseline, and which one this checkout uses
+npm run visual -- prune --dry-run            # which old runs `prune` would remove (and the GB): never the newest 20 (--keep N), one a baseline or an accept log names, visual/latest, or one maybe running (prune.ts)
 npm run visual -- capture web ios android --web-only card --web-device phone --ios-only card,thread --android-device phone   # one run, each platform its own slice
 ```
 
@@ -41,7 +42,21 @@ visual/runs/<id>/_diff/…png                                         changed pi
 visual/runs/<id>/results.json   index.html                          the comparison and its report (open in a browser)
 visual/runs/<id>/review/REVIEW.md   verdicts.json                   the review brief and the model's verdicts
 visual/runs/<id>/_logs/                                             emulators, dev server, app builds
+visual/runs/<id>/_resources.jsonl   _resources.json                 what the run cost the machine, every 5 s, by phase
+visual/runs/<id>/_timings.jsonl   _timings.json                     each capture's steps, each sign-in and build, by device
 ```
+
+**What a run costs** (`resources.ts`, `timings.ts`). Every few seconds (`VISUAL_SAMPLE_S`, default 5; `0` turns it
+off) the run notes each of its parts' resident memory and CPU — `next`, `firestore-emulator`, `firebase-cli`,
+`chromium`, `android-emulator`, `sim:Visual iPhone`, `mac-app`, `xcodebuild`, `gradle`, `maestro`, `agy`, the
+`harness` itself — with the machine's swap, compressed memory and free share, by the phase it is in (`stack`,
+`web+mac`, `android`, `ios`, `flows`, `compare`, `review`); the machine's build daemons are said apart
+(`machine:gradle-daemons`, `machine:xcode-build-service`: anyone's, never the run's). Each phase's peaks are said as
+it ends (`Resources (android, 412 s): the run's peak 9.8 GB (android-emulator 7.1 GB, next 1.9 GB, …) · swap …`) and
+kept in `_resources.json`. Each capture writes its steps (`hints`, `launch`, `ready`, `demo-bar`, `settle`,
+`second-look`, `checks`, `write`, `quit`), each sign-in launch and build its own line, and the run ends with each
+device's medians (`Timings android/phone: 6 captures, median 7.9 s (launch 1.4 s · ready 2.1 s · …)`). Nothing is
+asked but `ps`, `sysctl` and `vm_stat`.
 
 ## Baselines: main's, a round's, a branch's
 
@@ -352,6 +367,14 @@ diff. It answers a JSON schema (`review/verdict.schema.json`): `ok`, `intended`,
 the reason. Needs `agy` installed and logged in (`agy --version`; headless runs use the cached
 login and stop with "authentication required" otherwise).
 
+Two batches run at once (`VISUAL_AGY_PARALLEL`, default 2 — each `agy` holds about 1 GB; 1 runs them one after the other — a release's 116
+changed captures took 12 batches in a row, 34 min, run 20261123-073642). A batch turned away for its rate or quota
+(a 429, `RESOURCE_EXHAUSTED`, "rate limit", "quota") is tried once more and the rest go one at a time. In `capture
+--review` the review doesn't wait for the run's end: as each phase ends, its platforms' changed and new captures
+(and the film's stills, with the web) go to agy, judged while the next phases and the flows run; the end of the run
+hands over whatever no phase did, and the verdict waits for every batch (`agyReviewer` in review.ts). A run that
+ends early stops the calls still under way.
+
 Checked on 2026-10-31: five captures, one of them a blank messages page left by a capture taken too
 early; the blank one came back `broken` ("the conversation item with bob is missing entirely… the
 screen body blank"), the other four `ok`, in 3 min 15 s.
@@ -461,7 +484,12 @@ change near one of those states (`capture android --device phone-large --only se
   iOS status bar is overridden to 9:41 with full bars on 2026-09-01 (`simctl status_bar`), Android's
   is in demo mode at 09:41 with no notification icons (said again before each capture).
 - **Data and time**: `scripts/seed-emulator.ts` seeds a fresh world before every run with its clock
-  pinned (`SEED_NOW`, 2026-09-01 12:00 Taipei, in `stack.ts`), so every date on a screen is the same.
+  pinned (`SEED_NOW`, 2026-09-01 12:00 Taipei, in `stack.ts`), so every date on a screen is the same. The stack keeps
+  the seed loaded (`seedServer.ts`, `stack.ts` `startSeeder`: the script's own `seedWorld`, asked again for each
+  flow) and empties the database through the Firestore emulator's own endpoint (`wipeFirestore`): a reseed after a
+  flow took 3.4 s and takes some 0.2 s, the world the same document for document (102 documents, 4 accounts, compared
+  against the old way after a flow's writes). `VISUAL_SEED_RESIDENT=0` seeds in a process of its own as before; a
+  seeder that stops or never answers is replaced by that way for the rest of the run.
 - **Motion is never captured mid-way.** Web: `reducedMotion: 'reduce'`, CSS animations finished and
   the caret hidden by Playwright. iOS and Mac: the debug-only `-visualCapture YES` turns UIKit and
   SwiftUI animations off and hides scroll indicators (Mac also `-AppleShowScrollBars WhenScrolling`).
@@ -480,8 +508,10 @@ change near one of those states (`capture android --device phone-large --only se
   (`VisualReady`: Android in logcat, iOS and the Mac in the unified log, subsystem `com.resonance.visual`, read with `log stream` / `simctl spawn … log stream` — the Mac app's sandbox container is closed to every other process). The harness then goes
   on at once to a closer settle (frames 0.5 s apart; Android holds 1 s, not 3.5) instead of the fixed waits
   (Android's 4 s, 8 s on an account's first launch; iOS's and the Mac's 4 s). The sign-in launch iOS and the Mac make
-  for each account keeps its full 10 s: it isn't captured, it settles the account on the device, and nothing yet
-  shows the app is done with that at its first quiet moment.
+  for each account isn't captured, it settles the account on the device: it carries a token too, and the app says
+  `account <t>` once the account it was launched with is signed in and its profile read and kept (or signed out) —
+  `SessionStore`, debug builds only — beside its `ready <t>`; with both said the harness holds 1 s more and goes on
+  (`waitSignedIn`), with either missing it waits the full 10 s as before, and never longer.
   Everything that judges the frame stays as it was — the settle, Android's skeleton names, the second look. A
   launch that says nothing within `VISUAL_READY_TIMEOUT_S` (12) waits out the rest of the old fixed wait and goes
   on exactly as before; each capture's log line says which (`ready in 1.9 s`, `no ready signal`).
@@ -557,16 +587,25 @@ app's sources, the files it takes from the rest of the repository (fonts, string
 islands, native/), its build arguments and Xcode's version is kept beside the product, and a match
 with the product untouched since reuses it (`buildStamp.ts`; about 0.3 s against 30–200 s of xcodegen
 and xcodebuild). `--force-build` (or `VISUAL_FORCE_BUILD=1`) builds anyway; `VISUAL_SKIP_BUILD=1`
-reuses the last build without looking. The builds run beside
-the captures, never blocking them: the APK and the simulator app start building as the run starts,
-while the web and the Mac app are captured, and the two Xcode builds (Mac, simulator) take turns, as
-they share the project and Swift's package caches. The web's own captures run in several browser contexts at once (`VISUAL_WEB_PARALLEL`, default 3; 1 takes
+reuses the last build without looking. Every build is also kept in the machine's shared build cache by
+that fingerprint (`~/Library/Caches/resonance-visual/builds`, `VISUAL_BUILD_CACHE=<folder>`, `0` turns it off;
+the checkout's own path left out of it), so another worktree with the same app inputs — a web lane, a round's
+base, a fresh worktree — takes the app from there instead of building its own (an entry is renamed into place once
+whole, so a checkout finds a whole one or none; APFS clones, three per product). The builds run beside
+the captures, never blocking them: the apps start building as the run starts, in the order their phases come
+(`phases.ts`) — the Mac app first, as the Mac is captured in the first phase, then the simulator's, the two Xcode
+builds taking turns as they share the project and Swift's package caches, and the APK beside them. The Xcode
+builds write no index store (`XCODE_RUN_SETTINGS`: only Xcode's editor reads it). What the run starts leaves nothing resident behind it: the APK
+builds with `--no-daemon` and the Kotlin compiler in that same process (`GRADLE_RUN_FLAGS`; a build used to leave a
+4 GB Gradle daemon and a Kotlin daemon up for three idle hours, through the Android phase), and the stack's Firestore
+emulator runs in a heap of 1 GB with the serial collector (`VISUAL_FIRESTORE_HEAP`; firebase-tools gives it no
+limit). The web's own captures run in several browser contexts at once (`VISUAL_WEB_PARALLEL`, default 4; 1 takes
 them one by one as before), with the writes its pages make to the shared stack — a read counted once per reader,
 card and day, the bell's panel marking its notifications read, a screen's hints unspent — kept in their old order:
 each screen's first visit by an account runs one at a time in the old order, and only the later visits (the dark
 and English phone, the tablet, the desktop), which write nothing new, run side by side (`webSchedule.ts`). A
 context that fails is tried once more in a fresh one; failing twice, its captures are said and fail the run as
-unsettled, and the others go on. Phases (`PHASES` in `run.ts`): web + Mac, then
+unsettled, and the others go on. Phases (`PHASES` in `phases.ts`): web + Mac, then
 Android's phone and tablet together, then the iPhone and iPad together — in one run whatever slices the
 platforms take: `--<platform>-only a,b` and `--<platform>-device x,y` give a platform its own screens and
 devices (`--only` / `--device` are the others'), so a slice of four platforms starts one stack, builds the
@@ -574,6 +613,13 @@ apps beside the first phase and leaves no gap between platforms (round-verify ta
 platform's devices one at a time, for a machine short of memory); an AVD or simulator this run
 booted is shut down when its screens are done (`VISUAL_KEEP_DEVICES=1` keeps the simulators up), and
 nothing else ever is (One run at a time, and the owner's devices).
+**A second phone** (`lanes.ts`): a phone takes three variants and a tablet one, so the tablet's lane used to stand
+idle for most of the phase (run 20261123-073642: the Android tablet 14 min, the iPad 9). Now the phone's work is cut
+by variant; the first phone takes from the front (light zh-TW first, so the first visits keep their old order) and,
+once the tablet is done, shut down and seen gone, a second phone takes from the back — Android `visual-phone` again,
+read-only, as `emulator-5604` (its writes thrown away when it stops); iOS `Visual iPhone 2`, a `simctl clone` of
+`Visual iPhone` made before the iPhone boots (none when it already runs) and deleted when the run is done. Never more
+than two devices at once; `VISUAL_SECOND_PHONE=0` (or `VISUAL_PARALLEL=0`) keeps to one phone.
 The flows still run one platform at a time after the captures: each reseeds (and so empties) the
 stack's database, which would pull the data from under the other platform's flow. The stack's `next dev` builds into `.next-visual/<port>` with its own
 tsconfig, so it never meets another dev server's `.next` and never rewrites `tsconfig.json`, and keeps

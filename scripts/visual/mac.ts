@@ -15,12 +15,14 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { PNG } from 'pngjs';
 import { unspendHints } from './hints';
-import { BUNDLE_ID, ensureIslands, inXcodeLine, launchArgs, prepareProject, runLogged, xcodeInputs } from './ios';
+import { BUNDLE_ID, XCODE_RUN_SETTINGS, ensureIslands, inXcodeLine, launchArgs, prepareProject, runLogged, shootAfterLaunch, xcodeInputs, type Looker } from './ios';
+import { encodeFrame, settleFrames, type Frame } from './frames';
+import { stopwatch, type Stopwatch } from './timings';
 import { buildIfChanged, stampFile } from './buildStamp';
-import { LOG_STREAM_ARGS, logStream, readyNote, readyOn, readyToken, restOfWait, waitReady, type LogStream, type Ready } from './ready';
-import { lookNote, secondLook, type Look } from './secondLook';
+import { LOG_STREAM_ARGS, logStream, readyNote, readyOn, readyToken, waitReady, waitSignedIn, type LogStream, type Ready } from './ready';
+import { lookNote, type Look } from './secondLook';
 import { shotName } from './screens';
-import { ROOT, run, settle, shotPath, sleep, type Capture, type CaptureContext } from './util';
+import { ROOT, run, shotPath, sleep, type Capture, type CaptureContext } from './util';
 import { devicesFor, groups, plan, stateOf } from './variants';
 
 const MAC_BUNDLE_ID = `${BUNDLE_ID}.macdev`;
@@ -35,7 +37,19 @@ type Size = { width: number; height: number };
 
 type MacWindow = { id: number; pid: number; width: number; height: number; layer: number };
 
-function build(ctx: CaptureContext): Promise<void> {
+/**
+ * The Mac app, once per run however many ask (the run's head start, the capture); skipped when its inputs are as at the
+ * last build. It joins the Xcode line ahead of the simulator's (run.ts starts the builds in the phases' order): the Mac
+ * is captured in the first phase, the simulators in the last — behind the simulator's build it waited minutes with
+ * nothing captured (run 20261123-053155: 4 min).
+ */
+let built: Promise<void> | null = null;
+export function build(ctx: CaptureContext): Promise<void> {
+  built ??= buildOnce(ctx);
+  return built;
+}
+
+function buildOnce(ctx: CaptureContext): Promise<void> {
   if (!existsSync(WINDOWS_TOOL) || statSync(WINDOWS_TOOL).mtimeMs < statSync(WINDOWS_SOURCE).mtimeMs) {
     mkdirSync(DERIVED, { recursive: true });
     run('swiftc', ['-O', WINDOWS_SOURCE, '-o', WINDOWS_TOOL]);
@@ -55,12 +69,13 @@ function build(ctx: CaptureContext): Promise<void> {
       name: 'the Mac app',
       stamp: stampFile(DERIVED),
       product: join(APP, 'Contents/MacOS/Resonance.debug.dylib'),
+      artifact: APP,
       inputs: xcodeInputs(['mac-catalyst', ...args]),
       log: ctx.log,
       build: async () => {
         ctx.log('  building the Debug Mac app (apps/ios/build/visual-mac)…');
         await prepareProject(ctx);
-        await runLogged('xcodebuild', args, join(ctx.runDir, '_logs', 'mac-build.log'), IOS_DIR);
+        await runLogged('xcodebuild', [...args, ...XCODE_RUN_SETTINGS], join(ctx.runDir, '_logs', 'mac-build.log'), IOS_DIR);
       },
     });
   });
@@ -88,11 +103,24 @@ async function launch(args: string[], size: Size = WINDOW): Promise<MacWindow> {
 }
 
 /** Stops the copy this capture opened, and only it. */
-function quit(pid: number) {
+async function quit(pid: number, { timeoutMs = 10_000, wait = sleep }: { timeoutMs?: number; wait?: (ms: number) => Promise<unknown> } = {}) {
   try {
     process.kill(pid, 'SIGTERM');
   } catch {
-    // already gone
+    return; // already gone
+  }
+  // Gone before the next copy opens (its window is told apart by a pid not seen before): no fixed second.
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end && alive(pid)) await wait(100);
+}
+
+/** Whether a process is still there (signal 0 asks without sending anything). */
+export function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
 
@@ -100,7 +128,12 @@ function quit(pid: number) {
 /** The window's close / minimise / zoom buttons (capture pixels): grey or coloured as macOS thinks the window active. */
 const WINDOW_BUTTONS = { width: 160, height: 64 };
 
-function cut(png: Buffer, size: Size = WINDOW): Buffer {
+/**
+ * The window's capture cut to the size asked for, as pixels: decoded as before (pngjs: the window's PNG carries the
+ * display's colour profile, which pngjs leaves as it is), cut and painted over, never encoded until it is the one kept
+ * (frames.ts) — every frame looked at was encoded with pngjs before, at 2880 × 1800.
+ */
+export function cutFrame(png: Buffer, size: Size = WINDOW): Frame {
   const image = PNG.sync.read(png);
   const width = size.width * 2;
   const height = size.height * 2;
@@ -112,31 +145,35 @@ function cut(png: Buffer, size: Size = WINDOW): Buffer {
   for (let y = 0; y < WINDOW_BUTTONS.height; y++) {
     for (let x = 0; x < WINDOW_BUTTONS.width; x++) out.data.copyWithin((y * out.width + x) * 4, paper, paper + 4);
   }
-  return PNG.sync.write(out);
+  return { data: out.data, width: out.width, height: out.height };
 }
 
 /**
  * A launch's ready token (ready.ts) and how to wait for its word in the Mac's unified log (`stream`); null when the
  * signal is off. (Not a file: the app's sandbox keeps every other process out of its container.)
  */
-function readyArgs(stream: LogStream | null): { args: string[]; wait: () => Promise<Ready> } | null {
+function readyArgs(stream: LogStream | null): { token: string; args: string[]; wait: () => Promise<Ready> } | null {
   if (!stream) return null;
   const token = readyToken();
-  return { args: ['-visualReadyToken', token], wait: () => waitReady(() => stream.says(token)) };
+  return { token, args: ['-visualReadyToken', token], wait: () => waitReady(() => stream.says(token)) };
 }
 
-async function shoot(window: MacWindow, ctx: CaptureContext, key: string, size: Size, ready: (() => Promise<Ready>) | null): Promise<Look & { ready: Ready | null }> {
+function shoot(window: MacWindow, ctx: CaptureContext, key: string, size: Size, ready: (() => Promise<Ready>) | null, timing: Stopwatch): Promise<Look & { ready: Ready | null }> {
   const file = join(ctx.runDir, '_logs', 'mac-window.png');
   const frame = () => {
     run('screencapture', ['-o', '-x', '-t', 'png', '-l', String(window.id), file]);
-    return Promise.resolve(cut(readFileSync(file), size));
+    return Promise.resolve(cutFrame(readFileSync(file), size));
   };
-  // Its ready signal (ready.ts), or the 4 s it always waited.
-  const said = ready ? await ready() : null;
-  if (said) await restOfWait(said, 4000);
-  else await sleep(4000);
-  const take = (fast: boolean) => settle(frame, { timeoutMs: 40_000, intervalMs: fast ? 500 : 1000 });
-  return { ...(await secondLook(await take(!!said?.ready), () => take(false), { key, glance: frame })), ready: said };
+  // Settled on pixels; only the frame kept is encoded.
+  const looker: Looker = {
+    take: async (fast) => {
+      const { frame: kept, settled } = await settleFrames(frame, { timeoutMs: 40_000, intervalMs: fast ? 500 : 1000 });
+      return { png: await encodeFrame(kept), settled };
+    },
+    glance: async () => encodeFrame(await frame()),
+  };
+  // Its ready signal (ready.ts), or the 4 s it always waited; then the looks, as on iOS.
+  return shootAfterLaunch(looker, key, ready, timing);
 }
 
 export const captureMac: Capture = async (ctx) => {
@@ -157,25 +194,37 @@ export const captureMac: Capture = async (ctx) => {
     for (const { variant: v, account, screens } of groups(plan('mac', id, set, ctx.only))) {
       // The account signs in on a launch of its own; a screen's launch only restores it.
       // Its full 10 s, as ever, not cut short by the ready signal (ios.ts says why).
-      const signIn = await launch(launchArgs(ctx, account, null, v), size);
-      await sleep(10_000);
-      quit(signIn.pid);
+      // The app says when the account is settled (ready.ts `waitSignedIn`); 10 s, as ever, when it doesn't.
+      const signInTime = stopwatch();
+      const signInReady = readyArgs(stream);
+      const signIn = await launch([...launchArgs(ctx, account, null, v), ...(signInReady?.args ?? [])], size);
+      signInTime.lap('launch');
+      if (signInReady) await waitSignedIn((word) => stream!.says(signInReady.token, word));
+      else await sleep(10_000);
+      await quit(signIn.pid);
+      signInTime.lap('wait');
+      signInTime.done(ctx.runDir, `mac/${id}/${account ?? 'signed-out'}@${v.theme}-${v.locale}`, 'sign-in');
       for (const screen of screens) {
+        const timing = stopwatch();
         // Its hints unspent for its account on the stack (hints.ts), before the app reads the profile.
         await unspendHints(ctx, screen);
+        timing.lap('hints');
         const screenReady = readyArgs(stream);
         const window = await launch([...launchArgs(ctx, account, screen.route, v, screen.app?.mac ?? screen.app?.ios), ...(screenReady?.args ?? [])], size);
+        timing.lap('launch');
+        const name = shotName(screen, v);
+        const key = `mac/${id}/${name}`;
         try {
-          const name = shotName(screen, v);
-          const key = `mac/${id}/${name}`;
-          const look = await shoot(window, ctx, key, size, screenReady?.wait ?? null);
+          const look = await shoot(window, ctx, key, size, screenReady?.wait ?? null, timing);
           writeFileSync(shotPath(ctx.runDir, 'mac', id, name), look.png);
+          timing.lap('write');
           if (!look.settled) unsettled.push(key);
           if (look.retaken) ctx.retaken.push(key);
           ctx.log(`  ${key}${lookNote(look)}${readyNote(look.ready)}`);
         } finally {
-          quit(window.pid);
-          await sleep(1000);
+          await quit(window.pid);
+          timing.lap('quit');
+          timing.done(ctx.runDir, key);
         }
       }
     }

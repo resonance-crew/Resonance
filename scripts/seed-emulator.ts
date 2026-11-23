@@ -22,9 +22,32 @@ export const SEED_USERS = [
   { uid: 'dora', handle: 'dora', email: 'dora@resonance.test', accent: 'oklch(90% 0.05 215)' },
 ] as const;
 
-async function main() {
+/**
+ * Empties the emulator's whole Firestore database at once (its own REST endpoint, some 60 ms): the reset a flow needs
+ * between flows (SEED_RESET=1), which `recursiveDelete` of every collection did in seconds. Answers whether it did.
+ */
+export async function wipeFirestore(host = process.env.FIRESTORE_EMULATOR_HOST): Promise<boolean> {
+  if (!host) return false;
+  try {
+    const res = await fetch(`http://${host}/emulator/v1/projects/${EMULATOR_PROJECT_ID}/databases/(default)/documents`, {
+      method: 'DELETE',
+      signal: AbortSignal.timeout(30_000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The whole test world, into the emulators `process.env` names (EMULATOR_AUTH_PORT / EMULATOR_FIRESTORE_PORT, read
+ * by emulator-env.mjs). Run as a script (`npx tsx scripts/seed-emulator.ts`), or called again and again by a process
+ * that keeps it loaded (scripts/visual/seedServer.ts: every Maestro flow starts from a fresh world, and loading this
+ * script and what it imports took a second or more of each).
+ */
+export async function seedWorld() {
   Object.assign(process.env, emulatorEnv);
-  const { initializeApp } = await import('firebase-admin/app');
+  const { initializeApp, getApps } = await import('firebase-admin/app');
   const { getAuth } = await import('firebase-admin/auth');
   const { getFirestore, Timestamp } = await import('firebase-admin/firestore');
   const { translationHash } = await import('../src/lib/api/v1/translationHash');
@@ -34,12 +57,13 @@ async function main() {
   const { passagesSig } = await import('../src/lib/cards/translatedPassages');
   const { summarize } = await import('../src/lib/api/v1/summary');
 
-  const app = initializeApp({ projectId: EMULATOR_PROJECT_ID }, 'seed');
+  const app = getApps().find((a) => a.name === 'seed') ?? initializeApp({ projectId: EMULATOR_PROJECT_ID }, 'seed');
   const auth = getAuth(app);
   const db = getFirestore(app);
   // SEED_RESET=1 empties the database first, so nothing a flow wrote (a connection, a bookmark, a sent message) outlives
   // the next seed. The visual harness's private emulators only: never the shared ones by default.
-  if (process.env.SEED_RESET === '1') {
+  // Through the emulator's own endpoint at once; the old way when that can't be reached.
+  if (process.env.SEED_RESET === '1' && !(await wipeFirestore())) {
     // The emulator now and then cancels a delete while a client's listener is open: try again.
     for (let attempt = 1; ; attempt++) {
       try {
@@ -403,7 +427,10 @@ async function seedReadings(db: import('firebase-admin/firestore').Firestore) {
   }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Run as a script, unless a process loads it to call `seedWorld` itself (SEED_LIBRARY=1: scripts/visual/seedServer.ts).
+if (process.env.SEED_LIBRARY !== '1') {
+  seedWorld().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

@@ -104,8 +104,15 @@ error): every file here passes it.
 The runner starts its own stack (ports `VISUAL_AUTH_PORT` / `VISUAL_FIRESTORE_PORT` /
 `VISUAL_DEV_PORT`, default 9299 / 8280 / 3150), builds and installs the Debug app, brings up the
 harness's own phone (booting it if needed, and shutting down only what it booted), reseeds before
-each flow and runs `maestro test` on it. The reseed empties the stack's database first (`SEED_RESET=1`), so
-nothing one flow wrote — a connection, a bookmark, a sent message — carries into the next. It prints `Flows <run> <platform>: N passed · M failed`
+each flow and runs `maestro test` on it. The reseed (kept loaded: scripts/visual/README.md, Data and time) empties the stack's database first (`SEED_RESET=1`), so
+nothing one flow wrote — a connection, a bookmark, a sent message — carries into the next. Maestro's driver goes on the device for a run's first flow only (`--no-reinstall-driver` after it). A platform's
+flows run in one `maestro test` (scripts/visual/flowSession.ts; `VISUAL_FLOWS_SESSION=0` runs one `maestro test` a flow, as
+before): copies of the flows
+under `<platform>/_session/flows/` start with a hook that asks the runner to reseed and ready the device before each,
+as above — so the JVM and the device's driver start once — and a flow the session's report gives no verdict for runs
+again on its own; the repository's flows are never changed. Its device runs on 2026-11-23 passed 48 of 48 and took
+the flows from 572 to 425 s on Android and from 694 to 470 s on iOS. Each flow's report is in `<platform>/_session/`
+(Maestro's log, its JUnit `report.xml` and debug output) rather than in a folder of its own. It prints `Flows <run> <platform>: N passed · M failed`
 and exits non-zero on a failure. Everything lands in `visual/flows/<run>/<platform>/` (git-ignored):
 `<flow>.xml` (JUnit), `<flow>/maestro.log`, and `<flow>/` with Maestro's commands, logs, the
 flow's screenshots and, for a failure, the screen and hierarchy at the failing step

@@ -44,14 +44,14 @@ beforeEach(() => {
 afterEach(() => rmSync(baseline, { recursive: true, force: true }));
 
 describe('samePicture', () => {
-  it("is the comparison's rule: the same page drawn again, but not another page", () => {
-    expect(samePicture(LOADED, page([[10, 10, 90, 12], [10, 40, 140, 6], [10, 54, 120, 6]]))).toBe(true);
-    expect(samePicture(LOADED, SKELETON)).toBe(false);
+  it("is the comparison's rule: the same page drawn again, but not another page", async () => {
+    expect(await samePicture(LOADED, page([[10, 10, 90, 12], [10, 40, 140, 6], [10, 54, 120, 6]]))).toBe(true);
+    expect(await samePicture(LOADED, SKELETON)).toBe(false);
   });
 
-  it('leaves out what a capture skips, and forgives a screen its allowance', () => {
-    expect(samePicture(SKELETON, OTHER, [{ x: 0, y: 70, width: W, height: 40 }])).toBe(true);
-    expect(samePicture(SKELETON, OTHER, [], 0.5)).toBe(true);
+  it('leaves out what a capture skips, and forgives a screen its allowance', async () => {
+    expect(await samePicture(SKELETON, OTHER, [{ x: 0, y: 70, width: W, height: 40 }])).toBe(true);
+    expect(await samePicture(SKELETON, OTHER, [], 0.5)).toBe(true);
   });
 });
 
@@ -110,18 +110,18 @@ describe('a second look', () => {
     expect(waits).toEqual([1234, 1234]);
   });
 
-  it('looks again at a web capture with no baseline only on a platform that has one', () => {
+  it('looks again at a web capture with no baseline only on a platform that has one', async () => {
     const web = 'web/phone/card@light-zh-TW.png';
-    expect(wantsSecondLook(web, LOADED, [], baseline)).toBe(false);
+    expect(await wantsSecondLook(web, LOADED, [], baseline)).toBe(false);
     put('web/phone/home@light-zh-TW.png', LOADED);
-    expect(wantsSecondLook(web, LOADED, [], baseline)).toBe(true);
+    expect(await wantsSecondLook(web, LOADED, [], baseline)).toBe(true);
   });
 
   // A first run (or the extended set's first, or a new screen) on an app has nothing to go by: a skeleton taken there
   // would become the baseline the next run trusts. So every app capture without a baseline is looked at again.
   it('looks again at every app capture with no baseline, a machine’s first run included', async () => {
-    expect(wantsSecondLook(KEY, LOADED, [], baseline)).toBe(true);
-    expect(wantsSecondLook('ios/ipad-landscape/card@light-zh-TW.png', LOADED, [], baseline)).toBe(true);
+    expect(await wantsSecondLook(KEY, LOADED, [], baseline)).toBe(true);
+    expect(await wantsSecondLook('ios/ipad-landscape/card@light-zh-TW.png', LOADED, [], baseline)).toBe(true);
     const retake = takes(LOADED);
     const look = await secondLook(shot(SKELETON), retake, options());
     expect(look).toEqual({ png: LOADED, settled: true, retaken: true });
@@ -164,9 +164,9 @@ describe('a second look', () => {
     expect(retake.calls).toBe(1);
   });
 
-  it("skips what the baseline asked to skip too (its .ignore.json)", () => {
+  it("skips what the baseline asked to skip too (its .ignore.json)", async () => {
     put(KEY, SKELETON);
     writeFileSync(join(baseline, KEY.replace(/\.png$/, '.ignore.json')), JSON.stringify([{ x: 0, y: 70, width: W, height: 40 }]));
-    expect(wantsSecondLook(KEY, OTHER, [], baseline)).toBe(false);
+    expect(await wantsSecondLook(KEY, OTHER, [], baseline)).toBe(false);
   });
 });

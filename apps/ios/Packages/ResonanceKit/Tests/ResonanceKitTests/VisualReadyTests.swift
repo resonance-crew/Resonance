@@ -49,6 +49,28 @@ import Testing
         #expect(h.words == ["ready t1"])
     }
 
+    /// The sign-in launch's `account`: said once a launch, beside `ready`, never in a launch that didn't ask.
+    @Test func marksTheAccountSettledOnceALaunchAndOnlyWhenAsked() {
+        let quiet = Harness()
+        quiet.ready.mark("account")
+        #expect(quiet.words.isEmpty)
+        let h = Harness()
+        h.start("t2")
+        h.ready.mark("account")
+        h.ready.mark("account")
+        #expect(h.words == ["account t2"])
+        // A new launch's token says it again; the ready signal is its own.
+        h.start("t3")
+        h.ready.mark("account")
+        #expect(h.ready.requestStarted())
+        h.ready.requestEnded()
+        h.runLater()
+        #expect(h.words == ["account t2", "account t3", "ready t3"])
+        h.ready.stop()
+        h.ready.mark("other")
+        #expect(h.words.count == 3)
+    }
+
     @Test func aCallOrAPlaceholderWithinTheQuietTimeStartsItAgain() {
         let h = Harness()
         h.start()

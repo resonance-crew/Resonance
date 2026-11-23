@@ -23,6 +23,8 @@
  *   promote  --from <branch> --reason "<the owner's words>" [--only <key|screen>,…] [--allow-unmerged]
  *            a branch's (a round's) accepted pictures into main's baseline, once main has its commits (promote.ts)
  *   baselines                     main's and every branch's baseline, and which one this checkout uses (baselines.ts)
+ *   prune    [--keep N] [--dry-run]   old runs out of visual/runs/: never the newest N (20), one a baseline or an accept
+ *            log names, visual/latest, or one that may still be running (prune.ts)
  *
  * capture, compare and review end with the run's verdict — `Visual PASS|FAIL <id>: …` as the last
  * line, summary.json beside the report, exit code 1 on a FAIL (gate.ts says what fails a run).
@@ -36,7 +38,7 @@ import { describe, foreign, lostDevices, runningDevices, type RunningDevice } fr
 import { gateLines, judgeRun } from './gate';
 import { LockBusy, acquire, resourcesFor, type Lock, type LockHolder } from './lock';
 import { writeReport } from './report';
-import { reviewWithAgy, reviewWithGemini, writeReviewPack } from './review';
+import { agyReviewer, itemsOn, reviewItems, reviewWithAgy, reviewWithGemini, writeReviewPack } from './review';
 import { startStack, type Stack } from './stack';
 import { PORTS, ROOT, RUNS_DIR, VISUAL_DIR, git, ignorePath, listPngs, readJson, writeJson, type Capture } from './util';
 import { MAIN, baselineDir, currentBaselineName, ensureBaseline, listBaselines, runBaselineName } from './baselines';
@@ -45,17 +47,15 @@ import { execFileSync } from 'node:child_process';
 import type { Platform } from './screens';
 import { DEVICE_STATES, EXTRA_VARIANTS, VARIANT_SETS, estimate, variantSetOf } from './variants';
 import { watchdog } from './watchdog';
+import { PHASES, buildOrder } from './phases';
+import { DEFAULT_KEEP, prune } from './prune';
+import { startSampler } from './resources';
+import { writeTiming, writeTimingsSummary } from './timings';
+import { HARNESS_SIMULATORS } from './devices';
 import type { Result } from './compare';
 
 /** Every platform, in the order the report lists them. */
 const PLATFORMS: Platform[] = ['web', 'android', 'ios', 'mac'];
-/**
- * How a capture runs: these phases one after the other, the platforms of a phase side by side —
- * the web's headless browser beside the Mac app, then the two AVDs together, then the two
- * simulators together (each platform runs its own devices at once: VISUAL_PARALLEL=0 runs them one
- * at a time). Each phase frees its devices before the next boots.
- */
-const PHASES: Platform[][] = [['web', 'mac'], ['android'], ['ios']];
 
 async function capturer(platform: Platform): Promise<Capture> {
   switch (platform) {
@@ -138,6 +138,10 @@ async function capture(args: string[]) {
   writeJson(join(runDir, 'run.json'), info);
   let stack: Stack | undefined;
   const dog = watchdog((why) => abort(why));
+  // What the run costs the machine, every few seconds, by phase (resources.ts): `_resources.jsonl` / `_resources.json`.
+  const sampler = startSampler(runDir, { log, simulators: HARNESS_SIMULATORS, holds: new Set(platforms.filter((p): p is 'ios' | 'mac' | 'android' => p !== 'web')) });
+  // --review: agy judges each phase's changed captures as the phase ends, several batches at once (review.ts).
+  const reviewer = args.includes('--review') ? agyReviewer(runDir, (line) => log(line)) : null;
   // Every line the run says is progress (each capture, build, boot and phase says one).
   const say = (line: string) => {
     dog.progress();
@@ -167,21 +171,31 @@ async function capture(args: string[]) {
       : await startStack(join(runDir, '_logs'), say);
     const ctx = { runDir, devUrl: stack.devUrl, ports: PORTS, only: info.only, devices: info.devices, log: say, retaken: info.retaken!, set };
     // The apps' builds start now, beside the first phase's captures, so a later phase finds its app
-    // ready (each build is made once; the Xcode ones take turns). A failed one fails its phase.
+    // ready (each build is made once; the Xcode ones take turns, in the order their phases come: phases.ts). A failed
+    // one fails its phase.
     const headStart: Promise<unknown>[] = [];
-    if (platforms.includes('android')) headStart.push((await import('./android')).build(ctx));
-    if (platforms.includes('ios')) headStart.push((await import('./ios')).build(ctx));
+    for (const platform of buildOrder(platforms)) {
+      const started = Date.now();
+      const timed = (p: Promise<void>) => p.then(() => writeTiming(runDir, { key: `build/${platform}`, kind: 'build', totalMs: Date.now() - started, steps: {}, at: new Date().toISOString() }));
+      if (platform === 'mac') headStart.push(timed((await import('./mac')).build(ctx)));
+      if (platform === 'android') headStart.push(timed((await import('./android')).build(ctx)));
+      if (platform === 'ios') headStart.push(timed((await import('./ios')).build(ctx)));
+    }
     headStart.forEach((p) => p.catch(() => {}));
     for (const phase of PHASES) {
       const here = phase.filter((p) => platforms.includes(p));
       if (!here.length) continue;
       say(`\n== ${here.join(' + ')}`);
+      sampler.mark(here.join('+'));
       // Each platform with its own slice (--ios-only …), else the run's.
       const unsettled = await Promise.all(here.map(async (platform) => (await capturer(platform))({ ...ctx, ...sliceOf(info, platform) })));
       info.unsettled.push(...unsettled.flat());
       writeJson(join(runDir, 'run.json'), info);
+      // --review: what this phase changed goes to agy now, judged beside the next phases and the flows (review.ts).
+      if (reviewer) void reviewer.add(itemsOn(runDir, await compareRun(runDir, { log: say }), here));
     }
     if (args.includes('--flows')) {
+      sampler.mark('flows');
       info.flowsFailed = await flows(runDir, platforms, stack.devUrl, list(flag(args, 'tags')), set === 'extended', say);
       writeJson(join(runDir, 'run.json'), info);
     }
@@ -196,9 +210,19 @@ async function capture(args: string[]) {
       }
     }
     lock.release();
+    sampler.releaseDevices();
   }
+  sampler.mark('compare');
   let results = await finish(runDir);
-  if (args.includes('--review')) results = await review(runDir, ['--agy'], results);
+  if (reviewer) {
+    // Whatever no phase handed over yet (none, unless a phase failed before its turn), then what is still being judged.
+    sampler.mark('review');
+    await reviewer.add(reviewItems(runDir, results));
+    await reviewer.done();
+    results = await review(runDir, [], results);
+  }
+  await sampler.stop();
+  for (const line of writeTimingsSummary(runDir)) log(line);
   await gate(runDir, results);
 }
 
@@ -382,6 +406,13 @@ async function main() {
       return baselinesOf();
     case 'plan':
       return planOf(args);
+    case 'prune': {
+      // Old runs out of visual/runs/, never one a baseline or an accept log names, the newest, or one maybe running.
+      const keep = Number(flag(args, 'keep') ?? DEFAULT_KEEP);
+      if (!Number.isInteger(keep) || keep < 0) throw new Error(`--keep takes a whole number, not "${flag(args, 'keep')}"`);
+      prune({ keep, dryRun: args.includes('--dry-run'), log });
+      return;
+    }
     default:
       log('Usage: npm run visual -- capture [web android ios mac] [--only ids] [--device ids] [--variants release|extended] [--no-stack] [--flows] [--review] [--wait] | compare | review [--agy | --gemini] [--all] | accept --reason "<the owner\'s words>" [--only keys] [--runs a,b]  (each with --run <id>) | plan [--variants …]');
       process.exit(command ? 1 : 0);

@@ -14,7 +14,7 @@
  * every first visit left it, which is what the old order showed them too. A screen with hints unspends
  * them on every visit (hints.ts), so all its visits stay in `first`.
  *
- * `runGroups` runs groups `limit` at a time (`VISUAL_WEB_PARALLEL`, default 3; 1 is the old one-by-one).
+ * `runGroups` runs groups `limit` at a time (`VISUAL_WEB_PARALLEL`, default 4; 1 is the old one-by-one).
  * A group that throws is tried once more in a fresh context; one that fails twice has its captures said
  * and counted unsettled (which fails the run), and the others go on.
  */
@@ -43,10 +43,10 @@ export function schedule(groups: readonly WebGroup[]): { first: WebGroup[]; rest
   return { first, rest };
 }
 
-/** How many web contexts capture at once (`VISUAL_WEB_PARALLEL`, default 3). */
+/** How many web contexts capture at once (`VISUAL_WEB_PARALLEL`, default 4: room for 24 GB beside the stack, about 0.3 GB a context). */
 export function webParallel(): number {
   const set = Number(process.env.VISUAL_WEB_PARALLEL);
-  return Number.isFinite(set) && set >= 1 ? Math.floor(set) : 3;
+  return Number.isFinite(set) && set >= 1 ? Math.floor(set) : 4;
 }
 
 /**

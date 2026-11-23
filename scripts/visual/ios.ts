@@ -15,15 +15,17 @@ import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { HARNESS_SIMULATORS, mayShutDown, noteBooted } from './devices';
 import { withRestart } from './retry';
-import { LOG_STREAM_ARGS, logStream, readyNote, readyOn, readyToken, restOfWait, waitReady, type LogStream, type Ready } from './ready';
+import { LOG_STREAM_ARGS, logStream, readyNote, readyOn, readyToken, restOfWait, waitReady, waitSignedIn, type LogStream, type Ready } from './ready';
 import { buildIfChanged, stampFile, toolVersion, type BuildInputs } from './buildStamp';
 import { unspendHints } from './hints';
-import { lookNote, secondLook, type Look } from './secondLook';
+import { lookNote, secondLook, type Look, type Shot } from './secondLook';
 import { PNG } from 'pngjs';
 import { screensFor, shotName, type Account, type Variant } from './screens';
 import { CommandTimeout, ROOT, SEED_PASSWORD, execTimed, run, settle, shotPath, sleep, type Capture, type CaptureContext } from './util';
 import { devicesFor, groups, plan, stateOf } from './variants';
 import { MAESTRO, maestroEnv } from './flows';
+import { stopwatch, type Stopwatch } from './timings';
+import { BlockQueue, secondPhoneWanted, variantBlocks } from './lanes';
 
 export const BUNDLE_ID = 'com.resonance.stories';
 const IOS_DIR = join(ROOT, 'apps/ios');
@@ -37,6 +39,37 @@ export const IOS_DEVICES: IosDevice[] = [
   { id: 'iphone', phone: true, name: 'Visual iPhone', type: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro' },
   { id: 'ipad', phone: false, name: 'Visual iPad', type: 'com.apple.CoreSimulator.SimDeviceType.iPad-Air-11-inch-M4' },
 ];
+
+/**
+ * The second phone (lanes.ts): a clone of `Visual iPhone` (`simctl clone`, made while it is shut down, so the same
+ * device and the same state), booted once the iPad is done and shut down, deleted when the run is done with it.
+ */
+export const SECOND_IPHONE: IosDevice = { id: 'iphone', phone: true, name: 'Visual iPhone 2', type: IOS_DEVICES[0].type };
+
+type SimListed = { name: string; udid: string; state: string };
+function listed(): SimListed[] {
+  const all = JSON.parse(simctl('list', 'devices', '-j')) as { devices: Record<string, SimListed[]> };
+  return all.devices[RUNTIME] ?? [];
+}
+
+/** Deletes the second phone's clone, wherever a run left one (it is only ever the harness's own). */
+function deleteClone(log: (line: string) => void) {
+  for (const d of listed().filter((d) => d.name === SECOND_IPHONE.name)) {
+    if (d.state === 'Booted') spawnSync('xcrun', ['simctl', 'shutdown', d.udid], { stdio: 'ignore', timeout: SIMCTL_TIMEOUT_MS });
+    spawnSync('xcrun', ['simctl', 'delete', d.udid], { stdio: 'ignore', timeout: SIMCTL_TIMEOUT_MS });
+    log(`  removed the second iPhone's clone ${d.udid}`);
+  }
+}
+
+/** A clone of the harness's iPhone, made only while it is shut down (simctl clones a shut-down device); null otherwise. */
+function cloneIphone(log: (line: string) => void): string | null {
+  deleteClone(log);
+  const source = listed().find((d) => d.name === IOS_DEVICES[0].name);
+  if (!source || source.state !== 'Shutdown') return null;
+  const udid = simctl('clone', source.udid, SECOND_IPHONE.name).trim();
+  log(`  cloned ${source.name} as ${SECOND_IPHONE.name} (${udid}) for the phone's last variants`);
+  return udid;
+}
 
 /** Runs a long tool (xcodegen, xcodebuild) with its output in this run's logs; throws with the log's path. */
 /** A long command (a build) without holding up the captures running beside it; its output to `logFile`. */
@@ -89,6 +122,13 @@ export function prepareProject(ctx: CaptureContext): Promise<void> {
   })();
   return prepared;
 }
+
+/**
+ * Build settings the harness's Xcode builds run with, beside their arguments (not in the fingerprint: the app is the
+ * same). No index store: it is what Xcode's editor searches with, nothing a capture reads, and writing it is a share of
+ * every compile (`-index-store-path` on each one, 107 MB per build folder).
+ */
+export const XCODE_RUN_SETTINGS = ['COMPILER_INDEX_STORE_ENABLE=NO'];
 
 /**
  * What goes into an Xcode build of the app (buildStamp.ts): the app and its packages, the files project.yml takes from
@@ -204,12 +244,13 @@ export function build(ctx: CaptureContext): Promise<void> {
       name: 'the simulator app',
       stamp: stampFile(DERIVED),
       product: join(APP, 'Resonance.debug.dylib'),
+      artifact: APP,
       inputs: xcodeInputs(['ios-simulator', ...args]),
       log: ctx.log,
       build: async () => {
         ctx.log('  building the Debug app for the simulator (apps/ios/build/visual-sim)…');
         await prepareProject(ctx);
-        await runLogged('xcodebuild', args, join(ctx.runDir, '_logs', 'ios-build.log'), IOS_DIR);
+        await runLogged('xcodebuild', [...args, ...XCODE_RUN_SETTINGS], join(ctx.runDir, '_logs', 'ios-build.log'), IOS_DIR);
       },
     });
   });
@@ -258,19 +299,45 @@ function launchReady(udid: string, args: string[], stream: LogStream | null): ((
   return () => waitReady(() => stream.says(token));
 }
 
-async function shoot(udid: string, ctx: CaptureContext, key: string, ready: (() => Promise<Ready>) | null): Promise<Look & { ready: Ready | null }> {
-  const file = join(ctx.runDir, '_logs', `ios-${udid}.png`);
-  const frame = () => {
-    run('xcrun', ['simctl', 'io', udid, 'screenshot', '--type=png', file], {}, SIMCTL_TIMEOUT_MS);
-    return Promise.resolve(readFileSync(file));
-  };
+/**
+ * How a capture looks at its screen: a settled look (`fast`: frames closer together, after the ready signal) and one
+ * plain frame (the second look's glance at a capture with no baseline).
+ */
+export type Looker = { take: (fast: boolean) => Promise<Shot>; glance: () => Promise<Buffer> };
+
+/** A looker over PNG frames (iOS: `simctl io screenshot`), settled by util's `settle`. */
+export const pngLooker = (frame: () => Promise<Buffer>): Looker => ({
+  take: (fast) => settle(frame, { timeoutMs: 40_000, intervalMs: fast ? 500 : 1000 }),
+  glance: frame,
+});
+
+/** One capture's looks after its launch (`timing` has the launch's laps already; this adds the ready wait and the looks). */
+export async function shootAfterLaunch(
+  looker: Looker,
+  key: string,
+  ready: (() => Promise<Ready>) | null,
+  timing: Stopwatch,
+): Promise<Look & { ready: Ready | null }> {
   // A launch draws its cover, restores the account and asks the stack: never judged before its ready signal, or
   // else the 4 s it always waited (ready.ts).
   const said = ready ? await ready() : null;
   if (said) await restOfWait(said, 4000);
   else await sleep(4000);
-  const take = (fast: boolean) => settle(frame, { timeoutMs: 40_000, intervalMs: fast ? 500 : 1000 });
-  return { ...(await secondLook(await take(!!said?.ready), () => take(false), { key, glance: frame })), ready: said };
+  timing.lap('ready');
+  const first = await looker.take(!!said?.ready);
+  timing.lap('settle');
+  const look = await secondLook(first, () => looker.take(false), { key, glance: looker.glance });
+  timing.lap('second-look');
+  return { ...look, ready: said };
+}
+
+function shoot(udid: string, ctx: CaptureContext, key: string, ready: (() => Promise<Ready>) | null, timing: Stopwatch): Promise<Look & { ready: Ready | null }> {
+  const file = join(ctx.runDir, '_logs', `ios-${udid}.png`);
+  const frame = () => {
+    run('xcrun', ['simctl', 'io', udid, 'screenshot', '--type=png', file], {}, SIMCTL_TIMEOUT_MS);
+    return Promise.resolve(readFileSync(file));
+  };
+  return shootAfterLaunch(pngLooker(frame), key, ready, timing);
 }
 
 export const captureIos: Capture = async (ctx) => {
@@ -283,8 +350,11 @@ export const captureIos: Capture = async (ctx) => {
   if (!lanes.length || !screensFor('ios', ctx.only, set === 'extended').length) return unsettled;
   mkdirSync(join(ctx.runDir, '_logs'), { recursive: true });
   await build(ctx);
-  // Both simulators at once (VISUAL_PARALLEL=0: one at a time), each booted, captured and shut down.
-  const captureOn = async ({ device, ids }: (typeof lanes)[number]) => {
+  // Both simulators at once (VISUAL_PARALLEL=0: one at a time), each booted, captured and shut down. The iPhone's own
+  // variants come from `queue` when a second iPhone may share them (lanes.ts): the first from the front, the clone
+  // from the back.
+  type IosGroup = ReturnType<typeof groups>[number];
+  const captureOn = async ({ device, ids }: (typeof lanes)[number], queue?: { blocks: BlockQueue<IosGroup[]>; end: 'front' | 'back' }) => {
     const { udid, booted } = await simulator(device, ctx);
     spawnSync('xcrun', ['simctl', 'terminate', udid, BUNDLE_ID], { stdio: 'ignore', timeout: SIMCTL_TIMEOUT_MS });
     simctl('install', udid, APP);
@@ -300,7 +370,10 @@ export const captureIos: Capture = async (ctx) => {
       if (landscape) await turn(udid, true, ctx);
       try {
         let theme: Variant['theme'] | null = null;
-        for (const { variant: v, account, screens } of groups(plan('ios', id, set, ctx.only))) {
+        // The device's groups in one block, or the iPhone's shared blocks one at a time.
+        const own: IosGroup[][] = [groups(plan('ios', id, set, ctx.only))];
+        const next = queue && id === device.id ? () => (queue.end === 'front' ? queue.blocks.front() : queue.blocks.back()) : () => own.shift();
+        for (let block = next(); block; block = next()) for (const { variant: v, account, screens } of block) {
           // The system's appearance too: the app follows its own choice, the status bar the system's.
           if (theme !== v.theme) simctl('ui', udid, 'appearance', v.theme);
           theme = v.theme;
@@ -309,16 +382,28 @@ export const captureIos: Capture = async (ctx) => {
           // Its full 10 s, as ever, not cut short by the ready signal (ready.ts): this launch isn't captured, it
           // settles the account on the device — the sign-in and what the app keeps after it — and nothing yet shows
           // that the app is done with that when its screen first goes quiet.
-          launch(udid, launchArgs(ctx, account, null, v));
-          await sleep(10_000);
+          // The app says when the account is settled (ready.ts `waitSignedIn`); 10 s, as ever, when it doesn't.
+          const signIn = stopwatch();
+          const signInToken = stream ? readyToken() : null;
+          launch(udid, [...launchArgs(ctx, account, null, v), ...(signInToken ? ['-visualReadyToken', signInToken] : [])]);
+          signIn.lap('launch');
+          if (signInToken) await waitSignedIn((word) => stream!.says(signInToken, word));
+          else await sleep(10_000);
+          signIn.lap('wait');
+          signIn.done(ctx.runDir, `ios/${id}/${account ?? 'signed-out'}@${v.theme}-${v.locale}`, 'sign-in');
           for (const screen of screens) {
+            const timing = stopwatch();
             // Its hints unspent for its account on the stack (hints.ts), before the app reads the profile.
             await unspendHints(ctx, screen);
+            timing.lap('hints');
             const ready = launchReady(udid, launchArgs(ctx, account, screen.route, v, screen.app?.ios), stream);
+            timing.lap('launch');
             const name = shotName(screen, v);
             const key = `ios/${id}/${name}`;
-            const look = await shoot(udid, ctx, key, ready);
+            const look = await shoot(udid, ctx, key, ready, timing);
             writeFileSync(shotPath(ctx.runDir, 'ios', id, name), look.png);
+            timing.lap('write');
+            timing.done(ctx.runDir, key);
             if (!look.settled) unsettled.push(key);
             if (look.retaken) ctx.retaken.push(key);
             ctx.log(`  ${key}${lookNote(look)}${readyNote(look.ready)}`);
@@ -335,7 +420,30 @@ export const captureIos: Capture = async (ctx) => {
     spawnSync('xcrun', ['simctl', 'terminate', udid, BUNDLE_ID], { stdio: 'ignore', timeout: SIMCTL_TIMEOUT_MS });
     if (booted) shutDown(udid, device.name, ctx.log);
   };
-  if (process.env.VISUAL_PARALLEL === '0') for (const lane of lanes) await captureOn(lane);
-  else await Promise.all(lanes.map(captureOn));
+  if (process.env.VISUAL_PARALLEL === '0') {
+    for (const lane of lanes) await captureOn(lane);
+    return unsettled;
+  }
+  const phoneLane = lanes.find((l) => l.device.id === 'iphone' && l.ids.includes('iphone'));
+  const tabletLane = lanes.find((l) => l.device.id === 'ipad');
+  const blocks = phoneLane && tabletLane && process.env.VISUAL_SECOND_PHONE !== '0' ? variantBlocks(groups(plan('ios', 'iphone', set, ctx.only))) : [];
+  // Cloned before the iPhone boots (a clone wants its source shut down); none when it already runs.
+  const clone = blocks.length >= 2 && process.env.VISUAL_KEEP_DEVICES !== '1' ? cloneIphone(ctx.log) : null;
+  const queue = clone ? { blocks: new BlockQueue(blocks), end: 'front' as const } : undefined;
+  try {
+    await Promise.all(
+      lanes.map(async (lane) => {
+        await captureOn(lane, lane === phoneLane ? queue : undefined);
+        if (lane !== tabletLane || !queue) return;
+        // Down first, and seen down, or no second iPhone: never three simulators at once.
+        const ipad = listed().find((d) => d.name === lane.device.name);
+        if (!secondPhoneWanted({ left: queue.blocks.left, tabletDown: ipad?.state === 'Shutdown' })) return;
+        ctx.log(`  the iPad is done and down: ${SECOND_IPHONE.name} takes the iPhone's last variants`);
+        await captureOn({ device: SECOND_IPHONE, ids: ['iphone'] }, { blocks: queue.blocks, end: 'back' });
+      }),
+    );
+  } finally {
+    if (clone) deleteClone(ctx.log);
+  }
   return unsettled;
 };
