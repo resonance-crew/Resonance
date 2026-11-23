@@ -13,6 +13,7 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Ease
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -115,6 +116,7 @@ import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.lifecycle.Lifecycle
@@ -1020,7 +1022,8 @@ private fun PublishStep(
     var lineComposed by remember { mutableStateOf(false) }
     val mirrorShows = !updating && model.mirror.let { it is Mirror.Loading || it is Mirror.Shown }
     // A phone's band under the bar may be the first thing there; with nothing above it, it is the feed's first card.
-    val hint = model.showsUpdateHint
+    // The hint's room, not its words: kept for a live card whatever 卡片類型 says (§P4), so nothing above the grid moves.
+    val hint = model.updateHintRoom
     val tucks = bar && compact && !hint
     val underBar = bandUnderBar(bar, compact, hint, mirrorOnScreen = mirrorShows || lineComposed)
     // A tablet's preview card first under the bar stands where a card page's cover would (round 11 §4): 8 lower
@@ -1059,8 +1062,15 @@ private fun PublishStep(
                 Spacer(Modifier.height(gap))
             }
         }
-        if (model.showsUpdateHint) {
-            BasicText(L10n.Write.PublishPanel.updateHint, style = AppFonts.body(14f, lineHeight = 1.7f, color = Tokens.TextMuted))
+        if (hint) {
+            // Round 32 §P4: under 私人卡 the words fade out (no reader will see the change) but keep their room.
+            val shows = model.showsUpdateHint
+            val alpha by animateFloatAsState(if (shows) 1f else 0f, if (reduced) snap() else tween(160), label = "updateHint")
+            BasicText(
+                L10n.Write.PublishPanel.updateHint,
+                Modifier.graphicsLayer { this.alpha = alpha }.then(if (shows) Modifier else Modifier.clearAndSetSemantics { }),
+                style = AppFonts.body(14f, lineHeight = 1.7f, color = Tokens.TextMuted),
+            )
             Spacer(Modifier.height(hintGap))
         }
         // The mirror line over the band: the band starts under the wave, as it does at the end of the line's folding.
@@ -1078,6 +1088,9 @@ private fun PublishStep(
             Tags(model, tagAnchor, dismissKeyboard)
             Spacer(Modifier.height(gap))
             AudienceChoice(model, onPlaced = { audienceTop = it })
+            // What changes with 卡片類型 stands under it (§P4), and grows or folds in a short ease (at once under reduced
+            // motion): at the step's end a fold would otherwise pull the page down in one frame.
+            Column(Modifier.animateContentSize(publishFoldSpec(reduced))) {
             // 匿名公開 for a card once shared privately in a message: whoever read it knows who wrote it. A word, never a stop.
             if (model.sharedWarning) {
                 Spacer(Modifier.height(gap))
@@ -1104,12 +1117,14 @@ private fun PublishStep(
                     )
                 }
             }
+            }
         }
 
         // The rule over the foot stands in the middle of one section gap (round 11 §4 review): the verb stays near
         // the choice that names it.
         Spacer(Modifier.height(gap / 2))
-        Column {
+        // 捨棄修改 comes and goes with a change of choice on a live card (§P4): eased like the lines over it.
+        Column(Modifier.animateContentSize(publishFoldSpec(reduced))) {
             WavyDivider(seed = 47.0)
             Spacer(Modifier.height(gap / 2))
             if (model.verbWaits) {
@@ -1147,6 +1162,9 @@ private fun PublishStep(
         }
     }
 }
+
+/** How what changes under 卡片類型 grows or folds (§P4): a short ease, at once under reduced motion. */
+internal fun publishFoldSpec(reduced: Boolean): FiniteAnimationSpec<IntSize> = if (reduced) snap() else tween(200, easing = Ease)
 
 /** Two lines of the mirror's words (14 on 1.7): the room its loader keeps on a phone. */
 private val MIRROR_TWO_LINES = (14f * 1.7f * 2).dp

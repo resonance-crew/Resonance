@@ -394,6 +394,13 @@ class WriteModel(
     val showsUpdateHint: Boolean get() = liveSeen && values.visibility != "private"
 
     /**
+     * Whether the publish step keeps the update hint's room (round 32 §P4): for every card readers have, whatever is
+     * chosen — the hint's words fade out under 私人卡 ([showsUpdateHint]) but its place stays, so nothing above
+     * 卡片類型 changes height with a choice and the grid never moves under the finger.
+     */
+    val updateHintRoom: Boolean get() = liveSeen
+
+    /**
      * What the bar says of the writing after its title (null: nothing yet — before the card's first
      * write in this visit, and for a card in the trash, which keeps its own line in the page).
      */
