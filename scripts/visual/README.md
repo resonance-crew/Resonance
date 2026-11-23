@@ -557,10 +557,15 @@ app's sources, the files it takes from the rest of the repository (fonts, string
 islands, native/), its build arguments and Xcode's version is kept beside the product, and a match
 with the product untouched since reuses it (`buildStamp.ts`; about 0.3 s against 30–200 s of xcodegen
 and xcodebuild). `--force-build` (or `VISUAL_FORCE_BUILD=1`) builds anyway; `VISUAL_SKIP_BUILD=1`
-reuses the last build without looking. The builds run beside
-the captures, never blocking them: the APK and the simulator app start building as the run starts,
-while the web and the Mac app are captured, and the two Xcode builds (Mac, simulator) take turns, as
-they share the project and Swift's package caches. What the run starts leaves nothing resident behind it: the APK
+reuses the last build without looking. Every build is also kept in the machine's shared build cache by
+that fingerprint (`~/Library/Caches/resonance-visual/builds`, `VISUAL_BUILD_CACHE=<folder>`, `0` turns it off;
+the checkout's own path left out of it), so another worktree with the same app inputs — a web lane, a round's
+base, a fresh worktree — takes the app from there instead of building its own (an entry is renamed into place once
+whole, so a checkout finds a whole one or none; APFS clones, three per product). The builds run beside
+the captures, never blocking them: the apps start building as the run starts, in the order their phases come
+(`phases.ts`) — the Mac app first, as the Mac is captured in the first phase, then the simulator's, the two Xcode
+builds taking turns as they share the project and Swift's package caches, and the APK beside them. The Xcode
+builds write no index store (`XCODE_RUN_SETTINGS`: only Xcode's editor reads it). What the run starts leaves nothing resident behind it: the APK
 builds with `--no-daemon` and the Kotlin compiler in that same process (`GRADLE_RUN_FLAGS`; a build used to leave a
 4 GB Gradle daemon and a Kotlin daemon up for three idle hours, through the Android phase), and the stack's Firestore
 emulator runs in a heap of 1 GB with the serial collector (`VISUAL_FIRESTORE_HEAP`; firebase-tools gives it no
@@ -570,7 +575,7 @@ card and day, the bell's panel marking its notifications read, a screen's hints 
 each screen's first visit by an account runs one at a time in the old order, and only the later visits (the dark
 and English phone, the tablet, the desktop), which write nothing new, run side by side (`webSchedule.ts`). A
 context that fails is tried once more in a fresh one; failing twice, its captures are said and fail the run as
-unsettled, and the others go on. Phases (`PHASES` in `run.ts`): web + Mac, then
+unsettled, and the others go on. Phases (`PHASES` in `phases.ts`): web + Mac, then
 Android's phone and tablet together, then the iPhone and iPad together — in one run whatever slices the
 platforms take: `--<platform>-only a,b` and `--<platform>-device x,y` give a platform its own screens and
 devices (`--only` / `--device` are the others'), so a slice of four platforms starts one stack, builds the

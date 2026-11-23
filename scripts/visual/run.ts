@@ -45,17 +45,11 @@ import { execFileSync } from 'node:child_process';
 import type { Platform } from './screens';
 import { DEVICE_STATES, EXTRA_VARIANTS, VARIANT_SETS, estimate, variantSetOf } from './variants';
 import { watchdog } from './watchdog';
+import { PHASES, buildOrder } from './phases';
 import type { Result } from './compare';
 
 /** Every platform, in the order the report lists them. */
 const PLATFORMS: Platform[] = ['web', 'android', 'ios', 'mac'];
-/**
- * How a capture runs: these phases one after the other, the platforms of a phase side by side —
- * the web's headless browser beside the Mac app, then the two AVDs together, then the two
- * simulators together (each platform runs its own devices at once: VISUAL_PARALLEL=0 runs them one
- * at a time). Each phase frees its devices before the next boots.
- */
-const PHASES: Platform[][] = [['web', 'mac'], ['android'], ['ios']];
 
 async function capturer(platform: Platform): Promise<Capture> {
   switch (platform) {
@@ -167,10 +161,14 @@ async function capture(args: string[]) {
       : await startStack(join(runDir, '_logs'), say);
     const ctx = { runDir, devUrl: stack.devUrl, ports: PORTS, only: info.only, devices: info.devices, log: say, retaken: info.retaken!, set };
     // The apps' builds start now, beside the first phase's captures, so a later phase finds its app
-    // ready (each build is made once; the Xcode ones take turns). A failed one fails its phase.
+    // ready (each build is made once; the Xcode ones take turns, in the order their phases come: phases.ts). A failed
+    // one fails its phase.
     const headStart: Promise<unknown>[] = [];
-    if (platforms.includes('android')) headStart.push((await import('./android')).build(ctx));
-    if (platforms.includes('ios')) headStart.push((await import('./ios')).build(ctx));
+    for (const platform of buildOrder(platforms)) {
+      if (platform === 'mac') headStart.push((await import('./mac')).build(ctx));
+      if (platform === 'android') headStart.push((await import('./android')).build(ctx));
+      if (platform === 'ios') headStart.push((await import('./ios')).build(ctx));
+    }
     headStart.forEach((p) => p.catch(() => {}));
     for (const phase of PHASES) {
       const here = phase.filter((p) => platforms.includes(p));

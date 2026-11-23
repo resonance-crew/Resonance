@@ -15,7 +15,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { PNG } from 'pngjs';
 import { unspendHints } from './hints';
-import { BUNDLE_ID, ensureIslands, inXcodeLine, launchArgs, prepareProject, runLogged, xcodeInputs } from './ios';
+import { BUNDLE_ID, XCODE_RUN_SETTINGS, ensureIslands, inXcodeLine, launchArgs, prepareProject, runLogged, xcodeInputs } from './ios';
 import { buildIfChanged, stampFile } from './buildStamp';
 import { LOG_STREAM_ARGS, logStream, readyNote, readyOn, readyToken, restOfWait, waitReady, type LogStream, type Ready } from './ready';
 import { lookNote, secondLook, type Look } from './secondLook';
@@ -35,7 +35,19 @@ type Size = { width: number; height: number };
 
 type MacWindow = { id: number; pid: number; width: number; height: number; layer: number };
 
-function build(ctx: CaptureContext): Promise<void> {
+/**
+ * The Mac app, once per run however many ask (the run's head start, the capture); skipped when its inputs are as at the
+ * last build. It joins the Xcode line ahead of the simulator's (run.ts starts the builds in the phases' order): the Mac
+ * is captured in the first phase, the simulators in the last — behind the simulator's build it waited minutes with
+ * nothing captured (run 20261123-053155: 4 min).
+ */
+let built: Promise<void> | null = null;
+export function build(ctx: CaptureContext): Promise<void> {
+  built ??= buildOnce(ctx);
+  return built;
+}
+
+function buildOnce(ctx: CaptureContext): Promise<void> {
   if (!existsSync(WINDOWS_TOOL) || statSync(WINDOWS_TOOL).mtimeMs < statSync(WINDOWS_SOURCE).mtimeMs) {
     mkdirSync(DERIVED, { recursive: true });
     run('swiftc', ['-O', WINDOWS_SOURCE, '-o', WINDOWS_TOOL]);
@@ -55,12 +67,13 @@ function build(ctx: CaptureContext): Promise<void> {
       name: 'the Mac app',
       stamp: stampFile(DERIVED),
       product: join(APP, 'Contents/MacOS/Resonance.debug.dylib'),
+      artifact: APP,
       inputs: xcodeInputs(['mac-catalyst', ...args]),
       log: ctx.log,
       build: async () => {
         ctx.log('  building the Debug Mac app (apps/ios/build/visual-mac)…');
         await prepareProject(ctx);
-        await runLogged('xcodebuild', args, join(ctx.runDir, '_logs', 'mac-build.log'), IOS_DIR);
+        await runLogged('xcodebuild', [...args, ...XCODE_RUN_SETTINGS], join(ctx.runDir, '_logs', 'mac-build.log'), IOS_DIR);
       },
     });
   });

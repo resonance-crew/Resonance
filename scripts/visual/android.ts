@@ -254,6 +254,7 @@ export function build(ctx: CaptureContext): Promise<void> {
       name: 'the debug APK',
       stamp: stampFile(dirname(APK)),
       product: APK,
+      artifact: APK,
       inputs: androidInputs(),
       log: ctx.log,
       build: async () => {

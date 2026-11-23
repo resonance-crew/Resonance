@@ -91,6 +91,13 @@ export function prepareProject(ctx: CaptureContext): Promise<void> {
 }
 
 /**
+ * Build settings the harness's Xcode builds run with, beside their arguments (not in the fingerprint: the app is the
+ * same). No index store: it is what Xcode's editor searches with, nothing a capture reads, and writing it is a share of
+ * every compile (`-index-store-path` on each one, 107 MB per build folder).
+ */
+export const XCODE_RUN_SETTINGS = ['COMPILER_INDEX_STORE_ENABLE=NO'];
+
+/**
  * What goes into an Xcode build of the app (buildStamp.ts): the app and its packages, the files project.yml takes from
  * the rest of the repository (fonts, strings, stickers, both islands, the shared geometry under native/), and the
  * toolchain. `salt` adds the build's own arguments.
@@ -204,12 +211,13 @@ export function build(ctx: CaptureContext): Promise<void> {
       name: 'the simulator app',
       stamp: stampFile(DERIVED),
       product: join(APP, 'Resonance.debug.dylib'),
+      artifact: APP,
       inputs: xcodeInputs(['ios-simulator', ...args]),
       log: ctx.log,
       build: async () => {
         ctx.log('  building the Debug app for the simulator (apps/ios/build/visual-sim)…');
         await prepareProject(ctx);
-        await runLogged('xcodebuild', args, join(ctx.runDir, '_logs', 'ios-build.log'), IOS_DIR);
+        await runLogged('xcodebuild', [...args, ...XCODE_RUN_SETTINGS], join(ctx.runDir, '_logs', 'ios-build.log'), IOS_DIR);
       },
     });
   });
