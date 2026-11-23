@@ -319,6 +319,59 @@ describe('CardEditor — the publish step', () => {
     expect(push).not.toHaveBeenCalled();
   });
 
+  // Round 32 §P6: publishing waited on a save of the step's choice sent only when the verb was pressed (or sent
+  // again though the pause had saved it). The choice is saved at once, and the verb writes only what isn't written.
+  describe('one save before publishing', () => {
+    const publishButton = () => screen.getByRole('button', { name: en.write.publishPanel.publish });
+    const publicSaves = () => vi.mocked(updateCardDraft).mock.calls.filter(([, p]) => p.visibility === 'public').length;
+
+    it('saves the audience the moment it is chosen, not after the pause', async () => {
+      renderWithIntl(<Writer locale="en" />);
+      await toPublishStep();
+      await choosePublic();
+      // Well inside the autosave's 1.5 s pause.
+      await waitFor(() => expect(updateCardDraft).toHaveBeenCalledWith('draft-1', expect.objectContaining({ visibility: 'public' })), { timeout: 400 });
+    });
+
+    it('publishes a choice already saved without saving it again', async () => {
+      renderWithIntl(<Writer locale="en" />);
+      await toPublishStep();
+      await choosePublic();
+      await waitFor(() => expect(publicSaves()).toBe(1));
+      await userEvent.click(publishButton());
+      await waitFor(() => expect(publishCard).toHaveBeenCalledWith('draft-1'));
+      expect(updateCardDraft).toHaveBeenCalledTimes(1);
+    });
+
+    it('waits for the save of the choice under way, sending it once, and publishes after it', async () => {
+      let stored!: () => void;
+      vi.mocked(updateCardDraft).mockReturnValueOnce(new Promise((r) => (stored = () => r({ id: 'draft-1' } as never))) as never);
+      renderWithIntl(<Writer locale="en" />);
+      await toPublishStep();
+      await choosePublic();
+      await waitFor(() => expect(updateCardDraft).toHaveBeenCalledTimes(1));
+      await userEvent.click(publishButton());
+      await new Promise((r) => setTimeout(r, 20));
+      expect(publishCard).not.toHaveBeenCalled();
+      await act(async () => stored());
+      await waitFor(() => expect(publishCard).toHaveBeenCalledWith('draft-1'));
+      expect(updateCardDraft).toHaveBeenCalledTimes(1);
+    });
+
+    it('a choice whose save failed is saved again by the verb before publishing', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.mocked(updateCardDraft).mockRejectedValueOnce(new Error('offline'));
+      renderWithIntl(<Writer locale="en" />);
+      await toPublishStep();
+      await choosePublic();
+      await waitFor(() => expect(updateCardDraft).toHaveBeenCalledTimes(1));
+      await userEvent.click(publishButton());
+      await waitFor(() => expect(publishCard).toHaveBeenCalledWith('draft-1'));
+      expect(publicSaves()).toBe(2);
+      expect(vi.mocked(updateCardDraft).mock.invocationCallOrder[1]).toBeLessThan(vi.mocked(publishCard).mock.invocationCallOrder[0]);
+    });
+  });
+
   // Round 12 §3: a 私人卡's 公開發表 opens the step with 公開 chosen — as if picked there, so it autosaves with the
   // draft — and a card already marked anonymous starts at 匿名公開.
   it('starts the step at 公開 when opened by 公開發表, saving it as a choice', async () => {
@@ -403,12 +456,13 @@ describe('CardEditor — the publish step', () => {
     await waitFor(() => expect(updateCardDraft).toHaveBeenCalledWith('draft-1', expect.objectContaining({ visibility: 'public' })), {
       timeout: 4000,
     });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Offline from here: the choice's own save (made at once, round 32 §P6) and the button's both fail.
+    vi.mocked(updateCardDraft).mockRejectedValue(new Error('offline'));
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
     expect(onStepTitleChange).toHaveBeenLastCalledWith(en.write.publishPanel.saveTitle);
     // The one button: no way out beside it any more (草稿 is a choice of its own).
     expect(screen.queryByRole('button', { name: en.write.saveDraftAndLeave })).toBeNull();
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.mocked(updateCardDraft).mockRejectedValueOnce(new Error('offline'));
     await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.save }));
     expect(await screen.findByRole('alert')).toHaveTextContent(en.write.publishPanel.saveFailed);
     expect(publishCard).not.toHaveBeenCalled();
@@ -506,10 +560,15 @@ describe('CardEditor — editing a published card', () => {
   // after any autosave still in flight, and before the apply is asked for.
   it('saves the working copy with the step’s choices, then has the server apply it — without re-publishing', async () => {
     // The write carrying the step's choices is held, to see that the apply waits for it.
+    // Released once, for good: the choice's own save (made at once, round 32 §P6) and the button's queued behind it.
     const held: (() => void)[] = [];
-    const release = () => held.splice(0).forEach((go) => go());
+    let released = false;
+    const release = () => {
+      released = true;
+      held.splice(0).forEach((go) => go());
+    };
     vi.mocked(savePendingCardEdit).mockImplementation(async (_id, payload) => {
-      if (payload.visibility === 'private') await new Promise<void>((resolve) => held.push(resolve));
+      if (payload.visibility === 'private' && !released) await new Promise<void>((resolve) => held.push(resolve));
     });
     renderWithIntl(<Writer locale="en" initial={livePost} />);
     fireEvent.change(story(), { target: { value: 'The finished rewrite.' } });

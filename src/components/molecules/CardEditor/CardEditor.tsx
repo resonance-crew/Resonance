@@ -536,6 +536,23 @@ export function CardEditor({
     return card;
   }
 
+  /**
+   * The draft's id once what is on screen is stored — publishing's first step. Written only when it isn't yet
+   * (round 32 §P6): a save of these very values already under way (the audience just chosen) is waited for, not
+   * sent again, and nothing is sent when the last save holds them; one that failed is tried again here.
+   */
+  async function savedDraftId(): Promise<string> {
+    const snapshot = draftSnapshot(latest());
+    if (draftIdRef.current && attemptRef.current === snapshot) await writeChainRef.current;
+    if (!draftIdRef.current || lastSavedRef.current !== snapshot) {
+      const card = await saveDraft();
+      if (!card) throw new Error('Draft was not saved');
+    }
+    const id = draftIdRef.current;
+    if (!id) throw new Error('Draft was not saved');
+    return id;
+  }
+
   /** What is on screen differs from what was last written, and is worth writing (a blank new card isn't). */
   function needsSave(): boolean {
     const v = latest();
@@ -607,6 +624,15 @@ export function CardEditor({
     const h = setTimeout(() => autosaveNowRef.current(), AUTOSAVE_DELAY_MS);
     return () => clearTimeout(h);
   }, [thoughtCore, story, tags, visibility, anonymous, media, accentHue]);
+
+  // An audience chosen in the step is saved at once, not after the pause (round 32 §P6): the verb is usually the
+  // next press, and publishing waits on this save — started now, it is under way or done by then.
+  const audienceChosenRef = useRef(false);
+  useEffect(() => {
+    if (!audienceChosenRef.current) return;
+    audienceChosenRef.current = false;
+    autosaveNowRef.current();
+  }, [visibility, anonymous]);
 
   // Edits younger than the debounce flush when the editor unmounts (in-app
   // back/navigation keeps the JS context alive, so the async write completes)
@@ -767,8 +793,7 @@ export function CardEditor({
     setPending(true);
     setPublishError(null);
     try {
-      const card = await saveDraft();
-      if (!card) throw new Error('Draft was not saved');
+      const id = await savedDraftId();
       // One server call publishes it (POST /api/v1/cards/{id}/publish, as the
       // apps do): it stamps the card once, gives it its English URL slug (the
       // id stands in if that AI step fails — publishing never fails for it),
@@ -776,7 +801,7 @@ export function CardEditor({
       // rings the original author's bell — never for an anonymous one, whose
       // connection would name its author. The recommendation index and the
       // card page's cache are refreshed after the response.
-      const published = await publishCard(card.id);
+      const published = await publishCard(id);
       closedRef.current = true;
       // In place of the step's own address: back from the card is the writing step, never a step of a card
       // that is live now.
@@ -1030,6 +1055,7 @@ export function CardEditor({
               onTagsChange={setTags}
               onAudienceChange={(next) => {
                 // One change, so no write is ever anonymous and for connections only.
+                audienceChosenRef.current = true;
                 setVisibility(next.visibility);
                 setAnonymous(next.anonymous);
               }}

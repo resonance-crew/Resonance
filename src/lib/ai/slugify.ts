@@ -34,6 +34,9 @@ export function latinSlugBase(title: string): string | null {
   return /[a-z]/.test(base) ? base : null;
 }
 
+/** How many of the numbered candidates are asked at once once the base and the handle's are taken. */
+export const SLUG_PROBE_BATCH = 8;
+
 /**
  * Resolve a collision-free slug from a base.
  *
@@ -43,22 +46,36 @@ export function latinSlugBase(title: string): string | null {
  *   3. base + author handle + number  (on further collision)
  *
  * `isTaken` reports whether a candidate is already used by *another* card.
+ * The answer is always the first free candidate in that order; only how many
+ * are asked at a time changed (round 32 §P6): the base alone first — nearly
+ * every card's answer, and no handle needed — then, on a collision, the
+ * handle's and the first numbered ones together (`SLUG_PROBE_BATCH`), so a
+ * common title costs one more round trip, not one per card already holding
+ * it. `handle` may still be on its way (the pen name read beside the base's
+ * check): it is awaited only on a collision.
  */
 export async function ensureUniqueSlug(
   base: string,
-  handle: string,
+  handle: string | PromiseLike<string>,
   isTaken: (slug: string) => Promise<boolean>,
 ): Promise<string> {
   const root = base || 'story';
   if (!(await isTaken(root))) return root;
 
-  const handleSlug = slugify(handle);
+  const handleSlug = slugify(await handle);
   const withHandle = handleSlug ? `${root}-${handleSlug}` : root;
-  if (withHandle !== root && !(await isTaken(withHandle))) return withHandle;
-
-  for (let n = 2; n < 1000; n += 1) {
-    const candidate = `${withHandle}-${n}`;
-    if (!(await isTaken(candidate))) return candidate;
+  // Numbered from 2 up to 999, as many as `count`.
+  const numbered = (from: number, count: number) =>
+    Array.from({ length: Math.max(0, Math.min(count, 1000 - from)) }, (_, i) => `${withHandle}-${from + i}`);
+  // The handle's (when it differs from the base) leads the first batch.
+  let batch = [...(withHandle !== root ? [withHandle] : []), ...numbered(2, SLUG_PROBE_BATCH)];
+  let next = 2 + SLUG_PROBE_BATCH;
+  while (batch.length) {
+    const taken = await Promise.all(batch.map((c) => isTaken(c)));
+    const free = taken.indexOf(false);
+    if (free >= 0) return batch[free];
+    batch = numbered(next, SLUG_PROBE_BATCH);
+    next += SLUG_PROBE_BATCH;
   }
   // Pathological fallback — effectively never reached.
   return `${withHandle}-${Date.now()}`;

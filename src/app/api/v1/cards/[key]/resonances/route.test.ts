@@ -73,7 +73,8 @@ describe('POST /api/v1/cards/{id}/resonances', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ card: CARD, changed: true });
     expect(spend).toHaveBeenCalledWith('alice', 'resonate');
-    expect(resonateWith).toHaveBeenCalledWith(CTX, 'alice', 'orig', 'mine');
+    // The budget goes beside the service's reads, which await it before writing (round 32 §P6).
+    expect(resonateWith).toHaveBeenCalledWith(CTX, 'alice', 'orig', 'mine', expect.any(Promise));
     expect(ringAfter).toHaveBeenCalledWith(CTX, 'resonance_alice_orig');
     expect(await settled()).toEqual(LOCALIZED);
     // A write: Firebase Auth is asked whether the session still stands.
@@ -88,12 +89,31 @@ describe('POST /api/v1/cards/{id}/resonances', () => {
     expect(await settled()).toEqual([]);
   });
 
-  it('is 429 over budget, changing nothing', async () => {
+  it('is 429 over budget, changing nothing: the service is handed the refused budget, and its own refusal never wins over it', async () => {
     spend.mockRejectedValue(new ApiFailure('rate_limited', 'Too many requests. Please try again later.'));
-    const res = await post({ cardId: 'mine' });
+    // The service writes only once its budget answered (graph.test.ts pins that on the memory context).
+    resonateWith.mockImplementation(async (...a: unknown[]) => {
+      await a[4];
+      throw new Error('never reached');
+    });
+    let res = await post({ cardId: 'mine' });
     expect(res.status).toBe(429);
     expect((await res.json()).error.code).toBe('rate_limited');
-    expect(resonateWith).not.toHaveBeenCalled();
+    resonateWith.mockRejectedValueOnce(new ApiFailure('not_found', 'No such card.'));
+    res = await post({ cardId: 'mine' });
+    expect(res.status).toBe(429);
+    expect(ringAfter).not.toHaveBeenCalled();
+    expect(await settled()).toEqual([]);
+  });
+
+  it('reads beside the budget: the service begins before the budget answers (round 32 §P6)', async () => {
+    let answer!: () => void;
+    spend.mockReturnValue(new Promise<void>((r) => (answer = r)));
+    const posting = post({ cardId: 'mine' });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(resonateWith).toHaveBeenCalledTimes(1);
+    answer();
+    expect((await posting).status).toBe(200);
   });
 
   it("passes the service's refusals on with their status, ringing and revalidating nothing", async () => {

@@ -32,11 +32,14 @@ export async function assignSlugIn(
 
   // Leak checklist (ux §6): an anonymous card's public URL must not embed the
   // author's handle — collisions fall straight through to the numeric suffix.
-  const [base, penName] = await Promise.all([
-    slugBase(String(data.thoughtCore ?? '')),
-    data.anonymous !== true ? Promise.resolve().then(() => infra.getUserHandle(String(data.authorId ?? ''))) : null,
-  ]);
-  const handle = penName !== null ? slugify(penName) : '';
+  // The pen name is asked for at once, beside the translation, and waited for only on a collision: a free base
+  // (nearly every card) is checked the moment the base is in (round 32 §P6: a Latin title, made with no model,
+  // waited a round trip for a pen name it didn't need).
+  const handle: Promise<string> =
+    data.anonymous !== true ? Promise.resolve().then(() => infra.getUserHandle(String(data.authorId ?? ''))).then(slugify) : Promise.resolve('');
+  // Not needed when the base is free: its failure then fails nothing.
+  handle.catch(() => {});
+  const base = await slugBase(String(data.thoughtCore ?? ''));
 
   // Taken by another card, or retired with a card deleted for good (old links still name it).
   const slug = await ensureUniqueSlug(base, handle, (candidate) => infra.slugTaken(candidate, cardId));

@@ -24,8 +24,8 @@ export const PUT = withUser(async (user, req, ctx: RouteContext<'key'>) => {
   // An id Firestore keeps for itself names no card: answered as one, before it costs any of the budget.
   if (isReservedId(id)) throw new ApiFailure('not_found', 'No such card.');
   const server = serverCtx();
-  // The budget answers before anything is written (budgetFirst).
+  // The budget answers before anything is written (budgetFirst), spent beside the pick's reads (round 32 §P6).
   const spent = server.limits.spend(user.id, 'tap');
-  const result = await budgetFirst(spent, () => spent.then(() => setTapPassageIn(server, user.id, id, passage)));
+  const result = await budgetFirst(spent, () => setTapPassageIn(server, user.id, id, passage, spent));
   return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } });
 });

@@ -78,6 +78,17 @@ describe('graph services on memory', () => {
     expect(s.get('connections', 'alice_bob')).toBeNull();
   });
 
+  it('a budget spent beside the reads (round 32 §P6): refused, nothing is written, no one connected or rung', async () => {
+    const { ctx } = setup();
+    const s = ctx.state;
+    const refused = Promise.reject(new ApiFailure('rate_limited', 'Slow down.'));
+    refused.catch(() => {});
+    expect(await failure(resonateWithIn(ctx, 'bob', 'walk', 'reply', refused))).toBe('rate_limited');
+    expect(s.get('cards', 'reply')?.referenceCardId).toBeUndefined();
+    expect(s.get('connections', 'alice_bob')).toBeNull();
+    expect(s.get('notifications', 'resonance_bob_walk')).toBeNull();
+  });
+
   it('a second reason keeps the two connected when the first is taken back; a published resonance reaches through tryReachResonance', async () => {
     const { ctx, now } = setup();
     const s = ctx.state;

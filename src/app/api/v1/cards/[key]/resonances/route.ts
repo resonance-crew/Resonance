@@ -5,6 +5,7 @@ import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { BRIEF, cachedJson } from '@/lib/api/v1/cache';
 import { serverCtx } from '@/server/ctx';
 import { getResonances } from '@/server/app/cardsRead';
+import { budgetFirst } from '@/server/app/budget';
 import { ringAfterIn } from '@/server/app/pushAfter';
 import { resonateWithIn } from '@/server/app/resonate';
 
@@ -31,8 +32,9 @@ export const POST = withUser(async (user, req, ctx: RouteContext<'key'>) => {
   // An id Firestore keeps for itself names no card: answered as one, before it costs any of the budget.
   if (isReservedId(target) || isReservedId(cardId)) throw new ApiFailure('not_found', 'No such card.');
   const server = serverCtx();
-  await server.limits.spend(user.id, 'resonate');
-  const { notificationId, stale, ...result } = await resonateWithIn(server, user.id, target, cardId);
+  // Spent beside the reads, not before them (round 32 §P6), and still answering first (budgetFirst).
+  const spent = server.limits.spend(user.id, 'resonate');
+  const { notificationId, stale, ...result } = await budgetFirst(spent, () => resonateWithIn(server, user.id, target, cardId, spent));
   ringAfterIn(server, notificationId);
   if (stale.length) server.later.later(() => void server.pages.revalidate(stale), 'revalidate');
   return NextResponse.json(result);
