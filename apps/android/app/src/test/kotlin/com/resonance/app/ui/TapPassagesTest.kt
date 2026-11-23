@@ -9,7 +9,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
+import com.resonance.design.QuietButtonPadX
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.isDialog
@@ -369,5 +373,80 @@ class TapPassagesTest {
         // Wave 2 #3a: three passages of about 100 characters each — the web's min(560, 70 %).
         assertEquals(560f, passagesListMax(900.dp).value)
         assertEquals(420f, passagesListMax(600.dp).value, 0.01f)
+    }
+
+    // Round 32 §P1–§P2: one scroll region (the title and the rows), 略過 pinned under it, rules between the rows
+
+    private val paperMatcher = SemanticsMatcher.keyIsDefined(SemanticsProperties.PaneTitle)
+
+    @Test fun theTitleScrollsWithTheRowsAndSkipStaysPinnedUnderThem() {
+        show()
+        compose.waitForIdle()
+        val region = compose.onNodeWithTag("tap-passages", useUnmergedTree = true).getBoundsInRoot()
+        val title = compose.onNodeWithText(L10n.Card.Tap.passageTitle, useUnmergedTree = true).getBoundsInRoot()
+        val skip = compose.onNodeWithTag("tap-passage-skip", useUnmergedTree = true).getBoundsInRoot()
+        val first = compose.onNodeWithTag("tap-passage-0", useUnmergedTree = true).getBoundsInRoot()
+        val last = compose.onNodeWithTag("tap-passage-2", useUnmergedTree = true).getBoundsInRoot()
+        // The title is the region's first child: 10 over the first row, inside the region.
+        assertTrue("the title inside the scroll region", title.top >= region.top - 0.5.dp && title.bottom <= region.bottom)
+        assertEquals(10f, (first.top - title.bottom).value, 0.5f)
+        // 略過 outside it, under it, 18 under the last row (the shell's 14 and the foot's 4), at the foot's end.
+        assertTrue("略過 under the region", skip.top >= region.bottom - 0.5.dp)
+        assertEquals(18f, (skip.top - last.bottom).value, 1f)
+        val paper = compose.onNode(paperMatcher, useUnmergedTree = true).getBoundsInRoot()
+        assertEquals("略過's words end on the column's end", (paper.right - 28.dp).value, (skip.right - QuietButtonPadX).value, 1f)
+        assertTrue("a finger's 44 at least", (skip.bottom - skip.top).value >= 44f - 0.5f)
+        // Short content: the dialog as short as it is — 32 of paper under 略過, nothing more.
+        assertEquals(32f, (paper.bottom - skip.bottom).value, 1f)
+    }
+
+    @Test fun skipIsWordsAloneNoPillNoPenLine() {
+        // A quiet action (Components.kt's QuietButton): the twin of the link dialog's 移除連結 — never ModalCloseButton's pill.
+        val source = File("src/main/kotlin/com/resonance/app/ui/TapPassages.kt").readText()
+        assertTrue(source.contains("QuietButton("))
+        assertFalse("no tonal pill in the passages' dialog", source.contains("ModalCloseButton("))
+        show()
+        compose.waitForIdle()
+        compose.onNodeWithTag("tap-passage-skip", useUnmergedTree = true).assertHasClickAction()
+        compose.onNodeWithText(L10n.Card.Tap.passageSkip, useUnmergedTree = true).assertExists()
+    }
+
+    @Test @Config(qualifiers = "w320dp-h568dp")
+    fun longPassagesScrollInsideTheRegionTheDialogFitsTheWindowAndSkipNeverMoves() {
+        val long = List(3) { i ->
+            TapPassage("p$i", "清晨六點的城市還沒醒，我站在陽台上，看著對面的窗一扇一扇亮起來，像有人在替這一天慢慢點燈。".repeat(3).take(140) + "。$i")
+        }
+        compose.setContent {
+            CompositionLocalProvider(LocalWindowLayout provides WindowLayout(320.dp)) {
+                TapPassages(long, null, StoryScript.Cjk, reducedMotion = true, onPick = {}, onDismiss = {})
+            }
+        }
+        compose.waitForIdle()
+        val paper = compose.onNode(paperMatcher, useUnmergedTree = true).getBoundsInRoot()
+        // The whole card in the window: nothing for the backdrop to scroll.
+        assertTrue("the paper ${paper.top}–${paper.bottom} inside 568", paper.top.value >= 0f && paper.bottom.value <= 568f + 0.5f)
+        val skipBefore = compose.onNodeWithTag("tap-passage-skip", useUnmergedTree = true).getBoundsInRoot()
+        val titleBefore = compose.onNodeWithText(L10n.Card.Tap.passageTitle, useUnmergedTree = true).fetchSemanticsNode().positionInRoot.y
+        assertTrue("略過 inside the paper", skipBefore.bottom <= paper.bottom)
+        compose.onNodeWithTag("tap-passages", useUnmergedTree = true).performTouchInput { swipeUp() }
+        compose.waitForIdle()
+        val skipAfter = compose.onNodeWithTag("tap-passage-skip", useUnmergedTree = true).getBoundsInRoot()
+        val titleAfter = compose.onNodeWithText(L10n.Card.Tap.passageTitle, useUnmergedTree = true).fetchSemanticsNode().positionInRoot.y
+        // The title went with the rows; 略過 stayed where it was.
+        assertTrue("the title scrolled away ($titleBefore → $titleAfter)", titleAfter < titleBefore - 10f)
+        assertEquals(skipBefore.top.value, skipAfter.top.value, 0.5f)
+        assertEquals(paper, compose.onNode(paperMatcher, useUnmergedTree = true).getBoundsInRoot())
+    }
+
+    @Test fun aRuleStandsBetweenTwoRowsNeverAboveTheFirstFromTheWordsStartToTheirEnd() {
+        assertFalse(passageRuleAbove(0))
+        assertTrue(passageRuleAbove(1))
+        assertTrue(passageRuleAbove(2))
+        // From the paper's edge to the words: the rule's inset is the words', not the paper's edges.
+        assertEquals(40f, PassageBand.wordsInset.value)
+        // The house hairline and the Divider's ink: the source names no width or colour of its own.
+        val source = File("src/main/kotlin/com/resonance/app/ui/TapPassages.kt").readText()
+        assertTrue(source.contains("wavyRuleAbove(PassageBand.wordsInset, rule"))
+        assertTrue(source.contains("val rule = DividerInk"))
     }
 }

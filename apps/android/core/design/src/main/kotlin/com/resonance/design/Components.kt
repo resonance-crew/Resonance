@@ -343,7 +343,7 @@ fun HandDrawnAvatar(
  */
 @Composable
 fun WavyDivider(
-    color: Color = Tokens.FieldBorderHover.copy(alpha = 0.35f),
+    color: Color = DividerInk,
     seed: Double = 17.0,
     amp: Double = 1.4,
     modifier: Modifier = Modifier,
@@ -353,7 +353,7 @@ fun WavyDivider(
     Box(
         modifier
             .fillMaxWidth()
-            .height(6.dp)
+            .height(DividerHeight)
             .clearAndSetSemantics { }
             .drawWithCache {
                 val p = wavyLinePath(size.width, size.height, density, seed, amp, steps)
@@ -361,6 +361,27 @@ fun WavyDivider(
                 onDrawBehind { drawPath(p, color, style = s) }
             },
     )
+}
+
+/** [WavyDivider]'s ink: the faint field-border tone of the web's Divider. */
+val DividerInk: Color @Composable @ReadOnlyComposable get() = Tokens.FieldBorderHover.copy(alpha = 0.35f)
+
+/** How tall [WavyDivider]'s wave stands (and [wavyRuleAbove]'s, centred on the edge it marks). */
+val DividerHeight: Dp = 6.dp
+
+/**
+ * [WavyDivider]'s wave drawn on this layout's top edge instead of in a row of its own (round 32 §P2: between two rows
+ * of a list whose bands meet, so a rule adds no height and moves nothing): from [inset] in on either side — the words'
+ * start to their end, never the paper's edges — at the house hairline ([Tokens.InkLight]), in [color]. Drawn behind
+ * what this layout draws, so a row's own band (its press, its pick) washes over it.
+ */
+fun Modifier.wavyRuleAbove(inset: Dp, color: Color, seed: Double = 17.0, lineWidth: Dp = Tokens.InkLight): Modifier = drawWithCache {
+    val left = inset.toPx()
+    val w = (size.width - left * 2).coerceAtLeast(0f)
+    val h = DividerHeight.toPx()
+    val p = wavyLinePath(w, h, density, seed, 1.4, 7)
+    val s = Stroke(lineWidth.toPx(), cap = StrokeCap.Round)
+    onDrawBehind { if (w > 0f) translate(left, -h / 2) { drawPath(p, color, style = s) } }
 }
 
 /**
