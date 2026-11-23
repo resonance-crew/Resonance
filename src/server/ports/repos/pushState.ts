@@ -162,8 +162,10 @@ export interface PushStateData {
   putDevice(installationId: string, record: DeviceRecord): Promise<void>;
   /** Every record of the user's, with when it was last registered (ms; 0 when unknown). */
   listDeviceAges(uid: string): Promise<{ id: string; updatedAtMs: number }[]>;
-  /** The user's installs a push can reach (records with a token). */
+  /** The user's installs a push can reach (records with a token), one per token: the most recently registered (`onePerToken`). */
   listDevices(uid: string): Promise<PushDevice[]>;
+  /** The records, anyone's, that hold this push token. */
+  listDevicesWithToken(token: string): Promise<string[]>;
   /** Every record's `capabilities` (null where it isn't a list), tokenless ones too. */
   listDeviceCapabilities(uid: string): Promise<(string[] | null)[]>;
   /** Delete these records, 500 to a batch. */

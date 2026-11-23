@@ -6,7 +6,7 @@ import { unlistedCard } from '@/lib/cards/blank';
 import { mapCard } from '@/lib/db/firestore/mapper';
 import { unlistedForStrangers } from '@/lib/recommend/collections';
 import { RECOMMENDATIONS, readStored } from '@/lib/recommend/stored';
-import { deviceLocale } from '@/server/domain/push/devices';
+import { deviceLocale, onePerToken } from '@/server/domain/push/devices';
 import { CONSENT_AT, readNotificationSettings, type PickLog } from '@/server/domain/push/settings';
 import type {
   AnnounceCard,
@@ -188,7 +188,15 @@ export function pushStateData(db: AdminDb): PushStateData {
     },
     async listDevices(uid) {
       const devices = await devicesOf(uid).get();
-      return devices.docs.flatMap((d) => deviceOf(d) ?? []);
+      const records = devices.docs.flatMap((d) => {
+        const device = deviceOf(d);
+        return device ? [{ device, token: device.token, updatedAtMs: millisOf(d.get('updatedAt')) ?? 0 }] : [];
+      });
+      return onePerToken(records).map((r) => r.device);
+    },
+    async listDevicesWithToken(token) {
+      if (!token) return [];
+      return (await db.collection(DEVICES).where('token', '==', token).select().get()).docs.map((d) => d.id);
     },
     async listDeviceCapabilities(uid) {
       const devices = await devicesOf(uid).select('capabilities').get();
