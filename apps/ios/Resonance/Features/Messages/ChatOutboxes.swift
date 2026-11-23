@@ -30,6 +30,11 @@ final class ChatOutboxes {
         let messaging = messaging, sent = sent
         let box = Outbox { [weak self] m in
             guard let self else { throw CancellationError() }
+            #if DEBUG
+            // `-threadSendDelay <seconds>` holds each send that long first, so 傳送中 shows (a check of the thread's
+            // foot, which the line must never push: ``DeliveryLinePlace``).
+            if let delay = Self.debugSendDelay { try await Task.sleep(for: .seconds(delay)) }
+            #endif
             var image: ChatImage?
             if let picture = m.picture { image = try await upload(picture, of: m, to: to, with: messaging()) }
             let answer = try await messaging().sendMessage(to: to, text: m.text, cardRef: m.cardRef, noteRef: m.noteRef,
@@ -42,6 +47,16 @@ final class ChatOutboxes {
         boxes[pairId] = box
         return box
     }
+
+    #if DEBUG
+    /// The launch argument `-threadSendDelay <seconds>` (debug builds only): nil, or a delay of more than 0.
+    static func sendDelay(_ defaults: UserDefaults) -> Double? {
+        let seconds = defaults.double(forKey: "threadSendDelay")
+        return seconds > 0 ? min(seconds, 60) : nil
+    }
+
+    private static var debugSendDelay: Double? { sendDelay(.standard) }
+    #endif
 
     /// The message's picture, kept by the server under the message's client id (once).
     private func upload(_ picture: Outbox.Picture, of m: Outbox.Outgoing, to: String, with messaging: MessagingAPI) async throws -> ChatImage {

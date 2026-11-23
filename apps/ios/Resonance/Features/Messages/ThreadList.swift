@@ -171,7 +171,7 @@ struct MessageList: View {
                     ForEach(Array(newestFirst.enumerated()), id: \.element.id) { i, row in
                         // A run still on its way says so once, under its newest message: the stack stays one stack.
                         let sendingBelow = row.position.joinsBelow && i > 0 && newestFirst[i - 1].message.delivery == .sending
-                        ThreadRowView(row: row, ctx: ctx, deliveryLine: !sendingBelow)
+                        ThreadRowView(row: row, ctx: ctx, deliveryLine: !sendingBelow, newest: i == 0)
                             // Drawn again only when what it shows changed (`==`), not each time the screen is.
                             .equatable()
                             .upsideDown()
@@ -354,9 +354,12 @@ struct ThreadRowView: View, Equatable {
     let row: ThreadRow
     let ctx: ThreadContext
     let deliveryLine: Bool
+    /// The thread's newest row: a line on its way is drawn in the air under it, taking no room (``DeliveryLinePlace``).
+    var newest = false
 
     static func == (a: ThreadRowView, b: ThreadRowView) -> Bool {
-        a.row == b.row && a.deliveryLine == b.deliveryLine && a.row.messages.allSatisfy { a.ctx.draws($0, like: b.ctx) }
+        a.row == b.row && a.deliveryLine == b.deliveryLine && a.newest == b.newest
+            && a.row.messages.allSatisfy { a.ctx.draws($0, like: b.ctx) }
     }
 
     var body: some View {
@@ -367,7 +370,7 @@ struct ThreadRowView: View, Equatable {
             } else if row.timeLabel {
                 DayLabel(text: ThreadScreen.time(row.message.sentAt))
             }
-            MessageItem(row: row, ctx: ctx, deliveryLine: deliveryLine)
+            MessageItem(row: row, ctx: ctx, deliveryLine: deliveryLine, newest: newest)
         }
         .padding(.top, gap)
     }
@@ -441,11 +444,13 @@ private struct MessageItem: View {
     let row: ThreadRow
     let ctx: ThreadContext
     let deliveryLine: Bool
+    var newest = false
 
     var body: some View {
         let message = row.message
         let model = ctx.model
         let mine = model.isMine(message)
+        let lineEdge: HorizontalAlignment = mine ? .trailing : .leading
         Group {
             if message.isUnsent {
                 // Unsent (round 16 §3): one quiet line on its sender's side, nothing to press, swipe or answer.
@@ -466,10 +471,15 @@ private struct MessageItem: View {
                         } else {
                             TheirFace(shown: !row.position.joinsBelow, lifted: album.contains { ctx.lifted == $0.key }, ctx: ctx)
                         }
+                        let shown = deliveryLine ? AlbumGridView.deliveryMessage(album) : nil
+                        let place = shown.map { DeliveryLinePlace.of($0.delivery, newest: newest) } ?? .none
                         VStack(alignment: mine ? .trailing : .leading, spacing: 0) {
                             AlbumGridView(row: row, album: album, ctx: ctx, mine: mine)
+                                .hangingBelow(lineEdge) {
+                                    if let shown, place == .under { DeliveryLine(message: shown, model: model, under: true) }
+                                }
                             // One line for the grid: a picture that didn't go (its retry), else the one still on its way.
-                            if deliveryLine, let shown = AlbumGridView.deliveryMessage(album) { DeliveryLine(message: shown, model: model) }
+                            if let shown, place == .inline { DeliveryLine(message: shown, model: model) }
                         }
                         .frame(maxWidth: ctx.rowMax, alignment: mine ? .trailing : .leading)
                         if !mine { Spacer(minLength: 0) }
@@ -485,9 +495,13 @@ private struct MessageItem: View {
                         } else {
                             TheirFace(shown: !row.position.joinsBelow, lifted: ctx.lifted == message.key, ctx: ctx)
                         }
+                        let place = deliveryLine ? DeliveryLinePlace.of(message.delivery, newest: newest) : .none
                         VStack(alignment: mine ? .trailing : .leading, spacing: 0) {
                             MessageCore(row: row, ctx: ctx, interactive: true)
-                            if deliveryLine { DeliveryLine(message: message, model: model) }
+                                .hangingBelow(lineEdge) {
+                                    if place == .under { DeliveryLine(message: message, model: model, under: true) }
+                                }
+                            if place == .inline { DeliveryLine(message: message, model: model) }
                         }
                         .frame(maxWidth: ctx.rowMax, alignment: mine ? .trailing : .leading)
                         if !mine { Spacer(minLength: 0) }
@@ -1023,10 +1037,40 @@ enum ThreadCaptions {
     }
 }
 
+/// Where a message's delivery line stands: none (sent), in the layout under its bubble (a send that failed — its
+/// retry stays — or one on its way with newer messages under it), or `under` — 傳送中 for the thread's newest message,
+/// drawn in the empty air below it (the composer's clearance) and taking no height, so neither its coming nor its
+/// going moves the list (the owner's iPad: the first send's 傳送中 pushed the thread up, then let it drop).
+nonisolated enum DeliveryLinePlace: Equatable, Sendable {
+    case none, inline, under
+
+    static func of(_ delivery: Delivery, newest: Bool) -> DeliveryLinePlace {
+        switch delivery {
+        case .failed: .inline
+        case .sending: newest ? .under : .inline
+        case .delivered, .sent: .none
+        }
+    }
+}
+
+extension View {
+    /// `content` hung from this view's foot at its `edge` — its top on the foot, as wide as it is (a bubble narrower
+    /// than its words never wraps them) — taking no room: this view lays out exactly as without it.
+    func hangingBelow<Content: View>(_ edge: HorizontalAlignment, @ViewBuilder _ content: () -> Content) -> some View {
+        overlay(alignment: Alignment(horizontal: edge, vertical: .bottom)) {
+            content()
+                .fixedSize()
+                .alignmentGuide(.bottom) { $0[.top] }
+        }
+    }
+}
+
 /// The line under a message on its way or one that didn't go (its bubble above is dimmed).
 private struct DeliveryLine: View {
     let message: ChatMessage
     let model: ThreadModel
+    /// Laid over the bubble's foot, hanging below it (``DeliveryLinePlace/under``): it takes no room at all.
+    var under = false
     /// Most sends are over before anyone looks; the line is for the ones that take a moment.
     @State private var slow = false
 
@@ -1039,18 +1083,25 @@ private struct DeliveryLine: View {
             .buttonStyle(.plain)
             .padding(.top, 4).padding(.horizontal, 4)
             .accessibilityHint(L10n.Messages.retry)
+        case .sending where under:
+            // Hung from the bubble's foot (``View/hangingBelow(_:_:)``): nothing to press, no room taken.
+            sending.allowsHitTesting(false)
         case .sending:
-            Text(L10n.Messages.sending).font(AppFonts.body(11.5)).foregroundStyle(Tokens.textMuted)
-                .padding(.top, 4).padding(.horizontal, 4)
-                .opacity(slow ? 1 : 0)
+            sending
                 .frame(height: slow ? nil : 0, alignment: .top)
-                .task(id: message.key) {
-                    try? await Task.sleep(for: .seconds(1))
-                    withAnimation(.easeOut(duration: 0.2)) { slow = true }
-                }
         case .delivered, .sent:
             EmptyView()
         }
+    }
+
+    private var sending: some View {
+        Text(L10n.Messages.sending).font(AppFonts.body(11.5)).foregroundStyle(Tokens.textMuted)
+            .padding(.top, 4).padding(.horizontal, 4)
+            .opacity(slow ? 1 : 0)
+            .task(id: message.key) {
+                try? await Task.sleep(for: .seconds(1))
+                withAnimation(.easeOut(duration: 0.2)) { slow = true }
+            }
     }
 }
 

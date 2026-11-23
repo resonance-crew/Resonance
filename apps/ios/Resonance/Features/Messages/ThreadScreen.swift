@@ -226,10 +226,17 @@ struct ThreadScreen: View {
             // Back in the foreground: listeners that failed listen again; a thread that couldn't find its person asks again.
             .onChange(of: scenePhase) { _, phase in
                 if phase != .active { model?.saveDraft() }
+                // Behind, or back in front: the composer comes back unfocused (the owner's call) — no keyboard raised
+                // again by itself, and none left standing as a height the foot floats on.
+                if phase != .inactive { returnUnfocused() }
                 guard let model, visible else { return }
                 model.setOnScreen(phase == .active)
                 guard phase == .active else { return }
                 if model.phase == .failed { Task { await model.load() } } else { model.resume() }
+            }
+            // Opened again while it shows (its push tapped, its bell row): it stays as it is, the composer unfocused.
+            .onReceive(NotificationCenter.default.publisher(for: ThreadReturn.didAsk)) { _ in
+                if visible { returnUnfocused() }
             }
             // No conversation yet, then their first message arrives: it shows up in Messages, and here.
             .onChange(of: conversationListed) { _, listed in
@@ -395,6 +402,22 @@ struct ThreadScreen: View {
 
     /// On show: the top of its stack, on the tab chosen.
     private var visible: Bool { appeared && onSelectedTab }
+
+    /// The composer unfocused, synchronously: its field lets the keyboard go, a panel in the keyboard's place goes,
+    /// a hold for a keyboard to come back goes, and a keyboard height left by one that went while the app was behind
+    /// is zeroed (``KeyboardWatch/settle()``) — so the foot rests on the screen's foot, never over a keyboard that
+    /// isn't there with a field that looks focused (the owner's iPad, from a push).
+    private func returnUnfocused() {
+        composing = false
+        if FirstResponder.current() is ComposerUITextView {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
+        withTransaction(\.disablesAnimations, true) {
+            if panels.isOpen { closePanels() }
+            if viewing == nil, keyboardHold.padding != nil { keyboardHold.letGo() }
+        }
+        keyboard.settle()
+    }
 
     /// The thread came on show, or went out of it: listening, and reading what arrives, only while it shows.
     private func shown(_ visible: Bool) {
