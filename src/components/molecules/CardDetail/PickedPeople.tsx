@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import useSWRInfinite from 'swr/infinite';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
@@ -17,9 +18,25 @@ import styles from './PickedPeople.module.css';
 /** The paper's padding, the apps' `ModalPaper` inset (round 29 §S12): 32 above and below, 28 at each side. */
 export const PICKED_PEOPLE_PADDING = '32px 28px';
 
+/**
+ * How long the dialog waits for its first page before it opens on a stand-in (round 32 §P3): an answer inside this
+ * opens the dialog whole — notes' lines included — at its final height; a slower one opens on rows of the same count.
+ */
+export const PICKED_HOLD_MS = 300;
+
+/**
+ * How many rows the list will open with, known before it answers (round 32 §P3): the marks' own faces (`people`, at
+ * most 3, the newest) — the first page holds exactly those when no one else picked it (`more` false). With `more`,
+ * at least 3. Never under 1 (a mark is drawn only for a sentence someone picked).
+ */
+export function pickedRowsKnown(passage: Pick<TapPickedBody, 'people' | 'more'>): number {
+  return Math.max(1, Math.min(3, passage.people?.length ?? 0) || (passage.more ? 3 : 1));
+}
+
 export interface PickedPeopleProps {
   cardId: string;
-  passage: Pick<TapPickedBody, 'id' | 'text'>;
+  /** The sentence as its mark holds it: its id, its words, and its faces (how many rows the list opens with). */
+  passage: Pick<TapPickedBody, 'id' | 'text'> & Partial<Pick<TapPickedBody, 'people' | 'more'>>;
   script: StoryScript;
   onClose: () => void;
 }
@@ -36,6 +53,16 @@ export interface PickedPeopleProps {
 export function PickedPeople({ cardId, passage, script, onClose }: PickedPeopleProps) {
   const t = useTranslations('card.tap');
   const onPhone = useMediaQuery(TAP_LIST_PHONE_QUERY) !== false;
+  const list = usePickedList(cardId, passage.id);
+  // Round 32 §P3 (the owner: 「先跳出一个很高的弹窗，再根据内容缩回实际高度」): the dialog opened on three stand-in rows
+  // whatever the count, then shrank to the one or two that came. It now waits a moment for the answer and opens whole;
+  // past that, on stand-ins exactly as many as the mark's faces — so its first frame is its final height.
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setWaited(true), PICKED_HOLD_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+  if (!list.data && !waited) return null;
   return (
     <Modal
       open
@@ -52,7 +79,7 @@ export function PickedPeople({ cardId, passage, script, onClose }: PickedPeopleP
         <p className={styles.sentence} data-script={script}>
           {t('passageQuote', { text: passage.text })}
         </p>
-        <PickedList cardId={cardId} passage={passage.id} onPick={onClose} />
+        <PickedList list={list} rows={pickedRowsKnown({ people: passage.people ?? [], more: passage.more ?? false })} onPick={onClose} />
       </div>
     </Modal>
   );
@@ -62,10 +89,9 @@ export function PickedPeople({ cardId, passage, script, onClose }: PickedPeopleP
  * The sentence's people, a page at a time (the list's pages), newest first. Keyed by the viewer too (Wave 2 #3b: a
  * reader reads it as well as the author, each their own blocks' answer), so one account's list never shows the next.
  */
-function PickedList({ cardId, passage, onPick }: { cardId: string; passage: string; onPick: () => void }) {
-  const tHome = useTranslations('home');
+function usePickedList(cardId: string, passage: string) {
   const viewer = useAuth().user?.id ?? '';
-  const { data, size, setSize, isValidating } = useSWRInfinite<TapListBody>(
+  return useSWRInfinite<TapListBody>(
     (i, prev: TapListBody | null) =>
       i === 0
         ? ['taps-picked', cardId, passage, '', viewer]
@@ -75,7 +101,19 @@ function PickedList({ cardId, passage, onPick }: { cardId: string; passage: stri
     ([, id, p, token]: [string, string, string, string, string]) => listTaps(id, token || null, p),
     { revalidateOnFocus: false, revalidateFirstPage: false },
   );
-  if (!data) return <TapPeopleSkeleton />;
+}
+
+function PickedList({ list, rows, onPick }: { list: ReturnType<typeof usePickedList>; rows: number; onPick: () => void }) {
+  const tHome = useTranslations('home');
+  const { data, size, setSize, isValidating } = list;
+  // Still on its way past the hold: stand-ins of the loaded rows' own height (TapPeople's .row), as many as will come.
+  // In the same scroll region as the rows (its 4 under the last band count too).
+  if (!data)
+    return (
+      <DialogScroll>
+        <TapPeopleSkeleton rows={rows} />
+      </DialogScroll>
+    );
   const people = data.flatMap((p) => p.people);
   const next = data.at(-1)?.nextPageToken;
   const loadingMore = isValidating && size > data.length;

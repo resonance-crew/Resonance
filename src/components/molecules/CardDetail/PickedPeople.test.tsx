@@ -7,7 +7,7 @@ import { SWRConfig } from 'swr';
 import zhMessages from '@/messages/zh-TW.json';
 import { renderWithIntl, screen, userEvent, waitFor, within } from '@/../test/render';
 import type { AuthorBody, TapListBody, TapPersonBody } from '@/lib/api/v1/schemas';
-import { PickedPeople } from './PickedPeople';
+import { PICKED_HOLD_MS, PickedPeople, pickedRowsKnown } from './PickedPeople';
 
 /**
  * Round 29 §S4: who resonated with one sentence of the author's story — a centred dialog in the who-resonated
@@ -128,5 +128,54 @@ describe('PickedPeople', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     await user().click(await within(dialog).findByRole('link'));
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  // Round 32 §P3 (the owner: 「会先跳出一个很高的弹窗，再根据内容缩回实际高度，造成明显闪动」). The cause: the list
+  // opened on three stand-in rows whatever the sentence's count (TapPeopleSkeleton's default), outside the rows' scroll
+  // region, then shrank to the one or two people who came. Now an answer inside the hold opens the dialog whole; a
+  // slower one opens on exactly as many stand-ins as the mark's faces, in the same region — the loaded rows' height.
+  it.each([1, 2, 3])('opens on its final height for %i people: as many stand-ins as will come, in the rows’ region', async (n) => {
+    phone(true);
+    let answer: (b: TapListBody) => void = () => {};
+    listTaps.mockReturnValueOnce(new Promise((r) => (answer = r)));
+    const people = ['gus', 'bob', 'carol'].slice(0, n);
+    renderWithIntl(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <PickedPeople cardId="rich-story" passage={{ id: 'a1b2c3d4', text: SENTENCE, people: people.map(face), more: false }} script="cjk" onClose={vi.fn()} />
+      </SWRConfig>,
+      { locale: 'zh-TW', messages: zhMessages },
+    );
+    // Held back a moment for the answer: nothing drawn yet.
+    expect(screen.queryByRole('dialog')).toBeNull();
+    const dialog = await screen.findByRole('dialog', {}, { timeout: PICKED_HOLD_MS + 500 });
+    const stand = within(dialog).getByRole('status');
+    const standRows = stand.querySelectorAll(':scope > li > span');
+    expect(standRows).toHaveLength(n);
+    const region = stand.closest('[class*="scrollBody"]');
+    expect(region).not.toBeNull();
+    answer({ people: people.map((p) => person(p)), nextPageToken: null });
+    const links = await within(dialog).findAllByRole('link');
+    expect(links).toHaveLength(n);
+    // the same list and row (TapPeople's .list, its .row with the 60 floor) in the same region: nothing else changes
+    expect(standRows[0].className).toMatch(/row/);
+    expect(links[0].closest('ul')!.className).toBe(stand.className);
+    expect(links[0].closest('[class*="scrollBody"]')).not.toBeNull();
+  });
+
+  it('opens whole, never on stand-ins, when the answer comes inside the hold', async () => {
+    phone(true);
+    listTaps.mockResolvedValueOnce({ people: [person('gus'), person('bob', '讀到這裡停了很久。')], nextPageToken: null });
+    open();
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).queryByRole('status')).toBeNull();
+    expect(within(dialog).getAllByRole('link')).toHaveLength(2);
+  });
+
+  it('knows its rows from the mark: its faces, at least one, three when others picked it too', () => {
+    expect(pickedRowsKnown({ people: [face('a')], more: false })).toBe(1);
+    expect(pickedRowsKnown({ people: [face('a'), face('b')], more: false })).toBe(2);
+    expect(pickedRowsKnown({ people: [face('a'), face('b'), face('c')], more: true })).toBe(3);
+    expect(pickedRowsKnown({ people: [], more: true })).toBe(3);
+    expect(pickedRowsKnown({ people: [], more: false })).toBe(1);
   });
 });
