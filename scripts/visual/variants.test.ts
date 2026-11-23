@@ -26,8 +26,9 @@ describe('the variant sets', () => {
     // the tablet: 485 + 9; round 28: card-end-long, the web's five alone (the apps keep 分享 · ⋯ in the bar): 494 + 5; round 29:
     // card-picked-people on the fourteen: 499 + 14
     // Wave 2: publish-audience, the web's five alone: 513 + 5; 2026-11-23, the four card types as a grid on the apps
-    // too — the iPhone's three, the iPad, the Mac, the Android phone's three and the tablet: 518 + 9
-    expect(estimate('release').captures).toBe(527);
+    // too — the iPhone's three, the iPad, the Mac, the Android phone's three and the tablet: 518 + 9; round 31:
+    // card-passages-translated and card-picked-translated on the fourteen: 527 + 2 × 14
+    expect(estimate('release').captures).toBe(555);
   });
 
   it('adds the device states after the device they run on, and only in the extended set', () => {

@@ -532,6 +532,14 @@ export const TranslationResponse = named(
     title: z.string(),
     /** The story, translated: Markdown, as `CardDetail.story`. */
     story: z.string(),
+    /**
+     * The card's passages (`CardDetail.tap.passages`) as this translation says them (round 31): each the passage's
+     * own id and a piece of `story`'s plain text, word for word (whitespace read as one) — offer these after 共振
+     * while the translation is on screen, and pick by the id as ever; mark a picked sentence (`CardTap.picked`, by
+     * id) where its piece stands in the translation. Absent when the card offers none or none was found in it; a
+     * passage missing here is not offered in this translation.
+     */
+    passages: z.array(TapPassage).optional(),
   }),
   'TranslationResponse',
   "A story translated by AI into the reader's interface language (title and story only).",

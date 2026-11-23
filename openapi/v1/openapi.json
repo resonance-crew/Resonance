@@ -5719,6 +5719,12 @@
           },
           "story": {
             "type": "string"
+          },
+          "passages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TapPassage"
+            }
           }
         },
         "required": [

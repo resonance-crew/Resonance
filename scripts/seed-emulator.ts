@@ -30,7 +30,8 @@ async function main() {
   const { translationHash } = await import('../src/lib/api/v1/translationHash');
   const { summaryHash } = await import('../src/lib/api/v1/summaryTranslations');
   const { passagesHash, PASSAGES_VERSION } = await import('../src/lib/cards/tapPassages');
-  const { RICH_STORY, RICH_STORY_TITLE, RICH_STORY_PASSAGES } = await import('./seed/pinned');
+  const { RICH_STORY, RICH_STORY_TITLE, RICH_STORY_PASSAGES, RICH_STORY_EN, RICH_STORY_EN_TITLE, RICH_STORY_EN_PASSAGES } = await import('./seed/pinned');
+  const { passagesSig } = await import('../src/lib/cards/translatedPassages');
   const { summarize } = await import('../src/lib/api/v1/summary');
 
   const app = initializeApp({ projectId: EMULATOR_PROJECT_ID }, 'seed');
@@ -163,6 +164,16 @@ async function main() {
     const of = summaryHash(ownTitle, summarize(ownStory).excerpt);
     await db.doc(`cards/${id}`).update({ summaryTranslations: { of, [to]: { title, excerpt } } });
   };
+  // rich-story into English with its passages placed (round 31): what dora reads under 自動翻譯 in English — the
+  // dialog after 共振 offers the translation's words, and the sentences readers picked are marked in it.
+  await db.doc('cards/rich-story/translations/en').set({
+    title: RICH_STORY_EN_TITLE,
+    story: RICH_STORY_EN,
+    hash: translationHash(RICH_STORY_TITLE, RICH_STORY),
+    model: 'seed',
+    createdAt: at(10),
+    passages: { of: passagesSig(RICH_STORY_PASSAGES), items: RICH_STORY_EN_PASSAGES, at: at(10) },
+  });
   await translated(
     'rain-walk',
     'en',

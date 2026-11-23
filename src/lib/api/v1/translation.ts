@@ -1,5 +1,5 @@
 import { mirrorModel } from '@/lib/ai/openai';
-import { translateStory, type TranslatedStory } from '@/lib/ai/translate';
+import { placeTranslatedPassages, translateStory, type TranslatedStory } from '@/lib/ai/translate';
 import { modelsOffline, type TranslationTarget } from '@/lib/text/translation';
 import * as app from '@/server/app/translation';
 import type { AdminDb } from '@/server/infra/firestore/db';
@@ -34,6 +34,8 @@ import type { TranslationResponseBody } from './schemas';
 
 export interface TranslationDeps {
   translate?: (input: { title: string; story: string }, to: TranslationTarget) => Promise<TranslatedStory>;
+  /** Where the translation says the card's passages (round 31): candidates, verified by the service. */
+  place?: (input: { story: string; passages: readonly { id: string; text: string }[] }, to: TranslationTarget) => Promise<unknown[]>;
 }
 
 export { translationHash };
@@ -60,5 +62,7 @@ export function translateCardIn(
     // Against the emulators no model is asked: only the seed's kept translations answer (scripts/seed-emulator.ts).
     translate: deps.translate ?? (modelsOffline() ? null : translateStory),
     model: mirrorModel,
+    // Against the emulators no model places them either: only the seed's kept placing answers.
+    place: deps.place ?? (modelsOffline() ? null : placeTranslatedPassages),
   });
 }

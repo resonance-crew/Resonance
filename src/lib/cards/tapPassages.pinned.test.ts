@@ -14,3 +14,11 @@ describe('the seed’s pinned tap passages', () => {
     for (const p of RICH_STORY_PASSAGES) expect(Object.keys(p).sort()).toEqual(['id', 'text']);
   });
 });
+
+describe('the seed’s pinned translation of rich-story (round 31)', () => {
+  it('says each passage in its own words: what the server would keep from a placing', async () => {
+    const { verifyTranslatedPassages } = await import('./translatedPassages');
+    const { RICH_STORY_EN, RICH_STORY_EN_PASSAGES } = await import('../../../scripts/seed/pinned');
+    expect(verifyTranslatedPassages(RICH_STORY_EN, RICH_STORY_PASSAGES, RICH_STORY_EN_PASSAGES)).toEqual(RICH_STORY_EN_PASSAGES);
+  });
+});

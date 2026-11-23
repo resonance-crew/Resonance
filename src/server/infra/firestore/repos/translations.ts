@@ -95,12 +95,17 @@ export function translationsData(db: AdminDb): TranslationsData {
       const title = kept.get('title');
       const story = kept.get('story');
       if (typeof title !== 'string' || typeof story !== 'string') return null;
-      return { hash: typeof hash === 'string' ? hash : null, title, story };
+      return { hash: typeof hash === 'string' ? hash : null, title, story, passages: kept.get('passages') };
     },
     async keepTranslation(cardId, to, value) {
+      // Whole (`set`): a translation made again drops the passages placed in the one before.
       await db
         .doc(`cards/${cardId}/translations/${to}`)
         .set({ title: value.title, story: value.story, hash: value.hash, model: value.model, createdAt: FieldValue.serverTimestamp() });
+    },
+    async keepTranslationPassages(cardId, to, value) {
+      // `update`: only beside a translation that is there (a card deleted meanwhile took its translations).
+      await db.doc(`cards/${cardId}/translations/${to}`).update({ passages: { of: value.of, items: value.items, at: FieldValue.serverTimestamp() } });
     },
 
     async summaryPage(after, limit) {

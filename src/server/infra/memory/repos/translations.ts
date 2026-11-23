@@ -96,10 +96,15 @@ export function translationsData(state: MemoryState): TranslationsData {
     async getKeptTranslation(cardId, to) {
       const kept = state.get(translationsTable(cardId), to);
       if (!kept || typeof kept.title !== 'string' || typeof kept.story !== 'string') return null;
-      return { hash: typeof kept.hash === 'string' ? kept.hash : null, title: kept.title, story: kept.story };
+      return { hash: typeof kept.hash === 'string' ? kept.hash : null, title: kept.title, story: kept.story, passages: kept.passages };
     },
     async keepTranslation(cardId, to, value) {
       state.put(translationsTable(cardId), to, { ...value, createdAt: new Date() });
+    },
+    async keepTranslationPassages(cardId, to, value) {
+      const kept = state.get(translationsTable(cardId), to);
+      if (!kept) throw new Error('No such translation.');
+      state.put(translationsTable(cardId), to, { ...kept, passages: { of: value.of, items: value.items, at: new Date() } });
     },
 
     async summaryPage(after, limit) {

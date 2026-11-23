@@ -199,6 +199,19 @@ export const SCREENS: Screen[] = [
     web: { query: 'visualTap=passages', scrollTo: '[data-end-row]' },
     app: { ios: ['-visualEnd', 'YES', '-visualTap', 'passages'], android: ['--es', 'cardEnd', 'passages'] },
     expect: "alice's rich story read by dora, who just pressed 共振 (on: the verb's solid face, two waves): a small centred dialog over the dimmed page — its title 哪一段讓你有共鳴, then three banded rows of alice's own sentences, each wrapped in full in the story's type (never cut, no 「…」), nothing drawn round a row at rest, and the small 略過 at the foot's end, no ✕ — a phone 400 or the column less 16 a side, tablet and desktop 480; never a bottom sheet, never a popover" },
+  // Round 31 (the owner, 2026-11-23: 「如果我讀翻譯的文章……那我這邊顯示的清單三句應該也要都翻成英文才對……它這個句子還要
+  // 可以對應回去原本的那個標在畫面上」): the same story read by dora under 自動翻譯 — in English (light-en) the seed's kept
+  // translation with its passages placed (scripts/seed/pinned.ts); in 繁體中文 the story is the reader's own language
+  // and both look as card-passages and card-picked do.
+  { id: 'card-passages-translated', route: '/card/rich-story', as: 'dora',
+    web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) }, query: 'visualTap=passages', scrollTo: '[data-end-row]' },
+    app: { ios: [...AUTO_TRANSLATE.ios, '-visualEnd', 'YES', '-visualTap', 'passages'], android: [...AUTO_TRANSLATE.android, '--es', 'cardEnd', 'passages'] },
+    expect: "light-en: alice's rich story in English (the line under the byline Translated by AI · Show original) read by dora, who just pressed 共振: the passages' dialog as card-passages draws it, its three rows the translation's own words — Boxes filled the living room. I sat on the floor…, You did not lose a home; you gained a place to go back to., The quiet after moving out felt like mine — finally. — each wrapped in full, never cut; zh-TW: the dialog in Chinese, as card-passages" },
+  { id: 'card-picked-translated', route: '/card/rich-story', as: 'dora',
+    web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) }, scrollTo: '[data-passage-faces]' },
+    // (the first picked sentence is the story's first paragraph: in view at the page's top on every device)
+    app: AUTO_TRANSLATE,
+    expect: "light-en: alice's rich story in English read by dora: the sentences readers picked marked where the translation says them — Boxes filled the living room. I sat on the floor… (gus's and bob's faces) and You did not lose a home; you gained a place to go back to. (carol's) — each on its faint wash, the faces in the line after it on a phone and in the left margin where there is room, exactly as in the original; zh-TW: the same marks on the Chinese sentences" },
   { id: 'card-passage-picked', route: '/card/rich-story', as: 'dora', set: 'extended',
     web: { query: 'visualTap=picked', scrollTo: '[data-end-row]' },
     app: { ios: ['-visualEnd', 'YES', '-visualTap', 'picked'], android: ['--es', 'cardEnd', 'passage-picked'] },

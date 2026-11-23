@@ -74,6 +74,8 @@ export interface KeptTranslation {
   hash: string | null;
   title: string;
   story: string;
+  /** Its passages as it says them (round 31), as stored — `{ of, items }` — or undefined (lib/cards/translatedPassages reads it). */
+  passages?: unknown;
 }
 
 /** A story's translation to keep. */
@@ -138,6 +140,8 @@ export interface TranslationsData {
   getKeptTranslation(cardId: string, to: TranslationLang): Promise<KeptTranslation | null>;
   /** Keep a translation of the story into `to` (whole, `createdAt` the server's time). */
   keepTranslation(cardId: string, to: TranslationLang, value: NewTranslation): Promise<void>;
+  /** Keep where the kept translation into `to` says the card's passages (round 31), whole: `of` names the passages. */
+  keepTranslationPassages(cardId: string, to: TranslationLang, value: { of: string; items: { id: string; text: string }[] }): Promise<void>;
 
   /** Up to `limit` cards in id order, after the id `after` (from the first when null or ''). */
   summaryPage(after: string | null, limit: number): Promise<SummaryRow[]>;

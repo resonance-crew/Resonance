@@ -20,15 +20,18 @@ vi.mock('@/server/infra/firestore/rateLimit', () => ({
   firestoreRateLimiter: (db: unknown) => ({ spend: (...a: unknown[]) => spend(db, ...a) }),
 }));
 const translateStory = vi.fn();
+const placeTranslatedPassages = vi.fn();
 vi.mock('@/lib/ai/translate', async (orig) => ({
   ...(await orig<typeof import('@/lib/ai/translate')>()),
   translateStory: (...a: unknown[]) => translateStory(...a),
+  placeTranslatedPassages: (...a: unknown[]) => placeTranslatedPassages(...a),
 }));
 
 const { POST } = await import('@/app/api/v1/cards/[key]/translation/route');
 const { ApiFailure } = await import('./http');
 const { translationHash } = await import('./translation');
 const { TranslationResponse } = await import('./schemas');
+const { passagesHash, PASSAGES_VERSION } = await import('@/lib/cards/tapPassages');
 
 const TITLE = '外婆的醃梅子';
 const STORY = '每年五月，外婆都會把青梅一顆顆擦乾，排在竹篩上曬太陽。';
@@ -48,6 +51,7 @@ beforeEach(() => {
   vi.stubEnv('FIRESTORE_EMULATOR_HOST', '');
   getCurrentUser.mockReset().mockResolvedValue({ id: 'carol' });
   spend.mockReset().mockResolvedValue(undefined);
+  placeTranslatedPassages.mockReset().mockResolvedValue([]);
   translateStory.mockReset().mockImplementation(async ({ title, story }: { title: string; story: string }) => ({ title: `EN ${title}`, story: `EN ${story}` }));
   fake = fakeAdminDb({
     'users/alice': { handle: 'alice' },
@@ -149,5 +153,106 @@ describe('POST /api/v1/cards/{key}/translation', () => {
   it('is 401 for no one signed in', async () => {
     getCurrentUser.mockResolvedValue(null);
     expect((await ask('pub1')).status).toBe(401);
+  });
+});
+
+// Round 31 (the owner, 2026-11-23: 「如果我讀翻譯的文章……那我這邊顯示的清單三句應該也要都翻成英文才對……它這個句子
+// 還要可以對應回去原本的那個標在畫面上」): the answer carries the card's passages as the translation says them — each
+// the original's id and a piece of the translated story, word for word — placed once per translation and passages.
+describe('POST /api/v1/cards/{key}/translation — the passages in the translation (round 31)', () => {
+  const MOVE = ['箱子堆滿了客廳，我坐在地上，第一次覺得安靜是屬於自己的。', '你不是失去了一個家，你是多了一個可以回去的地方。'];
+  const MOVE_EN = ['Boxes filled the living room. I sat on the floor and felt, for the first time, that the quiet was mine.', 'You did not lose a home; you gained a place to go back to.'];
+  const PASSAGES = MOVE.map((text, i) => ({ id: `p${i}`, text }));
+  const STORY_MOVE = MOVE.join('\n\n');
+  const STORY_MOVE_EN = MOVE_EN.join('\n\n');
+  const withPassages = (extra: Record<string, unknown> = {}) =>
+    card({ slug: 'moving', story: STORY_MOVE, tapPassages: { of: passagesHash(STORY_MOVE), items: PASSAGES, model: 'm', v: PASSAGES_VERSION }, ...extra });
+
+  beforeEach(() => {
+    fake.docs['cards/move1'] = withPassages();
+    translateStory.mockImplementation(async ({ title }: { title: string }) => ({ title: `EN ${title}`, story: STORY_MOVE_EN }));
+  });
+
+  it('places the passages in a new translation, keeps the placing beside it, and answers them by the original ids', async () => {
+    placeTranslatedPassages.mockResolvedValue([
+      { id: 'p1', text: MOVE_EN[1] },
+      { id: 'p0', text: MOVE_EN[0] },
+    ]);
+    const body = await (await ask('move1')).json();
+    expect(TranslationResponse.safeParse(body).success).toBe(true);
+    // In the original's order, whatever order the model answered in.
+    expect(body.passages).toEqual([
+      { id: 'p0', text: MOVE_EN[0] },
+      { id: 'p1', text: MOVE_EN[1] },
+    ]);
+    expect(placeTranslatedPassages).toHaveBeenCalledWith({ story: STORY_MOVE_EN, passages: PASSAGES }, 'en');
+    expect(fake.docs['cards/move1/translations/en'].passages).toMatchObject({ of: 'p0,p1', items: body.passages });
+  });
+
+  it('never shows what the model wrote: a piece that is not the translation’s own words, an unknown id or an overlap is dropped', async () => {
+    placeTranslatedPassages.mockResolvedValue([
+      { id: 'p0', text: 'Boxes everywhere, and the quiet felt like mine.' }, // a paraphrase: not in the translation
+      { id: 'p1', text: MOVE_EN[1] },
+      { id: 'zz', text: MOVE_EN[0] }, // no such passage
+      { id: 'p1', text: MOVE_EN[0] }, // a second answer for p1
+    ]);
+    const body = await (await ask('move1')).json();
+    expect(body.passages).toEqual([{ id: 'p1', text: MOVE_EN[1] }]);
+  });
+
+  it('answers a kept placing without asking again, and places again once the card’s passages changed', async () => {
+    placeTranslatedPassages.mockResolvedValue([{ id: 'p0', text: MOVE_EN[0] }]);
+    await ask('move1');
+    placeTranslatedPassages.mockClear();
+    translateStory.mockClear();
+    expect((await (await ask('move1')).json()).passages).toEqual([{ id: 'p0', text: MOVE_EN[0] }]);
+    expect(placeTranslatedPassages).not.toHaveBeenCalled();
+    expect(translateStory).not.toHaveBeenCalled();
+
+    // A placing that found none is kept too: asked once per translation and passages.
+    placeTranslatedPassages.mockResolvedValue([]);
+    fake.docs['cards/move1'].tapPassages = { of: passagesHash(STORY_MOVE), items: [PASSAGES[1], { id: 'p9', text: MOVE[0] }], model: 'm', v: PASSAGES_VERSION };
+    expect((await (await ask('move1')).json()).passages).toBeUndefined();
+    expect(placeTranslatedPassages).toHaveBeenCalledTimes(1);
+    await ask('move1');
+    expect(placeTranslatedPassages).toHaveBeenCalledTimes(1);
+    expect(translateStory).not.toHaveBeenCalled();
+  });
+
+  it('places them in a translation kept before round 31, with no budget spent', async () => {
+    fake.docs['cards/move1/translations/en'] = { title: `EN ${TITLE}`, story: STORY_MOVE_EN, hash: translationHash(TITLE, STORY_MOVE), model: 'm' };
+    placeTranslatedPassages.mockResolvedValue([{ id: 'p1', text: MOVE_EN[1] }]);
+    const body = await (await ask('move1')).json();
+    expect(body.passages).toEqual([{ id: 'p1', text: MOVE_EN[1] }]);
+    expect(translateStory).not.toHaveBeenCalled();
+    expect(spend).not.toHaveBeenCalled();
+  });
+
+  it('answers the translation all the same when placing fails, keeps no placing, and asks again for the next reader', async () => {
+    placeTranslatedPassages.mockRejectedValue(new Error('timeout'));
+    const res = await ask('move1');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.story).toBe(STORY_MOVE_EN);
+    expect(body.passages).toBeUndefined();
+    expect(fake.docs['cards/move1/translations/en'].passages).toBeUndefined();
+    placeTranslatedPassages.mockResolvedValue([{ id: 'p0', text: MOVE_EN[0] }]);
+    expect((await (await ask('move1')).json()).passages).toEqual([{ id: 'p0', text: MOVE_EN[0] }]);
+  });
+
+  it('asks nothing for a card that offers no passages (a short story, stale passages), and its answer is as before', async () => {
+    fake.docs['cards/move1'] = withPassages({ tapPassages: { of: 'stale', items: PASSAGES, model: 'm', v: PASSAGES_VERSION } });
+    const body = await (await ask('move1')).json();
+    expect(Object.keys(body).sort()).toEqual(['story', 'title', 'to']);
+    expect((await (await ask('pub1')).json()).passages).toBeUndefined();
+    expect(placeTranslatedPassages).not.toHaveBeenCalled();
+  });
+
+  it('names no author on an anonymous card: the passages are the story’s own words and the translation’s', async () => {
+    fake.docs['cards/anonmove'] = withPassages({ anonymous: true, slug: 'anon-moving' });
+    placeTranslatedPassages.mockResolvedValue([{ id: 'p0', text: MOVE_EN[0] }]);
+    const body = await (await ask('anonmove')).json();
+    expect(Object.keys(body).sort()).toEqual(['passages', 'story', 'title', 'to']);
+    expect(JSON.stringify(body)).not.toContain('alice');
   });
 });

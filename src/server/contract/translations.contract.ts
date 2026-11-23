@@ -113,6 +113,23 @@ export function describeTranslationsContract(name: string, make: () => Translati
       expect(await h.data.translations.getKeptTranslation(id, 'en')).toEqual({ hash: 'h2', title: 'Plums 2', story: 'Every June' });
     });
 
+    it('keeps where a kept translation says the passages beside it (round 31), and a translation made again drops them', async () => {
+      const id = h.card('placed');
+      await h.seedCard(id, published());
+      await h.data.translations.keepTranslation(id, 'en', { title: 'Plums', story: 'Every May. She dried them.', hash: 'h1', model: 'm' });
+      await h.data.translations.keepTranslationPassages(id, 'en', { of: 'p0,p1', items: [{ id: 'p0', text: 'She dried them.' }] });
+      const kept = await h.data.translations.getKeptTranslation(id, 'en');
+      expect(kept).toMatchObject({ hash: 'h1', title: 'Plums', story: 'Every May. She dried them.' });
+      expect(kept?.passages).toMatchObject({ of: 'p0,p1', items: [{ id: 'p0', text: 'She dried them.' }] });
+      // Placing none is kept as none.
+      await h.data.translations.keepTranslationPassages(id, 'en', { of: 'p2', items: [] });
+      expect((await h.data.translations.getKeptTranslation(id, 'en'))?.passages).toMatchObject({ of: 'p2', items: [] });
+      await h.data.translations.keepTranslation(id, 'en', { title: 'Plums', story: 'Every June.', hash: 'h2', model: 'm' });
+      expect((await h.data.translations.getKeptTranslation(id, 'en'))?.passages).toBeUndefined();
+      // Never beside a translation that isn't there.
+      await expect(h.data.translations.keepTranslationPassages(id, 'zh-TW', { of: 'p0', items: [] })).rejects.toThrow();
+    });
+
     it('summaryPage pages in id order after a cursor; the writer keeps a summary only while the card is unchanged', async () => {
       const a = h.card('a');
       const b = h.card('b');

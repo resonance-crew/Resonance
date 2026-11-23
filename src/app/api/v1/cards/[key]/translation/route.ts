@@ -5,8 +5,9 @@ import { CardKey, TranslationRequest } from '@/lib/api/v1/schemas';
 import { serverCtx } from '@/server/ctx';
 
 export const dynamic = 'force-dynamic';
-// A long story is up to eight model calls, six at a time, given 50 s in all (lib/ai/translate).
-export const maxDuration = 60;
+// A long story is up to eight model calls, six at a time, given 50 s in all (lib/ai/translate); then placing its
+// passages in the translation, 20 s at most (round 31).
+export const maxDuration = 90;
 
 /**
  * POST /api/v1/cards/{key}/translation `{ to }` — a published public story

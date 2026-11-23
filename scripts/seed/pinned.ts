@@ -33,3 +33,32 @@ export const RICH_STORY_PASSAGES: TapPassageItem[] = [
   { id: '85007cbf', text: '你不是失去了一個家，你是多了一個可以回去的地方。' },
   { id: '8684820a', text: 'The quiet after moving out felt like mine — finally.' },
 ];
+
+/**
+ * rich-story in English, as the server would keep it (`cards/rich-story/translations/en`; round 31): no model
+ * answers against the emulators, so a reader under 自動翻譯 in English reads this — block for block the story's own
+ * shape, its links and Markdown kept.
+ */
+export const RICH_STORY_EN_TITLE = 'The first quiet night after moving';
+export const RICH_STORY_EN = [
+  'Boxes filled the living room. I sat on the floor and felt, for the first time, that **the quiet was mine**. Outside, someone was *slowly* taking in their washing.',
+  '## The things that couldn’t come along',
+  'Some things were left behind the moment I started packing: the old sofa, a cracked mirror, and [an essay I had read many times](https://example.com/essay).',
+  '> You did not lose a home;\n> you gained a place to go back to.',
+  ' ',
+  '### A list',
+  '- Shelve the books by colour\n- Put a pot of mint on the windowsill\n- Write to myself ten years ago',
+  '1. Sleep first\n2. Then see',
+  'Further reading:',
+  '[一場雨後的散步](/card/rain-walk)',
+  'You might also like [第一杯自己沖的咖啡](/card/first-coffee) — it is written so gently.',
+  '---',
+  'The quiet after moving out felt like mine — *finally*.',
+].join('\n\n');
+
+/** RICH_STORY_PASSAGES as RICH_STORY_EN says them: each the original's id and the translation's own words. */
+export const RICH_STORY_EN_PASSAGES: TapPassageItem[] = [
+  { id: '569526aa', text: 'Boxes filled the living room. I sat on the floor and felt, for the first time, that the quiet was mine. Outside, someone was slowly taking in their washing.' },
+  { id: '85007cbf', text: 'You did not lose a home; you gained a place to go back to.' },
+  { id: '8684820a', text: 'The quiet after moving out felt like mine — finally.' },
+];

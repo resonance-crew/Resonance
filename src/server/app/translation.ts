@@ -4,6 +4,9 @@ import { translationHash } from '@/lib/api/v1/translationHash';
 import { TRANSLATE_MAX_CHARS, translationTargets, type TranslationTarget } from '@/lib/text/translation';
 import type { ServerCtx } from '@/server/ctx';
 import { trashedAtOf } from '@/server/domain/visibility';
+import { presentTapPassages } from '@/lib/api/v1/tapPassages';
+import { keptTranslatedPassages, passagesSig, verifyTranslatedPassages, type TranslatedPassage } from '@/lib/cards/translatedPassages';
+import type { TapPassageItem } from '@/lib/cards/tapPassages';
 import { visibleCard } from './cardsRead';
 
 /**
@@ -21,6 +24,11 @@ export interface TranslateCardDeps {
   translate: ((input: { title: string; story: string }, to: TranslationTarget) => Promise<{ title: string; story: string }>) | null;
   /** The model a kept translation names. */
   model: () => string;
+  /**
+   * Which piece of the translation renders each of the card's passages (round 31): only candidates, verified here
+   * (verifyTranslatedPassages). Null when no model may be asked: only a kept placing answers then (the seed's).
+   */
+  place?: ((input: { story: string; passages: readonly TapPassageItem[] }, to: TranslationTarget) => Promise<unknown[]>) | null;
 }
 
 const notFound = () => new ApiFailure('not_found', 'No such card.');
@@ -46,8 +54,12 @@ export async function translateCard(
   }
 
   const hash = translationHash(title, story);
+  const offered = presentTapPassages(card);
   const kept = await ctx.data.translations.getKeptTranslation(card.id, to);
-  if (kept && kept.hash === hash) return { to, title: kept.title, story: kept.story };
+  if (kept && kept.hash === hash) {
+    const passages = await placedPassages(ctx, card.id, to, kept.story, offered, kept.passages, deps);
+    return { to, title: kept.title, story: kept.story, ...(passages.length ? { passages } : {}) };
+  }
 
   if (!deps.translate) throw unavailable();
   await ctx.limits.spend(viewerId, 'translate');
@@ -58,9 +70,51 @@ export async function translateCard(
     console.error('[api/v1] translation', card.id, to, e);
     throw unavailable();
   }
-  // Kept for the next reader; a failure to keep it never fails this one.
-  await ctx.data.translations
+  // Kept for the next reader; a failure to keep it never fails this one. Kept before its passages are placed, so
+  // the placing writes beside a translation that is there.
+  const keptNow = await ctx.data.translations
     .keepTranslation(card.id, to, { title: made.title, story: made.story, hash, model: deps.model() })
-    .catch((e: unknown) => console.error('[api/v1] translation keep', card.id, to, e));
-  return { to, title: made.title, story: made.story };
+    .then(() => true)
+    .catch((e: unknown) => {
+      console.error('[api/v1] translation keep', card.id, to, e);
+      return false;
+    });
+  const passages = await placedPassages(ctx, card.id, to, made.story, offered, undefined, deps, keptNow);
+  return { to, title: made.title, story: made.story, ...(passages.length ? { passages } : {}) };
+}
+
+/**
+ * The card's passages as the translation says them (round 31; lib/cards/translatedPassages): a kept placing of
+ * these passages, else — when a model may be asked — placed now and kept beside the translation (a placing that
+ * found none is kept too, so it is asked once per translation and passages). A failed call is kept nowhere and
+ * answers none: the translation never fails for it, and the next reader asks again. No budget: one small call per
+ * card, language and passages.
+ */
+async function placedPassages(
+  ctx: ServerCtx,
+  cardId: string,
+  to: TranslationTarget,
+  translated: string,
+  offered: readonly TapPassageItem[],
+  stored: unknown,
+  deps: TranslateCardDeps,
+  keep = true,
+): Promise<TranslatedPassage[]> {
+  if (!offered.length) return [];
+  const kept = keptTranslatedPassages(stored, offered);
+  if (kept) return kept;
+  if (!deps.place) return [];
+  let items: TranslatedPassage[];
+  try {
+    items = verifyTranslatedPassages(translated, offered, await deps.place({ story: translated, passages: offered }, to));
+  } catch (e) {
+    console.error('[api/v1] translation passages', cardId, to, e);
+    return [];
+  }
+  if (keep) {
+    await ctx.data.translations
+      .keepTranslationPassages(cardId, to, { of: passagesSig(offered), items })
+      .catch((e: unknown) => console.error('[api/v1] translation passages keep', cardId, to, e));
+  }
+  return items;
 }
