@@ -173,7 +173,9 @@ describe('TapPassages (§U1)', () => {
     expect(skip).toHaveAttribute('data-variant', 'quiet');
     expect(skip.parentElement).toHaveAttribute('data-quiet');
     const read = (f: string) => readFileSync(join(process.cwd(), f), 'utf8');
-    expect(read('src/components/molecules/Modal/Modal.module.css')).toMatch(/\.closeRow\[data-quiet\] > button \{[^}]*min-height: 44px;/);
+    // Its words end on the column's end (the apps' quiet word): hung out by the small button's own 18 of padding.
+    expect(read('src/components/molecules/Modal/Modal.module.css')).toMatch(/\.closeRow\[data-quiet\] > button \{[^}]*min-height: 44px;[^}]*margin-inline-end: -18px;/);
+    expect(read('src/components/atoms/OrganicButton/OrganicButton.module.css')).toMatch(/\.sm \{[^}]*padding: 9px 18px;/);
     // The region's cap: the apps' min(560, 70 %) and never more than the window leaves — the backdrop's margin, the
     // paper's 24 + 22, the foot's 18 + 44 — so the whole dialog fits and its foot never scrolls with the backdrop.
     const css = read('src/components/molecules/CardDetail/TapPassages.module.css');
