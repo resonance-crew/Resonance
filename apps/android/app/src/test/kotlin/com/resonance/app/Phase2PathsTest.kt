@@ -160,7 +160,7 @@ class Phase2PathsTest {
         features = on
         var readAt = "null"
         routes["GET /api/v1/me/bell"] = {
-            json("""{"items":[{"id":"n1","type":"note","payload":{"fromUserId":"b","cardId":"c1","noteId":"t1","preview":"hi","anonymous":true},"readAt":$readAt,"createdAt":"2026-11-21T08:00:00Z"}],"people":[],"nextPageToken":null}""")
+            json("""{"items":[{"id":"n1","type":"note","payload":{"fromUserId":"b","cardId":"c1","noteId":"t1","preview":"hi","anonymous":true},"readAt":$readAt,"createdAt":"2026-11-21T08:00:00Z"}],"people":[],"nextPageToken":null,"updatedCursor":"k1"}""")
         }
         routes["POST /api/v1/notifications/read"] = { readAt = "\"2026-11-21T09:00:00Z\""; empty }
         val store = NotificationsStore().also { it.remote = remote }
@@ -169,7 +169,8 @@ class Phase2PathsTest {
         val row = store.items.value.single()
         assertTrue(row.isUnread)
         assertTrue(row.onAnonymousCard)
-        assertEquals("/api/v1/me/bell?limit=50", seen.first { it.startsWith("GET /api/v1/me/bell") }.substringAfter("GET "))
+        // The whole read asks for a cursor (BellReader).
+        assertEquals("/api/v1/me/bell?limit=50&changes=1", seen.first { it.startsWith("GET /api/v1/me/bell") }.substringAfter("GET "))
         store.markRead(row)
         // Drawn read before the server answers.
         assertFalse(store.items.value.single().isUnread)
@@ -179,6 +180,51 @@ class Phase2PathsTest {
         signals.publish(Signals(bell = 3))
         until { seen.count { it.startsWith("GET /api/v1/me/bell") } > before }
         until { !store.items.value.single().isUnread }
+        store.stop()
+    }
+
+    @Test fun theBellReadsOnlyWhatChangedTakesItsFacesFromTheAnswerAndReadsItsCardsAhead() {
+        features = on
+        var cursor = 0
+        val delta = "GET /api/v1/me/bell?limit=50&updatedAfter=k1"
+        routes["GET /api/v1/me/bell"] = {
+            cursor++
+            json("""{"items":[{"id":"n1","type":"note","payload":{"fromUserId":"b","cardId":"c1","preview":"hi"},"readAt":null,"createdAt":"2026-11-21T08:00:00Z"}],"people":[{"id":"b","handle":"bob","initials":"BO","accentColor":"","avatarUrl":null,"avatarSeed":null,"verified":false,"region":null}],"nextPageToken":null,"updatedCursor":"k$cursor"}""")
+        }
+        routes[delta] = {
+            json("""{"items":[{"id":"n2","type":"note","payload":{"fromUserId":"b","cardId":"c2","preview":"again"},"readAt":null,"createdAt":"2026-11-21T09:00:00Z"}],"people":[],"nextPageToken":null,"delta":true,"updatedCursor":"k9"}""")
+        }
+        val cardsAsked = CopyOnWriteArrayList<List<String>>()
+        val peopleAsked = CopyOnWriteArrayList<String>()
+        val store = NotificationsStore().also {
+            it.remote = remote
+            it.extrasSource = NotificationsStore.ExtrasSource(
+                person = { uid -> peopleAsked += uid; null },
+                cards = { ids -> cardsAsked += ids; ids.associateWith { null } },
+            )
+        }
+        // The listener live before the first read: what that read saw is what it heard.
+        signals.publish(Signals(bell = 1))
+        store.start("a")
+        until { store.loaded.value }
+        // The face came with the answer: no read of its own.
+        assertEquals("bob", store.extras.value.people["b"]?.handle)
+        until { cardsAsked.isNotEmpty() }
+        assertEquals(listOf("c1"), cardsAsked.single())
+        until { store.extras.value.cardSettled("c1") }
+        // The counter moves: only what changed since the cursor is asked, merged in newest first.
+        signals.publish(Signals(bell = 2))
+        until { delta in seen }
+        until { store.items.value.size == 2 }
+        assertEquals(listOf("n2", "n1"), store.items.value.map { it.id })
+        until { cardsAsked.size == 2 }
+        assertEquals(listOf("c2"), cardsAsked[1])
+        assertEquals(emptyList<String>(), peopleAsked.toList())
+        // Nothing moved: a kick asks nothing.
+        val asked = seen.count { it.startsWith("GET /api/v1/me/bell") }
+        store.resume()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(asked, seen.count { it.startsWith("GET /api/v1/me/bell") })
         store.stop()
     }
 

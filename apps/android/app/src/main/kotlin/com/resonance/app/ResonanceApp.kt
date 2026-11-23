@@ -7,6 +7,8 @@ import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.annotation.ExperimentalCoilApi
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import coil3.request.ImageRequest
+import kotlin.math.roundToInt
 import com.resonance.design.AppFonts
 import com.resonance.design.Grain
 import com.resonance.kit.api.AppHttp
@@ -61,8 +63,20 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
         draftOutboxPrefs = getSharedPreferences("draft-outbox", MODE_PRIVATE),
     ).also {
         session = it
+        it.notifications.prefetchCovers = ::prefetchBellCovers
         it.start { it.loadMe() }
         watchNetwork(it)
+    }
+
+    /**
+     * The bell's card covers, read into Coil's caches before the bell is open: at the size its thumb
+     * draws them (NotificationsScreen's 46 with its 4 of bleed a side), so the row's AsyncImage finds
+     * them in memory — or at least on disk.
+     */
+    private fun prefetchBellCovers(urls: List<String>) {
+        val loader = SingletonImageLoader.get(this)
+        val px = (BELL_THUMB_FACE_DP * resources.displayMetrics.density).roundToInt()
+        urls.distinct().forEach { url -> loader.enqueue(ImageRequest.Builder(this).data(url).size(px).build()) }
     }
 
     /** A network that comes back sends at once what waited for it (Session.networkBack). */
@@ -115,6 +129,9 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
     }
 
     companion object {
+        /** The bell thumb's face: 46 and 4 of bleed a side (NotificationsScreen's BellThumb, ThumbBleed). */
+        private const val BELL_THUMB_FACE_DP = 54f
+
         /**
          * Coil reads the pictures — covers, avatars, story and link pictures — through the app's
          * [client] (its own disk cache keeps them; their addresses never change), and keeps only a

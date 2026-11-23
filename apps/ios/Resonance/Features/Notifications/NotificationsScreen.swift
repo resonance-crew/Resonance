@@ -536,7 +536,7 @@ private struct BellThumbView: View {
             ZStack {
                 (cover == nil ? family.fill : family.skeleton)
                 if let cover {
-                    RemoteImage(url: cover, fallback: card.listCoverFallbackURL, pixelSize: CGSize(width: face * 3, height: face * 3))
+                    RemoteImage(url: cover, fallback: card.listCoverFallbackURL, pixelSize: BellThumb.pixelSize)
                         .frame(width: face, height: face)
                 } else {
                     Text(verbatim: card.title.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "")
@@ -559,6 +559,24 @@ private struct BellThumbView: View {
 nonisolated enum BellThumb {
     /// How far the face reaches past the 46 box: the swells go out by up to 2.1.
     static let bleed: CGFloat = 4
+
+    /// The pixels a thumb's cover is decoded at (its face, bled, at 3×): what ``RemoteImage`` asks and the
+    /// store's read ahead decodes.
+    static var pixelSize: CGSize {
+        let face = NotificationRowLabel.thumbSize + bleed * 2
+        return CGSize(width: face * 3, height: face * 3)
+    }
+
+    /// The covers the rows' thumbs draw, once their cards are known (newest rows first).
+    @MainActor static func covers(_ items: [NotificationsStore.Item], cards: CardSummaries) -> [URL] {
+        var seen = Set<URL>()
+        return BellExtras.cardIds(items).compactMap { cards.card($0)?.listCoverURL }.filter { seen.insert($0).inserted }
+    }
+
+    /// Decodes them ahead, so 通知 opens on its pictures, not on tiles filling in.
+    @MainActor static func prefetch(_ urls: [URL]) {
+        CoverPrefetch.decoded(urls, box: pixelSize)
+    }
 
     /// Drawn in the bled frame's coordinates: the 46 tile, set in by ``bleed``.
     nonisolated struct Outline: Shape {

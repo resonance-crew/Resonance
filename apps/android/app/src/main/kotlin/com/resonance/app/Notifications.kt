@@ -4,6 +4,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QueryDocumentSnapshot
+import com.resonance.api.models.Author
 import com.resonance.api.models.FeedCard
 import com.resonance.api.models.BellItem
 import com.resonance.kit.chat.isoDate
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.tasks.await
+import java.util.Collections
 import java.util.Date
 
 /**
@@ -31,9 +33,12 @@ import java.util.Date
  * iOS's NotificationsStore.
  *
  * Phase 2: with client-config's `apiBell` on, the rows are pulled from GET /me/bell instead (on
- * the `bell` signal, back in the foreground, each minute on screen — a 304 when nothing moved) and
- * read through POST /notifications/read, drawn read at once. Chosen at [start]; the listener stays
- * for a release.
+ * the `bell` signal, back in the foreground, each minute on screen — only the rows changed since the
+ * last read, nothing at all when the counter didn't move, whole when no one can say: [BellReader])
+ * and read through POST /notifications/read, drawn read at once. The answer's people are the rows'
+ * faces (no read of their own), and after each read the rows' cards — their covers too — are read in
+ * the background ([extrasSource], [prefetchCovers]), so the screen opens on them. Chosen at [start];
+ * the listener stays for a release.
  */
 class NotificationsStore {
     /** The /api/v1 path's clients and switches (Phase 2); null: Firestore only. */
@@ -98,13 +103,28 @@ class NotificationsStore {
 
     private val listeners = LiveListeners()
 
+    /** Where the rows' extras are read from outside a screen (Session's): a pull reads its rows' cards with it. */
+    class ExtrasSource(
+        val person: suspend (String) -> Person?,
+        val cards: suspend (List<String>) -> Map<String, FeedCard?>,
+    )
+
+    var extrasSource: ExtrasSource? = null
+
+    /** Warms the image loader with these covers (ResonanceApp's: Coil's disk and memory caches); null: no prefetch. */
+    var prefetchCovers: ((List<String>) -> Unit)? = null
+
+    /** Extras being read now (`u:` / `c:` keys), by a screen or a pull: never asked twice at once. */
+    private val asking: MutableSet<String> = Collections.synchronizedSet(HashSet())
+
     /**
      * What the rows draw beside their words (round 21; the web's useBellExtras): who each is from —
      * their face — and the card it is about. A key there has been read: its value the person or the
      * card, or null when there is none to show (a profile gone, a card the viewer can't read any
      * more). A key in [Extras.failedPeople] / [Extras.failedCards] couldn't be read this time: the row
-     * draws without it (initials, no card) and the next appearance of the screen asks again. Kept
-     * until sign-out, so coming back to the bell shows them at once.
+     * draws without it (initials, no card) and the next appearance of the screen asks again — still
+     * drawn without it while it is asked, never back to the skeleton. Kept until sign-out, so coming
+     * back to the bell shows them at once.
      */
     data class Extras(
         val people: Map<String, Person?> = emptyMap(),
@@ -125,24 +145,44 @@ class NotificationsStore {
      * each, through [person], which may answer from a list that has them), the cards in one request
      * ([cards]: GET /cards?keys=, 30 a request — every key asked is in its answer, null when the
      * viewer can't read the card, left out when its request failed). [skip] are ids already asked in
-     * this appearance of the screen (not asked twice in one); each one asked is added to it.
+     * this appearance of the screen (not asked twice in one); each one asked is added to it. One that
+     * failed before is asked again only with [retryFailed] (a screen's appearance; a pull's background
+     * read leaves it be), and stays failed — drawn as it was — until an answer says otherwise. The
+     * cards' covers go to [prefetchCovers] as they arrive.
      */
     suspend fun loadExtras(
         items: List<Item>,
         skip: MutableSet<String>,
         person: suspend (String) -> Person?,
         cards: suspend (List<String>) -> Map<String, FeedCard?>,
+        retryFailed: Boolean = true,
     ) {
         val known = _extras.value
         val uids = items.mapNotNull { it.fromUserId?.takeIf(String::isNotEmpty) }.distinct()
-            .filter { it !in known.people && "u:$it" !in skip }
+            .filter { it !in known.people && "u:$it" !in skip && (retryFailed || it !in known.failedPeople) }
+            .filter { asking.add("u:$it") }
         val cardIds = items.mapNotNull { it.cardId?.takeIf(String::isNotEmpty) }.distinct()
-            .filter { it !in known.cards && "c:$it" !in skip }
-        if (uids.isEmpty() && cardIds.isEmpty()) return
+            .filter { it !in known.cards && "c:$it" !in skip && (retryFailed || it !in known.failedCards) }
+            .filter { asking.add("c:$it") }
         uids.forEach { skip.add("u:$it") }
         cardIds.forEach { skip.add("c:$it") }
-        // Asked again now: no longer failed (each row shows its skeleton while it is read).
-        _extras.update { it.copy(failedPeople = it.failedPeople - uids.toSet(), failedCards = it.failedCards - cardIds.toSet()) }
+        if (uids.isEmpty() && cardIds.isEmpty()) return
+        // What couldn't be read last time stays failed while it is asked again: its row keeps drawing
+        // without it (initials, no card) rather than flashing back to the skeleton on every visit.
+        try {
+            readExtras(uids, cardIds, person, cards)
+        } finally {
+            uids.forEach { asking.remove("u:$it") }
+            cardIds.forEach { asking.remove("c:$it") }
+        }
+    }
+
+    private suspend fun readExtras(
+        uids: List<String>,
+        cardIds: List<String>,
+        person: suspend (String) -> Person?,
+        cards: suspend (List<String>) -> Map<String, FeedCard?>,
+    ) {
         coroutineScope {
             val people = async {
                 uids.map { uid ->
@@ -169,13 +209,38 @@ class NotificationsStore {
             }
             val found = people.await()
             val answered = read.await()
+            val readPeople = found.filter { it.second.isSuccess }.map { it.first }
+            val readCards = cardIds.filter { it in answered }
             _extras.update { now ->
                 now.copy(
                     people = now.people + found.filter { it.second.isSuccess }.map { it.first to it.second.getOrNull() },
-                    failedPeople = now.failedPeople + found.filter { it.second.isFailure }.map { it.first },
-                    cards = now.cards + cardIds.filter { it in answered }.associateWith { answered[it] },
-                    failedCards = now.failedCards + cardIds.filter { it !in answered },
+                    failedPeople = now.failedPeople - readPeople.toSet() + found.filter { it.second.isFailure }.map { it.first },
+                    cards = now.cards + readCards.associateWith { answered[it] },
+                    failedCards = now.failedCards - readCards.toSet() + cardIds.filter { it !in answered },
                 )
+            }
+            val covers = readCards.mapNotNull { answered[it]?.imageUrl?.takeIf(String::isNotEmpty) }
+            if (covers.isNotEmpty()) prefetchCovers?.invoke(covers)
+        }
+    }
+
+    /** The people a bell answer named: the rows' faces, with no read of their own. */
+    private fun rememberPeople(people: List<Author>) {
+        if (people.isEmpty()) return
+        val named = people.filter { it.id.isNotEmpty() }.associate { it.id to Person.of(it) }
+        _extras.update { now -> now.copy(people = now.people + named, failedPeople = now.failedPeople - named.keys) }
+    }
+
+    /** After a read: the rows' cards (and their covers), and anyone the answer didn't name, read in the background. */
+    private fun prefetchExtras(items: List<Item>) {
+        val source = extrasSource ?: return
+        scope.launch {
+            try {
+                loadExtras(items, HashSet(), source.person, source.cards, retryFailed = false)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // The screen asks again when it appears.
             }
         }
     }
@@ -197,9 +262,11 @@ class NotificationsStore {
         stop()
         val remote = remote
         if (remote != null && remote.features().apiBell) {
+            // Only what changed since the last read (?updatedAfter=), whole when no one can say: BellReader.
+            val reader = BellReader(remote.inbox, remote.signals::live, LIMIT)
             pull = scope.launchPulls(merge(remote.signals.topic(Signals.Topic.Bell), kicks), remote.onScreen) {
-                val page = try {
-                    remote.inbox.bell(LIMIT)
+                val read = try {
+                    reader.read()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -207,12 +274,19 @@ class NotificationsStore {
                     return@launchPulls
                 }
                 if (pull == null) return@launchPulls
-                val items = page.items.map(::bellItemOf)
+                if (read is BellReader.Read.Same && _loaded.value) {
+                    // Nothing moved: the rows stand (and a pull that failed since is current again).
+                    _failed.value = false
+                    return@launchPulls
+                }
+                rememberPeople(read.people)
+                val items = read.items.map(::bellItemOf)
                 // A row the server shows read no longer needs this device's mark.
                 items.forEach { if (it.readAt != null) readHere.remove(it.id) }
                 _items.value = items.map { item -> readHere[item.id]?.let { item.copy(readAt = it) } ?: item }
                 _loaded.value = true
                 _failed.value = false
+                prefetchExtras(items)
             }
             return
         }

@@ -46,6 +46,22 @@ export function staleDevices(mine: { id: string; updatedAtMs: number }[]): strin
   return [...mine].sort((a, b) => b.updatedAtMs - a.updatedAtMs).slice(MAX_DEVICES).map((d) => d.id);
 }
 
+/**
+ * One record per push token, the most recently registered kept (its language and capabilities are the build's
+ * now): the same token under two records — an install whose id was made anew while its token stayed, as an iOS
+ * install's is when the phone's vendor id changes between an Xcode build and a store build — would ring the
+ * phone twice for one push (device-fixes #6).
+ */
+export function onePerToken<T extends { token: string; updatedAtMs: number }>(records: T[]): T[] {
+  const kept = new Map<string, T>();
+  for (const r of records) {
+    const held = kept.get(r.token);
+    if (!held || r.updatedAtMs > held.updatedAtMs) kept.set(r.token, r);
+  }
+  // In the records' own order.
+  return records.filter((r) => kept.get(r.token) === r);
+}
+
 /** The targets split by the language their app speaks, in the order each language first appears. */
 export function groupByLocale<T extends { locale: DeviceLocale }>(targets: T[]): Map<DeviceLocale, T[]> {
   const byLocale = new Map<DeviceLocale, T[]>();

@@ -70,8 +70,19 @@ class InboxApi(private val api: DefaultApi) {
     /** The viewer read [pair] (their unread count there goes to 0). */
     suspend fun markRead(pair: String) = call { api.markConversationRead(pair) }
 
-    /** The bell's newest rows (and the people they name). */
-    suspend fun bell(limit: Int = 50): BellPage = call { api.getBell(null, limit) }
+    /**
+     * The bell's newest rows (and the people they name). [changes]: the answer carries an
+     * `updatedCursor`; [updatedAfter] (an earlier answer's cursor): only the rows changed since it,
+     * `delta: true` — or, when the server can't tell them all, the newest page whole (no `delta`).
+     * The bell's delta reader is BellReader (the web's `bellReader`).
+     */
+    suspend fun bell(limit: Int = 50, updatedAfter: String? = null, changes: Boolean = false): BellPage = call {
+        api.getBell(
+            pageToken = null, limit = limit, updatedAfter = updatedAfter,
+            // `updatedAfter` implies it: asked only for a whole read.
+            changes = if (changes && updatedAfter == null) DefaultApi.ChangesGetBell._1 else null,
+        )
+    }
 
     /** These bell rows were read (1–50 ids a request). */
     suspend fun markBellRead(ids: Collection<String>) {

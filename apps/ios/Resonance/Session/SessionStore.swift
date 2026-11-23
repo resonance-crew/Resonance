@@ -199,6 +199,8 @@ final class SessionStore {
         let paths = livePaths
         signals.start(uid: uid, listens: paths.signals)
         let inbox = InboxAPI(client: api)
+        // Each read of the bell fetches its rows' cards and covers ahead, so 通知 opens on them.
+        notifications.makeExtras = { [weak self] in self.map { BellExtras.make(reading: $0.reading, readPeople: $0.peopleReader) } }
         notifications.start(uid: uid, bell: paths.bell ? inbox : nil, signals: signals)
         conversations.readPeople = peopleReader ?? { ids in await PeopleBook.readEach(ids) { await ConversationsStore.read($0) } }
         conversations.start(uid: uid, inbox: paths.conversations ? inbox : nil,

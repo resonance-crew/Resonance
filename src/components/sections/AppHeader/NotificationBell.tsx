@@ -19,7 +19,8 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const onPage = pathname === '/notifications';
-  // The list's faces and cards are read only while the dialog shows it (the badge needs neither); the page reads its own.
+  // The list's faces and cards are read once the rows are in and the browser is idle (useBell), so the dialog and
+  // the page open on them; the badge needs neither.
   const bell = useBell(open);
   const { items, fetched, unreadCount } = bell;
 

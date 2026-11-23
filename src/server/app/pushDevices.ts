@@ -13,7 +13,11 @@ export interface DeviceRegistration {
   timeZone?: string | null;
 }
 
-/** Register the install to `uid`, then forget their least recently registered past MAX_DEVICES. */
+/**
+ * Register the install to `uid`; then forget any other record holding its token (whoever's: the token is this
+ * install's now — an install whose id was made anew, or an account that never signed out there), which would ring
+ * the phone twice for one push, and the least recently registered past MAX_DEVICES.
+ */
 export async function registerDeviceIn(ctx: ServerCtx, uid: string, installationId: string, input: DeviceRegistration): Promise<void> {
   const state = ctx.data.pushState;
   await state.putDevice(installationId, {
@@ -25,6 +29,8 @@ export async function registerDeviceIn(ctx: ServerCtx, uid: string, installation
     capabilities: cleanCapabilities(input.capabilities),
     timeZone: timeZoneOf(input.timeZone),
   });
+  const twins = (await state.listDevicesWithToken(input.token)).filter((id) => id !== installationId);
+  if (twins.length) await state.deleteDevices(twins);
   const stale = staleDevices(await state.listDeviceAges(uid));
   if (stale.length) await state.deleteDevices(stale);
 }

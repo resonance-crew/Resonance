@@ -1,6 +1,6 @@
 import type { Card } from '@/lib/db/types';
 import type { StoredRecommendations } from '@/lib/recommend/stored';
-import { deviceLocale } from '@/server/domain/push/devices';
+import { deviceLocale, onePerToken } from '@/server/domain/push/devices';
 import { CONSENT_AT, readNotificationSettings, type PickLog } from '@/server/domain/push/settings';
 import type { PushConnection, PushDevice, PushProfile, PushStateData, PushStateTxRepo, PushTap } from '@/server/ports/repos/pushState';
 import { instantMillis, type Instant } from '@/server/ports/time';
@@ -130,12 +130,17 @@ export function pushStateData(state: MemoryState): PushStateData {
       return deviceRows(state, uid).map(({ id, row }) => ({ id, updatedAtMs: num(row.updatedAt) ?? 0 }));
     },
     async listDevices(uid) {
-      return deviceRows(state, uid).flatMap(({ id, row }): PushDevice[] => {
+      const records = deviceRows(state, uid).flatMap(({ id, row }) => {
         const token = str(row.token);
         if (!token) return [];
         const capabilities = Array.isArray(row.capabilities) ? row.capabilities.filter((c: unknown): c is string => typeof c === 'string') : [];
-        return [{ id, token, locale: deviceLocale(row.locale), platform: str(row.platform), capabilities }];
+        const device: PushDevice = { id, token, locale: deviceLocale(row.locale), platform: str(row.platform), capabilities };
+        return [{ device, token, updatedAtMs: num(row.updatedAt) ?? 0 }];
       });
+      return onePerToken(records).map((r) => r.device);
+    },
+    async listDevicesWithToken(token) {
+      return token ? state.rows('devices', (row) => row.token === token).map(({ id }) => id) : [];
     },
     async listDeviceCapabilities(uid) {
       return deviceRows(state, uid).map(({ row }) => (Array.isArray(row.capabilities) ? row.capabilities : null));

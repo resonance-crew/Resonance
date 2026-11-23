@@ -40,6 +40,25 @@ export function describePushStateContract(name: string, make: () => ServerCtx | 
       expect(await ctx.data.pushState.listDevices('ben')).toEqual([]);
     });
 
+    it('one token, one install: registering it forgets any other record holding it, and a push lists each token once', async () => {
+      // An iOS install whose id was made anew (its vendor id changed between an Xcode build and a store build) keeps its token.
+      await register('ann', 'old', { token: 'tok-ipad', platform: 'ios' });
+      await register('ben', 'gone', { token: 'tok-ipad', platform: 'ios' });
+      await register('ann', 'new', { token: 'tok-ipad', platform: 'ios' });
+      expect((await ctx.data.pushState.listDevices('ann')).map((d) => d.id)).toEqual(['new']);
+      expect(await ctx.data.pushState.listDevices('ben')).toEqual([]);
+      expect(await ctx.data.pushState.listDevicesWithToken('tok-ipad')).toEqual(['new']);
+      // Records already doubled (written before registering forgot twins) still ring once.
+      const record = { userId: 'cat', token: 'tok-twice', platform: 'ios', locale: 'en' as const, appVersion: null, capabilities: [], timeZone: null };
+      await ctx.data.pushState.putDevice('t1', record);
+      await ctx.data.pushState.putDevice('t2', record);
+      await ctx.data.pushState.putDevice('t3', { ...record, token: 'tok-other' });
+      const cat = await ctx.data.pushState.listDevices('cat');
+      expect(cat.map((d) => d.token).sort()).toEqual(['tok-other', 'tok-twice']);
+      expect((await ctx.data.pushState.listDevicesWithToken('tok-twice')).sort()).toEqual(['t1', 't2']);
+      expect(await ctx.data.pushState.listDevicesWithToken('')).toEqual([]);
+    });
+
     it('settings: a missing record reads as the defaults; turning a switch on is kept, and found by the walk', async () => {
       expect(await getNotificationSettingsIn(ctx, 'ann')).toEqual({ picks: false, connectionCards: false, messages: true, resonanceTaps: true });
       expect(await updateNotificationSettingsIn(ctx, 'ann', { picks: true, messages: null })).toEqual({ picks: true, connectionCards: false, messages: true, resonanceTaps: true });

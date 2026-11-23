@@ -30,6 +30,17 @@ extension Route {
     }
 }
 
+/// A conversation opened again while it shows (``Route/reopens(_:)``: its push tapped, its bell row): nothing is
+/// stacked over it, and it is told, so its composer comes back unfocused — never a keyboard height left standing
+/// from before, with a field that only looks focused (the owner's iPad, from a push).
+enum ThreadReturn {
+    static let didAsk = Notification.Name("resonance.threadReturn")
+
+    static func ask(_ center: NotificationCenter = .default) {
+        center.post(name: didAsk, object: nil)
+    }
+}
+
 /// Pushes a route onto the current tab's stack (for taps that aren't
 /// NavigationLinks, e.g. a card link inside a story).
 ///

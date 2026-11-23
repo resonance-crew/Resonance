@@ -213,6 +213,16 @@ public enum CoverPrefetch {
         guard !urls.isEmpty else { return }
         prefetcher.startPrefetching(with: urls)
     }
+
+    private static let decoder = ImagePrefetcher(destination: .memoryCache)
+
+    /// Small pictures a screen is about to draw at `box` (pixels; ``RemoteImage``'s `pixelSize`), decoded ahead into
+    /// the memory cache under the very request ``RemoteImage`` makes, so they are on screen the moment it lays out
+    /// — a list of 46 pt thumbs (the bell's cards), never a feed's covers.
+    public static func decoded(_ urls: [URL], box: CGSize) {
+        guard !urls.isEmpty else { return }
+        decoder.startPrefetching(with: urls.map { ImageSizeBuckets.request($0, box: box) })
+    }
 }
 
 /// A remote picture filling its frame (cover), decoded at the size it's shown

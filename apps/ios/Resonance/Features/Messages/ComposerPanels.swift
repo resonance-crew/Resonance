@@ -344,7 +344,7 @@ nonisolated struct KeyboardHeightMemory: Equatable, Sendable {
 final class KeyboardWatch {
     static let shared = KeyboardWatch()
 
-    private(set) var memory = KeyboardHeightMemory.load()
+    private(set) var memory: KeyboardHeightMemory
     /// Counts each time the keyboard finished coming up.
     private(set) var shownCount = 0
     /// Its height on screen now (0 when it is down).
@@ -356,12 +356,27 @@ final class KeyboardWatch {
     /// A keyboard over the screen that isn't docked at its foot (floating, split): it never takes a panel's place.
     var floats: Bool { onScreen && height == 0 }
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    @ObservationIgnored private let defaults: UserDefaults
+    /// Whether a text field or view holds the focus now (asked as the app comes back to the front).
+    @ObservationIgnored private let textInputFocused: @MainActor () -> Bool
 
-    init() {
-        let center = NotificationCenter.default
+    init(center: NotificationCenter = .default, defaults: UserDefaults = .standard,
+         textInputFocused: @escaping @MainActor () -> Bool = { FirstResponder.current() is UITextInput }) {
+        self.defaults = defaults
+        self.textInputFocused = textInputFocused
+        memory = KeyboardHeightMemory.load(defaults)
         observers.append(center.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
             let end = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
             MainActor.assumeIsolated { self?.changed(end) }
+        })
+        // Back in the front (a push tapped, the app switcher): a keyboard that went away while the app was behind
+        // may never have said so — its hide is not delivered there — and the height it left would float the
+        // composer over nothing, its field looking focused. Settled at once, before anything is laid out again.
+        observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.settle() }
+        })
+        observers.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.settle() }
         })
         observers.append(center.addObserver(forName: UIResponder.keyboardDidShowNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.shownCount += 1 }
@@ -374,17 +389,30 @@ final class KeyboardWatch {
         })
     }
 
+    /// What the keyboard says it is now, when nothing holds the focus a keyboard would be for: none (its height 0,
+    /// not on screen) — what a keyboard gone while the app was behind never said. With a field focused, as it is.
+    func settle() {
+        guard !textInputFocused() else { return }
+        if height != 0 { height = 0 }
+        onScreen = false
+    }
+
     private func changed(_ end: CGRect?) {
         guard let end, let screen = Self.screenBounds else { return }
+        changed(end, screen: screen, landscape: Self.landscape)
+    }
+
+    /// A keyboard frame `end` over `screen` (the screen's space).
+    func changed(_ end: CGRect, screen: CGRect, landscape: Bool) {
         let docked = abs(end.maxY - screen.maxY) < 1 && end.width >= screen.width - 1
         let visible = max(0, screen.maxY - end.minY)
         height = docked ? visible : 0
         onScreen = end.height > 0 && end.width > 0 && end.minY < screen.maxY - 1 && end.maxY > screen.minY
         var next = memory
-        next.record(height: end.height, docked: docked, landscape: Self.landscape)
+        next.record(height: end.height, docked: docked, landscape: landscape)
         if next != memory {
             memory = next
-            next.save()
+            next.save(defaults)
         }
     }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
 import { OrganicScrollbar, organicScrollTarget } from '@/components/atoms/OrganicScrollbar/OrganicScrollbar';
@@ -65,19 +65,38 @@ export interface BellState {
   pick: (n: Notification) => void;
 }
 
+/** Run `fn` once the browser is idle (the page's own reads go first); returns a cancel. */
+function whenIdle(fn: () => void): () => void {
+  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+    const id = window.requestIdleCallback(fn, { timeout: 3000 });
+    return () => window.cancelIdleCallback(id);
+  }
+  const id = setTimeout(fn, 200);
+  return () => clearTimeout(id);
+}
+
 /**
  * The bell's list and badge on the viewer's newest notifications (live: a new one rings the badge while the page
- * is open, one read elsewhere stops counting). `shown`: the list is on screen, so its faces and cards are read.
+ * is open, one read elsewhere stops counting). `shown`: the list is on screen, so its faces and cards are read —
+ * and once the rows are in and the browser is idle they are read anyway (#8), so the list opens (the page, the
+ * dialog) on its faces and pictures, never on empty tiles that fill a moment later; the read is shared (SWR's key),
+ * and its cards and covers are kept for the session.
  */
 export function useBell(shown: boolean): BellState {
   const live = useNotifications(20);
+  const [warm, setWarm] = useState(false);
+  const haveRows = live.data !== undefined;
+  useEffect(() => {
+    if (!haveRows || warm) return;
+    return whenIdle(() => setWarm(true));
+  }, [haveRows, warm]);
   const version = useSyncExternalStore(subscribeRead, () => readVersion, () => 0);
   const items = useMemo(
     () => (live.data ?? []).map((n) => (n.readAt === null && readHere.has(n.id) ? { ...n, readAt: new Date() } : n)),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `version` is what says readHere changed
     [live.data, version],
   );
-  const extras = useBellExtras(shown ? items : undefined);
+  const extras = useBellExtras(shown || warm ? items : undefined);
   const unreadCount = useMemo(() => items.filter((n) => n.readAt === null).length, [items]);
   return { items, fetched: live.data !== undefined || live.error !== null, unreadCount, extras, pick: markReadHere };
 }

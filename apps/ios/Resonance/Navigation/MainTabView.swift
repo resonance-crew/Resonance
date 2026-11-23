@@ -565,10 +565,13 @@ struct MainTabView: View {
         // A conversation belongs to the Messages tab's stack.
         if case .thread = route { tab = .messages }
         // Its message tapped while the conversation is open: it is on screen already, not opened again over itself.
-        if let top = paths[tab]?.last, route.reopens(top) { return }
+        if let top = paths[tab]?.last, route.reopens(top) { return ThreadReturn.ask() }
         // Two panes: the conversation takes the detail pane's place, over nothing.
         if case .thread = route, twoPane {
-            paths[.messages] = MessagesPanes.choose(route, in: paths[.messages] ?? [])
+            let path = paths[.messages] ?? []
+            let chosen = MessagesPanes.choose(route, in: path)
+            if chosen == path { return ThreadReturn.ask() }
+            paths[.messages] = chosen
             return
         }
         paths[tab, default: []].append(route)
