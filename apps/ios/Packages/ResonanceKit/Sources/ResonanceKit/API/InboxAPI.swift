@@ -25,6 +25,17 @@ public struct InboxAPI: Sendable {
     public struct BellPage: Sendable {
         public let items: [BellItem]
         public let people: [Author]
+        /// The rows are only those changed since the `updatedAfter` asked with (else the newest page whole).
+        public var delta = false
+        /// What to ask `updatedAfter` with next (asked with `changes` or `updatedAfter`; nil when the server has none).
+        public var updatedCursor: String?
+
+        public init(items: [BellItem], people: [Author], delta: Bool = false, updatedCursor: String? = nil) {
+            self.items = items
+            self.people = people
+            self.delta = delta
+            self.updatedCursor = updatedCursor
+        }
     }
 
     /// How many conversation pages the list reads at most (50 each).
@@ -111,12 +122,16 @@ public struct InboxAPI: Sendable {
         }
     }
 
-    /// The bell's newest `limit` rows (the listener read 50).
-    public func bell(limit: Int = 50) async throws -> BellPage {
-        switch try await client.getBell(query: .init(limit: limit)) {
+    /// The bell's newest `limit` rows (the listener read 50). With `changes`, the answer carries an `updatedCursor`;
+    /// with `updatedAfter` (a cursor), only the rows changed since it when the server can tell them all
+    /// (`delta`), else the newest page whole (``BellReader``).
+    public func bell(limit: Int = 50, changes: Bool = false, updatedAfter: String? = nil) async throws -> BellPage {
+        let query = Operations.GetBell.Input.Query(limit: limit, updatedAfter: updatedAfter,
+                                                   changes: changes && updatedAfter == nil ? ._1 : nil)
+        switch try await client.getBell(query: query) {
         case let .ok(r):
             let page = try r.body.json
-            return BellPage(items: page.items, people: page.people)
+            return BellPage(items: page.items, people: page.people, delta: page.delta == true, updatedCursor: page.updatedCursor)
         case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
         case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
         case let .undocumented(status, _): throw APIFailure.unexpected(status: status)

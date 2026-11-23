@@ -53,7 +53,21 @@ final class NotificationsStore {
     @ObservationIgnored private let listeners = LiveListeners()
     /// The API path this run takes (nil: Firestore), and the bell signal that says when to pull.
     @ObservationIgnored private var bell: InboxAPI?
+    /// The read that asks only for what changed since the last (``BellReader``), and the signals it compares with.
+    @ObservationIgnored private var reader: BellReader?
+    @ObservationIgnored private weak var signals: SignalListener?
     @ObservationIgnored private var subscription: SignalSubscription?
+    /// The rows as the server last answered them (before `readHere` draws some read).
+    @ObservationIgnored private var fresh: [Item] = []
+    /// The people the answers named (GET /me/bell's `people`), by uid: the rows' faces need no read of their own.
+    @ObservationIgnored private(set) var answeredPeople: [String: Person] = [:]
+    /// Makes the screen's extras (the session's paths), so a read can fetch the rows' cards and their covers
+    /// before the screen shows: 通知 opens on its tiles, not on empty ones filling in (nil: nothing ahead).
+    @ObservationIgnored var makeExtras: (() -> BellExtras?)?
+    /// Fetches the cards' covers ahead (the image pipeline's prefetch; a test counts them).
+    @ObservationIgnored var prefetchCovers: ([URL]) -> Void = { BellThumb.prefetch($0) }
+    /// The last ahead-of-time load, awaited by tests.
+    @ObservationIgnored private(set) var preloading: Task<Void, Never>?
     @ObservationIgnored private var pulls = PullGate()
     @ObservationIgnored private var uid: String?
     /// Rows read here and not yet read in the server's answer: they stay read (a pull that started before the read
@@ -69,8 +83,8 @@ final class NotificationsStore {
     /// The rows' faces and cards, made the first time the screen asks.
     func extras(reading: ReadingAPI, readPeople: (@Sendable (Set<String>) async -> [String: PeopleBook.Read])? = nil) -> BellExtras {
         if let keptExtras { return keptExtras }
-        let made = readPeople.map { BellExtras(cards: CardSummaries(api: reading), readPeople: $0) }
-            ?? BellExtras(cards: CardSummaries(api: reading))
+        let made = BellExtras.make(reading: reading, readPeople: readPeople)
+        made.know(Array(answeredPeople.values))
         keptExtras = made
         return made
     }
@@ -80,6 +94,8 @@ final class NotificationsStore {
         self.uid = uid
         if let bell {
             self.bell = bell
+            self.signals = signals
+            reader = BellReader(inbox: bell, limit: 50)
             subscription = signals?.observe([.bell]) { [weak self] _ in self?.pull() }
             pull()
             return
@@ -114,14 +130,23 @@ final class NotificationsStore {
         if bell != nil { pull() }
     }
 
-    /// Asks the server for the bell (one pull at a time; one asked for meanwhile runs after it).
+    /// Asks the server for what changed in the bell (one pull at a time; one asked for meanwhile runs after it):
+    /// nothing when the listener is live and `bell` hasn't moved, only the rows changed when it has, the newest
+    /// page whole when no one can say (``BellReader``).
     private func pull() {
-        guard let bell, let uid else { return }
+        guard let reader, let uid else { return }
         pulls.run("bell") { [weak self] in
             do {
-                let page = try await bell.bell(limit: 50)
+                // Taken before the read: a touch heard while it is on its way is compared again by the next pull.
+                let answer = try await reader.read(heard: self?.signals?.heard ?? .unknown)
                 guard let self, self.uid == uid else { return }
-                self.show(page.items.map(Self.item(api:)))
+                if !answer.asked, self.loaded {
+                    self.failed = false
+                    return
+                }
+                self.remember(answer.people)
+                self.show(answer.items.map(Self.item(api:)))
+                self.preload()
             } catch {
                 guard let self, self.uid == uid else { return }
                 self.failed = true
@@ -129,7 +154,33 @@ final class NotificationsStore {
         }
     }
 
+    /// An answer's people, kept (and handed to the screen's extras once they exist).
+    private func remember(_ authors: [InboxAPI.Author]) {
+        let people = authors.compactMap(Person.init(author:))
+        guard !people.isEmpty else { return }
+        for person in people { answeredPeople[person.id] = person }
+        keptExtras?.know(people)
+    }
+
+    /// After a read, in the background: the rows' cards (one request for those not read yet) and their covers'
+    /// thumbnails, so the screen draws them at once when it opens.
+    private func preload() {
+        guard let extras = keptExtras ?? makeExtras?() else { return }
+        if keptExtras == nil {
+            extras.know(Array(answeredPeople.values))
+            keptExtras = extras
+        }
+        let items = items
+        let prefetch = prefetchCovers
+        preloading = Task { [weak self] in
+            await extras.loadCards(items)
+            guard self != nil else { return }
+            prefetch(BellThumb.covers(items, cards: extras.cards))
+        }
+    }
+
     private func show(_ fresh: [Item]) {
+        self.fresh = fresh
         // A row read here keeps its read until the server says so too.
         let shown = fresh.map { item -> Item in
             guard item.isUnread, let at = readHere[item.id] else {
@@ -149,6 +200,12 @@ final class NotificationsStore {
         subscription?.cancel()
         subscription = nil
         bell = nil
+        reader = nil
+        signals = nil
+        fresh = []
+        answeredPeople = [:]
+        preloading?.cancel()
+        preloading = nil
         pulls = PullGate()
         uid = nil
         readHere = [:]
@@ -171,12 +228,14 @@ final class NotificationsStore {
             // Drawn read at once; the server's answer follows on the bell's signal.
             let now = Date()
             readHere[id] = now
-            show(items)
+            show(fresh)
             Task { [weak self] in
                 do { try await bell.markBellRead([id]) } catch {
-                    // Not read after all: the dot comes back with the next answer.
-                    self?.readHere[id] = nil
-                    self?.pull()
+                    // Not read after all: the dot comes back (as the server last said), and the bell is asked again.
+                    guard let self else { return }
+                    self.readHere[id] = nil
+                    self.show(self.fresh)
+                    self.pull()
                 }
             }
             return
@@ -277,6 +336,30 @@ final class BellExtras {
         return from + "|" + cards
     }
 
+    /// The extras on the session's paths: people read many at once with `readPeople`, else one by one.
+    static func make(reading: ReadingAPI, readPeople: (@Sendable (Set<String>) async -> [String: PeopleBook.Read])?) -> BellExtras {
+        readPeople.map { BellExtras(cards: CardSummaries(api: reading), readPeople: $0) } ?? BellExtras(cards: CardSummaries(api: reading))
+    }
+
+    /// People an answer of the bell already named (GET /me/bell's `people`): found, never read again.
+    func know(_ found: [Person]) {
+        for person in found where people[person.id] != person {
+            people[person.id] = person
+            book.record(person.id, .found(person))
+            answered.insert(person.id)
+        }
+    }
+
+    /// The cards of `items` not asked for yet, in one request (what the store reads ahead of the screen).
+    func loadCards(_ items: [NotificationsStore.Item]) async {
+        await cards.load(Self.cardIds(items))
+    }
+
+    nonisolated static func cardIds(_ items: [NotificationsStore.Item]) -> [String] {
+        var seen = Set<String>()
+        return items.compactMap(\.cardId).filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
     /// Reads the senders and cards of `items` not read yet; `known` hands over a person already at hand.
     func load(_ items: [NotificationsStore.Item], known: (String) -> Person?) async {
         let uids = Set(items.compactMap(\.fromUserId).filter { !$0.isEmpty })
@@ -288,8 +371,7 @@ final class BellExtras {
         }
         let wanted = book.toRead(uids).subtracting(reading)
         reading.formUnion(wanted)
-        var seen = Set<String>()
-        let cardIds = items.compactMap(\.cardId).filter { !$0.isEmpty && seen.insert($0).inserted }
+        let cardIds = Self.cardIds(items)
         let cards = cards
         async let cardsRead: Void = cards.load(cardIds)
         if !wanted.isEmpty {
