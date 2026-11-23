@@ -255,13 +255,35 @@ class WriterStepsTest {
         assertEquals("private" to false, named.values.visibility to named.values.anonymous)
     }
 
-    @Test fun aCardKeptForConnectionsShowsNoneChosenAndReadsAsPublishing() {
-        assertNull(audienceOf("connections", anonymous = false))
+    @Test fun aCardKeptForConnectionsShowsConnectionsChosenAndReadsAsPublishing() {
+        assertEquals(Audience.Connections, audienceOf("connections", anonymous = false))
+        // Older cards anonymous and for connections only (the server refuses the pair now): none chosen.
+        assertNull(audienceOf("connections", anonymous = true))
         assertEquals(Audience.Private, audienceOf("private", anonymous = true))
         val m = model(draft(written.copy(visibility = "connections")))
-        assertNull(m.audience)
+        assertEquals(Audience.Connections, m.audience)
+        assertEquals(StepVerb.Publish, m.stepVerb)
         assertEquals("發布", m.verb)
         assertEquals("發布這張卡片", m.stepTitle)
+    }
+
+    @Test fun connectionsIsAlwaysNamedInOneChangeAlsoFromAnonymous() = runBlocking {
+        val m = model(draft(written))
+        m.next()
+        m.choose(Audience.Anonymous)
+        m.choose(Audience.Connections)
+        assertEquals("connections" to false, m.values.visibility to m.values.anonymous)
+        assertEquals(Audience.Connections, m.audience)
+        // 發布, never 匿名發布; the step's title as for 公開; a resonance for connections is quiet, as any non-public card.
+        assertEquals(Triple(StepVerb.Publish, "發布", "發布這張卡片"), Triple(m.stepVerb, m.verb, m.stepTitle))
+        assertEquals(ResonanceLine.Quiet, resonanceLine(true, false, false, m.values.visibility, m.values.anonymous))
+        m.saveNow()
+        assertEquals(written.copy(visibility = "connections", anonymous = false), store.updates.last().second)
+        assertTrue(store.updates.none { (_, v) -> v.anonymous && v.visibility == "connections" })
+        // A live card: an update, as for 公開.
+        val live = model(live(written))
+        live.choose(Audience.Connections)
+        assertEquals(StepVerb.Update, live.stepVerb)
     }
 
     @Test fun theStepsTitleAndItsOneButtonFollowTheCardAndTheChoice() {
@@ -279,7 +301,7 @@ class WriterStepsTest {
         assertEquals(StepVerb.Update, live.stepVerb)
         live.choose(Audience.Private)
         assertEquals(Triple(StepVerb.MakeDraft, "轉為私人卡", "更新這張卡片"), Triple(live.stepVerb, live.verb, live.stepTitle))
-        // An older card kept for connections, none of the three chosen: an update.
+        // A card kept for connections: an update.
         assertEquals(StepVerb.Update, model(live(written.copy(visibility = "connections"))).stepVerb)
         // A published card kept private is a 草稿: published again by its choice, or kept one.
         val kept = model(live(written.copy(visibility = "private")))
