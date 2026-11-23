@@ -31,6 +31,7 @@ import { ApiError } from '@/lib/db/firestore/client/api';
 import { onOutboxCaughtUp } from '@/lib/db/firestore/client/draftOutbox';
 import { useOpenedOnce } from '@/lib/hooks/useOpenedOnce';
 import { useConnectionRefresh } from '@/lib/data/resonate';
+import { usePrefillOwnCard } from '@/lib/data/ownCardPrefill';
 import { useSharedPrivately } from '@/lib/data/privateShares';
 import { localeScript, storyLang, writerScript, type StoryScript } from '@/lib/text/script';
 import { isTrashed, isTrashRefusal, mayBeTrashed, restoreTrashedCard } from './trashedCard';
@@ -751,6 +752,11 @@ export function CardEditor({
   }, []);
 
   // ---- Step 2: publish, save changes, leave ---------------------------------
+  // The card's page opens on what was just written, not a skeleton (round 32 §P6: its server render has public cards only).
+  const prefillOwn = usePrefillOwnCard();
+  const prefillWritten = (id: string, slug: string | null | undefined, published: boolean) =>
+    prefillOwn({ ...latest(), id, slug, published, originalLocale: locale, referenceCardId, linkPreviews: initial?.linkPreviews });
+
   async function submit() {
     if (pending) return;
     // The server refuses a card without a title; say so in the writer's words, where the title is.
@@ -778,6 +784,7 @@ export function CardEditor({
       // card page's cache are refreshed after the response.
       const published = await publishCard(card.id);
       closedRef.current = true;
+      prefillWritten(published.id, published.slug, true);
       // In place of the step's own address: back from the card is the writing step, never a step of a card
       // that is live now.
       router.replace(`/card/${published.slug ?? published.id}`);
@@ -886,6 +893,7 @@ export function CardEditor({
       const id = draftIdRef.current;
       if (!id) throw new Error('Draft was not saved');
       closedRef.current = true;
+      prefillWritten(id, initial?.slug, false);
       showCard(`/card/${initial?.slug ?? id}`);
     } catch (err) {
       closedRef.current = false;
