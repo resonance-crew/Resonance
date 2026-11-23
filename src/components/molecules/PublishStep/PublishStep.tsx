@@ -232,6 +232,7 @@ export function PublishStep({
   const t = useTranslations('write');
   const tPanel = useTranslations('write.publishPanel');
   const tVis = useTranslations('write.visibility');
+  const tApp = useTranslations('app');
   const { data: me } = useMyProfile();
   const updating = mode === 'update';
   const { thoughtCore, story, tags, visibility, anonymous, media, accentHue } = values;
@@ -322,7 +323,8 @@ export function PublishStep({
     authorInitials: anonymous ? '·' : (me?.initials ?? '?'),
     avatarUrl: anonymous ? undefined : me?.avatarUrl,
     avatarSeed: anonymous ? '217' : me?.avatarSeed,
-    readTime: `${readMinutes(story)} min`,
+    // In the reader's language, as the apps' preview and the card page's byline say it (「1 分鐘」, not 「1 min」).
+    readTime: tApp('readMinutes', { count: readMinutes(story) }),
     tags,
     imageUrl: cover.partial ?? media?.url,
     // the cover where 調整位置 put it (a picture still arriving has none yet)
