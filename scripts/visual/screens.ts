@@ -208,9 +208,9 @@ export const SCREENS: Screen[] = [
     app: { ios: [...AUTO_TRANSLATE.ios, '-visualEnd', 'YES', '-visualTap', 'passages'], android: [...AUTO_TRANSLATE.android, '--es', 'cardEnd', 'passages'] },
     expect: "light-en: alice's rich story in English (the line under the byline Translated by AI · Show original) read by dora, who just pressed 共振: the passages' dialog as card-passages draws it, its three rows the translation's own words — Boxes filled the living room. I sat on the floor…, You did not lose a home; you gained a place to go back to., The quiet after moving out felt like mine — finally. — each wrapped in full, never cut; zh-TW: the dialog in Chinese, as card-passages" },
   { id: 'card-picked-translated', route: '/card/rich-story', as: 'dora',
-    // (the web scrolls to the line under the byline, just above the story: the header then covers that line and the
-    // first paragraph — the first picked sentence — stands in full under it; in 繁體中文 there is no line, the top stays)
-    web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) }, scrollTo: '[data-translate]' },
+    // (no scroll on the web either: rich-story has no cover, so the page's top holds the first paragraph and the quote
+    // — a scroll lays something under the fixed header, and one before the translation lands keeps the original)
+    web: { storage: { 'resonance-tweaks': JSON.stringify({ autoTranslate: true }) } },
     // (the first picked sentence is the story's first paragraph: in view at the page's top on every device)
     app: AUTO_TRANSLATE,
     expect: "light-en: alice's rich story in English read by dora: the sentences readers picked marked where the translation says them — Boxes filled the living room. I sat on the floor… (gus's and bob's faces) and You did not lose a home; you gained a place to go back to. (carol's) — each on its faint wash, the faces in the line after it on a phone and in the left margin where there is room, exactly as in the original; zh-TW: the same marks on the Chinese sentences" },
