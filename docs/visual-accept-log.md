@@ -39,3 +39,5 @@ what says on whose word they changed. Commit the new row with the accept
 | 2026-11-22T10:07:41Z | 20261122-085814 | 9000b994 | ios | card-picked-people | 3 | 接受為基準 |
 | 2026-11-22T18:14:14Z | 20261122-170103 | c9ea85ed | web | thought-map, publish-cover | 4 | 1、2 接受，3 是設計本來如此 |
 | 2026-11-22T18:14:21Z | 20261122-170235 | c9ea85ed | android | card-note-open | 3 | 1、2 接受，3 是設計本來如此 |
+| 2026-11-23T05:48:24Z | 20261123-053155 | 987aa20e | android, ios, mac | home-invite | 8 | accept visual baseline |
+| 2026-11-23T05:48:26Z | 20261123-053155 | 987aa20e | android, ios, mac | home-invite | 8 | accept visual baseline (promoted from picks-invite-band) |
