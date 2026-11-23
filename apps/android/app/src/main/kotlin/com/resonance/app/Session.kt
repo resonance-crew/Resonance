@@ -470,6 +470,7 @@ class Session(
             _entry.value = if (next != null && prefs.getBoolean(profileKey(next), false)) Entry.App else Entry.Waiting
             _deletionDate.value = null
             _phase.value = if (next == null) Phase.SignedOut else Phase.SignedIn
+            com.resonance.kit.visual.LaunchTrace.mark(if (next == null) "signed out" else "signed in (restored)")
             if (next != null) {
                 _signedOutForDeletion.value = false
                 val listen = { if (uid == next) startLive(next) }
@@ -494,7 +495,7 @@ class Session(
     private suspend fun idToken(forceRefresh: Boolean): String? {
         val user = auth.currentUser ?: return null
         return try {
-            user.getIdToken(forceRefresh).await().token
+            user.getIdToken(forceRefresh).await().token.also { com.resonance.kit.visual.LaunchTrace.mark("id token") }
         } catch (e: FirebaseAuthInvalidUserException) {
             if (forceRefresh) auth.signOut()
             null

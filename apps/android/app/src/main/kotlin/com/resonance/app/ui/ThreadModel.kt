@@ -269,6 +269,7 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
     val hasSomethingToSend: Boolean get() = draft.isNotBlank() || pendingCard != null || pictures.isNotEmpty()
 
     suspend fun load() {
+        com.resonance.kit.visual.LaunchTrace.mark("thread load")
         if (phase == Phase.Failed) phase = Phase.Loading
         watchConnections()
         otherId?.let { id ->
@@ -510,6 +511,7 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
         if (merged == MessageHistory.Merged.Restarted) forgetPaging()
         listenFailed = false
         threadReady = true
+        com.resonance.kit.visual.LaunchTrace.mark("thread first page merged")
         historyChanged()
         checkRestoredReply(conversationGone = false)
         markReadIfNeeded()
