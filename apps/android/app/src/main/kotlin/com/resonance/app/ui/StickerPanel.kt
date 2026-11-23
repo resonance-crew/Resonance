@@ -1,5 +1,8 @@
 package com.resonance.app.ui
 
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -244,14 +247,18 @@ private fun StickerGrid(
     val askStill by rememberUpdatedState(stillNow)
     // Asked on every tick (round 25 §D): turning the system's animations off or on shows without reopening the panel.
     var still by remember { mutableStateOf(askStill()) }
-    LaunchedEffect(breath, grid) {
-        while (true) {
-            val holds = askStill()
-            if (holds != still) still = holds
-            // Still: every turn ends at once (no cell in view, as if scrolled away), the poses stay.
-            if (holds) breath.step(emptyList(), scrolling = true)
-            else breath.step(cellsInView(grid, hidden), grid.isScrollInProgress)
-            delay(PickerBreath.STAGGER_MILLIS)
+    // Only while the app is in front (AND-8): a panel left open in the background wakes nothing.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(breath, grid, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                val holds = askStill()
+                if (holds != still) still = holds
+                // Still: every turn ends at once (no cell in view, as if scrolled away), the poses stay.
+                if (holds) breath.step(emptyList(), scrolling = true)
+                else breath.step(cellsInView(grid, hidden), grid.isScrollInProgress)
+                delay(PickerBreath.STAGGER_MILLIS)
+            }
         }
     }
     LazyVerticalGrid(

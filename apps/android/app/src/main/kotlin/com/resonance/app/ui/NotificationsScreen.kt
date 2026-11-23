@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
@@ -124,10 +125,15 @@ fun NotificationsScreen(session: Session, open: (Route) -> Unit) {
     // The rows' times and parts follow the clock while the screen is open: the minute is read only by
     // each row's time, and by the parts, which change only when a row crosses into another (A13).
     val clock = remember { mutableStateOf(Instant.now()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(60_000)
+    // Only while the app is in front (AND-8); back in front, the clock catches up at once.
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
             clock.value = Instant.now()
+            while (true) {
+                delay(60_000)
+                clock.value = Instant.now()
+            }
         }
     }
     val parts by remember { derivedStateOf { bellBands(bellParts(items, clock.value)) } }

@@ -3,6 +3,8 @@
 # app's own hot paths: the launch and the session, the shell and its tabs, the feed and its cards, the card page
 # and its story, the thread, the writer and its island bridge, the thought map, and what they all draw with
 # (the design system and the shared geometry). Libraries (Compose, Coil, Firebase) ship their own profiles.
+# 2026-11-23 (AND-5, the rules only): the loaders and the card cache are kit/reading's (below), the root is
+# Root.kt's RootKt, and the chat, realtime, config and writing kits and rounds 26–30's card page and bell join.
 
 # Launch, the session, the HTTP and reading layers
 HSPLcom/resonance/app/ResonanceApp;->**(**)**
@@ -14,8 +16,14 @@ HSPLcom/resonance/app/AppConfig;->**(**)**
 HSPLcom/resonance/app/Appearance**;->**(**)**
 HSPLcom/resonance/app/ConversationsStore**;->**(**)**
 HSPLcom/resonance/app/Notifications**;->**(**)**
+HSPLcom/resonance/app/PushCenter**;->**(**)**
+HSPLcom/resonance/app/ChatAvatar**;->**(**)**
 HSPLcom/resonance/kit/api/**;->**(**)**
 HSPLcom/resonance/kit/reading/**;->**(**)**
+HSPLcom/resonance/kit/chat/**;->**(**)**
+HSPLcom/resonance/kit/realtime/**;->**(**)**
+HSPLcom/resonance/kit/config/**;->**(**)**
+HSPLcom/resonance/kit/writing/**;->**(**)**
 HSPLcom/resonance/kit/l10n/**;->**(**)**
 HSPLcom/resonance/kit/story/**;->**(**)**
 HSPLcom/resonance/kit/text/**;->**(**)**
@@ -26,14 +34,18 @@ HSPLcom/resonance/api/models/CardDetail**;->**(**)**
 HSPLcom/resonance/app/ui/NavigationKt**;->**(**)**
 HSPLcom/resonance/app/ui/TabBarAutoHide;->**(**)**
 HSPLcom/resonance/app/ui/FeedScreenKt**;->**(**)**
-HSPLcom/resonance/app/ui/FeedLoader**;->**(**)**
 HSPLcom/resonance/app/ui/SharedKt**;->**(**)**
-HSPLcom/resonance/app/ui/ResonanceRootKt**;->**(**)**
+HSPLcom/resonance/app/ui/RootKt**;->**(**)**
+HSPLcom/resonance/app/ui/ListBandsKt**;->**(**)**
+HSPLcom/resonance/app/ui/NotificationsScreenKt**;->**(**)**
 
 # The card page and its story
 HSPLcom/resonance/app/ui/CardScreenKt**;->**(**)**
-HSPLcom/resonance/app/ui/CardPageLoader**;->**(**)**
-HSPLcom/resonance/app/ui/CardCache**;->**(**)**
+HSPLcom/resonance/app/ui/CardReading**;->**(**)**
+HSPLcom/resonance/app/ui/CardEnd**;->**(**)**
+HSPLcom/resonance/app/ui/TapFaces**;->**(**)**
+HSPLcom/resonance/app/ui/PassageMarks**;->**(**)**
+HSPLcom/resonance/app/ui/NoteInPlace**;->**(**)**
 
 # The thread and the conversations
 HSPLcom/resonance/app/ui/ThreadScreenKt**;->**(**)**
