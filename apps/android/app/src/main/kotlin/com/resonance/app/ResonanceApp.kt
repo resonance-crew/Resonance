@@ -110,6 +110,12 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        // A debug build's cold-start timings in logcat (`adb logcat -s LaunchTrace`, round 32 §P7).
+        if (BuildConfig.DEBUG) {
+            val started = android.os.Process.getStartElapsedRealtime()
+            com.resonance.kit.visual.LaunchTrace.start({ android.os.SystemClock.elapsedRealtime() - started }) { android.util.Log.i(com.resonance.kit.visual.LaunchTrace.TAG, it) }
+            com.resonance.kit.visual.LaunchTrace.mark("app")
+        }
         AppFonts.init(this)
         // Production's Firebase and App Check provider in every process the app starts (A1 a): a push
         // can wake one no activity ever runs in, which then warms the tokens (ResonancePushService).

@@ -4,6 +4,7 @@ import java.util.concurrent.TimeUnit
 import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
+import com.resonance.kit.visual.LaunchTrace
 import com.resonance.kit.visual.VisualReady
 
 /**
@@ -31,10 +32,14 @@ object AppHttp {
         // debug build was launched for a capture: then `requestStarted` answers false and nothing else happens.
         .addInterceptor(Interceptor { chain ->
             val counted = VisualReady.requestStarted()
+            // A debug launch's timings (LaunchTrace, round 32 §P7): what it asks for, in what order.
+            val traced = LaunchTrace.request(chain.request().url.encodedPath)
+            var code: Int? = null
             try {
-                chain.proceed(chain.request())
+                chain.proceed(chain.request()).also { code = it.code }
             } finally {
                 if (counted) VisualReady.requestEnded()
+                traced?.invoke(code)
             }
         })
         // A network interceptor: asked again on every hop, so a redirect off our API never carries the token.

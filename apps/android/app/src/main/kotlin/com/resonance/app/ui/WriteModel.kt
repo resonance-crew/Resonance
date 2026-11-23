@@ -394,6 +394,13 @@ class WriteModel(
     val showsUpdateHint: Boolean get() = liveSeen && values.visibility != "private"
 
     /**
+     * Whether the publish step keeps the update hint's room (round 32 §P4): for every card readers have, whatever is
+     * chosen — the hint's words fade out under 私人卡 ([showsUpdateHint]) but its place stays, so nothing above
+     * 卡片類型 changes height with a choice and the grid never moves under the finger.
+     */
+    val updateHintRoom: Boolean get() = liveSeen
+
+    /**
      * What the bar says of the writing after its title (null: nothing yet — before the card's first
      * write in this visit, and for a card in the trash, which keeps its own line in the page).
      */
@@ -500,12 +507,24 @@ class WriteModel(
      * left over from trying 匿名公開), and leaves a published card's anonymity as it is — an anonymous
      * card made a 草稿, then public again, comes back anonymous, never under its author's name.
      */
-    fun choose(audience: Audience) = when (audience) {
-        Audience.Public -> setAudience("public", anonymous = false)
-        // Named, always — also coming from 匿名公開: who and under whose name in one change.
-        Audience.Connections -> setAudience("connections", anonymous = false)
-        Audience.Anonymous -> setAudience("public", anonymous = true)
-        Audience.Private -> setAudience("private", anonymous = isPublished && values.anonymous)
+    fun choose(audience: Audience) {
+        when (audience) {
+            Audience.Public -> setAudience("public", anonymous = false)
+            // Named, always — also coming from 匿名公開: who and under whose name in one change.
+            Audience.Connections -> setAudience("connections", anonymous = false)
+            Audience.Anonymous -> setAudience("public", anonymous = true)
+            Audience.Private -> setAudience("private", anonymous = isPublished && values.anonymous)
+        }
+        // Round 32 §P6: a draft's choice is saved at once, not after the typing pause — so the verb pressed right after
+        // it finds nothing left to save, and publishing sends only the publish (its own saveNow hands over nothing). A
+        // live card's keeps the pause: its verb writes the buffer it applies whatever was saved (applyEdit's forced save).
+        if (!isPublished) saveAtOnce()
+    }
+
+    /** What is on screen handed to the store now, without the autosave's wait. */
+    private fun saveAtOnce() {
+        saveJob?.cancel()
+        saveJob = scope.launch { saveSaying() }
     }
 
     // Autosave

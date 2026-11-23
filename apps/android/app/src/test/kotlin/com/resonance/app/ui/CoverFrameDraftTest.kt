@@ -4,6 +4,8 @@ import com.resonance.app.DraftService
 import com.resonance.app.DraftValues
 import com.resonance.app.thoughtmap.ThoughtMapService
 import com.resonance.design.CoverFraming
+import com.resonance.app.draftUpdate
+import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -65,6 +67,36 @@ class CoverFrameDraftTest {
         assertNull(m.values.imageFrame)
         m.setCoverFrame(frame)
         assertNull(m.values.imageFrame)
+    }
+
+    /**
+     * Round 32 §P5: an illustration (the generate route's picture, labelled as one, its `-w960` copy beside it) is framed
+     * as a photo is — the frame in the draft, on the preview, in both writes (the merge's `media.frame`, the contract's
+     * `DraftMedia.frame`), its small copy kept.
+     */
+    @Test fun anIllustrationsFrameGoesWhereAPhotosGoes() {
+        val ai = "https://img.resonance.channel/image/2026-11/0b6c.webp"
+        val opened = DraftService.OpenedCard(
+            "d1",
+            DraftValues(
+                title = "放鬆的心才接得住靈感", story = "那天下午雨停了。", imageUrl = ai, imageLabel = L10n.Write.mediaGeneratedLabel,
+                accentHue = 30.0, imageThumbUrl = "https://img.resonance.channel/image/2026-11/0b6c-w960.webp",
+                imageFrame = CoverFraming(0.5, 0.4, 1.2, 1.5),
+            ),
+            isPublished = true, slug = "s", referenceCardId = null, hasPendingEdit = false,
+        )
+        val m = WriteModel(store, calls, null, editor, opened, WriterStep.Publish, scope, reachedOut = {}, locale = { "zh-TW" })
+        val frame = CoverFraming(0.2, 0.7, 1.8, 1.5)
+        m.setCoverFrame(frame)
+        assertEquals(frame, m.values.imageFrame)
+        assertEquals(frame, previewContent(m, null).imageFrame)
+        @Suppress("UNCHECKED_CAST")
+        val media = draftUpdate(m.values)["media"] as Map<String, Any?>
+        assertEquals(frame.toMap(), media["frame"])
+        val sent = DraftService.draftMedia(m.values)!!
+        assertEquals(frame.cx, sent.frame!!.cx, 0.0)
+        assertEquals(frame.zoom, sent.frame!!.zoom, 0.0)
+        assertEquals("https://img.resonance.channel/image/2026-11/0b6c-w960.webp", sent.thumbUrl)
     }
 
     @Test fun theMapsThumbReadsTheFrameOfAPictureCover() {

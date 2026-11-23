@@ -439,6 +439,46 @@ class WriterStepsTest {
         assertFalse(kept.showsUpdateHint)
     }
 
+    /**
+     * Round 32 §P4 (the owner: 切卡片類型時畫面上下跳動): the update hint above 卡片類型 came and went with 私人卡, so the
+     * grid jumped. Its room now stays for every card readers have, whatever is chosen; only its words fade.
+     */
+    /**
+     * Round 32 §P6 (the server lane's audit: publish waited for a second, serial save): a choice in 卡片類型 is handed
+     * to the store at once, not 1.5 s later, and the publish after it hands over nothing more — it sends only the
+     * publish.
+     */
+    @Test fun aChoiceIsSavedAtOnceAndPublishThenSendsOnlyThePublish() = runBlocking {
+        val m = model(draft(written))
+        m.choose(Audience.Connections)
+        // No autosave wait: handed over now.
+        assertEquals(listOf("connections"), store.handed.map { it.third.visibility })
+        val handed = store.handed.size
+        assertEquals("rain-walk", m.finish()?.key)
+        assertEquals(listOf("d1"), calls.published)
+        assertEquals("publish's own save sent nothing more", handed, store.handed.size)
+    }
+
+    @Test fun nothingAboveTheCardTypesChangesWithAChoice() {
+        for (start in listOf(live(written), live(written.copy(visibility = "connections")), live(written.copy(visibility = "private")), draft(written))) {
+            val m = model(start)
+            val room = m.updateHintRoom
+            for (a in listOf(Audience.Anonymous, Audience.Connections, Audience.Private, Audience.Connections, Audience.Private, Audience.Public)) {
+                m.choose(a)
+                assertEquals("$a keeps the room above the grid", room, m.updateHintRoom)
+            }
+        }
+        assertTrue(model(live(written)).updateHintRoom)
+        assertFalse(model(draft(written)).updateHintRoom)
+        // The step's code reads the room, not the words, for its layout; the words only fade.
+        val source = java.io.File("src/main/kotlin/com/resonance/app/ui/WriteScreen.kt").readText()
+        assertTrue(source.contains("val hint = model.updateHintRoom"))
+        assertFalse("no section above the grid mounts with the choice", source.contains("if (model.showsUpdateHint)"))
+        // No scroll is asked for on a choice: 卡片類型's press only chooses.
+        val choice = source.substringAfter("private fun AudienceChoice(").substringBefore("\n}\n")
+        assertFalse(choice.contains("scrollTo") || choice.contains("animateScrollTo") || choice.contains("scrollBy"))
+    }
+
     @Test fun aStoryWithNoWordsHoldsTheVerbForReadersButNotForAPrivateCard() {
         // Only a picture: nothing for anyone to read (the web's lib/cards/blank).
         val m = model(draft(written.copy(story = "![](https://img.resonance.channel/a.webp)", visibility = "public")))

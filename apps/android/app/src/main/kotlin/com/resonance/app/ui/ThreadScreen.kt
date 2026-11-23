@@ -514,6 +514,12 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     }
     // The release screenshots' composer states (debug builds): a reply and a card riding, or the sticker panel open — once
     // the thread is read, taken once.
+    // A debug launch's timing (round 32 §P7): the frame after the messages arrived — they are drawn.
+    if (BuildConfig.DEBUG) LaunchedEffect(model, model.threadReady) {
+        if (!model.threadReady) return@LaunchedEffect
+        withFrameNanos { }
+        com.resonance.kit.visual.LaunchTrace.mark("thread messages drawn (${model.messages.size})")
+    }
     if (BuildConfig.DEBUG) LaunchedEffect(model, model.threadReady) {
         if (!model.threadReady) return@LaunchedEffect
         if (DebugLaunch.threadRide == "replyCard") {

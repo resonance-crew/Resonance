@@ -172,6 +172,11 @@ val LocalModalBackdrop = staticCompositionLocalOf<ModalBackdrop?> { null }
  * wobble and the pen line is drawn over it, so a child widened to the paper's edges ([toModalPaperEdges]) — a banded
  * row's wash — runs from the paper's left edge to its right, under the line, never past it: the web's Modal, whose
  * scroll body is clipped to the paper (`useModalPaper()`).
+ *
+ * [scrollsItself] (off by default): the card itself never scrolls — the content has the window's room (less the
+ * margins and the paper's padding) as its bounds and keeps its own scroll region in it (a child with
+ * `Modifier.weight(1f, fill = false)` and a `verticalScroll`), so a foot after that region stays at the card's bottom
+ * however long the region is (round 32 §P1: the passages' dialog, 略過 pinned).
  */
 @Composable
 fun OrganicModal(
@@ -183,6 +188,7 @@ fun OrganicModal(
     /** The card's widest (Modal's `maxWidth`): 460 unless a small dialog asks for less. */
     maxWidth: Dp = 460.dp,
     clipToPaper: Boolean = false,
+    scrollsItself: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     // The screens under it are softened while it is up (review F8): the root listens.
@@ -258,9 +264,9 @@ fun OrganicModal(
                                 }
                             }
                         }
-                        // A card taller than the room scrolls, its words fading where there is more.
-                        .scrollFade(scroll, ModalScrollFade)
-                        .verticalScroll(scroll)
+                        // A card taller than the room scrolls, its words fading where there is more — unless its
+                        // content keeps a scroll region of its own ([scrollsItself]).
+                        .then(if (scrollsItself) Modifier else Modifier.scrollFade(scroll, ModalScrollFade).verticalScroll(scroll))
                         .padding(horizontal = ModalPaperInset, vertical = 32.dp),
                     verticalArrangement = Arrangement.spacedBy(ModalGap),
                     content = content,

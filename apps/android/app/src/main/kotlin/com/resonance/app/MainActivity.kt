@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.os.Looper
 import android.os.Handler
 import android.util.Log
+import com.resonance.kit.visual.LaunchTrace
 import com.resonance.kit.visual.VisualReady
 import android.webkit.WebSettings
 import android.view.KeyEvent
@@ -66,6 +67,9 @@ class MainActivity : ComponentActivity() {
         // Under the first frame, the chosen theme's paper (the manifest's theme knows only terracotta's).
         window.setBackgroundDrawable(ColorDrawable(AppearanceStore.shared.palette(this).Cream.toArgb()))
         super.onCreate(savedInstanceState)
+        LaunchTrace.mark("activity")
+        // The first frame drawn (the splash's, or the screen's when the splash has gone).
+        window.decorView.post { LaunchTrace.mark("first frame") }
         val emulator = BuildConfig.LOCAL_STACK && intent.getBooleanExtra("emulator", false)
         val config = if (!emulator) AppConfig(usesEmulator = false) else {
             // `--ei` from adb, or a string extra from Maestro (its `launchApp` arguments read from env vars are strings).

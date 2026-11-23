@@ -8,12 +8,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import com.resonance.api.models.Author
 import com.resonance.api.models.TapPerson
 import com.resonance.app.Session
 import com.resonance.design.AppFonts
@@ -27,7 +32,9 @@ import com.resonance.design.StoryType
 import com.resonance.design.generated.Tokens
 import com.resonance.kit.api.TapApi
 import com.resonance.kit.l10n.L10n
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * What a row of the sentence's people says under the pen name (round 29 §S4.2): the note's first line (2 lines) when
@@ -57,12 +64,30 @@ internal fun PickedPeople(
     open: (Route) -> Unit,
 ) {
     val list = remember(cardId, mark.id) { pickedPeople(session.taps, cardId, mark.id) }
-    LaunchedEffect(list) { list.first() }
-    PickedPeopleDialog(list, mark.picked.text, type, anonymous, onDismiss) { p ->
+    // Round 32 §P3: the dialog is drawn once its first page has answered — or, a slow one, after [PICKED_OPEN_WAIT_MS]
+    // with the sentence's own faces as its rows ([TapRows]' expected) — never first at another height.
+    var ready by remember(list) { mutableStateOf(false) }
+    LaunchedEffect(list) {
+        launch { list.first() }
+        awaitPickedFirstPage(list)
+        ready = true
+    }
+    if (ready) PickedPeopleDialog(list, mark.picked.text, type, anonymous, onDismiss, expected = mark.picked.people) { p ->
         onDismiss()
         open(tapRowRoute(p, anonymous))
     }
 }
+
+/**
+ * Waits until [list]'s first page has answered (or failed), [wait] at most (round 32 §P3): the dialog's first frame then
+ * holds the rows it keeps — their notes too — instead of rows that change its height a moment later.
+ */
+internal suspend fun awaitPickedFirstPage(list: TapPeople, wait: Long = PICKED_OPEN_WAIT_MS) {
+    withTimeoutOrNull(wait) { snapshotFlow { list.loaded || list.failed }.first { it } }
+}
+
+/** How long a press on a picked sentence waits for its people before the dialog opens without them (§P3). */
+internal const val PICKED_OPEN_WAIT_MS = 300L
 
 /**
  * The dialog as it is drawn (§S4.1–3): a centred [OrganicModal] — the who-resonated dialog's shell and widths
@@ -80,6 +105,8 @@ internal fun PickedPeopleDialog(
     type: StoryType,
     anonymous: Boolean,
     onDismiss: () -> Unit,
+    /** Who the first page will hold, when known (the sentence's faces): its rows while it is read (§P3). */
+    expected: List<Author>? = null,
     onRow: (TapPerson) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -93,7 +120,7 @@ internal fun PickedPeopleDialog(
             // The flows find the dialog by it (maestro/flows/tap-picked.yaml).
             BasicText(L10n.Card.Tap.passageQuote(sentence), Modifier.fillMaxWidth().flowTag("tap-picked"), style = quote)
             Spacer(Modifier.height(PickedRowsGap))
-            TapRows(list, TapRowMeasure.Dialog, lines = { pickedRowLines(it, anonymous) }, onRow = onRow)
+            TapRows(list, TapRowMeasure.Dialog, lines = { pickedRowLines(it, anonymous) }, expected = expected, onRow = onRow)
         }
         if (showsMore(list)) {
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
