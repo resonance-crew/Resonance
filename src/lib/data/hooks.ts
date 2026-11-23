@@ -30,6 +30,7 @@ import { liveConversationsKey } from './thread';
 import { bellReader } from '@/lib/db/firestore/client/notifications';
 import { watchSignal, type SignalTopic } from '@/lib/db/firestore/client/signals';
 import { getMyBlockedIds } from '@/lib/db/firestore/client/blocks';
+import { isBookmarked } from '@/lib/db/firestore/client/bookmarks';
 import { ApiError, callApi } from '@/lib/db/firestore/client/api';
 import { getFirebaseClientAuth, hasSessionMark, sessionMarkUid } from '@/lib/auth/firebase/client';
 import { linkPreviewsOf } from '@/lib/links/previewShape';
@@ -302,7 +303,7 @@ interface SharedDetail {
   /** When it settled; undefined while in flight. */
   settledAt?: number;
   /** Who has had it: each reader takes one answer once, so its own next read asks again. */
-  takers: Set<'card' | 'lists'>;
+  takers: Set<'card' | 'lists' | 'bookmark'>;
 }
 
 /** By `{uid}:{key}` (the card's id, and its slug once answered). */
@@ -341,6 +342,27 @@ export function sharedCardDetail(key: string, uid: string, who: 'card' | 'lists'
     },
   );
   return entry.promise;
+}
+
+/**
+ * Whether the viewer saved this card, for 收藏 (`CardBookmark`): taken from the card page's one request
+ * ({@link sharedCardDetail} — its `CardDetail.bookmarked`) while that is in flight or a moment after, so opening a
+ * card asks the server once, not a second time for one boolean (the perf audit's WEB-2). With no such answer at
+ * hand (a later revalidation, a page without the request) it asks for itself, as before.
+ */
+export async function sharedBookmarked(cardId: string, uid: string): Promise<boolean> {
+  const hit = sharedDetails.get(`${uid}:${cardId}`);
+  const fresh = hit && (hit.settledAt === undefined || Date.now() - hit.settledAt <= SHARED_DETAIL_MS);
+  if (hit && fresh && !hit.takers.has('bookmark')) {
+    hit.takers.add('bookmark');
+    try {
+      const body = await hit.promise;
+      if (body) return body.bookmarked === true;
+    } catch {
+      // The shared read failed: ask for this one alone.
+    }
+  }
+  return isBookmarked(cardId);
 }
 
 /** Forget the shared answers (tests). */

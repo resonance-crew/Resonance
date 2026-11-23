@@ -22,6 +22,8 @@ import styles from './page.module.css';
 type Lead = 'recommended' | 'latest';
 
 const NO_CARDS: Card[] = [];
+/** The feed's covers on screen as it opens — a phone's first two bands, a wide grid's first row of three (WEB-4). */
+const HOME_EAGER_COVERS = 3;
 
 export default function HomeFeedPage() {
   const t = useTranslations('home');
@@ -205,7 +207,7 @@ export default function HomeFeedPage() {
         <>
           {/* The recommender's reasons are deliberately not shown — an
               unexplained pick keeps the surprise of opening the card. */}
-          {feedCards.length > 0 && <CardLinkGrid cards={feedCards} authors={feedAuthors} seamTop enterFrom={enterFrom} />}
+          {feedCards.length > 0 && <CardLinkGrid cards={feedCards} authors={feedAuthors} seamTop enterFrom={enterFrom} eagerCovers={HOME_EAGER_COVERS} />}
 
           <footer ref={foot} className={styles.foot} data-mascot="feed-foot">
             {moreToShow ? (

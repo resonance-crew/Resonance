@@ -56,6 +56,13 @@ describe('ReplyingBand', () => {
     expect(band.querySelector('img')?.getAttribute('src')).toBe('https://img.example/rain.webp');
   });
 
+  it("draws the cover's 960 px copy when it has one, never the 2048 px cover in a 36 tile", () => {
+    original.card = { ...RAIN_WALK, media: { type: 'image', url: 'https://img.example/rain.webp', thumbUrl: 'https://img.example/rain-w960.webp' } };
+    renderWithIntl(<WriteWorkspace title="寫卡片" locale="zh-TW" referenceCardId="rain-walk" />, zh);
+    const band = screen.getByRole('button', { name: '回應〈一場雨後的散步〉' });
+    expect(band.querySelector('img')?.getAttribute('src')).toBe('https://img.example/rain-w960.webp');
+  });
+
   it('opens the original in a centred dialog, the writing left under it', async () => {
     renderWithIntl(<WriteWorkspace title="寫卡片" locale="zh-TW" referenceCardId="rain-walk" />, zh);
     await userEvent.click(screen.getByRole('button', { name: '回應〈一場雨後的散步〉' }));

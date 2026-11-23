@@ -48,6 +48,11 @@ export interface CardLinkGridProps {
    * before it. Cards already on screen never play it again.
    */
   enterFrom?: number;
+  /**
+   * How many of the first covers are fetched at once with a high priority (the home feed: the ones on screen as it
+   * opens, WEB-4); the rest wait until they near the viewport. Default none.
+   */
+  eagerCovers?: number;
 }
 
 /** The stagger between two cards coming in, and the most of it any card waits. */
@@ -82,7 +87,7 @@ export function useFeedColumns(): number | null {
  * the same way — card i in column i % n, by the CSS breakpoints — so the
  * landing page ships its cards in its HTML where they will stay.
  */
-export function CardLinkGrid({ cards, authors, cardHref, renderActions, renderCaption, quoteFor, seamTop = false, enterFrom }: CardLinkGridProps) {
+export function CardLinkGrid({ cards, authors, cardHref, renderActions, renderCaption, quoteFor, seamTop = false, enterFrom, eagerCovers = 0 }: CardLinkGridProps) {
   const t = useTranslations('card');
   const cols = useFeedColumns();
   const prefill = usePrefillCard();
@@ -146,6 +151,7 @@ export function CardLinkGrid({ cards, authors, cardHref, renderActions, renderCa
             isFirst={seamTop && i === 0}
             quote={quoteFor ? quoteFor(card, i) ?? undefined : undefined}
             sharedChalk
+            priorityCover={i < eagerCovers}
           />
         </Link>
         {renderActions && <div className={styles.actions}>{renderActions(card, i, palettes[i])}</div>}

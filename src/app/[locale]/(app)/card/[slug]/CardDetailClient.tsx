@@ -40,6 +40,7 @@ import { hasSessionMark } from '@/lib/auth/firebase/client';
 import { cardKey } from '@/lib/data/cardPrefill';
 import type { CardSeed } from '@/lib/data/cardSeed';
 import type { Card } from '@/lib/db/types';
+import { coverThumbUrl } from '@/lib/adapters/story';
 import { useCard, useCardPageLists, useReaderBlockedIds, type CardView } from '@/lib/data/hooks';
 import { useCountCardRead } from '@/lib/data/cardReads';
 import { useReadingReport } from '@/lib/data/readingReport';
@@ -49,6 +50,9 @@ import { useEndsApart } from '@/lib/hooks/useEndsApart';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { CARD_HOLD_ATTR } from './cardHold';
 import styles from './page.module.css';
+
+/** The cover's width in the card page's column (`--measure`, 680; the whole width on a phone). */
+const HERO_SIZES = '(max-width: 720px) 100vw, 680px';
 
 /** The end row the card's share · ⋯ would add under the tags (a bar button's height), counted when deciding. */
 const END_ROW_H = 44;
@@ -428,6 +432,9 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
                 frame={card.media.frame}
                 className={styles.heroImage}
                 priority
+                // The ≤ 960 px copy beside it: a phone's column (≤ 720 at 2×) decodes about a quarter of the pixels.
+                thumbSrc={coverThumbUrl(card)}
+                sizes={HERO_SIZES}
               />
             )}
 

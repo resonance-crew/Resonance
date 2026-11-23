@@ -8,6 +8,8 @@ import { cardVar, previewPalette } from '@/lib/design/cardColours';
 import { seedFromString } from '@/lib/design/prng';
 import { wobRect } from '@/lib/design/wobRect';
 import { OriginalCardPanel } from './LazyOriginalCardPanel';
+import { coverThumbUrl } from '@/lib/adapters/story';
+import { RevealImg } from '@/components/atoms/RevealImg/RevealImg';
 import styles from './ReplyingBand.module.css';
 
 const THUMB = 36;
@@ -34,8 +36,7 @@ function OriginalThumb({ id, cover, hue, title }: { id: string; cover?: string; 
     >
       <span className={styles.thumbFace}>
         {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={cover} alt="" loading="lazy" decoding="async" />
+          <RevealImg reveal="thumb" src={cover} alt="" loading="lazy" decoding="async" />
         ) : (
           <span className={styles.thumbWord}>
             {Array.from(title.trim())[0] ?? ''}
@@ -66,7 +67,7 @@ export function ReplyingBand({ cardId }: { cardId: string }) {
   return (
     <>
       <button type="button" className={styles.band} onClick={() => setOpen(true)} aria-haspopup="dialog" data-replying-band="">
-        <OriginalThumb id={card.id} cover={card.media?.type === 'image' ? card.media.url : undefined} hue={card.accentHue ?? null} title={card.thoughtCore} />
+        <OriginalThumb id={card.id} cover={card.media?.type === 'image' ? (coverThumbUrl(card) ?? card.media.url) : undefined} hue={card.accentHue ?? null} title={card.thoughtCore} />
         <span className={styles.words}>{label}</span>
       </button>
       {open && (

@@ -94,6 +94,9 @@ vi.mock('@/lib/db/firestore/client/thoughtMap', () => ({
 vi.mock('@/lib/db/firestore/client/blocks', () => ({
   getMyBlockedIds: vi.fn(),
 }));
+vi.mock('@/lib/db/firestore/client/bookmarks', () => ({
+  isBookmarked: vi.fn(async () => false),
+}));
 
 // useAuth is mocked so each test controls the signed-in viewer directly,
 // instead of standing up the real AuthProvider + Firebase auth.
@@ -123,6 +126,7 @@ import { listConversations } from '@/lib/db/firestore/client/messages';
 import { getBell } from '@/lib/db/firestore/client/notifications';
 import { resetLive } from './live';
 import { ApiError, callApi } from '@/lib/db/firestore/client/api';
+import { isBookmarked } from '@/lib/db/firestore/client/bookmarks';
 import { loadMyThoughtMap } from '@/lib/db/firestore/client/thoughtMap';
 import { getClientDb } from '@/lib/db/firestore/client/init';
 import type { CardDetailBody, CardListBody, FeedCardBody, FeedPageBody, RecommendedFeedBody } from '@/lib/api/v1/schemas';
@@ -148,6 +152,7 @@ import {
   useRecommendedFeed,
   useRelated,
   resetSharedCardDetails,
+  sharedBookmarked,
   useUnreadMessages,
   type CardBoxShelf,
 } from './hooks';
@@ -1365,6 +1370,28 @@ describe('useCardPageLists', () => {
     expect(loading).toEqual({ status: 'loading' });
     rerender();
     expect(result.current.embeds).toBe(loading);
+  });
+});
+
+// WEB-2: 收藏 read its one boolean with a second GET /api/v1/cards/{id} beside the page's own; it takes the page's
+// answer (`CardDetail.bookmarked`) now, and asks for itself only with none at hand.
+describe('sharedBookmarked', () => {
+  it("takes 收藏 from the card page's one request instead of a second GET", async () => {
+    api({
+      '/api/v1/cards/c1?include=': { card: summary('c1', 'a1'), resonances: [], related: [], links: [], embeds: [], bookmarked: true },
+    });
+    const { result } = renderHook(() => useCardPageLists('c1', undefined), { wrapper });
+    const saved = sharedBookmarked('c1', 'me');
+    await expect(saved).resolves.toBe(true);
+    await waitFor(() => expect(result.current.related).toBeDefined());
+    expect(vi.mocked(callApi).mock.calls.filter(([p]) => String(p).startsWith('/api/v1/cards/c1'))).toHaveLength(1);
+    expect(isBookmarked).not.toHaveBeenCalled();
+  });
+
+  it('asks for itself with no answer at hand', async () => {
+    vi.mocked(isBookmarked).mockResolvedValueOnce(true);
+    await expect(sharedBookmarked('c9', 'me')).resolves.toBe(true);
+    expect(isBookmarked).toHaveBeenCalledWith('c9');
   });
 });
 

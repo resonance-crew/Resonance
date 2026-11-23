@@ -12,6 +12,8 @@ import { cardVar, previewPalette } from '@/lib/design/cardColours';
 import { seedFromString } from '@/lib/design/prng';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import type { Card, Notification, User } from '@/lib/db/types';
+import { coverThumbUrl } from '@/lib/adapters/story';
+import { RevealImg } from '@/components/atoms/RevealImg/RevealImg';
 import styles from './NotificationBell.module.css';
 
 /** Stands in for the pen name while the sentence is formatted, so the name can be set apart wherever it falls. */
@@ -242,13 +244,13 @@ function useThumbClip(id: string) {
 export function BellCardThumb({ card }: { card: Card }) {
   const family = previewPalette(card.accentHue ?? null, card.id);
   const clip = useThumbClip(card.id);
-  const cover = card.media?.type === 'image' ? card.media.url : undefined;
+  // The ≤ 960 px list copy when the cover has one: a 46 tile never needs the 2048 px cover.
+  const cover = card.media?.type === 'image' ? (coverThumbUrl(card) ?? card.media.url) : undefined;
   return (
     <span className={styles.thumb} style={{ clipPath: clip }} aria-hidden>
       <span className={styles.thumbFace} style={{ inset: -THUMB_BLEED, background: cardVar(cover ? 'skeleton' : 'fill', family) }}>
         {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={cover} alt="" loading="lazy" decoding="async" />
+          <RevealImg reveal="thumb" src={cover} alt="" loading="lazy" decoding="async" />
         ) : (
           <span className={styles.thumbWord} style={{ color: cardVar('border-deep', family) }}>
             {Array.from(card.thoughtCore.trim())[0] ?? ''}

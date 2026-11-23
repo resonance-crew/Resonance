@@ -158,3 +158,20 @@ describe('the cards share their chalk', () => {
     expect(used).toEqual(cards.map((_, i) => `url(#chalk-hdb-${i % 6})`));
   });
 });
+
+// WEB-4: the home feed's first covers were lazy and of no priority, though on screen as it opens.
+describe("the feed's first covers", () => {
+  const withCover = (id: string) => card(id, 140, { media: { type: 'image', url: `https://img.test/${id}.webp`, label: id } });
+  it('asks for the first ones at once with a high priority, and the rest as they near the viewport', () => {
+    const cards = ['a', 'b', 'c', 'd', 'e'].map(withCover);
+    const { container } = renderWithIntl(<CardLinkGrid cards={cards} authors={{}} eagerCovers={3} />);
+    const covers = Array.from(container.querySelectorAll('img')).filter((img) => img.getAttribute('src')?.startsWith('https://img.test/'));
+    expect(covers.map((img) => img.getAttribute('loading'))).toEqual(['eager', 'eager', 'eager', 'lazy', 'lazy']);
+    expect(covers.map((img) => img.getAttribute('fetchpriority'))).toEqual(['high', 'high', 'high', null, null]);
+  });
+
+  it('keeps every cover lazy in a list that asks for none', () => {
+    const { container } = renderWithIntl(<CardLinkGrid cards={['a', 'b'].map(withCover)} authors={{}} />);
+    for (const img of container.querySelectorAll('img')) expect(img).toHaveAttribute('loading', 'lazy');
+  });
+});

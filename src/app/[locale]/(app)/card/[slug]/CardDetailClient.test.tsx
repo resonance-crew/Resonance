@@ -842,6 +842,31 @@ describe('its pictures', () => {
   });
 });
 
+// WEB-3: the card page's cover (its LCP) asked for the 2048 px upload on every phone; it offers its ≤ 960 px copy
+// beside it now, chosen by the column's width.
+describe('its cover on a phone', () => {
+  it("offers the cover's 960 px copy, sized by the story's column", () => {
+    vi.mocked(getCardById).mockReturnValue(new Promise(() => {}));
+    const s = seed();
+    renderPage({
+      seed: {
+        ...s,
+        view: {
+          card: {
+            ...s.view!.card,
+            media: { type: 'image', url: 'https://img.test/cover.webp', thumbUrl: 'https://img.test/cover-w960.webp', label: 'The kettle' },
+          },
+          author: s.view!.author,
+        },
+      },
+    });
+    const cover = screen.getByRole('img', { name: 'The kettle' });
+    expect(cover).toHaveAttribute('srcset', 'https://img.test/cover-w960.webp 960w, https://img.test/cover.webp 2048w');
+    expect(cover).toHaveAttribute('sizes', '(max-width: 720px) 100vw, 680px');
+    expect(cover).toHaveAttribute('fetchpriority', 'high');
+  });
+});
+
 describe('the head: title, byline and actions', () => {
   const env = process.env.NEXT_PUBLIC_SITE_URL;
   beforeEach(() => {
