@@ -174,6 +174,23 @@ export interface FilmPin {
   until?: Date;
 }
 
+/**
+ * The landing film's choice for one Taipei day (`config/landingFilmToday`, server-only like every `config/*`): card ids
+ * only — which two lead and which the end lists — so a render reads this one document instead of the window, its
+ * readings and the parts' vectors again (the perf audit's BE-5). `v` is the rule's version, `pin` the pin it was
+ * chosen under (a pin set, changed or run out since makes a new choice).
+ */
+export interface FilmToday {
+  day: number;
+  v: number;
+  pin: string;
+  written: string;
+  answer: string | null;
+  relation: 'resonance' | 'kin' | 'alone';
+  pinned: boolean;
+  picks: string[];
+}
+
 /** Outside a transaction: reads, and writes that need none (batches, bulk deletes). */
 export interface CardsData {
   // --- read side (cardsRead lane)
@@ -240,6 +257,10 @@ export interface CardsData {
   filmWindow(limit: number): Promise<FilmWindowRow[]>;
   /** The landing film's pin, if any. */
   filmPin(): Promise<FilmPin | null>;
+  /** The film's choice for a day, as last kept (null: none, or not of this shape). */
+  filmToday(): Promise<FilmToday | null>;
+  /** Keep the film's choice for its day (written whole). */
+  saveFilmToday(today: FilmToday): Promise<void>;
   /** The vectors of these cards' parts on a channel (`cardVectors/{id}__{channel}__{i}`), by card id. */
   partVectors(ids: string[], channel: 'insight' | 'situation', perCard: number): Promise<Map<string, number[][]>>;
   /** These cards with the landing grid's fields, whole (LANDING_CARD_FIELDS). */

@@ -36,7 +36,7 @@ vi.mock('@/lib/db/firestore/client/reads', () => ({
   getUserById: vi.fn(),
   getUsersByIds: vi.fn(async () => ({})),
   getRelatedCards: vi.fn(async () => ({ cards: [] })),
-  getResonanceCards: vi.fn(async () => []),
+  getPublicResonances: vi.fn(async () => ({ cards: [] })),
   isConnected: vi.fn(async () => false),
 }));
 vi.mock('@/lib/db/firestore/client/blocks', () => ({
@@ -78,7 +78,7 @@ import {
   getCardBySlugOrId,
   getPublicCardView,
   getRelatedCards,
-  getResonanceCards,
+  getPublicResonances,
   getUserById,
   getUsersByIds,
   resolveCardId,
@@ -624,7 +624,7 @@ describe('the lists around the card and its embedded cards', () => {
     // The card itself came in that answer too (W3): not read again through the rules.
     expect(getCardById).not.toHaveBeenCalled();
     expect(getRelatedCards).not.toHaveBeenCalled();
-    expect(getResonanceCards).not.toHaveBeenCalled();
+    expect(getPublicResonances).not.toHaveBeenCalled();
     expect(getCardBySlugOrId).not.toHaveBeenCalled();
     expect(getUsersByIds).not.toHaveBeenCalled();
   });
@@ -653,9 +653,11 @@ describe('the lists around the card and its embedded cards', () => {
 
   // The related cards from the server's signed-out route (GET /api/cards/related): only it reads which cards their
   // reading keeps from strangers (round 26 §A1.7).
-  it('signed out: read the public lists through the rules and the related cards signed out, each embed its own card — and never ask the API', async () => {
+  // BE-9: the answers too come from a signed-out route (GET /api/cards/resonances), summaries the CDN keeps, not 30
+  // whole cards read through the rules for every visitor.
+  it('signed out: read the answers and the related cards from the signed-out routes, each embed its own card — and never ask the API', async () => {
     vi.mocked(getCardById).mockResolvedValue(card('pub1', { story: `${STORY}\n\n[Walk](/card/walk)` }));
-    vi.mocked(getResonanceCards).mockResolvedValue([card('reply', { authorId: 'a2', thoughtCore: 'A public reply' })]);
+    vi.mocked(getPublicResonances).mockResolvedValue({ cards: [summary('reply', 'A public reply')] });
     vi.mocked(getRelatedCards).mockResolvedValue({ cards: [summary('near', 'A public neighbour')] });
     vi.mocked(getCardBySlugOrId).mockResolvedValue(card('walk', { thoughtCore: 'The walk, read by itself' }));
 
@@ -663,7 +665,7 @@ describe('the lists around the card and its embedded cards', () => {
     expect((await screen.findAllByText('A public reply')).length).toBeGreaterThan(0);
     expect((await screen.findAllByText('A public neighbour')).length).toBeGreaterThan(0);
     expect(await screen.findByText('The walk, read by itself')).toBeInTheDocument();
-    expect(getResonanceCards).toHaveBeenCalledWith('pub1');
+    expect(getPublicResonances).toHaveBeenCalledWith('pub1');
     expect(getRelatedCards).toHaveBeenCalledWith('pub1');
     expect(callApi).not.toHaveBeenCalled();
   });
@@ -839,6 +841,31 @@ describe('its pictures', () => {
       expect(avatar).toHaveAttribute('loading', 'lazy');
     }
     await waitFor(() => expect(getCardById).toHaveBeenCalled());
+  });
+});
+
+// WEB-3: the card page's cover (its LCP) asked for the 2048 px upload on every phone; it offers its ≤ 960 px copy
+// beside it now, chosen by the column's width.
+describe('its cover on a phone', () => {
+  it("offers the cover's 960 px copy, sized by the story's column", () => {
+    vi.mocked(getCardById).mockReturnValue(new Promise(() => {}));
+    const s = seed();
+    renderPage({
+      seed: {
+        ...s,
+        view: {
+          card: {
+            ...s.view!.card,
+            media: { type: 'image', url: 'https://img.test/cover.webp', thumbUrl: 'https://img.test/cover-w960.webp', label: 'The kettle' },
+          },
+          author: s.view!.author,
+        },
+      },
+    });
+    const cover = screen.getByRole('img', { name: 'The kettle' });
+    expect(cover).toHaveAttribute('srcset', 'https://img.test/cover-w960.webp 960w, https://img.test/cover.webp 2048w');
+    expect(cover).toHaveAttribute('sizes', '(max-width: 720px) 100vw, 680px');
+    expect(cover).toHaveAttribute('fetchpriority', 'high');
   });
 });
 

@@ -6,6 +6,7 @@ import { HandDrawnBorder } from '../HandDrawnBorder/HandDrawnBorder';
 import { INK } from '@/lib/design/strokes';
 import { personFill } from '@/lib/design/personFill';
 import { brokenImage } from '@/lib/images/broken';
+import { useRevealRef } from '../RevealImg/RevealImg';
 
 export interface HandDrawnAvatarProps {
   initials?: string;
@@ -41,6 +42,8 @@ export function HandDrawnAvatar({
     const img = imgRef.current;
     if (src && img && brokenImage(img)) setFailed(src);
   }, [src]);
+  // A face that arrives after the row is on screen sharpens in (3 px, 200 ms; lib/images/reveal).
+  const revealRef = useRevealRef<HTMLImageElement>('avatar', undefined, imgRef);
 
   const path = useMemo(
     () => (picture ? avatarWobPath(size, seed) : ''),
@@ -58,7 +61,7 @@ export function HandDrawnAvatar({
         <span className="res-shape-fade-in" style={{ position: 'absolute', inset: 0 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            ref={imgRef}
+            ref={revealRef}
             src={picture}
             alt={initials}
             onError={() => setFailed(picture)}

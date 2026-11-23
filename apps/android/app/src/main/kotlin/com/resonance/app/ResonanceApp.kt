@@ -6,6 +6,7 @@ import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.annotation.ExperimentalCoilApi
+import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.ImageRequest
 import kotlin.math.roundToInt
@@ -19,6 +20,7 @@ import com.resonance.kit.chat.KeyboardHeights
 import com.resonance.kit.chat.StickerRecents
 import com.resonance.kit.l10n.Strings
 import com.resonance.kit.reading.ApiCache
+import com.resonance.app.ui.GalleryThumbnails
 import com.resonance.app.ui.share.ShareFiles
 import okhttp3.Cache
 import okhttp3.Call
@@ -128,6 +130,12 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
         PushCenter.init(this)
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // The gallery's thumbnails are ours to let go of (AND-4); Coil trims its own caches.
+        GalleryThumbnails.onTrimMemory(level)
+    }
+
     companion object {
         /** The bell thumb's face: 46 and 4 of bleed a side (NotificationsScreen's BellThumb, ThumbBleed). */
         private const val BELL_THUMB_FACE_DP = 54f
@@ -144,6 +152,12 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
                 add(OkHttpNetworkFetcherFactory(callFactory = { client }, cacheStrategy = { PicturesOnly }))
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || (BuildConfig.DEBUG && DebugLaunch.avifDecoder)) add(AvifDecoder.Factory())
             }
+            // A fifth of what the app may hold (AND-9): Coil's default (about a quarter) beside the chat
+            // loader's tenth left the two near half of it between them.
+            .memoryCache { MemoryCache.Builder().maxSizePercent(context, MEMORY_PERCENT).build() }
             .build()
+
+        /** The share of the app's memory the main loader's pictures may keep decoded. */
+        internal const val MEMORY_PERCENT = 0.18
     }
 }

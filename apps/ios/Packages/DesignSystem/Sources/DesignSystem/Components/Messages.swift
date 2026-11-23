@@ -1511,7 +1511,7 @@ public struct ComposerRowTile: View {
             case let .cover(url, fallback):
                 Self.tonal.overlay {
                     CoverLazyImage(url: url, fallback: fallback,
-                                   request: { ImageSizeBuckets.request($0, square: side) }) { image, _, _ in
+                                   request: { ImageSizeBuckets.request($0, square: side) }, reveal: .thumb) { image, _, _ in
                         if let image { image.resizable().scaledToFill() }
                     }
                 }

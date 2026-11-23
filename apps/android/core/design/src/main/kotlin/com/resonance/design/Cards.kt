@@ -70,7 +70,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import com.resonance.design.generated.Tokens
 import com.resonance.geometry.PathCommand
 import com.resonance.geometry.SegValue
@@ -155,11 +154,13 @@ fun OrganicImage(
             Box(if (grain > 0f) Modifier.grainOverlay(grain) else Modifier) {
                 var shown by remember(url, fallbackUrl) { mutableStateOf(url ?: fallbackUrl) }
                 var loading by remember(url, fallbackUrl) { mutableStateOf(shown != null) }
-                if (loading) SkeletonCover() else placeholder()
+                // The shimmer stays under a picture coming in until it is sharp (Wave 2 #7).
+                val reveal = rememberImageRevealState()
+                if (loading || reveal.revealing) SkeletonCover() else placeholder()
                 val picture = shown
-                if (picture != null) AsyncImage(
+                if (picture != null) RevealImage(
                     model = picture, contentDescription = contentDescription, modifier = Modifier.fillMaxSize(),
-                    contentScale = CoverFit.scale(frame), alignment = CoverFit.alignment(frame),
+                    contentScale = CoverFit.scale(frame), alignment = CoverFit.alignment(frame), state = reveal,
                     onLoading = { loading = true },
                     onSuccess = { loading = false },
                     onError = {

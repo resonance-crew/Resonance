@@ -208,3 +208,57 @@ describe("the film's leads and kin on round 26's readings", () => {
     expect(await filmCards(ctxFor(fakeAdminDb({ ...film, ...USERS }).db).data, { storageBases: [BASE], now: NOW })).toBeNull();
   });
 });
+
+// BE-5 (the perf audit): every choice read the window of 120, its 120 readings and the leads' parts again — about 450
+// reads — though the choice holds all through a Taipei day. It is kept now (`config/landingFilmToday`, card ids only):
+// a render reads that and the pin, then the chosen cards again, so one made private since still leaves at once.
+describe("the film's day's choice, kept", () => {
+  const cover = (id: string) => ({ media: { type: 'image', url: `${BASE}/covers/${id}.webp` } });
+  const world = () => ({ ...CARDS, 'cards/second': doc('u2', 0.93, 1, cover('second')), ...READINGS, ...readingsOf({ 'cards/second': {} }, { second: 0.93 }), ...USERS });
+  const heavy = (reads: string[]) => reads.filter((r) => r.startsWith('cards?') && r.includes('limit=120') || r.startsWith('cardSignatures') || r.startsWith('cardVectors'));
+
+  it('reads the window once a day: a second render reads the kept choice and the cards it shows, and shows the same', async () => {
+    const fake = fakeAdminDb(world());
+    const data = ctxFor(fake.db).data;
+    const first = await filmCards(data, { storageBases: [BASE], now: NOW });
+    expect(fake.docs['config/landingFilmToday']).toMatchObject({ day: DAY, written: first!.written.id, picks: expect.any(Array) });
+    // card ids only: no score, no author, nothing a reader's page doesn't already say
+    expect(JSON.stringify(fake.docs['config/landingFilmToday'])).not.toMatch(/insight|u-secret|u1|score/i);
+
+    const chose = fake.billed();
+    fake.reads.length = 0;
+    const again = await filmCards(data, { storageBases: [BASE], now: new Date(NOW.getTime() + 3 * 3_600_000) });
+    expect(heavy(fake.reads)).toEqual([]);
+    expect(fake.reads).toContain('config/landingFilmToday');
+    expect([again!.written.id, again!.answer?.id ?? null, again!.relation]).toEqual([first!.written.id, first!.answer?.id ?? null, first!.relation]);
+    expect(again!.picks.map((c) => c.id)).toEqual(first!.picks.map((c) => c.id));
+    // a kept day's render bills a small part of what choosing did
+    expect(fake.billed() - chose).toBeLessThan(chose / 2);
+  });
+
+  it('chooses again when a kept lead may no longer lead — made private since', async () => {
+    const fake = fakeAdminDb(world());
+    const data = ctxFor(fake.db).data;
+    const first = await filmCards(data, { storageBases: [BASE], now: NOW });
+    fake.docs[`cards/${first!.written.id}`] = { ...fake.docs[`cards/${first!.written.id}`], visibility: 'private' };
+    const again = await filmCards(data, { storageBases: [BASE], now: NOW });
+    expect(again?.written.id).not.toBe(first!.written.id);
+    expect(fake.docs['config/landingFilmToday']).toMatchObject({ written: again?.written.id });
+  });
+
+  it('chooses again on a new Taipei day, and when the pin changes', async () => {
+    const fake = fakeAdminDb(world());
+    const data = ctxFor(fake.db).data;
+    await filmCards(data, { storageBases: [BASE], now: NOW });
+    fake.reads.length = 0;
+    await filmCards(data, { storageBases: [BASE], now: new Date(NOW.getTime() + 86_400_000) });
+    expect(heavy(fake.reads).length).toBeGreaterThan(0);
+    expect(fake.docs['config/landingFilmToday']).toMatchObject({ day: DAY + 1 });
+
+    fake.docs['config/landingFilm'] = { written: 'second' };
+    fake.reads.length = 0;
+    const pinned = await filmCards(data, { storageBases: [BASE], now: new Date(NOW.getTime() + 86_400_000) });
+    expect(heavy(fake.reads).length).toBeGreaterThan(0);
+    expect([pinned!.written.id, pinned!.pinned]).toEqual(['second', true]);
+  });
+});

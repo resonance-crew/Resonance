@@ -21,7 +21,7 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 vi.mock('@/lib/db/firestore/client/reads', () => ({
   getUserByHandle: vi.fn(),
-  getPublicCardsByAuthor: vi.fn(),
+  getPublicAuthorCards: vi.fn(),
   getCardById: vi.fn(),
   getUsersByIds: vi.fn(),
   isConnected: vi.fn(),
@@ -46,7 +46,7 @@ vi.mock('@/lib/db/firestore/client/api', () => {
 
 import {
   getCardById,
-  getPublicCardsByAuthor,
+  getPublicAuthorCards,
   getUserByHandle,
   getUsersByIds,
   isConnected,
@@ -104,7 +104,16 @@ beforeEach(() => {
   vi.mocked(getUserByHandle).mockResolvedValue(user('bob'));
   vi.mocked(getMyBlockedIds).mockResolvedValue(new Set());
   vi.mocked(isConnected).mockResolvedValue(false);
-  vi.mocked(getPublicCardsByAuthor).mockResolvedValue([card('p1', 'bob', "Bob's first walk")]);
+  // Signed out, the profile's cards come from GET /api/cards/by-author as summaries (BE-9).
+  vi.mocked(getPublicAuthorCards).mockResolvedValue({
+    cards: [
+      {
+        id: 'p1', slug: null, title: "Bob's first walk", excerpt: '', tags: [], publishedAt: '2026-01-01T00:00:00.000Z',
+        author: { id: 'bob', handle: 'bob', initials: 'B', accentColor: 'c', avatarUrl: null, avatarSeed: '1', verified: false, region: null },
+        anonymous: false, visibility: 'public', imageUrl: null, imageLabel: null, accentHue: null, readMinutes: 1, referenceCardId: null, reason: null,
+      },
+    ],
+  });
   vi.mocked(getCardById).mockImplementation(async (id) => card(id, 'carol', "Carol's reply"));
   vi.mocked(getUsersByIds).mockResolvedValue({ carol: user('carol') });
 });
@@ -126,7 +135,7 @@ describe('public profile page, signed out', () => {
     vi.mocked(getUserByHandle).mockResolvedValue(null);
     renderPage();
     expect(await screen.findByText("This person can't be found")).toBeInTheDocument();
-    expect(getPublicCardsByAuthor).not.toHaveBeenCalled();
+    expect(getPublicAuthorCards).not.toHaveBeenCalled();
     // The way home is a button, filled as every button is: the tonal pill.
     const home = screen.getByRole('button', { name: 'Back to home' });
     expect(home).toHaveAttribute('data-variant', 'tonal');
@@ -190,7 +199,7 @@ describe('public profile page, signed in', () => {
 
     expect(callApi).toHaveBeenCalledTimes(1);
     expect(callApi).toHaveBeenCalledWith('/api/v1/users/bob?include=cards,links&limit=30');
-    for (const read of [getUserByHandle, getMyBlockedIds, isConnected, getPublicCardsByAuthor, getCardById, getUsersByIds]) {
+    for (const read of [getUserByHandle, getMyBlockedIds, isConnected, getPublicAuthorCards, getCardById, getUsersByIds]) {
       expect(read).not.toHaveBeenCalled();
     }
   });

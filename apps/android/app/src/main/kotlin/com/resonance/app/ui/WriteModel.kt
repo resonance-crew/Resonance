@@ -4,6 +4,12 @@ import com.resonance.design.CoverFraming
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import coil3.SingletonImageLoader
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.request.allowHardware
+import coil3.toBitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
 import androidx.compose.runtime.getValue
@@ -25,7 +31,6 @@ import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
 import com.resonance.kit.story.PlainText
 import java.io.ByteArrayOutputStream
-import java.net.URL
 import java.time.LocalTime
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.max
@@ -1083,7 +1088,8 @@ class WriteModel(
      * show as they arrive; the stored picture becomes the cover, its hue read
      * from that picture (or, failing that, the last preview).
      */
-    fun generateCover() {
+    fun generateCover(context: Context) {
+        val app = context.applicationContext
         if (!canGenerate) return
         mediaError = null
         generating = true
@@ -1105,10 +1111,8 @@ class WriteModel(
                     return@launch
                 }
                 val preview = partialPreview
-                val hue = withContext(Dispatchers.IO) {
-                    val picture = runCatching { URL(url).readBytes() }.getOrNull()?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
-                    (picture ?: preview)?.let(CoverImage::accentHue)
-                }
+                val picture = CoverImage.hueSample(app, url)
+                val hue = withContext(Dispatchers.Default) { (picture ?: preview)?.let(CoverImage::accentHue) }
                 update { copy(imageUrl = url, imageLabel = L10n.Write.mediaGeneratedLabel, accentHue = hue, imageFrame = null) }
             } catch (e: CancellationException) {
                 throw e
@@ -1337,6 +1341,24 @@ object CoverImage {
         bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it)
         it.toByteArray()
     }
+
+    /**
+     * A stored cover small enough to read its hue from (AND-9): through Coil and the app's client — whose
+     * disk cache then has it for the cover about to show, never asked for twice — decoded at [HUE_SIDE],
+     * never whole (a 2048² illustration was some 16 MB to read 32² of); null: unreadable.
+     */
+    suspend fun hueSample(context: Context, url: String): Bitmap? = try {
+        val request = ImageRequest.Builder(context).data(url).size(HUE_SIDE).allowHardware(false)
+            .memoryCachePolicy(CachePolicy.DISABLED).build()
+        (SingletonImageLoader.get(context).execute(request) as? SuccessResult)?.image?.toBitmap()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    }
+
+    /** [hueSample]'s long side: well over the 32² [accentHue] reads. */
+    private const val HUE_SIDE = 128
 
     fun accentHue(bitmap: Bitmap): Double? {
         val thumb = Bitmap.createScaledBitmap(bitmap, 32, 32, true)

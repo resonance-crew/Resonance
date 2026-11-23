@@ -15,7 +15,7 @@ struct OrganicAvatarPhoto: View {
     var body: some View {
         Color.clear
             .overlay {
-                CoverLazyImage(url: url, fallback: fallback, request: { ImageSizeBuckets.request($0, square: side) }) { image, _, _ in
+                CoverLazyImage(url: url, fallback: fallback, request: { ImageSizeBuckets.request($0, square: side) }, reveal: .avatar) { image, _, _ in
                     if let image { image.resizable().scaledToFill() }
                 }
             }

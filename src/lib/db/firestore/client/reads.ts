@@ -130,6 +130,27 @@ export async function getRelatedCards(cardId: string): Promise<CardListBody> {
 }
 
 /**
+ * The named public cards answering a card, for a reader nobody is signed in as: GET /api/cards/resonances, summaries
+ * the CDN keeps a minute — what {@link getResonanceCards} read through the rules, 30 whole cards with their stories,
+ * for every visitor (BE-9).
+ */
+export async function getPublicResonances(cardId: string): Promise<CardListBody> {
+  const res = await fetch(`/api/cards/resonances?id=${encodeURIComponent(cardId)}`);
+  if (!res.ok) throw new Error(`Resonances request failed (${res.status})`);
+  return (await res.json()) as CardListBody;
+}
+
+/**
+ * A person's named public cards for a reader nobody is signed in as: GET /api/cards/by-author, summaries the CDN keeps
+ * a minute — what {@link getPublicCardsByAuthor} read through the rules, 40 whole cards with their stories (BE-9).
+ */
+export async function getPublicAuthorCards(authorId: string): Promise<CardListBody> {
+  const res = await fetch(`/api/cards/by-author?uid=${encodeURIComponent(authorId)}`);
+  if (!res.ok) throw new Error(`Profile cards request failed (${res.status})`);
+  return (await res.json()) as CardListBody;
+}
+
+/**
  * Public cards that resonate with (reference) the given card, newest first.
  * Readable signed out: every match is public, published and attributed
  * (`anonymous == false`), as the Firestore `list` rule asks. Used for the

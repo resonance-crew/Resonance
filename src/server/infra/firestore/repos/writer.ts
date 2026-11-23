@@ -1,5 +1,5 @@
 import { FieldValue, Timestamp, type DocumentData, type Transaction } from 'firebase-admin/firestore';
-import { edgeRowOf, groupRowOf, nodeRowOf } from '@/server/domain/writer';
+import { DRAFT_HEAD_FIELDS, edgeRowOf, groupRowOf, nodeRowOf } from '@/server/domain/writer';
 import type { DraftPatch, MapItems, MapWrite, WriterData, WriterTxRepo } from '@/server/ports/repos/writer';
 import type { AdminDb } from '../db';
 import { sanitize } from '../mapper';
@@ -76,6 +76,10 @@ export function writerTx(db: AdminDb, tx: Transaction): WriterTxRepo {
 
     async getCard(id) {
       return rowOf((await tx.get(db.doc(`cards/${id}`))).data());
+    },
+    async getDraftHead(id) {
+      const [snap] = await tx.getAll(db.doc(`cards/${id}`), { fieldMask: [...DRAFT_HEAD_FIELDS] });
+      return rowOf(snap.data());
     },
     async isTombstoned(id) {
       return (await tx.get(tombstoneRef(db, id))).exists;

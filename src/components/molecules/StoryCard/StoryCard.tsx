@@ -93,6 +93,7 @@ function StoryImage({
   seed,
   slot,
   grain = true,
+  priority = false,
 }: {
   thumbUrl?: string;
   frame?: CoverFrame;
@@ -103,9 +104,12 @@ function StoryImage({
   slot?: ReactNode;
   /** The cover's own grain (a live filter): left off on a card whose paper wears a still grain. */
   grain?: boolean;
+  /** Among the first covers of a feed, on screen as it opens: fetched at once, ahead of the rest (WEB-4). */
+  priority?: boolean;
 }) {
   return (
     <OrganicImage
+      priority={priority}
       src={imageUrl}
       thumbSrc={thumbUrl}
       alt={label}
@@ -253,6 +257,11 @@ export interface StoryCardProps {
    * its own (`index % 6`). Without it the card defines its filter itself.
    */
   sharedChalk?: boolean;
+  /**
+   * The cover is among the first of a feed, on screen as the page opens: requested at once with a high fetch
+   * priority, not lazily after layout (the perf audit's WEB-4).
+   */
+  priorityCover?: boolean;
 }
 
 /**
@@ -278,6 +287,7 @@ export const StoryCard = memo(function StoryCard({
   stillGrain,
   foot,
   sharedChalk = false,
+  priorityCover = false,
 }: StoryCardProps) {
   const [hoveredRaw, setHovered] = useState(false);
   const hovered = hoveredRaw && !preview;
@@ -447,6 +457,7 @@ export const StoryCard = memo(function StoryCard({
             seed={seed + 5}
             slot={coverSlot}
             grain={!stillGrain}
+            priority={priorityCover}
           />
         )}
 

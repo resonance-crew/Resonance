@@ -22,6 +22,8 @@ struct ResonanceApp: App {
         HardwareKeyboard.watch()
         #if DEBUG
         if VisualCapture.on { UIView.setAnimationsEnabled(false) }
+        // Nor does a picture come in blurred (ImageReveal): SwiftUI's animations take no notice of UIKit's switch.
+        ImageReveal.capturing = VisualCapture.on
         // `-visualReadyToken <t>`: say when the screen is drawn (VisualReady → the unified log), so the release
         // screenshots go on without their fixed waits (scripts/visual/ios.ts, mac.ts).
         if VisualCapture.on, let token = UserDefaults.standard.string(forKey: "visualReadyToken"), !token.isEmpty {
@@ -40,6 +42,8 @@ struct ResonanceApp: App {
             RootView()
                 .environment(session)
                 .wearsAppearance(AppearanceStore.shared)
+                // How a picture arriving late comes in: Reduce Motion, Low Power Mode, the screenshots (ImageReveal).
+                .imageRevealBudget()
                 // Every link into the app comes here, a cold launch's too (before the tabs exist): Google's sign-in
                 // callback is Google's; a universal link or the Smart App Banner's 打開 waits for the tabs (round 23 §7).
                 .onOpenURL { url in session.links.receive(url) { GIDSignIn.sharedInstance.handle($0) } }

@@ -36,7 +36,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.geometry.seedFromString
@@ -74,7 +73,7 @@ fun StoryLinkCard(preview: LinkPreview, host: String, label: String, onOpen: () 
                     .bleedTopAndSides(StoryLinkCardLook.BLEED.dp)
                     .background(Tokens.Text.copy(alpha = 0.06f)),
             ) {
-                AsyncImage(
+                RevealImage(
                     model = picture, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
                     onError = {
                         FailedPictures.shared.note(picture)

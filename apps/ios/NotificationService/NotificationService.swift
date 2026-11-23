@@ -47,8 +47,10 @@ final class NotificationService: UNNotificationServiceExtension {
 
     @MainActor
     private static func face(_ sender: ChatSender, photo: Data?) -> Data {
-        fonts
-        return sender.picture(photo: photo.flatMap { ChatSender.decode($0) })
+        let decoded = photo.flatMap { ChatSender.decode($0) }
+        // The typefaces only for the initials, drawn when there is no photo (IOS-10).
+        if decoded == nil { fonts }
+        return sender.picture(photo: decoded)
     }
 
     /// The app's own typefaces, for the initials: they ship in the app's bundle, which this

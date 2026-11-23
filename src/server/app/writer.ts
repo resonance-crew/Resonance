@@ -20,6 +20,7 @@ import type { Card } from '@/lib/db/types';
 import { isCoverFrame } from '@/lib/images/coverFrame';
 import { publicBases, storageKeyOf } from '@/lib/storage/publicUrl';
 import type { ServerCtx } from '@/server/ctx';
+import { budgetFirst } from './budget';
 import { mediaKeyFor } from '@/server/domain/media';
 import { cardVisible } from '@/server/domain/visibility';
 import { MapOpRefused, draftLogExpiry, mapReadsOf, planMapOps, revApplies, storedRev } from '@/server/domain/writer';
@@ -200,19 +201,22 @@ export async function saveDraftIn(ctx: ServerCtx, uid: string, id: string, input
   const cover = coverOf(ctx, media);
   const set: DraftPatch['set'] = Object.fromEntries(Object.entries({ ...fields, ...(cover ? { media: cover } : {}) }).filter(([, v]) => v != null));
   const patch: DraftPatch = { set, clear: [...new Set(clear ?? [])].filter((f) => !(f in set)) };
-  await ctx.limits.spend(uid, 'draftSave');
+  // The budget is spent beside the save's read, not before it (BE-7), and still answers first (budgetFirst): the save
+  // waits for it before writing. The card is read without its words (BE-6: getDraftHead).
+  const spent = ctx.limits.spend(uid, 'draftSave');
   const at = ctx.clock.date();
-  const result = await ctx.uow.run(async (tx) => {
-    const stored = await tx.writer.getCard(id);
+  const result = await budgetFirst(spent, () => ctx.uow.run(async (tx) => {
+    const stored = await tx.writer.getDraftHead(id);
     if (!stored || stored.authorId !== uid) throw notFound();
     refuseInTrash({ get: (f) => stored[f] });
     if (stored.publishedAt != null) throw new ApiFailure('conflict', PUBLISHED_DRAFT_MESSAGE);
     if (!revApplies(stored.draftRev, rev)) return { applied: false, rev: storedRev(stored.draftRev), updatedAt: null };
     refuseCover(cover, keptCoverUrl(stored));
+    await spent;
     tx.writer.patchDraft(id, patch, rev, at);
     tx.writer.logDraftPatch(id, uid, { rev, patch, expireAt: draftLogExpiry(at) }, at);
     return { applied: true, rev, updatedAt: at.toISOString() };
-  }, { label: 'saveDraft' });
+  }, { label: 'saveDraft' }));
   if (result.applied) await touch(ctx, uid, 'drafts');
   return result;
 }
@@ -275,19 +279,21 @@ export async function putPendingEditIn(ctx: ServerCtx, uid: string, id: string, 
     accentHue: input.accentHue ?? null,
     rev: input.rev,
   };
-  await ctx.limits.spend(uid, 'draftSave');
+  // As a draft's save: the budget beside the reads (BE-7), the card without its words (BE-6).
+  const spent = ctx.limits.spend(uid, 'draftSave');
   const at = ctx.clock.date();
-  const result = await ctx.uow.run(async (tx) => {
-    const [card, edit] = await Promise.all([tx.writer.getCard(id), tx.writer.getEdit(id)]);
+  const result = await budgetFirst(spent, () => ctx.uow.run(async (tx) => {
+    const [card, edit] = await Promise.all([tx.writer.getDraftHead(id), tx.writer.getEdit(id)]);
     if (!card || card.authorId !== uid) throw notFound();
     refuseInTrash({ get: (f) => card[f] });
     const leaves = editedAudience(copy, card);
     if (anonymousForConnections(leaves) && !anonymousForConnections(card)) throw new ApiFailure('invalid_request', ANONYMOUS_VISIBILITY_MESSAGE);
     if (edit && editMine(edit, uid) && !revApplies(edit.rev, input.rev)) return { applied: false, rev: storedRev(edit.rev), updatedAt: null };
     refuseCover(cover, keptCoverUrl(card));
+    await spent;
     tx.writer.putEdit(id, uid, copy, at);
     return { applied: true, rev: input.rev, updatedAt: at.toISOString() };
-  }, { label: 'putPendingEdit' });
+  }, { label: 'putPendingEdit' }));
   if (result.applied) await touch(ctx, uid, 'drafts');
   return result;
 }

@@ -239,6 +239,9 @@ private struct AlbumTile: View {
     @State private var loaded: UIImage?
     @State private var failed = false
     @State private var attempt = 0
+    /// Read after the tile was drawn: it comes in blurred, as a single picture does (ImageReveal).
+    @State private var arrivedLate = false
+    @Environment(\.imageRevealBudget) private var budget
 
     var body: some View {
         let store = ctx.model.pictures
@@ -247,7 +250,7 @@ private struct AlbumTile: View {
         Tokens.creamDark
             .overlay {
                 if let shown {
-                    Image(uiImage: shown).resizable().scaledToFill()
+                    Image(uiImage: shown).resizable().scaledToFill().imageReveal(ImageReveal.decide(.cover, atHand: !arrivedLate, budget: budget))
                 } else if failed {
                     OrganicIcon(.image, size: 20, color: Tokens.textMuted)
                 }
@@ -271,6 +274,7 @@ private struct AlbumTile: View {
             }
             failed = false
             let picture = await store.image(image.id, .thumb)
+            arrivedLate = picture != nil
             loaded = picture
             failed = picture == nil && !Task.isCancelled
         }

@@ -119,7 +119,8 @@ import androidx.compose.ui.unit.em
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import coil3.SingletonImageLoader
-import coil3.compose.AsyncImage
+import com.resonance.design.ImageRevealKind
+import com.resonance.design.RevealImage
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
@@ -1316,6 +1317,7 @@ internal fun previewContent(model: WriteModel, me: com.resonance.api.models.Me?)
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BoxScope.CoverSlot(frame: CoverFrame, palette: CardPalette, model: WriteModel, pickCover: () -> Unit, dismissKeyboard: () -> Unit) {
+    val context = LocalContext.current
     val url = model.values.imageUrl
     val partial = model.partialPreview
     val busy = model.mediaBusy
@@ -1335,8 +1337,10 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, palette: CardPalette, model: W
                             Image(partial.asImageBitmap(), null, Modifier.fillMaxSize().blur(14.dp), contentScale = ContentScale.Crop)
                         } else if (url != null) {
                             val f = model.values.imageFrame
-                            AsyncImage(
+                            RevealImage(
                                 model = url, contentDescription = null, modifier = Modifier.fillMaxSize().blur(14.dp),
+                                // Already veiled: it only fades in.
+                                kind = ImageRevealKind.Fade,
                                 contentScale = CoverFit.scale(f), alignment = CoverFit.alignment(f),
                             )
                         }
@@ -1366,7 +1370,7 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, palette: CardPalette, model: W
                                 face = faces.solid, disabledFace = faces.resting,
                             ) {
                                 dismissKeyboard()
-                                model.generateCover()
+                                model.generateCover(context)
                             }
                         }
                         val error = model.mediaError
@@ -1441,7 +1445,8 @@ internal const val COVER_CHIP_GLYPH_SCALE = 1.3f
 
 /** The cover's picture whole, in software pixels, for the framing dialog (at most 2048 on its long side); null: unreadable. */
 private suspend fun coverPicture(context: android.content.Context, url: String): ImageBitmap? = try {
-    val request = ImageRequest.Builder(context).data(url).size(2048).allowHardware(false).build()
+    // Read once for the dialog, never kept in memory (AND-9: 11–16 MB of software pixels).
+    val request = ImageRequest.Builder(context).data(url).size(2048).allowHardware(false).memoryCachePolicy(coil3.request.CachePolicy.DISABLED).build()
     (SingletonImageLoader.get(context).execute(request) as? SuccessResult)?.image?.toBitmap()?.asImageBitmap()
 } catch (e: CancellationException) {
     throw e
@@ -1486,9 +1491,10 @@ private fun CoverErrorChip(text: String, maxWidth: Dp, seed: Double) {
  */
 @Composable
 private fun CoverMenu(model: WriteModel, seed: Double, palette: CardPalette, pickCover: () -> Unit, dismissKeyboard: () -> Unit) {
+    val context = LocalContext.current
     val items = listOf(
         OrganicMenuItem(L10n.Write.mediaReplace, IconName.Image) { pickCover() },
-        OrganicMenuItem(L10n.Write.mediaGenerate, IconName.Sparkle, enabled = model.canGenerate) { model.generateCover() },
+        OrganicMenuItem(L10n.Write.mediaGenerate, IconName.Sparkle, enabled = model.canGenerate) { model.generateCover(context) },
         OrganicMenuItem(L10n.Write.mediaRemove, IconName.Trash, destructive = true) { model.removeCover() },
     )
     val faces = CoverFaces.of(palette)

@@ -649,8 +649,9 @@ export const SCHEMAS = {
       oldDeletedAt: f.time(),
     },
   }),
-  // storage, recommendPool, landingFilm: three documents of three shapes.
-  config: passthrough(1, 'storage | recommendPool | landingFilm', {
+  // storage, recommendPool, landingFilm, landingFilmToday (the film's choice for a Taipei day: card ids only, BE-5):
+  // four documents of four shapes.
+  config: passthrough(1, 'storage | recommendPool | landingFilm | landingFilmToday', {
     at: f.time(),
     until: f.time(),
     embedModel: f.str(),

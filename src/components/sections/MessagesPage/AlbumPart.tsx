@@ -13,6 +13,7 @@ import type { MessageImage } from '@/lib/db/types';
 import { PICTURE_MAX_W, PictureViewer } from './PicturePart';
 import { ReactionChips } from './ReactionChips';
 import styles from './Thread.module.css';
+import { RevealImg } from '@/components/atoms/RevealImg/RevealImg';
 
 /** An album's grid is as wide as the widest picture a bubble holds. */
 export const ALBUM_W = PICTURE_MAX_W;
@@ -120,8 +121,7 @@ function AlbumCell({
         }}
       >
         {src && !failed && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img key={src} src={src} alt="" decoding="async" draggable={false} onError={() => setFailed(true)} />
+          <RevealImg reveal="cover" key={src} src={src} alt="" decoding="async" draggable={false} onError={() => setFailed(true)} />
         )}
         {failed && (
           <span className={styles.sentPictureGlyph}>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { parse, routeParam, withUser, type RouteContext } from '@/lib/api/v1/http';
 import { ConversationIdParam } from '@/lib/api/v1/schemas';
 import { serverCtx } from '@/server/ctx';
+import { budgetFirst } from '@/server/app/budget';
 import { OWN_SIGNALS_HEADER, markConversationReadIn, type OwnSignals } from '@/server/app/inbox';
 
 export const dynamic = 'force-dynamic';
@@ -14,9 +15,10 @@ export const dynamic = 'force-dynamic';
 export const POST = withUser(async (user, _req, ctx: RouteContext<'pair'>) => {
   const pair = parse(ConversationIdParam, await routeParam(ctx, 'pair'));
   const server = serverCtx();
-  await server.limits.spend(user.id, 'markRead');
+  // The budget beside the row's read (BE-7), still answering first: the mark waits for it before writing.
+  const spent = server.limits.spend(user.id, 'markRead');
   const own: { signals?: OwnSignals } = {};
-  await markConversationReadIn(server, user.id, pair, (signals) => (own.signals = signals));
+  await budgetFirst(spent, () => markConversationReadIn(server, user.id, pair, (signals) => (own.signals = signals), spent));
   // The reader's own counters after the read mark: their client takes them as heard (client/signals pokeOwn).
   return new NextResponse(null, { status: 204, headers: own.signals ? { [OWN_SIGNALS_HEADER]: JSON.stringify(own.signals) } : {} });
 });

@@ -312,6 +312,7 @@ struct StoryImageView: View {
     /// The column it is laid out in, measured (an iPad window is neither the screen nor a phone).
     @State private var column: CGFloat?
     @Environment(\.window) private var window
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         GeometryReader { geo in
@@ -321,18 +322,23 @@ struct StoryImageView: View {
             let h = w / a
             let bleed = (min(w, h) * 0.025 + 6 + 4).rounded(.up)
             let setAspect = $aspect
-            LazyImage(request: Self.request(url)) { state in
-                if let image = state.image {
-                    // A picture with transparency (a logo's black words) stands on a light paper in dark
-                    // (--picture-backing; nothing in light).
-                    image.resizable().scaledToFill().background(Tokens.pictureBacking)
+            let column = geo.size.width, scale = displayScale
+            Group {
+                if let url {
+                    CoverLazyImage(url: url, fallback: nil, request: { Self.request($0, column: column, scale: scale) },
+                                   onPicture: { size in
+                                       if size.height > 0 { setAspect.wrappedValue = size.width / size.height }
+                                   }) { image, _, _ in
+                        if let image {
+                            // A picture with transparency (a logo's black words) stands on a light paper in dark
+                            // (--picture-backing; nothing in light).
+                            image.resizable().scaledToFill().background(Tokens.pictureBacking)
+                        } else {
+                            Tokens.creamDark
+                        }
+                    }
                 } else {
                     Tokens.creamDark
-                }
-            }
-            .onCompletion { result in
-                if case let .success(response) = result, response.image.size.height > 0 {
-                    setAspect.wrappedValue = response.image.size.width / response.image.size.height
                 }
             }
             .frame(width: w + bleed * 2, height: h + bleed * 2)
@@ -351,11 +357,16 @@ struct StoryImageView: View {
 
     /// A story picture may come from any host and declare any size: decoded as a thumbnail (ImageIO,
     /// never the whole bitmap first), so a small file claiming tens of thousands of pixels a side
-    /// can't take the reader's memory.
-    static func request(_ url: URL?) -> ImageRequest? {
-        guard let url else { return nil }
+    /// can't take the reader's memory. For a `column` points wide at `scale` (audit IOS-3) it is fitted (its
+    /// proportions kept) into ``ImageSizeBuckets/storyPictureBox(column:scale:)``; not laid out yet, its longer
+    /// side at ``maxPixelSize``, as before.
+    static func request(_ url: URL, column: CGFloat, scale: CGFloat) -> ImageRequest {
         var request = ImageRequest(url: url)
-        request.thumbnail = ImageRequest.ThumbnailOptions(maxPixelSize: maxPixelSize)
+        guard let size = ImageSizeBuckets.storyPictureBox(column: column, scale: scale) else {
+            request.thumbnail = ImageRequest.ThumbnailOptions(maxPixelSize: maxPixelSize)
+            return request
+        }
+        request.thumbnail = ImageRequest.ThumbnailOptions(size: size, unit: .pixels, contentMode: .aspectFit)
         return request
     }
 
@@ -365,6 +376,24 @@ struct StoryImageView: View {
         let a = aspect ?? 1.5
         let width = column ?? min(window.contentWidth - 40, StoryTypography.measure)
         return min(width, maxH * a) / a
+    }
+}
+
+extension ImageSizeBuckets {
+    /// The tallest a story picture is drawn (pt), whatever the window.
+    static let storyTallest: CGFloat = 520
+    /// Room past the box for the clip's bleed and the cover-fill of a box a little off the picture's proportions.
+    static let storyReach: CGFloat = 1.2
+
+    /// The box (pixels) a story picture is fitted into for a `column` points wide at `scale` (audit IOS-3): the
+    /// column's width and the tallest a picture is drawn, each × ``storyReach`` and rounded up to the buckets (so a
+    /// column a little narrower or wider keeps its cache key), never past the 2400 a story picture was always
+    /// capped at — a phone's landscape 2048 px picture decodes at 1600 wide, not whole. Nil before it is laid out.
+    public static func storyPictureBox(column: CGFloat, scale: CGFloat) -> CGSize? {
+        guard column > 0, column.isFinite, scale > 0, scale.isFinite else { return nil }
+        let cap: CGFloat = 2400 // StoryImageView.maxPixelSize
+        return CGSize(width: min(cap, bucket(column * scale * storyReach)),
+                      height: min(cap, bucket(storyTallest * scale * storyReach)))
     }
 }
 

@@ -24,6 +24,8 @@ struct StoryCardList: View {
     var enterFrom: Int? = nil
     var onAppearLast: (() -> Void)? = nil
     @Environment(SessionStore.self) private var session
+    @Environment(\.window) private var window
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         let split = min(max(splitAt ?? 0, 0), cards.count)
@@ -65,7 +67,7 @@ struct StoryCardList: View {
         .onAppear {
             session.cardPreviews.remember(card)
             if i == cards.count - 1 { onAppearLast?() }
-            CoverPrefetch.ahead(Self.coversAhead(of: i, in: cards))
+            CoverPrefetch.ahead(Self.coversAhead(of: i, in: cards, box: Self.coverBox(window: window, scale: displayScale)))
         }
     }
 
@@ -85,10 +87,29 @@ struct StoryCardList: View {
     /// How many covers past a card on screen are fetched ahead of the reader.
     static let coversAhead = 6
 
-    /// The covers of the few cards after card `i`, which the reader comes to next.
-    static func coversAhead(of i: Int, in cards: [FeedCard]) -> [URL] {
+    /// The covers of the few cards after card `i`, which the reader comes to next: for a cover drawn in `box`
+    /// (pixels, ``coverBox``) the very URL its ``OrganicImage`` will ask for (audit IOS-4) — the smaller cover where
+    /// it has the pixels, else the cover itself (a phone's band at 3×) — and with no box the smaller cover.
+    static func coversAhead(of i: Int, in cards: [FeedCard], box: CGSize? = nil) -> [URL] {
         guard i + 1 < cards.count else { return [] }
-        return cards[(i + 1)..<min(cards.count, i + 1 + coversAhead)].compactMap(\.listCoverURL)
+        return cards[(i + 1)..<min(cards.count, i + 1 + coversAhead)].compactMap { card in
+            guard let url = card.listCoverURL else { return nil }
+            guard let box else { return url }
+            return ImageSizeBuckets.listSource(url, fallback: card.listCoverFallbackURL, box: box,
+                                               zoom: card.coverFraming?.zoom ?? 1).url
+        }
+    }
+
+    /// About the box (pixels) a list's cover is drawn in: a column of the list as ``CardColumns`` lays it out, at
+    /// the cover's 0.62, with ``OrganicImage``'s bleed. Close is enough: the smaller cover (960) is far under a
+    /// phone's band (≈ 1100 at 3×) and far over a tablet grid's card (≈ 650 at 2×).
+    static func coverBox(window: WindowLayout, scale: CGFloat) -> CGSize {
+        let content = max(0, min(window.contentWidth, 1200) - 2 * window.pad)
+        let columns = max(1, LayoutClass.feedColumns(window.layoutClass, contentWidth: content))
+        let w = columns > 1 ? (content - Tokens.feedGap * CGFloat(columns - 1)) / CGFloat(columns) : content
+        let h = w * 0.62
+        let bleed = organicImageBleed(w, h)
+        return CGSize(width: (w + bleed * 2) * scale, height: (h + bleed * 2) * scale)
     }
 
     /// The cards' identities (a card twice in a list keeps both): the scroll's anchors on the feed, and

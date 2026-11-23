@@ -84,7 +84,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import com.resonance.design.generated.Tokens
 import com.resonance.geometry.penWave
 import com.resonance.geometry.wavyVertical
@@ -863,7 +862,7 @@ private fun StoryImage(url: String, alt: String, atStart: Boolean = false) {
         val seed = seedFromString(url).toDouble()
         BoxWithConstraints(Modifier.widthIn(max = w.dp).aspectRatio(aspect).heightIn(min = 40.dp)) {
             val bleed = imageBleed(maxWidth.value, maxHeight.value, 0.025)
-            AsyncImage(
+            RevealImage(
                 model = url,
                 contentDescription = alt,
                 contentScale = ContentScale.Crop,

@@ -10,6 +10,7 @@ import { localPicture } from '@/lib/chat/localPictures';
 import { chatImageUrl } from '@/lib/db/firestore/client/messages';
 import type { MessageImage } from '@/lib/db/types';
 import styles from './Thread.module.css';
+import { RevealImg } from '@/components/atoms/RevealImg/RevealImg';
 
 /** A picture's place in a bubble: as wide as it may be, never taller than this. */
 export const PICTURE_MAX_W = 280;
@@ -64,8 +65,7 @@ export function PicturePart({ image, interactive }: { image: MessageImage; inter
         }}
       >
         {src && !failed && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img key={src} src={src} alt="" decoding="async" draggable={false} onError={() => setFailed(true)} />
+          <RevealImg reveal="cover" key={src} src={src} alt="" decoding="async" draggable={false} onError={() => setFailed(true)} />
         )}
         {failed && (
           <span className={styles.sentPictureGlyph}>
@@ -106,8 +106,7 @@ export function PictureViewer({ image, onClose }: { image: MessageImage; onClose
       <span className={styles.viewerClose}>
         <BareIconButton icon="close" label={tNative('close')} iconSize={20} tone="onDark" tip={false} onClick={onClose} />
       </span>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className={styles.viewerPicture} src={src} alt="" onClick={(e) => e.stopPropagation()} />
+      <RevealImg reveal="fade" className={styles.viewerPicture} src={src} alt="" onClick={(e) => e.stopPropagation()} />
     </div>,
     document.body,
   );

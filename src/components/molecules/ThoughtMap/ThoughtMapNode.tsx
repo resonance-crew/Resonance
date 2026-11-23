@@ -3,6 +3,7 @@
 import { memo, useId, useMemo, type CSSProperties, type PointerEvent } from 'react';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import { Icon } from '@/components/atoms/Icon';
+import { useRevealRef } from '@/components/atoms/RevealImg/RevealImg';
 import { INK, INK_STRONG } from '@/lib/design/strokes';
 import { seedFromString } from '@/lib/design/prng';
 import { wobRect } from '@/lib/design/wobRect';
@@ -259,6 +260,8 @@ export const ThoughtMapNode = memo(function ThoughtMapNode({
 /** Organic-clipped thumbnail; floats top-right so the text wraps around it. */
 function NodeThumb({ src, seed, hue, frame }: { src: string; seed: number; hue: number; frame?: CoverFrame | null }) {
   const uid = useId().replace(/:/g, '');
+  // Fades in as it lands, never blurs: a filter inside the map's moving SVG would be drawn again on every move.
+  const revealRef = useRevealRef<SVGImageElement>('fade');
   const S = 56;
   // The picture fills a square S + 8 wide from (-4, -4): centred, or — a framed cover (round 25 §G1) — placed so
   // its frame's square crop fills it, as the apps' map nodes draw it.
@@ -286,6 +289,7 @@ function NodeThumb({ src, seed, hue, frame }: { src: string; seed: number; hue: 
         </clipPath>
       </defs>
       <image
+        ref={revealRef}
         href={src}
         {...place}
         data-frame={r ? '' : undefined}

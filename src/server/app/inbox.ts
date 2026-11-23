@@ -184,10 +184,18 @@ export async function listThreadIn(ctx: ServerCtx, uid: string, pair: string, q:
  * rules let a participant make. 404 for anyone else. Nothing written (and no
  * signal) when it is 0 already.
  */
-export async function markConversationReadIn(ctx: ServerCtx, uid: string, pair: string, own?: (signals: OwnSignals) => void): Promise<void> {
+export async function markConversationReadIn(
+  ctx: ServerCtx,
+  uid: string,
+  pair: string,
+  own?: (signals: OwnSignals) => void,
+  /** The reader's budget, spent beside the read of the row (BE-7): awaited before the write. */
+  spent?: Promise<void>,
+): Promise<void> {
   otherOf(uid, pair);
   const row = await ownRow(ctx, uid, pair);
   if ((row.unread[uid] ?? 0) === 0) return;
+  await spent;
   if ((await ctx.data.conversations.markRead(pair, uid)) === 'gone') throw noConversation();
   await signalWithOwn(ctx, uid, conversationRead(pair, uid), own);
 }

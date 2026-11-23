@@ -209,6 +209,18 @@ describe('the bell’s faces, cards and parts', () => {
     expect(resonance.querySelectorAll('img')).toHaveLength(0);
   });
 
+  it("draw a card's 960 px cover copy in the 46 tile when it has one, not the 2048 px cover", async () => {
+    live.rows = [namedNote];
+    live.extras = {
+      people: {},
+      cards: { walk: card('walk', { media: { type: 'image', url: 'https://img.example/walk.webp', thumbUrl: 'https://img.example/walk-w960.webp' } }) },
+    };
+    const { list } = await openBell();
+    const [note] = within(list).getAllByRole('link');
+    expect([...note.querySelectorAll('img')].map((i) => i.getAttribute('src'))).toContain('https://img.example/walk-w960.webp');
+    expect(note.querySelector('img[src="https://img.example/walk.webp"]')).toBeNull();
+  });
+
   // Round 26 §U8: someone resonated (the tap) — named in bold, the others counted — and the weekly read summary.
   it('draw a resonance tap: its newest face, the name in bold, 「和另外 n 人」, the card — and open the card', async () => {
     live.rows = [

@@ -146,6 +146,12 @@ export interface WriterTxRepo {
 
   /** The card as stored (times as Date), or null. */
   getCard(id: string): Promise<CardRow | null>;
+  /**
+   * The card without its words — only what an autosave asks of it (`DRAFT_HEAD_FIELDS`: whose it is, published or in
+   * the trash, its draft's rev, its cover, its audience) — or null: a save every 1.5 s needn't read a story of up to
+   * 200 000 characters to write it (the perf audit's BE-6).
+   */
+  getDraftHead(id: string): Promise<CardRow | null>;
   /** Whether `id` is a card deleted for good (`cardTombstones/{id}`). */
   isTombstoned(id: string): Promise<boolean>;
   /** The card `originalId` and the writer's ties to its author; null when there is no such card. */

@@ -18,7 +18,7 @@ import { INSIGHTS_MAX } from '@/lib/recommend/signature';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { serverCtx } from '@/server/ctx';
 import { storedMillis } from '@/server/domain/cards';
-import type { FilmWindowRow } from '@/server/ports/repos/cards';
+import type { FilmPin, FilmWindowRow } from '@/server/ports/repos/cards';
 import type { DataRepos } from '@/server/ports/uow';
 import { publicBases } from '@/lib/storage/publicUrl';
 import type { Card, User } from '@/lib/db/types';
@@ -170,13 +170,56 @@ const forPage = (c: Card): Card => {
   return card.anonymous ? { ...card, authorId: '' } : card;
 };
 
+/** The version of the choosing rule a kept day's choice was made by: bump it when the rule changes. */
+export const FILM_TODAY_V = 1;
+
+/** The pin a choice is made under, as a key (empty: no pin in force at `now`). */
+const pinKey = (pin: FilmPin | null, now: Date) =>
+  pin?.written && (!pin.until || pin.until.getTime() > now.getTime()) ? `${pin.written}|${pin.answer ?? ''}|${pin.until?.getTime() ?? ''}` : '';
+
+interface FilmChoice {
+  pair: { w: string; a: string | null; relation: FilmRelation; pinned: boolean };
+  pickIds: string[];
+}
+
+/**
+ * The film's cards for a render. The choice — which two lead, which the end lists — holds all through a Taipei day
+ * (the rotation turns at its midnight), so it is kept (`config/landingFilmToday`, card ids only) and a render reads that
+ * one document and the pin, not the window of 120, its readings and the parts' vectors again (the perf audit's BE-5:
+ * about 450 reads a choice). The cards themselves are read again on every render, as before — one made private,
+ * trashed or emptied since leaves the film at once — and a kept lead that no longer may lead makes a new choice.
+ */
 export async function filmCards(data: Pick<DataRepos, 'cards' | 'users'>, opts: { storageBases: readonly string[]; now?: Date }): Promise<FilmCards | null> {
   const now = opts.now ?? new Date();
   const day = taipeiDayIndex(now);
+  const [today, pin] = await Promise.all([data.cards.filmToday().catch(() => null), data.cards.filmPin()]);
+  const key = pinKey(pin, now);
+  if (today && today.day === day && today.v === FILM_TODAY_V && today.pin === key) {
+    const kept = await filmOf(data, { pair: { w: today.written, a: today.answer, relation: today.relation, pinned: today.pinned }, pickIds: today.picks }, true);
+    if (kept !== 'stale') return kept;
+  }
+  const choice = await chooseFilm(data, pin, { storageBases: opts.storageBases, now });
+  if (!choice) return null; // no lead at all: the page plays the film with blank cards only
+  const { pair, pickIds } = choice;
+  await data.cards
+    .saveFilmToday({ day, v: FILM_TODAY_V, pin: key, written: pair.w, answer: pair.a, relation: pair.relation, pinned: pair.pinned, picks: pickIds })
+    .catch((e) => console.warn('[film] keeping the day\'s choice failed', e instanceof Error ? e.message : e));
+  const film = await filmOf(data, choice, false);
+  return film === 'stale' ? null : film;
+}
+
+/** The day's choice from the window, its readings and the leads' parts (the rule above, SPEC §2). */
+async function chooseFilm(
+  data: Pick<DataRepos, 'cards' | 'users'>,
+  pin: FilmPin | null,
+  opts: { storageBases: readonly string[]; now: Date },
+): Promise<FilmChoice | null> {
+  const { now } = opts;
+  const day = taipeiDayIndex(now);
   const bases = opts.storageBases;
 
-  // The window, each card with its reading (the score and the strangers' switch only), and the owner's pin.
-  const [rows, pin] = await Promise.all([data.cards.filmWindow(FILM_WINDOW), data.cards.filmPin()]);
+  // The window, each card with its reading (the score and the strangers' switch only).
+  const rows = await data.cards.filmWindow(FILM_WINDOW);
   const pickIds = recommendedIds(rows, day);
   const leads = rows.filter((r) => leadable(r, bases));
   const byId = new Map(leads.map((r) => [r.id, r]));
@@ -244,8 +287,15 @@ export async function filmCards(data: Pick<DataRepos, 'cards' | 'users'>, opts: 
 
   // 3. Nothing close enough: the best card alone (rotating among the top three); the answer beat is a blank card.
   if (!pair && pool.length) pair = { w: pool[day % Math.min(FILM_ROTATION, pool.length)].id, a: null, relation: 'alone', pinned: false };
-  if (!pair) return null; // no lead at all: the page plays the film with blank cards only
+  return pair ? { pair, pickIds } : null;
+}
 
+/**
+ * The chosen cards as the page may show them, read now. `kept`: the choice was made earlier today, so its leads are
+ * asked again whether they still may lead (public, published, out of the trash, named, under a pen name) — 'stale'
+ * when one no longer may, and the caller chooses again.
+ */
+async function filmOf(data: Pick<DataRepos, 'cards' | 'users'>, { pair, pickIds }: FilmChoice, kept: boolean): Promise<FilmCards | null | 'stale'> {
   // The two again, whole and as the page may show them (the grid's projection: no signature beyond `placeholder`) —
   // and, in the same read, the end's candidates.
   const ids = [pair.w, ...(pair.a ? [pair.a] : [])];
@@ -255,9 +305,12 @@ export async function filmCards(data: Pick<DataRepos, 'cards' | 'users'>, opts: 
   const pickCards = pickIds
     .map((id) => cards.find((c) => c.id === id))
     .filter((c): c is Card => !!c && c.visibility === 'public' && c.publishedAt != null && c.trashedAt == null && !unlistedCard(c));
-  const written = cards.find((c) => c.id === pair!.w);
+  const written = cards.find((c) => c.id === pair.w);
+  const stillLeads = (c: Card | undefined) =>
+    !!c && c.visibility === 'public' && c.publishedAt != null && c.trashedAt == null && c.anonymous !== true && !unlistedCard(c);
+  if (kept && (!stillLeads(written) || (pair.a && !stillLeads(cards.find((c) => c.id === pair.a))))) return 'stale';
   if (!written) return null; // changed in the last moment: the next render picks again
-  const answer = pair.a ? cards.find((c) => c.id === pair!.a) ?? null : null;
+  const answer = pair.a ? cards.find((c) => c.id === pair.a) ?? null : null;
 
   // The sky: the landing grid's own read (anonymous cards too, authorless), minus the two.
   const latest = await data.cards.latestForLanding(SKY_MAX + 2);
@@ -277,6 +330,8 @@ export async function filmCards(data: Pick<DataRepos, 'cards' | 'users'>, opts: 
     .filter((c) => c.anonymous === true || String(authors[c.authorId]?.handle ?? '').trim())
     .slice(0, PICKS)
     .map(forPage);
+  // A kept lead whose author has since lost their pen name no longer leads.
+  if (kept && [written, answer].some((c) => c && !String(authors[c.authorId]?.handle ?? '').trim())) return 'stale';
 
   return { written: forPage(written), answer: answer ? forPage(answer) : null, relation: answer ? pair.relation : 'alone', pinned: pair.pinned, sky, picks, authors };
 }
@@ -314,8 +369,8 @@ export async function fallbackModel(data: Pick<DataRepos, 'cards'>): Promise<Fil
 }
 
 /**
- * The film's cards for a render. One run takes 1–2 s and about 150 reads, so the answer is kept for 10 minutes within
- * the Taipei day (dev re-renders on every reload). On a throw or null: `[film] picks failed`, then the fallback; with
+ * The film's cards for a render. A new choice takes 1–2 s and about 450 reads (one a Taipei day since it is kept,
+ * `filmCards`), a render of a kept one about 30, and the answer is kept for 10 minutes within the Taipei day (dev re-renders on every reload). On a throw or null: `[film] picks failed`, then the fallback; with
  * no cards at all, A is drawn too.
  */
 export async function loadFilm(_locale: string, now: Date = new Date()): Promise<FilmModel> {

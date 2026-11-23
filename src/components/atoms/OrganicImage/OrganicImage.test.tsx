@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render } from '@/../test/render';
+import { act, fireEvent, render, waitFor } from '@/../test/render';
 import { IMAGE_RETRY_MS, OrganicImage } from './OrganicImage';
 
 // A cover whose request fails — a lookup that failed on a network just joined, a host briefly
@@ -39,6 +39,8 @@ describe('a cover that fails to load', () => {
     fireEvent.error(container.querySelector('img')!);
     act(() => vi.advanceTimersByTime(IMAGE_RETRY_MS));
     fireEvent.load(container.querySelector('img')!);
+    // past a reveal, should it have played (a load heard later than 50 ms after the element came)
+    act(() => vi.advanceTimersByTime(400));
     expect(shimmer(container)).toBeNull();
   });
 
@@ -122,12 +124,14 @@ describe('a cover grain', () => {
   const SRC = 'https://img.example.com/image/cover.avif';
   const grain = <i data-testid="grain" />;
 
-  it('comes once the picture has landed, never over the shimmer', () => {
+  it('comes once the picture has landed, never over the shimmer', async () => {
     const { container, queryByTestId } = render(<OrganicImage src={SRC} grain={grain} />);
     expect(container.querySelector('span[aria-hidden]')).not.toBeNull();
     expect(queryByTestId('grain')).toBeNull();
     fireEvent.load(container.querySelector('img')!);
-    expect(container.querySelector('span[aria-hidden]')).toBeNull();
+    // A picture that lands late reveals blur-to-sharp first (lib/images/reveal): the shimmer stays under it until then.
+    if (container.querySelector('span[aria-hidden]')) expect(queryByTestId('grain')).toBeNull();
+    await waitFor(() => expect(container.querySelector('span[aria-hidden]')).toBeNull());
     expect(queryByTestId('grain')).not.toBeNull();
   });
 

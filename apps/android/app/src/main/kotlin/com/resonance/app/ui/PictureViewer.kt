@@ -45,7 +45,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import coil3.ImageLoader
-import coil3.compose.AsyncImage
+import com.resonance.design.ImageRevealKind
+import com.resonance.design.RevealImage
 import com.resonance.design.ChatPictureSource
 import com.resonance.design.OrganicIcon
 import com.resonance.design.OnDarkDisc
@@ -130,8 +131,10 @@ internal fun PictureViewer(picture: ChatPictureSource, loader: ImageLoader?, onD
                 is ChatPictureSource.Local -> picture.bytes
                 is ChatPictureSource.Remote -> picture.full
             }
-            if (loader != null) AsyncImage(
+            if (loader != null) RevealImage(
                 model = model, contentDescription = L10n.Messages.attachImage, imageLoader = loader,
+                // The full picture fades in where the thumb's place was; a picture of the device's own shows at once.
+                kind = if (picture is ChatPictureSource.Local) ImageRevealKind.Off else ImageRevealKind.Fade,
                 modifier = Modifier.fillMaxSize().graphicsLayer {
                     scaleX = scale
                     scaleY = scale

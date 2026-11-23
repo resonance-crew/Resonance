@@ -4,6 +4,7 @@ import { useMemo, useRef } from 'react';
 import { storyPictureShape } from '@/lib/design/storyPicture';
 import { INK_STRONG } from '@/lib/design/strokes';
 import { useElementSize } from '@/lib/hooks/useElementSize';
+import { useRevealRef } from '../RevealImg/RevealImg';
 
 export interface OrganicStoryImageProps {
   src: string;
@@ -49,6 +50,8 @@ export function OrganicStoryImage({
   const shape = useMemo(() => (w && h ? storyPictureShape(w, h, seed) : undefined), [w, h, seed]);
   const clip = shape?.clip;
   const bleed = shape?.bleed ?? 0;
+  // A picture that lands as the reader reaches it sharpens in (lib/images/reveal); one already there just shows.
+  const revealRef = useRevealRef<HTMLImageElement>('cover');
 
   return (
     <span
@@ -73,6 +76,7 @@ export function OrganicStoryImage({
             wrapper/sizing fights that layout. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
+          ref={revealRef}
           src={src}
           alt={alt}
           loading="lazy"

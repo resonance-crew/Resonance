@@ -24,7 +24,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
+import com.resonance.design.ImageRevealKind
+import com.resonance.design.RevealImage
 import com.resonance.api.models.FeedCard
 import com.resonance.app.Session
 import com.resonance.design.AppFonts
@@ -98,7 +99,7 @@ private fun CoverTile(card: FeedCard, size: Dp) {
     Box(Modifier.size(size).clip(shape).background(if (card.imageUrl != null) colors.skeleton else colors.fill), contentAlignment = Alignment.Center) {
         val cover = card.imageUrl
         if (cover != null) {
-            AsyncImage(cover, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            RevealImage(cover, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(), kind = ImageRevealKind.Thumb)
         } else {
             BasicText(coverInitial(card.title), style = AppFonts.style(AppFonts.Family.HeadingCJK, 16f, 600, lineHeight = 1f, color = colors.deep))
         }

@@ -137,11 +137,27 @@ internal object MediaGallery {
 /**
  * The gallery's thumbnails (round 22 §6.2): the system's own 256 px thumbnail of each picture
  * (`loadThumbnail`, never a full-size decode), read on a few IO threads and cancelled with the cell that
- * asked, kept in memory up to an eighth of the app's heap.
+ * asked, kept in memory up to [MAX_BYTES] (AND-4: their pixels are native memory, which an eighth of
+ * the Java heap — 32–64 MB — never measured) and let go of as the panel closes ([trim]) or the system
+ * asks the app for memory back ([onTrimMemory]).
  */
 internal object GalleryThumbnails {
-    private val cache = object : LruCache<Long, ImageBitmap>((Runtime.getRuntime().maxMemory() / 8).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()) {
-        override fun sizeOf(key: Long, value: ImageBitmap): Int = value.width * value.height * 4
+    /** 12 MB: about 48 of the 256² thumbnails, some three screens of the grid. */
+    const val MAX_BYTES = 12 * 1024 * 1024
+
+    private val cache = object : LruCache<Long, ImageBitmap>(MAX_BYTES) {
+        override fun sizeOf(key: Long, value: ImageBitmap): Int = thumbnailBytes(value.width, value.height)
+    }
+
+    /** What stays once the grid has closed: 4 MB, about the newest screenful (a reopening shows those at once). */
+    const val CLOSED_BYTES = 4 * 1024 * 1024
+
+    /** The grid closed (the panel, or its 卡片 side): down to [CLOSED_BYTES], the least recently seen first. */
+    fun trim() = cache.trimToSize(CLOSED_BYTES)
+
+    /** The system's [android.content.ComponentCallbacks2] level: the UI hidden, or worse, lets go of them all. */
+    fun onTrimMemory(level: Int) {
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) cache.evictAll()
     }
     @OptIn(ExperimentalCoroutinesApi::class)
     private val io = Dispatchers.IO.limitedParallelism(4)
@@ -168,6 +184,9 @@ internal object GalleryThumbnails {
         }
     }
 }
+
+/** A thumbnail's pixels in bytes (ARGB_8888), what [GalleryThumbnails]' cap counts. */
+internal fun thumbnailBytes(width: Int, height: Int): Int = width * height * 4
 
 /** What the app may read of the phone's pictures (round 22 §6.2). */
 internal enum class GalleryAccess { NotAsked, Full, Partial, Denied, DeniedForever }
@@ -263,6 +282,8 @@ internal fun GalleryGrid(
         resolver.registerContentObserver(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, observer)
         onDispose { resolver.unregisterContentObserver(observer) }
     }
+    // Closed: the thumbnails it read let go of, but for the newest screenful (AND-4).
+    DisposableEffect(Unit) { onDispose { GalleryThumbnails.trim() } }
     BoxWithConstraints(modifier) {
         val columns = when {
             maxWidth >= 720.dp -> 5

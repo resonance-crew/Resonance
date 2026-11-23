@@ -1,4 +1,4 @@
-import { edgeRowOf, groupRowOf, nodeRowOf } from '@/server/domain/writer';
+import { DRAFT_HEAD_FIELDS, edgeRowOf, groupRowOf, nodeRowOf } from '@/server/domain/writer';
 import type { DraftPatch, MapItems, WriterData, WriterTxRepo } from '@/server/ports/repos/writer';
 import type { MemoryState, Row } from '../state';
 import type { MemoryTx } from '../uow';
@@ -73,6 +73,10 @@ export function writerTx(tx: MemoryTx): WriterTxRepo {
 
     async getCard(id) {
       return r.card(id);
+    },
+    async getDraftHead(id) {
+      const card = r.card(id);
+      return card ? Object.fromEntries(DRAFT_HEAD_FIELDS.filter((f) => f in card).map((f) => [f, card[f]])) : null;
     },
     async isTombstoned(id) {
       return !!tx.get('cardTombstones', id);

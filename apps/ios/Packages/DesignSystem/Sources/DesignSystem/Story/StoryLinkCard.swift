@@ -183,11 +183,11 @@ private struct LinkPicture: View {
         GeometryReader { geo in
             let bleed = StoryLinkCard.Look.bleed
             // Decoded at the size it is drawn (audit I2).
-            LazyImage(request: ImageSizeBuckets.request(url, box: CGSize(width: (geo.size.width + bleed * 2) * 3,
-                                                                          height: (geo.size.height + bleed * 2) * 3))) { state in
-                if let image = state.image {
+            let box = CGSize(width: (geo.size.width + bleed * 2) * 3, height: (geo.size.height + bleed * 2) * 3)
+            CoverLazyImage(url: url, fallback: nil, request: { ImageSizeBuckets.request($0, box: box) }) { image, _, failed in
+                if let image {
                     image.resizable().scaledToFill()
-                } else if state.error != nil {
+                } else if failed {
                     Color.clear.onAppear(perform: onError)
                 } else {
                     Tokens.text.opacity(0.06)
