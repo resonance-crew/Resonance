@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -307,6 +308,31 @@ private fun sceneParts(overlay: LayoutCoordinates, marks: MascotMarks, density: 
  */
 @Composable
 internal fun MascotStrip(on: Boolean, control: LayoutCoordinates?, modifier: Modifier = Modifier) {
+    // The island (a WebView renderer of its own, some 30–50 MB) only once the switch has been on during this
+    // visit (AND-7): a page opened with it off draws the strip's floor alone, and turning it on brings the
+    // puppets in; turned off again, the island stays to the page's end and puts one back to nap.
+    var live by remember { mutableStateOf(on) }
+    LaunchedEffect(on) { if (on) live = true }
+    // The web's strip: 116 tall, 104 on a phone's width (< 480).
+    val stripHeight = if (LocalConfiguration.current.screenWidthDp >= 480) 116.dp else 104.dp
+    if (live) MascotStripIsland(on, control, stripHeight, modifier)
+    else Box(modifier.fillMaxWidth().height(stripHeight).clearAndSetSemantics { }.stripFloor())
+}
+
+/** The strip's floor: wavyLine(240, 31, 1.1, 9) stretched across, 4 in from each end, its middle 12 above the foot. */
+private fun Modifier.stripFloor(): Modifier = composed {
+    val floor = Tokens.FieldBorderHover.copy(alpha = 0.55f)
+    drawWithCache {
+        val d = density
+        val w = size.width / d - 8
+        val line = wavyLine(max(1.0, w.toDouble()), 31.0, 1.1, 9).toPath(d)
+        val pen = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round)
+        onDrawBehind { translate(4 * d, size.height - 12 * d) { drawPath(line, floor, style = pen) } }
+    }
+}
+
+@Composable
+private fun MascotStripIsland(on: Boolean, control: LayoutCoordinates?, stripHeight: androidx.compose.ui.unit.Dp, modifier: Modifier) {
     val context = LocalContext.current
     val density = LocalDensity.current
     val island = remember { MascotIsland(context) }
@@ -318,8 +344,6 @@ internal fun MascotStrip(on: Boolean, control: LayoutCoordinates?, modifier: Mod
         }
     }
     MascotLook(island)
-    // The web's strip: 116 tall, 104 on a phone's width (< 480).
-    val stripHeight = if (LocalConfiguration.current.screenWidthDp >= 480) 116.dp else 104.dp
     var width by remember { mutableStateOf(0f) }
     var switchAt by remember { mutableStateOf<Rect?>(null) }
     LaunchedEffect(Unit) { island.call("mascots.inset(${STRIP_HEADROOM - 10}, 0)") }
@@ -343,7 +367,6 @@ internal fun MascotStrip(on: Boolean, control: LayoutCoordinates?, modifier: Mod
         }
     }
     val slop = LocalViewConfiguration.current.touchSlop
-    val floor = Tokens.FieldBorderHover.copy(alpha = 0.55f)
     // One layout node: the strip's room, its floor, and the web view reaching up over the row above — so the
     // column sees it share a press with that row ([MascotTapElement] in its own chain).
     Box(
@@ -360,14 +383,7 @@ internal fun MascotStrip(on: Boolean, control: LayoutCoordinates?, modifier: Mod
                 val next = Rect(r.left / d, r.top / d + STRIP_HEADROOM, r.right / d, r.bottom / d + STRIP_HEADROOM).round1()
                 if (next != switchAt) switchAt = next
             }
-            // The floor: wavyLine(240, 31, 1.1, 9) stretched across, 4 in from each end, its middle 12 above the foot.
-            .drawWithCache {
-                val d = density.density
-                val w = size.width / d - 8
-                val line = wavyLine(max(1.0, w.toDouble()), 31.0, 1.1, 9).toPath(d)
-                val pen = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round)
-                onDrawBehind { translate(4 * d, size.height - 12 * d) { drawPath(line, floor, style = pen) } }
-            }
+            .stripFloor()
             // Up over the row above by the headroom, drawn over it (the strip's own room is unchanged).
             .layout { measurable, constraints ->
                 val up = (STRIP_HEADROOM * density.density).roundToInt()
