@@ -43,3 +43,4 @@ what says on whose word they changed. Commit the new row with the accept
 | 2026-11-23T05:48:26Z | 20261123-053155 | 987aa20e | android, ios, mac | home-invite | 8 | accept visual baseline (promoted from picks-invite-band) |
 | 2026-11-23T13:40:32Z | 20261123-110429 | 98097022 | android, ios, mac, web | all | 543 | 我看完了，都沒有問題，謝謝你。 |
 | 2026-11-24T20:03:31Z | 20261124-191032 | b01f5d1b | android, ios, mac, web | all | 543 | 我已经看过这些图，呃，所以没问题的话，就请你 accept 这个 baseline，发行新版本 |
+| 2026-11-24T20:36:39Z | 20261124-191032 | b01f5d1b | android, ios, mac, web | all | 543 | 我已经看过这些图，呃，所以没问题的话，就请你 accept 这个 baseline，发行新版本 (promoted from r35/base) |
