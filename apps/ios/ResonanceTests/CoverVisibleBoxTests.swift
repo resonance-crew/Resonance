@@ -213,4 +213,29 @@ import UIKit
             .appendingPathComponent("../Packages/DesignSystem/Sources/DesignSystem/Components/OrganicImage.swift").standardized, encoding: .utf8)
         #expect(image.contains("if let image { FramedCover(image, pictureSize: pictureSize, bleed: bleed) }"))
     }
+
+    /// Post-merge review (round 33): a chat card's cover is drawn 4 past the bubble's sides only; its crop is the seen
+    /// width's (the box less 4 a side, its full height), framed or not — a link's picture still fills the whole box.
+    @Test func aBubblesCoverIsCutForItsSeenWidth() throws {
+        let seen = CGSize(width: 260, height: 268 / 1.91)
+        let box = CGSize(width: seen.width + 8, height: seen.height)
+        for picture in [CGSize(width: 1536, height: 1024), CGSize(width: 1024, height: 1536)] {
+            for frame in [nil, CoverFraming(cx: 0.3, cy: 0.7, zoom: 1.4, ar: Double(picture.width / picture.height))] {
+                let ar = Double(picture.width / picture.height)
+                let place = CoverLayout.placement(box: box, pictureSize: picture, frame: frame, bleedX: 4, bleedY: 0)
+                let crop = CoverFraming.coverCrop(ar: ar, frame: frame, boxRatio: Double(seen.height / seen.width))
+                #expect(abs(place.minX + crop.minX * place.width - 4) < 0.001)
+                #expect(abs(place.minY + crop.minY * place.height) < 0.001)
+                #expect(abs(crop.width * place.width - seen.width) < 0.001 && abs(crop.height * place.height - seen.height) < 0.001)
+            }
+        }
+        // The one-bleed form is the same with both axes.
+        let even = CoverLayout.placement(box: CGSize(width: 64, height: 64), pictureSize: CGSize(width: 3, height: 2), frame: nil, bleed: 4)
+        #expect(even == CoverLayout.placement(box: CGSize(width: 64, height: 64), pictureSize: CGSize(width: 3, height: 2), frame: nil, bleedX: 4, bleedY: 4))
+        let source = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Packages/DesignSystem/Sources/DesignSystem/Components/Messages.swift").standardized, encoding: .utf8)
+        #expect(source.contains("FramedCover(image, pictureSize: pictureSize, bleedX: cover ? pictureBleed : 0, bleedY: 0)"))
+        #expect(source.contains("BubblePicture(url: imageURL, fallback: imageFallbackURL, cover: true)"))
+        #expect(source.contains("BubblePicture(url: imageURL) { pictureFailed = true }"))
+    }
 }

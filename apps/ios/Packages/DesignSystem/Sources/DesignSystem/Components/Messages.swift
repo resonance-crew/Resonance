@@ -350,6 +350,9 @@ private struct BubblePicture: View {
     /// A shared card's cover itself, when `url` is its smaller copy (B2): asked for once if that fails, or at once
     /// where the bubble needs more pixels than the copy has.
     var fallback: URL? = nil
+    /// A shared card's cover (round 33 post-merge review): cut for the bubble's seen width, not the width it is drawn
+    /// past its sides at; a link's picture keeps filling that bleed.
+    var cover = false
     let onError: () -> Void
     @Environment(\.displayScale) private var displayScale
     @Environment(\.coverFraming) private var framing
@@ -367,8 +370,9 @@ private struct BubblePicture: View {
                     CoverLazyImage(url: source.url, fallback: source.fallback,
                                    request: { ImageSizeBuckets.request($0, box: box, zoom: zoom) }) { image, pictureSize, failed in
                         if let image {
-                            // A shared card's cover on its frame (round 25 §G1); a link's picture has none.
-                            FramedCover(image, pictureSize: pictureSize)
+                            // A shared card's cover on its frame (round 25 §G1), cut for the seen width (the box less
+                            // the bleed past each side, round 33); a link's picture has none and fills it all.
+                            FramedCover(image, pictureSize: pictureSize, bleedX: cover ? pictureBleed : 0, bleedY: 0)
                         } else if failed {
                             Color.clear.onAppear(perform: onError)
                         }
@@ -621,7 +625,7 @@ public struct SharedCardSection: View {
             }
             .padding(12)
             if let imageURL, !coverFailed {
-                BubblePicture(url: imageURL, fallback: imageFallbackURL) { coverFailed = true }
+                BubblePicture(url: imageURL, fallback: imageFallbackURL, cover: true) { coverFailed = true }
                     .coverFraming(coverFrame)
             } else {
                 let palette = CardPalette(accentHue: accentHue, position: 0)
