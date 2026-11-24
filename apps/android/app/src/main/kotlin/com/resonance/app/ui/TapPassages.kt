@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.resonance.design.DividerInk
-import com.resonance.design.wavyRuleAbove
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -236,7 +235,7 @@ internal fun TapPassages(
                     .then(if (i == focused) Modifier.focusRequester(first) else Modifier)
                     // §P2: a rule between two rows (never above the first), the words' start to their end; the
                     // row's own band washes over it.
-                    .then(if (passageRuleAbove(i)) Modifier.wavyRuleAbove(PassageBand.wordsInset, rule, seed = 47.0 + i) else Modifier)
+                    .then(if (passageRuleAbove(i)) Modifier.bandRuleAbove(keys[i], PassageBand.wordsInset, rule) else Modifier)
                     .listBand(keys[i], below[i], source, { false }, rest = if (isChosen) press else null, cut = PassageBand.cut)
                     .flowTag("tap-passage-$i")
                     .plainClickable(role = Role.Button) {

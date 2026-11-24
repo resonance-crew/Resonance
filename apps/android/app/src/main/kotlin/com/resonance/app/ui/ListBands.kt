@@ -17,6 +17,9 @@ import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.isOutOfBounds
 import androidx.compose.ui.input.pointer.pointerInput
@@ -94,11 +97,13 @@ internal object ListBands {
     /** The curve [key] draws at [y] across a band [w] wide (flat where it meets the band's ends). */
     fun curve(y: Double, w: Double, key: String): List<Pt> = rowBoundary(y, w, seed(key), Amp, 0.0, steps(w))
 
+    /** The rule a row draws on its top edge ([bandRuleAbove]): exactly [region]'s top curve for that key. */
+    fun ruleCurve(w: Double, key: String): List<PathCommand> = dividerPath(curve(0.0, w, key))
+
     /** A row's band, [w] × [h]: its own curve along the top, the one under it ([bottomKey]'s) along the bottom. */
     fun region(w: Double, h: Double, topKey: String, bottomKey: String): List<PathCommand> {
-        val top = curve(0.0, w, topKey)
         val back = curve(h, w, bottomKey).reversed()
-        return dividerPath(top) + PathCommand.Line(back[0].x, back[0].y) + dividerPath(back).drop(1) + PathCommand.Close
+        return ruleCurve(w, topKey) + PathCommand.Line(back[0].x, back[0].y) + dividerPath(back).drop(1) + PathCommand.Close
     }
 
     /**
@@ -114,6 +119,24 @@ internal object ListBands {
             addRoundRect(RoundRect(0f, -reach, (w * density).toFloat(), (h * density).toFloat() + reach, CornerRadius(radius, radius)))
         }
         return Path().apply { op(band, box, PathOperation.Intersect) }
+    }
+}
+
+/**
+ * A rule on this row's top edge that IS its band's top curve (round 34 (6), the owner: 按压色块的上下边缘就是分隔线那条曲线):
+ * [ListBands.curve] of [key] — the row's own top key, the one the row above ends on ([bandsBelow]) — at y 0, the same
+ * path and the same place as both bands' edge, stroked only from [inset] in on either side (the words' start to their
+ * end) at the house hairline in [color]. Drawn behind the row, so its band's wash lies over it and fills exactly between
+ * its two rules.
+ */
+internal fun Modifier.bandRuleAbove(key: String, inset: Dp, color: Color, lineWidth: Dp = Tokens.InkLight): Modifier = drawWithCache {
+    val path = ListBands.ruleCurve((size.width / density).toDouble(), key).toPath(density)
+    val left = inset.toPx()
+    val right = size.width - left
+    val reach = ((ListBands.Amp + 1) * density).toFloat() + lineWidth.toPx()
+    val stroke = Stroke(lineWidth.toPx(), cap = StrokeCap.Round)
+    onDrawBehind {
+        if (right > left) clipRect(left, -reach, right, reach) { drawPath(path, color, style = stroke) }
     }
 }
 

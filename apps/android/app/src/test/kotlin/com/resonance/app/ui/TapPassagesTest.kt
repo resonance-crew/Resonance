@@ -461,7 +461,32 @@ class TapPassagesTest {
         assertEquals(24f, PassageBand.wordsInset.value)
         // The house hairline and the Divider's ink: the source names no width or colour of its own.
         val source = File("src/main/kotlin/com/resonance/app/ui/TapPassages.kt").readText()
-        assertTrue(source.contains("wavyRuleAbove(PassageBand.wordsInset, rule"))
+        assertTrue(source.contains("bandRuleAbove(keys[i], PassageBand.wordsInset, rule)"))
+        assertFalse("never a wave of its own", source.contains("wavyRuleAbove("))
         assertTrue(source.contains("val rule = DividerInk"))
+    }
+
+    @Test fun aRowsPressedBandEndsExactlyOnItsRules() {
+        // Round 34 (6) (the owner: 按压色块的上下边缘就是分隔线那条曲线): the rule over row i is the curve of row i's key — the
+        // band of row i starts on it, and the band of row i − 1 ends on it (its bottom key, bandsBelow) — one path, one place.
+        val keys = passages.map { "passage:" + it.id }
+        val below = bandsBelow(keys, ListBands.EndKey)
+        val w = 352.0
+        val h = 87.0
+        for (i in 1 until keys.size) {
+            val rule = ListBands.curve(0.0, w, keys[i])
+            // Row i's band: its top edge is the rule's very commands.
+            val band = ListBands.region(w, h, keys[i], below[i])
+            val ruleCommands = ListBands.ruleCurve(w, keys[i])
+            assertEquals(ruleCommands, band.take(ruleCommands.size))
+            // Row i − 1's band: its bottom edge (at its height h) is the same curve, h lower.
+            assertEquals(keys[i], below[i - 1])
+            val upper = ListBands.curve(h, w, below[i - 1])
+            assertEquals(rule.size, upper.size)
+            rule.zip(upper).forEach { (r, u) ->
+                assertEquals(r.x, u.x, 0.0)
+                assertEquals(r.y + h, u.y, 0.011)
+            }
+        }
     }
 }
