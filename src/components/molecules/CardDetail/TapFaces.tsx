@@ -14,6 +14,9 @@ import { TAP_DIALOG_PADDING, tapRowsKnown, useTapListHold } from './tapList';
 import { TapPeople, TapPeopleSkeleton, type TapOwnRow } from './TapPeople';
 import styles from './TapFaces.module.css';
 
+/** The faces' size on the end row's line. */
+export const TAP_FACE_SIZE = 28;
+
 /** A face as AvatarGroup draws it. */
 export function memberOf(a: AuthorBody): AvatarGroupMember {
   return { id: a.id, initials: a.initials, accentColor: a.accentColor, avatarSeed: a.avatarSeed ?? '', avatarUrl: a.avatarUrl ?? undefined };
@@ -113,7 +116,7 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving, onOwnRow }:
     return () => io.disconnect();
   }, [button, prefetch]);
   const group = (
-    <AvatarGroup members={shown.faces.map(memberOf)} size={28} arriving={arriving} leaving={leaving ? memberOf(leaving) : undefined} />
+    <AvatarGroup members={shown.faces.map(memberOf)} size={TAP_FACE_SIZE} arriving={arriving} leaving={leaving ? memberOf(leaving) : undefined} />
   );
   if (!faces.length && !leaving) return null;
   const onlyMine = !shown.more && faces.length === 1 && faces[0].id === viewerId && !onOwnRow;

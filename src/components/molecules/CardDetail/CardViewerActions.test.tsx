@@ -199,6 +199,23 @@ describe('the end row: three answers in one capsule (§U1)', () => {
     expect(container.querySelector('[data-face="viewer"]')).toHaveAttribute('data-leaving');
   });
 
+  // Round 34 §9: the face rises out of the 共振 segment — its line is told how far below a face's top the segment's
+  // top edge lies (--avatar-rise), measured as it lays out.
+  it('tells the faces where the 共振 segment’s top edge is, for the viewer’s face to rise out of it', async () => {
+    const real = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      // The faces' line 44 tall at 100; the segment 12 under it (its top at 156), 40 tall.
+      if (this.hasAttribute('data-end-faces-line')) return DOMRect.fromRect({ x: 0, y: 100, width: 320, height: 44 });
+      if (this.matches('[role="group"] > button')) return DOMRect.fromRect({ x: 0, y: 156, width: 120, height: 40 });
+      return real.call(this);
+    });
+    const { container } = renderPage();
+    await act(async () => {});
+    const faces = container.querySelector<HTMLElement>('[data-end-faces]')!;
+    // A face (28) centred on the line's middle (122) has its top at 108: the edge is 48 below it.
+    expect(faces.style.getPropertyValue('--avatar-rise')).toBe('48px');
+  });
+
   it('puts a tap the server refused back, and says so', async () => {
     setTap.mockRejectedValueOnce(Object.assign(new Error('500'), { status: 500, code: 'internal' }));
     renderPage();
