@@ -499,21 +499,27 @@ class TapPassagesTest {
         return layout.size.width to layout.lineCount
     }
 
-    @Test fun theChecksSlotIsKeptSoPickingNeverRewrapsTheWords() {
-        // Round 34 (7) (the owner saw the sentence re-wrap and the dialog's height jump as the ✓ appeared): the slot is
-        // on every row, unseen until picked.
+    @Test fun noCheckAndNoSlotForOneTheWordsRunTheRowsWidthBetweenTheInsets() {
+        // Round 35 (2) (the owner: 把这个 dialog 里面的勾勾拿掉…选中的就是现在的这个变色的效果就好了; round 34 (7)'s unseen
+        // slot withdrawn): the picked row is its band alone, selected for TalkBack; the words' box is the row's width less
+        // the family's 24 at each side, picked or not, so picking still never re-wraps them.
         show(hold = true)
         compose.waitForIdle()
+        val density = compose.density.density
         val before = passages.indices.map(::wordsLayout)
-        val rowBefore = compose.onNodeWithTag("tap-passage-0", useUnmergedTree = true).getBoundsInRoot()
-        passages.indices.forEach { compose.onNodeWithTag("tap-passage-check-$it", useUnmergedTree = true).assertExists() }
+        passages.indices.forEach { i ->
+            compose.onNodeWithTag("tap-passage-check-$i", useUnmergedTree = true).assertDoesNotExist()
+            val row = compose.onNodeWithTag("tap-passage-$i", useUnmergedTree = true).getBoundsInRoot()
+            val words = compose.onNodeWithText(passages[i].text, useUnmergedTree = true).fetchSemanticsNode()
+            // The long sentence wraps, so its box is the room it was given: the row less 24 + 24.
+            if (i == 0) assertEquals((row.right - row.left).value - 48f, words.size.width / density, 1f)
+            assertEquals(row.left.value + 24f, words.positionInRoot.x / density, 0.5f)
+        }
         compose.onNodeWithTag("tap-passage-0", useUnmergedTree = true).performClick()
         compose.waitForIdle()
         compose.onNodeWithTag("tap-passage-0", useUnmergedTree = true).assertIsSelected()
         assertEquals("the words' width and lines unchanged", before, passages.indices.map(::wordsLayout))
-        assertEquals(rowBefore, compose.onNodeWithTag("tap-passage-0", useUnmergedTree = true).getBoundsInRoot())
         val source = File("src/main/kotlin/com/resonance/app/ui/TapPassages.kt").readText()
-        assertTrue(source.contains("Modifier.alpha(if (isChosen) 1f else 0f)"))
-        assertFalse("never added only when picked", source.contains("if (isChosen) OrganicIcon("))
+        assertFalse("no check drawn in the dialog", source.contains("IconName.Check"))
     }
 }
