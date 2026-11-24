@@ -319,15 +319,19 @@ struct CardEndRow: View {
         case let .found(mine?):
             return SegmentSpec(id: "reply", icon: .pen, label: label, accessibilityLabel: name) { writer.edit(mine.id) }
         default:
-            return SegmentSpec(id: "reply", icon: .cards, label: label, accessibilityLabel: name,
-                               working: lookup.asking || lookup.state == .looking) {
+            // Round 35 §4: live from the first frame, inking only while a press asks — never for the background lookup.
+            return SegmentSpec(id: "reply", icon: .cards, label: label, accessibilityLabel: name, working: lookup.inks) {
                 // Signed out there is nothing to pick from: the writer, as before.
                 guard let drafts = session.drafts else { return writer.open(.init(referenceCardId: cardId)) }
-                if lookup.state == .failed {
-                    // Not known whether this card is answered already: asked now, the picker once it isn't.
-                    Task { if await lookup.askOnTap({ try await drafts.myResonance(to: cardId) }) { picking = true } }
-                } else {
-                    picking = true
+                if lookup.pressOpensPicker { picking = true; return }
+                // Not known yet whether this card is answered already (still looking, or the lookup failed): asked now,
+                // then the picker, the card or the writer — a second reply card is never begun without knowing.
+                Task {
+                    switch await lookup.askOnTap({ try await drafts.myResonance(to: cardId) }) {
+                    case .unanswered: picking = true
+                    case let .answered(mine): mine.published ? openRoute(.card(mine.id)) : writer.edit(mine.id)
+                    case .unknown: break
+                    }
                 }
             }
         }
