@@ -155,9 +155,11 @@ class TapFacesTest {
 
     @Test fun theListsRowsAreADialogsOnEveryDevice() {
         // The reader's list is the phone's dialog everywhere now (the owner's look, 2026-11-19), the author's already
-        // was: one measure of rows, 60 tall with a face of 36, its bands' own 12 in — no popover's rows any more.
+        // was: one measure of rows, 60 tall with a face of 36 — no popover's rows any more. Round 33 §Q2: the band from
+        // the paper's edge to its edge, the face and the words the family's 24 in (the title's edge), not 28 + 12.
         assertEquals(60f, TapRowMeasure.Dialog.height.value, 0f)
-        assertEquals(12f, TapRowMeasure.Dialog.inset.value, 0f)
+        assertEquals(24f, TapRowMeasure.Dialog.inset.value, 0f)
+        assertEquals(TapListInset, TapRowMeasure.Dialog.inset)
         assertEquals(36f, TapRowMeasure.Dialog.face.value, 0f)
     }
 

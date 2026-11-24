@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import com.resonance.design.LocalCoverInset
 import com.resonance.design.generated.HueRole
 import com.resonance.design.GrainInk
 import com.resonance.design.CardFamily
@@ -1378,7 +1379,7 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, palette: CardPalette, model: W
                                 model = url, contentDescription = null, modifier = Modifier.fillMaxSize().blur(14.dp),
                                 // Already veiled: it only fades in.
                                 kind = ImageRevealKind.Fade,
-                                contentScale = CoverFit.scale(f), alignment = CoverFit.alignment(f),
+                                contentScale = CoverFit.scale(f, LocalCoverInset.current), alignment = CoverFit.alignment(f, LocalCoverInset.current),
                             )
                         }
                         if (veiled) Box(Modifier.fillMaxSize().background(palette.interior.copy(alpha = 0.45f)))

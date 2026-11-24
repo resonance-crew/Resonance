@@ -1,6 +1,18 @@
 package com.resonance.design
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.animation.core.animate
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.focusable
@@ -116,6 +128,9 @@ const val COVER_STAGE_MAX = 480f
 
 fun cropMask(stage: Dp): Dp = stage - (CROP_MARGIN * 2).dp
 
+/** How long a pull past the limit takes to spring back (round 33 §Q5: ~280, the web's and iOS's). */
+const val RUBBER_BACK_MS = 280
+
 /** The scrim over the photo outside the mask: over a picture, the same dark in either scheme. */
 private val CropScrim = OverPicture.Scrim
 
@@ -170,6 +185,8 @@ fun FrameCropStage(
     label: String,
     modifier: Modifier = Modifier,
     moves: CropMoveLabels? = null,
+    /** A drag pushed along an axis where the picture has no room at this zoom (round 33 §Q5: the cover's hint). */
+    onBlocked: (() -> Unit)? = null,
     outline: (Double, Double) -> Shape,
 ) {
     val fw = (width.value - CROP_MARGIN * 2).coerceAtLeast(1f)
@@ -178,6 +195,15 @@ fun FrameCropStage(
     val model = remember(photo, fw, fh, maxZoom) { FrameCrop(photo.width.toDouble(), photo.height.toDouble(), fw.toDouble(), fh.toDouble(), maxZoom) }
     val current by rememberUpdatedState(state)
     val emit by rememberUpdatedState(onState)
+    val blocked by rememberUpdatedState(onBlocked)
+    // Round 33 §Q5: a drag past the picture's limits (or along an axis with no room) still follows the finger a
+    // little, with resistance — [FrameCrop.rubber] of the pull, at most 24 — and springs back when the fingers lift.
+    // Reduced motion: it doesn't move at all.
+    val still = LocalContext.current.prefersReducedMotion()
+    var band by remember { mutableStateOf(Offset.Zero) }
+    val pull = remember(model) { doubleArrayOf(0.0, 0.0) }
+    val scope = rememberCoroutineScope()
+    val springBack = remember { arrayOfNulls<Job>(1) }
     // A new size (turned, a window resized): the offsets follow the frame, so the same part of the picture shows.
     val lastWidth = remember { doubleArrayOf(fw.toDouble()) }
     LaunchedEffect(fw) {
@@ -252,8 +278,35 @@ fun FrameCropStage(
                         val ay = (centroid.y - size.height / 2f) / density
                         next = model.zoomTo(next, next.z * zoom, ax.toDouble(), ay.toDouble())
                     }
-                    next = model.pan(next, (pan.x / density).toDouble(), (pan.y / density).toDouble())
+                    val dragged = model.drag(StageDrag(next, pull[0], pull[1]), (pan.x / density).toDouble(), (pan.y / density).toDouble())
+                    next = dragged.state
+                    if (dragged.blocked) blocked?.invoke()
+                    if (!still) {
+                        pull[0] = dragged.overX
+                        pull[1] = dragged.overY
+                        band = Offset(FrameCrop.rubber(pull[0]).toFloat(), FrameCrop.rubber(pull[1]).toFloat())
+                    }
                     if (next != current) emit(next)
+                }
+            }
+            .pointerInput(model) {
+                // The fingers down: a spring under way stops where it is (the pull goes on from there); all lifted:
+                // the picture springs back onto its limit.
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    springBack[0]?.cancel()
+                    pull[0] = FrameCrop.pullOf(band.x.toDouble())
+                    pull[1] = FrameCrop.pullOf(band.y.toDouble())
+                    do {
+                        val event = awaitPointerEvent(PointerEventPass.Final)
+                    } while (event.changes.any { it.pressed })
+                    pull[0] = 0.0
+                    pull[1] = 0.0
+                    val from = band
+                    if (from != Offset.Zero) springBack[0] = scope.launch {
+                        animate(1f, 0f, animationSpec = tween(RUBBER_BACK_MS, easing = FastOutSlowInEasing)) { t, _ -> band = from * t }
+                        band = Offset.Zero
+                    }
                 }
             }
             .drawWithCache {
@@ -272,8 +325,8 @@ fun FrameCropStage(
                         val s = model.scale(current.z).toFloat() * density
                         val w = photo.width * s
                         val h = photo.height * s
-                        val left = size.width / 2f + current.ox.toFloat() * density - w / 2f
-                        val top = size.height / 2f + current.oy.toFloat() * density - h / 2f
+                        val left = size.width / 2f + (current.ox.toFloat() + band.x) * density - w / 2f
+                        val top = size.height / 2f + (current.oy.toFloat() + band.y) * density - h / 2f
                         drawImage(
                             photo,
                             dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),

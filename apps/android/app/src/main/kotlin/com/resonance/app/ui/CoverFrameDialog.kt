@@ -1,9 +1,25 @@
 package com.resonance.app.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import android.content.Context
 import android.view.InputDevice
-import androidx.compose.foundation.layout.Arrangement
+import com.resonance.design.OverPicture
+import com.resonance.design.CROP_MARGIN
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.Box
+import com.resonance.design.prefersReducedMotion
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,10 +29,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -101,6 +115,32 @@ internal fun CropZoomRow(
 /** The zoom row's height, 重設 or not (the small pill 重設 replaced, as iOS's `minHeight: 36`). */
 internal val CropZoomRowHeight = 36.dp
 
+/**
+ * 放大後才能移動 under the cover's frame (round 33 §Q5), once a drag found no room on its axis at this zoom, until the
+ * zoom gives it room: in the stage's own margin under the frame, on the dimmed picture in its light ink, so nothing
+ * under the stage moves (the web's and iOS's place). It only fades.
+ */
+@Composable
+internal fun CropNoRoomHint(shown: Boolean) {
+    val still = LocalContext.current.prefersReducedMotion()
+    val alpha by animateFloatAsState(if (shown) 1f else 0f, if (still) snap() else tween(160), label = "no-room")
+    BasicText(
+        L10n.Write.CoverFrame.zoomToMove,
+        Modifier
+            .padding(horizontal = 8.dp)
+            .heightIn(min = CROP_MARGIN.dp)
+            .wrapContentHeight(Alignment.CenterVertically)
+            .graphicsLayer { this.alpha = alpha }
+            .testTag(CropNoRoomTag)
+            .then(if (shown) Modifier.semantics { liveRegion = LiveRegionMode.Polite } else Modifier.clearAndSetSemantics {}),
+        style = AppFonts.body(12.5f, 600, lineHeight = 1.3f, color = OverPicture.Ink).copy(textAlign = TextAlign.Center),
+        maxLines = 1,
+    )
+}
+
+/** 放大後才能移動's test tag. */
+internal const val CropNoRoomTag = "crop-no-room"
+
 /** 重設's test tag. */
 internal const val CropResetTag = "crop-reset"
 
@@ -116,6 +156,8 @@ internal fun CoverFrameDialog(photo: ImageBitmap, frame: CoverFraming?, onCancel
     val pointer = remember(context) { context.hasPointer() }
     val windowHeight = LocalConfiguration.current.screenHeightDp.toFloat()
     var state by remember(photo) { mutableStateOf<CropState?>(null) }
+    // Round 33 §Q5: a drag that found no room on its axis — 放大後才能移動 under the frame until the zoom gives it room.
+    var pushed by remember(photo) { mutableStateOf(false) }
     OrganicModal(onCancel, L10n.Write.CoverFrame.title, seed = 91.0, closeLabel = L10n.Write.CoverFrame.cancel, maxWidth = 540.dp) {
         BoxWithConstraints {
             val width = cropStageWidth(maxWidth.value, windowHeight, COVER_STAGE_MAX, COVER_FRAME_RATIO).dp
@@ -124,6 +166,8 @@ internal fun CoverFrameDialog(photo: ImageBitmap, frame: CoverFraming?, onCancel
                 FrameCrop(photo.width.toDouble(), photo.height.toDouble(), fw.toDouble(), (fw * COVER_FRAME_RATIO).toDouble(), CoverFraming.MAX_ZOOM)
             }
             val shown = state ?: crop.stateOf(frame)
+            val noRoom = crop.lacksRoom(shown.z)
+            LaunchedEffect(noRoom) { if (!noRoom) pushed = false }
             Column(verticalArrangement = Arrangement.spacedBy(ModalGap)) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     ModalTitle(L10n.Write.CoverFrame.title)
@@ -133,10 +177,14 @@ internal fun CoverFrameDialog(photo: ImageBitmap, frame: CoverFraming?, onCancel
                     )
                 }
                 Box(Modifier.fillMaxWidth().padding(top = 2.dp), contentAlignment = Alignment.Center) {
-                    FrameCropStage(
-                        photo, width, COVER_FRAME_RATIO, CoverFraming.MAX_ZOOM, shown, { state = it },
-                        L10n.Write.CoverFrame.stage, moves = CropMoves,
-                    ) { _, _ -> OrganicImageShape(91.0) }
+                    Box(contentAlignment = Alignment.BottomCenter) {
+                        FrameCropStage(
+                            photo, width, COVER_FRAME_RATIO, CoverFraming.MAX_ZOOM, shown, { state = it },
+                            L10n.Write.CoverFrame.stage, moves = CropMoves, onBlocked = { pushed = true },
+                        ) { _, _ -> OrganicImageShape(91.0) }
+                        // Under the frame, on the dimmed picture's margin: nothing below it moves (the web's place too).
+                        CropNoRoomHint(pushed && noRoom)
+                    }
                 }
                 CropZoomRow(
                     shown.z, CoverFraming.MAX_ZOOM, L10n.Crop.zoom, moved = shown != CropState(),

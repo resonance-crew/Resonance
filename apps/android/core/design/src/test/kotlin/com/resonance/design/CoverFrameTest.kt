@@ -130,4 +130,38 @@ class CoverFrameTest {
         val w = cropStageWidth(800f, 411f, COVER_STAGE_MAX, 0.62f)
         assertEquals(211f, (w - 48f) * 0.62f + 48f, 1e-3f)
     }
+
+    // Round 33 §Q5: a drag with no room answers — it follows the finger a little and less and less, the pull taken up
+    // first by a drag back, and a push along an axis with no room is told.
+    @Test fun aDragPastTheLimitPullsWithResistanceAndADragBackTakesThePullUpFirst() {
+        // The generate route's 1536 × 1024 at zoom 1 in the 0.62 frame, 300 wide: no room across, ~7 down.
+        val crop = FrameCrop(1536.0, 1024.0, 300.0, 186.0, CoverFraming.MAX_ZOOM)
+        val (rx, ry) = crop.room(1.0)
+        assertEquals(0.0, rx, 1e-9)
+        assertEquals(7.0, ry, 0.1)
+        assertTrue(crop.lacksRoom(1.0))
+        // Zoomed, both axes have room: no hint.
+        assertTrue(!crop.lacksRoom(1.2))
+        // Across: nothing moves, the whole drag is pull, and it is a push with no room.
+        val across = crop.drag(StageDrag(CropState()), 40.0, 0.0)
+        assertEquals(CropState(), across.state)
+        assertEquals(40.0, across.overX, 1e-9)
+        assertTrue(across.blocked)
+        // Down: the room first, the rest pull; not a push with no room.
+        val down = crop.drag(StageDrag(CropState()), 0.0, 20.0)
+        assertEquals(ry, down.state.oy, 1e-9)
+        assertEquals(20.0 - ry, down.overY, 1e-9)
+        assertTrue(!down.blocked)
+        // Back up by 15: the pull goes first, then the picture moves the other way.
+        val back = crop.drag(down, 0.0, -15.0)
+        assertEquals(0.0, back.overY, 1e-9)
+        assertEquals(ry - (15.0 - (20.0 - ry)), back.state.oy, 1e-9)
+        // The rubber band: with the finger at first, never 24, and the pull back from what shows.
+        assertEquals(0.0, FrameCrop.rubber(0.0), 1e-9)
+        assertTrue(FrameCrop.rubber(4.0) > 3.0)
+        assertTrue(FrameCrop.rubber(1000.0) < FrameCrop.RUBBER_REACH)
+        assertTrue(FrameCrop.rubber(-1000.0) > -FrameCrop.RUBBER_REACH)
+        assertTrue(FrameCrop.rubber(80.0) - FrameCrop.rubber(40.0) < FrameCrop.rubber(40.0))
+        assertEquals(37.0, FrameCrop.pullOf(FrameCrop.rubber(37.0)), 1e-6)
+    }
 }

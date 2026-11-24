@@ -366,6 +366,8 @@ fun CardViewerActions(
         ReaderTapList(
             session, cardId, onDismiss = { openList = false }, open = open,
             offersPassages = offers,
+            // The faces over the capsule: the rows while the first page is read past the wait (round 33 §Q1).
+            expected = faces.shown,
             pagePick = PagePick(faces.passages.firstOrNull { it.id == (pickShown ?: currentPick) }?.text),
             // The reader's own row: the dialog again, the current pick marked (§U3); the tap is on, nothing to wait for.
             onOwnRow = {

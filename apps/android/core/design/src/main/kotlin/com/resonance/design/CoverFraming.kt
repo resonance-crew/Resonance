@@ -1,6 +1,8 @@
 package com.resonance.design
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.ContentScale
@@ -78,29 +80,66 @@ fun coverCrop(ar: Double, frame: CoverFraming?, boxRatio: Double): CoverCropRect
 }
 
 /**
+ * How far the box a cover is laid out in reaches past the box it is seen in, in pixels, on each side ([x] left and
+ * right, [y] top and bottom): [OrganicImage]'s bleed (the wobbly clip's outward swing), a bubble's sides. Round 33
+ * §Q4: the crop is the seen box's, and the bleed only carries the same picture on past its edges. [OrganicImage]
+ * sets it as it measures (the bleed follows the box offered), before the picture inside is measured and drawn, so the
+ * picture's [CoverFit] reads the bleed of the size it is given; a fixed bleed is set once.
+ */
+@Stable
+class CoverInset(x: Float = 0f, y: Float = 0f) {
+    var x: Float = x
+        internal set
+    var y: Float = y
+        internal set
+
+    internal fun set(x: Float, y: Float) {
+        this.x = x
+        this.y = y
+    }
+}
+
+/** The [CoverInset] of the bled box a cover is drawn in ([OrganicImage]'s content and overlay); null outside one. */
+val LocalCoverInset = staticCompositionLocalOf<CoverInset?> { null }
+
+/**
  * A cover drawn on its frame: the picture scaled so the frame's crop ([coverCrop], from the picture's own size and the
  * box's) fills the box, and placed so the crop's corner is the box's — a [ContentScale] and an [Alignment] in one, for
- * an `AsyncImage` or an `Image`. Without a frame it is `ContentScale.Crop` centred, as before.
+ * an `AsyncImage` or an `Image`. With an [inset] the box is the one seen inside the box laid out (that less the inset on
+ * every side): the crop is cut for the seen box and lies on it exactly, and the picture runs on into the inset — the
+ * same picture, never a crop of the larger box (round 33 §Q4: the preview was the 調整封面 window's middle ~88 %).
+ * Without a frame and without an inset it is `ContentScale.Crop` centred, as before.
  */
 @Immutable
-data class CoverFit(val frame: CoverFraming?) : ContentScale, Alignment {
+data class CoverFit(val frame: CoverFraming?, val inset: CoverInset? = null) : ContentScale, Alignment {
+    /** The seen box's size in [space] and its corner in it: [space] less the inset, or all of it when nothing is left. */
+    private fun seen(w: Float, h: Float): Triple<Float, Float, Pair<Float, Float>> {
+        val ix = inset?.x ?: 0f
+        val iy = inset?.y ?: 0f
+        return if (w - 2 * ix > 0f && h - 2 * iy > 0f) Triple(w - 2 * ix, h - 2 * iy, ix to iy) else Triple(w, h, 0f to 0f)
+    }
+
     override fun computeScaleFactor(srcSize: Size, dstSize: Size): ScaleFactor {
         if (srcSize.width <= 0f || srcSize.height <= 0f || dstSize.width <= 0f || dstSize.height <= 0f) return ScaleFactor(1f, 1f)
-        val crop = coverCrop((srcSize.width / srcSize.height).toDouble(), frame, (dstSize.height / dstSize.width).toDouble())
-        val s = (dstSize.width / (crop.w * srcSize.width)).toFloat()
+        val (w, h) = seen(dstSize.width, dstSize.height)
+        val crop = coverCrop((srcSize.width / srcSize.height).toDouble(), frame, (h / w).toDouble())
+        val s = (w / (crop.w * srcSize.width)).toFloat()
         return ScaleFactor(s, s)
     }
 
     override fun align(size: IntSize, space: IntSize, layoutDirection: LayoutDirection): IntOffset {
         if (size.width <= 0 || size.height <= 0 || space.width <= 0 || space.height <= 0) return IntOffset.Zero
-        val crop = coverCrop(size.width.toDouble() / size.height, frame, space.height.toDouble() / space.width)
-        return IntOffset((-crop.x * size.width).roundToInt(), (-crop.y * size.height).roundToInt())
+        val (w, h, at) = seen(space.width.toFloat(), space.height.toFloat())
+        val crop = coverCrop(size.width.toDouble() / size.height, frame, (h / w).toDouble())
+        return IntOffset((at.first - crop.x * size.width).roundToInt(), (at.second - crop.y * size.height).roundToInt())
     }
 
     companion object {
-        /** The scale and alignment for [frame]: the old centred crop when there is none. */
-        fun scale(frame: CoverFraming?): ContentScale = if (frame == null) ContentScale.Crop else CoverFit(frame)
-        fun alignment(frame: CoverFraming?): Alignment = if (frame == null) Alignment.Center else CoverFit(frame)
+        /** The scale and alignment for [frame] in a box bled by [inset]: the old centred crop when there is neither. */
+        fun scale(frame: CoverFraming?, inset: CoverInset? = null): ContentScale =
+            if (frame == null && inset == null) ContentScale.Crop else CoverFit(frame, inset)
+        fun alignment(frame: CoverFraming?, inset: CoverInset? = null): Alignment =
+            if (frame == null && inset == null) Alignment.Center else CoverFit(frame, inset)
     }
 }
 
@@ -126,6 +165,43 @@ open class FrameCrop(val iw: Double, val ih: Double, val fw: Double, val fh: Dou
 
     /** A drag of ([dx], [dy]) stage units. */
     fun pan(state: CropState, dx: Double, dy: Double): CropState = clamp(state.copy(ox = state.ox + dx, oy = state.oy + dy))
+
+    /** How far the picture's centre may move from the frame's at zoom [z], across and down (0: no room on that axis). */
+    fun room(z: Double): Pair<Double, Double> {
+        val sc = scale(z.coerceIn(1.0, maxZoom))
+        return max(0.0, (iw * sc - fw) / 2) to max(0.0, (ih * sc - fh) / 2)
+    }
+
+    /** Whether one axis has no room at zoom [z] (round 33 §Q5: a 3:2 picture at zoom 1 in the 0.62 frame, across). */
+    fun lacksRoom(z: Double): Boolean = room(z).let { (x, y) -> x < NO_ROOM || y < NO_ROOM }
+
+    /**
+     * A drag of ([dx], [dy]) that may pull past the picture's limits (round 33 §Q5): what fits moves the picture, what
+     * doesn't is kept as [StageDrag.overX] / [StageDrag.overY] — how far the finger is past the limit, the stage drawing
+     * [rubber] of it — and a drag back takes the pull up first. [StageDrag.blocked]: the drag pushed (mostly) along an
+     * axis with no room at all.
+     */
+    fun drag(from: StageDrag, dx: Double, dy: Double): StageDrag {
+        val (rx, ry) = room(from.state.z)
+        val (x, ox) = axis(from.state.ox, from.overX, dx, rx)
+        val (y, oy) = axis(from.state.oy, from.overY, dy, ry)
+        // Mostly along the axis (a finger's sideways wobble on a drag down is not a push across).
+        val blocked = (rx < NO_ROOM && kotlin.math.abs(dx) > kotlin.math.abs(dy)) || (ry < NO_ROOM && kotlin.math.abs(dy) > kotlin.math.abs(dx))
+        return StageDrag(clamp(from.state.copy(ox = x, oy = y)), ox, oy, blocked)
+    }
+
+    private fun axis(at: Double, over: Double, d: Double, limit: Double): Pair<Double, Double> {
+        var rest = d
+        if (over != 0.0) {
+            val pulled = over + rest
+            // Still past the limit the same way: only the pull changes.
+            if (pulled * over > 0) return at to pulled
+            rest = pulled
+        }
+        val to = at + rest
+        val kept = to.coerceIn(-limit, limit)
+        return kept to (to - kept)
+    }
 
     /** Zoomed to [z], the picture's point under the anchor ([ax], [ay] from the frame's centre) staying there. */
     fun zoomTo(state: CropState, z: Double, ax: Double = 0.0, ay: Double = 0.0): CropState {
@@ -173,8 +249,27 @@ open class FrameCrop(val iw: Double, val ih: Double, val fw: Double, val fh: Dou
 
         /** The zoom at slider place [v]. */
         fun zoomOf(v: Float): Double = kotlin.math.exp(v.toDouble())
+
+        /** Less than this (stage units) is no room. */
+        const val NO_ROOM = 0.5
+
+        /** The farthest a pull past the limit shows (round 33 §Q5: at most ~24). */
+        const val RUBBER_REACH = 24.0
+
+        /** How far a pull of [over] past the limit draws the picture: with it at first, then less and less, never [reach]. */
+        fun rubber(over: Double, reach: Double = RUBBER_REACH): Double = reach * over / (kotlin.math.abs(over) + reach)
+
+        /** The pull that draws [shown] ([rubber]'s inverse): a drag caught while the picture springs back goes on from there. */
+        fun pullOf(shown: Double, reach: Double = RUBBER_REACH): Double {
+            val b = shown.coerceIn(-reach * 0.999, reach * 0.999)
+            return reach * b / (reach - kotlin.math.abs(b))
+        }
     }
 }
+
+/** A drag on a crop stage as it goes ([FrameCrop.drag]): the picture's state and how far the finger is past its limits. */
+@Immutable
+data class StageDrag(val state: CropState, val overX: Double = 0.0, val overY: Double = 0.0, val blocked: Boolean = false)
 
 /**
  * How wide a crop stage may be (round 25 §G3.1): the dialog's width ([available]), at most [cap] (480 for the cover,

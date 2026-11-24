@@ -42,6 +42,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -156,8 +157,17 @@ class PickedPeopleTest {
         val line = 16f * 1.8f
         val lines = kotlin.math.round(height / line)
         assertTrue("$height tall: not ${lines.toInt()} lines of $line", lines >= 1 && kotlin.math.abs(height - lines * line) < 0.75f)
-        // 關閉 where it stood: the shell's 14 and its own 4 under the rows.
-        assertEquals(18f, (close.top - last.bottom).value, 2f)
+        // Round 33 §Q3: 關閉 floats over the region's foot, 16 over the paper's edge, its right edge on the content's
+        // (24 in); the last row clear of it, the list's end keeping its height + 16.
+        val paper = compose.onNode(this.paper, useUnmergedTree = true).getBoundsInRoot()
+        assertEquals(16f, (paper.bottom - close.bottom).value, 1f)
+        assertEquals((paper.right - 24.dp).value, close.right.value, 1f)
+        assertTrue("the last row clear of 關閉", last.bottom <= close.top + 0.5.dp)
+        assertEquals((FloatingExitHeight + FloatingExitBottom).value, (paper.bottom - last.bottom).value, 1.5f)
+        // §Q2: the faces on the title's edge, 24 in; the rows' bands from the paper's edge to its edge.
+        assertEquals((paper.left + 24.dp).value, title.left.value, 0.5f)
+        assertEquals(paper.left.value, first.left.value, 0.5f)
+        assertEquals(paper.right.value, first.right.value, 0.5f)
     }
 
     @Test fun onAPhoneTheTitleSentenceAndRowsStand10And12ApartTheSentenceAt1Point8() {
@@ -250,26 +260,29 @@ class PickedPeopleTest {
         }
     }
 
-    @Test fun theCauseThreeShapesOfSixtyAreNotOnePersonsRow() {
-        // What drew the tall-then-short flash: the loading state's three 60-tall shapes, whoever was coming.
+    @Test fun theLoadingRowsAreTheKnownFacesNeverADefaultCount() {
+        // Round 32's cause, round 33 §Q1 for the family: the loading state drew three 60-tall shapes whoever was coming.
+        // Now there is no default: the rows read are the faces known — none known, none drawn.
+        val source = File("src/main/kotlin/com/resonance/app/ui/TapFaces.kt").readText()
+        assertFalse("no fixed count of shapes", source.contains("repeat(3)"))
         val (reading, read) = heights(listOf(row("gus")), expected = null)
-        assertTrue("three shapes ($reading) taller than one row ($read)", reading - read >= 100f)
+        assertTrue("nothing drawn for no known faces ($reading < $read)", reading < read)
     }
 
     @Test fun thePressWaitsForTheFirstPageAShortWhileAtMost() = runBlocking {
         val answered = TapPeople { TapList(listOf(row("gus")), nextPageToken = null) }
         val job = launch { answered.first() }
-        awaitPickedFirstPage(answered)
+        awaitFirstPage(answered)
         assertTrue("waited for the page", answered.loaded)
         job.join()
         // A page that never comes: the dialog opens after the wait, with the sentence's faces as its rows.
         val never = TapPeople { kotlinx.coroutines.awaitCancellation() }
         val hanging = launch { never.first() }
         val start = System.nanoTime()
-        awaitPickedFirstPage(never, wait = 50)
+        awaitFirstPage(never, wait = 50)
         assertTrue((System.nanoTime() - start) / 1_000_000 < 1_000)
         assertTrue(!never.loaded)
         hanging.cancel()
-        assertEquals(300L, PICKED_OPEN_WAIT_MS)
+        assertEquals(300L, TAP_LIST_OPEN_WAIT_MS)
     }
 }
