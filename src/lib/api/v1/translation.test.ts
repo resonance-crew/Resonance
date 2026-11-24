@@ -186,7 +186,7 @@ describe('POST /api/v1/cards/{key}/translation — the passages in the translati
       { id: 'p1', text: MOVE_EN[1] },
     ]);
     expect(placeTranslatedPassages).toHaveBeenCalledWith({ story: STORY_MOVE_EN, passages: PASSAGES }, 'en');
-    expect(fake.docs['cards/move1/translations/en'].passages).toMatchObject({ of: 'p0,p1', items: body.passages });
+    expect(fake.docs['cards/move1/translations/en'].passages).toMatchObject({ of: 'v2:p0,p1', items: body.passages });
   });
 
   it('never shows what the model wrote: a piece that is not the translation’s own words, an unknown id or an overlap is dropped', async () => {

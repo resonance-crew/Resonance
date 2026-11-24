@@ -175,6 +175,50 @@ describe('backfill.ts story-translations', () => {
     expect((await backfillStoryTranslations(db, { apply: false, log: quiet })).candidates).toBe(1);
   });
 
+  it('places the passages in what it makes, and again in a kept translation placed by the older recipe (round 35)', async () => {
+    const { passagesHash, PASSAGES_VERSION } = await import('@/lib/cards/tapPassages');
+    const { passagesSig } = await import('@/lib/cards/translatedPassages');
+    const story = '那不是一個糟糕的成績，卻是一個固執的結果。\n\n我不需要每一步都算得比對手深，但可以每一步都多問自己一個問題。';
+    const items = [
+      { id: 'p1', text: '那不是一個糟糕的成績，卻是一個固執的結果。' },
+      { id: 'p2', text: '我不需要每一步都算得比對手深，但可以每一步都多問自己一個問題。' },
+    ];
+    const translated = 'That was not a bad score, but it was a **stubborn result**.\n\n**I do not need to calculate more deeply than my opponent.**';
+    // Only these two cards, each offering two passages: one with no translation yet, one whose kept placing is the
+    // old recipe's empty answer (the production cards' state).
+    await Promise.all(['pub', 'anon', 'conn', 'priv', 'trashed'].map((id) => db.doc(`cards/${id}`).delete()));
+    const passages = { of: passagesHash(story), items, model: 'test', v: PASSAGES_VERSION };
+    await Promise.all([
+      db.doc('cards/fresh').set(card({ story, tapPassages: passages })),
+      db.doc('cards/stale').set(card({ story, tapPassages: passages })),
+    ]);
+    await db.doc('cards/stale/translations/en').set({
+      title: 'Stale', story: translated, hash: translationHash(TITLE, story), model: 'test', createdAt: published,
+      passages: { of: 'p1,p2', items: [], at: published },
+    });
+    const dry = await backfillStoryTranslations(db, { apply: false, log: quiet });
+    expect(dry).toMatchObject({ candidates: 1, toPlace: 2 });
+    // The model copies with the Markdown marks, as in production; the pieces kept are the plain words.
+    const place = async () => [
+      { id: 'p1', text: 'That was not a bad score, but it was a **stubborn result**.' },
+      { id: 'p2', text: '**I do not need to calculate more deeply than my opponent.**' },
+    ];
+    const run = await backfillStoryTranslations(db, { apply: true, log: quiet, pauseMs: 0, translate: async () => ({ title: 'T', story: translated }), place });
+    expect(run).toMatchObject({ made: 1, placed: 2, placedFew: 0, placeFailed: 0 });
+    const want = [
+      { id: 'p1', text: 'That was not a bad score, but it was a stubborn result.' },
+      { id: 'p2', text: 'I do not need to calculate more deeply than my opponent.' },
+    ];
+    for (const id of ['fresh', 'stale']) {
+      const kept = (await db.doc(`cards/${id}/translations/en`).get()).get('passages');
+      expect(kept).toMatchObject({ of: passagesSig(items), items: want });
+      // The route answers them as kept: no model asked.
+      expect((await translateCard(db, 'carol', id, 'en', { translate: failing, place: async () => { throw new Error('not asked'); } })).passages).toEqual(want);
+    }
+    // Done: nothing to place the next time.
+    expect((await backfillStoryTranslations(db, { apply: false, log: quiet })).toPlace).toBe(0);
+  });
+
   it('keeps nothing for a story the model failed, and counts it', async () => {
     const run = await backfillStoryTranslations(db, { apply: true, log: quiet, pauseMs: 0, translate: failing });
     expect(run).toMatchObject({ candidates: 2, made: 0, failed: 2 });

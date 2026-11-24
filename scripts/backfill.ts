@@ -85,8 +85,11 @@
  *       every story a reader may translate (published, public, not in the trash) gets its kept translation
  *       (cards/{id}/translations/{to}) into each language it may go into, made now as the card page's translate
  *       line makes it for its first reader, so nobody waits for the model — one translateStory call each, two at
- *       a time; a dry run counts and estimates; needs OPENAI_API_KEY to apply (on the emulator no model is
- *       asked) — production runs are the owner's call
+ *       a time; and (round 35) places the card's tap passages in each translation it makes, and in each kept one
+ *       whose placing is missing or of an older recipe (lib/cards/translatedPassages PLACING_VERSION) — one small
+ *       call each — so its first reader neither waits nor meets a placing kept empty; a dry run counts and
+ *       estimates; needs OPENAI_API_KEY to apply (on the emulator no model is asked) — production runs are the
+ *       owner's call
  *   npx tsx scripts/backfill.ts recommend-index [--all] [--apply] [--emulator]
  *       published cards get round 26's reading (the whole story into its insights, server-only in
  *       cardSignatures) and their parts' vectors — the ones not read by this recipe yet, or every one with --all —

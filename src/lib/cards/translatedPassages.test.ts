@@ -27,6 +27,28 @@ describe('verifyTranslatedPassages', () => {
     ]);
   });
 
+  it('reads an answer copied with the translation’s Markdown marks as its plain words (round 35: 37vW59ND placed none)', () => {
+    // Production: both passages bold in the original, so in the translation; the model copied them with their `**`,
+    // and the plain blocks never held those — the card's placing was kept as none, and no dialog in translation.
+    const story = [
+      'That was not a bad score, but it was a **stubborn result**. I had long seen that there was a problem with the strategy; I simply did not want to say sorry to myself.',
+      '**I do not need to calculate more deeply than my opponent on every move, but I can ask myself one more question on every move.**',
+    ].join('\n\n');
+    const originals = [
+      { id: '8b55c797', text: '那不是一個糟糕的成績，卻是一個固執的結果。我早就看見策略出了問題，只是不願意對自己說一聲抱歉。' },
+      { id: 'd9e0f85c', text: '我不需要每一步都算得比對手深，但可以每一步都多問自己一個問題。' },
+    ];
+    expect(
+      verifyTranslatedPassages(story, originals, [
+        { id: '8b55c797', text: 'That was not a bad score, but it was a **stubborn result**. I had long seen that there was a problem with the strategy; I simply did not want to say sorry to myself.' },
+        { id: 'd9e0f85c', text: '**I do not need to calculate more deeply than my opponent on every move, but I can ask myself one more question on every move.**' },
+      ]),
+    ).toEqual([
+      { id: '8b55c797', text: 'That was not a bad score, but it was a stubborn result. I had long seen that there was a problem with the strategy; I simply did not want to say sorry to myself.' },
+      { id: 'd9e0f85c', text: 'I do not need to calculate more deeply than my opponent on every move, but I can ask myself one more question on every move.' },
+    ]);
+  });
+
   it('drops words the translation doesn’t have, a piece across two paragraphs, an unknown id and anything not a passage', () => {
     expect(
       verifyTranslatedPassages(TRANSLATED, ORIGINALS, [
@@ -66,5 +88,11 @@ describe('keptTranslatedPassages', () => {
     expect(keptTranslatedPassages(stored, ORIGINALS.slice(1))).toBeNull();
     expect(keptTranslatedPassages(undefined, ORIGINALS)).toBeNull();
     expect(keptTranslatedPassages({ of: 'a1,b2,c3' }, ORIGINALS)).toBeNull();
+  });
+
+  it('places again a placing kept by the older recipe (round 35: the Markdown answers it dropped), the empty ones too', () => {
+    expect(passagesSig(ORIGINALS)).toBe('v2:a1,b2,c3');
+    expect(keptTranslatedPassages({ of: 'a1,b2,c3', items: [] }, ORIGINALS)).toBeNull();
+    expect(keptTranslatedPassages({ of: 'a1,b2,c3', items: [{ id: 'a1', text: 'Boxes filled the living room.' }] }, ORIGINALS)).toBeNull();
   });
 });

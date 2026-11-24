@@ -1,3 +1,4 @@
+import { plainText } from '@/lib/markdown/plainText';
 import { blocksOf, placeInBlocks, PASSAGES_MAX, type TapPassageItem } from './tapPassages';
 
 /**
@@ -23,9 +24,17 @@ export type TranslatedPassage = TapPassageItem;
 /** The longest piece of a translation one passage may be (code points): a sentence or three, never a paragraph. */
 export const TRANSLATED_PASSAGE_MAX_CHARS = 480;
 
-/** Which passages a placement renders: their ids, in order (ids are the hashes of their words). */
+/**
+ * How a placing is made: 2 since round 35 — an answer is read as plain text (the model is handed the translation as
+ * Markdown and copies a piece with its marks, `a **stubborn result**`, which the plain blocks never held: every
+ * passage with emphasis was dropped, and a placing that found none kept for good). A kept placing of an older
+ * recipe is placed again by its next reader (and by `backfill.ts story-translations`).
+ */
+export const PLACING_VERSION = 2;
+
+/** Which passages a placement renders, and by which recipe: `v2:` and their ids, in order (ids are the hashes of their words). */
 export function passagesSig(passages: readonly { id: string }[]): string {
-  return passages.map((p) => p.id).join(',');
+  return `v${PLACING_VERSION}:` + passages.map((p) => p.id).join(',');
 }
 
 const codePoints = (s: string) => [...s].length;
@@ -49,7 +58,8 @@ export function verifyTranslatedPassages(
     if (!raw || typeof raw !== 'object') continue;
     const { id, text } = raw as Record<string, unknown>;
     if (typeof id !== 'string' || typeof text !== 'string' || !wanted.has(id) || placed.has(id)) continue;
-    const place = placeInBlocks(blocks, text);
+    // As its plain text first: the translation it copied from is Markdown (round 35); the words as given after.
+    const place = placeInBlocks(blocks, plainText(text)) ?? placeInBlocks(blocks, text);
     if (!place) continue;
     const n = codePoints(place.text);
     if (n < 2 || n > TRANSLATED_PASSAGE_MAX_CHARS) continue;

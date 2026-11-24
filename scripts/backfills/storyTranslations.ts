@@ -1,8 +1,11 @@
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { mirrorModel } from '../../src/lib/ai/openai';
 import { costOf, dollars } from '../../src/lib/ai/prices';
-import { translateStory, type TranslatedStory } from '../../src/lib/ai/translate';
+import { placeTranslatedPassages, translateStory, type TranslatedStory } from '../../src/lib/ai/translate';
+import { presentTapPassages } from '../../src/lib/api/v1/tapPassages';
 import { translationHash } from '../../src/lib/api/v1/translationHash';
+import { keptTranslatedPassages, passagesSig, verifyTranslatedPassages } from '../../src/lib/cards/translatedPassages';
+import type { TapPassageItem } from '../../src/lib/cards/tapPassages';
 import { modelsOffline, TRANSLATE_MAX_CHARS, translationTargets, type TranslationTarget } from '../../src/lib/text/translation';
 
 /** About how many tokens a character of a story is, each way (Chinese is about one; English less): an estimate's. */
@@ -17,6 +20,8 @@ export interface StoryTranslationsOptions {
   pauseMs?: number;
   /** The model call (translateStory); a test stands in for it. */
   translate?: (input: { title: string; story: string }, to: TranslationTarget) => Promise<TranslatedStory>;
+  /** The placing call (placeTranslatedPassages); a test stands in for it. */
+  place?: (input: { story: string; passages: readonly TapPassageItem[] }, to: TranslationTarget) => Promise<unknown[]>;
 }
 
 export interface StoryTranslationsReport {
@@ -28,6 +33,16 @@ export interface StoryTranslationsReport {
   estimate: { input: number; output: number; cost: number | null };
   made: number;
   failed: number;
+  /**
+   * Round 35: a translation (kept, or made now) whose card offers passages and whose placing of them is missing or of
+   * an older recipe (passagesSig) — placed as the route places them, so its first reader neither waits for the call
+   * nor meets a placing kept empty by the recipe that dropped Markdown answers.
+   */
+  toPlace: number;
+  placed: number;
+  /** Placed, but fewer than two found (no dialog in that translation; kept, as the route keeps it). */
+  placedFew: number;
+  placeFailed: number;
 }
 
 /**
@@ -47,7 +62,7 @@ export async function backfillStoryTranslations(db: Firestore, opts: StoryTransl
     .collection('cards')
     // The published cards, their visibility asked below (no composite index for this one-off read).
     .where('publishedAt', '!=', null)
-    .select('thoughtCore', 'story', 'visibility', 'trashedAt')
+    .select('thoughtCore', 'story', 'visibility', 'trashedAt', 'tapPassages')
     .get();
   const cards = snap.docs.filter((doc) => doc.get('visibility') === 'public' && doc.get('trashedAt') == null);
   const report: StoryTranslationsReport = {
@@ -57,9 +72,16 @@ export async function backfillStoryTranslations(db: Firestore, opts: StoryTransl
     estimate: { input: 0, output: 0, cost: null },
     made: 0,
     failed: 0,
+    toPlace: 0,
+    placed: 0,
+    placedFew: 0,
+    placeFailed: 0,
   };
 
-  const asked: { id: string; title: string; story: string; hash: string; to: TranslationTarget }[] = [];
+  type Offered = readonly TapPassageItem[];
+  const asked: { id: string; title: string; story: string; hash: string; to: TranslationTarget; offered: Offered }[] = [];
+  /** Kept translations of the words as they are, whose placing is owed. */
+  const placing: { id: string; to: TranslationTarget; translated: string; offered: Offered }[] = [];
   for (const doc of cards) {
     const title = typeof doc.get('thoughtCore') === 'string' ? (doc.get('thoughtCore') as string) : '';
     const story = typeof doc.get('story') === 'string' ? (doc.get('story') as string) : '';
@@ -70,51 +92,81 @@ export async function backfillStoryTranslations(db: Firestore, opts: StoryTransl
       continue;
     }
     const hash = translationHash(title, story);
+    const offered = presentTapPassages({ story, tapPassages: doc.get('tapPassages') });
     const kept = await db.getAll(...targets.map((to) => db.doc(`cards/${doc.id}/translations/${to}`)));
     targets.forEach((to, i) => {
       const k = kept[i];
       // As the route reads a kept one: of these words, and whole.
-      if (k.exists && k.get('hash') === hash && typeof k.get('title') === 'string' && typeof k.get('story') === 'string') return;
-      asked.push({ id: doc.id, title, story, hash, to });
+      if (k.exists && k.get('hash') === hash && typeof k.get('title') === 'string' && typeof k.get('story') === 'string') {
+        // As the route reads its placing: of these passages, by this recipe.
+        if (offered.length && keptTranslatedPassages(k.get('passages'), offered) === null) {
+          placing.push({ id: doc.id, to, translated: k.get('story') as string, offered });
+        }
+        return;
+      }
+      asked.push({ id: doc.id, title, story, hash, to, offered });
     });
   }
   report.candidates = asked.length;
+  report.toPlace = placing.length + asked.filter((a) => a.offered.length).length;
   const chars = asked.reduce((n, a) => n + a.title.length + a.story.length, 0);
   report.estimate.input = Math.round(chars * TOKENS_PER_CHAR) + asked.length * OVERHEAD.input;
   report.estimate.output = Math.round(chars * TOKENS_PER_CHAR) + asked.length * OVERHEAD.output;
   report.estimate.cost = costOf(mirrorModel(), report.estimate);
   log(`published public cards: ${cards.length}; stories to translate: ${asked.length} (${chars.toLocaleString('en')} characters), over the length limit: ${report.tooLong}`);
   log(`  model ${mirrorModel()}; estimate: ~${report.estimate.input.toLocaleString('en')} input + ~${report.estimate.output.toLocaleString('en')} output tokens, ${dollars(report.estimate.cost)}`);
-  if (!opts.apply || !asked.length) return report;
+  log(`translations whose passages are to be placed (kept ones and the ones made now): ${report.toPlace} — one small call each`);
+  if (!opts.apply || (!asked.length && !placing.length)) return report;
 
   // Against the emulators no model is asked (modelsOffline), as the route does: there a test brings its own.
   const translate = opts.translate ?? (modelsOffline() ? null : translateStory);
+  const place = opts.place ?? (modelsOffline() ? null : placeTranslatedPassages);
   if (!translate) {
     log('  no model to ask (the emulators): nothing made');
     report.failed = asked.length;
     return report;
   }
+  if (!place) log('  no model to place the passages (the emulators): translations only');
+  /** Places `offered` in a translation and keeps it beside it, as the route's placedPassages does (a failure keeps nothing). */
+  const placeIn = async (id: string, to: TranslationTarget, translated: string, offered: Offered) => {
+    if (!place) return;
+    try {
+      const items = verifyTranslatedPassages(translated, offered, await place({ story: translated, passages: offered }, to));
+      await db.doc(`cards/${id}/translations/${to}`).update({ passages: { of: passagesSig(offered), items, at: FieldValue.serverTimestamp() } });
+      if (items.length >= 2) report.placed++;
+      else report.placedFew++;
+    } catch (e) {
+      report.placeFailed++;
+      log(`  ${id} → ${to}: placing failed (${e instanceof Error ? e.message : String(e)})`);
+    }
+  };
+  const jobs: (() => Promise<void>)[] = [
+    ...asked.map((a) => async () => {
+      try {
+        const made = await translate({ title: a.title, story: a.story }, a.to);
+        await db
+          .doc(`cards/${a.id}/translations/${a.to}`)
+          .set({ title: made.title, story: made.story, hash: a.hash, model: mirrorModel(), createdAt: FieldValue.serverTimestamp() });
+        report.made++;
+        if (a.offered.length) await placeIn(a.id, a.to, made.story, a.offered);
+      } catch (e) {
+        report.failed++;
+        log(`  ${a.id} → ${a.to}: failed (${e instanceof Error ? e.message : String(e)})`);
+      }
+    }),
+    ...(place ? placing.map((p) => () => placeIn(p.id, p.to, p.translated, p.offered)) : []),
+  ];
   const concurrency = opts.concurrency ?? 2;
   const pause = opts.pauseMs ?? 500;
   let next = 0;
   await Promise.all(
     Array.from({ length: concurrency }, async () => {
-      while (next < asked.length) {
-        const a = asked[next++];
-        try {
-          const made = await translate({ title: a.title, story: a.story }, a.to);
-          await db
-            .doc(`cards/${a.id}/translations/${a.to}`)
-            .set({ title: made.title, story: made.story, hash: a.hash, model: mirrorModel(), createdAt: FieldValue.serverTimestamp() });
-          report.made++;
-        } catch (e) {
-          report.failed++;
-          log(`  ${a.id} → ${a.to}: failed (${e instanceof Error ? e.message : String(e)})`);
-        }
+      while (next < jobs.length) {
+        await jobs[next++]();
         if (pause) await new Promise((r) => setTimeout(r, pause));
       }
     }),
   );
-  log(`made ${report.made}, failed ${report.failed}`);
+  log(`made ${report.made}, failed ${report.failed}; passages placed ${report.placed}, fewer than two ${report.placedFew}, placing failed ${report.placeFailed}`);
   return report;
 }
