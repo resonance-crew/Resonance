@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithIntl, screen, userEvent, within } from '@/../test/render';
+import { fireEvent } from '@testing-library/react';
 import zhMessages from '@/messages/zh-TW.json';
 import type { AuthorBody, TapPersonBody } from '@/lib/api/v1/schemas';
 import { TapPeople } from './TapPeople';
@@ -110,5 +111,28 @@ describe('TapPeople: the passage on a row (§U2, §U3)', () => {
     // The author's list itself is unchanged (「保留原本查看的这个这个框」).
     renderWithIntl(<TapPeople people={people} />, zh);
     expect(lines(screen.getAllByRole('link')[0])).toEqual(['gus', `「${FIRST}」`]);
+  });
+
+  // Round 34 §11 (the owner: no press / hover / held ink on the people's rows; they still open the person's page).
+  it('draws no ink on a row under a pointer, a press or a hold; the row still opens, its keyboard ring kept', async () => {
+    const onPick = vi.fn();
+    const people: TapPersonBody[] = [{ author: face('gus'), note: null, passage: { text: FIRST } }, { author: face('dora'), note: null }];
+    const { container } = renderWithIntl(<TapPeople people={people} own={{ id: 'dora', quote: null, offer: true, onPress: vi.fn() }} onPick={onPick} />, zh);
+    expect(container.querySelector('[data-band]')).toBeNull();
+    const gus = screen.getByRole('link');
+    const own = screen.getByRole('button');
+    for (const row of [gus, own]) {
+      fireEvent.pointerDown(row, { button: 0, clientX: 4, clientY: 4 });
+      await new Promise((r) => setTimeout(r, 120));
+      expect(row.hasAttribute('data-band-pressed')).toBe(false);
+      fireEvent.pointerUp(row);
+      expect(row.className).not.toMatch(/host/);
+    }
+    await userEvent.setup({ pointerEventsCheck: 0 }).click(gus);
+    expect(onPick).toHaveBeenCalled();
+    expect(gus.getAttribute('href')).toBe('/u/gus');
+    const css = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/TapPeople.module.css'), 'utf8');
+    expect(css).toMatch(/\.row:focus-visible \{[^}]*outline: 2px solid var\(--color-terracotta\);/);
+    expect(css).not.toMatch(/:hover|:active|--band-fill/);
   });
 });

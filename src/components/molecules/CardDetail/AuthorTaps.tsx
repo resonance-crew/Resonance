@@ -79,7 +79,7 @@ function AuthorTapsDialog({ cardId, rows, onClose }: { cardId: string; rows: num
           <h3 className={styles.title}>{t('resonatorsModal.title')}</h3>
           {data ? (
             <>
-              <TapPeople people={people} onPick={onClose} endKey={next ? 'taps:more' : undefined} />
+              <TapPeople people={people} onPick={onClose} />
               {next && (
                 <div className={styles.more}>
                   <OrganicButton variant="tonal" size="sm" loading={loadingMore} onClick={() => void setSize(size + 1)}>

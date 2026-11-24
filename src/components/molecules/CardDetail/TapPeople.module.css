@@ -1,5 +1,5 @@
-/* Who resonated (round 26 §U2.5, §U3.2): bands, as the bell's rows, in a dialog on every screen — the bands run to
-   the paper's edges (the bell's DialogScroll, its --bell-inset). */
+/* Who resonated (round 26 §U2.5, §U3.2): rows touching, in a dialog on every screen, on the bell's insets (its
+   DialogScroll, --bell-inset). No ink under a pointer, a press or a hold (round 34 §11); a keyboard's ring stays. */
 .list {
   list-style: none;
   margin: 0;
@@ -52,7 +52,7 @@
   overflow-wrap: anywhere;
 }
 
-/* A row that is a button (the reader's own, round 27 §U3): no face of its own, its band the press. */
+/* A row that is a button (the reader's own, round 27 §U3): no face of its own, and no ink (round 34 §11). */
 .button {
   width: 100%;
   margin: 0;

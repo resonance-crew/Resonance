@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SWRConfig } from 'swr';
@@ -86,7 +88,7 @@ describe('TapFaces', () => {
   it.each([
     ['a phone', true, 'min(400px, calc(100vw - 32px))'],
     ['a wide screen', false, '480px'],
-  ])('opens a centred dialog with no title on %s: banded rows of face and name, each to their page, 關閉 at its foot', async (_, onPhone, width) => {
+  ])('opens a centred dialog with no title on %s: rows of face and name, each to their page, 關閉 at its foot', async (_, onPhone, width) => {
     phone(onPhone);
     listTaps.mockResolvedValueOnce({ people: [person('dora'), person('eli')], nextPageToken: null });
     renderFaces({ mine: false, faces: [face('dora'), face('eli')], more: false, mayNote: true });
@@ -105,7 +107,8 @@ describe('TapFaces', () => {
     expect(rows.map((r) => r.textContent)).toEqual(['DOdora', 'ELeli']);
     expect(rows.map((r) => r.getAttribute('href'))).toEqual(['/u/dora', '/u/eli']);
     expect(listTaps).toHaveBeenCalledWith('c1');
-    expect(dialog.querySelectorAll('[data-band]')).toHaveLength(2);
+    // Round 34 §11: no ink band on a row (no wash under a pointer, a press or a hold).
+    expect(dialog.querySelectorAll('[data-band]')).toHaveLength(0);
     // Each row's face 36, whatever the screen (the popover's 28 went with it).
     for (const row of rows) expect(row.querySelector('svg')?.getAttribute('width')).toBe('36');
     await user().click(within(dialog).getByRole('button', { name: 'Close' }));
@@ -198,3 +201,13 @@ describe('TapFaces: the reader’s own row on a card with passages (round 27 §U
     expect(screen.getByRole('img', { name: 'You resonated' })).toBeInTheDocument();
   });
 });
+
+// Round 34 §11: the faces over 共振 are a button with no hover or press look of their own — only a keyboard's ring.
+it('gives the faces’ button no hover or press look (round 34 §11)', () => {
+  const css = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/TapFaces.module.css'), 'utf8');
+  const avatars = readFileSync(join(process.cwd(), 'src/components/atoms/AvatarGroup/AvatarGroup.module.css'), 'utf8');
+  for (const sheet of [css, avatars]) expect(sheet).not.toMatch(/:hover|:active/);
+  expect(css).toMatch(/\.faces \{[^}]*background: none;[^}]*-webkit-tap-highlight-color: transparent;/);
+  expect(css).toMatch(/\.faces:focus-visible \{[^}]*outline: 2px solid var\(--color-terracotta\);/);
+});
+
