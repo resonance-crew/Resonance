@@ -48,6 +48,12 @@ export interface TapPeopleProps {
    * (round 29 §S4.2: the sentence heads the dialog, so no row says it again).
    */
   quotes?: boolean;
+  /**
+   * A pick's words as the page shows them, keyed by the author's own words (round 35, the owner: 「如果我已经翻译成英文，
+   * 是不是应该这边就都一直显示英文呢？」): while the story is read in translation, a row quotes its pick in the
+   * translation's words (translatedPassages quoteWords); a pick the translation doesn't say stays as the list kept it.
+   */
+  words?: ReadonlyMap<string, string>;
 }
 
 /**
@@ -56,7 +62,7 @@ export interface TapPeopleProps {
  * of their pick (round 34 §10: never the note's excerpt). A row opens the note's conversation when they left one, or
  * else their page: a tap alone gives no way to write to anyone.
  */
-export function TapPeople({ people, own, onPick, endKey = BAND_END_KEY, quotes = true }: TapPeopleProps) {
+export function TapPeople({ people, own, onPick, endKey = BAND_END_KEY, quotes = true, words }: TapPeopleProps) {
   const below = bandsBelow(people.map((p) => p.author.id), endKey);
   return (
     <ul className={styles.list}>
@@ -68,6 +74,7 @@ export function TapPeople({ people, own, onPick, endKey = BAND_END_KEY, quotes =
             onPick={onPick}
             own={own ? (p.author.id === own.id ? own : null) : undefined}
             quotes={quotes}
+            words={words}
           />
         </li>
       ))}
@@ -79,9 +86,15 @@ export function TapPeople({ people, own, onPick, endKey = BAND_END_KEY, quotes =
  * A row's second line, round 27: every list quotes each person's pick (§U2; a reader's too since Wave 2 #3b), and a
  * reader's own row says their pick, or 選一段 when the card has passages and they picked none (§U3). Null: no such line.
  */
-function rowQuote(person: TapPersonBody, own: TapOwnRow | null | undefined, quotes = true): { quote: string } | { pick: true } | null {
-  if (!own) return quotes && person.passage?.text ? { quote: person.passage.text } : null;
-  const text = own.quote === undefined ? person.passage?.text : own.quote;
+function rowQuote(
+  person: TapPersonBody,
+  own: TapOwnRow | null | undefined,
+  quotes = true,
+  words?: ReadonlyMap<string, string>,
+): { quote: string } | { pick: true } | null {
+  const picked = person.passage ? (words?.get(person.passage.text) ?? person.passage.text) : undefined;
+  if (!own) return quotes && picked ? { quote: picked } : null;
+  const text = own.quote === undefined ? picked : own.quote;
   if (text) return { quote: text };
   return own.offer ? { pick: true } : null;
 }
@@ -92,6 +105,7 @@ function PersonRow({
   onPick,
   own,
   quotes,
+  words,
 }: {
   person: TapPersonBody;
   band: { top: string; bottom: string };
@@ -99,11 +113,12 @@ function PersonRow({
   quotes?: boolean;
   /** Undefined in the author's list; in a reader's, their own row's (§U3) or null on everyone else's. */
   own?: TapOwnRow | null;
+  words?: ReadonlyMap<string, string>;
 }) {
   const t = useTranslations('card.tap');
   const press = useBandPress();
   const a = person.author;
-  const second = rowQuote(person, own, quotes);
+  const second = rowQuote(person, own, quotes, words);
   const inner = (
     <>
       <BandWash topKey={band.top} bottomKey={band.bottom} />

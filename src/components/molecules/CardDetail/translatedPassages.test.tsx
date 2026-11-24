@@ -9,7 +9,8 @@ import { RICH_STORY_EN, RICH_STORY_EN_PASSAGES, RICH_STORY_PASSAGES } from '../.
 import { PassageMarks } from './PassageMarks';
 import { ReadAfterArea } from './ReadAfterArea';
 import { StoryMarkdown, StoryPassagesContext } from './StoryMarkdown';
-import { tapInTranslation } from './translatedPassages';
+import { TapPeople } from './TapPeople';
+import { quoteWords, tapInTranslation } from './translatedPassages';
 
 /**
  * Round 31 (the owner, 2026-11-23: 「如果我讀翻譯的文章，譬如說中文翻成英文，那我這邊顯示的清單三句應該也要都翻成
@@ -79,6 +80,41 @@ describe('tapInTranslation', () => {
     expect(tapInTranslation(TAP, undefined)).toMatchObject({ passages: [], picked: [] });
     expect(tapInTranslation(null, RICH_STORY_EN_PASSAGES)).toBeNull();
     expect(tapInTranslation(undefined, RICH_STORY_EN_PASSAGES)).toBeUndefined();
+  });
+});
+
+/**
+ * Round 35 (the owner, 2026-11-25: 「我点击自己的头像，看有谁 resonant……我 resonant 的这一句话变回了中文，而不是翻译的英文。
+ * 如果我已经翻译成英文，是不是应该这边就都一直显示英文呢？」): the who-resonated lists answer each pick in the author's own
+ * words (no id); in translation each row quotes it in the translation's words, found by those words.
+ */
+describe('the who-resonated lists in translation (round 35)', () => {
+  const person = (id: string, text: string | null) => ({ author: face(id), note: null, passage: text ? { text } : null });
+
+  it('maps each passage the translation says from the author’s words to the translation’s, and nothing as written', () => {
+    const words = quoteWords(TAP, RICH_STORY_EN_PASSAGES);
+    expect([...words.entries()]).toEqual(RICH_STORY_PASSAGES.map((p, i) => [p.text, RICH_STORY_EN_PASSAGES[i].text]));
+    expect(quoteWords(TAP, [RICH_STORY_EN_PASSAGES[1]]).size).toBe(1);
+    expect(quoteWords(TAP, undefined).size).toBe(0);
+    expect(quoteWords(null, RICH_STORY_EN_PASSAGES).size).toBe(0);
+  });
+
+  it('quotes every row’s pick — the reader’s own and everyone else’s — in the translation’s words; one it doesn’t say stays as kept', () => {
+    renderWithIntl(
+      <TapPeople
+        people={[person('viewer', RICH_STORY_PASSAGES[1].text), person('gus', RICH_STORY_PASSAGES[0].text), person('hana', '有些東西在打包的時候就決定留下了。'), person('eli', null)]}
+        own={{ id: 'viewer', offer: true, onPress: () => {} }}
+        words={quoteWords(TAP, RICH_STORY_EN_PASSAGES)}
+      />,
+    );
+    const quotes = [...document.querySelectorAll('[data-tap-quote]')].map((q) => q.textContent);
+    expect(quotes).toHaveLength(3);
+    expect(quotes[0]).toContain(RICH_STORY_EN_PASSAGES[1].text);
+    expect(quotes[1]).toContain(RICH_STORY_EN_PASSAGES[0].text);
+    expect(quotes[0]).not.toMatch(/[一-鿿]/);
+    expect(quotes[1]).not.toMatch(/[一-鿿]/);
+    // A sentence the card no longer offers: no translation says it, so the row keeps the words it was picked in.
+    expect(quotes[2]).toContain('有些東西在打包的時候就決定留下了。');
   });
 });
 

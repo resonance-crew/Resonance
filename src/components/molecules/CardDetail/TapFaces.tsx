@@ -81,6 +81,8 @@ export interface TapFacesProps {
    * only one.
    */
   onOwnRow?: () => void;
+  /** In translation, each pick's words as the translation says them, keyed by the author's own (translatedPassages quoteWords). */
+  quoteWords?: ReadonlyMap<string, string>;
 }
 
 /**
@@ -90,7 +92,7 @@ export interface TapFacesProps {
  * 「我在想这个直接做成这个 model 会不会好一点呢」; on a wide screen it was a popover under the faces) — except when
  * the only face is the viewer's own: then it is a picture that says 你共振了, not in the tab order.
  */
-export function TapFaces({ cardId, tap, viewerId, arriving, leaving, onOwnRow }: TapFacesProps) {
+export function TapFaces({ cardId, tap, viewerId, arriving, leaving, onOwnRow, quoteWords }: TapFacesProps) {
   const t = useTranslations('card.tap');
   const locale = useLocale();
   const [open, setOpen] = useState(false);
@@ -162,6 +164,7 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving, onOwnRow }:
           viewerId={viewerId}
           rows={tapRowsKnown({ people: shown.faces, more: shown.more })}
           own={ownRow(tap, viewerId, onOwnRow)}
+          words={quoteWords}
           label={label}
           wide={!onPhone}
           onClose={close}
@@ -209,6 +212,7 @@ function ReaderTapsDialog({
   viewerId,
   rows,
   own,
+  words,
   label,
   wide,
   onClose,
@@ -217,6 +221,8 @@ function ReaderTapsDialog({
   viewerId: string;
   rows: number;
   own: TapOwnRow;
+  /** In translation, each pick's words as the translation says them (round 35). */
+  words?: ReadonlyMap<string, string>;
   label: string;
   wide: boolean;
   onClose: (refocus?: boolean) => void;
@@ -257,7 +263,7 @@ function ReaderTapsDialog({
         <DialogScroll>
           {data ? (
             <>
-              <TapPeople people={people} own={own} onPick={() => onClose(false)} endKey={next ? 'taps:more' : undefined} />
+              <TapPeople people={people} own={own} words={words} onPick={() => onClose(false)} endKey={next ? 'taps:more' : undefined} />
               {next && (
                 <div className={styles.more}>
                   <OrganicButton variant="tonal" size="sm" loading={!!more?.loading} onClick={() => void loadMore()}>

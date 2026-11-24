@@ -13,7 +13,7 @@ import { publishedDate } from '@/lib/publishedDate';
 import { readMinutes, readSeconds } from '@/lib/readTime';
 import { storyType } from '@/lib/text/script';
 import { CardToc, storyHasContents, tocHeadings, type TocHeading } from '@/components/molecules/CardDetail/CardToc';
-import { tapInTranslation } from '@/components/molecules/CardDetail/translatedPassages';
+import { quoteWords, tapInTranslation } from '@/components/molecules/CardDetail/translatedPassages';
 import { LatinMarkText } from '@/components/molecules/CardDetail/LatinMarkText';
 import { StoryByline } from '@/components/molecules/CardDetail/StoryByline';
 import { TranslateLine, useStoryTranslation } from '@/components/molecules/CardDetail/TranslateLine';
@@ -218,6 +218,8 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   // In translation (round 31 §R1–§R2): the passages and the picked sentences in the translation's words, by id —
   // only those the translation says (the server placed them: TranslationResponse.passages).
   const shownTap = useMemo(() => (tr.shown ? tapInTranslation(lists.tap, tr.shown.passages) : lists.tap), [tr.shown, lists.tap]);
+  // …and the who-resonated lists' quotes too (round 35): each person's pick in the translation's words where it says it.
+  const shownQuotes = useMemo(() => quoteWords(lists.tap, tr.shown?.passages), [tr.shown, lists.tap]);
   // What the page reads off the whole story — its reading time, whether it has contents, how its words are
   // set — once per story, not on every render of the page (W21: four scans of it each time).
   const cardStory = data?.card?.story ?? '';
@@ -511,7 +513,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               // Who resonated with it, as faces (round 26 §U3) — its share and ⋯ at that line's end after a long story;
               // with no faces (no one tapped, or in the trash), those two alone.
               !trashed && lists.tap?.faces.length ? (
-                <AuthorTaps cardId={card.id} tap={lists.tap} trailing={endsApart && wide === true ? cardActions : undefined} />
+                <AuthorTaps cardId={card.id} tap={lists.tap} quoteWords={shownQuotes} trailing={endsApart && wide === true ? cardActions : undefined} />
               ) : (
                 endsApart && wide === true && <div className={styles.endActions}>{cardActions}</div>
               )
@@ -532,6 +534,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
                   accentColor: author.accentColor,
                 }}
                 tap={shownTap}
+                quoteWords={shownQuotes}
                 trailing={phone === false ? passive : undefined}
                 // (in translation the dialog is offered only with the passages the translation says: shownTap's)
                 translated={!!tr.shown && !shownTap?.passages?.length}

@@ -21,6 +21,8 @@ export interface AuthorTapsProps {
   tap: CardTapBody | null | undefined;
   /** What ends the line: the card's share and ⋯ after a long story at ≥ 1200 (else they stand alone, CardDetailClient). */
   trailing?: ReactNode;
+  /** In translation, each pick's words as the translation says them, keyed by the author's own (translatedPassages quoteWords). */
+  quoteWords?: ReadonlyMap<string, string>;
 }
 
 /**
@@ -32,7 +34,7 @@ export interface AuthorTapsProps {
  * line, muted, opening that conversation (an unconnected reader's is the letter; replying connects, as ever). Someone
  * who only resonated can't be written to: their row opens their page. On an anonymous card, faces and names only.
  */
-export function AuthorTaps({ cardId, tap, trailing }: AuthorTapsProps) {
+export function AuthorTaps({ cardId, tap, trailing, quoteWords }: AuthorTapsProps) {
   const t = useTranslations('card');
   const locale = useLocale();
   const [open, setOpen] = useState(false);
@@ -48,7 +50,7 @@ export function AuthorTaps({ cardId, tap, trailing }: AuthorTapsProps) {
         <AvatarGroup members={tap.faces.map(memberOf)} size={28} />
       </button>
       {trailing && <span className={styles.trailing}>{trailing}</span>}
-      {open && <AuthorTapsDialog cardId={cardId} rows={tapRowsKnown({ people: tap.faces, more: tap.more })} onClose={() => setOpen(false)} />}
+      {open && <AuthorTapsDialog cardId={cardId} rows={tapRowsKnown({ people: tap.faces, more: tap.more })} words={quoteWords} onClose={() => setOpen(false)} />}
     </div>
   );
 }
@@ -58,7 +60,7 @@ export function AuthorTaps({ cardId, tap, trailing }: AuthorTapsProps) {
  * for its first page and opens whole, or past it on as many stand-ins as the author's line has faces (round 33 §Q1),
  * in the rows' own region; 關閉 floats over the region's foot (§Q3).
  */
-function AuthorTapsDialog({ cardId, rows, onClose }: { cardId: string; rows: number; onClose: () => void }) {
+function AuthorTapsDialog({ cardId, rows, words, onClose }: { cardId: string; rows: number; words?: ReadonlyMap<string, string>; onClose: () => void }) {
   const t = useTranslations('card');
   const tHome = useTranslations('home');
   const { data, size, setSize, isValidating } = useSWRInfinite<TapListBody>(
@@ -79,7 +81,7 @@ function AuthorTapsDialog({ cardId, rows, onClose }: { cardId: string; rows: num
           <h3 className={styles.title}>{t('resonatorsModal.title')}</h3>
           {data ? (
             <>
-              <TapPeople people={people} onPick={onClose} endKey={next ? 'taps:more' : undefined} />
+              <TapPeople people={people} onPick={onClose} words={words} endKey={next ? 'taps:more' : undefined} />
               {next && (
                 <div className={styles.more}>
                   <OrganicButton variant="tonal" size="sm" loading={loadingMore} onClick={() => void setSize(size + 1)}>

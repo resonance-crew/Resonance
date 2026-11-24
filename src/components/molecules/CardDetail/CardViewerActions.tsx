@@ -49,6 +49,8 @@ export interface CardViewerActionsProps {
   trailing?: ReactNode;
   /** The story is on screen in translation (round 25 §F): the passages, the author's own words, are not offered then. */
   translated?: boolean;
+  /** In translation, each pick's words as the translation says them, keyed by the author's own (translatedPassages quoteWords; round 35). */
+  quoteWords?: ReadonlyMap<string, string>;
   /** The story's script (src/lib/text/script.ts): the passages' dialog sets its rows in the story's own type (§U1.3). */
   script?: StoryScript;
 }
@@ -76,7 +78,7 @@ export const ENDS_GAP = 12;
  * turns it on also asks, 240 ms later, which part stayed with them — a small centred dialog the tap never waits on.
  * Nothing here is the author's.
  */
-export function CardViewerActions({ cardId, referenceCardId, author, tap, trailing, translated = false, script = 'cjk' }: CardViewerActionsProps) {
+export function CardViewerActions({ cardId, referenceCardId, author, tap, trailing, translated = false, script = 'cjk', quoteWords }: CardViewerActionsProps) {
   const t = useTranslations('card');
   const locale = useLocale();
   const router = useRouter();
@@ -306,6 +308,7 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
   const faces =
     user && tap ? (
       <TapFaces
+        quoteWords={quoteWords}
         cardId={cardId}
         tap={tap}
         viewerId={user.id}

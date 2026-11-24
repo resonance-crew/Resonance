@@ -18,3 +18,15 @@ export function tapInTranslation<T extends CardTapBody | null | undefined>(tap: 
   const picked = tap.picked?.filter((p) => words.has(p.id)).map((p) => ({ ...p, text: words.get(p.id)! }));
   return { ...tap, passages: shown, ...(tap.picked ? { picked } : {}) } as T;
 }
+
+/**
+ * A pick's words in translation, keyed by the author's own words (round 35, the owner: 「如果我已经翻译成英文，是不是应该
+ * 这边就都一直显示英文呢？」): the who-resonated lists answer each person's pick as they picked it — the original's words,
+ * no id — so a row finds its translation by those words among the card's passages. Empty when the story is shown as
+ * written (`passages` undefined): every row quotes its pick as kept.
+ */
+export function quoteWords(tap: CardTapBody | null | undefined, passages: readonly TapPassageBody[] | undefined): ReadonlyMap<string, string> {
+  if (!tap || !passages) return new Map();
+  const words = new Map(passages.map((p) => [p.id, p.text]));
+  return new Map((tap.passages ?? []).filter((p) => words.has(p.id)).map((p) => [p.text, words.get(p.id)!]));
+}
