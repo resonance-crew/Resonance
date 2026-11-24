@@ -51,7 +51,6 @@ public struct OrganicImage<Placeholder: View>: View {
                                 // crop the visible box's, the picture carried on into the bleed (round 33 §Q4).
                                 FramedCover(image, pictureSize: pictureSize, bleed: bleed)
                             }
-                            .mask { FramedCoverMask(pictureSize: pictureSize, bleed: bleed) }
                         } else if failed {
                             placeholder
                         } else {
