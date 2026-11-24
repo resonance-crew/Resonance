@@ -2,6 +2,17 @@ package com.resonance.app.ui
 
 import android.content.Context
 import android.view.InputDevice
+import com.resonance.design.prefersReducedMotion
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -101,6 +112,28 @@ internal fun CropZoomRow(
 /** The zoom row's height, 重設 or not (the small pill 重設 replaced, as iOS's `minHeight: 36`). */
 internal val CropZoomRowHeight = 36.dp
 
+/**
+ * 放大後才能移動 under the cover's frame (round 33 §Q5), once a drag found no room on its axis at this zoom, until the
+ * zoom gives it room. Its line is held whether it shows or not (it only fades), so nothing under the frame jumps.
+ */
+@Composable
+internal fun CropNoRoomHint(shown: Boolean) {
+    val still = LocalContext.current.prefersReducedMotion()
+    val alpha by animateFloatAsState(if (shown) 1f else 0f, if (still) snap() else tween(160), label = "no-room")
+    BasicText(
+        L10n.Write.CoverFrame.zoomToMove,
+        Modifier
+            .padding(top = 8.dp)
+            .graphicsLayer { this.alpha = alpha }
+            .testTag(CropNoRoomTag)
+            .then(if (shown) Modifier.semantics { liveRegion = LiveRegionMode.Polite } else Modifier.clearAndSetSemantics {}),
+        style = AppFonts.body(13.5f, lineHeight = 1.5f, color = Tokens.TextMuted).copy(textAlign = TextAlign.Center),
+    )
+}
+
+/** 放大後才能移動's test tag. */
+internal const val CropNoRoomTag = "crop-no-room"
+
 /** 重設's test tag. */
 internal const val CropResetTag = "crop-reset"
 
@@ -116,6 +149,8 @@ internal fun CoverFrameDialog(photo: ImageBitmap, frame: CoverFraming?, onCancel
     val pointer = remember(context) { context.hasPointer() }
     val windowHeight = LocalConfiguration.current.screenHeightDp.toFloat()
     var state by remember(photo) { mutableStateOf<CropState?>(null) }
+    // Round 33 §Q5: a drag that found no room on its axis — 放大後才能移動 under the frame until the zoom gives it room.
+    var pushed by remember(photo) { mutableStateOf(false) }
     OrganicModal(onCancel, L10n.Write.CoverFrame.title, seed = 91.0, closeLabel = L10n.Write.CoverFrame.cancel, maxWidth = 540.dp) {
         BoxWithConstraints {
             val width = cropStageWidth(maxWidth.value, windowHeight, COVER_STAGE_MAX, COVER_FRAME_RATIO).dp
@@ -124,6 +159,8 @@ internal fun CoverFrameDialog(photo: ImageBitmap, frame: CoverFraming?, onCancel
                 FrameCrop(photo.width.toDouble(), photo.height.toDouble(), fw.toDouble(), (fw * COVER_FRAME_RATIO).toDouble(), CoverFraming.MAX_ZOOM)
             }
             val shown = state ?: crop.stateOf(frame)
+            val noRoom = crop.lacksRoom(shown.z)
+            LaunchedEffect(noRoom) { if (!noRoom) pushed = false }
             Column(verticalArrangement = Arrangement.spacedBy(ModalGap)) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     ModalTitle(L10n.Write.CoverFrame.title)
@@ -132,11 +169,12 @@ internal fun CoverFrameDialog(photo: ImageBitmap, frame: CoverFraming?, onCancel
                         style = AppFonts.body(13.5f, lineHeight = 1.5f, color = Tokens.TextMuted),
                     )
                 }
-                Box(Modifier.fillMaxWidth().padding(top = 2.dp), contentAlignment = Alignment.Center) {
+                Column(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     FrameCropStage(
                         photo, width, COVER_FRAME_RATIO, CoverFraming.MAX_ZOOM, shown, { state = it },
-                        L10n.Write.CoverFrame.stage, moves = CropMoves,
+                        L10n.Write.CoverFrame.stage, moves = CropMoves, onBlocked = { pushed = true },
                     ) { _, _ -> OrganicImageShape(91.0) }
+                    CropNoRoomHint(pushed && noRoom)
                 }
                 CropZoomRow(
                     shown.z, CoverFraming.MAX_ZOOM, L10n.Crop.zoom, moved = shown != CropState(),

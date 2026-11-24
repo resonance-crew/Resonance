@@ -166,6 +166,43 @@ open class FrameCrop(val iw: Double, val ih: Double, val fw: Double, val fh: Dou
     /** A drag of ([dx], [dy]) stage units. */
     fun pan(state: CropState, dx: Double, dy: Double): CropState = clamp(state.copy(ox = state.ox + dx, oy = state.oy + dy))
 
+    /** How far the picture's centre may move from the frame's at zoom [z], across and down (0: no room on that axis). */
+    fun room(z: Double): Pair<Double, Double> {
+        val sc = scale(z.coerceIn(1.0, maxZoom))
+        return max(0.0, (iw * sc - fw) / 2) to max(0.0, (ih * sc - fh) / 2)
+    }
+
+    /** Whether one axis has no room at zoom [z] (round 33 §Q5: a 3:2 picture at zoom 1 in the 0.62 frame, across). */
+    fun lacksRoom(z: Double): Boolean = room(z).let { (x, y) -> x < NO_ROOM || y < NO_ROOM }
+
+    /**
+     * A drag of ([dx], [dy]) that may pull past the picture's limits (round 33 §Q5): what fits moves the picture, what
+     * doesn't is kept as [StageDrag.overX] / [StageDrag.overY] — how far the finger is past the limit, the stage drawing
+     * [rubber] of it — and a drag back takes the pull up first. [StageDrag.blocked]: the drag pushed (mostly) along an
+     * axis with no room at all.
+     */
+    fun drag(from: StageDrag, dx: Double, dy: Double): StageDrag {
+        val (rx, ry) = room(from.state.z)
+        val (x, ox) = axis(from.state.ox, from.overX, dx, rx)
+        val (y, oy) = axis(from.state.oy, from.overY, dy, ry)
+        // Mostly along the axis (a finger's sideways wobble on a drag down is not a push across).
+        val blocked = (rx < NO_ROOM && kotlin.math.abs(dx) > kotlin.math.abs(dy)) || (ry < NO_ROOM && kotlin.math.abs(dy) > kotlin.math.abs(dx))
+        return StageDrag(clamp(from.state.copy(ox = x, oy = y)), ox, oy, blocked)
+    }
+
+    private fun axis(at: Double, over: Double, d: Double, limit: Double): Pair<Double, Double> {
+        var rest = d
+        if (over != 0.0) {
+            val pulled = over + rest
+            // Still past the limit the same way: only the pull changes.
+            if (pulled * over > 0) return at to pulled
+            rest = pulled
+        }
+        val to = at + rest
+        val kept = to.coerceIn(-limit, limit)
+        return kept to (to - kept)
+    }
+
     /** Zoomed to [z], the picture's point under the anchor ([ax], [ay] from the frame's centre) staying there. */
     fun zoomTo(state: CropState, z: Double, ax: Double = 0.0, ay: Double = 0.0): CropState {
         val to = z.coerceIn(1.0, maxZoom)
@@ -212,8 +249,27 @@ open class FrameCrop(val iw: Double, val ih: Double, val fw: Double, val fh: Dou
 
         /** The zoom at slider place [v]. */
         fun zoomOf(v: Float): Double = kotlin.math.exp(v.toDouble())
+
+        /** Less than this (stage units) is no room. */
+        const val NO_ROOM = 0.5
+
+        /** The farthest a pull past the limit shows (round 33 §Q5: at most ~24). */
+        const val RUBBER_REACH = 24.0
+
+        /** How far a pull of [over] past the limit draws the picture: with it at first, then less and less, never [reach]. */
+        fun rubber(over: Double, reach: Double = RUBBER_REACH): Double = reach * over / (kotlin.math.abs(over) + reach)
+
+        /** The pull that draws [shown] ([rubber]'s inverse): a drag caught while the picture springs back goes on from there. */
+        fun pullOf(shown: Double, reach: Double = RUBBER_REACH): Double {
+            val b = shown.coerceIn(-reach * 0.999, reach * 0.999)
+            return reach * b / (reach - kotlin.math.abs(b))
+        }
     }
 }
+
+/** A drag on a crop stage as it goes ([FrameCrop.drag]): the picture's state and how far the finger is past its limits. */
+@Immutable
+data class StageDrag(val state: CropState, val overX: Double = 0.0, val overY: Double = 0.0, val blocked: Boolean = false)
 
 /**
  * How wide a crop stage may be (round 25 §G3.1): the dialog's width ([available]), at most [cap] (480 for the cover,
