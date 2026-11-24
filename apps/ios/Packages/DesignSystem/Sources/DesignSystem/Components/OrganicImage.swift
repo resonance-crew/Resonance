@@ -261,12 +261,16 @@ public struct RemoteImage: View {
     let fallback: URL?
     /// How it comes in when it arrives late (a small thumbnail's 4 pt; the thought map's a fade).
     let reveal: ImageReveal.Kind
+    /// How far the frame it is given reaches past the box that is seen, a side (the thought map's 4 round its 56): the
+    /// cover's crop is the seen box's (round 33 §Q4, ``FramedCover``).
+    let bleed: CGFloat
 
-    public init(url: URL, fallback: URL? = nil, pixelSize: CGSize, reveal: ImageReveal.Kind = .thumb) {
+    public init(url: URL, fallback: URL? = nil, pixelSize: CGSize, reveal: ImageReveal.Kind = .thumb, bleed: CGFloat = 0) {
         self.url = url
         self.fallback = fallback
         self.pixelSize = pixelSize
         self.reveal = reveal
+        self.bleed = bleed
     }
 
     public var body: some View {
@@ -275,7 +279,7 @@ public struct RemoteImage: View {
         CoverLazyImage(url: source.url, fallback: source.fallback,
                        request: { ImageSizeBuckets.request($0, box: pixelSize) }, reveal: reveal) { image, pictureSize, _ in
             // On the cover's frame when it has one (round 25 §G1): the decoded thumbnail keeps the picture's proportions.
-            if let image { FramedCover(image, pictureSize: pictureSize) }
+            if let image { FramedCover(image, pictureSize: pictureSize, bleed: bleed) }
         }
     }
 }

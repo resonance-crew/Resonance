@@ -190,4 +190,27 @@ import UIKit
             #expect(left.x < 0.02 && right.x > 0.98, "\(left) \(right)")
         }
     }
+
+    /// Post-merge review (round 33): the thought map's thumb draws a 64 box (56 seen + 4 a side) and its crop is the
+    /// 56's — a square, on the inner 56 — for a landscape and a portrait cover, framed or not.
+    @Test func theMapsThumbIsCutForItsSeen56() throws {
+        #expect(MapNodeView.thumbSide + 2 * MapNodeView.thumbBleed == 64)
+        let box = CGSize(width: 64, height: 64)
+        for picture in [CGSize(width: 1536, height: 1024), CGSize(width: 1024, height: 1536)] {
+            for frame in [nil, CoverFraming(cx: 0.4, cy: 0.6, zoom: 1.5, ar: Double(picture.width / picture.height))] {
+                let place = CoverLayout.placement(box: box, pictureSize: picture, frame: frame, bleed: 4)
+                let crop = CoverFraming.coverCrop(ar: Double(picture.width / picture.height), frame: frame, boxRatio: 1)
+                // The crop's corners land on the inner 56's.
+                #expect(abs(place.minX + crop.minX * place.width - 4) < 0.001)
+                #expect(abs(place.minY + crop.minY * place.height - 4) < 0.001)
+                #expect(abs(crop.width * place.width - 56) < 0.001 && abs(crop.height * place.height - 56) < 0.001)
+            }
+        }
+        let source = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Resonance/Features/ThoughtMap/MapNodeView.swift").standardized, encoding: .utf8)
+        #expect(source.contains("bleed: Self.thumbBleed)"))
+        let image = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Packages/DesignSystem/Sources/DesignSystem/Components/OrganicImage.swift").standardized, encoding: .utf8)
+        #expect(image.contains("if let image { FramedCover(image, pictureSize: pictureSize, bleed: bleed) }"))
+    }
 }
