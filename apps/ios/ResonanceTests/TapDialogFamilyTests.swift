@@ -103,8 +103,7 @@ import Testing
         #expect(opens.components(separatedBy: "clipsToPaper: true, paperInset: ModalPaper.listInset").count - 1 == 4)
         let faces = try source("TapFaces.swift")
         // The rows: no inset card — the band uncut where the paper clips, the words at the dialog's inset.
-        // Round 34 §11: the rows draw no band at all now (the passages keep theirs).
-        #expect(!faces.contains("BandWashStyle("))
+        #expect(faces.contains(".buttonStyle(BandWashStyle(top: top, bottom: bottom, cut: !clips))"))
         #expect(faces.contains(".padding(.horizontal, reach)"))
         #expect(!faces.contains(".padding(.horizontal, -12)"))
     }
@@ -348,13 +347,15 @@ import Testing
 
     // MARK: Round 34 §11 — no ink on the people's rows or the faces
 
-    /// The people's rows and the faces over 共振 show nothing of a press or a pointer; they still open what they open.
-    /// The passages' rows keep their band.
-    @Test func thePeoplesRowsAndTheFacesDrawNoWash() throws {
+    /// The faces' buttons — a reader's over 共振 and the author's line — show nothing of a press or a pointer (the
+    /// owner's correction: only they); the people's rows
+    /// keep round 33's band, uncut to the paper's edges, and the passages' rows theirs.
+    @Test func theFacesDrawNoWashTheRowsKeepTheirBand() throws {
         let faces = try source("TapFaces.swift")
-        #expect(!faces.contains("BandWashStyle("))
-        #expect(faces.components(separatedBy: ".buttonStyle(QuietPressStyle())\n").count - 1 >= 2)
-        #expect(faces.components(separatedBy: ".hoverEffectDisabled()").count - 1 >= 2)
+        #expect(faces.contains(".buttonStyle(BandWashStyle(top: top, bottom: bottom, cut: !clips))"))
+        #expect(faces.components(separatedBy: ".buttonStyle(QuietPressStyle())\n").count - 1 == 2)
+        #expect(faces.components(separatedBy: ".hoverEffectDisabled()").count - 1 == 2)
+        #expect(!faces.contains("OrganicPressStyle("))
         #expect(try source("TapPassages.swift").contains(".buttonStyle(BandWashStyle("))
         #expect(try source("PickedPeople.swift").contains("TapListBody("))
     }
