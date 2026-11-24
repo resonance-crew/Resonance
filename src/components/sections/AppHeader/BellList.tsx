@@ -5,7 +5,8 @@ import { useLocale, useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
 import { OrganicScrollbar, organicScrollTarget } from '@/components/atoms/OrganicScrollbar/OrganicScrollbar';
 import { Skeleton } from '@/components/atoms/Skeleton/Skeleton';
-import { useModalPaper } from '@/components/molecules/Modal/Modal';
+import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
+import { useModalClose, useModalPaper } from '@/components/molecules/Modal/Modal';
 import type { Notification } from '@/lib/db/types';
 import { useBellExtras, useNotifications, type BellExtras } from '@/lib/data/hooks';
 import { markNotificationRead } from '@/lib/db/firestore/client/notifications';
@@ -199,11 +200,17 @@ export function BellList({ bell, onPicked, variant }: BellListProps) {
  * and clipped to the dialog's own wobble (its outline moved into the body's coordinates), so a band ends on the
  * paper's pen line, never a straight cut short of it. The body reaches past the dialog's box on both sides for that
  * (`--bell-bleed`); the drawn bar stays in the content's gutter, over the bands.
+ *
+ * In a `closeButton="float"` Modal (round 33 §Q3: the tap lists' family, the passages' 略過) the region reaches the
+ * paper's bottom and the way out floats over its foot — the small tonal pill, its right edge on the words' end, 16
+ * above the paper's edge, never moving with the content — over the bottom fade, which runs under it; the region keeps
+ * the pill's height and 16 more as room under its last row, so the last row scrolls clear of it.
  */
 export function DialogScroll({ children }: { children: ReactNode }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollEdges = useEdgeFades(scrollRef);
   const paper = useModalPaper();
+  const close = useModalClose();
   const [clip, setClip] = useState<string | undefined>(undefined);
   useLayoutEffect(() => {
     const body = scrollRef.current;
@@ -222,11 +229,18 @@ export function DialogScroll({ children }: { children: ReactNode }) {
     setClip((now) => (now === next ? now : next));
   }, [paper]);
   return (
-    <div className={styles.scrollArea}>
+    <div className={styles.scrollArea} data-float-close={close ? '' : undefined}>
       <div ref={scrollEdges} className={`${styles.scrollBody} ${organicScrollTarget}`} style={clip ? { clipPath: clip } : undefined}>
         {children}
       </div>
       <OrganicScrollbar targetRef={scrollRef} seed={31} />
+      {close && (
+        <div className={styles.floatClose} data-float-close-button="">
+          <OrganicButton variant="tonal" size="sm" onClick={close.onClose}>
+            {close.label}
+          </OrganicButton>
+        </div>
+      )}
     </div>
   );
 }

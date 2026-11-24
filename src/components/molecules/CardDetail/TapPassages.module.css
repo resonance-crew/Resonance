@@ -1,15 +1,18 @@
 /* Which part stayed with the reader (round 27 §U1): the title, then the author's own sentences as bands — the
    who-resonated list's (TapPeople), running to the paper's edges through the bell's DialogScroll and its --bell-inset —
-   all in one scroll region (round 32 §P1), 略過 under it at the foot (Modal's quiet close row). */
+   all in one scroll region (round 32 §P1) reaching the paper's bottom, 略過 floating over its foot (round 33 §Q3). */
 .body {
   display: flex;
   flex-direction: column;
+  /* The family's paper (round 33 §Q2): sides 24, the words on the title's edge (no row indent of their own). */
+  --dialog-pad-x: 24px;
+  --dialog-row-indent: 0px;
   /* The region's cap (DialogScroll reads it): never more than the apps' min(560, 70 % of the window) (Wave 2 #3a),
      and never more than the window leaves (round 32 §P1) — less the backdrop's margin above and below
-     (Modal.module.css .backdrop), the paper's own padding (24 + 22, below) and the foot (18 + the quiet close's 44),
-     and 6 for the region's own 4 under its last band and rounding — so the whole dialog always fits and the backdrop
-     never scrolls: the foot stays at the dialog's bottom. */
-  --passages-room: calc(2 * clamp(12px, 3vw, 32px) + 24px + 22px + 18px + 44px + 6px);
+     (Modal.module.css .backdrop) and the paper's 24 above (it has none below: the region, 略過's room inside it,
+     reaches the paper's bottom), and 6 for rounding — so the whole dialog always fits and the backdrop never
+     scrolls. */
+  --passages-room: calc(2 * clamp(12px, 3vw, 32px) + 24px + 6px);
   --dialog-scroll-max: min(560px, 70vh, calc(100vh - var(--passages-room)));
   --dialog-scroll-max: min(560px, 70vh, calc(100dvh - var(--passages-room)));
   /* The story's own type (§U1.3), as story.css sets it by script: CJK first by default… */

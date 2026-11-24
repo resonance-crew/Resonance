@@ -13,6 +13,7 @@ import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { BAND_END_KEY, bandsBelow } from '@/lib/design/listBands';
 import { INK_LIGHT } from '@/lib/design/strokes';
 import { TAP_LIST_DIALOG_WIDTH, TAP_LIST_PHONE_QUERY } from './TapFaces';
+import { TAP_DIALOG_PADDING } from './tapList';
 import { PASSAGE_CHOSEN_MS, reducedMotion } from './tapMotion';
 import styles from './TapPassages.module.css';
 
@@ -41,7 +42,8 @@ export interface TapPassagesProps {
  * After a press that turns 共振 on (round 27 §U1): a small centred dialog asking which part stayed with the reader —
  * one scroll region holding the title and then the author's own sentences as banded rows (the who-resonated list's
  * bands), each in the story's type and wrapped in full, never cut, a quiet rule between two rows (round 32 §P1, §P2);
- * 略過 alone at the foot's end, outside the region — its words alone, pinned to the dialog's bottom. A press holds the row's ink and draws its check, then
+ * 略過 alone at the foot's end, the family's small tonal pill floating over the region's bottom fade, never moving
+ * with the rows (round 33 §Q3; the region reaches the paper's bottom). A press holds the row's ink and draws its check, then
  * the dialog closes; the picked row, reopened from the reader's own row, rests chosen and a press on it clears the
  * pick. The tap never waits on it: skipping leaves the tap on with no passage. Never a bottom sheet, never a popover.
  */
@@ -95,14 +97,15 @@ export function TapPassages({ passages, picked, script = 'cjk', onPick, onClose,
       onClose={onClose}
       maxWidth={onPhone ? TAP_LIST_DIALOG_WIDTH.phone : TAP_LIST_DIALOG_WIDTH.wide}
       seed={47}
-      padding="24px 22px 22px"
+      // The family's paper (round 33 §Q2): 24 above and a side, the region to its bottom.
+      padding={TAP_DIALOG_PADDING}
       ariaLabel={t('passageTitle')}
       closeLabel={t('passageSkip')}
-      closeButton="quiet"
+      closeButton="float"
     >
       <div data-tap-passages="" data-script={script} className={styles.body}>
         {/* One scroll region (round 32 §P1, the owner: 「整个弹窗只有一个统一滚动区，标题随文字滚走」): the title is its first
-            child; 略過 stands under it, outside, at the dialog's foot. */}
+            child; 略過 floats over its foot (round 33 §Q3). */}
         <DialogScroll>
           <h3 className={styles.title}>{t('passageTitle')}</h3>
           <ul ref={listRef} className={styles.list}>

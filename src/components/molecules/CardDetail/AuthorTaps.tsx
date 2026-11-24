@@ -11,6 +11,7 @@ import { DialogScroll } from '@/components/sections/AppHeader/BellList';
 import type { CardTapBody, TapListBody } from '@/lib/api/v1/schemas';
 import { listTaps } from '@/lib/db/firestore/client/taps';
 import { facesNames, memberOf } from './TapFaces';
+import { TAP_DIALOG_PADDING, tapRowsKnown, useTapListHold } from './tapList';
 import { TapPeople, TapPeopleSkeleton } from './TapPeople';
 import styles from './AuthorTaps.module.css';
 
@@ -47,40 +48,50 @@ export function AuthorTaps({ cardId, tap, trailing }: AuthorTapsProps) {
         <AvatarGroup members={tap.faces.map(memberOf)} size={28} />
       </button>
       {trailing && <span className={styles.trailing}>{trailing}</span>}
-      {open && (
-        <Modal open onClose={() => setOpen(false)} maxWidth={480} seed={53} padding="24px 22px 22px" ariaLabel={t('resonatorsModal.title')} closeButton>
-          <h3 className={styles.title}>{t('resonatorsModal.title')}</h3>
-          <AuthorList cardId={cardId} onPick={() => setOpen(false)} />
-        </Modal>
-      )}
+      {open && <AuthorTapsDialog cardId={cardId} rows={tapRowsKnown({ people: tap.faces, more: tap.more })} onClose={() => setOpen(false)} />}
     </div>
   );
 }
 
-/** The author's pages of who resonated, 30 at a time, newest first. */
-function AuthorList({ cardId, onPick }: { cardId: string; onPick: () => void }) {
+/**
+ * The author's pages of who resonated, 30 at a time, newest first — in a centred dialog that waits the family's hold
+ * for its first page and opens whole, or past it on as many stand-ins as the author's line has faces (round 33 §Q1),
+ * in the rows' own region; 關閉 floats over the region's foot (§Q3).
+ */
+function AuthorTapsDialog({ cardId, rows, onClose }: { cardId: string; rows: number; onClose: () => void }) {
+  const t = useTranslations('card');
   const tHome = useTranslations('home');
   const { data, size, setSize, isValidating } = useSWRInfinite<TapListBody>(
     (i, prev: TapListBody | null) => (i === 0 ? ['taps-author', cardId, ''] : prev?.nextPageToken ? ['taps-author', cardId, prev.nextPageToken] : null),
     ([, id, token]: [string, string, string]) => listTaps(id, token || null),
     { revalidateOnFocus: false, revalidateFirstPage: false },
   );
-  if (!data) return <TapPeopleSkeleton />;
-  const people = data.flatMap((p) => p.people);
-  const next = data.at(-1)?.nextPageToken;
-  const loadingMore = isValidating && size > data.length;
+  const show = useTapListHold(!!data);
+  if (!show) return null;
+  const people = data?.flatMap((p) => p.people) ?? [];
+  const next = data?.at(-1)?.nextPageToken;
+  const loadingMore = isValidating && !!data && size > data.length;
   return (
-    <>
-      <DialogScroll>
-        <TapPeople people={people} onPick={onPick} endKey={next ? 'taps:more' : undefined} />
-      </DialogScroll>
-      {next && (
-        <div className={styles.more}>
-          <OrganicButton variant="tonal" size="sm" loading={loadingMore} onClick={() => void setSize(size + 1)}>
-            {tHome('moreBtn')}
-          </OrganicButton>
-        </div>
-      )}
-    </>
+    <Modal open onClose={onClose} maxWidth={480} seed={53} padding={TAP_DIALOG_PADDING} ariaLabel={t('resonatorsModal.title')} closeButton="float">
+      <div className={styles.dialog}>
+        <h3 className={styles.title}>{t('resonatorsModal.title')}</h3>
+        <DialogScroll>
+          {data ? (
+            <>
+              <TapPeople people={people} onPick={onClose} endKey={next ? 'taps:more' : undefined} />
+              {next && (
+                <div className={styles.more}>
+                  <OrganicButton variant="tonal" size="sm" loading={loadingMore} onClick={() => void setSize(size + 1)}>
+                    {tHome('moreBtn')}
+                  </OrganicButton>
+                </div>
+              )}
+            </>
+          ) : (
+            <TapPeopleSkeleton rows={rows} />
+          )}
+        </DialogScroll>
+      </div>
+    </Modal>
   );
 }

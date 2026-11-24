@@ -154,8 +154,11 @@ function PersonRow({
   );
 }
 
-/** The list's rows on their way: a face and a name's line each, touching as the bands do. */
-export function TapPeopleSkeleton({ rows = 3 }: { rows?: number }) {
+/**
+ * The list's rows on their way: a face and a name's line each, touching as the bands do — exactly as many as will
+ * come (round 33 §Q1: the faces already on the page, `tapRowsKnown`; never a default count).
+ */
+export function TapPeopleSkeleton({ rows }: { rows: number }) {
   const t = useTranslations('home');
   const face = TAP_PERSON_FACE;
   return (

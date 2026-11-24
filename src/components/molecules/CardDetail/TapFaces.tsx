@@ -10,6 +10,7 @@ import { DialogScroll } from '@/components/sections/AppHeader/BellList';
 import { TAP_FACES_MAX, type AuthorBody, type CardTapBody, type TapListBody } from '@/lib/api/v1/schemas';
 import { listTaps } from '@/lib/db/firestore/client/taps';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
+import { TAP_DIALOG_PADDING, tapRowsKnown, useTapListHold } from './tapList';
 import { TapPeople, TapPeopleSkeleton, type TapOwnRow } from './TapPeople';
 import styles from './TapFaces.module.css';
 
@@ -133,20 +134,15 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving, onOwnRow }:
         {group}
       </button>
       {open && (
-        <Modal
-          open
-          onClose={() => close()}
-          maxWidth={onPhone ? TAP_LIST_DIALOG_WIDTH.phone : TAP_LIST_DIALOG_WIDTH.wide}
-          seed={43}
-          padding="22px 22px 22px"
-          // No visible title (S2): a reader sees only their connections, and a title would claim everyone.
-          ariaLabel={label}
-          closeButton
-        >
-          <DialogScroll>
-            <ReaderList cardId={cardId} viewerId={viewerId} own={ownRow(tap, viewerId, onOwnRow)} onPick={() => close(false)} />
-          </DialogScroll>
-        </Modal>
+        <ReaderTapsDialog
+          cardId={cardId}
+          viewerId={viewerId}
+          rows={tapRowsKnown({ people: shown.faces, more: shown.more })}
+          own={ownRow(tap, viewerId, onOwnRow)}
+          label={label}
+          wide={!onPhone}
+          onClose={close}
+        />
       )}
     </span>
   );
@@ -156,15 +152,36 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving, onOwnRow }:
  * The reader's people (themselves, then everyone they may see — Wave 2 #3b), read as the list opens, 30 a page. Keyed by the viewer
  * too, as every answer about who someone is connected with: another account in this tab (signed in from another
  * one) never sees the last one's people.
+ *
+ * Round 33 §Q1 (the owner: 「谁共振了」弹窗仍有高度闪动): the dialog opened at once on three stand-in rows whatever
+ * the count, then settled to the one or two (and their quotes' lines) that came. It now waits the family's hold for
+ * the first page and opens whole; past it, on exactly as many stand-ins as the faces' line holds — in the same region.
  */
-function ReaderList({ cardId, viewerId, own, onPick }: { cardId: string; viewerId: string; own: TapOwnRow; onPick: () => void }) {
+function ReaderTapsDialog({
+  cardId,
+  viewerId,
+  rows,
+  own,
+  label,
+  wide,
+  onClose,
+}: {
+  cardId: string;
+  viewerId: string;
+  rows: number;
+  own: TapOwnRow;
+  label: string;
+  wide: boolean;
+  onClose: (refocus?: boolean) => void;
+}) {
   const tHome = useTranslations('home');
   // The first page under the key the page reads again after a pick (lib/data/taps); later pages beside it.
   const { data } = useSWR(['taps', cardId, viewerId], () => listTaps(cardId), { revalidateOnFocus: false });
   const [more, setMore] = useState<{ people: TapListBody['people']; next: string | null; loading: boolean } | null>(null);
-  if (!data) return <TapPeopleSkeleton />;
-  const people = [...data.people, ...(more?.people ?? [])];
-  const next = more ? more.next : data.nextPageToken;
+  const show = useTapListHold(!!data);
+  if (!show) return null;
+  const people = [...(data?.people ?? []), ...(more?.people ?? [])];
+  const next = more ? more.next : (data?.nextPageToken ?? null);
   const loadMore = async () => {
     if (!next || more?.loading) return;
     setMore((m) => ({ people: m?.people ?? [], next, loading: true }));
@@ -176,16 +193,36 @@ function ReaderList({ cardId, viewerId, own, onPick }: { cardId: string; viewerI
     }
   };
   return (
-    <>
-      <TapPeople people={people} own={own} onPick={onPick} endKey={next ? 'taps:more' : undefined} />
-      {next && (
-        <div className={styles.more}>
-          <OrganicButton variant="tonal" size="sm" loading={!!more?.loading} onClick={() => void loadMore()}>
-            {tHome('moreBtn')}
-          </OrganicButton>
-        </div>
-      )}
-    </>
+    <Modal
+      open
+      onClose={() => onClose()}
+      maxWidth={wide ? TAP_LIST_DIALOG_WIDTH.wide : TAP_LIST_DIALOG_WIDTH.phone}
+      seed={43}
+      // The family's paper (round 33 §Q2), 關閉 floating over the region's foot (§Q3).
+      padding={TAP_DIALOG_PADDING}
+      // No visible title (S2): a reader sees only their connections, and a title would claim everyone.
+      ariaLabel={label}
+      closeButton="float"
+    >
+      <div className={styles.list} data-tap-reader="">
+        <DialogScroll>
+          {data ? (
+            <>
+              <TapPeople people={people} own={own} onPick={() => onClose(false)} endKey={next ? 'taps:more' : undefined} />
+              {next && (
+                <div className={styles.more}>
+                  <OrganicButton variant="tonal" size="sm" loading={!!more?.loading} onClick={() => void loadMore()}>
+                    {tHome('moreBtn')}
+                  </OrganicButton>
+                </div>
+              )}
+            </>
+          ) : (
+            <TapPeopleSkeleton rows={rows} />
+          )}
+        </DialogScroll>
+      </div>
+    </Modal>
   );
 }
 

@@ -34,9 +34,11 @@ export interface ModalProps {
   /**
    * For a modal whose foot has nothing else to do — a list, a picker, a
    * notice: the close is drawn there, a small tonal pill at the right, as in the
-   * apps (`ModalCloseRow`). `'quiet'`: its words alone, no fill (the passages' 略過, round 32 §P1).
+   * apps (`ModalCloseRow`). `'float'`: the same small tonal pill, floating over the foot of the dialog's scroll region
+   * (`DialogScroll` draws it, from {@link useModalClose}) rather than standing under it — the tap lists' family and
+   * the passages' 略過 (round 33 §Q3), whose region reaches the paper's bottom.
    */
-  closeButton?: boolean | 'quiet';
+  closeButton?: boolean | 'float';
   /**
    * It holds a field a phone's keyboard comes up for: it stays centred in the
    * room the keyboard leaves (the visual viewport), not behind the keyboard.
@@ -94,6 +96,19 @@ export interface ModalPaper {
 }
 
 const ModalPaperContext = createContext<ModalPaper | null>(null);
+
+/** A dialog's way out for its content to draw (`closeButton="float"`): its words and what it does. */
+export interface ModalClose {
+  label: string;
+  onClose: () => void;
+}
+
+const ModalCloseContext = createContext<ModalClose | null>(null);
+
+/** The close a `closeButton="float"` Modal hands its content to draw (DialogScroll floats it); null otherwise. */
+export function useModalClose(): ModalClose | null {
+  return useContext(ModalCloseContext);
+}
 
 /** The Modal this is drawn in: its paper's outline and size (see {@link ModalPaper}); null outside one. */
 export function useModalPaper(): ModalPaper | null {
@@ -314,6 +329,10 @@ export function Modal({
     [w, h, seed, mag],
   );
   const paper = useMemo<ModalPaper | null>(() => (borderPath ? { outline: borderPath, w, h, dialog: ref } : null), [borderPath, w, h]);
+  const floating = useMemo<ModalClose | null>(
+    () => (closeButton === 'float' && onClose ? { label: close, onClose } : null),
+    [closeButton, onClose, close],
+  );
 
   if (!open || !mounted) return null;
 
@@ -371,8 +390,10 @@ export function Modal({
           curve={0.6} cornerJitter={0.9} cornerOffset={5}
         />
         <div className={styles.content}>
-          <ModalPaperContext.Provider value={paper}>{children}</ModalPaperContext.Provider>
-          {closeButton && onClose && <ModalCloseRow label={close} onClose={onClose} quiet={closeButton === 'quiet'} />}
+          <ModalPaperContext.Provider value={paper}>
+            <ModalCloseContext.Provider value={floating}>{children}</ModalCloseContext.Provider>
+          </ModalPaperContext.Provider>
+          {closeButton === true && onClose && <ModalCloseRow label={close} onClose={onClose} />}
         </div>
         {!closeButton && onClose && (
           <button type="button" className={styles.hiddenClose} onClick={onClose}>

@@ -10,7 +10,9 @@
   /* The body reaches 10 past the dialog's box on both sides — past the farthest the paper's wobble swings out — and
      the dialog's outline, its clip, ends every band on the paper's pen line. */
   --bell-bleed: calc(var(--bell-pad) + 10px);
-  --bell-inset: calc(var(--bell-bleed) + 8px);
+  /* The rows' own 8 past the paper's padding — none in the tap lists' family (round 33 §Q2: --dialog-row-indent 0, its
+     faces on its title's edge). */
+  --bell-inset: calc(var(--bell-bleed) + var(--dialog-row-indent, 8px));
   /* The content's end: past the drawn bar's 14px column (--sb-hit) while it is there. */
   --bell-inset-end: calc(var(--bell-inset) + var(--sb-hit));
 }
@@ -32,6 +34,36 @@
   .scrollBody {
     max-height: var(--dialog-scroll-max, min(720px, 72vh));
   }
+}
+
+/* The way out floating over the region's foot (round 33 §Q3, Modal closeButton="float"): the region reaches the
+   paper's bottom (the dialog's own bottom padding is 0) and keeps, under its last row, the pill's height and 16 —
+   room the last row scrolls clear into; with nothing to scroll the dialog is its content and that room. The bottom
+   fade runs under the pill: clear for the 16 under it, whole again 16 over its top, so the words fade out before it. */
+.scrollArea[data-float-close] {
+  --float-close-h: 44px;
+  --float-close-room: calc(var(--float-close-h) + 16px);
+}
+
+.scrollArea[data-float-close] > .scrollBody {
+  padding-bottom: var(--float-close-room);
+  --edge-fade-clear: 16px;
+  --edge-fade-len: calc(var(--float-close-room) + 16px);
+}
+
+/* The small tonal pill (OrganicButton tonal sm: its fill, its wobble, no pen line, no shadow), 44 to any pointer, its
+   right edge on the words' end (the rows' --bell-inset-end, the drawn bar's gutter included while it is there), 16
+   above the paper's bottom edge. It stands in the region's box, so it never scrolls. */
+.floatClose {
+  position: absolute;
+  z-index: 1;
+  right: calc(var(--bell-inset-end) - var(--bell-bleed));
+  bottom: 16px;
+  display: flex;
+}
+
+.floatClose > button {
+  min-height: var(--float-close-h);
 }
 
 /* The gutter is the drawn bar's, and only while the bar is there: with nothing to scroll, or on a phone or touch

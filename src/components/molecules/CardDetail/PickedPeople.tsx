@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import useSWRInfinite from 'swr/infinite';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
@@ -12,25 +11,23 @@ import { listTaps } from '@/lib/db/firestore/client/taps';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import type { StoryScript } from '@/lib/text/script';
 import { TAP_LIST_DIALOG_WIDTH, TAP_LIST_PHONE_QUERY } from './TapFaces';
+import { TAP_DIALOG_PADDING, TAP_LIST_HOLD_MS, tapRowsKnown, useTapListHold } from './tapList';
 import { TapPeople, TapPeopleSkeleton } from './TapPeople';
 import styles from './PickedPeople.module.css';
 
-/** The paper's padding, the apps' `ModalPaper` inset (round 29 §S12): 32 above and below, 28 at each side. */
-export const PICKED_PEOPLE_PADDING = '32px 28px';
+/** The paper's padding: the tap lists' family's (round 33 §Q2: 24 above and a side, the region to the paper's bottom). */
+export const PICKED_PEOPLE_PADDING = TAP_DIALOG_PADDING;
 
-/**
- * How long the dialog waits for its first page before it opens on a stand-in (round 32 §P3): an answer inside this
- * opens the dialog whole — notes' lines included — at its final height; a slower one opens on rows of the same count.
- */
-export const PICKED_HOLD_MS = 300;
+/** How long the dialog waits for its first page before it opens on a stand-in: the family's hold (tapList). */
+export const PICKED_HOLD_MS = TAP_LIST_HOLD_MS;
 
 /**
  * How many rows the list will open with, known before it answers (round 32 §P3): the marks' own faces (`people`, at
  * most 3, the newest) — the first page holds exactly those when no one else picked it (`more` false). With `more`,
- * at least 3. Never under 1 (a mark is drawn only for a sentence someone picked).
+ * at least 3. Never under 1 (a mark is drawn only for a sentence someone picked). The family's count (tapList).
  */
 export function pickedRowsKnown(passage: Pick<TapPickedBody, 'people' | 'more'>): number {
-  return Math.max(1, Math.min(3, passage.people?.length ?? 0) || (passage.more ? 3 : 1));
+  return tapRowsKnown(passage);
 }
 
 export interface PickedPeopleProps {
@@ -47,7 +44,7 @@ export interface PickedPeopleProps {
  * 16 a side, 480 on a tablet, the Mac and the desktop; never a sheet, never a popover. Its title, the sentence once
  * (in the story's type at 16, muted, in full), then the people who picked it, newest first, as the author's list
  * draws a row — a face 36, the pen name, the note's first lines when they left one — with no quote under each name
- * (the sentence heads it); 顯示更多 when there is another page; the small 關閉 at the foot's end. A row leads where
+ * (the sentence heads it); 顯示更多 when there is another page; the small 關閉 floating at the foot's end (round 33 §Q3). A row leads where
  * the same person's row in the author's list leads. The author's list itself is unchanged (「保留原本查看的这个这个框」).
  */
 export function PickedPeople({ cardId, passage, script, onClose }: PickedPeopleProps) {
@@ -57,22 +54,20 @@ export function PickedPeople({ cardId, passage, script, onClose }: PickedPeopleP
   // Round 32 §P3 (the owner: 「先跳出一个很高的弹窗，再根据内容缩回实际高度」): the dialog opened on three stand-in rows
   // whatever the count, then shrank to the one or two that came. It now waits a moment for the answer and opens whole;
   // past that, on stand-ins exactly as many as the mark's faces — so its first frame is its final height.
-  const [waited, setWaited] = useState(false);
-  useEffect(() => {
-    const timer = window.setTimeout(() => setWaited(true), PICKED_HOLD_MS);
-    return () => window.clearTimeout(timer);
-  }, []);
-  if (!list.data && !waited) return null;
+  // Round 33 §Q1: the family's one hold (tapList), as the who-resonated lists wait now too.
+  const show = useTapListHold(!!list.data);
+  if (!show) return null;
   return (
     <Modal
       open
       onClose={onClose}
       maxWidth={onPhone ? TAP_LIST_DIALOG_WIDTH.phone : TAP_LIST_DIALOG_WIDTH.wide}
       seed={59}
-      // The apps' shell (§S12; the owner, 2026-11-22: 「留白够不够…把它一致」): 32 above and below, 28 a side.
+      // The family's paper (round 33 §Q2): 24 above and a side; the rows' region runs to its bottom, 關閉 floating
+      // over its foot (§Q3).
       padding={PICKED_PEOPLE_PADDING}
       ariaLabel={t('pickedTitle')}
-      closeButton
+      closeButton="float"
     >
       <div className={styles.picked} data-tap-picked="" id="tap-picked">
         <h3 className={styles.title}>{t('pickedTitle')}</h3>
@@ -117,11 +112,10 @@ function PickedList({ list, rows, onPick }: { list: ReturnType<typeof usePickedL
   const people = data.flatMap((p) => p.people);
   const next = data.at(-1)?.nextPageToken;
   const loadingMore = isValidating && size > data.length;
+  // 顯示更多 ends the region's content (round 33 §Q3: the region reaches the paper's bottom, nothing stands under it).
   return (
-    <>
-      <DialogScroll>
-        <TapPeople people={people} onPick={onPick} quotes={false} endKey={next ? 'picked:more' : undefined} />
-      </DialogScroll>
+    <DialogScroll>
+      <TapPeople people={people} onPick={onPick} quotes={false} endKey={next ? 'picked:more' : undefined} />
       {next && (
         <div className={styles.more}>
           <OrganicButton variant="tonal" size="sm" loading={loadingMore} onClick={() => void setSize(size + 1)}>
@@ -129,6 +123,6 @@ function PickedList({ list, rows, onPick }: { list: ReturnType<typeof usePickedL
           </OrganicButton>
         </div>
       )}
-    </>
+    </DialogScroll>
   );
 }
