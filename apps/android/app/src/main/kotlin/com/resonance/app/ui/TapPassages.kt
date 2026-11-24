@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.resonance.design.DividerInk
-import com.resonance.design.wavyRuleAbove
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalConfiguration
@@ -236,7 +236,7 @@ internal fun TapPassages(
                     .then(if (i == focused) Modifier.focusRequester(first) else Modifier)
                     // §P2: a rule between two rows (never above the first), the words' start to their end; the
                     // row's own band washes over it.
-                    .then(if (passageRuleAbove(i)) Modifier.wavyRuleAbove(PassageBand.wordsInset, rule, seed = 47.0 + i) else Modifier)
+                    .then(if (passageRuleAbove(i)) Modifier.bandRuleAbove(keys[i], PassageBand.wordsInset, rule) else Modifier)
                     .listBand(keys[i], below[i], source, { false }, rest = if (isChosen) press else null, cut = PassageBand.cut)
                     .flowTag("tap-passage-$i")
                     .plainClickable(role = Role.Button) {
@@ -258,7 +258,9 @@ internal fun TapPassages(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 BasicText(p.text, Modifier.weight(1f), style = words)
-                if (isChosen) OrganicIcon(IconName.Check, size = 16.dp, color = Tokens.Text)
+                // Round 34 (7): the check's slot (16 + the row's 12) kept on every row, unseen until picked — the words'
+                // width, and so their lines, never change when it shows.
+                OrganicIcon(IconName.Check, size = 16.dp, color = Tokens.Text, modifier = Modifier.alpha(if (isChosen) 1f else 0f).flowTag("tap-passage-check-$i"))
             }
         }
     }

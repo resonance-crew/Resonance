@@ -119,7 +119,7 @@ class TapListFootTest {
         // Nothing over the content; the dialog as tall as its rows and that foot.
         assertTrue(exit.top >= last.bottom)
         assertEquals(p.bottom.value, region.bottom.value, 1f)
-        assertEquals((3 * row.value) + FloatingExitRoom.value, (region.bottom - region.top).value, 1f)
+        assertEquals(TapListInset.value + (3 * row.value) + FloatingExitRoom.value, (region.bottom - region.top).value, 1f)
         // The constants the spec names: 24 + 44 + 18.
         assertEquals(24f, FloatingExitBottom.value)
         assertEquals(44f, FloatingExitHeight.value)
@@ -134,7 +134,7 @@ class TapListFootTest {
         val p = paper()
         val region = bounds("region")
         // The region is the cap and runs to the paper's bottom edge — no padding under it.
-        assertEquals(cap.value, (region.bottom - region.top).value, 1f)
+        assertEquals(cap.value + TapListInset.value, (region.bottom - region.top).value, 1f)
         assertEquals(p.bottom.value, region.bottom.value, 1f)
         // The fade's opaque end on the region's bottom edge, i.e. the paper's border.
         val h = region.bottom.value - region.top.value
@@ -234,4 +234,30 @@ class TapListFootTest {
 
     @Test @Config(qualifiers = "w1280dp-h800dp-mdpi")
     fun theTabletsTitleIs22() = assertEquals(22f, titleSize(1280.dp), 0f)
+
+    // Round 34 (5): the region and its top fade reach the paper's top border; the content opens 24 under it, as before.
+
+    private fun opensAtTheTop(n: Int) {
+        show(n)
+        compose.waitForIdle()
+        val p = paper()
+        assertEquals("$n: the region from the paper's top", p.top.value, bounds("region").top.value, 1f)
+        assertEquals("$n: the first row 24 under the paper's top", 24f, (bounds("row-0").top - p.top).value, 1f)
+    }
+
+    @Test fun aFooterListsRegionReachesThePapersTopItsContent24UnderIt() = opensAtTheTop(3)
+
+    @Test fun aScrollingListsRegionReachesThePapersTopItsContent24UnderIt() = opensAtTheTop(10)
+
+    @Test fun scrolledTheContentSlidesUnderTheTopFadeIntoTheBorder() {
+        show(10)
+        compose.waitForIdle()
+        val p = paper()
+        runBlocking { scroll.scrollTo(40) }
+        compose.waitForIdle()
+        // The first row now 16 above where it opened: under the paper's top inset, inside the region (clipped at the border).
+        val top = compose.onNodeWithTag("row-0", useUnmergedTree = true).fetchSemanticsNode().positionInRoot.y
+        assertEquals(24f - 40f, top - p.top.value, 1f)
+        assertTrue(scroll.value > 0)
+    }
 }

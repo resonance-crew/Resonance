@@ -57,6 +57,11 @@ import kotlinx.coroutines.withTimeoutOrNull
  *   height after the first frame, and the geometry is the same in both, so nothing moves when content that grows
  *   (顯示更多, a late page) crosses the cap: the dialog only grows, then scrolls.
  *
+ * - Round 34 (5): the region reaches the paper's top border too — the paper's top padding 0, the family's 24 the
+ *   region's own first room ([TapListInset], inside the scroll) — so the content opens where it did and, scrolled, slides
+ *   under the top fade into the border, no band of bare paper above it. [cap] keeps its meaning (the content's tallest
+ *   under that 24): the region is at most cap + 24, the paper as tall as before.
+ *
  * [cap]: the region's tallest (the passages' min(560, 70 %)); otherwise the window less the modal's margins.
  */
 @Composable
@@ -74,7 +79,7 @@ internal fun TapListModal(
 ) {
     OrganicModal(
         onDismiss, title, seed = seed, closeLabel = exit, maxWidth = maxWidth,
-        clipToPaper = true, scrollsItself = true, sideInset = TapListInset, topInset = TapListInset, bottomInset = 0.dp,
+        clipToPaper = true, scrollsItself = true, sideInset = TapListInset, topInset = 0.dp, bottomInset = 0.dp,
     ) {
         Box(Modifier.fillMaxWidth().weight(1f, fill = false)) {
             Column(
@@ -82,10 +87,10 @@ internal fun TapListModal(
                     .toModalPaperEdges(TapListInset)
                     .fillMaxWidth()
                     .then(regionModifier)
-                    .then(if (cap != null) Modifier.heightIn(max = cap) else Modifier)
+                    .then(if (cap != null) Modifier.heightIn(max = cap + TapListInset) else Modifier)
                     .scrollFadeUnder(scroll, ModalScrollFade, FloatingExitBottom + FloatingExitHeight)
                     .verticalScroll(scroll)
-                    .padding(bottom = FloatingExitRoom),
+                    .padding(top = TapListInset, bottom = FloatingExitRoom),
                 content = content,
             )
             OrganicButton(
