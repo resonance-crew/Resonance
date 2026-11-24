@@ -8,7 +8,7 @@ import { AuthorTaps } from './AuthorTaps';
 
 /**
  * Round 26 §U3: the author's own line where a reader's end row would be — the wave and the three newest faces, no
- * number, nothing when no one resonated — opening who they are in a centred dialog, their notes' first lines there.
+ * number, nothing when no one resonated — opening who they are in a centred dialog (no note's excerpt since round 34 §10).
  */
 
 vi.mock('@/i18n/navigation', () => ({
@@ -67,7 +67,8 @@ describe('AuthorTaps', () => {
     expect(within(dialog).getByRole('heading', { name: 'Resonated with this card' })).toBeInTheDocument();
     const rows = await within(dialog).findAllByRole('link');
     expect(rows.map((r) => r.getAttribute('href'))).toEqual(['/u/gus', '/messages/carol?u=carol']);
-    expect(within(rows[1]).getByText('讀到搬家那段，好像看見自己。')).toBeInTheDocument();
+    // Round 34 §10: the note's excerpt is never drawn (the row still opens its conversation).
+    expect(rows[1].textContent).not.toContain('讀到搬家那段');
     expect(listTaps).toHaveBeenNthCalledWith(1, 'rich-story', null);
 
     // 30 a page, then 顯示更多: the next page under the first.
@@ -85,7 +86,7 @@ describe('AuthorTaps', () => {
     expect(rows.every((r) => r.getAttribute('href')!.startsWith('/u/'))).toBe(true);
   });
 
-  it('quotes each person’s pick under their name (round 27 §U2), the note’s first line under the quote', async () => {
+  it('quotes each person’s pick under their name (round 27 §U2), never the note (round 34 §10)', async () => {
     listTaps.mockResolvedValueOnce({
       people: [
         { author: face('gus'), note: null, passage: { text: 'The lamp at the corner came on first.' } },
@@ -98,7 +99,7 @@ describe('AuthorTaps', () => {
     await user().click(screen.getByRole('button', { name: /Resonated with this card/ }));
     const [gus, carol, hana] = await within(await screen.findByRole('dialog')).findAllByRole('link');
     expect(gus).toHaveTextContent('gus“The lamp at the corner came on first.”');
-    expect(carol.textContent).toBe('CAcarol“I wiped every window anyway.”The move, I saw myself.');
+    expect(carol.textContent).toBe('CAcarol“I wiped every window anyway.”');
     expect(hana.textContent).toBe('HAhana');
     expect(carol.getAttribute('href')).toBe('/messages/carol?u=carol');
   });

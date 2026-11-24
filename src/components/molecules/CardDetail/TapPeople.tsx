@@ -15,7 +15,11 @@ export function tapPersonHref(p: TapPersonBody): string {
   return p.note ? `/messages/${handle}?u=${encodeURIComponent(p.author.id)}` : `/u/${handle}`;
 }
 
-/** A row's face: 36, in the reader's dialog and the author's alike (a row 60 tall, a note's line under the name in the author's). */
+/**
+ * A row's face: 36, in every list alike (a row 60 tall, the quote's lines under the name in the who-resonated lists).
+ * No row draws the note's excerpt (round 34 §10, the owner: the note arrives as a message — read it there); the answer
+ * still carries it, and a row with a note still opens its conversation.
+ */
 export const TAP_PERSON_FACE = 36;
 
 /**
@@ -48,9 +52,9 @@ export interface TapPeopleProps {
 
 /**
  * Who resonated (round 26 §U2.5, §U3.2): one band per person — the list's width between hand-drawn curves seen only
- * under a pointer or a press, as the bell's rows — their face and pen name, and, in the author's list, the first line
- * of the note they left on the card, muted, under the name. A row opens that note's conversation, or else their page:
- * a tap alone gives no way to write to anyone.
+ * under a pointer or a press, as the bell's rows — their face and pen name, and in the who-resonated lists the quote
+ * of their pick (round 34 §10: never the note's excerpt). A row opens the note's conversation when they left one, or
+ * else their page: a tap alone gives no way to write to anyone.
  */
 export function TapPeople({ people, own, onPick, endKey = BAND_END_KEY, quotes = true }: TapPeopleProps) {
   const below = bandsBelow(people.map((p) => p.author.id), endKey);
@@ -123,7 +127,6 @@ function PersonRow({
               {t('passagePick')}
             </span>
           )}
-          {person.note && <span className={styles.note}>{person.note.excerpt}</span>}
         </span>
       </span>
     </>

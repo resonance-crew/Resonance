@@ -84,16 +84,3 @@
   color: var(--button-on-tonal);
 }
 
-/* The first line of the note they left on the card (the author's list, a named card), muted, at most 2 lines
-   (round 27 §U2, S9: as Android). */
-.note {
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--color-text-muted);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
