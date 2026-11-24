@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -108,7 +109,10 @@ internal fun TapFacesButton(
     }
     Box(
         modifier
+            // A finger's 48 both ways whatever the count (round 34 (12)): plainClickable gets no touch-target growth, so
+            // one face (28) would be a 28-wide target; the room is touch only, the faces centred in it (so on 共振).
             .heightIn(min = 48.dp)
+            .widthIn(min = 48.dp)
             // The line's foot is the 共振 segment's top edge: a rising face is seen only above it.
             .then(if (author) Modifier else Modifier.clipToBounds())
             // The flows find the faces by it (maestro/flows/tap.yaml: the viewer's face slides in).
@@ -121,7 +125,7 @@ internal fun TapFacesButton(
                     // The clickable's role and action stay (they are this node's); the faces inside are said as one name.
                     .clearAndSetSemantics { contentDescription = label },
             ),
-        contentAlignment = Alignment.CenterStart,
+        contentAlignment = Alignment.Center,
     ) { group() }
 }
 
