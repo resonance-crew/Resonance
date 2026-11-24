@@ -1,8 +1,8 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import { AvatarGroup, type AvatarGroupMember } from '@/components/atoms/AvatarGroup/AvatarGroup';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { Modal } from '@/components/molecules/Modal/Modal';
@@ -13,6 +13,9 @@ import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { TAP_DIALOG_PADDING, tapRowsKnown, useTapListHold } from './tapList';
 import { TapPeople, TapPeopleSkeleton, type TapOwnRow } from './TapPeople';
 import styles from './TapFaces.module.css';
+
+/** The faces' size on the end row's line. */
+export const TAP_FACE_SIZE = 28;
 
 /** A face as AvatarGroup draws it. */
 export function memberOf(a: AuthorBody): AvatarGroupMember {
@@ -96,8 +99,24 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving, onOwnRow }:
   const faces = tap.faces;
   // At most three drawn and nothing after them (round 29 §S5); `more` is still spoken (the list stays whole: lib/data/taps).
   const shown = shownFaces(tap);
+  const prefetch = useReaderListAhead(cardId, viewerId, tap);
+  const [button, setButton] = useState<HTMLButtonElement | null>(null);
+  const bindButton = useCallback((el: HTMLButtonElement | null) => {
+    buttonRef.current = el;
+    setButton(el);
+  }, []);
+  // Round 34 §8: the list is asked for once the faces come into view (and again whenever the tap they draw changes),
+  // so its answer is here when they are pressed and the dialog opens whole inside the hold — rows, names and quotes.
+  useEffect(() => {
+    if (!button || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) prefetch();
+    }, { rootMargin: '400px 0px' });
+    io.observe(button);
+    return () => io.disconnect();
+  }, [button, prefetch]);
   const group = (
-    <AvatarGroup members={shown.faces.map(memberOf)} size={28} arriving={arriving} leaving={leaving ? memberOf(leaving) : undefined} />
+    <AvatarGroup members={shown.faces.map(memberOf)} size={TAP_FACE_SIZE} arriving={arriving} leaving={leaving ? memberOf(leaving) : undefined} />
   );
   if (!faces.length && !leaving) return null;
   const onlyMine = !shown.more && faces.length === 1 && faces[0].id === viewerId && !onOwnRow;
@@ -122,13 +141,17 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving, onOwnRow }:
   return (
     <span className={styles.anchor}>
       <button
-        ref={buttonRef}
+        ref={bindButton}
         type="button"
         className={styles.faces}
         data-tap-faces=""
         aria-label={label}
         aria-expanded={open}
         aria-haspopup="dialog"
+        // A pointer coming or a key reaching it asks too (no IntersectionObserver, or it came into view too fast).
+        onPointerEnter={prefetch}
+        onPointerDown={prefetch}
+        onFocus={prefetch}
         onClick={() => setOpen(true)}
       >
         {group}
@@ -146,6 +169,30 @@ export function TapFaces({ cardId, tap, viewerId, arriving, leaving, onOwnRow }:
       )}
     </span>
   );
+}
+
+/** The reader's list's key (lib/data/taps reads it again after a pick): the card and the viewer. */
+export const readerListKey = (cardId: string, viewerId: string) => ['taps', cardId, viewerId] as const;
+
+/**
+ * Round 34 §8 (the owner: the reader's list opened on its faces and names, each row's quote a second later): the list
+ * was asked for only as the dialog opened, and an answer slower than the family's 300 ms hold (a phone's first call
+ * to the server is often ~1 s) opened it on stand-ins — a face and a name's line, no quote line — that grew when the
+ * rows came. This asks ahead, into the dialog's own cache key: once per state of the tap the faces draw (who, whether
+ * the viewer's own is on, their pick), so the answer the dialog opens on is never one from before the viewer's tap.
+ */
+function useReaderListAhead(cardId: string, viewerId: string, tap: CardTapBody): () => void {
+  const { mutate } = useSWRConfig();
+  const stamp = `${tap.mine ? 1 : 0}|${tap.passage ?? ''}|${tap.more ? 1 : 0}|${tap.faces.map((f) => f.id).join(',')}`;
+  const asked = useRef<string | null>(null);
+  return useCallback(() => {
+    if (asked.current === stamp) return;
+    asked.current = stamp;
+    mutate(readerListKey(cardId, viewerId), listTaps(cardId), { revalidate: false }).catch(() => {
+      // Not in hand: the dialog asks itself as it opens, as before.
+      if (asked.current === stamp) asked.current = null;
+    });
+  }, [mutate, cardId, viewerId, stamp]);
 }
 
 /**
@@ -176,7 +223,9 @@ function ReaderTapsDialog({
 }) {
   const tHome = useTranslations('home');
   // The first page under the key the page reads again after a pick (lib/data/taps); later pages beside it.
-  const { data } = useSWR(['taps', cardId, viewerId], () => listTaps(cardId), { revalidateOnFocus: false });
+  // An answer already in hand (asked ahead, round 34 §8, for this very state of the tap) is the one it opens on: not
+  // asked again as it opens, which would only draw the same rows twice.
+  const { data } = useSWR(readerListKey(cardId, viewerId), () => listTaps(cardId), { revalidateOnFocus: false, revalidateIfStale: false });
   const [more, setMore] = useState<{ people: TapListBody['people']; next: string | null; loading: boolean } | null>(null);
   const show = useTapListHold(!!data);
   if (!show) return null;

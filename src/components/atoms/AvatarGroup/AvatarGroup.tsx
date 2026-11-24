@@ -17,12 +17,22 @@ export interface AvatarGroupProps {
   /** How many faces to draw: the rest are not drawn at all — no blank disc, no number (round 29 §S5). */
   max?: number;
   size?: number;
-  /** The member whose face slides in first (the viewer, as their tap turns on) — keyed so it slides in again. */
+  /**
+   * The member whose face slides in first (the viewer, as their tap turns on) — keyed so it slides in again. It rises
+   * from `--avatar-rise` below its place (set by the host: down to the top edge of the control it rises out of, the
+   * 共振 segment), cut by that edge, as if out of it (round 34 §9).
+   */
   arriving?: string;
-  /** A member whose face slides out (the viewer, as their tap turns off): drawn once more, leaving. */
+  /** A member whose face slides out (the viewer, as their tap turns off): drawn once more, sinking back the same way. */
   leaving?: AvatarGroupMember;
   className?: string;
 }
+
+/**
+ * How long the viewer's own face takes to rise into the line or sink back out of it (round 34 §9): the house's short
+ * ease. The host keeps a leaving face drawn this long.
+ */
+export const FACE_SLIDE_MS = 180;
 
 /** How far each face steps in over the one before it, as a share of its size. */
 export const AVATAR_STEP = 0.34;
@@ -58,7 +68,9 @@ export function AvatarGroup({ members, max = 3, size = 28, arriving, leaving, cl
           data-leaving={leaving?.id === m.id || undefined}
           data-face={m.id}
         >
-          <HandDrawnAvatar src={m.avatarUrl} initials={m.initials} size={size} color={m.accentColor} seed={seedOf(m, i)} />
+          <span className={styles.face}>
+            <HandDrawnAvatar src={m.avatarUrl} initials={m.initials} size={size} color={m.accentColor} seed={seedOf(m, i)} />
+          </span>
         </span>
       ))}
     </span>

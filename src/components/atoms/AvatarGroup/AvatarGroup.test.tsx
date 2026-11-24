@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@/../test/render';
-import { AvatarGroup, type AvatarGroupMember } from './AvatarGroup';
+import { AvatarGroup, FACE_SLIDE_MS, type AvatarGroupMember } from './AvatarGroup';
 
 function member(id: string): AvatarGroupMember {
   return { id, initials: id.toUpperCase(), accentColor: 'var(--accent)', avatarSeed: '3' };
@@ -64,7 +64,25 @@ describe('AvatarGroup', () => {
     expect(container.querySelector('[data-face="me"]')?.hasAttribute('data-arriving')).toBe(true);
     rerender(<AvatarGroup members={['b'].map(member)} leaving={member('me')} />);
     expect(container.querySelector('[data-face="me"]')?.hasAttribute('data-leaving')).toBe(true);
-    expect(css).toMatch(/animation: faceIn 150ms/);
     expect(css).toMatch(/prefers-reduced-motion: reduce[\s\S]*animation: none/);
+  });
+
+  // Round 34 §9 (the owner: the reader's own face rises out of the 共振 segment, cut by its top edge, and sinks back
+  // into it — not a sideways fade): the face moves inside its place, which cuts it at --avatar-rise (the host's edge).
+  it('raises the arriving face from --avatar-rise below, cut there, and sinks the leaving one back, in the house’s short ease', () => {
+    const { container } = render(<AvatarGroup members={['me', 'b'].map(member)} arriving="me" />);
+    const place = container.querySelector('[data-face="me"]')!;
+    // The face is its place's one child: what moves.
+    expect(place.children).toHaveLength(1);
+    expect(place.firstElementChild!.className).toMatch(/face/);
+    expect(FACE_SLIDE_MS).toBe(180);
+    expect(css).toMatch(/\.item\[data-arriving\],\s*\.item\[data-leaving\] \{[^}]*--rise: var\(--avatar-rise, calc\(var\(--avatar-size\) \+ 8px\)\);[^}]*clip-path: polygon\(-40px -40px, [^;]*, -40px var\(--rise\)\);/);
+    expect(css).toMatch(/\.item\[data-arriving\] > \.face \{\s*animation: faceRise 180ms ease-out;/);
+    expect(css).toMatch(/\.item\[data-leaving\] > \.face \{\s*animation: faceSink 180ms ease-in forwards;/);
+    expect(css).toMatch(/@keyframes faceRise \{\s*from \{\s*transform: translateY\(var\(--rise\)\);/);
+    expect(css).toMatch(/@keyframes faceSink \{\s*to \{\s*transform: translateY\(var\(--rise\)\);/);
+    // No fade and no sideways step any more.
+    expect(css).not.toMatch(/translateX|faceIn|faceOut/);
+    expect(css).toMatch(/prefers-reduced-motion: reduce\) \{[^}]*\.item\[data-arriving\] > \.face,[^}]*animation: none;/);
   });
 });

@@ -16,34 +16,67 @@
   margin-left: 0;
 }
 
-/* The viewer's own face slides in as their tap turns on, and out as it turns off (150 ms). */
+/* The face itself, inside its place: what rises and sinks (the place makes the room and cuts it). */
+.face {
+  display: inline-flex;
+}
+
+/* The viewer's own face rises into the line as their tap turns on and sinks back as it turns off (round 34 §9, the
+   owner: out of the 共振 segment, cut by its top edge — not a sideways fade): its place makes room as before, cut at
+   --avatar-rise below its top (the host's: the segment's top edge; the face's height and 8 when none says), and the
+   face moves between there and its place, so it shows only above that edge. FACE_SLIDE_MS, the house's short ease. */
+.item[data-arriving],
+.item[data-leaving] {
+  --rise: var(--avatar-rise, calc(var(--avatar-size) + 8px));
+  clip-path: polygon(-40px -40px, calc(100% + 40px) -40px, calc(100% + 40px) var(--rise), -40px var(--rise));
+}
+
 .item[data-arriving] {
-  animation: faceIn 150ms ease-out;
+  animation: faceRoomIn 180ms ease-out;
+}
+
+.item[data-arriving] > .face {
+  animation: faceRise 180ms ease-out;
 }
 
 .item[data-leaving] {
-  animation: faceOut 150ms ease-in forwards;
+  animation: faceRoomOut 180ms ease-in forwards;
 }
 
-@keyframes faceIn {
+.item[data-leaving] > .face {
+  animation: faceSink 180ms ease-in forwards;
+}
+
+/* The room it takes in the line: none at the start of a rise, none at the end of a sink. */
+@keyframes faceRoomIn {
   from {
-    opacity: 0;
     margin-right: calc(var(--avatar-step) - var(--avatar-size));
-    transform: translateX(-6px);
   }
 }
 
-@keyframes faceOut {
+@keyframes faceRoomOut {
   to {
-    opacity: 0;
     margin-right: calc(var(--avatar-step) - var(--avatar-size));
-    transform: translateX(-6px);
+  }
+}
+
+@keyframes faceRise {
+  from {
+    transform: translateY(var(--rise));
+  }
+}
+
+@keyframes faceSink {
+  to {
+    transform: translateY(var(--rise));
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .item[data-arriving],
-  .item[data-leaving] {
+  .item[data-leaving],
+  .item[data-arriving] > .face,
+  .item[data-leaving] > .face {
     animation: none;
   }
 

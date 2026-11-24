@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { useLocale, useTranslations } from 'next-intl';
+import { FACE_SLIDE_MS } from '@/components/atoms/AvatarGroup/AvatarGroup';
 import { Icon } from '@/components/atoms/Icon';
 import { SegmentedActionBar, type SegmentSpec } from '@/components/molecules/SegmentedActionBar/SegmentedActionBar';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -15,7 +16,7 @@ import { faceOf, useTapPassage, useTapToggle, type TapFailure } from '@/lib/data
 import { cardShareKey } from '@/lib/share/links';
 import type { StoryScript } from '@/lib/text/script';
 import { NoteInPlace, useNoteInPlace } from './NoteInPlace';
-import { TapFaces } from './TapFaces';
+import { TAP_FACE_SIZE, TapFaces } from './TapFaces';
 import { reducedMotion } from './tapMotion';
 import { useVisualTap } from './visualTap';
 import styles from './CardViewerActions.module.css';
@@ -170,14 +171,21 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
   // 对齐这个共振按钮的中间呢」): the segment's centre, from the faces' line's start, set as `--tap-centre` there.
   const facesLineRef = useRef<HTMLDivElement>(null);
   const [tapCentre, setTapCentre] = useState<number | null>(null);
+  // How far below a face's top the 共振 segment's top edge lies (round 34 §9): the viewer's own face rises out of
+  // the segment from there, cut by that edge (AvatarGroup's --avatar-rise).
+  const [tapRise, setTapRise] = useState<number | null>(null);
   useLayoutEffect(() => {
     const line = facesLineRef.current;
     const segment = firstBar.current?.querySelector<HTMLElement>('[role="group"] > button');
     if (!line || !segment) return;
     const measure = () => {
       const s = segment.getBoundingClientRect();
-      const centre = Math.round((s.left + s.width / 2 - line.getBoundingClientRect().left) * 10) / 10;
+      const l = line.getBoundingClientRect();
+      const centre = Math.round((s.left + s.width / 2 - l.left) * 10) / 10;
       setTapCentre(Number.isFinite(centre) && s.width > 0 ? centre : null);
+      // The faces stand centred in their line: a face's top is half a face over the line's middle.
+      const rise = Math.round((s.top - (l.top + l.height / 2) + TAP_FACE_SIZE / 2) * 10) / 10;
+      setTapRise(Number.isFinite(rise) && s.height > 0 && rise > 0 ? rise : null);
     };
     measure();
     if (typeof ResizeObserver === 'undefined') return;
@@ -202,7 +210,7 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
     } else {
       setArriving(undefined);
       setLeaving(face);
-      leaveTimer.current = window.setTimeout(() => setLeaving(undefined), 160);
+      leaveTimer.current = window.setTimeout(() => setLeaving(undefined), FACE_SLIDE_MS + 10);
     }
     window.clearTimeout(passagesTimer.current);
     // On, over a card with passages and its own words on screen: which part, a moment after the press (§U1.1).
@@ -317,7 +325,14 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
               className={styles.faces}
               data-end-faces=""
               data-tap-centred={tapCentre != null ? '' : undefined}
-              style={tapCentre != null ? ({ '--tap-centre': `${tapCentre}px` } as CSSProperties) : undefined}
+              style={
+                tapCentre != null || tapRise != null
+                  ? ({
+                      ...(tapCentre != null ? { '--tap-centre': `${tapCentre}px` } : null),
+                      ...(tapRise != null ? { '--avatar-rise': `${tapRise}px` } : null),
+                    } as CSSProperties)
+                  : undefined
+              }
             >
               {faces}
             </span>
