@@ -15,14 +15,21 @@ struct TapFaces: View {
 
     /// Row 2 under the capsule: always this tall, faces or none, so a face coming in never moves the page.
     static let rowHeight: CGFloat = 44
-    /// The reader's own face sliding in or out (none under Reduce Motion).
+    /// The reader's own face sliding in or out (none under Reduce Motion): the house's short ease.
     static let slide = Animation.easeOut(duration: 0.15)
+    /// Round 34 §9 (the owner: the face rises out of the 共振 segment instead of flipping in): a face comes up from under
+    /// the faces' line — the capsule's top edge, which cuts it (``EndRowTwo``) — and goes back down into it. The
+    /// distance: from the face's top in the 44 line (centred) to the line's foot, so it starts wholly inside the segment.
+    static func rise(size: CGFloat = FaceStack.size) -> CGFloat { rowHeight - (rowHeight - size) / 2 }
+    static var riseTransition: AnyTransition {
+        .asymmetric(insertion: .offset(y: rise()), removal: .offset(y: rise()))
+    }
     /// The button's pad at each side of the faces, the web's 6 (TapFaces.module.css `.faces`): after row 2's line
     /// (``RowTwo/facesLine``), the first face's rim stands ``RowTwo/faceInset`` in.
     static let buttonPad: CGFloat = RowTwo.faceInset - RowTwo.facesLine
 
     var body: some View {
-        let stack = FaceStack(faces: faces.map(Self.face))
+        let stack = FaceStack(faces: faces.map(Self.face), transition: Self.riseTransition)
             .padding(.horizontal, Self.buttonPad)
             // A finger's 44 at the least, the faces at its start (the web's `min-width: 44px`).
             .frame(minWidth: Self.rowHeight, minHeight: Self.rowHeight, alignment: .leading)

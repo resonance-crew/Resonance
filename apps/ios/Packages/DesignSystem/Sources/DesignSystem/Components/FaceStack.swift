@@ -28,6 +28,9 @@ public struct FaceStack: View {
 
     let faces: [Face]
     var size: CGFloat
+    /// How a face comes and goes (the caller animates the change): by default it slides in from the start, over the
+    /// one after it; the card page's reader rises out of the 共振 segment instead (round 34 §9).
+    var transition: AnyTransition
 
     /// At most this many faces, and nothing after them.
     public static let maxFaces = 3
@@ -36,9 +39,11 @@ public struct FaceStack: View {
     /// The faces' size on the card page (the apps' 28; the Mac's 77 % makes it 21.6).
     public static let size: CGFloat = 28
 
-    public init(faces: [Face], size: CGFloat = FaceStack.size) {
+    public init(faces: [Face], size: CGFloat = FaceStack.size, transition: AnyTransition? = nil) {
         self.faces = Array(faces.prefix(Self.maxFaces))
         self.size = size
+        self.transition = transition ?? .asymmetric(insertion: .offset(x: -Self.step(size)).combined(with: .opacity),
+                                                    removal: .offset(x: -Self.step(size)).combined(with: .opacity))
     }
 
     /// From one face's start to the next one's.
@@ -57,8 +62,7 @@ public struct FaceStack: View {
                 HandDrawnAvatar(initials: face.initials, imageURL: face.imageURL, color: face.color, size: size, seed: face.seed)
                     // The first on top, each next one under it.
                     .zIndex(Double(faces.count - i))
-                    .transition(.asymmetric(insertion: .offset(x: -Self.step(size)).combined(with: .opacity),
-                                            removal: .offset(x: -Self.step(size)).combined(with: .opacity)))
+                    .transition(transition)
             }
         }
         .accessibilityHidden(true)

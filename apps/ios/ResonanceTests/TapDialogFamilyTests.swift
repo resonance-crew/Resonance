@@ -313,4 +313,21 @@ import Testing
         #expect(first.height > bare.height, "\(first.height) vs \(bare.height)")
     }
 
+    // MARK: Round 34 §9 — the reader's face rises out of 共振
+
+    /// On turning 共振 on, the reader's face comes up out of the segment (cut by its top edge — the faces' line's foot)
+    /// and goes back down into it on turning it off, in the house's short ease; nothing under Reduce Motion.
+    @Test func theReadersFaceRisesOutOfTheSegment() throws {
+        #expect(TapFaces.rise() == 36)
+        #expect(TapFaces.rise() >= TapFaces.rowHeight - (TapFaces.rowHeight - FaceStack.size) / 2)
+        let faces = try source("TapFaces.swift"), row = try source("CardEndRow.swift")
+        #expect(faces.contains("FaceStack(faces: faces.map(Self.face), transition: Self.riseTransition)"))
+        #expect(faces.contains(".asymmetric(insertion: .offset(y: rise()), removal: .offset(y: rise()))"))
+        // Cut at the line's foot only.
+        #expect(row.contains(".padding(.top, -TapFaces.rowHeight)"))
+        #expect(row.contains("withAnimation(reduceMotion ? nil : TapFaces.slide) { tap.flip(viewer: viewer) }"))
+        // The line keeps its 44 whatever comes and goes.
+        let empty = dialogSize(EndRowTwo(facesCentre: 100, faceCount: 0) { EmptyView() }, width: 400)
+        #expect(empty.height == TapFaces.rowHeight)
+    }
 }

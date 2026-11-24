@@ -630,6 +630,13 @@ struct EndRowTwo<Faces: View>: View {
         Color.clear
             .frame(maxWidth: .infinity, minHeight: TapFaces.rowHeight, maxHeight: TapFaces.rowHeight)
             .overlay(alignment: .leading) { faces.padding(.leading, RowTwo.facesLead(centre: facesCentre, count: faceCount)) }
+            // Cut at the line's foot — the capsule's top edge (round 34 §9): a face rising in comes up out of the 共振
+            // segment, one going goes back down into it. Nothing is cut above or beside the line.
+            .mask {
+                Rectangle()
+                    .padding(.top, -TapFaces.rowHeight)
+                    .padding(.horizontal, -TapFaces.rowHeight)
+            }
     }
 }
 
