@@ -216,23 +216,6 @@ export function OrganicImage({
           land on image pixels rather than on empty space. */}
       <div style={{ position: 'absolute', inset: clip ? -bleed : 0 }}>
         {shimmering && <Skeleton radius={0} height="100%" style={{ position: 'absolute', inset: 0 }} />}
-        {picture && framed && clip && !shimmering && (
-          // Under the exact crop (round 33 §Q4, the lead): the same picture filling the box and its bleed the old way,
-          // so where the crop meets the picture's own edge the wobble's outward swing shows that edge, never the
-          // card's paper. Inside the box the crop on top covers it; laid only once the picture has landed (a reveal's
-          // blur never shows the other cut through it).
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={src}
-            // the same candidate the picture on top chose (a list's smaller copy): one download, not two
-            {...(thumbSrc && thumbSrc !== src && retryOf !== src ? { srcSet: `${thumbSrc} ${THUMB_W}w, ${src} ${COVER_W}w`, sizes } : null)}
-            alt=""
-            aria-hidden
-            data-cover-underlay=""
-            decoding="async"
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        )}
         {picture && framed ? (
           // A framed cover's percentages are of the ratio box itself (coverImageBox), not of this bled wrapper —
           // W + 2b by H + 2b would draw it out of shape and off its crop — so it sits in the box, back in by `bleed`.

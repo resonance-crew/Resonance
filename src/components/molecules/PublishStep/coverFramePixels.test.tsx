@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
 import { renderWithIntl, screen } from '@/../test/render';
 import zhMessages from '@/messages/zh-TW.json';
 import { OrganicImage } from '@/components/atoms/OrganicImage/OrganicImage';
 import { SharedCardContent } from '@/components/molecules/SharedCard/SharedCard';
 import type { StagePicture } from '@/components/molecules/CropStage/CropStage';
 import type { Card } from '@/lib/db/types';
-import { coverCrop, coverImageBox, type CoverFrame } from '@/lib/images/coverFrame';
+import { coverCrop, type CoverFrame } from '@/lib/images/coverFrame';
 import { coverFrameOfView } from '@/lib/images/cropFrame';
 import { COVER_FRAME_RATIO, CoverFrameModal } from './CoverFrameModal';
 
@@ -191,41 +191,5 @@ describe('a card shared in a thread cuts its frame for the box that is seen (rou
     const pct = (v: string) => Number.parseFloat(v) / 100;
     const aspect = (pct(img.style.width) * W) / (pct(img.style.height) * H);
     expect(Math.abs(aspect / 1.5 - 1)).toBeLessThan(0.001);
-  });
-});
-
-// The lead's follow-up (round 33 §Q4): where the exact crop meets the picture's own edge, the wobble's outward swing
-// into the bleed showed the card's paper. Under the crop the same picture fills the box and its bleed the old way.
-describe('a framed cover’s bleed', () => {
-  it('lays the picture, covering the bled box, under the exact crop — the crop itself unchanged', async () => {
-    const W = 360;
-    const H = Math.round(W * COVER_FRAME_RATIO);
-    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(W);
-    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(H);
-    const frame = { cx: 0, cy: 0.5, zoom: 1, ar: 1.5 };
-    const src = 'https://img.example.com/image/edge.avif';
-    const { container } = render(<OrganicImage src={src} ratio={COVER_FRAME_RATIO} frame={frame} />);
-    const top = container.querySelector<HTMLImageElement>('img[data-frame]')!;
-    // Not before the picture has landed (its shimmer, a reveal's blur).
-    expect(container.querySelector('[data-cover-underlay]')).toBeNull();
-    act(() => {
-      fireEvent.load(top);
-    });
-    await waitFor(() => expect(container.querySelector('img[data-cover-underlay]')).not.toBeNull());
-    const under = container.querySelector<HTMLImageElement>('img[data-cover-underlay]')!;
-    expect(under.getAttribute('src')).toBe(src);
-    expect(under).toHaveAttribute('aria-hidden');
-    // Covering the bled wrapper (the box and its bleed), under the crop's box.
-    const bled = container.firstElementChild!.firstElementChild as HTMLElement;
-    expect(Number.parseFloat(bled.style.inset)).toBeLessThan(0);
-    expect(under.parentElement).toBe(bled);
-    expect(under.style.objectFit).toBe('cover');
-    expect([under.style.width, under.style.height, under.style.inset]).toEqual(['100%', '100%', '0px']);
-    const box = container.querySelector('[data-frame-box]')!;
-    expect(under.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // The crop on top: the frame's, for the seen box, exactly as before.
-    const live = container.querySelector<HTMLImageElement>('img[data-frame]')!;
-    const want = coverImageBox(frame, COVER_FRAME_RATIO)!;
-    expect([live.style.left, live.style.top, live.style.width, live.style.height]).toEqual([want.left, want.top, want.width, want.height]);
   });
 });
