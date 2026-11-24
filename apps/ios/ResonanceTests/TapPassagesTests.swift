@@ -303,8 +303,8 @@ import Testing
         var slotWouldWrapMore = false
         for row in [CGFloat(400) + 2 * ModalPaper.bleed, 480 + 2 * ModalPaper.bleed, 360] {
             for text in texts {
-                let words = TapPassageWords(text: text, family: story.bodyFamily, leading: story.bodyLeading,
-                                            size: TapPassageRules.textSize, reach: reach)
+                let words = TapPassageWords(text: text, font: TapListMetrics.storyFont(story.bodyFamily, size: TapPassageRules.textSize),
+                                            leading: story.bodyLeading, reach: reach)
                 let alone = { (w: CGFloat) in
                     dialogSize(CSSText(text, font: TapListMetrics.storyFont(story.bodyFamily, size: TapPassageRules.textSize),
                                        lineHeight: story.bodyLeading, color: Tokens.UI.text)

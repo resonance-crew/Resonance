@@ -83,8 +83,9 @@ struct TapPassages: View {
         return Button { onChoose(TapPassageRules.choice(pressing: passage.id, current: picked)) } label: {
             // Round 35 §2: the words alone, the row's whole width between the insets — a pick changes only the ink, so
             // they never rewrap.
-            TapPassageWords(text: passage.text, family: story.bodyFamily, leading: story.bodyLeading,
-                            size: TapPassageRules.textSize(wide: TapListMetrics.wide(window)), reach: reach)
+            TapPassageWords(text: passage.text,
+                            font: TapListMetrics.storyFont(story.bodyFamily, size: TapPassageRules.textSize(wide: TapListMetrics.wide(window))),
+                            leading: story.bodyLeading, reach: reach)
                 // Pressed on the paper only: what reaches past its frame is clipped from sight, and is the backdrop's.
                 .contentShape(SidesIn(by: TapPassageRules.overhang(reach: reach, inset: inset)))
         }
@@ -101,13 +102,12 @@ struct TapPassages: View {
 /// band's ``ListBands/rowPad`` above and below — nothing beside them.
 struct TapPassageWords: View {
     let text: String
-    let family: AppFonts.Family
+    let font: UIFont
     let leading: CGFloat
-    let size: CGFloat
     let reach: CGFloat
 
     var body: some View {
-        CSSText(text, font: TapListMetrics.storyFont(family, size: size), lineHeight: leading, color: Tokens.UI.text)
+        CSSText(text, font: font, lineHeight: leading, color: Tokens.UI.text)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, reach)
