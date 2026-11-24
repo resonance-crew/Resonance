@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -177,6 +178,35 @@ class CoverFramePixelTest {
             }
         }
         println("CoverFramePixelTest\n$report(worst ${"%.2f".format(worst)} px)")
+    }
+
+    // The lead (round 33 §Q4): where the exact crop reaches the picture's edge, the wobble's outward swing past the box
+    // ends at the picture's edge, on the card's paper — never the placeholder (the card's stripes) under a loaded picture.
+    @Test fun theBleedPastTheBoxIsPictureNeverThePlaceholder() {
+        val blue = Color(0xFF0000FF)
+        val framing: MutableState<CoverFraming?> = mutableStateOf(null)
+        compose.setContent {
+            Box(Modifier.testTag("stage").background(Color(0xFF888888)).padding(24.dp)) {
+                OrganicImage(wide, 5.0, Modifier.size(boxW.dp, boxH.dp).testTag("cover"), frame = framing.value) {
+                    Box(Modifier.fillMaxSize().background(blue))
+                }
+            }
+        }
+        val stage = FrameCrop(1536.0, 1024.0, boxW.toDouble(), boxH.toDouble(), CoverFraming.MAX_ZOOM)
+        // Unframed, and framed at zoom 1 against the top: the crop spans the picture's whole width, so its sides end at
+        // the box's — the bleed on both sides has only the underlay to show.
+        for (frame in listOf(null, stage.framing(stage.pan(CropState(), 0.0, 40.0)))) {
+            compose.runOnIdle { framing.value = frame }
+            compose.waitUntil(5_000) { !colour(boxW / 2, boxH / 2).isGrey() }
+            compose.waitForIdle()
+            val image = compose.onNodeWithTag("stage").captureToImage().toPixelMap()
+            var bare = 0
+            for (y in 0 until image.height) for (x in 0 until image.width) {
+                val c = image[x, y]
+                if (c.blue > 0.5f && c.red < 0.3f && c.green < 0.3f) bare++
+            }
+            assertTrue("$frame: $bare placeholder pixels in the bleed", bare == 0)
+        }
     }
 
     private fun colour(xDp: Float, yDp: Float): Color {

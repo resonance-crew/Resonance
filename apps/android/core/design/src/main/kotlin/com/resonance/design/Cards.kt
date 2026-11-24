@@ -122,8 +122,8 @@ internal fun imageBleed(w: Float, h: Float, magFactor: Double): Dp = ceil(min(w,
  * picture itself (StoryCard's covers carry StoryGrain.Cover).
  *
  * While the picture is on its way its place shimmers ([SkeletonCover]); the
- * placeholder (a story card's stripes: "no picture") is for no address, a
- * picture that couldn't be loaded, and under one that has.
+ * placeholder (a story card's stripes: "no picture") is for no address and a
+ * picture that couldn't be loaded — never under one that has (round 33 §Q4).
  */
 @Composable
 fun OrganicImage(
@@ -159,9 +159,13 @@ fun OrganicImage(
               CompositionLocalProvider(LocalCoverInset provides inset) {
                 var shown by remember(url, fallbackUrl) { mutableStateOf(url ?: fallbackUrl) }
                 var loading by remember(url, fallbackUrl) { mutableStateOf(shown != null) }
+                var failed by remember(url, fallbackUrl) { mutableStateOf(false) }
                 // The shimmer stays under a picture coming in until it is sharp (Wave 2 #7).
                 val reveal = rememberImageRevealState()
-                if (loading || reveal.revealing) SkeletonCover() else placeholder()
+                // Under a picture that has landed, nothing (round 33 §Q4, the lead): the crop is exact for the box seen,
+                // and where it meets the picture's edge the wobble's outward swing ends there, on the card's paper —
+                // never the stripes. The placeholder is for no picture, or one that couldn't be loaded.
+                if (loading || reveal.revealing) SkeletonCover() else if (shown == null || failed) placeholder()
                 val picture = shown
                 if (picture != null) RevealImage(
                     model = picture, contentDescription = contentDescription, modifier = Modifier.fillMaxSize(),
@@ -172,6 +176,7 @@ fun OrganicImage(
                         if (fallbackUrl != null && picture != fallbackUrl) shown = fallbackUrl
                         else {
                             loading = false
+                            failed = true
                             onError?.invoke()
                         }
                     },
