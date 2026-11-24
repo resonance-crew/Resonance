@@ -376,7 +376,9 @@ fun CardViewerActions(
             offersPassages = offers,
             // The faces over the capsule: the rows while the first page is read past the wait (round 33 §Q1).
             expected = faces.shown,
-            pagePick = PagePick(faces.passages.firstOrNull { it.id == (pickShown ?: currentPick) }?.text),
+            // In translation, the pick in the translation's words (round 35), as the dialog offered it; else as written.
+            pagePick = (pickShown ?: currentPick).let { id -> PagePick((offered.firstOrNull { it.id == id } ?: faces.passages.firstOrNull { it.id == id })?.text) },
+            words = quoteWords(faces.passages, offered),
             // The reader's own row: the dialog again, the current pick marked (§U3); the tap is on, nothing to wait for.
             onOwnRow = {
                 tapJob = null

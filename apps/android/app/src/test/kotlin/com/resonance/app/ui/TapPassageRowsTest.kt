@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import com.resonance.api.models.Author
 import com.resonance.api.models.TapList
 import com.resonance.api.models.TapNote
+import com.resonance.api.models.TapPassage
 import com.resonance.api.models.TapPassageQuote
 import com.resonance.api.models.TapPerson
 import com.resonance.design.AppFonts
@@ -126,6 +127,24 @@ class TapPassageRowsTest {
             TapRowLines.NONE,
             tapRowLines(hana, anonymous = false, author = true, viewerId = "hana", offersPassages = true, pagePick = PagePick("第二段")),
         )
+    }
+
+    // Round 35 (the owner: 「我 resonant 的这一句话变回了中文，而不是翻译的英文。如果我已经翻译成英文，是不是应该这边就都一直
+    // 显示英文呢？」): in translation every row quotes its pick in the translation's words, found by the author's own.
+    @Test fun inTranslationEveryRowQuotesThePickInTheTranslationsWords() {
+        val original = listOf(TapPassage("p1", "原來一個人的早晨，也可以不急。"), TapPassage("p2", "咖啡涼了也沒關係。"))
+        val shown = listOf(TapPassage("p1", "A morning alone need not be rushed."), TapPassage("p2", "It's fine if the coffee goes cold."))
+        val words = quoteWords(original, shown)
+        assertEquals(mapOf(original[0].text to shown[0].text, original[1].text to shown[1].text), words)
+        // As written (the page's passages are the card's own): nothing to map.
+        assertEquals(emptyMap<String, String>(), quoteWords(original, original))
+        // Someone else's row, and the reader's own whose pick the page holds in the translation's words.
+        assertEquals(TapRowLines(quote = shown[0].text), tapRowLines(gus, anonymous = true, author = false, viewerId = "hana", offersPassages = true, words = words))
+        assertEquals(TapRowLines(quote = shown[1].text), tapRowLines(carol, anonymous = true, author = false, viewerId = "carol", offersPassages = false, words = words))
+        assertEquals(TapRowLines(quote = shown[1].text), tapRowLines(hana, anonymous = true, author = false, viewerId = "hana", offersPassages = true, pagePick = PagePick(shown[1].text), words = words))
+        // A pick the translation doesn't say keeps the words it was picked in.
+        val old = person("eli", quote = "有些東西在打包的時候就決定留下了。")
+        assertEquals(TapRowLines(quote = old.passage!!.text), tapRowLines(old, anonymous = true, author = false, viewerId = "hana", offersPassages = true, words = words))
     }
 
     @Test fun aReadersListShowsEveryonesPickNeverANote() {

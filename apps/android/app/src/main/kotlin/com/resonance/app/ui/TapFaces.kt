@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.resonance.api.models.Author
 import com.resonance.api.models.TapList
+import com.resonance.api.models.TapPassage
 import com.resonance.api.models.TapPerson
 import com.resonance.app.Session
 import com.resonance.design.AppFonts
@@ -210,8 +211,10 @@ internal fun tapRowLines(
     viewerId: String?,
     offersPassages: Boolean,
     pagePick: PagePick? = null,
+    /** In translation, each pick's words as the translation says them, keyed by the author's own ([quoteWords], round 35). */
+    words: Map<String, String> = emptyMap(),
 ): TapRowLines {
-    val listed = person.passage?.text?.takeIf { it.isNotBlank() }
+    val listed = person.passage?.text?.takeIf { it.isNotBlank() }?.let { words[it] ?: it }
     if (author) return listed?.let { TapRowLines(quote = it) } ?: TapRowLines.NONE
     if (viewerId == null || person.author.id != viewerId) return listed?.let { TapRowLines(quote = it) } ?: TapRowLines.NONE
     // On a card offering passages the page knows the reader's pick before the list does (the list may have been read
@@ -222,6 +225,17 @@ internal fun tapRowLines(
 
 /** The reader's pick as the card page holds it now (its words, or null for none): what their own row says (§U3). */
 internal data class PagePick(val text: String?)
+
+/**
+ * A pick's words as the page shows them, keyed by the author's own (round 35, the owner: 「我点击自己的头像，看有谁
+ * resonant……我 resonant 的这一句话变回了中文，而不是翻译的英文。如果我已经翻译成英文，是不是应该这边就都一直显示英文呢？」):
+ * the list answers each pick in the author's words (no id), so a row finds the translation's by those words among the
+ * card's [passages] and the ones the page [shown] (the translation's, by id). Empty as written: rows quote as kept.
+ */
+internal fun quoteWords(passages: List<TapPassage>, shown: List<TapPassage>): Map<String, String> {
+    val byId = shown.associate { it.id to it.text }
+    return passages.mapNotNull { p -> byId[p.id]?.takeIf { it != p.text }?.let { p.text to it } }.toMap()
+}
 
 /** The author's list shows 顯示更多 while there is a next page and it isn't being read. */
 internal fun showsMore(list: TapPeople): Boolean = list.next != null && !list.loading
@@ -246,13 +260,15 @@ internal fun ReaderTapList(
     expected: List<Author> = emptyList(),
     /** The page's list, its first page read while the faces stand (round 34 (8)); none: read from the press. */
     list: TapPeople? = null,
+    /** In translation, each pick's words as the translation says them ([quoteWords], round 35). */
+    words: Map<String, String> = emptyMap(),
 ) {
     val own = remember(cardId) { TapPeople { token -> session.taps.taps(cardId, token) } }
     val list = list ?: own
     // Round 33 §Q1: drawn once its first page has answered, or after the family's wait with the faces as its rows.
     if (!rememberFirstPageReady(list)) return
     val viewerId = session.uid
-    ReaderTapDialog(list, onDismiss, lines = { tapRowLines(it, anonymous = true, author = false, viewerId, offersPassages, pagePick) }, expected = expected) { p ->
+    ReaderTapDialog(list, onDismiss, lines = { tapRowLines(it, anonymous = true, author = false, viewerId, offersPassages, pagePick, words) }, expected = expected) { p ->
         onDismiss()
         if (readerRowPicks(p, viewerId, offersPassages)) onOwnRow() else open(Route.Author(p.author.handle))
     }
