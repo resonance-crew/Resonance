@@ -66,6 +66,12 @@ nonisolated enum TapDialog {
     /// line's), never none and never a default.
     static func loadingRows(knownFaces: Int) -> Int { max(1, min(knownFaces, FaceStack.maxFaces)) }
 
+    /// What a list read ahead stands for (round 34 §8): the card and the tap as the page shows it — the reader's own
+    /// on/off and pick, the faces drawn and whether there are more. A read ahead serves a press while this is unchanged.
+    static func listKey(card: String, on: Bool, passage: String?, faces: [String], more: Bool) -> String {
+        [card, on ? "on" : "off", passage ?? "-", faces.joined(separator: ","), more ? "more" : ""].joined(separator: "|")
+    }
+
     /// Starts reading `people` and returns once its first page has come or ``firstPageWait`` has passed, whichever is
     /// first; the read carries on either way (the dialog then shows it).
     @MainActor static func prepare(_ people: TapPeople) async {
