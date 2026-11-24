@@ -11,10 +11,6 @@ import { useRevealRef } from '@/components/atoms/RevealImg/RevealImg';
 /** How long a picture that failed waits before its one more try. */
 export const IMAGE_RETRY_MS = 3000;
 
-/** The blur of the picture laid under a cover's exact crop (round 33 §Q4), and how far it is laid past the bled box. */
-export const UNDERLAY_BLUR = 12;
-const UNDERLAY_SPREAD = 24;
-
 /** A cover's longer edge (the upload's) and its list copy's, as the `srcSet` names them. */
 const COVER_W = 2048;
 const THUMB_W = 960;
@@ -134,14 +130,6 @@ export function OrganicImage({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per src, as the element mounts
   }, [src]);
   const shimmering = !!src && settled !== src;
-  // The copy the picture landed with (round 33 §Q4's underlay): its currentSrc, read once it has settled.
-  const [under, setUnder] = useState<{ src: string; url: string } | null>(null);
-  useEffect(() => {
-    if (!src || settled !== src) return;
-    const url = imgRef.current?.currentSrc || src;
-    setUnder((now) => (now?.src === src && now.url === url ? now : { src, url }));
-  }, [settled, src]);
-  const underUrl = !shimmering && under && under.src === src ? under.url : null;
   // A picture that lands after its box is on screen comes in blur-to-sharp (lib/images/reveal); its shimmer stays
   // under it until it is sharp, and only then the grain is laid on. One the browser already had settles above.
   const settleTimer = useRef<number | undefined>(undefined);
@@ -228,25 +216,21 @@ export function OrganicImage({
           land on image pixels rather than on empty space. */}
       <div style={{ position: 'absolute', inset: clip ? -bleed : 0 }}>
         {shimmering && <Skeleton radius={0} height="100%" style={{ position: 'absolute', inset: 0 }} />}
-        {picture && framed && clip && underUrl && (
+        {picture && framed && clip && !shimmering && (
           // Under the exact crop (round 33 §Q4, the lead): the same picture filling the box and its bleed the old way,
           // so where the crop meets the picture's own edge the wobble's outward swing shows that edge, never the
-          // card's paper. Inside the box the crop on top covers it. Blurred: it shows only in that thin swing, where a
-          // sharp copy cut ≈1.1× larger stepped against the crop beside it — a blur of the picture's own colours has
-          // nothing to misalign. A layer, not a picture: the copy the picture on top already loaded (its currentSrc,
-          // the list's smaller one when it chose that), laid only once that has landed, 24 past the bled box all round
-          // so the blur's soft rim falls outside the clip.
-          <div
+          // card's paper. Inside the box the crop on top covers it; laid only once the picture has landed (a reveal's
+          // blur never shows the other cut through it).
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={src}
+            // the same candidate the picture on top chose (a list's smaller copy): one download, not two
+            {...(thumbSrc && thumbSrc !== src && retryOf !== src ? { srcSet: `${thumbSrc} ${THUMB_W}w, ${src} ${COVER_W}w`, sizes } : null)}
+            alt=""
             aria-hidden
             data-cover-underlay=""
-            style={{
-              position: 'absolute',
-              inset: -UNDERLAY_SPREAD,
-              backgroundImage: `url("${underUrl.replace(/"/g, '%22')}")`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              filter: `blur(${UNDERLAY_BLUR}px)`,
-            }}
+            decoding="async"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
           />
         )}
         {picture && framed ? (

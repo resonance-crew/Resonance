@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { renderWithIntl, screen } from '@/../test/render';
 import zhMessages from '@/messages/zh-TW.json';
-import { OrganicImage, UNDERLAY_BLUR } from '@/components/atoms/OrganicImage/OrganicImage';
+import { OrganicImage } from '@/components/atoms/OrganicImage/OrganicImage';
 import { SharedCardContent } from '@/components/molecules/SharedCard/SharedCard';
 import type { StagePicture } from '@/components/molecules/CropStage/CropStage';
 import type { Card } from '@/lib/db/types';
@@ -211,21 +211,16 @@ describe('a framed cover’s bleed', () => {
     act(() => {
       fireEvent.load(top);
     });
-    await waitFor(() => expect(container.querySelector('[data-cover-underlay]')).not.toBeNull());
-    const under = container.querySelector<HTMLElement>('[data-cover-underlay]')!;
-    // The copy the picture on top landed with, as a layer (no second picture to reveal or announce).
-    expect(under.tagName).toBe('DIV');
-    expect(under.style.backgroundImage).toContain(src);
+    await waitFor(() => expect(container.querySelector('img[data-cover-underlay]')).not.toBeNull());
+    const under = container.querySelector<HTMLImageElement>('img[data-cover-underlay]')!;
+    expect(under.getAttribute('src')).toBe(src);
     expect(under).toHaveAttribute('aria-hidden');
-    // Covering the bled wrapper (the box and its bleed) and 24 past it all round, so the blur's soft rim falls
-    // outside the clip; blurred, so nothing sharp steps against the crop beside it (the lead, after the seam).
+    // Covering the bled wrapper (the box and its bleed), under the crop's box.
     const bled = container.firstElementChild!.firstElementChild as HTMLElement;
     expect(Number.parseFloat(bled.style.inset)).toBeLessThan(0);
     expect(under.parentElement).toBe(bled);
-    expect([under.style.backgroundSize, under.style.backgroundPosition, under.style.inset]).toEqual(['cover', 'center center', '-24px']);
-    expect(under.style.filter).toBe(`blur(${UNDERLAY_BLUR}px)`);
-    // The outer box's clip (the wobble) cuts it: nothing spills past the cover.
-    expect((container.firstElementChild as HTMLElement).style.clipPath).toMatch(/^path\(/);
+    expect(under.style.objectFit).toBe('cover');
+    expect([under.style.width, under.style.height, under.style.inset]).toEqual(['100%', '100%', '0px']);
     const box = container.querySelector('[data-frame-box]')!;
     expect(under.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // The crop on top: the frame's, for the seen box, exactly as before.
