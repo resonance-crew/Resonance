@@ -127,7 +127,7 @@ function PickedList({ head, list, rows, onPick }: { head: ReactNode; list: Retur
   return (
     <DialogScroll>
       {head}
-      <TapPeople people={people} onPick={onPick} quotes={false} />
+      <TapPeople people={people} onPick={onPick} quotes={false} endKey={next ? 'picked:more' : undefined} />
       {next && (
         <div className={styles.more}>
           <OrganicButton variant="tonal" size="sm" loading={loadingMore} onClick={() => void setSize(size + 1)}>

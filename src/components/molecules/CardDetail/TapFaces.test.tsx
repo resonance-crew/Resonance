@@ -88,7 +88,7 @@ describe('TapFaces', () => {
   it.each([
     ['a phone', true, 'min(400px, calc(100vw - 32px))'],
     ['a wide screen', false, '480px'],
-  ])('opens a centred dialog with no title on %s: rows of face and name, each to their page, 關閉 at its foot', async (_, onPhone, width) => {
+  ])('opens a centred dialog with no title on %s: banded rows of face and name, each to their page, 關閉 at its foot', async (_, onPhone, width) => {
     phone(onPhone);
     listTaps.mockResolvedValueOnce({ people: [person('dora'), person('eli')], nextPageToken: null });
     renderFaces({ mine: false, faces: [face('dora'), face('eli')], more: false, mayNote: true });
@@ -107,8 +107,8 @@ describe('TapFaces', () => {
     expect(rows.map((r) => r.textContent)).toEqual(['DOdora', 'ELeli']);
     expect(rows.map((r) => r.getAttribute('href'))).toEqual(['/u/dora', '/u/eli']);
     expect(listTaps).toHaveBeenCalledWith('c1');
-    // Round 34 §11: no ink band on a row (no wash under a pointer, a press or a hold).
-    expect(dialog.querySelectorAll('[data-band]')).toHaveLength(0);
+    // Each row its band, edge to edge (round 34 §11 keeps the people rows' ink: only the faces over 共振 have none).
+    expect(dialog.querySelectorAll('[data-band]')).toHaveLength(2);
     // Each row's face 36, whatever the screen (the popover's 28 went with it).
     for (const row of rows) expect(row.querySelector('svg')?.getAttribute('width')).toBe('36');
     await user().click(within(dialog).getByRole('button', { name: 'Close' }));
