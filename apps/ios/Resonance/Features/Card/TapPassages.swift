@@ -5,8 +5,8 @@ import SwiftUI
 /// After 共振, which part stayed with the reader (round 27 §U1; the owner: 「在点击共振之后呢，还可以出现一个可能一个 pop
 /// ups，然后里面可以让使用者去选择…他文章里面哪一个部分有共鸣」): a centred dialog (``View/organicModal``, never a sheet) —
 /// the title 「悄悄告訴作者，哪一段讓你有共鳴」, the card's passages (the author's own sentences, word for word) as banded
-/// rows in the story's type, wrapped in full, then 略過 floating at the foot's end (round 33 §Q3: the family's tonal small
-/// pill over the region's bottom fade, ``View/floatingExit(_:id:action:)``). A press on a row holds its ink and a check,
+/// rows in the story's type, wrapped in full, then 略過 at the foot's end (round 34: the family's tonal small pill,
+/// ``View/dialogExit(_:id:action:)`` — under passages that fit, floating over passages that scroll). A press on a row holds its ink and a check,
 /// and the dialog closes 300 ms later; the picked row, reopened, rests in that ink and a press on it clears the pick.
 /// Only the author learns it. The web's `TapPassages.tsx`, Android's `TapPassages.kt`.
 struct TapPassages: View {
@@ -24,8 +24,6 @@ struct TapPassages: View {
     @Environment(\.modalRoom) private var room
     /// The paper's inset (the family's 24, round 33 §Q2).
     @Environment(\.modalPaperInset) private var inset
-    /// The floating 略過's room under the last row (round 33 §Q3).
-    @Environment(\.dialogExitRoom) private var exitRoom
     @AccessibilityFocusState private var focused: String?
 
     var body: some View {
@@ -34,46 +32,45 @@ struct TapPassages: View {
         let reach = TapPassageRules.reach(clipped: paperClips, inset: inset)
         let shown = Array(passages.prefix(TapPassageRules.most).enumerated())
         VStack(alignment: .leading, spacing: 0) {
-            // One scroll region (round 32 §P1, the owner: 「把标题放进同一个滚动容器内」): the title is its first child and
-            // scrolls away with the rows; it reaches the paper's bottom and ends in 略過's room, and 略過 floats over its
-            // bottom fade, never moving (round 33 §Q3).
-            ScrollView {
+            // One region (round 32 §P1, the owner: 「把标题放进同一个滚动容器内」): the title is its first child and
+            // scrolls away with the rows when they scroll; it ends in 略過 — the footer while it fits, floating over its
+            // bottom fade at the paper's edge once it scrolls (round 34, ``TapDialogRegion``).
+            TapDialogRegion(cap: TapPassageRules.regionCap(window: window.height, room: room)) {
                 VStack(alignment: .leading, spacing: 0) {
-                    ModalTitle(L10n.Card.Tap.passageTitle)
+                    ModalTitle(L10n.Card.Tap.passageTitle, size: TapListMetrics.titleSize(wide: TapListMetrics.wide(window)))
                         .padding(.bottom, TapPassageRules.titleGap)
                         .padding(.horizontal, reach)
                     ForEach(shown, id: \.element.id) { i, passage in
                         row(passage, index: i, top: ids[i], bottom: below[i], reach: reach)
-                            // §P2: a rule between two rows (never above the first), from the words' start to their end.
-                            .background(alignment: .top) {
-                                if TapPassageRules.ruled(index: i) { rule(reach: reach) }
+                            // §P2: a rule between two rows (never above the first), from the words' start to their end;
+                            // round 34 §6: it is the row's own band edge (its key's curve at its top), so a press fills
+                            // exactly between two rules.
+                            .background {
+                                if TapPassageRules.ruled(index: i) { rule(key: ids[i], reach: reach) }
                             }
                     }
                 }
-                .exitRoomBelow()
             }
-            .scrollIndicators(.hidden)
-            .scrollBounceBehavior(.basedOnSize)
-            .scrollEdgeFades()
-            .frame(maxHeight: TapPassageRules.regionHeight(window: window.height, room: room, exitRoom: exitRoom))
-            .fixedSize(horizontal: false, vertical: true)
-            // Out to the paper's edges and past them by the wobble's swing (``TapDialog/reach(clipped:inset:)``): the
-            // rows' bands run edge to edge, clipped to the paper; their words keep the dialog's own inset.
-            .padding(.horizontal, -reach)
         }
-        // 略過 (round 33 §Q3, replacing round 32's words alone): the family's tonal small pill, floating.
-        .floatingExit(L10n.Card.Tap.passageSkip, id: "tap-passage-skip", action: onSkip)
+        // 略過 (round 34): the family's tonal small pill, in the footer or floating.
+        .dialogExit(L10n.Card.Tap.passageSkip, id: "tap-passage-skip", action: onSkip)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tap-passages")
         .onAppear { focused = picked ?? passages.first?.id }
     }
 
-    /// The rule between two rows (§P2): the house's divider (``WavyDivider``: the divider ink, the light pen), inset to
-    /// the words, centred on the seam; under a pressed or held row's wash, which is see-through, it stays drawn.
-    private func rule(reach: CGFloat) -> some View {
-        WavyDivider(seed: 71)
-            .padding(.horizontal, reach)
-            .offset(y: -TapPassageRules.ruleHeight / 2)
+    /// The rule between two rows (§P2): the divider ink in the light pen, shown from the words' start to their end;
+    /// under a pressed or held row's wash, which is see-through, it stays drawn. Round 34 §6: its path is the band's
+    /// edge (``BandEdge``, the row's own key across the row's whole width — the same curve the row's band and the one
+    /// above it end on), only masked to the words' span, so the ink fills exactly between two rules.
+    private func rule(key: String, reach: CGFloat) -> some View {
+        BandEdge(key: key)
+            .stroke(Tokens.dividerInk, style: StrokeStyle(lineWidth: Tokens.inkLight, lineCap: .round))
+            .mask {
+                Rectangle()
+                    .padding(.horizontal, reach)
+                    .padding(.vertical, -TapPassageRules.ruleHeight)
+            }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
@@ -84,14 +81,16 @@ struct TapPassages: View {
         return Button { onChoose(TapPassageRules.choice(pressing: passage.id, current: picked)) } label: {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 CSSText(passage.text,
-                        font: AppFonts.storyUIFont(story.bodyFamily, size: TapPassageRules.textSize, relativeTo: .body),
+                        font: AppFonts.storyUIFont(story.bodyFamily, size: TapPassageRules.textSize(wide: TapListMetrics.wide(window)), relativeTo: .body),
                         lineHeight: story.bodyLeading, color: Tokens.UI.text)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if chosen {
-                    OrganicIcon(.check, size: TapPassageRules.checkSize, color: Tokens.text, strokeWidth: Tokens.ink)
-                        .transition(.opacity)
-                }
+                // Round 34 §7: the check's slot stands on every row; unpicked it is unseen (never taken out), so the
+                // words keep their width and never wrap again when a row is picked.
+                OrganicIcon(.check, size: TapPassageRules.checkSize, color: Tokens.text, strokeWidth: Tokens.ink)
+                    .opacity(chosen ? 1 : 0)
+                    .animation(.easeOut(duration: 0.15), value: chosen)
+                    .accessibilityHidden(true)
             }
             .padding(.horizontal, reach)
             .padding(.vertical, ListBands.rowPad)
@@ -125,6 +124,8 @@ nonisolated enum TapPassageRules {
     static let closeDelay: Duration = .milliseconds(300)
     /// The passages' words: the story's type at 16, with its leading.
     static let textSize: CGFloat = 16
+    /// On a tablet and the Mac, two points more (round 34, the family's type: ``TapListMetrics/sentenceSize(wide:)``).
+    static func textSize(wide: Bool) -> CGFloat { TapListMetrics.sentenceSize(wide: wide) }
     static let checkSize: CGFloat = 16
 
     /// Whether these are passages to offer at all.
@@ -174,13 +175,13 @@ nonisolated enum TapPassageRules {
     /// sentences, ~100 characters each, wrapped in full — the web's cap too).
     static func listHeight(window: CGFloat) -> CGFloat { min(560, window * 0.7) }
 
-    /// The one scroll region's cap (round 32 §P1; round 33 §Q3): the title and the rows scroll inside at most
-    /// ``listHeight(window:)`` and the floating 略過's room under them (`exitRoom`); the region reaches into the paper's
-    /// bottom inset, so it is never more than what the modal's stage leaves the dialog (`room`) and that inset — the
-    /// whole dialog always fits and the backdrop never scrolls it, 略過 included. Outside a modal (`room` nil), the
-    /// window's cap alone.
-    static func regionHeight(window: CGFloat, room: CGFloat?, exitRoom: CGFloat) -> CGFloat {
-        let cap = listHeight(window: window) + exitRoom
+    /// The region's cap (round 32 §P1; round 34), from its top to the paper's bottom edge: the title and the rows
+    /// with 略過's foot (18 + 44 + 24) stand in full up to ``listHeight(window:)`` and scroll past it; never more than
+    /// what the modal's stage leaves the dialog (`room`) and the paper's bottom inset the region reaches into — so the
+    /// whole dialog, 略過 included, always fits and the backdrop never scrolls it, in either state. Outside a modal
+    /// (`room` nil), the window's cap alone.
+    static func regionCap(window: CGFloat, room: CGFloat?) -> CGFloat {
+        let cap = listHeight(window: window)
         guard let room else { return cap }
         return max(0, min(cap, room + ModalPaper.insetV))
     }
@@ -189,7 +190,7 @@ nonisolated enum TapPassageRules {
     static let titleGap: CGFloat = 10
     /// Whether the row at `index` has a rule above it (§P2): between two rows, never above the first.
     static func ruled(index: Int) -> Bool { index > 0 }
-    /// The rule's box (``WavyDivider``'s), centred on the seam between two rows.
+    /// How far the rule's mask reaches above and below the seam: past the band curve's swing and the pen.
     static let ruleHeight: CGFloat = 6
 
     /// A pick's request refused: the options changed or the tap went (400, 409) → the dialog closes quietly and the card

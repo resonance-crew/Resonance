@@ -94,7 +94,7 @@ final class TapPeople {
 /// 会不会好一点呢」), rows 60 with faces 36. The author's is 480 wide at most everywhere; a reader's keeps a phone's 400
 /// (「手机上已经是这个 model 的设计了，所以可能只有平板和电脑网页和 Mac APP 需要更改哦」) and is 480 on a tablet and the Mac,
 /// as the web's `TAP_LIST_DIALOG_WIDTH` and Android's `readerListWidth`.
-enum TapListMetrics {
+nonisolated enum TapListMetrics {
     static let dialogWidth: CGFloat = 480
     static func readerWidth(compact: Bool) -> CGFloat { compact ? 400 : dialogWidth }
     static let dialogRow: CGFloat = 60
@@ -103,6 +103,17 @@ enum TapListMetrics {
     static let lineLimit = 2
     /// Above and below a row's content: within 60 for a name and one line.
     static let rowPad: CGFloat = 8
+
+    /// The family's type (round 34, the owner on the iPad: 「里面的字体太小…像是直接沿用手机版小字号」): a phone's sizes,
+    /// and two points more on a tablet and the Mac (any window wider than compact, as Android's tablets) — the title
+    /// 20 → 22, a pen name 15 → 17, a quote, 選一段 and a note's excerpt 13 → 15, the picked sentence and the passages
+    /// 16 → 18. The pills (關閉, 略過, 顯示更多) keep the small pill's 14; the rows' 60 and faces' 36 stay. Each still
+    /// grows with the person's text size (the sentence and the passages along the reading curve, with the Mac's boost).
+    static func wide(_ window: WindowLayout) -> Bool { window.layoutClass != .compact }
+    static func titleSize(wide: Bool) -> CGFloat { wide ? 22 : 20 }
+    static func nameSize(wide: Bool) -> CGFloat { wide ? 17 : 15 }
+    static func lineSize(wide: Bool) -> CGFloat { wide ? 15 : 13 }
+    static func sentenceSize(wide: Bool) -> CGFloat { wide ? 18 : 16 }
 }
 
 /// One person of a list: their face and pen name, banded (the curves show as a press's wash), leading to their page —
@@ -123,10 +134,12 @@ struct TapPersonRow: View {
     let action: () -> Void
     @Environment(\.modalPaperClips) private var clips
     @Environment(\.modalPaperInset) private var inset
+    @Environment(\.window) private var window
 
     var body: some View {
         let author = person.author
         let note = person.note?.value1.excerpt
+        let wide = TapListMetrics.wide(window)
         let reach = TapDialog.reach(clipped: clips, inset: inset)
         Button(action: action) {
             HStack(spacing: 12) {
@@ -134,12 +147,12 @@ struct TapPersonRow: View {
                                 color: author.accent, size: TapListMetrics.dialogFace, seed: author.avatarSeedValue)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(author.handle)
-                        .font(AppFonts.body(15, weight: .semibold))
+                        .font(AppFonts.body(TapListMetrics.nameSize(wide: wide), weight: .semibold))
                         .foregroundStyle(Tokens.text)
                         .lineLimit(1)
                     if let line {
                         Text(line.words)
-                            .font(AppFonts.body(13))
+                            .font(AppFonts.body(TapListMetrics.lineSize(wide: wide)))
                             .foregroundStyle(line == .pick ? Tokens.buttonOnTonal : Tokens.textMuted)
                             .lineLimit(TapListMetrics.lineLimit)
                             .truncationMode(.tail)
@@ -147,7 +160,7 @@ struct TapPersonRow: View {
                     }
                     if let note {
                         Text(note)
-                            .font(AppFonts.body(13))
+                            .font(AppFonts.body(TapListMetrics.lineSize(wide: wide)))
                             .foregroundStyle(Tokens.textMuted)
                             .lineLimit(TapListMetrics.lineLimit)
                             .truncationMode(.tail)
@@ -234,24 +247,31 @@ struct TapListState: View {
     }
 }
 
-/// A family dialog's list (round 33): one scroll region of the rows — the loading rows standing for them from the first
-/// frame (§Q1), 顯示更多 under them — reaching the paper's edges (§Q2) and its bottom, ending in the floating pill's room
-/// (§Q3), its bottom fade running under the pill. `cap`: the rows' own height at most (the region adds the pill's room
-/// and the paper's bottom inset it reaches into, so the dialog is no taller than it was with its footer).
+/// A family dialog's list (round 33, round 34): the rows — the loading rows standing for them from the first frame
+/// (§Q1), 顯示更多 under them — reaching the paper's edges (§Q2), in the family's region (``TapDialogRegion``): the
+/// classic footer under them while they and its foot (18 + 44 + 24) fit `cap` (the region's height at most, to the
+/// paper's bottom edge, as the web's), else one scroll region `cap` tall down to that edge with the way out floating
+/// over its fade.
 struct TapListBody: View {
     let people: TapPeople?
     let loadingRows: Int
     let cap: CGFloat
+    /// What heads the region (round 34 §5: the author's title, who-picked's title and sentence), scrolling with the
+    /// rows, at the dialog's inset.
+    var head: AnyView? = nil
     let line: (TapPerson) -> TapRowLine?
     let press: (TapPerson) -> Void
     @Environment(\.modalPaperClips) private var clips
     @Environment(\.modalPaperInset) private var inset
-    @Environment(\.dialogExitRoom) private var exitRoom
 
     var body: some View {
-        let reach = TapDialog.reach(clipped: clips, inset: inset)
-        ScrollView {
+        TapDialogRegion(cap: cap) {
             VStack(spacing: 0) {
+                if let head {
+                    head
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, TapDialog.reach(clipped: clips, inset: inset))
+                }
                 if let people {
                     TapRows(people: people.people, line: line, press: press)
                 }
@@ -264,21 +284,14 @@ struct TapListBody: View {
                         .padding(.top, 12)
                 }
             }
-            .exitRoomBelow()
         }
-        .scrollIndicators(.hidden)
-        .scrollBounceBehavior(.basedOnSize)
-        .scrollEdgeFades()
-        .frame(maxHeight: cap + exitRoom + ModalPaper.insetV)
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(.horizontal, -reach)
     }
 }
 
 /// A reader's list of who resonated (§U2.5): a centred dialog on every device — a phone's, a tablet's, the Mac's — with
 /// no visible title, the rows banded, 60 tall with faces of 36 — since Wave 2 #3b everyone who resonated, newest first,
-/// each with the sentence they picked, paged with 顯示更多 — each leading to that person's page; then 關閉 floating at
-/// its foot's end (round 33 §Q3).
+/// each with the sentence they picked, paged with 顯示更多 — each leading to that person's page; then 關閉 at its foot's
+/// end (round 34: under rows that fit, floating over rows that scroll).
 struct ReaderTapList: View {
     let cardId: String
     /// The card offers passages (round 27 §U3): the reader's own row says their pick or 選一段, and opens the dialog.
@@ -313,7 +326,7 @@ struct ReaderTapList: View {
                 openRoute(TapPersonRow.route(for: person))
             }
         }
-        .floatingExit(L10n.Native.close, id: "tap-list-close", action: onClose)
+        .dialogExit(L10n.Native.close, id: "tap-list-close", action: onClose)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tap-list")
         .task {
@@ -418,16 +431,19 @@ struct AuthorTapList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ModalTitle(L10n.Card.ResonatorsModal.title).padding(.bottom, 10)
+            // The title heads the region (round 34 §5), scrolling with the rows.
             TapListBody(people: list, loadingRows: TapDialog.loadingRows(knownFaces: knownFaces),
-                        cap: Self.listCap(window: window.height)) { person in
+                        cap: Self.listCap(window: window.height),
+                        head: AnyView(ModalTitle(L10n.Card.ResonatorsModal.title,
+                                                 size: TapListMetrics.titleSize(wide: TapListMetrics.wide(window)))
+                            .padding(.bottom, 10))) { person in
                 TapRowLine.of(person, authorList: true, viewer: session.uid, offersPassages: false)
             } press: { person in
                 onClose()
                 openRoute(TapPersonRow.route(for: person))
             }
         }
-        .floatingExit(L10n.Native.close, id: "author-taps-close", action: onClose)
+        .dialogExit(L10n.Native.close, id: "author-taps-close", action: onClose)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("author-tap-list")
         .task {

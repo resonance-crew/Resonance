@@ -192,21 +192,20 @@ import Testing
 
     /// §P1 — 「略过固定不动」, 「标题与段落文字合一滚动」: one scroll region (the title its first child, then the rows); since
     /// round 33 §Q3 略過 floats over the region's bottom fade as the family's tonal small pill (it was round 32's words
-    /// alone in a foot under the region — this test pinned that and now pins the float).
+    /// alone in a foot under the region — this test pinned that, then the float; since round 34 the family's region draws the
+    /// pill: the footer while the title and rows fit, floating once they scroll).
     @Test func theTitleScrollsWithTheRowsAndSkipFloatsOverTheFade() throws {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appendingPathComponent("../Resonance/Features/Card/TapPassages.swift").standardized
         let source = try String(contentsOf: url, encoding: .utf8)
         let body = try #require(source.range(of: "var body: some View {")).upperBound
         let view = String(source[body...])
-        let scroll = try #require(view.range(of: "ScrollView {"))
-        let title = try #require(view.range(of: "ModalTitle(L10n.Card.Tap.passageTitle)"))
-        let skip = try #require(view.range(of: ".floatingExit(L10n.Card.Tap.passageSkip, id: \"tap-passage-skip\""))
+        let scroll = try #require(view.range(of: "TapDialogRegion(cap: TapPassageRules.regionCap("))
+        let title = try #require(view.range(of: "ModalTitle(L10n.Card.Tap.passageTitle"))
+        let skip = try #require(view.range(of: ".dialogExit(L10n.Card.Tap.passageSkip, id: \"tap-passage-skip\""))
         #expect(scroll.lowerBound < title.lowerBound && title.lowerBound < skip.lowerBound)
-        // It floats over the whole dialog, after the region closes (its frame cap), never inside the scroll.
-        let cap = try #require(view.range(of: ".frame(maxHeight: TapPassageRules.regionHeight("))
-        #expect(cap.lowerBound < skip.lowerBound)
-        #expect(view.contains(".exitRoomBelow()"))
+        // One region: no scroll of its own here (the region's).
+        #expect(!view.contains("ScrollView {"))
         #expect(!view.contains("ModalCloseButton(") && !view.contains("QuietTextButton("))
         #expect(TapPassageRules.titleGap == 10)
     }
@@ -215,15 +214,17 @@ import Testing
     /// 略過's room under the rows (round 33 §Q3), and never more than what the stage leaves it with the paper's bottom
     /// inset it reaches into; so the backdrop never scrolls it and 略過 never moves.
     @Test func theDialogAlwaysFitsWhatTheStageLeavesIt() {
-        #expect(TapPassageRules.regionHeight(window: 2000, room: nil, exitRoom: 60) == 620)
-        #expect(TapPassageRules.regionHeight(window: 2000, room: 3000, exitRoom: 60) == 620)
-        #expect(TapPassageRules.regionHeight(window: 600, room: 500, exitRoom: 60) == 480)
-        // An iPhone turned (402 tall less the margins and the paper's air): the stage, not the 70 %, holds it.
+        // Round 34: the region's cap, to the paper's bottom edge (the foot of 18 + 44 + 24 inside it).
+        #expect(TapDialog.budget(cap: 560, exit: true) == 560 - ModalPaper.insetV)
+        #expect(TapPassageRules.regionCap(window: 2000, room: nil) == 560)
+        #expect(TapPassageRules.regionCap(window: 2000, room: 3000) == 560)
+        #expect(TapPassageRules.regionCap(window: 600, room: 500) == 420)
+        // A short stage (380, less the margins and the paper's air) in a taller window: the stage, not the 70 %, holds it.
         let room = ModalPaper.room(stage: 380)
         #expect(abs(room - CGFloat(380 - 2 * 12 - 2 * 32)) < 0.001)
-        #expect(TapPassageRules.regionHeight(window: 402, room: room, exitRoom: 60) == room + ModalPaper.insetV)
-        // Laid out: long passages in a short room take exactly the room (the region reaching the paper's bottom inset,
-        // which the dialog gives back) — never more.
+        #expect(TapPassageRules.regionCap(window: 600, room: room) == room + ModalPaper.insetV)
+        // Laid out: long passages in a short room take exactly the room (they scroll in a region down to the paper's edge, its
+        // bottom inset given back) — never more.
         for room in [220.0, 300, 480] {
             let size = dialogSize(dialog(Self.long, room: room), width: 344)
             #expect(size.height <= room + 0.5, "room \(room): \(size.height)")
@@ -240,11 +241,52 @@ import Testing
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appendingPathComponent("../Resonance/Features/Card/TapPassages.swift").standardized
         let source = try String(contentsOf: url, encoding: .utf8)
-        // The house's divider (its ink and light pen), inset to the words' start and end — the rows' own inset.
-        let rule = try #require(source.range(of: "private func rule(reach: CGFloat)")).upperBound
-        let body = String(source[rule...].prefix(300))
-        #expect(body.contains("WavyDivider("))
+        // Round 34 §6: the rule is the row's band edge (its own key's curve across the row), masked to the words' span.
+        let rule = try #require(source.range(of: "private func rule(key: String, reach: CGFloat)")).upperBound
+        let body = String(source[rule...].prefix(400))
+        #expect(body.contains("BandEdge(key: key)"))
         #expect(body.contains(".padding(.horizontal, reach)"))
+        #expect(!source.contains("WavyDivider("))
+        #expect(source.contains("rule(key: ids[i], reach: reach)"))
+    }
+
+    /// §6 — one source: a rule's curve is exactly where the band of the row under it begins and the band of the row
+    /// over it ends (the same key, the same width, the same y).
+    @Test func aRuleIsTheBandsOwnEdge() {
+        let ids = ["passage:a", "passage:b", "passage:c"]
+        let below = ListBands.below(ids, after: ListBands.endKey)
+        let w = 432.0, h = 88.0
+        for i in 1..<ids.count {
+            let rule = dividerPath(ListBands.curve(y: 0, w: w, key: ids[i]))
+            // The row under it: its band's top edge.
+            let under = ListBands.region(w: w, h: h, top: ids[i], bottom: below[i])
+            #expect(Array(under.prefix(rule.count)) == rule, "row \(i)'s top")
+            // The row over it: its band's bottom edge, at its foot (the same curve, h lower in its own frame).
+            #expect(below[i - 1] == ids[i])
+            let over = ListBands.curve(y: h, w: w, key: below[i - 1]).flatMap { [$0.x, $0.y - h] }
+            let edge = ListBands.curve(y: 0, w: w, key: ids[i]).flatMap { [$0.x, $0.y] }
+            #expect(zip(over, edge).allSatisfy { abs($0 - $1) < 1e-9 } && over.count == edge.count, "row \(i - 1)'s bottom")
+        }
+        let rect = CGRect(x: 0, y: 0, width: w, height: h)
+        #expect(BandEdge(key: ids[1]).path(in: rect).boundingRect.width > 0)
+    }
+
+    /// §7 — the check's slot is kept on every row: picking a row never rewraps its words, so the dialog keeps its height.
+    @Test func pickingARowNeverRewrapsItsWords() throws {
+        let passages = [
+            TapPassage(id: "a", text: String(repeating: "箱子堆滿了客廳，我坐在地上，第一次覺得安靜是屬於自己的。", count: 3)),
+            TapPassage(id: "b", text: "你不是失去了一個家，你是多了一個可以回去的地方。"),
+        ]
+        for width in [300.0, 344, 400] {
+            let free = dialogSize(TapPassages(passages: passages, picked: nil, script: .cjk, onChoose: { _ in }, onSkip: {}), width: width)
+            let picked = dialogSize(TapPassages(passages: passages, picked: "a", script: .cjk, onChoose: { _ in }, onSkip: {}), width: width)
+            #expect(free.height == picked.height, "\(width): \(free.height) vs \(picked.height)")
+        }
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Resonance/Features/Card/TapPassages.swift").standardized
+        let source = try String(contentsOf: url, encoding: .utf8)
+        #expect(source.contains(".opacity(chosen ? 1 : 0)"))
+        #expect(!source.contains("if chosen {"))
     }
 
     /// §P3 — the passages' dialog has no flash: its rows are known when it opens, so its first layout is its last —

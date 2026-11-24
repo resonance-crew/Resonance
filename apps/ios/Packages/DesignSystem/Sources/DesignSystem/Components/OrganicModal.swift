@@ -139,10 +139,15 @@ public struct OrganicConfirmContent: View {
 /// A dialog's heading: Playfair 20, bold.
 public struct ModalTitle: View {
     let text: String
-    public init(_ text: String) { self.text = text }
+    let size: CGFloat
+    /// `size`: 20, or a dialog's own (the tap lists' family on a tablet and the Mac: 22, round 34).
+    public init(_ text: String, size: CGFloat = 20) {
+        self.text = text
+        self.size = size
+    }
     public var body: some View {
         Text(text)
-            .font(AppFonts.heading(20))
+            .font(AppFonts.heading(size))
             .foregroundStyle(Tokens.text)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityAddTraits(.isHeader)
@@ -218,7 +223,7 @@ public struct ModalActions<Cancel: View, Verb: View>: View {
     }
 }
 
-public enum ModalMetrics {
+public nonisolated enum ModalMetrics {
     /// A dialog's buttons are never shorter than a finger needs (the small pills are about 38pt).
     public static let minButtonHeight: CGFloat = 44
     /// A button that can't be pressed yet (the way out while the verb works): the disabled fade.
