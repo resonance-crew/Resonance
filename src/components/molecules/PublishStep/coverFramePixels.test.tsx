@@ -192,6 +192,28 @@ describe('a card shared in a thread cuts its frame for the box that is seen (rou
     const aspect = (pct(img.style.width) * W) / (pct(img.style.height) * H);
     expect(Math.abs(aspect / 1.5 - 1)).toBeLessThan(0.001);
   });
+
+  // Post-merge review: an unframed chat-card cover covered the bled span; it covers the seen box now (the centred
+  // zoom-1 crop of what is seen), the same element in the same box as a framed one.
+  it('covers the container’s width with no frame — the centred crop of the seen box', () => {
+    const W = 300;
+    const BLEED = 4;
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(W + 2 * BLEED);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(Math.round((W + 2 * BLEED) / 1.91));
+    const real = window.getComputedStyle;
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el, p) => {
+      const cs = real(el, p);
+      return (el as HTMLElement).dataset?.coverSeen == null && (el as HTMLElement).className?.toString().includes('cover')
+        ? ({ ...cs, marginLeft: `-${BLEED}px` } as CSSStyleDeclaration)
+        : cs;
+    });
+    const { container } = renderWithIntl(<SharedCardContent card={{ ...card, media: { type: 'image', url: card.media!.url } }} author={null} />);
+    const img = container.querySelector('img')!;
+    expect(img).not.toHaveAttribute('data-frame');
+    const seen = img.parentElement!;
+    expect(seen).toHaveAttribute('data-cover-seen');
+    expect([seen.style.left, seen.style.right]).toEqual([`${BLEED}px`, `${BLEED}px`]);
+  });
 });
 
 // Post-merge review (round 33): the unframed cover's <img> was unmounted right after its load — the shape read put

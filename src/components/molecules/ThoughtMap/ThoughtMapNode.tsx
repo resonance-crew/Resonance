@@ -263,15 +263,15 @@ function NodeThumb({ src, seed, hue, frame }: { src: string; seed: number; hue: 
   // Fades in as it lands, never blurs: a filter inside the map's moving SVG would be drawn again on every move.
   const revealRef = useRevealRef<SVGImageElement>('fade');
   const S = 56;
-  // The picture fills a square S + 8 wide from (-4, -4), centred — or, a framed cover (round 25 §G1), it is placed so
-  // its frame's square crop fills the square that is seen, S wide from (0, 0) (round 33 §Q4: the crop was for the
-  // bled S + 8, so the thumb showed the middle 88 % of it), and runs on past it, as the apps' map nodes draw it.
-  const B = S + 8;
+  // The picture fills the square that is seen, S wide from (0, 0): centred at zoom 1 (round 33 post-merge review:
+  // it was the bled S + 8 square's, from (-4, -4)) — or, a framed cover (round 25 §G1), placed so its frame's square
+  // crop fills it (round 33 §Q4: the crop was for the bled S + 8, so the thumb showed the middle 88 % of it), running
+  // on past it, as the apps' map nodes draw it.
   const f = coverFrameOf(frame);
   const r = f ? coverCrop(f.ar, f, 1) : null;
   const place = r
     ? { x: -(r.x / r.w) * S, y: -(r.y / r.h) * S, width: S / r.w, height: S / r.h, preserveAspectRatio: 'none' }
-    : { x: -4, y: -4, width: B, height: B, preserveAspectRatio: 'xMidYMid slice' };
+    : { x: 0, y: 0, width: S, height: S, preserveAspectRatio: 'xMidYMid slice' };
   const path = useMemo(
     () => wobRect(S, S, 12, seed + 3, 1.8, { segmentsH: 2, segmentsV: 2, curve: 1.3, cornerJitter: 1.4 }),
     [seed],
