@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
 import { renderWithIntl, screen } from '@/../test/render';
 import zhMessages from '@/messages/zh-TW.json';
 import { OrganicImage } from '@/components/atoms/OrganicImage/OrganicImage';
@@ -41,7 +41,7 @@ function picture(width: number, height: number): StagePicture {
 }
 
 /** The picture's pixel under each frame point in the 調整封面 window, as its stage draws it. */
-function inWindow(pic: StagePicture, frame: CoverFrame): [number, number][] {
+function inWindow(pic: StagePicture, frame: CoverFrame | null): [number, number][] {
   const view = renderWithIntl(<CoverFrameModal picture={pic} frame={frame} onCancel={vi.fn()} onDone={vi.fn()} />, {
     locale: 'zh-TW',
     messages: zhMessages,
@@ -63,7 +63,7 @@ function inWindow(pic: StagePicture, frame: CoverFrame): [number, number][] {
 }
 
 /** …and on the feed card's cover: the picture's pixel under each point of the box that is seen, and its scale. */
-function inPreview(pic: StagePicture, frame: CoverFrame): { at: [number, number][]; pxPerPicturePx: number } {
+function inPreview(pic: StagePicture, frame: CoverFrame | null): { at: [number, number][]; pxPerPicturePx: number } {
   const H = Math.round(PREVIEW_W * COVER_FRAME_RATIO);
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(PREVIEW_W);
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(H);
@@ -72,6 +72,16 @@ function inPreview(pic: StagePicture, frame: CoverFrame): { at: [number, number]
   const bled = box.firstElementChild as HTMLElement;
   const bleed = -Number.parseFloat(bled.style.inset);
   expect(bleed).toBeGreaterThan(0); // the cover does bleed past its box for the wobble
+  if (!frame) {
+    // No frame: the picture's shape comes from its load (naturalWidth × naturalHeight).
+    const loading = container.querySelector('img')!;
+    expect(loading).not.toHaveAttribute('data-frame'); // until then, as ever: covering the box and its bleed
+    Object.defineProperty(loading, 'naturalWidth', { value: pic.width });
+    Object.defineProperty(loading, 'naturalHeight', { value: pic.height });
+    act(() => {
+      fireEvent.load(loading);
+    });
+  }
   const img = container.querySelector<HTMLImageElement>('img[data-frame]')!;
   // The box the picture is placed in, in the seen box's coordinates: the bled wrapper, back in by its own inset.
   const holder = img.parentElement as HTMLElement;
@@ -109,6 +119,20 @@ describe('a framed cover shows what the 調整封面 window framed (round 33 §Q
     const { at: previewAt, pxPerPicturePx } = inPreview(pic, frame);
     const worst = Math.max(...POINTS.map((_, i) => Math.hypot(windowAt[i][0] - previewAt[i][0], windowAt[i][1] - previewAt[i][1]) * pxPerPicturePx));
     // The frame's numbers are rounded to 4 places when kept: far under a pixel of the preview.
+    expect(worst).toBeLessThan(1);
+  });
+
+  // The lead (overriding "no frame unchanged"): a cover with no frame — an AI cover, or one after 重設 — is the
+  // centred frame at zoom 1 cut for the seen box, as the window shows it at its start; it was the picture covering
+  // the box and its bleed, ≈1.1× tighter.
+  it.each([
+    [1536, 1024],
+    [1024, 1536],
+  ])('%i × %i with no frame: the preview is the window at its start', (w, h) => {
+    const pic = picture(w, h);
+    const windowAt = inWindow(pic, null);
+    const { at: previewAt, pxPerPicturePx } = inPreview(pic, null);
+    const worst = Math.max(...POINTS.map((_, i) => Math.hypot(windowAt[i][0] - previewAt[i][0], windowAt[i][1] - previewAt[i][1]) * pxPerPicturePx));
     expect(worst).toBeLessThan(1);
   });
 

@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/atoms/Skeleton/Skeleton';
 import { wobRect } from '@/lib/design/wobRect';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import { brokenImage } from '@/lib/images/broken';
-import { coverImageBox, type CoverFrame } from '@/lib/images/coverFrame';
+import { CENTRED, COVER_FRAME_LIMITS, coverFrameOf, coverImageBox, type CoverFrame } from '@/lib/images/coverFrame';
 import { useRevealRef } from '@/components/atoms/RevealImg/RevealImg';
 
 /** How long a picture that failed waits before its one more try. */
@@ -87,7 +87,17 @@ export function OrganicImage({
   thumbSrc,
   sizes = LIST_SIZES,
 }: OrganicImageProps) {
-  const framed = coverImageBox(frame, ratio);
+  // A cover with no frame is the centred frame at zoom 1 (round 33 §Q4, the lead: as the 調整封面 window shows it at
+  // its start, 重設 included) — cut for the box that is seen, once the picture's shape is known from its load; until
+  // then, as ever, covering the box and its bleed.
+  const [shape, setShape] = useState<{ src: string; ar: number } | null>(null);
+  const centred = !coverFrameOf(frame) && src && shape?.src === src ? { ...CENTRED, ar: shape.ar } : null;
+  const framed = coverImageBox(centred ?? frame, ratio);
+  const readShape = (img: HTMLImageElement, of: string) => {
+    if (coverFrameOf(frame) || !img.naturalWidth || !img.naturalHeight) return;
+    const ar = Math.min(COVER_FRAME_LIMITS.ar.max, Math.max(COVER_FRAME_LIMITS.ar.min, img.naturalWidth / img.naturalHeight));
+    setShape((now) => (now?.src === of && Math.abs(now.ar - ar) < 1e-6 ? now : { src: of, ar }));
+  };
   const ref = useRef<HTMLDivElement>(null);
   const { w, h } = useElementSize(ref, 320, Math.round(320 * ratio));
   // While the picture is on its way its place shimmers (a story card tints the
@@ -113,7 +123,10 @@ export function OrganicImage({
     if (!src || !img?.complete) return;
     // Failed before hydration: its error went unheard.
     if (brokenImage(img)) failed(src);
-    else setSettled(src);
+    else {
+      readShape(img, src);
+      setSettled(src);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per src, as the element mounts
   }, [src]);
   const shimmering = !!src && settled !== src;
@@ -167,6 +180,7 @@ export function OrganicImage({
         // The reveal settles it (after its blur). React hears the load before the reveal's own listener, so look
         // once that has run: a picture it isn't revealing settles here.
         const img = e.currentTarget;
+        readShape(img, src);
         window.setTimeout(() => {
           if (!img.hasAttribute('data-reveal')) setSettled(src);
         }, 0);
