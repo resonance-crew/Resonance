@@ -204,7 +204,7 @@ internal fun TapPassages(
 ) {
     val layout = LocalWindowLayout.current
     val type = StoryType.of(script, layout.cls)
-    val words = AppFonts.style(type.bodyFamily, 16f, type.bodyWeight, type.bodyLeading, Tokens.Text, letterSpacing = type.bodyTracking.em)
+    val words = AppFonts.style(type.bodyFamily, tapListText(layout.cls).sentence, type.bodyWeight, type.bodyLeading, Tokens.Text, letterSpacing = type.bodyTracking.em)
     val cap = passagesListMax(LocalConfiguration.current.screenHeightDp.dp)
     var chosen by remember { mutableStateOf(picked?.takeIf { id -> passages.any { it.id == id } }) }
     var closing by remember { mutableStateOf(false) }

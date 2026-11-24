@@ -17,11 +17,13 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import com.resonance.design.AppFonts
 import com.resonance.design.Grain
+import com.resonance.design.LayoutClass
 import com.resonance.design.LocalWindowLayout
 import com.resonance.design.WindowLayout
 import com.resonance.design.scrollFadeBelowSpan
@@ -200,4 +202,36 @@ class TapListFootTest {
         assertTrue(scroll.maxValue > 0)
     }
 
+
+    // Round 34 (the owner, on the iPad: 名单弹窗里面的字体太小…没有适配平板阅读字级): a tablet reads one step up, a phone keeps its own.
+
+    @Test fun aPhoneKeepsItsSizesATabletReadsOneStepUp() {
+        assertEquals(TapListText(title = 20f, handle = 15f, line = 13f, sentence = 16f), tapListText(LayoutClass.Compact))
+        for (cls in listOf(LayoutClass.Medium, LayoutClass.Expanded)) {
+            assertEquals(TapListText(title = 22f, handle = 17f, line = 15f, sentence = 18f), tapListText(cls))
+            assertEquals(17f, TapRowMeasure.dialog(cls).handle)
+            assertEquals(15f, TapRowMeasure.dialog(cls).line)
+        }
+        assertEquals(15f, TapRowMeasure.dialog(LayoutClass.Compact).handle)
+        assertEquals(13f, TapRowMeasure.dialog(LayoutClass.Compact).line)
+    }
+
+    /** The drawn font size (sp) of the family's title in a window [width] wide. */
+    private fun titleSize(width: Dp): Float {
+        compose.setContent {
+            CompositionLocalProvider(LocalWindowLayout provides WindowLayout(width)) {
+                TapListModal(onDismiss = {}, title = "t", seed = 41.0, exit = "關閉", maxWidth = 480.dp) { TapListTitle("與這張卡片共振的人") }
+            }
+        }
+        compose.waitForIdle()
+        val node = compose.onNodeWithText("與這張卡片共振的人", useUnmergedTree = true).fetchSemanticsNode()
+        val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        node.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+        return results.single().layoutInput.style.fontSize.value
+    }
+
+    @Test fun thePhonesTitleIs20() = assertEquals(20f, titleSize(390.dp), 0f)
+
+    @Test @Config(qualifiers = "w1280dp-h800dp-mdpi")
+    fun theTabletsTitleIs22() = assertEquals(22f, titleSize(1280.dp), 0f)
 }

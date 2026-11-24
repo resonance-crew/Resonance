@@ -12,6 +12,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import com.resonance.design.AppFonts
 import com.resonance.design.Grain
+import com.resonance.design.LayoutClass
 import org.junit.Rule
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
@@ -157,10 +158,10 @@ class TapFacesTest {
         // The reader's list is the phone's dialog everywhere now (the owner's look, 2026-11-19), the author's already
         // was: one measure of rows, 60 tall with a face of 36 — no popover's rows any more. Round 33 §Q2: the band from
         // the paper's edge to its edge, the face and the words the family's 24 in (the title's edge), not 28 + 12.
-        assertEquals(60f, TapRowMeasure.Dialog.height.value, 0f)
-        assertEquals(24f, TapRowMeasure.Dialog.inset.value, 0f)
-        assertEquals(TapListInset, TapRowMeasure.Dialog.inset)
-        assertEquals(36f, TapRowMeasure.Dialog.face.value, 0f)
+        assertEquals(60f, TapRowMeasure.dialog(LayoutClass.Compact).height.value, 0f)
+        assertEquals(24f, TapRowMeasure.dialog(LayoutClass.Compact).inset.value, 0f)
+        assertEquals(TapListInset, TapRowMeasure.dialog(LayoutClass.Compact).inset)
+        assertEquals(36f, TapRowMeasure.dialog(LayoutClass.Compact).face.value, 0f)
     }
 
     @Test fun fourWhoResonatedAreThreeFacesAndNoBlankDisc() {

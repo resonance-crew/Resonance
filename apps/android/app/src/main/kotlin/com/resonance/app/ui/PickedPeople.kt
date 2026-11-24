@@ -82,7 +82,7 @@ internal fun PickedPeopleDialog(
     onRow: (TapPerson) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val quote = AppFonts.style(type.bodyFamily, 16f, type.bodyWeight, pickedSentenceLeading(type), Tokens.TextMuted, letterSpacing = type.bodyTracking.em)
+    val quote = AppFonts.style(type.bodyFamily, tapListText(LocalWindowLayout.current.cls).sentence, type.bodyWeight, pickedSentenceLeading(type), Tokens.TextMuted, letterSpacing = type.bodyTracking.em)
     // The flow closes it by its id: the backdrop is named 關閉 too (maestro/flows/tap-picked.yaml).
     TapListModal(
         onDismiss, L10n.Card.Tap.pickedTitle, seed = 53.0, exit = L10n.Native.close,
@@ -97,7 +97,7 @@ internal fun PickedPeopleDialog(
             style = quote,
         )
         Spacer(Modifier.height(PickedRowsGap))
-        TapRows(list, TapRowMeasure.Dialog, lines = { pickedRowLines(it, anonymous) }, expected = expected, onRow = onRow)
+        TapRows(list, TapRowMeasure.dialog(LocalWindowLayout.current.cls), lines = { pickedRowLines(it, anonymous) }, expected = expected, onRow = onRow)
         if (showsMore(list)) TapListMore { scope.launch { list.more() } }
     }
 }
