@@ -113,8 +113,9 @@ public nonisolated enum CoverLayout {
 
 /// `image` filling a box on its cover frame (the environment's ``EnvironmentValues/coverFraming``), or centred
 /// and cropped to fill without one — what `resizable().scaledToFill()` drew before round 25. `bleed`: the box is the
-/// visible one grown by it on every side, and the frame's crop is the visible box's (``CoverLayout``); a cover with no
-/// frame fills the whole box, as it always has.
+/// visible one grown by it on every side, and the frame's crop is the visible box's (``CoverLayout``) — a cover with no
+/// frame too, as the centred frame at zoom 1 (round 33 §Q4, the lead: it must match 調整封面 after 重設, which it was
+/// ≈1.1× tighter than while it filled the bled box). With no bleed and no frame it fills its box, centred, as always.
 public struct FramedCover: View {
     let image: Image
     let pictureSize: CGSize?
@@ -128,7 +129,7 @@ public struct FramedCover: View {
     }
 
     public var body: some View {
-        if let frame {
+        if frame != nil || bleed > 0 {
             GeometryReader { geo in
                 let place = CoverLayout.placement(box: geo.size, pictureSize: pictureSize, frame: frame, bleed: bleed)
                 image.resizable()
@@ -145,7 +146,7 @@ public struct FramedCover: View {
 
 /// The mask of what a ``FramedCover`` with a bleed covers (``CoverLayout/coverage(box:pictureSize:frame:bleed:)``): laid
 /// over the cover and what stands under it (a placeholder), so no placeholder shows in a bleed the picture can't reach.
-/// Without a frame, the whole box.
+/// Without a frame, the centred frame's (as ``FramedCover`` draws it); with no bleed either, the whole box.
 public struct FramedCoverMask: View {
     let pictureSize: CGSize?
     let bleed: CGFloat
@@ -158,7 +159,7 @@ public struct FramedCoverMask: View {
 
     public var body: some View {
         GeometryReader { geo in
-            let rect = frame == nil ? CGRect(origin: .zero, size: geo.size)
+            let rect = frame == nil && bleed == 0 ? CGRect(origin: .zero, size: geo.size)
                 : CoverLayout.coverage(box: geo.size, pictureSize: pictureSize, frame: frame, bleed: bleed)
             Rectangle().frame(width: rect.width, height: rect.height).offset(x: rect.minX, y: rect.minY)
                 .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)

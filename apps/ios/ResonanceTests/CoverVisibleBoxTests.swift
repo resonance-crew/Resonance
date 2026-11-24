@@ -70,7 +70,8 @@ import UIKit
 
     /// The largest gap, in the card's points, between where the stage and the card show the same sample.
     /// Also the gradient's step there: one of its 256 levels, in the card's points (what a sample can't tell apart).
-    private func drift(picture w: Int, _ h: Int, zoom: CGFloat, pan: CGSize, bleedCrop: Bool) throws -> (gap: CGFloat, step: CGFloat) {
+    private func drift(picture w: Int, _ h: Int, zoom: CGFloat, pan: CGSize, bleedCrop: Bool,
+                       framed: Bool = true) throws -> (gap: CGFloat, step: CGFloat) {
         let picture = try gradient(w, h)
         // The stage, as 調整封面 lays it out on a phone (a 400 stage: a 352 × 218 frame).
         let stageSize = CGSize(width: 400, height: (400 - CropStageSize.margin) * CGFloat(CoverFraming.Box.feed) + CropStageSize.margin)
@@ -88,7 +89,7 @@ import UIKit
         let card = try render(FramedCover(Image(decorative: picture, scale: 1), pictureSize: CGSize(width: w, height: h),
                                           bleed: bleedCrop ? bleed : 0)
             .frame(width: bled.width, height: bled.height)
-            .coverFraming(framing))
+            .coverFraming(framed ? framing : nil))
 
         var worst: CGFloat = 0
         var step: CGFloat = 0
@@ -115,6 +116,12 @@ import UIKit
             // A couple of points past what the gradient can tell apart (one of its 256 levels across the shown part).
             #expect(now <= step + 2, "\(c.w)×\(c.h) zoom \(c.zoom): \(now) pt off (a level is \(step))")
             #expect(before > now + 6, "the bled box's crop drifted further (\(before) vs \(now))")
+        }
+        // No stored frame (the lead, round 33): the card must match 調整封面 after 重設 — the centred frame at zoom 1.
+        for (w, h) in [(1536, 1024), (1024, 1536)] {
+            let (now, step) = try drift(picture: w, h, zoom: 1, pan: .zero, bleedCrop: true, framed: false)
+            report.append("\(w)×\(h) no frame: \(String(format: "%.1f", now)) pt, a level \(String(format: "%.1f", step)) pt")
+            #expect(now <= step + 2, "\(w)×\(h) no frame: \(now) pt off")
         }
         print("§Q4 drift: " + report.joined(separator: "; "))
     }
