@@ -161,6 +161,9 @@ internal object PassageBand {
     /** Never the tablet's rounded cut: the band runs to the paper's edges. */
     const val cut = false
 
+    /** Round 35 (3): drawn past the paper's box, the paper's wobble cutting it on the pen line at both sides. */
+    val bleed: Dp = TapListBandBleed
+
     /** From the paper's edge to a row's words, at both sides (round 35 (2): no check between them and the edge): the family's 24. */
     val wordsInset: Dp = TapListInset
 }
@@ -233,7 +236,7 @@ internal fun TapPassages(
                     // §P2: a rule between two rows (never above the first), the words' start to their end; the
                     // row's own band washes over it.
                     .then(if (passageRuleAbove(i)) Modifier.bandRuleAbove(keys[i], PassageBand.wordsInset, rule) else Modifier)
-                    .listBand(keys[i], below[i], source, { false }, rest = if (isChosen) press else null, cut = PassageBand.cut)
+                    .listBand(keys[i], below[i], source, { false }, rest = if (isChosen) press else null, cut = PassageBand.cut, bleed = PassageBand.bleed)
                     .flowTag("tap-passage-$i")
                     .plainClickable(role = Role.Button) {
                         if (closing) return@plainClickable

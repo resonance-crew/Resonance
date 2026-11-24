@@ -292,6 +292,12 @@ class TapPassagesTest {
         val title = compose.onNodeWithText(L10n.Card.Tap.passageTitle, useUnmergedTree = true).fetchSemanticsNode().positionInRoot.x / compose.density.density
         assertEquals(paper.left.value + 24f, title, 0.5f)
         compose.onNodeWithTag("tap-passage-1", useUnmergedTree = true).assertIsSelected()
+        // Round 35 (3): the region's layer reaches 16 past the paper's box at each side (by position and size: its
+        // bounds box is clipped to the paper), so the bands drawn that far survive it and the paper's wobble cuts them.
+        val region = compose.onNodeWithTag("tap-passages", useUnmergedTree = true).fetchSemanticsNode()
+        val d = compose.density.density
+        assertEquals(paper.left.value - 16f, region.positionInRoot.x / d, 0.5f)
+        assertEquals((paper.right - paper.left).value + 32f, region.size.width / d, 0.5f)
     }
 
     @Test fun aRowPressedIsPickedThenTheDialogCloses() {

@@ -85,11 +85,15 @@ internal fun TapListModal(
         Box(Modifier.fillMaxWidth().weight(1f, fill = false)) {
             Column(
                 Modifier
-                    .toModalPaperEdges(TapListInset)
+                    // Round 35 (3): the fade's layer [TapListBandBleed] wider than the paper's box at each side, so a
+                    // row's band drawn past the box ([listBand]'s `bleed`) survives it, for the paper's wobble — which
+                    // bulges past the box — to cut at its pen line. The scroll, the rows and their words keep the box.
+                    .toModalPaperEdges(TapListInset + TapListBandBleed)
                     .fillMaxWidth()
                     .then(regionModifier)
                     .then(if (cap != null) Modifier.heightIn(max = cap + TapListInset) else Modifier)
                     .scrollFadeUnder(scroll, ModalScrollFade, FloatingExitBottom + FloatingExitHeight)
+                    .padding(horizontal = TapListBandBleed)
                     .verticalScroll(scroll)
                     .padding(top = TapListInset, bottom = FloatingExitRoom),
                 content = content,
@@ -109,6 +113,15 @@ internal fun TapListModal(
 
 /** The family's paper inset, top and sides (round 33 §Q2: 28 → 24, 32 → 24 on top — these dialogs only; every other modal keeps 28 / 32). */
 internal val TapListInset: Dp = 24.dp
+
+/**
+ * How far a row's band in these dialogs is drawn past the paper's box at each side (round 35 (3), the owner: 这个变色的区块
+ * …没有完全填充满…左边、右边有点露出来): the paper ([OrganicModal]'s wobRect) bulges past its box — its edges swing about
+ * 1.4 % of its short side, under 7 at the widest dialog (480) — so a band exactly the box's width left a sliver of paper
+ * before the pen line. Drawn this far past, the paper's clip cuts it on the line at every height (the web's runs 10 past).
+ * Inside the vertical scroll's own clip, which leaves 30 at the sides.
+ */
+internal val TapListBandBleed: Dp = 16.dp
 
 /** The floating way out's height (§Q3: 44, a finger's, as the web's and iOS's). */
 internal val FloatingExitHeight: Dp = 44.dp

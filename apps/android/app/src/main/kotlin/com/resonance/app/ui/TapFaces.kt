@@ -458,7 +458,8 @@ private fun TapRow(
             .heightIn(min = measure.height)
             // Round 33 §Q2: the band from the paper's edge to its edge (the dialog's region reaches them, the paper's
             // wobble clipping it under its pen line), never the rounded inset card of round 26.
-            .listBand(topKey, bottomKey, source, { false }, cut = false)
+            // Round 35 (3): drawn past the box, the paper's clip ending it on the pen line at both sides.
+            .listBand(topKey, bottomKey, source, { false }, cut = false, bleed = TapListBandBleed)
             .then(if (onClick != null) Modifier.plainClickable(role = Role.Button, onClick = onClick) else Modifier)
             .padding(horizontal = measure.inset, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

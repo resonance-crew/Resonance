@@ -94,24 +94,32 @@ internal object ListBands {
     /** A curve's seed: its key's (the row below it), never its index. */
     fun seed(key: String): Double = seedFromString(key).toDouble()
 
-    /** The curve [key] draws at [y] across a band [w] wide (flat where it meets the band's ends). */
-    fun curve(y: Double, w: Double, key: String): List<Pt> = rowBoundary(y, w, seed(key), Amp, 0.0, steps(w))
+    /**
+     * The curve [key] draws at [y] across a band [w] wide (flat where it meets the band's ends) — and, with [bleed], on
+     * flat past both ends that far: the same turns between 0 and [w] (the PRNG never sees the pad), so a rule drawn
+     * without it lies exactly on a bled band's edge.
+     */
+    fun curve(y: Double, w: Double, key: String, bleed: Double = 0.0): List<Pt> = rowBoundary(y, w, seed(key), Amp, bleed, steps(w))
 
     /** The rule a row draws on its top edge ([bandRuleAbove]): exactly [region]'s top curve for that key. */
     fun ruleCurve(w: Double, key: String): List<PathCommand> = dividerPath(curve(0.0, w, key))
 
-    /** A row's band, [w] × [h]: its own curve along the top, the one under it ([bottomKey]'s) along the bottom. */
-    fun region(w: Double, h: Double, topKey: String, bottomKey: String): List<PathCommand> {
-        val back = curve(h, w, bottomKey).reversed()
-        return ruleCurve(w, topKey) + PathCommand.Line(back[0].x, back[0].y) + dividerPath(back).drop(1) + PathCommand.Close
+    /**
+     * A row's band, [w] × [h]: its own curve along the top, the one under it ([bottomKey]'s) along the bottom — [bleed]
+     * past the row's sides at both ends (round 35 (3): the tap dialogs', for the paper's wobble to cut), the curves'
+     * turns unchanged.
+     */
+    fun region(w: Double, h: Double, topKey: String, bottomKey: String, bleed: Double = 0.0): List<PathCommand> {
+        val back = curve(h, w, bottomKey, bleed).reversed()
+        return dividerPath(curve(0.0, w, topKey, bleed)) + PathCommand.Line(back[0].x, back[0].y) + dividerPath(back).drop(1) + PathCommand.Close
     }
 
     /**
      * A row's band as drawn, [w] × [h] dp at [density]: [cut], its ends cut at the frame's sides with rounded corners
      * (a tablet's: the frame is the reading column).
      */
-    fun path(w: Double, h: Double, topKey: String, bottomKey: String, cut: Boolean, density: Float): Path {
-        val band = region(w, h, topKey, bottomKey).toPath(density)
+    fun path(w: Double, h: Double, topKey: String, bottomKey: String, cut: Boolean, density: Float, bleed: Double = 0.0): Path {
+        val band = region(w, h, topKey, bottomKey, if (cut) 0.0 else bleed).toPath(density)
         if (!cut) return band
         val reach = ((Amp + 1) * density).toFloat()
         val radius = (CutRadius * density).toFloat()
@@ -180,6 +188,8 @@ internal fun Modifier.listBand(
     scrolling: () -> Boolean,
     rest: Color? = null,
     cut: Boolean = false,
+    /** How far the band is drawn past the row's sides ([TapListBandBleed] in the tap dialogs, whose paper cuts it); never with [cut]. */
+    bleed: Dp = 0.dp,
 ): Modifier {
     val hovered by source.collectIsHoveredAsState()
     var pressed by remember { mutableStateOf(false) }
@@ -188,7 +198,7 @@ internal fun Modifier.listBand(
     return this
         .delayedPress(scrolling) { pressed = it }
         .drawWithCache {
-            val path = ListBands.path((size.width / density).toDouble(), (size.height / density).toDouble(), topKey, bottomKey, cut, density)
+            val path = ListBands.path((size.width / density).toDouble(), (size.height / density).toDouble(), topKey, bottomKey, cut, density, bleed.value.toDouble())
             onDrawBehind {
                 if (rest != null) drawPath(path, rest)
                 when {
