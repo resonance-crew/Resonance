@@ -50,7 +50,7 @@ nonisolated enum TapDialog {
     /// the fade and the border; none where it doesn't clip.
     static func below(clipped: Bool) -> CGFloat { clipped ? ModalPaper.bleed : 0 }
     /// The scrolling region's bottom fade: the house's 16 over the last of the paper and the reach past its edge, so
-    /// the rows have faded out where the wobble cuts them.
+    /// the rows have faded out where the wobble cuts them. Its top fade the same past the top edge (round 34 §5).
     static func bottomFade(below: CGFloat) -> CGFloat { ScrollEdgeFades.length + below }
 
     /// How far a row reaches past the dialog's content on each side: in a dialog clipped to its paper, the paper's
@@ -114,6 +114,8 @@ struct TapDialogFoot: Layout {
 
 /// The family's region (round 34): `content` — the rows, or the passages' title and rows — reaching the paper's sides
 /// (its rows' bands edge to edge, ``TapDialog/reach(clipped:inset:)``), then the way out (``EnvironmentValues/dialogExit``).
+/// It is the dialog's first child (round 34 §5: a title heads it, never stands above it), so scrolling it reaches the
+/// paper's top border too.
 /// `cap`: the region's height at most, from its top to the paper's bottom edge (the web's: the content and the foot,
 /// 18 + 44 + 24). While the content and that foot fit it, the classic footer — the content, 18, the pill, the paper's
 /// 24; past it, the content scrolls in a region `cap` tall down to the paper's bottom edge (and past it by
@@ -161,9 +163,13 @@ struct TapDialogRegion<Content: View>: View {
     /// wobble), the pill floating over its bottom fade, the list's end keeping the pill's room.
     @ViewBuilder private func floating(reach: CGFloat, below: CGFloat) -> some View {
         let down = exit == nil ? 0 : below
+        // Round 34 §5 (「顶部渐变也贴齐纸张 border」): the region reaches the paper's top edge too, and the wobble's swing
+        // past it; the paper's top inset (24) is the content's own top padding inside it, so the content opens exactly
+        // where it did and slides under the top fade into the border.
+        let top = ModalPaper.top(inset: inset), up = below
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                content
+                content.padding(.top, top + up)
                 if let exit {
                     // The room: the pill itself, unseen (so it is the pill's at every text size), 18 over it and the
                     // paper's 24 and the reach past its edge under it.
@@ -177,10 +183,11 @@ struct TapDialogRegion<Content: View>: View {
         }
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.basedOnSize)
-        .scrollEdgeFades(bottom: TapDialog.bottomFade(below: down))
-        .frame(maxHeight: cap + down)
+        .scrollEdgeFades(ScrollEdgeFades.length + up, bottom: TapDialog.bottomFade(below: down))
+        .frame(maxHeight: cap + down + top + up)
         .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, -reach)
+        .padding(.top, -(top + up))
         // Down to the paper's bottom edge and past it (the paper's bottom inset given back): what the layout keeps is
         // the content's frame, so the pill's place below is the footer's.
         .padding(.bottom, exit == nil ? 0 : -(ModalPaper.insetV + down))

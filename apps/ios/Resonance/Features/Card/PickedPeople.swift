@@ -89,18 +89,13 @@ struct PickedPeople: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             let wide = TapListMetrics.wide(window)
-            ModalTitle(L10n.Card.Tap.pickedTitle, size: TapListMetrics.titleSize(wide: wide)).padding(.bottom, 10)
-            CSSText(L10n.Card.Tap.passageQuote(text: passage.text), font: Self.sentenceFont(script: script, wide: wide),
-                    lineHeight: Self.sentenceLeading(script: script), color: Tokens.UI.textMuted)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, 12)
-                .accessibilityIdentifier("tap-picked-passage")
             // The list from the first frame (§P3): while the people are read — before the read has even begun — the rows
             // the marks promise stand in their place, so nothing appears later that changes the dialog's height. Round 33:
-            // the family's region (``TapListBody``) — rows edge to edge, down to the paper's bottom under 關閉.
+            // the family's region (``TapListBody``) — rows edge to edge, down to the paper's bottom under 關閉; round 34
+            // §5: the title and the sentence head it, scrolling with the rows.
             let cap = Self.listCap(window: window.height)
-            TapListBody(people: list, loadingRows: Self.loadingRows(passage, cap: cap), cap: cap, line: Self.line(for:)) { person in
+            TapListBody(people: list, loadingRows: Self.loadingRows(passage, cap: cap), cap: cap,
+                        head: AnyView(head(wide: wide)), line: Self.line(for:)) { person in
                 onClose()
                 openRoute(Self.route(for: person))
             }
@@ -117,6 +112,19 @@ struct PickedPeople: View {
             let made = Self.people(cardId: cardId, passage: passage.id, api: session.reading)
             people = made
             await made.load()
+        }
+    }
+
+    /// The region's head (round 34 §5): the title and the sentence.
+    private func head(wide: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ModalTitle(L10n.Card.Tap.pickedTitle, size: TapListMetrics.titleSize(wide: wide)).padding(.bottom, 10)
+            CSSText(L10n.Card.Tap.passageQuote(text: passage.text), font: Self.sentenceFont(script: script, wide: wide),
+                    lineHeight: Self.sentenceLeading(script: script), color: Tokens.UI.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 12)
+                .accessibilityIdentifier("tap-picked-passage")
         }
     }
 }

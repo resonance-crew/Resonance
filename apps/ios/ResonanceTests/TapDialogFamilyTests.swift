@@ -216,7 +216,10 @@ import Testing
         #expect(got.first == got.settled)
         let scroll = try #require(got.scrolls.first)
         let rows = CGFloat(ids.count) * TapListMetrics.dialogRow
-        #expect(abs(scroll.contentSize.height - (rows + TapDialog.exitRoom() + ModalPaper.bleed)) < 1, "\(scroll.contentSize)")
+        // Round 34 §5: the region reaches the top border too, the paper's 24 (and the 16 past it) its content's own top.
+        let top = ModalPaper.top(inset: ModalPaper.listInset) + ModalPaper.bleed
+        #expect(abs(scroll.contentSize.height - (top + rows + TapDialog.exitRoom() + ModalPaper.bleed)) < 1, "\(scroll.contentSize)")
+        #expect(abs(scroll.bounds.height - (top + Self.cap + ModalPaper.bleed)) < 1, "\(scroll.bounds)")
         #expect(abs(Self.width - got.pill.maxX - 24) < 0.5, "\(got.pill)")
         #expect(abs(got.first - got.pill.midY - 24 - 22) < 0.5, "\(got.pill) in \(got.first)")
         #expect(TapDialog.bottomFade(below: ModalPaper.bleed) == ScrollEdgeFades.length + ModalPaper.bleed)
@@ -255,8 +258,22 @@ import Testing
         // Every element of the family reads it: no fixed phone size left in the rows or the titles.
         let faces = try source("TapFaces.swift")
         #expect(!faces.contains("AppFonts.body(15, weight: .semibold)") && !faces.contains(".font(AppFonts.body(13))"))
-        #expect(faces.contains("ModalTitle(L10n.Card.ResonatorsModal.title, size: TapListMetrics.titleSize("))
+        #expect(faces.contains("ModalTitle(L10n.Card.ResonatorsModal.title,") && faces.contains("size: TapListMetrics.titleSize(wide: TapListMetrics.wide(window))"))
         #expect(try source("PickedPeople.swift").contains("ModalTitle(L10n.Card.Tap.pickedTitle, size: TapListMetrics.titleSize(wide: wide))"))
         #expect(try source("TapPassages.swift").contains("ModalTitle(L10n.Card.Tap.passageTitle, size: TapListMetrics.titleSize("))
+    }
+
+    // MARK: Round 34 §5 — the region reaches the paper's top border
+
+    /// The titles head the region (no fixed band above its fade), and the region's top is the paper's: its scroll
+    /// stands 24 + 16 above the content and pads as much back in.
+    @Test func theHeadsScrollInTheRegionThatReachesTheTop() throws {
+        let faces = try source("TapFaces.swift"), picked = try source("PickedPeople.swift")
+        #expect(faces.contains("head: AnyView(ModalTitle(L10n.Card.ResonatorsModal.title"))
+        #expect(picked.contains("head: AnyView(head(wide: wide))"))
+        let dialog = try source("TapDialog.swift")
+        #expect(dialog.contains("content.padding(.top, top + up)"))
+        #expect(dialog.contains(".padding(.top, -(top + up))"))
+        #expect(dialog.contains(".scrollEdgeFades(ScrollEdgeFades.length + up, bottom:"))
     }
 }

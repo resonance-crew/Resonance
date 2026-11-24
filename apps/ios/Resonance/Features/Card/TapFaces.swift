@@ -256,12 +256,22 @@ struct TapListBody: View {
     let people: TapPeople?
     let loadingRows: Int
     let cap: CGFloat
+    /// What heads the region (round 34 §5: the author's title, who-picked's title and sentence), scrolling with the
+    /// rows, at the dialog's inset.
+    var head: AnyView? = nil
     let line: (TapPerson) -> TapRowLine?
     let press: (TapPerson) -> Void
+    @Environment(\.modalPaperClips) private var clips
+    @Environment(\.modalPaperInset) private var inset
 
     var body: some View {
         TapDialogRegion(cap: cap) {
             VStack(spacing: 0) {
+                if let head {
+                    head
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, TapDialog.reach(clipped: clips, inset: inset))
+                }
                 if let people {
                     TapRows(people: people.people, line: line, press: press)
                 }
@@ -421,10 +431,12 @@ struct AuthorTapList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ModalTitle(L10n.Card.ResonatorsModal.title, size: TapListMetrics.titleSize(wide: TapListMetrics.wide(window)))
-                .padding(.bottom, 10)
+            // The title heads the region (round 34 §5), scrolling with the rows.
             TapListBody(people: list, loadingRows: TapDialog.loadingRows(knownFaces: knownFaces),
-                        cap: Self.listCap(window: window.height)) { person in
+                        cap: Self.listCap(window: window.height),
+                        head: AnyView(ModalTitle(L10n.Card.ResonatorsModal.title,
+                                                 size: TapListMetrics.titleSize(wide: TapListMetrics.wide(window)))
+                            .padding(.bottom, 10))) { person in
                 TapRowLine.of(person, authorList: true, viewer: session.uid, offersPassages: false)
             } press: { person in
                 onClose()
