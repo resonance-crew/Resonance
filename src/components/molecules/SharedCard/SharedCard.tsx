@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type CSSProperties } from 'react';
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import { GrainOverlay } from '@/components/atoms/GrainOverlay/GrainOverlay';
 import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
@@ -16,6 +16,32 @@ import { coverImageBox } from '@/lib/images/coverFrame';
 import type { Card, User } from '@/lib/db/types';
 import styles from './SharedCard.module.css';
 import { RevealImg } from '@/components/atoms/RevealImg/RevealImg';
+
+/**
+ * The part of the cover that is seen (round 33 §Q4), measured before paint: the cover's span less its bleed past the
+ * container on either side (its negative side margins) — that width, and the span's height over it. Null until
+ * measured, or while `active` is false (no frame to cut).
+ */
+function useSeenCoverBox(active: boolean) {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const [box, setBox] = useState<{ ratio: number; bleed: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!active || !el) return;
+    const measure = () => {
+      const bleed = Math.max(0, -Number.parseFloat(getComputedStyle(el).marginLeft || '0') || 0);
+      const w = el.offsetWidth - 2 * bleed;
+      const h = el.offsetHeight;
+      const next = w > 0 && h > 0 ? { ratio: h / w, bleed } : null;
+      setBox((now) => (now?.ratio === next?.ratio && now?.bleed === next?.bleed ? now : next));
+    };
+    measure();
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [active]);
+  return { ref, box };
+}
 
 /** A card's palette family (StoryCard's): by its cover's hue, or the first. */
 function paletteOf(accentHue: number | undefined): number {
@@ -54,8 +80,11 @@ export function SharedCardContent({ card, author, titleId }: SharedCardContentPr
   const byline = card.anonymous ? null : author;
   const palette = paletteOf(card.accentHue);
   const cover = card.media?.url && !coverFailed ? card.media.url : null;
-  // The cover cut from its frame (round 25 §G1) for this 1.91 : 1 box, as the apps' chat cards cut theirs.
-  const framed = cover ? coverImageBox(card.media?.frame, 1 / 1.91) : null;
+  // The cover cut from its frame (round 25 §G1) for the box that is seen (round 33 §Q4): the cover reaches
+  // --shared-card-bleed past its container's sides, whose own wobbly edge ends it, so the frame's crop is cut for
+  // the container's width, not the bled one — until measured, for the 1.91 : 1 box as a whole.
+  const seen = useSeenCoverBox(!!cover && !!card.media?.frame);
+  const framed = cover ? coverImageBox(card.media?.frame, seen.box ? seen.box.ratio : 1 / 1.91) : null;
   // A summary's story is its plain excerpt and brings the whole story's read time along; a card read in full
   // (its summary didn't come) has its Markdown, to be read as words.
   const minutes = card.summary?.readMinutes ?? readMinutes(card.story);
@@ -86,16 +115,30 @@ export function SharedCardContent({ card, author, titleId }: SharedCardContentPr
         </span>
       </span>
       {cover ? (
-        <span className={styles.cover}>
-          <RevealImg reveal="thumb"
-            src={cover}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            onError={() => setCoverFailed(true)}
-            data-frame={framed ? '' : undefined}
-            style={framed ? { ...framed, right: 'auto', bottom: 'auto', maxWidth: 'none' } : undefined}
-          />
+        <span className={styles.cover} ref={seen.ref}>
+          {framed ? (
+            // The seen box (the container's width), the bleed on either side of it: the crop's percentages are of
+            // it, and the picture runs on past it into the bleed.
+            <span className={styles.coverSeen} data-cover-seen="" style={seen.box ? { left: seen.box.bleed, right: seen.box.bleed } : undefined}>
+              <RevealImg reveal="thumb"
+                src={cover}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                onError={() => setCoverFailed(true)}
+                data-frame=""
+                style={{ ...framed, right: 'auto', bottom: 'auto', maxWidth: 'none' }}
+              />
+            </span>
+          ) : (
+            <RevealImg reveal="thumb"
+              src={cover}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              onError={() => setCoverFailed(true)}
+            />
+          )}
         </span>
       ) : (
         <span

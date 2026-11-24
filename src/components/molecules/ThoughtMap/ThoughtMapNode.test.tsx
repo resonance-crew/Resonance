@@ -177,10 +177,12 @@ describe('a node’s thumb', () => {
     expect(thumb({ ...base, media })).toEqual(['-4', '-4', '64', '64', 'xMidYMid slice', null]);
   });
 
-  it('with a frame: the frame’s square crop fills it', () => {
-    // a 2 : 1 picture framed at its left edge: drawn 128 wide from x -4, so its left half fills the square
+  // Round 33 §Q4: the crop fills the 56 square that is seen, not the bled 64 one (this case pinned -4, -4, 128, 64:
+  // the frame's crop for the bled square, so the thumb showed only its middle).
+  it('with a frame: the frame’s square crop fills the square that is seen', () => {
+    // a 2 : 1 picture framed at its left edge: drawn 112 wide from x 0, so its left half fills the 56 square
     const [x, y, w, h, fit, framed] = thumb({ ...base, media: { ...media, frame: { cx: 0, cy: 0.5, zoom: 1, ar: 2 } } });
-    expect([Number(x), Number(y), Number(w), Number(h)]).toEqual([-4, -4, 128, 64]);
+    expect([Number(x), Number(y), Number(w), Number(h)]).toEqual([0, 0, 112, 56]);
     expect(fit).toBe('none');
     expect(framed).toBe('');
   });
