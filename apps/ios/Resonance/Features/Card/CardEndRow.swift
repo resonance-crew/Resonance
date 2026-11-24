@@ -66,6 +66,8 @@ struct CardEndRow: View {
     /// The reader's list asked for at the press (round 33 §Q1), handed to the dialog.
     @State private var listPeople: TapPeople?
     @State private var listOpening: Task<Void, Never>?
+    /// The reader's list read ahead (round 34 §8): asked for once the faces' line can open it, so a press finds it read.
+    @State private var listAhead: (key: String, people: TapPeople, reading: Task<Void, Never>)?
     /// Which part stayed with the reader (round 27 §U1): the dialog of the card's passages.
     @State private var passagesOpen = false
     /// The dialog's one press (``TapPassageRules/OnePress``), taken again each time it opens.
@@ -141,6 +143,11 @@ struct CardEndRow: View {
                 picking = false
             }
             .withSession(session)
+        }
+        // Round 34 §8: the list read before the press, again whenever the tap changes it — once the tap's own request
+        // has answered, so the list has the reader's row as it now stands.
+        .task(id: listOpens && !tap.working ? listKey : "") {
+            if listOpens && !tap.working { readListAhead() }
         }
         // The reader's list of who resonated: a centred dialog with no title (everyone, since Wave 2 #3b),
         // a phone's, a tablet's and the Mac's alike — the tap lists' family (round 33): clipped to its paper at 24.
@@ -417,17 +424,42 @@ struct CardEndRow: View {
         }
     }
 
-    /// The faces' list is asked for at the press, and the dialog waits for it at most ``TapDialog/firstPageWait``
-    /// (round 33 §Q1, the owner: 「谁共振了弹窗仍有高度闪动」): come by then, it opens at its final height, quotes and
-    /// all; not yet, with a loading row for each face shown, and the read carries on in it.
-    private func openList() {
-        listOpening?.cancel()
+    /// Whether the faces' line opens the reader's list (``rowTwo``'s button).
+    private var listOpens: Bool {
+        !tap.shownFaces.isEmpty && (!tap.onlyMine(viewer: session.uid) || (tap.on && offersPassages))
+    }
+
+    /// The list as it stands now (``TapDialog/listKey(card:on:passage:faces:more:)``).
+    private var listKey: String {
+        TapDialog.listKey(card: cardId, on: tap.on, passage: tap.passage, faces: tap.shownFaces.map(\.id), more: tap.showsMore)
+    }
+
+    /// Round 34 §8 (the owner: 「打开时先出现头像和名字，大约一秒后每一行的引句才出现」): the list's first page takes longer
+    /// than the 300 ms a press waits on a real network, so the dialog opened on its loading rows — a face's disc and a
+    /// name's bar each, 60 tall — and the rows came in with their quotes a moment later, taller. Now the page is read
+    /// as soon as the faces' line can open it (the end row on screen, the tap as it stands), and read again only when
+    /// that changes or the read failed: a press finds it read and the dialog opens complete.
+    private func readListAhead() {
+        let key = listKey
+        if let ahead = listAhead, ahead.key == key, ahead.people.phase != .failed { return }
         let api = session.reading, id = cardId
         let made = TapPeople { try await api.taps(id, pageToken: $0) }
+        listAhead = (key, made, Task { await made.load() })
+    }
+
+    /// The faces' list: read ahead (``readListAhead()``), or asked for now; the dialog waits for it at most
+    /// ``TapDialog/firstPageWait`` (round 33 §Q1): come by then, it opens at its final height, quotes and all; not yet,
+    /// with a loading row for each face shown, and the read carries on in it.
+    private func openList() {
+        listOpening?.cancel()
+        readListAhead()
+        guard let ahead = listAhead else { return }
         listOpening = Task {
-            await TapDialog.prepare(made)
+            if ahead.people.phase != .loaded {
+                _ = await firstAnswer(within: TapDialog.firstPageWait) { await ahead.reading.value }
+            }
             guard !Task.isCancelled else { return }
-            listPeople = made
+            listPeople = ahead.people
             listOpen = true
         }
     }
@@ -598,6 +630,13 @@ struct EndRowTwo<Faces: View>: View {
         Color.clear
             .frame(maxWidth: .infinity, minHeight: TapFaces.rowHeight, maxHeight: TapFaces.rowHeight)
             .overlay(alignment: .leading) { faces.padding(.leading, RowTwo.facesLead(centre: facesCentre, count: faceCount)) }
+            // Cut at the line's foot — the capsule's top edge (round 34 §9): a face rising in comes up out of the 共振
+            // segment, one going goes back down into it. Nothing is cut above or beside the line.
+            .mask {
+                Rectangle()
+                    .padding(.top, -TapFaces.rowHeight)
+                    .padding(.horizontal, -TapFaces.rowHeight)
+            }
     }
 }
 

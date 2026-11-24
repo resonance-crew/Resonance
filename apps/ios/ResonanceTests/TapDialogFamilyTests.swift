@@ -75,7 +75,8 @@ import Testing
     /// Each opener asks at the press and hands the dialog the list and the faces' count.
     @Test func everyOpenerAsksAtThePressAndPassesTheFacesCount() throws {
         let row = try source("CardEndRow.swift")
-        #expect(row.contains("await TapDialog.prepare(made)"))
+        // Round 34 §8: the reader's list is read ahead; a press waits at most the 300 ms for a read still on its way.
+        #expect(row.contains("_ = await firstAnswer(within: TapDialog.firstPageWait) { await ahead.reading.value }"))
         #expect(row.contains("preloaded: listPeople, knownFaces: tap.shownFaces.count"))
         #expect(row.contains("{ openList() }"))
         #expect(!row.contains("{ listOpen = true }"))
@@ -275,5 +276,58 @@ import Testing
         #expect(dialog.contains("content.padding(.top, top + up)"))
         #expect(dialog.contains(".padding(.top, -(top + up))"))
         #expect(dialog.contains(".scrollEdgeFades(ScrollEdgeFades.length + up, bottom:"))
+    }
+
+    // MARK: Round 34 §8 — the reader's list opens complete
+
+    /// The cause: the first page took longer than the press's 300 ms, so the dialog opened on its loading rows (a disc
+    /// and a bar each, 60 tall) and the rows came with their quotes later, taller. Now it is read ahead, once the faces'
+    /// line can open it and the tap's own request has answered, and again only when the tap as shown changes.
+    @Test func theReadersListIsReadAheadOfThePress() throws {
+        let row = try source("CardEndRow.swift")
+        #expect(row.contains(".task(id: listOpens && !tap.working ? listKey : \"\")"))
+        #expect(row.contains("if let ahead = listAhead, ahead.key == key, ahead.people.phase != .failed { return }"))
+        // A read already in hand opens at once.
+        #expect(row.contains("if ahead.people.phase != .loaded {"))
+        let key = { (on: Bool, passage: String?, faces: [String], more: Bool) in
+            TapDialog.listKey(card: "c", on: on, passage: passage, faces: faces, more: more)
+        }
+        #expect(key(true, "p1", ["me", "gus"], false) == key(true, "p1", ["me", "gus"], false))
+        #expect(key(true, "p1", ["me", "gus"], false) != key(false, "p1", ["gus"], false))
+        #expect(key(true, "p1", ["me"], false) != key(true, "p2", ["me"], false))
+        #expect(key(true, nil, ["me", "gus"], false) != key(true, nil, ["me", "gus"], true))
+    }
+
+    /// The first drawn rows carry their quotes: a list read when the dialog opens lays out its quote lines in its first
+    /// measure (a quote of two lines takes a row past the 60 of a name alone, which is what grew when the rows came in).
+    @Test func theFirstDrawnRowsCarryTheirQuotes() async throws {
+        let people = ["gus", "bob"].map { TapPerson(author: Fixture.author($0), note: nil, passage: .init(value1: .init(text: "\($0)：" + String(repeating: "那一段讓我想起搬家的那個晚上，", count: 4)))) }
+        let list = TapPeople { _ in TapList(people: people, nextPageToken: nil) }
+        await list.load()
+        let line = { (p: TapPerson) in TapRowLine.of(p, authorList: false, viewer: "dora", offersPassages: true) }
+        #expect(line(people[0]) == people[0].passage.map { .quote($0.value1.text) })
+        let body = TapListBody(people: list, loadingRows: 2, cap: 600, line: line, press: { _ in })
+        let first = dialogSize(body, width: 400)
+        #expect(first.height > 2 * TapListMetrics.dialogRow + 10, "\(first.height)")
+        let bare = dialogSize(TapListBody(people: list, loadingRows: 2, cap: 600, line: { _ in nil }, press: { _ in }), width: 400)
+        #expect(first.height > bare.height, "\(first.height) vs \(bare.height)")
+    }
+
+    // MARK: Round 34 §9 — the reader's face rises out of 共振
+
+    /// On turning 共振 on, the reader's face comes up out of the segment (cut by its top edge — the faces' line's foot)
+    /// and goes back down into it on turning it off, in the house's short ease; nothing under Reduce Motion.
+    @Test func theReadersFaceRisesOutOfTheSegment() throws {
+        #expect(TapFaces.rise() == 36)
+        #expect(TapFaces.rise() >= TapFaces.rowHeight - (TapFaces.rowHeight - FaceStack.size) / 2)
+        let faces = try source("TapFaces.swift"), row = try source("CardEndRow.swift")
+        #expect(faces.contains("FaceStack(faces: faces.map(Self.face), transition: Self.riseTransition)"))
+        #expect(faces.contains(".asymmetric(insertion: .offset(y: rise()), removal: .offset(y: rise()))"))
+        // Cut at the line's foot only.
+        #expect(row.contains(".padding(.top, -TapFaces.rowHeight)"))
+        #expect(row.contains("withAnimation(reduceMotion ? nil : TapFaces.slide) { tap.flip(viewer: viewer) }"))
+        // The line keeps its 44 whatever comes and goes.
+        let empty = dialogSize(EndRowTwo(facesCentre: 100, faceCount: 0) { EmptyView() }, width: 400)
+        #expect(empty.height == TapFaces.rowHeight)
     }
 }
