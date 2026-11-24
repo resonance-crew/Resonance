@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalConfiguration
@@ -257,7 +258,9 @@ internal fun TapPassages(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 BasicText(p.text, Modifier.weight(1f), style = words)
-                if (isChosen) OrganicIcon(IconName.Check, size = 16.dp, color = Tokens.Text)
+                // Round 34 (7): the check's slot (16 + the row's 12) kept on every row, unseen until picked — the words'
+                // width, and so their lines, never change when it shows.
+                OrganicIcon(IconName.Check, size = 16.dp, color = Tokens.Text, modifier = Modifier.alpha(if (isChosen) 1f else 0f).flowTag("tap-passage-check-$i"))
             }
         }
     }

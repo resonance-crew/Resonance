@@ -489,4 +489,31 @@ class TapPassagesTest {
             }
         }
     }
+
+    /** Passage [i]'s words as laid out: their width and their line count. */
+    private fun wordsLayout(i: Int): Pair<Int, Int> {
+        val node = compose.onNodeWithText(passages[i].text, useUnmergedTree = true).fetchSemanticsNode()
+        val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        node.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+        val layout = results.single()
+        return layout.size.width to layout.lineCount
+    }
+
+    @Test fun theChecksSlotIsKeptSoPickingNeverRewrapsTheWords() {
+        // Round 34 (7) (the owner saw the sentence re-wrap and the dialog's height jump as the ✓ appeared): the slot is
+        // on every row, unseen until picked.
+        show(hold = true)
+        compose.waitForIdle()
+        val before = passages.indices.map(::wordsLayout)
+        val rowBefore = compose.onNodeWithTag("tap-passage-0", useUnmergedTree = true).getBoundsInRoot()
+        passages.indices.forEach { compose.onNodeWithTag("tap-passage-check-$it", useUnmergedTree = true).assertExists() }
+        compose.onNodeWithTag("tap-passage-0", useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("tap-passage-0", useUnmergedTree = true).assertIsSelected()
+        assertEquals("the words' width and lines unchanged", before, passages.indices.map(::wordsLayout))
+        assertEquals(rowBefore, compose.onNodeWithTag("tap-passage-0", useUnmergedTree = true).getBoundsInRoot())
+        val source = File("src/main/kotlin/com/resonance/app/ui/TapPassages.kt").readText()
+        assertTrue(source.contains("Modifier.alpha(if (isChosen) 1f else 0f)"))
+        assertFalse("never added only when picked", source.contains("if (isChosen) OrganicIcon("))
+    }
 }
