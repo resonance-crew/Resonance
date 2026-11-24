@@ -330,4 +330,19 @@ import Testing
         let empty = dialogSize(EndRowTwo(facesCentre: 100, faceCount: 0) { EmptyView() }, width: 400)
         #expect(empty.height == TapFaces.rowHeight)
     }
+
+    // MARK: Round 34 §10 — no note's excerpt in the rows
+
+    /// A row is its face, its pen name and (in the who-resonated lists) the quote: a note the answer still carries is
+    /// not drawn — a row with a note and no quote is the 60 of a name alone — and it still leads to that conversation.
+    @Test func aRowDrawsNoNote() async throws {
+        let withNote = TapPerson(author: Fixture.author("carol"), note: .init(value1: .init(excerpt: String(repeating: "謝謝你寫下這段，", count: 8))))
+        let list = TapPeople { _ in TapList(people: [withNote], nextPageToken: nil) }
+        await list.load()
+        let size = dialogSize(TapRows(people: list.people, line: { _ in nil }, press: { _ in }), width: 400)
+        #expect(abs(size.height - TapListMetrics.dialogRow) < 0.5, "\(size.height)")
+        #expect(TapPersonRow.route(for: withNote) == .thread(handle: "carol", uid: "carol", note: nil))
+        #expect(!(try source("TapFaces.swift")).contains("person.note?.value1.excerpt"))
+    }
+
 }
