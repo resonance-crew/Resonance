@@ -366,6 +366,9 @@ struct CropStage: View {
     let size: CGSize
     let outline: CropOutline
     let label: String
+    /// A drag pushed along an axis the picture has no room in at this zoom (`true`: across, `false`: up and down) —
+    /// 調整封面's 放大後才能移動 shows from it (round 33 §Q5).
+    var onNoRoom: ((_ across: Bool) -> Void)? = nil
     @FocusState private var focused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// A drag past where the picture can go (round 33 §Q5): what the clamp refused, and the stretch drawn for it.
@@ -403,6 +406,7 @@ struct CropStage: View {
         .gesture(CropPan { delta in
             // Past its limit — or with no room at all — the picture follows the finger a little, against resistance
             // (none under Reduce Motion), and springs back when it lets go.
+            if let axis = CropRubber.noRoomAxis(delta, crop: crop) { onNoRoom?(axis) }
             rubber.drag(delta, crop: &crop, stretches: !reduceMotion)
         } ended: {
             guard rubber.stretch != .zero || rubber.pull != .zero else { return }
@@ -530,6 +534,15 @@ struct CropRubber: Equatable {
         }
         pull = CGSize(width: px, height: py)
         stretch = CGSize(width: Self.band(px), height: Self.band(py))
+    }
+
+    /// The axis a move of `delta` pushes (mostly) along when the picture has no room in it at all at this zoom
+    /// (`true`: across), else nil.
+    static func noRoomAxis(_ delta: CGSize, crop: AvatarCrop) -> Bool? {
+        let across = abs(delta.width) >= abs(delta.height)
+        guard max(abs(delta.width), abs(delta.height)) > 0 else { return nil }
+        let room = across ? crop.room.width : crop.room.height
+        return room < AvatarCrop.noRoom ? across : nil
     }
 
     /// The fingers lifted: nothing past the limit any more.

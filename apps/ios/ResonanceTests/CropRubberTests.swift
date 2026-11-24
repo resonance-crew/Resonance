@@ -66,15 +66,30 @@ import Testing
         #expect(source?.contains("if [.ended, .cancelled, .failed].contains(recognizer.state) { return ended() }") == true)
     }
 
-    @Test func theHintShowsWhileThePictureHasNoRoomInAnAxis() {
-        // Zoom 1: a 3:2 picture is the frame's width — no room across.
-        #expect(CoverFrameContent.hintsZoom(cover()))
-        // Zoomed in: room both ways, no hint.
-        #expect(!CoverFrameContent.hintsZoom(cover(zoom: 1.3)))
-        // A portrait photo at zoom 1: the frame's width again, room up and down only.
+    /// The hint (the web's and Android's choice): not when the window opens, but once a drag pushes along an axis with
+    /// no room, until a zoom gives that axis room.
+    @Test func theHintShowsOnceADragFindsNoRoomUntilAZoomGivesIt() {
+        var crop = cover()
+        #expect(crop.lacksRoom)
+        var hint = NoRoomHint()
+        #expect(!hint.shows(crop), "the window opens quietly")
+        // Up and down a 3:2 picture has a sliver of room at zoom 1: no push. Across it has none.
+        #expect(CropRubber.noRoomAxis(CGSize(width: 2, height: 20), crop: crop) == nil)
+        let axis = CropRubber.noRoomAxis(CGSize(width: 20, height: 3), crop: crop)
+        #expect(axis == true)
+        hint.pushed(across: true)
+        #expect(hint.shows(crop))
+        // Zoomed in: room across, the hint goes and the push is forgotten.
+        crop.zoom(to: 1.3)
+        #expect(!hint.shows(crop))
+        hint.settle(crop)
+        crop.zoom(to: 1)
+        #expect(!hint.shows(crop))
+        // A portrait photo: no room across at zoom 1, room up and down.
         let portrait = AvatarCrop(imageSize: CGSize(width: 1024, height: 1536), frame: CGSize(width: 352, height: 352 * 0.62), cover: nil)
         #expect(portrait.room.width < AvatarCrop.noRoom && portrait.room.height > 100)
-        #expect(CoverFrameContent.hintsZoom(portrait))
+        #expect(CropRubber.noRoomAxis(CGSize(width: 0, height: 30), crop: portrait) == nil)
+        #expect(CropRubber.noRoomAxis(CGSize(width: -30, height: 0), crop: portrait) == true)
         // The words, both languages, with no full stop.
         #expect(Strings.shared.string("write.coverFrame.zoomToMove") == L10n.Write.CoverFrame.zoomToMove)
         #expect(!L10n.Write.CoverFrame.zoomToMove.hasSuffix("。") && !L10n.Write.CoverFrame.zoomToMove.hasSuffix("."))
