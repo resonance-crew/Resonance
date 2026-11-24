@@ -37,7 +37,7 @@ struct TapPassages: View {
             // bottom fade at the paper's edge once it scrolls (round 34, ``TapDialogRegion``).
             TapDialogRegion(cap: TapPassageRules.regionCap(window: window.height, room: room)) {
                 VStack(alignment: .leading, spacing: 0) {
-                    ModalTitle(L10n.Card.Tap.passageTitle)
+                    ModalTitle(L10n.Card.Tap.passageTitle, size: TapListMetrics.titleSize(wide: TapListMetrics.wide(window)))
                         .padding(.bottom, TapPassageRules.titleGap)
                         .padding(.horizontal, reach)
                     ForEach(shown, id: \.element.id) { i, passage in
@@ -73,7 +73,7 @@ struct TapPassages: View {
         return Button { onChoose(TapPassageRules.choice(pressing: passage.id, current: picked)) } label: {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 CSSText(passage.text,
-                        font: AppFonts.storyUIFont(story.bodyFamily, size: TapPassageRules.textSize, relativeTo: .body),
+                        font: AppFonts.storyUIFont(story.bodyFamily, size: TapPassageRules.textSize(wide: TapListMetrics.wide(window)), relativeTo: .body),
                         lineHeight: story.bodyLeading, color: Tokens.UI.text)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -114,6 +114,8 @@ nonisolated enum TapPassageRules {
     static let closeDelay: Duration = .milliseconds(300)
     /// The passages' words: the story's type at 16, with its leading.
     static let textSize: CGFloat = 16
+    /// On a tablet and the Mac, two points more (round 34, the family's type: ``TapListMetrics/sentenceSize(wide:)``).
+    static func textSize(wide: Bool) -> CGFloat { TapListMetrics.sentenceSize(wide: wide) }
     static let checkSize: CGFloat = 16
 
     /// Whether these are passages to offer at all.

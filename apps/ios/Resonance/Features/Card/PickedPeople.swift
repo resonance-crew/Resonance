@@ -64,8 +64,9 @@ struct PickedPeople: View {
 
     /// The sentence's face (§S12): the story's body face for `script` at 16 × the reading text scale, as the round 27
     /// passages dialog sets its rows.
-    static func sentenceFont(script: StoryScript) -> UIFont {
-        AppFonts.storyUIFont(StoryTypography(script: script, compact: true).bodyFamily, size: sentenceSize, relativeTo: .body)
+    static func sentenceFont(script: StoryScript, wide: Bool = false) -> UIFont {
+        AppFonts.storyUIFont(StoryTypography(script: script, compact: true).bodyFamily,
+                             size: TapListMetrics.sentenceSize(wide: wide), relativeTo: .body)
     }
 
     /// The sentence's leading: the story's compact one (1.8 for a CJK story, 1.6 for a Latin one), at every width.
@@ -87,8 +88,9 @@ struct PickedPeople: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ModalTitle(L10n.Card.Tap.pickedTitle).padding(.bottom, 10)
-            CSSText(L10n.Card.Tap.passageQuote(text: passage.text), font: Self.sentenceFont(script: script),
+            let wide = TapListMetrics.wide(window)
+            ModalTitle(L10n.Card.Tap.pickedTitle, size: TapListMetrics.titleSize(wide: wide)).padding(.bottom, 10)
+            CSSText(L10n.Card.Tap.passageQuote(text: passage.text), font: Self.sentenceFont(script: script, wide: wide),
                     lineHeight: Self.sentenceLeading(script: script), color: Tokens.UI.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -94,7 +94,7 @@ final class TapPeople {
 /// 会不会好一点呢」), rows 60 with faces 36. The author's is 480 wide at most everywhere; a reader's keeps a phone's 400
 /// (「手机上已经是这个 model 的设计了，所以可能只有平板和电脑网页和 Mac APP 需要更改哦」) and is 480 on a tablet and the Mac,
 /// as the web's `TAP_LIST_DIALOG_WIDTH` and Android's `readerListWidth`.
-enum TapListMetrics {
+nonisolated enum TapListMetrics {
     static let dialogWidth: CGFloat = 480
     static func readerWidth(compact: Bool) -> CGFloat { compact ? 400 : dialogWidth }
     static let dialogRow: CGFloat = 60
@@ -104,6 +104,16 @@ enum TapListMetrics {
     /// Above and below a row's content: within 60 for a name and one line.
     static let rowPad: CGFloat = 8
 
+    /// The family's type (round 34, the owner on the iPad: 「里面的字体太小…像是直接沿用手机版小字号」): a phone's sizes,
+    /// and two points more on a tablet and the Mac (any window wider than compact, as Android's tablets) — the title
+    /// 20 → 22, a pen name 15 → 17, a quote, 選一段 and a note's excerpt 13 → 15, the picked sentence and the passages
+    /// 16 → 18. The pills (關閉, 略過, 顯示更多) keep the small pill's 14; the rows' 60 and faces' 36 stay. Each still
+    /// grows with the person's text size (the sentence and the passages along the reading curve, with the Mac's boost).
+    static func wide(_ window: WindowLayout) -> Bool { window.layoutClass != .compact }
+    static func titleSize(wide: Bool) -> CGFloat { wide ? 22 : 20 }
+    static func nameSize(wide: Bool) -> CGFloat { wide ? 17 : 15 }
+    static func lineSize(wide: Bool) -> CGFloat { wide ? 15 : 13 }
+    static func sentenceSize(wide: Bool) -> CGFloat { wide ? 18 : 16 }
 }
 
 /// One person of a list: their face and pen name, banded (the curves show as a press's wash), leading to their page —
@@ -124,10 +134,12 @@ struct TapPersonRow: View {
     let action: () -> Void
     @Environment(\.modalPaperClips) private var clips
     @Environment(\.modalPaperInset) private var inset
+    @Environment(\.window) private var window
 
     var body: some View {
         let author = person.author
         let note = person.note?.value1.excerpt
+        let wide = TapListMetrics.wide(window)
         let reach = TapDialog.reach(clipped: clips, inset: inset)
         Button(action: action) {
             HStack(spacing: 12) {
@@ -135,12 +147,12 @@ struct TapPersonRow: View {
                                 color: author.accent, size: TapListMetrics.dialogFace, seed: author.avatarSeedValue)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(author.handle)
-                        .font(AppFonts.body(15, weight: .semibold))
+                        .font(AppFonts.body(TapListMetrics.nameSize(wide: wide), weight: .semibold))
                         .foregroundStyle(Tokens.text)
                         .lineLimit(1)
                     if let line {
                         Text(line.words)
-                            .font(AppFonts.body(13))
+                            .font(AppFonts.body(TapListMetrics.lineSize(wide: wide)))
                             .foregroundStyle(line == .pick ? Tokens.buttonOnTonal : Tokens.textMuted)
                             .lineLimit(TapListMetrics.lineLimit)
                             .truncationMode(.tail)
@@ -148,7 +160,7 @@ struct TapPersonRow: View {
                     }
                     if let note {
                         Text(note)
-                            .font(AppFonts.body(13))
+                            .font(AppFonts.body(TapListMetrics.lineSize(wide: wide)))
                             .foregroundStyle(Tokens.textMuted)
                             .lineLimit(TapListMetrics.lineLimit)
                             .truncationMode(.tail)
@@ -409,7 +421,8 @@ struct AuthorTapList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ModalTitle(L10n.Card.ResonatorsModal.title).padding(.bottom, 10)
+            ModalTitle(L10n.Card.ResonatorsModal.title, size: TapListMetrics.titleSize(wide: TapListMetrics.wide(window)))
+                .padding(.bottom, 10)
             TapListBody(people: list, loadingRows: TapDialog.loadingRows(knownFaces: knownFaces),
                         cap: Self.listCap(window: window.height)) { person in
                 TapRowLine.of(person, authorList: true, viewer: session.uid, offersPassages: false)

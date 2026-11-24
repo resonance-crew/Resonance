@@ -235,4 +235,28 @@ import Testing
         #expect(abs(three.first - three.pill.midY - (four.first - four.pill.midY)) < 0.5)
     }
 
+    // MARK: Round 34 — the family's type on a tablet and the Mac
+
+    /// 「iPad 上…名单弹窗里面的字体太小」: two points more past compact (Android's step), a phone's sizes unchanged, the
+    /// pills and the rows' measures kept; each size still follows the person's text size.
+    @Test func theFamilysTypeStepsUpTwoPastCompact() throws {
+        let phone = TapListMetrics.wide(.phone), iPad = TapListMetrics.wide(WindowLayout(width: 820, height: 1180))
+        #expect(!phone && iPad)
+        #expect(!TapListMetrics.wide(WindowLayout(width: 599, height: 900)) && TapListMetrics.wide(WindowLayout(width: 600, height: 900)))
+        #expect([false, true].map { TapListMetrics.titleSize(wide: $0) } == [20, 22])
+        #expect([false, true].map { TapListMetrics.nameSize(wide: $0) } == [15, 17])
+        #expect([false, true].map { TapListMetrics.lineSize(wide: $0) } == [13, 15])
+        #expect([false, true].map { TapListMetrics.sentenceSize(wide: $0) } == [16, 18])
+        #expect(TapPassageRules.textSize(wide: true) == 18 && TapPassageRules.textSize == 16)
+        #expect(TapListMetrics.dialogRow == 60 && TapListMetrics.dialogFace == 36)
+        // The sentence's face grows with it (and with the person's text size, along the reading curve).
+        let small = PickedPeople.sentenceFont(script: .cjk), large = PickedPeople.sentenceFont(script: .cjk, wide: true)
+        #expect(abs(large.pointSize / small.pointSize - 18.0 / 16.0) < 0.01, "\(small.pointSize) → \(large.pointSize)")
+        // Every element of the family reads it: no fixed phone size left in the rows or the titles.
+        let faces = try source("TapFaces.swift")
+        #expect(!faces.contains("AppFonts.body(15, weight: .semibold)") && !faces.contains(".font(AppFonts.body(13))"))
+        #expect(faces.contains("ModalTitle(L10n.Card.ResonatorsModal.title, size: TapListMetrics.titleSize("))
+        #expect(try source("PickedPeople.swift").contains("ModalTitle(L10n.Card.Tap.pickedTitle, size: TapListMetrics.titleSize(wide: wide))"))
+        #expect(try source("TapPassages.swift").contains("ModalTitle(L10n.Card.Tap.passageTitle, size: TapListMetrics.titleSize("))
+    }
 }
