@@ -191,6 +191,8 @@ fun OrganicModal(
     scrollsItself: Boolean = false,
     /** The paper's side padding ([ModalPaperInset]; round 33 §Q2: the tap lists' 24). */
     sideInset: Dp = ModalPaperInset,
+    /** The paper's top padding (32; round 33 §Q2: the tap lists' 24). */
+    topInset: Dp = 32.dp,
     /** The paper's bottom padding (32; round 33 §Q3: 0 under a scroll region that reaches the paper's foot). */
     bottomInset: Dp = 32.dp,
     content: @Composable ColumnScope.() -> Unit,
@@ -271,7 +273,7 @@ fun OrganicModal(
                         // A card taller than the room scrolls, its words fading where there is more — unless its
                         // content keeps a scroll region of its own ([scrollsItself]).
                         .then(if (scrollsItself) Modifier else Modifier.scrollFade(scroll, ModalScrollFade).verticalScroll(scroll))
-                        .padding(start = sideInset, end = sideInset, top = 32.dp, bottom = bottomInset),
+                        .padding(start = sideInset, end = sideInset, top = topInset, bottom = bottomInset),
                     verticalArrangement = Arrangement.spacedBy(ModalGap),
                     content = content,
                 )

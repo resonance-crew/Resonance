@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -22,7 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.resonance.design.ButtonVariant
-import com.resonance.design.ModalActionMinHeight
 import com.resonance.design.ModalActionMinWidth
 import com.resonance.design.ModalScrollFade
 import com.resonance.design.OrganicButton
@@ -38,7 +38,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * 固定浮在滚动区底部渐变之上 … 用有颜色的浮动按钮): who resonated (a reader's list, the author's), who picked a sentence, and
  * which passage stayed with you. One shell for the four, the twin of the web's and iOS's:
  *
- * - §Q2: the paper's side inset is [TapListInset] (24, the house's 28 elsewhere); one scroll region from the paper's left
+ * - §Q2: the paper's inset is [TapListInset] (24 top and sides, the house's 32 / 28 elsewhere; 0 at the foot); one scroll region from the paper's left
  *   edge to its right ([toModalPaperEdges]), clipped to its wobble under its pen line (`clipToPaper`), so a row's band
  *   reaches both edges — the rows pad themselves the inset back, their faces and words on the title's edge.
  * - §Q3: the region reaches the paper's foot; the one way out ([exit]) floats over it at the foot's end, its right edge
@@ -64,7 +64,7 @@ internal fun TapListModal(
 ) {
     OrganicModal(
         onDismiss, title, seed = seed, closeLabel = exit, maxWidth = maxWidth,
-        clipToPaper = true, scrollsItself = true, sideInset = TapListInset, bottomInset = 0.dp,
+        clipToPaper = true, scrollsItself = true, sideInset = TapListInset, topInset = TapListInset, bottomInset = 0.dp,
     ) {
         Box(Modifier.fillMaxWidth().weight(1f, fill = false)) {
             Column(
@@ -83,7 +83,7 @@ internal fun TapListModal(
                 exitModifier
                     .align(Alignment.BottomEnd)
                     .padding(bottom = FloatingExitBottom)
-                    .heightIn(min = FloatingExitHeight)
+                    .height(FloatingExitHeight)
                     .widthIn(min = ModalActionMinWidth),
                 variant = ButtonVariant.Tonal, small = true, onClick = onDismiss,
             )
@@ -91,11 +91,11 @@ internal fun TapListModal(
     }
 }
 
-/** The family's paper side inset (round 33 §Q2: 28 → 24 — these dialogs only; every other modal keeps 28). */
+/** The family's paper inset, top and sides (round 33 §Q2: 28 → 24, 32 → 24 on top — these dialogs only; every other modal keeps 28 / 32). */
 internal val TapListInset: Dp = 24.dp
 
-/** The floating way out's touch height: the house's one-exit pill's ([ModalActionMinHeight], 44 at least). */
-internal val FloatingExitHeight: Dp = ModalActionMinHeight
+/** The floating way out's height (§Q3: 44, a finger's, as the web's and iOS's). */
+internal val FloatingExitHeight: Dp = 44.dp
 
 /** From the paper's bottom edge to the floating button's (§Q3: ~16). */
 internal val FloatingExitBottom: Dp = 16.dp

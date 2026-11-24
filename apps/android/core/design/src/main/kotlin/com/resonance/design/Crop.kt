@@ -1,6 +1,8 @@
 package com.resonance.design
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import androidx.compose.ui.platform.LocalContext
@@ -10,9 +12,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.focusable
@@ -127,6 +127,9 @@ const val AVATAR_STAGE_MAX = 400f
 const val COVER_STAGE_MAX = 480f
 
 fun cropMask(stage: Dp): Dp = stage - (CROP_MARGIN * 2).dp
+
+/** How long a pull past the limit takes to spring back (round 33 §Q5: ~280, the web's and iOS's). */
+const val RUBBER_BACK_MS = 280
 
 /** The scrim over the photo outside the mask: over a picture, the same dark in either scheme. */
 private val CropScrim = OverPicture.Scrim
@@ -301,7 +304,7 @@ fun FrameCropStage(
                     pull[1] = 0.0
                     val from = band
                     if (from != Offset.Zero) springBack[0] = scope.launch {
-                        animate(1f, 0f, animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)) { t, _ -> band = from * t }
+                        animate(1f, 0f, animationSpec = tween(RUBBER_BACK_MS, easing = FastOutSlowInEasing)) { t, _ -> band = from * t }
                         band = Offset.Zero
                     }
                 }

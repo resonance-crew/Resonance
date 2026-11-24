@@ -4,6 +4,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import android.content.Context
 import android.view.InputDevice
+import com.resonance.design.OverPicture
+import com.resonance.design.CROP_MARGIN
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.Box
 import com.resonance.design.prefersReducedMotion
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.semantics.semantics
@@ -113,7 +117,8 @@ internal val CropZoomRowHeight = 36.dp
 
 /**
  * 放大後才能移動 under the cover's frame (round 33 §Q5), once a drag found no room on its axis at this zoom, until the
- * zoom gives it room. Its line is held whether it shows or not (it only fades), so nothing under the frame jumps.
+ * zoom gives it room: in the stage's own margin under the frame, on the dimmed picture in its light ink, so nothing
+ * under the stage moves (the web's and iOS's place). It only fades.
  */
 @Composable
 internal fun CropNoRoomHint(shown: Boolean) {
@@ -122,11 +127,14 @@ internal fun CropNoRoomHint(shown: Boolean) {
     BasicText(
         L10n.Write.CoverFrame.zoomToMove,
         Modifier
-            .padding(top = 8.dp)
+            .padding(horizontal = 8.dp)
+            .heightIn(min = CROP_MARGIN.dp)
+            .wrapContentHeight(Alignment.CenterVertically)
             .graphicsLayer { this.alpha = alpha }
             .testTag(CropNoRoomTag)
             .then(if (shown) Modifier.semantics { liveRegion = LiveRegionMode.Polite } else Modifier.clearAndSetSemantics {}),
-        style = AppFonts.body(13.5f, lineHeight = 1.5f, color = Tokens.TextMuted).copy(textAlign = TextAlign.Center),
+        style = AppFonts.body(12.5f, 600, lineHeight = 1.3f, color = OverPicture.Ink).copy(textAlign = TextAlign.Center),
+        maxLines = 1,
     )
 }
 
@@ -168,12 +176,15 @@ internal fun CoverFrameDialog(photo: ImageBitmap, frame: CoverFraming?, onCancel
                         style = AppFonts.body(13.5f, lineHeight = 1.5f, color = Tokens.TextMuted),
                     )
                 }
-                Column(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    FrameCropStage(
-                        photo, width, COVER_FRAME_RATIO, CoverFraming.MAX_ZOOM, shown, { state = it },
-                        L10n.Write.CoverFrame.stage, moves = CropMoves, onBlocked = { pushed = true },
-                    ) { _, _ -> OrganicImageShape(91.0) }
-                    CropNoRoomHint(pushed && noRoom)
+                Box(Modifier.fillMaxWidth().padding(top = 2.dp), contentAlignment = Alignment.Center) {
+                    Box(contentAlignment = Alignment.BottomCenter) {
+                        FrameCropStage(
+                            photo, width, COVER_FRAME_RATIO, CoverFraming.MAX_ZOOM, shown, { state = it },
+                            L10n.Write.CoverFrame.stage, moves = CropMoves, onBlocked = { pushed = true },
+                        ) { _, _ -> OrganicImageShape(91.0) }
+                        // Under the frame, on the dimmed picture's margin: nothing below it moves (the web's place too).
+                        CropNoRoomHint(pushed && noRoom)
+                    }
                 }
                 CropZoomRow(
                     shown.z, CoverFraming.MAX_ZOOM, L10n.Crop.zoom, moved = shown != CropState(),
