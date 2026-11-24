@@ -391,23 +391,23 @@ class TapPassagesTest {
         // The title is the region's first child: 10 over the first row, inside the region.
         assertTrue("the title inside the scroll region", title.top >= region.top - 0.5.dp && title.bottom <= region.bottom)
         assertEquals(10f, (first.top - title.bottom).value, 0.5f)
-        // Round 33 §Q3: the region reaches the paper's foot and 略過 floats over it — no footer under the region — its right
-        // edge on the content's (the paper's less 24), 16 over the paper's edge; the list's end keeps the button's
-        // height + 16 so the last row clears it; short content: the dialog as tall as the rows and that room.
+        // Round 33 §Q3, round 34: the region reaches the paper's foot and 略過 stands in its end's room — its right edge on
+        // the content's (the paper's less 24), 24 over the paper's edge; the list's end keeps 24 + 44 + 18 so the last row
+        // clears it; short content: the dialog as tall as the rows and that room (TapListFootTest: the two states).
         val paper = compose.onNode(paperMatcher, useUnmergedTree = true).getBoundsInRoot()
         assertEquals("the region down to the paper's foot", paper.bottom.value, region.bottom.value, 1f)
         assertTrue("略過 over the region", skip.top >= region.top && skip.bottom <= region.bottom + 0.5.dp)
         assertEquals("略過's right edge on the content's", (paper.right - 24.dp).value, skip.right.value, 1f)
-        assertEquals(16f, (paper.bottom - skip.bottom).value, 1f)
+        assertEquals(24f, (paper.bottom - skip.bottom).value, 1f)
         assertTrue("a finger's 44 at least", (skip.bottom - skip.top).value >= 44f - 0.5f)
-        // Scrolled to the end, the last row stands clear of it: the list's end keeps the button's height + 16.
+        // Scrolled to the end, the last row stands clear of it: the list's end keeps 24 + 44 + 18.
         repeat(3) { compose.onNodeWithTag("tap-passages", useUnmergedTree = true).performTouchInput { swipeUp() } }
         compose.waitForIdle()
         val end = compose.onNodeWithTag("tap-passage-2", useUnmergedTree = true).getBoundsInRoot()
         val skipThen = compose.onNodeWithTag("tap-passage-skip", useUnmergedTree = true).getBoundsInRoot()
         assertEquals("略過 never moved", skip.top.value, skipThen.top.value, 0.5f)
         assertTrue("the last row (${end.bottom}) clear of 略過 (${skip.top})", end.bottom <= skip.top + 0.5.dp)
-        assertEquals((FloatingExitHeight + FloatingExitBottom).value, (region.bottom - end.bottom).value, 1f)
+        assertEquals(FloatingExitRoom.value, (region.bottom - end.bottom).value, 1f)
     }
 
     @Test fun skipIsTheFamilysFloatingTonalPill() {

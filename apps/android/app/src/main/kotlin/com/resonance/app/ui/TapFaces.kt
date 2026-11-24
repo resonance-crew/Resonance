@@ -41,7 +41,6 @@ import com.resonance.design.HandDrawnAvatar
 import com.resonance.design.LayoutClass
 import com.resonance.design.LocalWindowLayout
 import com.resonance.design.ModalGap
-import com.resonance.design.ModalTitle
 import com.resonance.design.OrganicButton
 import com.resonance.design.OrganicIcon
 import com.resonance.design.generated.IconName
@@ -258,7 +257,7 @@ internal fun ReaderTapDialog(
 ) {
     val width = readerListWidth(LocalWindowLayout.current.cls)
     TapListModal(onDismiss, L10n.Card.Tap.label, seed = 41.0, exit = L10n.Native.close, maxWidth = width) {
-        TapRows(list, TapRowMeasure.Dialog, lines = lines, expected = expected, onRow = onRow)
+        TapRows(list, TapRowMeasure.dialog(LocalWindowLayout.current.cls), lines = lines, expected = expected, onRow = onRow)
     }
 }
 
@@ -320,7 +319,7 @@ internal fun AuthorTapDialog(
     val scope = rememberCoroutineScope()
     TapListModal(onDismiss, L10n.Card.ResonatorsModal.title, seed = 43.0, exit = L10n.Native.close, maxWidth = 480.dp) {
         TapListTitle(L10n.Card.ResonatorsModal.title)
-        TapRows(list, TapRowMeasure.Dialog, lines = { tapRowLines(it, anonymous, author = true, viewerId = null, offersPassages = false) }, expected = expected, onRow = onRow)
+        TapRows(list, TapRowMeasure.dialog(LocalWindowLayout.current.cls), lines = { tapRowLines(it, anonymous, author = true, viewerId = null, offersPassages = false) }, expected = expected, onRow = onRow)
         if (showsMore(list)) TapListMore { scope.launch { list.more() } }
     }
 }
@@ -328,7 +327,11 @@ internal fun AuthorTapDialog(
 /** A family dialog's title in its scroll region, on the rows' faces' edge ([TapListInset]), 10 over what follows. */
 @Composable
 internal fun TapListTitle(title: String) {
-    Box(Modifier.fillMaxWidth().padding(horizontal = TapListInset).padding(bottom = TapListTitleGap)) { ModalTitle(title) }
+    val size = tapListText(LocalWindowLayout.current.cls).title
+    Box(Modifier.fillMaxWidth().padding(horizontal = TapListInset).padding(bottom = TapListTitleGap)) {
+        // ModalTitle's face and leading, at the family's size for the device.
+        BasicText(title, style = AppFonts.heading(size, lineHeight = 1.3f))
+    }
 }
 
 /** The title to the first row (round 29 §S12, round 32 §P1: 10). */
@@ -346,15 +349,28 @@ internal fun TapListMore(onClick: () -> Unit) {
  * A row of who resonated, measured for where it stands: [height] at least, the [face], [inset] from the paper's edge to
  * the face (and from the name's end), [gap] from the face to the name, the name at [handle] sp.
  */
-internal data class TapRowMeasure(val height: Dp, val face: Dp, val inset: Dp, val gap: Dp, val handle: Float) {
+internal data class TapRowMeasure(val height: Dp, val face: Dp, val inset: Dp, val gap: Dp, val handle: Float, val line: Float = 13f) {
     companion object {
         /**
          * A dialog's (the reader's and the author's, on every device): 60, a face of 36 — its band from the paper's edge
-         * to its edge, the face and the words [TapListInset] in (round 33 §Q2: the title's edge and the button's).
+         * to its edge, the face and the words [TapListInset] in (round 33 §Q2: the title's edge and the button's); the
+         * pen name and the lines under it at [TapListText]'s sizes for [cls] (round 34: a tablet's reading sizes).
          */
-        val Dialog = TapRowMeasure(60.dp, 36.dp, TapListInset, 12.dp, 15f)
+        fun dialog(cls: LayoutClass): TapRowMeasure = tapListText(cls).let { TapRowMeasure(60.dp, 36.dp, TapListInset, 12.dp, it.handle, it.line) }
     }
 }
+
+/**
+ * The tap-list family's type sizes (sp, so the system's text size still scales them) — round 34 (the owner, on the
+ * iPad: 名单弹窗里面的字体太小…没有适配平板阅读字级): a phone keeps its own (the title 20, the pen name 15, the quote and
+ * the note 13, a sentence 16); a tablet (wider than [LayoutClass.Compact]) reads one step up — 22, 17, 15, 18 (the
+ * story's own 18 for a sentence). The pill and 顯示更多 stay the design system's small pill (14) on both.
+ */
+internal data class TapListText(val title: Float, val handle: Float, val line: Float, val sentence: Float)
+
+internal fun tapListText(cls: LayoutClass): TapListText =
+    if (cls == LayoutClass.Compact) TapListText(title = 20f, handle = 15f, line = 13f, sentence = 16f)
+    else TapListText(title = 22f, handle = 17f, line = 15f, sentence = 18f)
 
 /** The list's rows: banded, each the face, the pen name and the excerpt; while read, the known faces' rows. */
 @Composable
@@ -433,17 +449,17 @@ private fun TapRow(
             // The pick (the author's own sentence: here it may be cut), or 選一段; then the note's first line.
             if (said.quote != null) BasicText(
                 L10n.Card.Tap.passageQuote(said.quote),
-                style = AppFonts.body(13f, lineHeight = 1.45f, color = Tokens.TextMuted),
+                style = AppFonts.body(measure.line, lineHeight = 1.45f, color = Tokens.TextMuted),
                 maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
             else if (said.pick) BasicText(
                 L10n.Card.Tap.passagePick,
-                style = AppFonts.body(13f, lineHeight = 1.45f, color = Tokens.ButtonOnTonal),
+                style = AppFonts.body(measure.line, lineHeight = 1.45f, color = Tokens.ButtonOnTonal),
                 maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
             if (said.excerpt != null) BasicText(
                 said.excerpt,
-                style = AppFonts.body(13f, lineHeight = 1.45f, color = Tokens.TextMuted),
+                style = AppFonts.body(measure.line, lineHeight = 1.45f, color = Tokens.TextMuted),
                 maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
         }

@@ -141,7 +141,7 @@ class PickedPeopleTest {
     }
 
     /** The title, the sentence, the first row and 關閉 as drawn, and the two gaps and the sentence's leading measured. */
-    private fun measures() {
+    private fun measures(size: Float = 16f) {
         compose.waitForIdle()
         val title = compose.onNodeWithText(L10n.Card.Tap.pickedTitle).getBoundsInRoot()
         val quote = compose.onNodeWithTag("tap-picked", useUnmergedTree = true).getBoundsInRoot()
@@ -151,19 +151,21 @@ class PickedPeopleTest {
         // Title → sentence 10, sentence → rows 12 (round 29 §S12; the shell's 14 before).
         assertEquals(10f, (quote.top - title.bottom).value, 0.5f)
         assertEquals(12f, (first.top - quote.bottom).value, 0.5f)
-        // The sentence's lines at 16 × 1.8 (the story's compact CJK leading), never the tablet's 1.85.
+        // The sentence's lines at [size] × 1.8 (the story's compact CJK leading), never the tablet's 1.85 — 16 on a phone,
+        // the tablet's 18 (round 34).
         // (Laid out in whole pixels: within 0.75 of the lines; at 1.85 they are 1.2 or more off.)
         val height = (quote.bottom - quote.top).value
-        val line = 16f * 1.8f
+        val line = size * 1.8f
         val lines = kotlin.math.round(height / line)
         assertTrue("$height tall: not ${lines.toInt()} lines of $line", lines >= 1 && kotlin.math.abs(height - lines * line) < 0.75f)
-        // Round 33 §Q3: 關閉 floats over the region's foot, 16 over the paper's edge, its right edge on the content's
-        // (24 in); the last row clear of it, the list's end keeping its height + 16.
+        // Round 34: 關閉 24 over the paper's edge, its right edge on the content's (24 in); the last row clear of it, the
+        // list's end keeping 24 + 44 + 18 (two rows: the footer, 18 under the last row).
         val paper = compose.onNode(this.paper, useUnmergedTree = true).getBoundsInRoot()
-        assertEquals(16f, (paper.bottom - close.bottom).value, 1f)
+        assertEquals(24f, (paper.bottom - close.bottom).value, 1f)
         assertEquals((paper.right - 24.dp).value, close.right.value, 1f)
         assertTrue("the last row clear of 關閉", last.bottom <= close.top + 0.5.dp)
-        assertEquals((FloatingExitHeight + FloatingExitBottom).value, (paper.bottom - last.bottom).value, 1.5f)
+        assertEquals(FloatingExitRoom.value, (paper.bottom - last.bottom).value, 1.5f)
+        assertEquals(FloatingExitGap.value, (close.top - last.bottom).value, 1.5f)
         // §Q2: the faces on the title's edge, 24 in; the rows' bands from the paper's edge to its edge.
         assertEquals((paper.left + 24.dp).value, title.left.value, 0.5f)
         assertEquals(paper.left.value, first.left.value, 0.5f)
@@ -178,7 +180,7 @@ class PickedPeopleTest {
     @Test @Config(qualifiers = "w1280dp-h800dp")
     fun onATabletTheSameMeasuresTheStorysCompactLeadingNotItsWide() {
         show(1280.dp)
-        measures()
+        measures(18f)
         // A Latin story's, at every width: 1.6.
         assertEquals(1.6f, pickedSentenceLeading(StoryType.of(StoryScript.Latin, LayoutClass.Expanded)), 0f)
         assertEquals(1.6f, pickedSentenceLeading(StoryType.of(StoryScript.Latin, LayoutClass.Compact)), 0f)
