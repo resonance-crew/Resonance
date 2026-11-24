@@ -110,16 +110,24 @@ enum TapListMetrics {
 /// letter; replying connects, as today). Under the name (round 27 §U2, §U3): the passage they picked, quoted (``TapRowLine``),
 /// muted, two lines at most, or 選一段 on a reader's own row; then the note's excerpt, muted, two lines at most (as
 /// Android's). A row with neither is 60 tall, as before.
+///
+/// Round 33 §Q2 (the owner: 「高亮区块应延伸到左右边缘…不要有弹窗里又包了一张缩进去的小卡片的感觉」): in a dialog clipped to
+/// its paper the row stands ``TapDialog/reach(clipped:inset:)`` out on each side and pads as much back in, so its press
+/// ink runs from the paper's left edge to its right under the pen line, uncut, while the face and the words keep the
+/// dialog's inset (the face's left edge on the title's, the words' right edge on the floating pill's).
 struct TapPersonRow: View {
     let person: TapPerson
     let line: TapRowLine?
     let top: String
     let bottom: String
     let action: () -> Void
+    @Environment(\.modalPaperClips) private var clips
+    @Environment(\.modalPaperInset) private var inset
 
     var body: some View {
         let author = person.author
         let note = person.note?.value1.excerpt
+        let reach = TapDialog.reach(clipped: clips, inset: inset)
         Button(action: action) {
             HStack(spacing: 12) {
                 HandDrawnAvatar(initials: author.initials, imageURL: author.avatarUrl.flatMap(URL.init(string:)),
@@ -148,15 +156,16 @@ struct TapPersonRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            // 12 a side, which the dialog's scroll (-12) pulls back to its own padding: a face stands at the dialog's
-            // padding and the bands reach nearer its paper's edges. 8 above and below: a row of a name and one line
-            // stays 60, and one with a quote and a note grows past it with air at both ends.
-            .padding(.horizontal, 12)
+            // `reach` a side, which the list (-reach) takes back: the face at the dialog's inset, the band to the paper's
+            // edges. 8 above and below: a row of a name and one line stays 60, and one with a quote and a note grows past
+            // it with air at both ends.
+            .padding(.horizontal, reach)
             .padding(.vertical, TapListMetrics.rowPad)
             .frame(minHeight: TapListMetrics.dialogRow)
-            .contentShape(Rectangle())
+            // Pressed on the paper only: what reaches past its frame is clipped from sight, and is the backdrop's.
+            .contentShape(SidesIn(by: TapDialog.overhang(reach: reach, inset: inset)))
         }
-        .buttonStyle(BandWashStyle(top: top, bottom: bottom, cut: true))
+        .buttonStyle(BandWashStyle(top: top, bottom: bottom, cut: !clips))
         .accessibilityElement(children: .combine)
     }
 
@@ -185,13 +194,17 @@ struct TapRows: View {
     }
 }
 
-/// While the list is read: rows' shapes (two, or as many as the caller knows are coming — `loadingRows`); when it
-/// couldn't be, a line and 重試. A list not asked for yet (`people` nil) is one on its way.
+/// While the list is read: rows' shapes, as many as the caller knows are coming (`loadingRows`: the faces already
+/// shown, round 33 §Q1 — never a default); when it couldn't be, a line and 重試. A list not asked for yet (`people`
+/// nil) is one on its way.
 struct TapListState: View {
     let people: TapPeople?
-    var loadingRows = 2
+    let loadingRows: Int
+    @Environment(\.modalPaperClips) private var clips
+    @Environment(\.modalPaperInset) private var inset
 
     var body: some View {
+        let reach = TapDialog.reach(clipped: clips, inset: inset)
         switch people?.phase ?? .loading {
         case .loading:
             VStack(spacing: 0) {
@@ -201,7 +214,7 @@ struct TapListState: View {
                         SkeletonBlock(width: i % 2 == 0 ? 112 : 88, height: 14)
                         Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, reach)
                     .frame(height: TapListMetrics.dialogRow)
                 }
             }
@@ -213,7 +226,7 @@ struct TapListState: View {
                 ModalError(L10n.Native.loadError)
                 OrganicButton(L10n.Native.retry, variant: .tonal, size: .sm) { Task { await people?.load() } }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, reach)
             .padding(.vertical, 8)
         case .loaded:
             EmptyView()
@@ -221,54 +234,93 @@ struct TapListState: View {
     }
 }
 
+/// A family dialog's list (round 33): one scroll region of the rows — the loading rows standing for them from the first
+/// frame (§Q1), 顯示更多 under them — reaching the paper's edges (§Q2) and its bottom, ending in the floating pill's room
+/// (§Q3), its bottom fade running under the pill. `cap`: the rows' own height at most (the region adds the pill's room
+/// and the paper's bottom inset it reaches into, so the dialog is no taller than it was with its footer).
+struct TapListBody: View {
+    let people: TapPeople?
+    let loadingRows: Int
+    let cap: CGFloat
+    let line: (TapPerson) -> TapRowLine?
+    let press: (TapPerson) -> Void
+    @Environment(\.modalPaperClips) private var clips
+    @Environment(\.modalPaperInset) private var inset
+    @Environment(\.dialogExitRoom) private var exitRoom
+
+    var body: some View {
+        let reach = TapDialog.reach(clipped: clips, inset: inset)
+        ScrollView {
+            VStack(spacing: 0) {
+                if let people {
+                    TapRows(people: people.people, line: line, press: press)
+                }
+                TapListState(people: people, loadingRows: loadingRows)
+                if let people, people.next != nil {
+                    OrganicButton(L10n.Home.moreBtn, variant: .tonal, size: .sm) { Task { await people.more() } }
+                        .loading(people.loadingMore)
+                        .fixedSize()
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 12)
+                }
+            }
+            .exitRoomBelow()
+        }
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollEdgeFades()
+        .frame(maxHeight: cap + exitRoom + ModalPaper.insetV)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, -reach)
+    }
+}
+
 /// A reader's list of who resonated (§U2.5): a centred dialog on every device — a phone's, a tablet's, the Mac's — with
 /// no visible title, the rows banded, 60 tall with faces of 36 — since Wave 2 #3b everyone who resonated, newest first,
-/// each with the sentence they picked, paged with 顯示更多 — each leading to that person's page; then the dialog's 關閉 at
-/// its foot's end.
+/// each with the sentence they picked, paged with 顯示更多 — each leading to that person's page; then 關閉 floating at
+/// its foot's end (round 33 §Q3).
 struct ReaderTapList: View {
     let cardId: String
     /// The card offers passages (round 27 §U3): the reader's own row says their pick or 選一段, and opens the dialog.
     var offersPassages = false
     /// The reader's pick as the page holds it (a pick just made shows at once, before the list knows it).
     var pagePick: TapRowLine.PagePick?
+    /// The people as the page asked for them at the press (round 33 §Q1: read, or still on their way after
+    /// ``TapDialog/firstPageWait``): taken as they are, never asked for twice.
+    var preloaded: TapPeople?
+    /// The faces the page shows over the capsule (at most three): the loading rows' count while the list is read.
+    var knownFaces = 1
     var onPick: () -> Void = {}
     let onClose: () -> Void
     @Environment(SessionStore.self) private var session
     @Environment(\.window) private var window
     @Environment(\.openRoute) private var openRoute
     @State private var people: TapPeople?
+    /// The list drawn: the one read here, or from the first frame the page's (`preloaded`).
+    private var list: TapPeople? { people ?? preloaded }
+
+    /// The rows' cap: at most 420, and 55 % of the window.
+    static func listCap(window: CGFloat) -> CGFloat { min(420, window * 0.55) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let people {
-                ScrollView {
-                    TapRows(people: people.people) { person in
-                        TapRowLine.of(person, authorList: false, viewer: session.uid, offersPassages: offersPassages, pagePick: pagePick)
-                    } press: { person in
-                        onClose()
-                        if offersPassages, person.author.id == session.uid { return onPick() }
-                        openRoute(TapPersonRow.route(for: person))
-                    }
-                    TapListState(people: people)
-                    // Wave 2 #3b: everyone who resonated, paged as the author's list is.
-                    if people.next != nil {
-                        OrganicButton(L10n.Home.moreBtn, variant: .tonal, size: .sm) { Task { await people.more() } }
-                            .loading(people.loadingMore)
-                            .fixedSize()
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 12)
-                    }
-                }
-                .scrollIndicators(.hidden)
-                .scrollBounceBehavior(.basedOnSize)
-                .scrollEdgeFades()
-                .frame(maxHeight: min(420, window.height * 0.55))
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, -12)
+            TapListBody(people: list, loadingRows: TapDialog.loadingRows(knownFaces: knownFaces),
+                        cap: Self.listCap(window: window.height)) { person in
+                TapRowLine.of(person, authorList: false, viewer: session.uid, offersPassages: offersPassages, pagePick: pagePick)
+            } press: { person in
+                onClose()
+                if offersPassages, person.author.id == session.uid { return onPick() }
+                openRoute(TapPersonRow.route(for: person))
             }
-            ModalCloseButton(L10n.Native.close, action: onClose)
         }
+        .floatingExit(L10n.Native.close, id: "tap-list-close", action: onClose)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("tap-list")
         .task {
+            if let preloaded {
+                people = preloaded
+                return
+            }
             let api = session.reading, id = cardId
             let made = TapPeople { try await api.taps(id, pageToken: $0) }
             people = made
@@ -287,6 +339,9 @@ struct AuthorTaps: View {
     let faces: [Author]
     let more: Bool
     @State private var open = false
+    /// The list asked for at the press (round 33 §Q1), handed to the dialog.
+    @State private var people: TapPeople?
+    @State private var opening: Task<Void, Never>?
     @Environment(SessionStore.self) private var session
 
     /// From the wave's box to the first face's: the line's 8 and the 3 a face's paper pad stood in before it went
@@ -299,29 +354,44 @@ struct AuthorTaps: View {
     }
 
     var body: some View {
-        Button { open = true } label: {
+        let shown = Array(faces.prefix(FaceStack.maxFaces))
+        Button(action: openList) {
             HStack(spacing: Self.facesGap) {
                 OrganicIcon(.wave, size: 16, color: Tokens.textMuted, strokeWidth: Tokens.ink)
-                FaceStack(faces: faces.prefix(FaceStack.maxFaces).map(TapFaces.face))
+                FaceStack(faces: shown.map(TapFaces.face))
             }
             .frame(minHeight: TapFaces.rowHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(OrganicPressStyle(inset: 2))
-        .accessibilityLabel(TapState.spokenForAuthor(Array(faces.prefix(FaceStack.maxFaces)),
-                                                     more: more || faces.count > FaceStack.maxFaces))
+        .accessibilityLabel(TapState.spokenForAuthor(shown, more: more || faces.count > FaceStack.maxFaces))
         .accessibilityIdentifier("author-taps")
-        .organicModal(isPresented: $open, seed: 31, maxWidth: TapListMetrics.dialogWidth, closeLabel: L10n.Native.close) {
-            AuthorTapList(cardId: cardId) { open = false }.withSession(session)
+        .organicModal(isPresented: $open, seed: 31, maxWidth: TapListMetrics.dialogWidth, closeLabel: L10n.Native.close,
+                      clipsToPaper: true, paperInset: ModalPaper.listInset) {
+            AuthorTapList(cardId: cardId, preloaded: people, knownFaces: shown.count) { open = false }.withSession(session)
         }
         #if DEBUG
         // The release screenshots' `taps-author-list`: `-visualTaps author` opens the list.
         .task {
             guard UserDefaults.standard.string(forKey: "visualTaps") == "author" else { return }
             try? await Task.sleep(for: .milliseconds(600))
-            open = true
+            openList()
         }
         #endif
+    }
+
+    /// The list is asked for at the press, and the dialog waits for it at most ``TapDialog/firstPageWait`` (§Q1): come
+    /// by then, it opens at its final height; not yet, with a loading row for each face shown.
+    private func openList() {
+        opening?.cancel()
+        let api = session.reading, id = cardId
+        let made = TapPeople { try await api.taps(id, pageToken: $0) }
+        opening = Task {
+            await TapDialog.prepare(made)
+            guard !Task.isCancelled else { return }
+            people = made
+            open = true
+        }
     }
 }
 
@@ -329,45 +399,42 @@ struct AuthorTaps: View {
 /// thirty people a page (顯示更多 the next), each a face of 36 and their pen name; one who left a note on the card has its
 /// first line muted under the name and opens that conversation; one who only resonated opens their page (a tap is no
 /// way to be written to). Round 27 §U2: the passage each picked, quoted under the name, before the note's excerpt. An
-/// anonymous card's list has no note (the server sends none).
+/// anonymous card's list has no note (the server sends none). 關閉 floats at its foot's end (round 33 §Q3).
 struct AuthorTapList: View {
     let cardId: String
+    /// The people as the line asked for them at the press (round 33 §Q1).
+    var preloaded: TapPeople?
+    /// The faces on the author's line (at most three): the loading rows' count while the list is read.
+    var knownFaces = 1
     let onClose: () -> Void
     @Environment(SessionStore.self) private var session
     @Environment(\.window) private var window
     @Environment(\.openRoute) private var openRoute
     @State private var people: TapPeople?
+    private var list: TapPeople? { people ?? preloaded }
+
+    /// The rows' cap: at most 520, and 60 % of the window.
+    static func listCap(window: CGFloat) -> CGFloat { min(520, window * 0.6) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ModalTitle(L10n.Card.ResonatorsModal.title).padding(.bottom, 10)
-            if let people {
-                ScrollView {
-                    TapRows(people: people.people) { person in
-                        TapRowLine.of(person, authorList: true, viewer: session.uid, offersPassages: false)
-                    } press: { person in
-                        onClose()
-                        openRoute(TapPersonRow.route(for: person))
-                    }
-                    TapListState(people: people)
-                    if people.next != nil {
-                        OrganicButton(L10n.Home.moreBtn, variant: .tonal, size: .sm) { Task { await people.more() } }
-                            .loading(people.loadingMore)
-                            .fixedSize()
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 12)
-                    }
-                }
-                .scrollIndicators(.hidden)
-                .scrollBounceBehavior(.basedOnSize)
-                .scrollEdgeFades()
-                .frame(maxHeight: min(520, window.height * 0.6))
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, -12)
+            TapListBody(people: list, loadingRows: TapDialog.loadingRows(knownFaces: knownFaces),
+                        cap: Self.listCap(window: window.height)) { person in
+                TapRowLine.of(person, authorList: true, viewer: session.uid, offersPassages: false)
+            } press: { person in
+                onClose()
+                openRoute(TapPersonRow.route(for: person))
             }
-            ModalCloseButton(L10n.Native.close, action: onClose)
         }
+        .floatingExit(L10n.Native.close, id: "author-taps-close", action: onClose)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("author-tap-list")
         .task {
+            if let preloaded {
+                people = preloaded
+                return
+            }
             let api = session.reading, id = cardId
             let made = TapPeople { try await api.taps(id, pageToken: $0) }
             people = made

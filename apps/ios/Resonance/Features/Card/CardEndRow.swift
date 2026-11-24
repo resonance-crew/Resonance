@@ -63,6 +63,9 @@ struct CardEndRow: View {
     /// Why the last send failed, for the field opened again on its words.
     @State private var noteWhy: String?
     @State private var listOpen = false
+    /// The reader's list asked for at the press (round 33 §Q1), handed to the dialog.
+    @State private var listPeople: TapPeople?
+    @State private var listOpening: Task<Void, Never>?
     /// Which part stayed with the reader (round 27 §U1): the dialog of the card's passages.
     @State private var passagesOpen = false
     /// The dialog's one press (``TapPassageRules/OnePress``), taken again each time it opens.
@@ -140,17 +143,19 @@ struct CardEndRow: View {
             .withSession(session)
         }
         // The reader's list of who resonated: a centred dialog with no title (everyone, since Wave 2 #3b),
-        // a phone's, a tablet's and the Mac's alike.
-        .organicModal(isPresented: $listOpen, seed: 29, maxWidth: TapListMetrics.readerWidth(compact: compact), closeLabel: L10n.Native.close) {
+        // a phone's, a tablet's and the Mac's alike — the tap lists' family (round 33): clipped to its paper at 24.
+        .organicModal(isPresented: $listOpen, seed: 29, maxWidth: TapListMetrics.readerWidth(compact: compact), closeLabel: L10n.Native.close,
+                      clipsToPaper: true, paperInset: ModalPaper.listInset) {
             ReaderTapList(cardId: cardId, offersPassages: offersPassages,
                           pagePick: .init(text: tap.passages.first { $0.id == tap.passage }?.text),
+                          preloaded: listPeople, knownFaces: tap.shownFaces.count,
                           onPick: openPassagesFromList) { listOpen = false }
                 .withSession(session)
         }
         // Which part stayed with the reader (round 27 §U1): centred, as wide as the reader's list; 略過, the backdrop and
         // Escape leave the tap on with no passage.
         .organicModal(isPresented: $passagesOpen, seed: 37, maxWidth: TapListMetrics.readerWidth(compact: compact),
-                      closeLabel: L10n.Card.Tap.passageSkip, clipsToPaper: true) {
+                      closeLabel: L10n.Card.Tap.passageSkip, clipsToPaper: true, paperInset: ModalPaper.listInset) {
             TapPassages(passages: passageRows, picked: tap.passage, script: script, onChoose: choosePassage) {
                 passagesOpen = false
             }
@@ -235,7 +240,7 @@ struct CardEndRow: View {
             noteOpen = true
         default: break
         }
-        if defaults.string(forKey: "visualTaps") == "list" { listOpen = true }
+        if defaults.string(forKey: "visualTaps") == "list" { openList() }
     }
     #endif
 
@@ -412,6 +417,21 @@ struct CardEndRow: View {
         }
     }
 
+    /// The faces' list is asked for at the press, and the dialog waits for it at most ``TapDialog/firstPageWait``
+    /// (round 33 §Q1, the owner: 「谁共振了弹窗仍有高度闪动」): come by then, it opens at its final height, quotes and
+    /// all; not yet, with a loading row for each face shown, and the read carries on in it.
+    private func openList() {
+        listOpening?.cancel()
+        let api = session.reading, id = cardId
+        let made = TapPeople { try await api.taps(id, pageToken: $0) }
+        listOpening = Task {
+            await TapDialog.prepare(made)
+            guard !Task.isCancelled else { return }
+            listPeople = made
+            listOpen = true
+        }
+    }
+
     /// The reader's own row in the list (§U3): the list closes, then the dialog opens on the pick as it stands.
     private func openPassagesFromList() {
         passagesHeld = false
@@ -445,7 +465,7 @@ struct CardEndRow: View {
             if !tap.shownFaces.isEmpty {
                 // With passages on offer, the reader's own face alone is a button too: their row picks one (§U3).
                 TapFaces(faces: tap.shownFaces, spoken: tap.spoken(viewer: session.uid),
-                         isButton: !tap.onlyMine(viewer: session.uid) || (tap.on && offersPassages)) { listOpen = true }
+                         isButton: !tap.onlyMine(viewer: session.uid) || (tap.on && offersPassages)) { openList() }
                     // Over the capsule now: a puppet peeking over a short bar near them never rises in front of them.
                     .readingMark(.respondFaces)
             }

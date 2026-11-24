@@ -578,7 +578,7 @@ struct CardScreen: View {
                 // The end row's faces' line starts 16 under the story when no tags' row stands between (round 30 §S1).
                 .padding(.bottom, endRowFollows && card.tags.isEmpty && !bookmarkInTags ? endRowAbove : story.endGap)
                 .organicModal(isPresented: $pickedOpen, seed: 41, maxWidth: PickedPeople.width(compact: window.layoutClass == .compact),
-                              closeLabel: L10n.Native.close) {
+                              closeLabel: L10n.Native.close, clipsToPaper: true, paperInset: ModalPaper.listInset) {
                     if let pickedPassage {
                         PickedPeople(cardId: card.id, passage: pickedPassage, script: type.script, preloaded: pickedPeople) {
                             pickedOpen = false

@@ -14,12 +14,17 @@ extension View {
     /// `clipsToPaper` (round 27, the passages' dialog): what the card holds is clipped to the paper's own wobble and the
     /// pen line drawn over it, so a row's ink may run past the words' inset to the paper's edge (``ModalPaper``) — the
     /// web's Modal clipping its scroll body to the paper (`useModalPaper()`). Off, as every other dialog has it.
+    ///
+    /// `paperInset`: the content's inset from the paper's frame, a side — ``ModalPaper/inset`` (28) for every dialog but
+    /// the tap lists' family, which stands ``ModalPaper/listInset`` (24) in (round 33 §Q2). Its children read it as
+    /// ``EnvironmentValues/modalPaperInset``.
     public func organicModal<Card: View>(isPresented: Binding<Bool>, seed: Double = 17, maxWidth: CGFloat = 440,
                                          closeLabel: String, dismissible: Bool = true, clipsToPaper: Bool = false,
+                                         paperInset: CGFloat = ModalPaper.inset,
                                          @ViewBuilder content: @escaping () -> Card) -> some View {
         modifier(OrganicModalPresenter(isPresented: isPresented, seed: seed, maxWidth: maxWidth,
                                        closeLabel: closeLabel, dismissible: dismissible, clipsToPaper: clipsToPaper,
-                                       card: content))
+                                       paperInset: paperInset, card: content))
     }
 
     /// ConfirmModal: title, a line of explanation, then cancel and the verb at
@@ -249,6 +254,7 @@ struct OrganicModalPresenter<Card: View>: ViewModifier {
     let closeLabel: String
     let dismissible: Bool
     let clipsToPaper: Bool
+    let paperInset: CGFloat
     let card: () -> Card
     /// The cover itself; it comes and goes without UIKit's slide, and the
     /// stage inside fades and pops like the web's dialog.
@@ -259,7 +265,7 @@ struct OrganicModalPresenter<Card: View>: ViewModifier {
             .fullScreenCover(isPresented: $coverShown) {
                 OrganicModalStage(isPresented: $isPresented, coverShown: $coverShown, seed: seed, maxWidth: maxWidth,
                                   closeLabel: closeLabel, dismissible: dismissible, clipsToPaper: clipsToPaper,
-                                  card: card)
+                                  paperInset: paperInset, card: card)
                     .presentationBackground(.clear)
             }
             .onChange(of: isPresented, initial: true) { _, show in
@@ -315,6 +321,7 @@ struct OrganicModalStage<Card: View>: View {
     let closeLabel: String
     let dismissible: Bool
     let clipsToPaper: Bool
+    var paperInset: CGFloat = ModalPaper.inset
     let card: () -> Card
     @State private var shown = false
     /// This modal counts toward ``ModalBackdrop`` (from its appearing to its closing).
@@ -339,7 +346,7 @@ struct OrganicModalStage<Card: View>: View {
                 // The backdrop scrolls when the dialog is taller than the screen
                 // (the web's overflow-y: auto); a tap beside the card closes it.
                 ScrollView {
-                    OrganicModalCard(seed: seed, maxWidth: maxWidth, clipsToPaper: clipsToPaper, content: card)
+                    OrganicModalCard(seed: seed, maxWidth: maxWidth, clipsToPaper: clipsToPaper, inset: paperInset, content: card)
                         // What the stage leaves the card (round 32 §P1): a dialog that must never outgrow it — the
                         // passages' — caps its own scroll by it, so this backdrop never has to scroll.
                         .environment(\.modalRoom, ModalPaper.room(stage: geo.size.height))
@@ -399,12 +406,14 @@ struct OrganicModalCard<Content: View>: View {
     let seed: Double
     let maxWidth: CGFloat
     var clipsToPaper = false
+    var inset: CGFloat = ModalPaper.inset
     let content: () -> Content
 
     var body: some View {
         let shape = ModalShape(seed: seed)
         let card = VStack(alignment: .leading, spacing: 0) { content() }
-            .padding(.horizontal, ModalPaper.inset)
+            .environment(\.modalPaperInset, inset)
+            .padding(.horizontal, inset)
             .padding(.vertical, ModalPaper.insetV)
             .frame(maxWidth: maxWidth, alignment: .leading)
         if clipsToPaper {
@@ -446,6 +455,9 @@ struct OrganicModalCard<Content: View>: View {
 public nonisolated enum ModalPaper {
     /// The content's inset from the paper's frame, a side.
     public static let inset: CGFloat = 28
+    /// The tap lists' family's (who resonated — a reader's and the author's —, who picked a sentence, the passages'),
+    /// a side (round 33 §Q2, the owner: 「左右 padding 稍微再收窄（28→24）」): only theirs, every other dialog keeps ``inset``.
+    public static let listInset: CGFloat = 24
     /// Past the frame, a side: more than the wobble's widest swing out at a dialog's sizes.
     public static let bleed: CGFloat = 16
     /// The content's inset from the paper's frame, above and below.
@@ -462,6 +474,9 @@ public nonisolated enum ModalPaper {
 extension EnvironmentValues {
     /// The modal this view stands in clips its content to the paper (``ModalPaper``).
     @Entry public var modalPaperClips = false
+    /// The content's inset from the paper's frame in the modal this view stands in, a side (``ModalPaper/inset`` unless
+    /// the modal says otherwise).
+    @Entry public var modalPaperInset: CGFloat = ModalPaper.inset
     /// The height the modal's stage leaves this dialog's content (``ModalPaper/room(stage:)``); nil outside a modal.
     @Entry public var modalRoom: CGFloat? = nil
 }

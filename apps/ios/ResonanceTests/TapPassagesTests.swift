@@ -52,10 +52,10 @@ import Testing
         // The band is not cut: the paper's clip shapes its ends.
         #expect(!TapPassageRules.bandCut(clipped: true))
         // The words: the list stands `reach` out of the dialog's content and each row pads `reach` back in, so they stay
-        // on the dialog's own 28 from the paper's frame, where they were.
-        #expect(ModalPaper.inset == 28)
+        // on the dialog's own inset from the paper's frame — the family's 24 since round 33 §Q2 (every other dialog's 28).
+        #expect(ModalPaper.inset == 28 && ModalPaper.listInset == 24)
         // Past the paper's frame by the bleed, and only that much is kept from a press.
-        #expect(reach - ModalPaper.inset == ModalPaper.bleed)
+        #expect(reach - ModalPaper.listInset == ModalPaper.bleed)
         #expect(TapPassageRules.overhang(reach: reach) == ModalPaper.bleed)
         // Out of a clipping dialog the rows stay inside the paper, cut and rounded, as the first captures.
         #expect(TapPassageRules.bandCut(clipped: false))
@@ -190,9 +190,10 @@ import Testing
             .environment(\.modalRoom, room)
     }
 
-    /// §P1 — 「略过固定不动」, 「标题与段落文字合一滚动」: one scroll region (the title its first child, then the rows) and
-    /// the foot outside it, a quiet 略過 — the link dialog's words-alone button, never the tonal pill.
-    @Test func theTitleScrollsWithTheRowsAndTheQuietSkipStaysAtTheFoot() throws {
+    /// §P1 — 「略过固定不动」, 「标题与段落文字合一滚动」: one scroll region (the title its first child, then the rows); since
+    /// round 33 §Q3 略過 floats over the region's bottom fade as the family's tonal small pill (it was round 32's words
+    /// alone in a foot under the region — this test pinned that and now pins the float).
+    @Test func theTitleScrollsWithTheRowsAndSkipFloatsOverTheFade() throws {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appendingPathComponent("../Resonance/Features/Card/TapPassages.swift").standardized
         let source = try String(contentsOf: url, encoding: .utf8)
@@ -200,26 +201,29 @@ import Testing
         let view = String(source[body...])
         let scroll = try #require(view.range(of: "ScrollView {"))
         let title = try #require(view.range(of: "ModalTitle(L10n.Card.Tap.passageTitle)"))
-        let skip = try #require(view.range(of: "QuietTextButton(L10n.Card.Tap.passageSkip"))
+        let skip = try #require(view.range(of: ".floatingExit(L10n.Card.Tap.passageSkip, id: \"tap-passage-skip\""))
         #expect(scroll.lowerBound < title.lowerBound && title.lowerBound < skip.lowerBound)
-        // The foot comes after the scroll region closes (its frame cap), not inside it.
+        // It floats over the whole dialog, after the region closes (its frame cap), never inside the scroll.
         let cap = try #require(view.range(of: ".frame(maxHeight: TapPassageRules.regionHeight("))
         #expect(cap.lowerBound < skip.lowerBound)
-        #expect(!view.contains("ModalCloseButton("))
-        #expect(TapPassageRules.footGap == 18 && TapPassageRules.titleGap == 10)
+        #expect(view.contains(".exitRoomBelow()"))
+        #expect(!view.contains("ModalCloseButton(") && !view.contains("QuietTextButton("))
+        #expect(TapPassageRules.titleGap == 10)
     }
 
-    /// §P1 — the whole dialog always fits the stage: the region's cap is what the stage leaves less the foot, never
-    /// more than min(560, 70 % of the window); so the backdrop never scrolls it and 略過 never moves.
+    /// §P1 — the whole dialog always fits the stage: the region's cap is min(560, 70 % of the window) and the floating
+    /// 略過's room under the rows (round 33 §Q3), and never more than what the stage leaves it with the paper's bottom
+    /// inset it reaches into; so the backdrop never scrolls it and 略過 never moves.
     @Test func theDialogAlwaysFitsWhatTheStageLeavesIt() {
-        #expect(TapPassageRules.regionHeight(window: 2000, room: nil, foot: 62) == 560)
-        #expect(TapPassageRules.regionHeight(window: 2000, room: 3000, foot: 62) == 560)
-        #expect(TapPassageRules.regionHeight(window: 600, room: 500, foot: 62) == 420)
+        #expect(TapPassageRules.regionHeight(window: 2000, room: nil, exitRoom: 60) == 620)
+        #expect(TapPassageRules.regionHeight(window: 2000, room: 3000, exitRoom: 60) == 620)
+        #expect(TapPassageRules.regionHeight(window: 600, room: 500, exitRoom: 60) == 480)
         // An iPhone turned (402 tall less the margins and the paper's air): the stage, not the 70 %, holds it.
         let room = ModalPaper.room(stage: 380)
         #expect(abs(room - CGFloat(380 - 2 * 12 - 2 * 32)) < 0.001)
-        #expect(TapPassageRules.regionHeight(window: 402, room: room, foot: 62) == room - 62)
-        // Laid out: long passages in a short room take exactly the room, foot included — never more.
+        #expect(TapPassageRules.regionHeight(window: 402, room: room, exitRoom: 60) == room + ModalPaper.insetV)
+        // Laid out: long passages in a short room take exactly the room (the region reaching the paper's bottom inset,
+        // which the dialog gives back) — never more.
         for room in [220.0, 300, 480] {
             let size = dialogSize(dialog(Self.long, room: room), width: 344)
             #expect(size.height <= room + 0.5, "room \(room): \(size.height)")
