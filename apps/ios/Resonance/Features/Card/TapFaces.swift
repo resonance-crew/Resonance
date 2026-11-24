@@ -35,8 +35,10 @@ struct TapFaces: View {
             .frame(minWidth: Self.rowHeight, minHeight: Self.rowHeight, alignment: .leading)
             .contentShape(Rectangle())
         if isButton {
+            // Round 34 §11: no press or hover wash on the faces (the Mac's pointer and an iPad's trackpad included).
             Button(action: onOpen) { stack }
-                .buttonStyle(OrganicPressStyle(inset: 2))
+                .buttonStyle(QuietPressStyle())
+                .hoverEffectDisabled()
                 .accessibilityLabel(spoken)
                 // The name the interaction flows find it by (maestro/flows/tap.yaml).
                 .accessibilityIdentifier("tap-faces")
@@ -177,7 +179,10 @@ struct TapPersonRow: View {
             // Pressed on the paper only: what reaches past its frame is clipped from sight, and is the backdrop's.
             .contentShape(SidesIn(by: TapDialog.overhang(reach: reach, inset: inset)))
         }
-        .buttonStyle(BandWashStyle(top: top, bottom: bottom, cut: !clips))
+        // Round 34 §11 (the owner: no ink band on the people's rows): pressed, hovered or not, a row draws nothing — it
+        // still opens its page. Its band keys (`top`, `bottom`) stay for the list's order; the passages keep their wash.
+        .buttonStyle(QuietPressStyle())
+        .hoverEffectDisabled()
         .accessibilityElement(children: .combine)
     }
 
@@ -187,6 +192,11 @@ struct TapPersonRow: View {
         let author = person.author
         return person.note == nil ? .author(author.handle) : .thread(handle: author.handle, uid: author.id, note: nil)
     }
+}
+
+/// A button that shows nothing of a press (round 34 §11): its label as it is — no wash, no dimming.
+struct QuietPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { configuration.label }
 }
 
 /// The rows of a list, banded, each curve keyed by the row under it (``ListBands``); `line` gives each its second line.

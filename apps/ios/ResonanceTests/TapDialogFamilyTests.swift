@@ -103,7 +103,8 @@ import Testing
         #expect(opens.components(separatedBy: "clipsToPaper: true, paperInset: ModalPaper.listInset").count - 1 == 4)
         let faces = try source("TapFaces.swift")
         // The rows: no inset card — the band uncut where the paper clips, the words at the dialog's inset.
-        #expect(faces.contains(".buttonStyle(BandWashStyle(top: top, bottom: bottom, cut: !clips))"))
+        // Round 34 §11: the rows draw no band at all now (the passages keep theirs).
+        #expect(!faces.contains("BandWashStyle("))
         #expect(faces.contains(".padding(.horizontal, reach)"))
         #expect(!faces.contains(".padding(.horizontal, -12)"))
     }
@@ -345,4 +346,16 @@ import Testing
         #expect(!(try source("TapFaces.swift")).contains("person.note?.value1.excerpt"))
     }
 
+    // MARK: Round 34 §11 — no ink on the people's rows or the faces
+
+    /// The people's rows and the faces over 共振 show nothing of a press or a pointer; they still open what they open.
+    /// The passages' rows keep their band.
+    @Test func thePeoplesRowsAndTheFacesDrawNoWash() throws {
+        let faces = try source("TapFaces.swift")
+        #expect(!faces.contains("BandWashStyle("))
+        #expect(faces.components(separatedBy: ".buttonStyle(QuietPressStyle())\n").count - 1 >= 2)
+        #expect(faces.components(separatedBy: ".hoverEffectDisabled()").count - 1 >= 2)
+        #expect(try source("TapPassages.swift").contains(".buttonStyle(BandWashStyle("))
+        #expect(try source("PickedPeople.swift").contains("TapListBody("))
+    }
 }
