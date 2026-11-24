@@ -108,6 +108,31 @@ import Testing
         #expect(!faces.contains(".padding(.horizontal, -12)"))
     }
 
+    /// Round 35 §3 (the owner, on Android at night: 「这个变色的区块…没有完全填充满…左边、右边有点露出来」): the paper's
+    /// wobble bulges past the box its content is laid in, so a row's band is drawn past that box on both sides (the
+    /// bleed) and the paper's clip cuts it — for each of the family's papers (who resonated, the reader's 29 and the
+    /// author's 31; who picked 41; the passages' 37), at their widths and from a short list to the tallest, the band's
+    /// drawn extent covers the paper's at every height: no sliver of paper between its ends and the pen line.
+    @Test func aRowsBandIsDrawnPastTheBoxSoThePapersClipCutsIt() {
+        let reach = TapDialog.reach(clipped: true, inset: ModalPaper.listInset)
+        for seed in [29.0, 31, 37, 41] {
+            for width in [TapListMetrics.readerWidth(compact: true), TapListMetrics.dialogWidth] {
+                for height in [CGFloat(180), 260, 420, 640, 820] {
+                    let paper = CGRect(x: 0, y: 0, width: width, height: height)
+                    // A row as the region lays it: the content's box (the paper less 24 a side), `reach` out each side.
+                    let content = paper.insetBy(dx: ModalPaper.listInset, dy: 0)
+                    let row = CGRect(x: content.minX - reach, y: 40, width: content.width + 2 * reach, height: 60)
+                    let band = BandShape(top: "tap:a", bottom: "tap:b").path(in: row).boundingRect
+                    #expect(band.minX < content.minX - ModalPaper.listInset && band.maxX > content.maxX + ModalPaper.listInset,
+                            "the band goes past the paper's frame, not only the box")
+                    let outline = ModalPaper.outline(in: paper, seed: seed).boundingRect
+                    #expect(band.minX <= outline.minX && band.maxX >= outline.maxX,
+                            "seed \(seed), \(width)×\(height): band \(band.minX)…\(band.maxX), paper \(outline.minX)…\(outline.maxX)")
+                }
+            }
+        }
+    }
+
     /// The paper's inset reaches the dialog's children, and only these dialogs change it.
     @Test func thePapersInsetIsTheModalsOwn() throws {
         let modal = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()

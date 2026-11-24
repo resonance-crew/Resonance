@@ -42,7 +42,7 @@ import Testing
         // Wave 2 #3a: ~100-character passages, so min(560, 70 % of the window).
         #expect(TapPassageRules.listHeight(window: 2000) == 560)
         #expect(TapPassageRules.listHeight(window: 600) == 420)
-        #expect(TapPassageRules.textSize == 16 && TapPassageRules.checkSize == 16)
+        #expect(TapPassageRules.textSize == 16)
     }
 
     /// The owner's look (2026-11-21): 「这个选中的区块是延伸到这个 pop up 这个卡片的最左边和最右边的」 — a row's band runs
@@ -271,7 +271,9 @@ import Testing
         #expect(BandEdge(key: ids[1]).path(in: rect).boundingRect.width > 0)
     }
 
-    /// §7 — the check's slot is kept on every row: picking a row never rewraps its words, so the dialog keeps its height.
+    /// Round 35 §2 (withdrawing round 34 §7, the owner: 「可以把这个 dialog 里面的勾勾拿掉呢？…选中的就是现在的这个变色的效果
+    /// 就好了」): no check and no slot kept for one — picking a row changes only its ink, so its words never rewrap and
+    /// the dialog keeps its height.
     @Test func pickingARowNeverRewrapsItsWords() throws {
         let passages = [
             TapPassage(id: "a", text: String(repeating: "箱子堆滿了客廳，我坐在地上，第一次覺得安靜是屬於自己的。", count: 3)),
@@ -285,8 +287,37 @@ import Testing
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appendingPathComponent("../Resonance/Features/Card/TapPassages.swift").standardized
         let source = try String(contentsOf: url, encoding: .utf8)
-        #expect(source.contains(".opacity(chosen ? 1 : 0)"))
-        #expect(!source.contains("if chosen {"))
+        #expect(!source.contains("OrganicIcon(.check"))
+        #expect(!source.contains("checkSize"))
+    }
+
+    /// Round 35 §2: the words run the row's whole width less the reach a side — the paper's inset, as every row of the
+    /// family — measured: a row wraps its words exactly as they wrap alone at that width, never as at a width a check
+    /// would have taken from them.
+    @Test func aPassagesWordsTakeTheRowsWholeWidthBetweenTheInsets() {
+        let story = StoryTypography(script: .cjk, compact: true)
+        let reach = TapPassageRules.reach(clipped: true)
+        // Passages from one line to four: some of them end a line within the 28 a check would have taken.
+        let whole = Array(String(repeating: "箱子堆滿了客廳，我坐在地上，第一次覺得安靜是屬於自己的。", count: 3))
+        let texts = stride(from: 18, through: 84, by: 3).map { String(whole.prefix($0)) }
+        var slotWouldWrapMore = false
+        for row in [CGFloat(400) + 2 * ModalPaper.bleed, 480 + 2 * ModalPaper.bleed, 360] {
+            for text in texts {
+                let words = TapPassageWords(text: text, font: TapListMetrics.storyFont(story.bodyFamily, size: TapPassageRules.textSize),
+                                            leading: story.bodyLeading, reach: reach)
+                let alone = { (w: CGFloat) in
+                    dialogSize(CSSText(text, font: TapListMetrics.storyFont(story.bodyFamily, size: TapPassageRules.textSize),
+                                       lineHeight: story.bodyLeading, color: Tokens.UI.text)
+                        .fixedSize(horizontal: false, vertical: true), width: w).height + 2 * ListBands.rowPad
+                }
+                let measured = dialogSize(words, width: row).height
+                #expect(abs(measured - alone(row - 2 * reach)) < 0.5, "\(row): \(text.count) characters")
+                // The old slot (a 16 check and 12 before it) would have taken 28 from the words.
+                if abs(alone(row - 2 * reach - 28) - measured) >= 0.5 { slotWouldWrapMore = true }
+            }
+        }
+        // The measure tells the two apart for at least one of these.
+        #expect(slotWouldWrapMore)
     }
 
     /// §P3 — the passages' dialog has no flash: its rows are known when it opens, so its first layout is its last —
