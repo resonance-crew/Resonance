@@ -324,3 +324,61 @@ describe('the way out: the foot while nothing scrolls, floating once it does (ro
     expect(area).toHaveAttribute('data-close-state', 'float');
   });
 });
+
+/**
+ * Round 34 §8 — the reader's who-resonated list opened on its faces and names and drew each row's quote a moment later.
+ * The cause: the list was asked for only when the dialog opened, so an answer slower than the 300 ms hold opened it on
+ * stand-ins (a face and a name's line, no quote line) that grew when the rows came. It is asked ahead now, as the faces
+ * come into view, and the dialog opens on that answer whole.
+ */
+describe('the reader’s list is in hand before its faces are pressed (round 34 §8)', () => {
+  let seen: ((entries: { isIntersecting: boolean }[]) => void)[] = [];
+  beforeEach(() => {
+    seen = [];
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(private cb: (entries: { isIntersecting: boolean }[]) => void) {}
+        observe() {
+          seen.push(this.cb);
+        }
+        disconnect() {}
+      },
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+  const inView = () => act(() => seen.forEach((cb) => cb([{ isIntersecting: true }])));
+
+  it('asks once the faces are in view; pressed after a slow answer, it opens with every row’s quote on its first frame', async () => {
+    let answer: (b: TapListBody) => void = () => {};
+    listTaps.mockReturnValue(new Promise((r) => (answer = r)));
+    renderWithIntl(wrap(<TapFaces cardId="c1" tap={tapOf(NAMES)} viewerId="alice" />), { locale: 'zh-TW', messages: zhMessages });
+    expect(listTaps).not.toHaveBeenCalled();
+    inView();
+    expect(listTaps).toHaveBeenCalledTimes(1);
+    // The answer takes longer than the hold (a phone's first call): it lands while the reader is still reading.
+    await new Promise((r) => setTimeout(r, TAP_LIST_HOLD_MS + 50));
+    await act(async () => answer({ people: NAMES.map((id) => person(id)), nextPageToken: null }));
+    const watch = watchStandIns();
+    await user().click(screen.getByRole('button'));
+    const dialog = screen.getByRole('dialog');
+    const links = within(dialog).getAllByRole('link');
+    expect(links).toHaveLength(3);
+    for (const link of links) expect(link.querySelector('[data-tap-quote]')).toHaveTextContent('雨停的時候，巷口的燈先亮了。');
+    expect(watch.seen()).toBe(false);
+    watch.stop();
+    // Asked once: the dialog opened on the answer in hand.
+    expect(listTaps).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks again when the tap the faces draw changes (the viewer’s own turned on), never twice for the same', async () => {
+    listTaps.mockResolvedValue({ people: [person('gus')], nextPageToken: null });
+    const view = renderWithIntl(wrap(<TapFaces cardId="c1" tap={tapOf(['gus', 'bob'])} viewerId="alice" />), { locale: 'zh-TW', messages: zhMessages });
+    inView();
+    inView();
+    expect(listTaps).toHaveBeenCalledTimes(1);
+    view.rerender(wrap(<TapFaces cardId="c1" tap={{ ...tapOf(['alice', 'gus', 'bob']), mine: true }} viewerId="alice" />));
+    inView();
+    expect(listTaps).toHaveBeenCalledTimes(2);
+  });
+});
