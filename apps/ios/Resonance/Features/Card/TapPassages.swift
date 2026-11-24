@@ -6,12 +6,14 @@ import SwiftUI
 /// ups，然后里面可以让使用者去选择…他文章里面哪一个部分有共鸣」): a centred dialog (``View/organicModal``, never a sheet) —
 /// the title 「悄悄告訴作者，哪一段讓你有共鳴」, the card's passages (the author's own sentences, word for word) as banded
 /// rows in the story's type, wrapped in full, then 略過 at the foot's end (round 34: the family's tonal small pill,
-/// ``View/dialogExit(_:id:action:)`` — under passages that fit, floating over passages that scroll). A press on a row holds its ink and a check,
+/// ``View/dialogExit(_:id:action:)`` — under passages that fit, floating over passages that scroll). A press on a row holds its ink,
 /// and the dialog closes 300 ms later; the picked row, reopened, rests in that ink and a press on it clears the pick.
+/// Round 35 §2 (the owner: 「可以把这个 dialog 里面的勾勾拿掉呢？这样子可以显示文字的区块就更多一点」): no check, and no slot
+/// kept for one — the words run the row's whole width between the family's insets; the pick is its ink alone.
 /// Only the author learns it. The web's `TapPassages.tsx`, Android's `TapPassages.kt`.
 struct TapPassages: View {
     let passages: [TapPassage]
-    /// The reader's pick as it stands (the row held in ink with its check).
+    /// The reader's pick as it stands (the row held in ink).
     let picked: String?
     let script: StoryScript
     /// A press on a row: what it makes the pick (``TapPassageRules/choice(pressing:current:)``).
@@ -79,23 +81,12 @@ struct TapPassages: View {
         let chosen = passage.id == picked
         let story = StoryTypography(script: script, compact: true)
         return Button { onChoose(TapPassageRules.choice(pressing: passage.id, current: picked)) } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                CSSText(passage.text,
-                        font: TapListMetrics.storyFont(story.bodyFamily, size: TapPassageRules.textSize(wide: TapListMetrics.wide(window))),
-                        lineHeight: story.bodyLeading, color: Tokens.UI.text)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                // Round 34 §7: the check's slot stands on every row; unpicked it is unseen (never taken out), so the
-                // words keep their width and never wrap again when a row is picked.
-                OrganicIcon(.check, size: TapPassageRules.checkSize, color: Tokens.text, strokeWidth: Tokens.ink)
-                    .opacity(chosen ? 1 : 0)
-                    .animation(.easeOut(duration: 0.15), value: chosen)
-                    .accessibilityHidden(true)
-            }
-            .padding(.horizontal, reach)
-            .padding(.vertical, ListBands.rowPad)
-            // Pressed on the paper only: what reaches past its frame is clipped from sight, and is the backdrop's.
-            .contentShape(SidesIn(by: TapPassageRules.overhang(reach: reach, inset: inset)))
+            // Round 35 §2: the words alone, the row's whole width between the insets — a pick changes only the ink, so
+            // they never rewrap.
+            TapPassageWords(text: passage.text, family: story.bodyFamily, leading: story.bodyLeading,
+                            size: TapPassageRules.textSize(wide: TapListMetrics.wide(window)), reach: reach)
+                // Pressed on the paper only: what reaches past its frame is clipped from sight, and is the backdrop's.
+                .contentShape(SidesIn(by: TapPassageRules.overhang(reach: reach, inset: inset)))
         }
         .buttonStyle(BandWashStyle(top: top, bottom: bottom, cut: TapPassageRules.bandCut(clipped: paperClips),
                                    held: chosen))
@@ -103,6 +94,24 @@ struct TapPassages: View {
         .accessibilityAddTraits(chosen ? .isSelected : [])
         .accessibilityIdentifier("tap-passage-\(index)")
         .accessibilityFocused($focused, equals: passage.id)
+    }
+}
+
+/// A passage row's words (round 35 §2): the story's type, wrapped in full across the row less `reach` a side, with the
+/// band's ``ListBands/rowPad`` above and below — nothing beside them.
+struct TapPassageWords: View {
+    let text: String
+    let family: AppFonts.Family
+    let leading: CGFloat
+    let size: CGFloat
+    let reach: CGFloat
+
+    var body: some View {
+        CSSText(text, font: TapListMetrics.storyFont(family, size: size), lineHeight: leading, color: Tokens.UI.text)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, reach)
+            .padding(.vertical, ListBands.rowPad)
     }
 }
 
@@ -120,13 +129,12 @@ nonisolated enum TapPassageRules {
     static let most = 3
     /// From the press that turned 共振 on to the dialog: the segment has filled and the face slid in (150–160 ms).
     static let openDelay: Duration = .milliseconds(240)
-    /// A row pressed holds its ink and check this long before the dialog closes.
+    /// A row pressed holds its ink this long before the dialog closes.
     static let closeDelay: Duration = .milliseconds(300)
     /// The passages' words: the story's type at 16, with its leading.
     static let textSize: CGFloat = 16
     /// On a tablet and the Mac, two points more (round 34, the family's type: ``TapListMetrics/sentenceSize(wide:)``).
     static func textSize(wide: Bool) -> CGFloat { TapListMetrics.sentenceSize(wide: wide) }
-    static let checkSize: CGFloat = 16
 
     /// Whether these are passages to offer at all.
     static func offers(_ passages: [TapPassage]) -> Bool { passages.count >= fewest }

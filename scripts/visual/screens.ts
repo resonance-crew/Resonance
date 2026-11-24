@@ -217,7 +217,7 @@ export const SCREENS: Screen[] = [
   { id: 'card-passage-picked', route: '/card/rich-story', as: 'dora', set: 'extended',
     web: { query: 'visualTap=picked', scrollTo: '[data-end-row]' },
     app: { ios: ['-visualEnd', 'YES', '-visualTap', 'picked'], android: ['--es', 'cardEnd', 'passage-picked'] },
-    expect: "The same dialog with the second row chosen: that row's band in the press ink between its two hand-drawn curves, a small check at its end, the other two rows bare — no toast" },
+    expect: "The same dialog with the second row chosen: that row's band in the press ink between its two hand-drawn curves, reaching the paper's pen line at both sides, and no check anywhere (round 35: its words run the row's whole width), the other two rows bare — no toast" },
   { id: 'card-private', route: '/card/alice-draft', as: 'alice',
     expect: "alice's private card: 🔒 私人卡 at the end of the meta line and an edit pen before the ⋯" },
   { id: 'profile', route: '/u/bob', as: 'alice',
