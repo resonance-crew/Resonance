@@ -17,7 +17,8 @@ export const TAP_LIST_HOLD_MS = 300;
 
 /**
  * The family's paper (round 33 §Q2): 24 above and at each side (it was 28 a side, 22–32 above), nothing below — the
- * scroll region reaches the paper's bottom and keeps its own room there for the floating way out (§Q3).
+ * scroll region's foot draws the way out and its 24 (round 34: under the content, or floating over a region that
+ * reaches the paper's bottom; BellList DialogScroll).
  */
 export const TAP_DIALOG_PADDING = '24px 24px 0';
 

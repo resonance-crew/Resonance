@@ -132,8 +132,8 @@ textarea:lang(zh-TW)::placeholder {
   mask-image: linear-gradient(to bottom, transparent, #000 16px);
 }
 
-/* The bottom's passage is 16 unless the list sets its own: a dialog whose way out floats over its foot (round 33
-   §Q3) keeps it clear under the pill (--edge-fade-clear) and whole again over it (--edge-fade-len). */
+/* The bottom's passage is 16 unless the list sets its own: a dialog whose way out floats over its foot (round 34)
+   fades to its border (--edge-fade-clear 0) and is whole again over the pill (--edge-fade-len). */
 [data-edge-fade-bottom] {
   -webkit-mask-image: linear-gradient(to top, transparent var(--edge-fade-clear, 0px), #000 var(--edge-fade-len, 16px));
   mask-image: linear-gradient(to top, transparent var(--edge-fade-clear, 0px), #000 var(--edge-fade-len, 16px));

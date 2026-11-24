@@ -34,9 +34,9 @@ export interface ModalProps {
   /**
    * For a modal whose foot has nothing else to do — a list, a picker, a
    * notice: the close is drawn there, a small tonal pill at the right, as in the
-   * apps (`ModalCloseRow`). `'float'`: the same small tonal pill, floating over the foot of the dialog's scroll region
-   * (`DialogScroll` draws it, from {@link useModalClose}) rather than standing under it — the tap lists' family and
-   * the passages' 略過 (round 33 §Q3), whose region reaches the paper's bottom.
+   * apps (`ModalCloseRow`). `'float'`: the same small tonal pill, drawn by the dialog's scroll region (`DialogScroll`,
+   * from {@link useModalClose}) — under the content as this foot while nothing scrolls, floating over the region's
+   * foot once it does, at the same corner either way (round 34): the tap lists' family and the passages' 略過.
    */
   closeButton?: boolean | 'float';
   /**
