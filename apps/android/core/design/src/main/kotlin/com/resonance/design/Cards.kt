@@ -10,6 +10,7 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -149,9 +150,13 @@ fun OrganicImage(
     // The bleed follows the box offered (what BoxWithConstraints read, now read while measuring, with
     // no subcomposition); the clip is set as the picture is placed, with that bleed in it ([bledLayout]).
     val clip = remember(seed, radius, magFactor) { { bleed: Double -> BledShape(seed, bleed, radius, magFactor) } }
+    // The bleed in pixels, set as the box is measured: the picture's crop is cut for the box seen, not the bled one
+    // (round 33 §Q4), and an overlay drawing the same picture reads it too ([LocalCoverInset]).
+    val inset = remember { CoverInset() }
     Layout(
         content = {
             Box(if (grain > 0f) Modifier.grainOverlay(grain) else Modifier) {
+              CompositionLocalProvider(LocalCoverInset provides inset) {
                 var shown by remember(url, fallbackUrl) { mutableStateOf(url ?: fallbackUrl) }
                 var loading by remember(url, fallbackUrl) { mutableStateOf(shown != null) }
                 // The shimmer stays under a picture coming in until it is sharp (Wave 2 #7).
@@ -160,7 +165,7 @@ fun OrganicImage(
                 val picture = shown
                 if (picture != null) RevealImage(
                     model = picture, contentDescription = contentDescription, modifier = Modifier.fillMaxSize(),
-                    contentScale = CoverFit.scale(frame), alignment = CoverFit.alignment(frame), state = reveal,
+                    contentScale = CoverFit.scale(frame, inset), alignment = CoverFit.alignment(frame, inset), state = reveal,
                     onLoading = { loading = true },
                     onSuccess = { loading = false },
                     onError = {
@@ -172,10 +177,11 @@ fun OrganicImage(
                     },
                 )
                 overlay?.invoke()
+              }
             }
         },
         modifier = modifier,
-    ) { measurables, constraints -> bledLayout(measurables.single(), constraints, magFactor, clip) }
+    ) { measurables, constraints -> bledLayout(measurables.single(), constraints, magFactor, clip, inset) }
 }
 
 /**
@@ -187,13 +193,21 @@ fun OrganicImage(
  * its layer and its size, and a shape set before this measure (its bleed not known yet) drew that card's
  * picture unclipped, a bleed wider on every side.
  */
-internal fun MeasureScope.bledLayout(measurable: Measurable, constraints: Constraints, magFactor: Double, clip: (Double) -> Shape): MeasureResult {
+internal fun MeasureScope.bledLayout(
+    measurable: Measurable, constraints: Constraints, magFactor: Double, clip: (Double) -> Shape, inset: CoverInset? = null,
+): MeasureResult {
     val maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth.toDp() else Dp.Infinity
     val maxHeight = if (constraints.hasBoundedHeight) constraints.maxHeight.toDp() else Dp.Infinity
     val bleed = imageBleed(maxWidth.value, maxHeight.value, magFactor)
     val shape = clip(bleed.value.toDouble())
     val innerW = (maxWidth + bleed * 2).roundToPx()
     val innerH = (maxHeight + bleed * 2).roundToPx()
+    // What the bled box reaches past the box seen, per side — set before the picture is measured, which reads it.
+    inset?.set(
+        // As the picture is placed below: the box's left and top edges inside it (a whole pixel).
+        if (constraints.hasBoundedWidth) ((innerW - constraints.maxWidth) / 2).toFloat() else 0f,
+        if (constraints.hasBoundedHeight) ((innerH - constraints.maxHeight) / 2).toFloat() else 0f,
+    )
     val placeable = measurable.measure(Constraints.fixed(innerW, innerH))
     // The size the box saw the picture take (within what it offered), and the box's own.
     val seenW = innerW.coerceIn(0, constraints.maxWidth)

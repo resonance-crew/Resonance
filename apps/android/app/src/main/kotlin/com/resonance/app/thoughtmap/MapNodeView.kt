@@ -2,6 +2,7 @@ package com.resonance.app.thoughtmap
 
 import com.resonance.app.ui.flowTag
 import com.resonance.design.CoverFit
+import com.resonance.design.CoverInset
 import com.resonance.design.CoverFraming
 import com.resonance.design.generated.LocalResonanceColors
 import com.resonance.design.generated.ResonanceColors
@@ -300,6 +301,8 @@ private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier,
     var shown by remember(url, fallbackUrl) { mutableStateOf(url) }
     val request = remember(shown, px) { ImageRequest.Builder(context).data(shown).size(Size(px, px)).crossfade(false).build() }
     val rimInk = MapInk.current.thumbRim(hue)
+    val thumbPx = with(LocalDensity.current) { 4.dp.toPx() }
+    val thumbInset = remember(thumbPx) { CoverInset(thumbPx, thumbPx) }
     Box(
         modifier
             .size(56.dp)
@@ -319,8 +322,9 @@ private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier,
                 model = request,
                 kind = ImageRevealKind.Fade,
                 contentDescription = null,
-                contentScale = CoverFit.scale(frame),
-                alignment = CoverFit.alignment(frame),
+                // 64 drawn in the 56 seen: the crop is the 56's, the 4 round it the same picture (round 33 §Q4).
+                contentScale = CoverFit.scale(frame, thumbInset),
+                alignment = CoverFit.alignment(frame, thumbInset),
                 modifier = Modifier.requiredSize(64.dp).offset((-4).dp, (-4).dp),
                 onError = { if (fallbackUrl != null && shown != fallbackUrl) shown = fallbackUrl },
             )

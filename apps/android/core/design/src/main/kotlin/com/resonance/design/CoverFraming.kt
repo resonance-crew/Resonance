@@ -1,6 +1,8 @@
 package com.resonance.design
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.ContentScale
@@ -78,29 +80,66 @@ fun coverCrop(ar: Double, frame: CoverFraming?, boxRatio: Double): CoverCropRect
 }
 
 /**
+ * How far the box a cover is laid out in reaches past the box it is seen in, in pixels, on each side ([x] left and
+ * right, [y] top and bottom): [OrganicImage]'s bleed (the wobbly clip's outward swing), a bubble's sides. Round 33
+ * §Q4: the crop is the seen box's, and the bleed only carries the same picture on past its edges. [OrganicImage]
+ * sets it as it measures (the bleed follows the box offered), before the picture inside is measured and drawn, so the
+ * picture's [CoverFit] reads the bleed of the size it is given; a fixed bleed is set once.
+ */
+@Stable
+class CoverInset(x: Float = 0f, y: Float = 0f) {
+    var x: Float = x
+        internal set
+    var y: Float = y
+        internal set
+
+    internal fun set(x: Float, y: Float) {
+        this.x = x
+        this.y = y
+    }
+}
+
+/** The [CoverInset] of the bled box a cover is drawn in ([OrganicImage]'s content and overlay); null outside one. */
+val LocalCoverInset = staticCompositionLocalOf<CoverInset?> { null }
+
+/**
  * A cover drawn on its frame: the picture scaled so the frame's crop ([coverCrop], from the picture's own size and the
  * box's) fills the box, and placed so the crop's corner is the box's — a [ContentScale] and an [Alignment] in one, for
- * an `AsyncImage` or an `Image`. Without a frame it is `ContentScale.Crop` centred, as before.
+ * an `AsyncImage` or an `Image`. With an [inset] the box is the one seen inside the box laid out (that less the inset on
+ * every side): the crop is cut for the seen box and lies on it exactly, and the picture runs on into the inset — the
+ * same picture, never a crop of the larger box (round 33 §Q4: the preview was the 調整封面 window's middle ~88 %).
+ * Without a frame and without an inset it is `ContentScale.Crop` centred, as before.
  */
 @Immutable
-data class CoverFit(val frame: CoverFraming?) : ContentScale, Alignment {
+data class CoverFit(val frame: CoverFraming?, val inset: CoverInset? = null) : ContentScale, Alignment {
+    /** The seen box's size in [space] and its corner in it: [space] less the inset, or all of it when nothing is left. */
+    private fun seen(w: Float, h: Float): Triple<Float, Float, Pair<Float, Float>> {
+        val ix = inset?.x ?: 0f
+        val iy = inset?.y ?: 0f
+        return if (w - 2 * ix > 0f && h - 2 * iy > 0f) Triple(w - 2 * ix, h - 2 * iy, ix to iy) else Triple(w, h, 0f to 0f)
+    }
+
     override fun computeScaleFactor(srcSize: Size, dstSize: Size): ScaleFactor {
         if (srcSize.width <= 0f || srcSize.height <= 0f || dstSize.width <= 0f || dstSize.height <= 0f) return ScaleFactor(1f, 1f)
-        val crop = coverCrop((srcSize.width / srcSize.height).toDouble(), frame, (dstSize.height / dstSize.width).toDouble())
-        val s = (dstSize.width / (crop.w * srcSize.width)).toFloat()
+        val (w, h) = seen(dstSize.width, dstSize.height)
+        val crop = coverCrop((srcSize.width / srcSize.height).toDouble(), frame, (h / w).toDouble())
+        val s = (w / (crop.w * srcSize.width)).toFloat()
         return ScaleFactor(s, s)
     }
 
     override fun align(size: IntSize, space: IntSize, layoutDirection: LayoutDirection): IntOffset {
         if (size.width <= 0 || size.height <= 0 || space.width <= 0 || space.height <= 0) return IntOffset.Zero
-        val crop = coverCrop(size.width.toDouble() / size.height, frame, space.height.toDouble() / space.width)
-        return IntOffset((-crop.x * size.width).roundToInt(), (-crop.y * size.height).roundToInt())
+        val (w, h, at) = seen(space.width.toFloat(), space.height.toFloat())
+        val crop = coverCrop(size.width.toDouble() / size.height, frame, (h / w).toDouble())
+        return IntOffset((at.first - crop.x * size.width).roundToInt(), (at.second - crop.y * size.height).roundToInt())
     }
 
     companion object {
-        /** The scale and alignment for [frame]: the old centred crop when there is none. */
-        fun scale(frame: CoverFraming?): ContentScale = if (frame == null) ContentScale.Crop else CoverFit(frame)
-        fun alignment(frame: CoverFraming?): Alignment = if (frame == null) Alignment.Center else CoverFit(frame)
+        /** The scale and alignment for [frame] in a box bled by [inset]: the old centred crop when there is neither. */
+        fun scale(frame: CoverFraming?, inset: CoverInset? = null): ContentScale =
+            if (frame == null && inset == null) ContentScale.Crop else CoverFit(frame, inset)
+        fun alignment(frame: CoverFraming?, inset: CoverInset? = null): Alignment =
+            if (frame == null && inset == null) Alignment.Center else CoverFit(frame, inset)
     }
 }
 

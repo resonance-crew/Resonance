@@ -281,6 +281,9 @@ private fun wordsLayout(text: String, type: StoryType, paint: TextPaint, widthPx
 @Composable
 private fun CoverPicture(cover: ImageBitmap, seed: Double, width: Float, height: Float, frame: CoverFraming? = null) {
     val bleed = imageBleed(width, height, 0.05)
+    // The crop is the seen box's, the bleed the same picture carried on (round 33 §Q4).
+    val px = with(LocalDensity.current) { bleed.toPx() }
+    val inset = remember(px) { CoverInset(px, px) }
     Box(Modifier.size(width.dp, height.dp), contentAlignment = Alignment.Center) {
         Box(
             Modifier
@@ -288,7 +291,7 @@ private fun CoverPicture(cover: ImageBitmap, seed: Double, width: Float, height:
                 .clip(BledShape(seed, bleed.value.toDouble()))
                 .grainOverlay(ShareCardRecipe.Cover.GRAIN, GrainInk.of(ShareCardRecipe.PALETTE)),
         ) {
-            Image(cover, contentDescription = null, contentScale = CoverFit.scale(frame), alignment = CoverFit.alignment(frame), modifier = Modifier.fillMaxSize())
+            Image(cover, contentDescription = null, contentScale = CoverFit.scale(frame, inset), alignment = CoverFit.alignment(frame, inset), modifier = Modifier.fillMaxSize())
         }
     }
 }
