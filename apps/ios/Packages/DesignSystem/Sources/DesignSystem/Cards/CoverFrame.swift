@@ -122,9 +122,6 @@ public struct FramedCover: View {
     let bleed: CGFloat
     @Environment(\.coverFraming) private var frame
 
-    /// The underlay's blur, under a bled cover's exact crop.
-    public static let underlayBlur: CGFloat = 12
-
     public init(_ image: Image, pictureSize: CGSize? = nil, bleed: CGFloat = 0) {
         self.image = image
         self.pictureSize = pictureSize
@@ -135,27 +132,37 @@ public struct FramedCover: View {
         if frame != nil || bleed > 0 {
             GeometryReader { geo in
                 let place = CoverLayout.placement(box: geo.size, pictureSize: pictureSize, frame: frame, bleed: bleed)
-                ZStack(alignment: .topLeading) {
-                    // Under it, only where the exact crop leaves the bleed bare (a crop at the picture's edge): the same
-                    // picture filling the bled box the old way, blurred, so the wobble's outward swing shows the picture's own
-                    // edge — never the placeholder or the paper (round 33 §Q4, the lead). Inside the box the crop covers it.
-                    if bleed > 0 {
-                        image.resizable().scaledToFill()
-                            .frame(width: geo.size.width, height: geo.size.height)
-                            .clipped()
-                            // Blurred (the lead, after the web's step at the swing): it only fills the swing with the
-                            // picture's own colours; opaque, so its edges never fade to what stands behind.
-                            .blur(radius: Self.underlayBlur, opaque: true)
-                    }
-                    image.resizable()
-                        .frame(width: place.width, height: place.height)
-                        .offset(x: place.minX, y: place.minY)
-                }
-                .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+                image.resizable()
+                    .frame(width: place.width, height: place.height)
+                    .offset(x: place.minX, y: place.minY)
+                    .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
             }
             .clipped()
         } else {
             image.resizable().scaledToFill()
+        }
+    }
+}
+
+/// The mask of what a ``FramedCover`` with a bleed covers (``CoverLayout/coverage(box:pictureSize:frame:bleed:)``): laid
+/// over the cover and what stands under it (a placeholder), so no placeholder shows in a bleed the picture can't reach.
+/// Without a frame, the centred frame's (as ``FramedCover`` draws it); with no bleed either, the whole box.
+public struct FramedCoverMask: View {
+    let pictureSize: CGSize?
+    let bleed: CGFloat
+    @Environment(\.coverFraming) private var frame
+
+    public init(pictureSize: CGSize?, bleed: CGFloat) {
+        self.pictureSize = pictureSize
+        self.bleed = bleed
+    }
+
+    public var body: some View {
+        GeometryReader { geo in
+            let rect = frame == nil && bleed == 0 ? CGRect(origin: .zero, size: geo.size)
+                : CoverLayout.coverage(box: geo.size, pictureSize: pictureSize, frame: frame, bleed: bleed)
+            Rectangle().frame(width: rect.width, height: rect.height).offset(x: rect.minX, y: rect.minY)
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
         }
     }
 }

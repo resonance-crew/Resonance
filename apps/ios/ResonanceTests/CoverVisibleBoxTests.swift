@@ -139,8 +139,8 @@ import UIKit
         #expect(abs(place.minX - (plain.minX + bleed)) < 0.001 && abs(place.minY - (plain.minY + bleed)) < 0.001)
         let shown = CGRect(x: bleed, y: bleed, width: visible.width, height: visible.height)
         #expect(place.insetBy(dx: -0.001, dy: -0.001).contains(shown))
-        // At zoom 1 a 3:2 picture is all of the 0.62 box's width: the exact crop has nothing past its sides (the picture
-        // filled the old way fills that bleed, ``theBleedIsNeverBare``).
+        // At zoom 1 a 3:2 picture is all of the 0.62 box's width: nothing past its sides, so the bleed there stays empty
+        // (the lead's final word: no underlay — the card's own paper shows and the swing ends at the picture's edge).
         let edge = CoverLayout.coverage(box: bled, pictureSize: CGSize(width: 1536, height: 1024),
                                         frame: CoverFraming(cx: 0.5, cy: 0.5, zoom: 1, ar: 1.5), bleed: bleed)
         #expect(abs(edge.minX - bleed) < 0.001 && abs(edge.width - visible.width) < 0.001)
@@ -152,16 +152,14 @@ import UIKit
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../Packages/DesignSystem/Sources/DesignSystem").standardized
         let image = try String(contentsOf: root.appendingPathComponent("Components/OrganicImage.swift"), encoding: .utf8)
         #expect(image.contains("FramedCover(image, pictureSize: pictureSize, bleed: bleed)"))
-        #expect(!image.contains("FramedCoverMask"))
-        #expect(FramedCover.underlayBlur == 12)
+        #expect(image.contains(".mask { FramedCoverMask(pictureSize: pictureSize, bleed: bleed) }"))
         let share = try String(contentsOf: root.appendingPathComponent("Cards/ShareCardView.swift"), encoding: .utf8)
         #expect(share.contains("FramedCover(Image(uiImage: image), pictureSize: image.size, bleed: bleed)"))
     }
 
-    /// The lead (round 33, after Android's stripes): where the exact crop touches the picture's edge — a 1536 × 1024
-    /// cover at zoom 1 in the 0.62 box, across — the wobble's outward swing into the bleed shows the same picture filled
-    /// the old way, never what stands behind (a placeholder); inside the box the exact crop is unchanged.
-    @Test func theBleedIsNeverBare() throws {
+    /// The lead's final word (round 33): where the exact crop ends inside the bleed nothing is drawn — under a loaded
+    /// picture the placeholder never shows there (``FramedCoverMask``), and inside the box the crop is exact.
+    @Test func noPlaceholderShowsPastTheLoadedPicture() throws {
         let picture = try gradient(1536, 1024)
         let visible = CGSize(width: 360, height: (360 * CoverFraming.Box.feed).rounded())
         let bleed = organicImageBleed(visible.width, visible.height)
@@ -171,14 +169,23 @@ import UIKit
                 Color(red: 0, green: 0, blue: 1) // a placeholder: blue, which the picture never has
                 FramedCover(Image(decorative: picture, scale: 1), pictureSize: CGSize(width: 1536, height: 1024), bleed: bleed)
             }
+            .mask { FramedCoverMask(pictureSize: CGSize(width: 1536, height: 1024), bleed: bleed) }
             .frame(width: bled.width, height: bled.height)
             .coverFraming(framing))
-            func blue(_ x: CGFloat, _ y: CGFloat) -> UInt8 { drawn.data[(Int(y) * drawn.width + Int(x)) * 4 + 2] }
-            // The bleed at the sides and the corners: picture, not placeholder.
-            for (x, y) in [(2, bled.height / 2), (bled.width - 3, bled.height / 2), (2, 2), (bled.width - 3, bled.height - 3)] {
-                #expect(blue(x, y) < 40, "\(String(describing: framing)) bleed at \(x),\(y): blue \(blue(x, y))")
+            func pixel(_ x: CGFloat, _ y: CGFloat) -> (blue: UInt8, alpha: UInt8) {
+                let i = (Int(y) * drawn.width + Int(x)) * 4
+                return (drawn.data[i + 2], drawn.data[i + 3])
             }
-            // Inside the box: the exact crop — its left edge is the picture's left edge (red ≈ 0), its right the right.
+            // The bleed past the picture's sides: nothing (transparent), never the placeholder.
+            for x in [CGFloat(2), bled.width - 3] {
+                let p = pixel(x, bled.height / 2)
+                #expect(p.alpha < 10, "\(String(describing: framing)) at \(x): alpha \(p.alpha), blue \(p.blue)")
+            }
+            // Above, where the picture has more (a 3:2 picture at zoom 1 is ~8 taller than the box), it carries on into
+            // the bleed.
+            let top = pixel(bled.width / 2, bleed - 4)
+            #expect(top.alpha > 245 && top.blue < 40)
+            // Inside the box: the exact crop, edge to edge.
             let left = drawn.place(bleed + 1, bled.height / 2), right = drawn.place(bleed + visible.width - 2, bled.height / 2)
             #expect(left.x < 0.02 && right.x > 0.98, "\(left) \(right)")
         }
