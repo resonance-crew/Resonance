@@ -91,7 +91,7 @@ describe('PickedPeople', () => {
     const dialog = await screen.findByRole('dialog');
     await within(dialog).findAllByRole('link');
     const padded = [dialog, ...dialog.querySelectorAll<HTMLElement>('*')].find((el) => el.style.padding);
-    expect(padded?.style.padding).toBe('24px 24px 0px');
+    expect(padded?.style.padding).toBe('0px 24px');
     const read = (f: string) => readFileSync(join(process.cwd(), f), 'utf8');
     const css = read('src/components/molecules/CardDetail/PickedPeople.module.css');
     // The rows' bands bleed by the dialog's own side padding, so they still end on the paper's pen line.

@@ -58,10 +58,13 @@
   --dialog-row-indent: 0px;
 }
 
+/* The region's first child (round 34 §5): the region reaches past the paper's padding for the bands (--bell-bleed),
+   so the title steps back in to the content's edge, its end clear of the drawn bar's gutter (as the passages'). */
 .title {
   font-family: var(--font-heading);
   font-size: 20px;
   margin: 0 0 14px;
+  padding: 0 calc(var(--bell-inset-end) - var(--bell-inset) + var(--bell-bleed)) 0 var(--bell-bleed);
 }
 
 .more {

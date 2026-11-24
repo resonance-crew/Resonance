@@ -16,11 +16,11 @@ import { useEffect, useState } from 'react';
 export const TAP_LIST_HOLD_MS = 300;
 
 /**
- * The family's paper (round 33 §Q2): 24 above and at each side (it was 28 a side, 22–32 above), nothing below — the
- * scroll region's foot draws the way out and its 24 (round 34: under the content, or floating over a region that
- * reaches the paper's bottom; BellList DialogScroll).
+ * The family's paper (round 33 §Q2): 24 at each side (it was 28), nothing above or below — the scroll region runs
+ * from the paper's top border to its bottom and holds the family's 24 itself (round 34, BellList DialogScroll): above
+ * its content, so its top fade reaches the border; under it, the way out and its 24 (the foot, or floating).
  */
-export const TAP_DIALOG_PADDING = '24px 24px 0';
+export const TAP_DIALOG_PADDING = '0 24px';
 
 /**
  * How many rows a list will open with, known before it answers (round 32 §P3, round 33 §Q1): the faces already on

@@ -46,6 +46,12 @@
   --close-gap: 18px;
 }
 
+/* The family's 24 above the content stands inside the region (round 34 §5: the dialog has no top padding), so the
+   region and its top fade reach the paper's top border; at rest the content is where the paper's 24 put it. */
+.scrollArea[data-float-close] > .scrollBody {
+  padding-top: var(--close-edge);
+}
+
 .floatClose {
   display: flex;
   justify-content: flex-end;

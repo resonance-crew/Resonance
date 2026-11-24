@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import useSWRInfinite from 'swr/infinite';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
@@ -70,11 +71,20 @@ export function PickedPeople({ cardId, passage, script, onClose }: PickedPeopleP
       closeButton="float"
     >
       <div className={styles.picked} data-tap-picked="" id="tap-picked">
-        <h3 className={styles.title}>{t('pickedTitle')}</h3>
-        <p className={styles.sentence} data-script={script}>
-          {t('passageQuote', { text: passage.text })}
-        </p>
-        <PickedList list={list} rows={pickedRowsKnown({ people: passage.people ?? [], more: passage.more ?? false })} onPick={onClose} />
+        {/* The title and the sentence head the region (round 34 §5: it reaches the paper's top border). */}
+        <PickedList
+          head={
+            <div className={styles.head}>
+              <h3 className={styles.title}>{t('pickedTitle')}</h3>
+              <p className={styles.sentence} data-script={script}>
+                {t('passageQuote', { text: passage.text })}
+              </p>
+            </div>
+          }
+          list={list}
+          rows={pickedRowsKnown({ people: passage.people ?? [], more: passage.more ?? false })}
+          onPick={onClose}
+        />
       </div>
     </Modal>
   );
@@ -98,7 +108,7 @@ function usePickedList(cardId: string, passage: string) {
   );
 }
 
-function PickedList({ list, rows, onPick }: { list: ReturnType<typeof usePickedList>; rows: number; onPick: () => void }) {
+function PickedList({ head, list, rows, onPick }: { head: ReactNode; list: ReturnType<typeof usePickedList>; rows: number; onPick: () => void }) {
   const tHome = useTranslations('home');
   const { data, size, setSize, isValidating } = list;
   // Still on its way past the hold: stand-ins of the loaded rows' own height (TapPeople's .row), as many as will come.
@@ -106,6 +116,7 @@ function PickedList({ list, rows, onPick }: { list: ReturnType<typeof usePickedL
   if (!data)
     return (
       <DialogScroll>
+        {head}
         <TapPeopleSkeleton rows={rows} />
       </DialogScroll>
     );
@@ -115,6 +126,7 @@ function PickedList({ list, rows, onPick }: { list: ReturnType<typeof usePickedL
   // 顯示更多 ends the region's content (round 33 §Q3: the region reaches the paper's bottom, nothing stands under it).
   return (
     <DialogScroll>
+      {head}
       <TapPeople people={people} onPick={onPick} quotes={false} endKey={next ? 'picked:more' : undefined} />
       {next && (
         <div className={styles.more}>

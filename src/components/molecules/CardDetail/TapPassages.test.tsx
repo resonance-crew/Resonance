@@ -6,6 +6,7 @@ import { renderWithIntl, screen, userEvent, waitFor, within } from '@/../test/re
 import zhMessages from '@/messages/zh-TW.json';
 import type { TapPassageBody } from '@/lib/api/v1/schemas';
 import { INK_LIGHT } from '@/lib/design/strokes';
+import { BAND_END_KEY, bandCurvePath, bandRegion } from '@/lib/design/listBands';
 import { PASSAGE_CHOSEN_MS, TapPassages } from './TapPassages';
 
 /**
@@ -32,6 +33,12 @@ function renderDialog(picked: string | null = null, script?: 'cjk' | 'latin') {
 }
 
 const user = () => userEvent.setup({ pointerEventsCheck: 0 });
+
+/** jsdom lays nothing out: every element measures `w` × `h`, as a row would, so the measured shapes draw. */
+function laidOut(w = 320, h = 60) {
+  vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(w);
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(h);
+}
 const rows = (dialog: HTMLElement) => [...dialog.querySelectorAll<HTMLButtonElement>('[data-passage]')];
 
 afterEach(() => {
@@ -90,8 +97,9 @@ describe('TapPassages (§U1)', () => {
     const [a, b] = rows(dialog);
     expect(b).toHaveAttribute('aria-pressed', 'true');
     expect(b.hasAttribute('data-band-pressed')).toBe(true);
-    expect(b.querySelector('svg')).not.toBeNull();
+    expect(b.querySelector('[data-check]')).toHaveAttribute('data-check', 'on');
     expect(a).toHaveAttribute('aria-pressed', 'false');
+    expect(a.querySelector('[data-check]')).toHaveAttribute('data-check', 'off');
   });
 
   it('held open for a screenshot (no press came before), it puts focus on no row: no keyboard ring in the capture', async () => {
@@ -197,12 +205,13 @@ describe('TapPassages (§U1)', () => {
 
   // Round 32 §P2 (the owner: 「区段与区段之间加上分隔线…左右与文字内容齐平、适当内缩」).
   it('draws a quiet rule between two rows only, from the words’ start to their end, at the light pen', async () => {
+    laidOut();
     renderDialog();
     const dialog = await screen.findByRole('dialog');
     const items = [...dialog.querySelectorAll('li')];
-    expect(items.map((li) => li.querySelectorAll('[data-passage-rule]').length)).toEqual([0, 1, 1]);
+    expect(items.map((li) => li.querySelectorAll('[data-band-rule]').length)).toEqual([0, 1, 1]);
     for (const li of items.slice(1)) {
-      const rule = li.querySelector('[data-passage-rule]')!;
+      const rule = li.querySelector('[data-band-rule]')!;
       expect(rule).toHaveAttribute('aria-hidden');
       // before its row: the held row's see-through band washes over it
       expect(rule.compareDocumentPosition(li.querySelector('[data-passage]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -210,7 +219,58 @@ describe('TapPassages (§U1)', () => {
     }
     const css = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/TapPassages.module.css'), 'utf8');
     // the words' own insets (the rows' padding), never the paper's edges nor the drawn bar's gutter; no room taken
-    expect(css).toMatch(/\.rule \{[^}]*position: absolute;[^}]*left: var\(--bell-inset, 20px\);[^}]*right: var\(--bell-inset-end, 20px\);/);
+    expect(css).toMatch(/\.rule \{\s*clip-path: inset\(0 var\(--bell-inset-end, 20px\) 0 var\(--bell-inset, 20px\)\);/);
     expect(css).toMatch(/\.row \{[^}]*padding: 0 var\(--bell-inset-end, 20px\) 0 var\(--bell-inset, 20px\);/);
+  });
+
+  // Round 34 §6 (the owner: a press fills exactly between its two rules — 「同一路径、同一位置」): the rule is the bands'
+  // own edge, drawn from the one curve — the row below's top edge and the row above's bottom edge, at the same place.
+  it('draws each rule as the very curve its two bands end on, at their boundary', async () => {
+    laidOut(320, 60);
+    renderDialog();
+    const dialog = await screen.findByRole('dialog');
+    const items = [...dialog.querySelectorAll('li')];
+    for (const [i, li] of items.entries()) {
+      if (i === 0) continue;
+      const rule = li.querySelector('[data-band-rule] path')!.getAttribute('d')!;
+      const key = `passage:${PASSAGES[i].id}`;
+      expect(rule).toBe(bandCurvePath(0, 320, key));
+      // The row's band starts on that path (its top edge)…
+      const band = li.querySelector('[data-passage] [data-band] path')!.getAttribute('d')!;
+      expect(band.startsWith(rule)).toBe(true);
+      expect(band).toBe(bandRegion(320, 60, key, i + 1 < PASSAGES.length ? `passage:${PASSAGES[i + 1].id}` : BAND_END_KEY));
+      // …and the row above's band ends on it (its bottom edge, the same curve moved down by its height).
+      const above = items[i - 1].querySelector('[data-passage] [data-band] path')!.getAttribute('d')!;
+      expect(above).toBe(bandRegion(320, 60, `passage:${PASSAGES[i - 1].id}`, key));
+      // On the boundary itself: the rule's box is centred on the row's top edge, the curve on its middle.
+      expect(li.querySelector('[data-band-rule]')!.parentElement).toBe(li);
+    }
+    const css = readFileSync(join(process.cwd(), 'src/components/atoms/BandWash/BandWash.module.css'), 'utf8');
+    expect(css).toMatch(/\.rule \{[^}]*position: absolute;[^}]*left: 0;[^}]*right: 0;[^}]*top: -4px;[^}]*height: 8px;/);
+    expect(css).toMatch(/\.rule > \.svg \{\s*top: 4px;/);
+  });
+
+  // Round 34 §7 (the owner: the ✓ appears in place, the words never re-wrap): the check's slot — 16 and the row's 12
+  // gap — is on every row at all times, unseen until chosen. jsdom lays nothing out, so the row's laid-out parts are
+  // compared: chosen or not, the words have the same box beside the same slot; only the slot's opacity differs.
+  it('keeps the check’s slot on every row, unseen until chosen: the words’ width and wrapping never change', async () => {
+    const view = renderDialog();
+    const dialog = await screen.findByRole('dialog');
+    const before = rows(dialog).map((r) => r.querySelector('[class*="rowInner"]')!.outerHTML);
+    for (const r of rows(dialog)) expect(r.querySelector('[data-check]')).toHaveAttribute('data-check', 'off');
+    await user().click(rows(dialog)[1]);
+    const after = rows(dialog);
+    expect(after[1].querySelector('[data-check]')).toHaveAttribute('data-check', 'on');
+    // The same parts in the same order on every row: only the chosen slot's state changed.
+    expect(after.map((r) => r.querySelector('[class*="rowInner"]')!.outerHTML.replace('data-check="on"', 'data-check="off"'))).toEqual(before);
+    view.unmount();
+    const css = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/TapPassages.module.css'), 'utf8');
+    const slot = css.match(/\.check \{([^}]*)\}/)?.[1] ?? '';
+    expect(slot).toMatch(/flex: none;/);
+    expect(slot).toMatch(/width: 16px;/);
+    expect(slot).toMatch(/opacity: 0;/);
+    expect(slot).not.toMatch(/display: none|visibility/);
+    expect(css).toMatch(/\.check\[data-check='on'\] \{\s*opacity: 1;\s*\}/);
+    expect(css).toMatch(/\.rowInner \{[^}]*gap: 12px;/);
   });
 });

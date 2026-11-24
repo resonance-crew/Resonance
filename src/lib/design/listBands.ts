@@ -51,15 +51,23 @@ export function bandCurve(y: number, w: number, key: string): [number, number][]
 }
 
 /**
+ * The curve `key` draws at `y` across `w`, as an open path: what a rule between two bands strokes (BandRule) — the
+ * very curve {@link bandRegion} gives the bands on either side as their edge, so a pressed row fills exactly to it.
+ */
+export function bandCurvePath(y: number, w: number, key: string): string {
+  const pts = bandCurve(y, w, key);
+  return `M ${pts[0][0]},${pts[0][1]}` + segs(pts);
+}
+
+/**
  * A row's band, `w` × `h`, as a closed path: its own curve (`topKey`'s) along the top, the one under it
  * (`bottomKey`'s) along the bottom — each swinging `BAND_AMP` about the row's edge, so the path reaches a little
  * past the box (drawn unclipped). Two rows touching share the curve between them exactly: the upper row's bottom
  * is the lower row's top, moved down by the upper row's height.
  */
 export function bandRegion(w: number, h: number, topKey: string, bottomKey: string): string {
-  const top = bandCurve(0, w, topKey);
   const back = [...bandCurve(h, w, bottomKey)].reverse();
-  return `M ${top[0][0]},${top[0][1]}` + segs(top) + ` L ${back[0][0]},${back[0][1]}` + segs(back) + ' Z';
+  return bandCurvePath(0, w, topKey) + ` L ${back[0][0]},${back[0][1]}` + segs(back) + ' Z';
 }
 
 /** The key of the curve under each row of `keys`: the next row's, and after the last, `after` (a title's key, or the list's end). */

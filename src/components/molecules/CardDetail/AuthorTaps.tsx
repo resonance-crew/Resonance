@@ -74,8 +74,9 @@ function AuthorTapsDialog({ cardId, rows, onClose }: { cardId: string; rows: num
   return (
     <Modal open onClose={onClose} maxWidth={480} seed={53} padding={TAP_DIALOG_PADDING} ariaLabel={t('resonatorsModal.title')} closeButton="float">
       <div className={styles.dialog}>
-        <h3 className={styles.title}>{t('resonatorsModal.title')}</h3>
+        {/* The title is the region's first child (round 34 §5: the region reaches the paper's top border). */}
         <DialogScroll>
+          <h3 className={styles.title}>{t('resonatorsModal.title')}</h3>
           {data ? (
             <>
               <TapPeople people={people} onPick={onClose} endKey={next ? 'taps:more' : undefined} />

@@ -32,3 +32,26 @@
 .fill {
   fill: var(--band-fill, transparent);
 }
+
+/* BandRule: the boundary's curve across the band's width, taking no room — a box of the curve's reach (its swing
+   and the pen, BAND_AMP 2 and less than 2 of INK_LIGHT) centred on the boundary, the curve drawn on its middle, so a
+   host may cut it with a plain clip-path inset. */
+.rule {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -4px;
+  height: 8px;
+  pointer-events: none;
+}
+
+.rule > .svg {
+  top: 4px;
+}
+
+/* The dividers' muted ink (Divider's colour), round ends. */
+.ruleLine {
+  fill: none;
+  stroke: color-mix(in oklch, var(--field-border-hover) 35%, transparent);
+  stroke-linecap: round;
+}

@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
-import { BAND_PRESS_DELAY_MS, bandRegion } from '@/lib/design/listBands';
+import { BAND_PRESS_DELAY_MS, bandCurvePath, bandRegion } from '@/lib/design/listBands';
+import { INK_LIGHT } from '@/lib/design/strokes';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import styles from './BandWash.module.css';
 
@@ -38,6 +39,35 @@ export function BandWash({ topKey, bottomKey, className }: BandWashProps) {
       {d && (
         <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} overflow="visible" className={styles.svg}>
           <path d={d} className={styles.fill} />
+        </svg>
+      )}
+    </span>
+  );
+}
+
+export interface BandRuleProps {
+  /** The key of the curve it draws: the band below it's own (its `topKey`). */
+  curveKey: string;
+  className?: string;
+}
+
+/**
+ * The quiet rule drawn on the boundary between two bands (round 34 §6, the owner: pressing a row fills exactly
+ * between its two rules): the band's own edge — the same curve (`bandCurvePath`, the very one `BandWash` closes its
+ * fill with), at the same place, across the band's full width — stroked at the light pen in the dividers' muted ink.
+ * Lay it over the boundary, across the band's whole width (left and right as the row's box), before the row (its
+ * see-through wash covers it). Where it shows is the host's to cut, with a `clip-path` inset (`className`): the
+ * passages' runs from the words' start to their end.
+ */
+export function BandRule({ curveKey, className }: BandRuleProps) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const { w } = useElementSize(ref);
+  const d = useMemo(() => (w > 0 ? bandCurvePath(0, w, curveKey) : ''), [w, curveKey]);
+  return (
+    <span ref={ref} className={`${styles.rule}${className ? ` ${className}` : ''}`} aria-hidden data-band-rule="">
+      {d && (
+        <svg width={w} height={1} viewBox={`0 0 ${w} 1`} overflow="visible" className={`${styles.svg} res-shape-fade-in`}>
+          <path d={d} className={styles.ruleLine} strokeWidth={INK_LIGHT} />
         </svg>
       )}
     </span>

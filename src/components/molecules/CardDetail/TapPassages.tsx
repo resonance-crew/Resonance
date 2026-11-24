@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { BandWash, bandHost, useBandPress } from '@/components/atoms/BandWash/BandWash';
-import { Divider } from '@/components/atoms/Divider/Divider';
+import { BandRule, BandWash, bandHost, useBandPress } from '@/components/atoms/BandWash/BandWash';
 import { Icon } from '@/components/atoms/Icon';
 import { Modal } from '@/components/molecules/Modal/Modal';
 import { DialogScroll } from '@/components/sections/AppHeader/BellList';
@@ -11,7 +10,6 @@ import type { TapPassageBody } from '@/lib/api/v1/schemas';
 import type { StoryScript } from '@/lib/text/script';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { BAND_END_KEY, bandsBelow } from '@/lib/design/listBands';
-import { INK_LIGHT } from '@/lib/design/strokes';
 import { TAP_LIST_DIALOG_WIDTH, TAP_LIST_PHONE_QUERY } from './TapFaces';
 import { TAP_DIALOG_PADDING } from './tapList';
 import { PASSAGE_CHOSEN_MS, reducedMotion } from './tapMotion';
@@ -114,13 +112,10 @@ export function TapPassages({ passages, picked, script = 'cjk', onPick, onClose,
               const inked = chosen ? chosen.id === p.id : picked === p.id;
               return (
                 <li key={p.id} className={styles.item}>
-                  {/* Between two rows only (§P2): the house's quiet wavy rule from the words' start to their end, drawn
-                      on the boundary (it takes no room), under a held row's see-through band. */}
-                  {i > 0 && (
-                    <span className={styles.rule} data-passage-rule="" aria-hidden>
-                      <Divider seed={71 + i} spacing={0} strokeWidth={INK_LIGHT} />
-                    </span>
-                  )}
+                  {/* Between two rows only (§P2): the quiet rule from the words' start to their end, on the boundary (it
+                      takes no room), under a held row's see-through band — the band's own edge (round 34 §6: BandRule
+                      strokes the very curve the bands on either side end on), so a press fills exactly to it. */}
+                  {i > 0 && <BandRule curveKey={keys[i]} className={styles.rule} />}
                   <PassageRow
                     id={p.id}
                     index={i}
@@ -173,11 +168,10 @@ function PassageRow({
       <BandWash topKey={band.top} bottomKey={band.bottom} />
       <span className={styles.rowInner}>
         <span className={styles.text}>{text}</span>
-        {selected && (
-          <span className={styles.check} aria-hidden>
-            <Icon name="check" size={16} />
-          </span>
-        )}
+        {/* The check's slot is every row's (round 34 §7): there but unseen until chosen, so the words never re-wrap. */}
+        <span className={styles.check} data-check={selected ? 'on' : 'off'} aria-hidden>
+          <Icon name="check" size={16} />
+        </span>
       </span>
     </button>
   );

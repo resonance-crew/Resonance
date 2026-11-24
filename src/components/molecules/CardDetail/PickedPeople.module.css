@@ -6,6 +6,12 @@
   --dialog-row-indent: 0px;
 }
 
+/* The region's head (round 34 §5): the region reaches past the paper's padding for the bands (--bell-bleed), so the
+   title and the sentence step back in to the content's edge, their end clear of the drawn bar's gutter. */
+.head {
+  padding: 0 calc(var(--bell-inset-end) - var(--bell-inset) + var(--bell-bleed)) 0 var(--bell-bleed);
+}
+
 .title {
   font-family: var(--font-heading);
   font-size: 20px;
