@@ -832,6 +832,7 @@
     "coverFrame": {
       "title": "調整封面",
       "hintTouch": "拖曳移動，捏合或滑桿縮放",
+      "zoomToMove": "放大後才能移動",
       "hintPointer": "拖曳移動，滾輪或滑桿縮放",
       "stage": "封面顯示範圍",
       "done": "完成",

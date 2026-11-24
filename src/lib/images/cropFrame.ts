@@ -15,13 +15,29 @@ export function frameScale(img: CropImage, ratio: number, z: number): number {
   return Math.max(1 / img.width, ratio / img.height) * z;
 }
 
+/** How far the picture's centre may move from the frame's at zoom z, each way, in frame widths: 0 where it just covers. */
+export function frameRoom(img: CropImage, ratio: number, z: number): { x: number; y: number } {
+  const s = frameScale(img, ratio, z);
+  return { x: Math.max(0, (img.width * s - 1) / 2), y: Math.max(0, (img.height * s - ratio) / 2) };
+}
+
+/** The most a drag past the picture's edge moves it (round 33 §Q5's rubber band), px. */
+export const RUBBER_MAX = 24;
+
+/**
+ * How far the picture follows a drag that has gone `over` px past where it can go (round 33 §Q5): about a half at
+ * first, firmer the further, never more than {@link RUBBER_MAX} — the sign kept.
+ */
+export function rubberBand(over: number, max = RUBBER_MAX): number {
+  if (!over) return 0;
+  return Math.sign(over) * max * (1 - Math.exp(-Math.abs(over) / (2 * max)));
+}
+
 /** The view inside its bounds: zoom in [1, zMax], the frame always covered. */
 export function clampFrameView(img: CropImage, ratio: number, view: CropView, zMax: number): CropView {
   const z = clamp(view.z, 1, zMax);
-  const s = frameScale(img, ratio, z);
-  const maxX = Math.max(0, (img.width * s - 1) / 2);
-  const maxY = Math.max(0, (img.height * s - ratio) / 2);
-  return { z, ox: clamp(view.ox, -maxX, maxX), oy: clamp(view.oy, -maxY, maxY) };
+  const room = frameRoom(img, ratio, z);
+  return { z, ox: clamp(view.ox, -room.x, room.x), oy: clamp(view.oy, -room.y, room.y) };
 }
 
 export function panFrameView(img: CropImage, ratio: number, view: CropView, dx: number, dy: number, zMax: number): CropView {

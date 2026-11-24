@@ -10,7 +10,7 @@ import { wobRect } from '@/lib/design/wobRect';
 import { autoCurve, autoMag, autoSegments } from '@/lib/design/wobAuto';
 import { INK } from '@/lib/design/strokes';
 import { CROP_START, KEY_PAN, KEY_PAN_FAST, KEY_ZOOM, WHEEL_ZOOM, type CropView } from '@/lib/images/avatarCrop';
-import { frameScale, frameStage, panFrameView, sliderOfZoom, viewMoved, zoomFrameView, zoomOfSlider } from '@/lib/images/cropFrame';
+import { clampFrameView, frameRoom, frameScale, frameStage, panFrameView, rubberBand, sliderOfZoom, viewMoved, zoomFrameView, zoomOfSlider } from '@/lib/images/cropFrame';
 import styles from './CropStage.module.css';
 
 /** A picture to frame: a decoded canvas (a new profile photo) or a loaded <img> (a cover already up). */
@@ -36,12 +36,24 @@ export interface CropStageProps {
   /** The stage's name (「封面顯示範圍」, 「Photo framing area」). */
   label: string;
   busy?: boolean;
+  /**
+   * The words said under the frame once a drag has met an axis the picture has no room in at this zoom (round 33
+   * §Q5: 「放大後才能移動」), until a zoom gives that axis room. Left out: no such line (the profile photo).
+   */
+  noRoomHint?: string;
 }
 
 /** The scrim over the picture outside the frame (the avatar dropzone's wash). */
 const SCRIM = 'color-mix(in oklch, var(--photo-shade) 50%, transparent)';
 const STAGE_SEED = 79;
 type Point = { x: number; y: number };
+/** Less room than this (frame widths) is none: the picture just covers the frame in that axis. */
+const ROOM_EPS = 1e-6;
+
+/** Whether the reader asked for less motion (a test's jsdom has no matchMedia: motion as usual). */
+function reducedMotion(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 /**
  * The crop stage the profile photo and the cover share (round 25 §G3): the picture under a frame, dimmed outside it,
@@ -50,7 +62,7 @@ type Point = { x: number; y: number };
  * on the keyboard's focus says; 重設 once something has moved. The view is in frame widths (lib/images/cropFrame), so
  * a resize keeps the framing; the stage is never taller than the window less 200.
  */
-export function CropStage({ picture, ratio, max, inset, zoomMax, outline, view, onView, label, busy = false }: CropStageProps) {
+export function CropStage({ picture, ratio, max, inset, zoomMax, outline, view, onView, label, busy = false, noRoomHint }: CropStageProps) {
   const t = useTranslations('crop');
   const keysId = useId();
   const roomRef = useRef<HTMLDivElement>(null);
@@ -93,21 +105,56 @@ export function CropStage({ picture, ratio, max, inset, zoomMax, outline, view, 
     [img, onView, ratio, zoomMax],
   );
 
-  // Drag to move; two fingers pinch (and move) about their moving centre.
+  // Drag to move; two fingers pinch (and move) about their moving centre. A drag past where the picture can go
+  // (round 33 §Q5) still follows the finger a little — a rubber band, at most RUBBER_MAX, firmer the further — and
+  // springs back on the lift; under reduced motion it doesn't move at all. `raw` is where the drag would have put the
+  // picture's centre with no edges, so moving back first takes the stretch up before the picture moves again.
   const pointers = useRef(new Map<number, Point>());
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const raw = useRef<Point | null>(null);
+  const [rubber, setRubber] = useState<Point>({ x: 0, y: 0 });
+  const [springing, setSpringing] = useState(false);
+  // The axes a drag has pushed while the picture had no room in them (§Q5's hint), until the picture changes.
+  const [pushed, setPushed] = useState({ x: false, y: false });
+  useEffect(() => setPushed({ x: false, y: false }), [picture]);
+  const stretched = useRef(false);
+  stretched.current = !!(rubber.x || rubber.y);
+  const release = () => {
+    raw.current = null;
+    if (!stretched.current) return;
+    setSpringing(true);
+    setRubber({ x: 0, y: 0 });
+  };
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
     if (busy || !img) return;
     e.currentTarget.setPointerCapture?.(e.pointerId);
     pointers.current.set(e.pointerId, toUnits(e.clientX, e.clientY));
+    setSpringing(false);
+    if (pointers.current.size === 1) raw.current = { x: viewRef.current.ox, y: viewRef.current.oy };
+    else release();
   }
   function onPointerMove(e: PointerEvent<HTMLDivElement>) {
     const map = pointers.current;
     const before = map.get(e.pointerId);
-    if (!before || busy) return;
+    if (!before || busy || !img) return;
     const now = toUnits(e.clientX, e.clientY);
     if (map.size === 1) {
       map.set(e.pointerId, now);
-      pan(now.x - before.x, now.y - before.y);
+      const from = raw.current ?? { x: viewRef.current.ox, y: viewRef.current.oy };
+      const want = { x: from.x + now.x - before.x, y: from.y + now.y - before.y };
+      const next = clampFrameView(img, ratio, { ...viewRef.current, ox: want.x, oy: want.y }, zoomMax);
+      viewRef.current = next;
+      onView((v) => clampFrameView(img, ratio, { ...v, ox: next.ox, oy: next.oy }, zoomMax));
+      const still = reducedMotion();
+      // Reduced motion: no stretch, so the picture answers a move back at once.
+      raw.current = still ? { x: next.ox, y: next.oy } : want;
+      const over = { x: (want.x - next.ox) * frameW, y: (want.y - next.oy) * frameW };
+      setRubber(still ? { x: 0, y: 0 } : { x: rubberBand(over.x), y: rubberBand(over.y) });
+      const room = frameRoom(img, ratio, next.z);
+      const pushX = Math.abs(over.x) > 0.5 && room.x <= ROOM_EPS;
+      const pushY = Math.abs(over.y) > 0.5 && room.y <= ROOM_EPS;
+      if (pushX || pushY) setPushed((p) => (p.x === (p.x || pushX) && p.y === (p.y || pushY) ? p : { x: p.x || pushX, y: p.y || pushY }));
       return;
     }
     const [a, b] = Array.from(map.entries()).slice(0, 2);
@@ -122,6 +169,8 @@ export function CropStage({ picture, ratio, max, inset, zoomMax, outline, view, 
   }
   function onPointerEnd(e: PointerEvent<HTMLDivElement>) {
     pointers.current.delete(e.pointerId);
+    if (pointers.current.size === 0) release();
+    else if (pointers.current.size === 1) raw.current = { x: viewRef.current.ox, y: viewRef.current.oy };
   }
 
   // A wheel or a trackpad's pinch zooms about the pointer, and never scrolls the page under the stage.
@@ -169,9 +218,12 @@ export function CropStage({ picture, ratio, max, inset, zoomMax, outline, view, 
     ? {
         width: img.width,
         height: img.height,
-        transform: `translate(${width / 2 + view.ox * frameW - (img.width * s) / 2}px, ${height / 2 + view.oy * frameW - (img.height * s) / 2}px) scale(${s})`,
+        transform: `translate(${width / 2 + view.ox * frameW - (img.width * s) / 2 + rubber.x}px, ${height / 2 + view.oy * frameW - (img.height * s) / 2 + rubber.y}px) scale(${s})`,
       }
     : undefined;
+  // §Q5's hint: an axis a drag pushed that still has no room at this zoom.
+  const slack = img ? frameRoom(img, ratio, view.z) : { x: 1, y: 1 };
+  const noRoom = !!noRoomHint && ((pushed.x && slack.x <= ROOM_EPS) || (pushed.y && slack.y <= ROOM_EPS));
   const fx = (width - frameW) / 2;
   const fy = (height - frameH) / 2;
 
@@ -194,7 +246,14 @@ export function CropStage({ picture, ratio, max, inset, zoomMax, outline, view, 
           onKeyDown={onKeyDown}
         >
           <div className={styles.paper} style={stagePath ? { clipPath: `path('${stagePath}')`, WebkitClipPath: `path('${stagePath}')` } : undefined}>
-            <div ref={holderRef} className={styles.holder} style={placed} />
+            <div
+              ref={holderRef}
+              className={styles.holder}
+              style={placed}
+              data-rubber={rubber.x || rubber.y ? '' : undefined}
+              data-spring={springing || undefined}
+              onTransitionEnd={() => setSpringing(false)}
+            />
             {framePath && (
               <svg className={styles.overlay} width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden>
                 <g transform={`translate(${fx} ${fy})`}>
@@ -204,6 +263,12 @@ export function CropStage({ picture, ratio, max, inset, zoomMax, outline, view, 
               </svg>
             )}
           </div>
+          {noRoomHint && (
+            // 放大後才能移動 (§Q5): under the frame, on the dimmed picture, once a drag met an axis with no room.
+            <span className={styles.noRoom} data-shown={noRoom || undefined} aria-hidden={!noRoom} aria-live="polite" data-crop-no-room="">
+              {noRoom ? noRoomHint : null}
+            </span>
+          )}
           {/* the keyboard's way, said on its focus only */}
           <span id={keysId} className={styles.keys}>
             {t('keys')}

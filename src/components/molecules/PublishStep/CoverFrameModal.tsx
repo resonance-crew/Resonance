@@ -82,6 +82,7 @@ export function CoverFrameModal({
         view={view}
         onView={onView}
         label={t('stage')}
+        noRoomHint={t('zoomToMove')}
       />
       <div className={styles.frameFoot}>
         <ModalActions>
