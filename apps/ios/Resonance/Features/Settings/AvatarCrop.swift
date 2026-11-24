@@ -119,6 +119,18 @@ struct AvatarCrop: Equatable {
         offset = CGSize(width: min(max(offset.width, -maxX), maxX), height: min(max(offset.height, -maxY), maxY))
     }
 
+    /// How far the picture may move each way from the frame's centre at this zoom, in stage points.
+    var room: CGSize {
+        let s = scale
+        return CGSize(width: max(0, (imageSize.width * s - frame.width) / 2), height: max(0, (imageSize.height * s - frame.height) / 2))
+    }
+
+    /// The picture can't move in an axis at this zoom (round 33 §Q5: a 3:2 cover at zoom 1 in the 0.62 frame across): the
+    /// cover's 放大後才能移動 shows while it is so.
+    var lacksRoom: Bool { room.width < Self.noRoom || room.height < Self.noRoom }
+    /// Less than this a side is no room to move (a point's sliver at a zoom just past 1).
+    static let noRoom: CGFloat = 1
+
     /// What the frame shows, in image pixels.
     var cropRect: CGRect {
         let s = scale
@@ -355,6 +367,9 @@ struct CropStage: View {
     let outline: CropOutline
     let label: String
     @FocusState private var focused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// A drag past where the picture can go (round 33 §Q5): what the clamp refused, and the stretch drawn for it.
+    @State private var rubber = CropRubber()
     /// The shade over the photo outside the crop (--photo-shade at 0.5: the same in both schemes).
     static let scrim = Tokens.photoShade.opacity(0.5)
 
@@ -368,7 +383,7 @@ struct CropStage: View {
                 .resizable()
                 .interpolation(.high)
                 .frame(width: CGFloat(image.width) * s, height: CGFloat(image.height) * s)
-                .offset(crop.offset)
+                .offset(x: crop.offset.width + rubber.stretch.width, y: crop.offset.height + rubber.stretch.height)
         }
         .frame(width: size.width, height: size.height)
         // Over the photo: the scrim everywhere but the frame's shape, and that shape's cream line.
@@ -385,7 +400,14 @@ struct CropStage: View {
         .clipShape(stageShape)
         .contentShape(Rectangle())
         // A finger or the pointer drags; two fingers move with their centre and pinch about it.
-        .gesture(CropPan { crop.pan(by: $0) })
+        .gesture(CropPan { delta in
+            // Past its limit — or with no room at all — the picture follows the finger a little, against resistance
+            // (none under Reduce Motion), and springs back when it lets go.
+            rubber.drag(delta, crop: &crop, stretches: !reduceMotion)
+        } ended: {
+            guard rubber.stretch != .zero || rubber.pull != .zero else { return }
+            withAnimation(CropRubber.springBack) { rubber.release() }
+        })
         .gesture(CropPinch { ratio, at in crop.zoom(to: crop.zoom * ratio, about: centred(at)) })
         // The wheel (a mouse's, a trackpad's scroll) zooms about the pointer.
         .gesture(CropWheel { dy, at in crop.zoom(to: crop.zoom * exp(-dy * AvatarCrop.wheelZoom), about: centred(at)) })
@@ -462,11 +484,68 @@ nonisolated struct CropScrimShape: Shape {
     }
 }
 
+/// The rubber band of a drag the picture can't follow (round 33 §Q5, the owner: 「無拖動空間時給輕微橡皮筋回彈」): what of
+/// each move the stage's clamp refused gathers as `pull`, and the picture is drawn `stretch` past where it may go — at
+/// most ``most`` (24 pt), each point of pull worth less than the last — until the fingers lift and it springs back. A
+/// move back the other way gives up the pull before it moves the picture again. The web's and Android's twin.
+struct CropRubber: Equatable {
+    private(set) var pull: CGSize = .zero
+    private(set) var stretch: CGSize = .zero
+
+    /// The furthest the picture is drawn past its limit.
+    static let most: CGFloat = 24
+    /// How soon the resistance stiffens: a pull of this many points is drawn at 63 % of ``most``.
+    static let give: CGFloat = 48
+    /// Back where it may be, once the fingers lift.
+    static let springBack = Animation.spring(response: 0.32, dampingFraction: 0.72)
+
+    /// A pull of `p` points, as drawn: `most` × (1 − e^(−|p| ÷ give)), on its own side.
+    static func band(_ p: CGFloat) -> CGFloat {
+        guard p != 0 else { return 0 }
+        return (p < 0 ? -1 : 1) * most * (1 - exp(-abs(p) / give))
+    }
+
+    /// A move of `delta`: first back out of the pull it opposes, then the picture as far as its room lets it, then
+    /// what is left into the pull (drawn only when `stretches`, else dropped).
+    mutating func drag(_ delta: CGSize, crop: inout AvatarCrop, stretches: Bool = true) {
+        func ease(_ pull: inout CGFloat, _ d: inout CGFloat) {
+            guard pull != 0, pull * d < 0 else { return }
+            let back = min(abs(pull), abs(d)) * (d < 0 ? -1 : 1)
+            pull += back
+            d -= back
+        }
+        var dx = delta.width, dy = delta.height
+        var px = pull.width, py = pull.height
+        ease(&px, &dx)
+        ease(&py, &dy)
+        let before = crop.offset
+        crop.pan(by: CGSize(width: dx, height: dy))
+        let moved = CGSize(width: crop.offset.width - before.width, height: crop.offset.height - before.height)
+        if stretches {
+            px += dx - moved.width
+            py += dy - moved.height
+        } else {
+            px = 0
+            py = 0
+        }
+        pull = CGSize(width: px, height: py)
+        stretch = CGSize(width: Self.band(px), height: Self.band(py))
+    }
+
+    /// The fingers lifted: nothing past the limit any more.
+    mutating func release() {
+        pull = .zero
+        stretch = .zero
+    }
+}
+
 /// One finger (or the pointer, or two fingers' centre) dragging the picture: each change's movement, in points.
 /// A UIKit pan (its translation is the touches' centroid's), so two fingers move with their centre while
 /// ``CropPinch`` zooms about it — a SwiftUI drag follows the first finger alone.
 struct CropPan: UIGestureRecognizerRepresentable {
     let moved: (CGSize) -> Void
+    /// The fingers lifted (or the drag was cancelled).
+    var ended: () -> Void = {}
 
     func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
         let pan = UIPanGestureRecognizer()
@@ -476,6 +555,7 @@ struct CropPan: UIGestureRecognizerRepresentable {
     }
 
     func handleUIGestureRecognizerAction(_ recognizer: UIPanGestureRecognizer, context: Context) {
+        if [.ended, .cancelled, .failed].contains(recognizer.state) { return ended() }
         guard recognizer.state == .began || recognizer.state == .changed else { return }
         let t = recognizer.translation(in: recognizer.view)
         recognizer.setTranslation(.zero, in: recognizer.view)

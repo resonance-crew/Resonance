@@ -38,7 +38,19 @@ struct CoverFrameContent: View {
                 CropStage(image: image, crop: binding, size: stage, outline: .cover(seed: seed), label: L10n.Write.CoverFrame.stage)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 16)
-                CropZoomRow(crop: binding).padding(.top, 14)
+                // Round 33 §Q5: while the picture has no room to move in an axis at this zoom, the line under the frame
+                // says so — its line kept when it doesn't, so the zoom row never moves.
+                Text(L10n.Write.CoverFrame.zoomToMove)
+                    .font(AppFonts.body(13))
+                    .foregroundStyle(Tokens.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
+                    .opacity(Self.hintsZoom(binding.wrappedValue) ? 1 : 0)
+                    .accessibilityHidden(!Self.hintsZoom(binding.wrappedValue))
+                    .animation(.easeOut(duration: 0.16), value: Self.hintsZoom(binding.wrappedValue))
+                    .accessibilityIdentifier("cover-frame-zoom-to-move")
+                CropZoomRow(crop: binding).padding(.top, 6)
             }
             ModalActions {
                 OrganicButton(L10n.Write.CoverFrame.cancel, variant: .tonal, size: .sm, action: onCancel)
@@ -61,6 +73,10 @@ struct CoverFrameContent: View {
             }
         }
     }
+
+    /// 放大後才能移動 shows while the picture can't move in an axis at its zoom (round 33 §Q5: always while there is no
+    /// room, not only after a drag finds none — the same on the three platforms).
+    static func hintsZoom(_ crop: AvatarCrop) -> Bool { crop.lacksRoom }
 
     /// The dialog's width: the stage's cap and the modal's padding round it.
     static var maxWidth: CGFloat { (CropStageSize.isMac ? CropStageSize.coverCapMac : CropStageSize.coverCap) + 48 }
