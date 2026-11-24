@@ -61,18 +61,13 @@
   position: relative;
 }
 
-/* The rule between two rows (round 32 §P2, the owner: 「左右与文字内容齐平、适当内缩」): the house's quiet wavy rule
-   (Divider, its muted pen at INK_LIGHT) from the words' start to their end — the rows' own insets, so never under
-   the drawn bar's gutter nor out to the paper's edges — centred on the boundary, taking no room. It is laid before
+/* The rule between two rows (round 32 §P2, the owner: 「左右与文字内容齐平、适当内缩」): the quiet rule (its muted pen
+   at INK_LIGHT) shown from the words' start to their end — the rows' own insets, so never under the drawn bar's
+   gutter nor out to the paper's edges — on the boundary, taking no room. Since round 34 §6 it is the bands' own edge
+   (BandRule: the curve across the row's whole width, the same place), cut here to the words' span. It is laid before
    the row, so a held row's see-through band washes over it and it stays drawn. */
 .rule {
-  position: absolute;
-  top: 0;
-  left: var(--bell-inset, 20px);
-  right: var(--bell-inset-end, 20px);
-  transform: translateY(-50%);
-  line-height: 0;
-  pointer-events: none;
+  clip-path: inset(0 var(--bell-inset-end, 20px) 0 var(--bell-inset, 20px));
 }
 
 /* A row is a button: no face of its own — its band is the press — its words on the dialog's own inset. */
