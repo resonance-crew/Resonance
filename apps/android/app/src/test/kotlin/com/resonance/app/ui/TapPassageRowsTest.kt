@@ -85,10 +85,11 @@ class TapPassageRowsTest {
     private val carol = person("carol", quote = "咖啡涼了也沒關係。", note = "我也是這樣搬出來的")
     private val hana = person("hana")
 
-    @Test fun theAuthorsListShowsEveryPickThenTheNote() {
+    @Test fun theAuthorsListShowsEveryPickNeverTheNote() {
         assertEquals(TapRowLines(quote = gus.passage!!.text), tapRowLines(gus, anonymous = false, author = true, viewerId = null, offersPassages = false))
+        // Round 34 (10): the pick, never the note (it arrives as a message).
         assertEquals(
-            TapRowLines(quote = carol.passage!!.text, excerpt = "我也是這樣搬出來的"),
+            TapRowLines(quote = carol.passage!!.text),
             tapRowLines(carol, anonymous = false, author = true, viewerId = null, offersPassages = false),
         )
         // No pick, no note: as round 26, 60 tall.

@@ -162,7 +162,9 @@ class TapListFamilyTest {
         for (n in 1..3) {
             val seen = heightsSeen(Kind.Author, n, answerMs = 120, until = 900)
             assertEquals("author, $n: one height from its first frame ($seen)", 1, seen.size)
-            assertEquals(n, compose.onAllNodesWithText("讀到搬家那段，好像看見自己。", useUnmergedTree = true).fetchSemanticsNodes().size)
+            // Round 34 (10): the quote, never the note.
+            assertEquals(n, compose.onAllNodesWithText(L10n.Card.Tap.passageQuote("清晨六點的城市還沒醒"), useUnmergedTree = true).fetchSemanticsNodes().size)
+            assertEquals(0, compose.onAllNodesWithText("讀到搬家那段，好像看見自己。", useUnmergedTree = true).fetchSemanticsNodes().size)
         }
     }
 

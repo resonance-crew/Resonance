@@ -25,10 +25,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * What a row of the sentence's people says under the pen name (round 29 §S4.2): the note's first line (2 lines) when
- * they left one on this named card — and never the quote, which heads the dialog.
+ * What a row of the sentence's people says under the pen name: nothing — round 34 (10) took the note's first line
+ * away (it arrives as a message), and the quote heads the dialog. A row is the face and the pen name, 60 tall.
  */
-internal fun pickedRowLines(person: TapPerson, anonymous: Boolean): TapRowLines = TapRowLines(excerpt = tapRowExcerpt(person, anonymous))
+@Suppress("UNUSED_PARAMETER")
+internal fun pickedRowLines(person: TapPerson, anonymous: Boolean): TapRowLines = TapRowLines.NONE
 
 /**
  * The people who picked one sentence, a page at a time (§S4.4): the author's list read with `?passage=` — the same rows,
@@ -67,7 +68,7 @@ internal fun PickedPeople(
  * [sentence] once, 「…」, in the story's [type] at 16 sp, muted, in full, at the story's compact leading at every width
  * ([pickedSentenceLeading]) — [PickedTitleGap] under the title, [PickedRowsGap] over the rows (§S12: the web's and iOS's
  * measures); that sentence's people, newest first, as the
- * author's list draws a row (a face 36, the pen name, the note's excerpt) — each [onRow] where that row leads in the
+ * author's list draws a row (a face 36 and the pen name — round 34 (10): never the note) — each [onRow] where that row leads in the
  * author's list ([tapRowRoute]); 顯示更多 for the next page; the small 關閉 floating at the foot's end ([TapListModal]).
  */
 @Composable

@@ -6,6 +6,10 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.onRoot
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -186,4 +190,56 @@ class TapFacesTest {
         assertTrue(source.contains("rise = if (author) null else viewerId, riseBy = OwnFaceRise"))
         assertTrue(source.contains("if (author) Modifier else Modifier.clipToBounds()"))
     }
+
+    // Round 34 (11): no press, hover or held ink on the people rows; the faces over 共振 have none either.
+
+    @Test fun thePeopleRowsAndTheFacesDrawNoPressInk() {
+        val source = File("src/main/kotlin/com/resonance/app/ui/TapFaces.kt").readText()
+        val row = source.substringAfter("private fun TapRow(").substringBefore("\n}\n")
+        assertFalse("no band on a people row", row.contains("listBand("))
+        assertTrue("still opens its person, plainly", row.contains("plainClickable(role = Role.Button, onClick = onClick)"))
+        val button = source.substringAfter("internal fun TapFacesButton(").substringBefore("\n}\n")
+        assertFalse(button.contains("indication = ") || button.contains("listBand(") || button.contains("collectIsPressedAsState"))
+        assertTrue(button.contains(".plainClickable(role = Role.Button, onClick = onOpen)"))
+        // The passages' rows keep theirs.
+        assertTrue(File("src/main/kotlin/com/resonance/app/ui/TapPassages.kt").readText().contains(".listBand(keys[i], below[i], source"))
+    }
+
+    // Round 34 (12) (found on the Mac): every face of the group over 共振 opens the list — the overlaps too, nothing
+    // clipped out of the target (item 9's clip draws only), nothing over it.
+
+    private fun opensAtEveryFace(n: Int) {
+        val people = listOf(dora, eli, fay).take(n)
+        var opened = 0
+        compose.setContent {
+            Column {
+                EndRowTwo(Modifier.width(320.dp), facesCentre = 60.dp) {
+                    TapFacesButton(TapFaces(false, people, more = false), viewerId = "alice", author = false, onOpen = { opened++ })
+                }
+            }
+        }
+        compose.waitForIdle()
+        val b = compose.onNodeWithTag("tap-faces", useUnmergedTree = true).getBoundsInRoot()
+        val step = AvatarGroup.step(TapFaceSize)
+        val mid = (b.top + b.bottom) / 2
+        val points = buildList {
+            for (i in people.indices) add(b.left + step * i + TapFaceSize / 2)
+            // Where two overlap, and at the group's two ends.
+            for (i in 1 until people.size) add(b.left + step * i + 2.dp)
+            add(b.left + 2.dp)
+            add(b.right - 2.dp)
+        }
+        with(compose.density) {
+            for (x in points) compose.onRoot().performTouchInput { click(androidx.compose.ui.geometry.Offset(x.toPx(), mid.toPx())) }
+        }
+        compose.waitForIdle()
+        assertEquals("$n faces: every point opens it", points.size, opened)
+        assertTrue("a finger's 48 tall at least", (b.bottom - b.top).value >= 48f - 0.5f)
+    }
+
+    @Test fun oneFaceOpensTheListAtItsCentre() = opensAtEveryFace(1)
+
+    @Test fun twoFacesOpenTheListAtEachFaceAndTheOverlap() = opensAtEveryFace(2)
+
+    @Test fun threeFacesOpenTheListAtEachFaceAndTheOverlaps() = opensAtEveryFace(3)
 }

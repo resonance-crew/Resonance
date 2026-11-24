@@ -2,7 +2,6 @@ package com.resonance.app.ui
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -178,24 +177,24 @@ internal fun tapRowRoute(person: TapPerson, anonymous: Boolean): Route =
     if (!anonymous && person.note != null) Route.Thread(person.author.handle, uid = person.author.id)
     else Route.Author(person.author.handle)
 
-/** The row's muted second line: the first line of their note on a named card; nothing on an anonymous one. */
+/** The first line of their note on a named card (nothing on an anonymous one) — no longer drawn in a row (round 34 (10)). */
 internal fun tapRowExcerpt(person: TapPerson, anonymous: Boolean): String? =
     if (anonymous) null else person.note?.excerpt?.takeIf { it.isNotBlank() }
 
 /**
  * What a row of who resonated says under the pen name (round 27 §U2, §U3): the [quote] of the passage that person
  * picked (「…」, muted, 2 lines), or — the reader's own row on a card offering passages, with none picked — [pick]
- * (選一段, in the tonal label's ink); then the note's [excerpt] (2 lines). Nothing: the row is as before, 60 tall.
+ * (選一段, in the tonal label's ink). Never the note (round 34 (10), the owner: the note arrives as a message — read it
+ * there): a row is the face, the pen name and that quote. Nothing: the row is as before, 60 tall.
  */
-internal data class TapRowLines(val quote: String? = null, val pick: Boolean = false, val excerpt: String? = null) {
+internal data class TapRowLines(val quote: String? = null, val pick: Boolean = false) {
     companion object {
         val NONE = TapRowLines()
     }
 }
 
 /**
- * The lines for [person]'s row. The author's list ([author]): every row's pick, then its note's first line (none on an
- * anonymous card). A reader's list: their own row ([viewerId]) — their pick, or 選一段 when the card offers passages
+ * The lines for [person]'s row. The author's list ([author]): every row's pick (round 34 (10): never its note). A reader's list: their own row ([viewerId]) — their pick, or 選一段 when the card offers passages
  * ([offersPassages]) — and, since Wave 2 #3b (everyone's picks are seen, 「像按讚一樣」), every other row's pick as the
  * server sent it; never a note on a reader's list, on a named card or an anonymous one (M3: the server sends none).
  */
@@ -208,7 +207,7 @@ internal fun tapRowLines(
     pagePick: PagePick? = null,
 ): TapRowLines {
     val listed = person.passage?.text?.takeIf { it.isNotBlank() }
-    if (author) return TapRowLines(quote = listed, excerpt = tapRowExcerpt(person, anonymous))
+    if (author) return listed?.let { TapRowLines(quote = it) } ?: TapRowLines.NONE
     if (viewerId == null || person.author.id != viewerId) return listed?.let { TapRowLines(quote = it) } ?: TapRowLines.NONE
     // On a card offering passages the page knows the reader's pick before the list does (the list may have been read
     // while the pick's request was still on its way): the own row says the page's, as the web's.
@@ -389,7 +388,7 @@ internal fun tapListText(cls: LayoutClass): TapListText =
     if (cls == LayoutClass.Compact) TapListText(title = 20f, handle = 15f, line = 13f, sentence = 16f)
     else TapListText(title = 22f, handle = 17f, line = 15f, sentence = 18f)
 
-/** The list's rows: banded, each the face, the pen name and the excerpt; while read, the known faces' rows. */
+/** The list's rows: each the face, the pen name and (who resonated) the quote; while read, the known faces' rows. */
 @Composable
 internal fun TapRows(
     list: TapPeople,
@@ -413,21 +412,10 @@ internal fun TapRows(
             }
         }
         !list.loaded -> Column(Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = L10n.Home.moreLoading }) {
-            val known = expected.orEmpty()
-            val keys = known.map { "tap:" + it.id }
-            val below = bandsBelow(keys, ListBands.EndKey)
-            known.forEachIndexed { i, a ->
-                val source = remember(a.id) { MutableInteractionSource() }
-                TapRow(TapPerson(a, null), TapRowLines.NONE, measure, keys[i], below[i], source, onClick = null)
-            }
+            expected.orEmpty().forEach { a -> TapRow(TapPerson(a, null), TapRowLines.NONE, measure, onClick = null) }
         }
         else -> Column(Modifier.fillMaxWidth()) {
-            val keys = people.map { "tap:" + it.author.id }
-            val below = bandsBelow(keys, ListBands.EndKey)
-            people.forEachIndexed { i, p ->
-                val source = remember(p.author.id) { MutableInteractionSource() }
-                TapRow(p, lines(p), measure, keys[i], below[i], source) { onRow(p) }
-            }
+            people.forEach { p -> TapRow(p, lines(p), measure) { onRow(p) } }
             if (list.failed) BasicText(
                 L10n.Native.loadError,
                 style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.TextMuted),
@@ -443,18 +431,14 @@ private fun TapRow(
     p: TapPerson,
     said: TapRowLines,
     measure: TapRowMeasure,
-    topKey: String,
-    bottomKey: String,
-    source: MutableInteractionSource,
     onClick: (() -> Unit)?,
 ) {
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = measure.height)
-            // Round 33 §Q2: the band from the paper's edge to its edge (the dialog's region reaches them, the paper's
-            // wobble clipping it under its pen line), never the rounded inset card of round 26.
-            .listBand(topKey, bottomKey, source, { false }, cut = false)
+            // Round 34 (11) (the owner): no press, hover or held ink — the row still opens its person, plainly (no
+            // ripple); the row spans the paper's edges (round 33 §Q2), its face and words [TapRowMeasure.inset] in.
             .then(if (onClick != null) Modifier.plainClickable(role = Role.Button, onClick = onClick) else Modifier)
             .padding(horizontal = measure.inset, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -472,11 +456,6 @@ private fun TapRow(
             else if (said.pick) BasicText(
                 L10n.Card.Tap.passagePick,
                 style = AppFonts.body(measure.line, lineHeight = 1.45f, color = Tokens.ButtonOnTonal),
-                maxLines = 2, overflow = TextOverflow.Ellipsis,
-            )
-            if (said.excerpt != null) BasicText(
-                said.excerpt,
-                style = AppFonts.body(measure.line, lineHeight = 1.45f, color = Tokens.TextMuted),
                 maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
         }
