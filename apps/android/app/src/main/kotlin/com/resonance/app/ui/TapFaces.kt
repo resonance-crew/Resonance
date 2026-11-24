@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -53,6 +54,12 @@ import kotlinx.coroutines.launch
 
 /** The faces under the capsule and on the author's line (§U2.2): the apps' 28. */
 internal val TapFaceSize: Dp = 28.dp
+
+/**
+ * How far below its place the reader's own face starts rising (round 34 (9)): from centred in the faces' line
+ * ([Row2Height], over 共振 with 0 between) to its top on the line's foot — wholly inside the segment, out of sight.
+ */
+internal val OwnFaceRise: Dp = (Row2Height + TapFaceSize) / 2
 
 /**
  * On the author's line, from the wave to the first face's rim: where that rim has stood since §U3.1 — the 8 before the
@@ -92,12 +99,19 @@ internal fun TapFacesButton(
                 OrganicIcon(IconName.Wave, size = 16.dp, color = Tokens.TextMuted)
                 Spacer(Modifier.width(AuthorFacesGap))
             }
-            AvatarGroup(faces.shown.map { it.groupFace() }, size = TapFaceSize, reducedMotion = reduced)
+            // Round 34 (9): a reader's own face rises out of 共振 (the segment right under this line, whose top edge is
+            // this line's foot, clips it) and sinks back into it — from its place to under the line's foot.
+            AvatarGroup(
+                faces.shown.map { it.groupFace() }, size = TapFaceSize, reducedMotion = reduced,
+                rise = if (author) null else viewerId, riseBy = OwnFaceRise,
+            )
         }
     }
     Box(
         modifier
             .heightIn(min = 48.dp)
+            // The line's foot is the 共振 segment's top edge: a rising face is seen only above it.
+            .then(if (author) Modifier else Modifier.clipToBounds())
             // The flows find the faces by it (maestro/flows/tap.yaml: the viewer's face slides in).
             .flowTag(if (author) "author-taps" else "tap-faces")
             .then(
@@ -226,8 +240,11 @@ internal fun ReaderTapList(
     pagePick: PagePick? = null,
     /** The faces over the capsule (at most 3): the rows while the first page is read past the wait (round 33 §Q1). */
     expected: List<Author> = emptyList(),
+    /** The page's list, its first page read while the faces stand (round 34 (8)); none: read from the press. */
+    list: TapPeople? = null,
 ) {
-    val list = remember(cardId) { TapPeople { token -> session.taps.taps(cardId, token) } }
+    val own = remember(cardId) { TapPeople { token -> session.taps.taps(cardId, token) } }
+    val list = list ?: own
     // Round 33 §Q1: drawn once its first page has answered, or after the family's wait with the faces as its rows.
     if (!rememberFirstPageReady(list)) return
     val viewerId = session.uid

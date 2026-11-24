@@ -4,8 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import androidx.compose.ui.graphics.toPixelMap
@@ -112,6 +114,64 @@ class AvatarGroupTest {
             val rim = (b.left + 28 * density + 3 * density).toInt()
             assertTrue("$palette: the face behind right after the front one's pen line, ${pixels[rim, mid]}", near(behind, pixels[rim, mid]))
         }
+    }
+
+    // Round 34 (9) (the owner: 自己的头像从共振按钮里滑上来，取消时滑回去): the rising face comes up from under the line's foot,
+    // clipped by it, and sinks back; nothing fades, nothing slides sideways; at once under reduced motion.
+
+    @Test fun aRisingFaceMovesOnlyUpAndDownOnTheShortEase() {
+        assertEquals(38f, AvatarGroup.riseOffset(0f, 38f), 0f)
+        assertEquals(0f, AvatarGroup.riseOffset(1f, 38f), 0f)
+        assertEquals(19f, AvatarGroup.riseOffset(0.5f, 38f), 0f)
+        assertEquals(androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.8f, 0.3f, 1f), AvatarGroup.RiseEasing)
+        assertEquals(150, AvatarGroup.MOVE_MILLIS)
+    }
+
+    /** Whether the rising face shows at its place's middle, frame by frame: after it is added, then after it is taken. */
+    private fun risingFace(reducedMotion: Boolean): Pair<List<Boolean>, List<Boolean>> {
+        val shown = androidx.compose.runtime.mutableStateOf(false)
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            // The faces' line (48) with the face centred in it, clipped at its foot, on a black table.
+            Box(Modifier.size(100.dp, 48.dp).background(Color.Black).testTag("line").clipToBounds()) {
+                Box(Modifier.padding(top = 10.dp)) {
+                    AvatarGroup(
+                        if (shown.value) listOf(faces[0]) else emptyList(), size = 28.dp, reducedMotion = reducedMotion,
+                        rise = "a", riseBy = 38.dp,
+                    )
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(100)
+        fun shows(): Boolean {
+            val pixels = compose.onRoot().captureToImage().toPixelMap()
+            val b = compose.onNodeWithTag("line").fetchSemanticsNode().boundsInRoot
+            return near(front, pixels[(b.left + 14 * density).toInt(), (b.top + 24 * density).toInt()])
+        }
+        compose.runOnIdle { shown.value = true }
+        val coming = List(20) { compose.mainClock.advanceTimeByFrame(); shows() }
+        compose.runOnIdle { shown.value = false }
+        val going = List(20) { compose.mainClock.advanceTimeByFrame(); shows() }
+        return coming to going
+    }
+
+    @Test fun theOwnFaceRisesFromUnderTheLinesFootAndSinksBackIntoIt() {
+        val (coming, going) = risingFace(reducedMotion = false)
+        // It comes later than a face that appears at once (by frame 3, the reduced-motion test's) — it starts under the
+        // line's foot, clipped — then stays.
+        val risen = coming.indexOf(true)
+        assertTrue("risen ($coming) later than at once", risen > 3)
+        assertTrue("stays risen: $coming", coming.drop(risen).all { it })
+        // Going, it sinks out of sight once and for all — never a blink before it goes.
+        val sunk = going.indexOf(false)
+        assertTrue("sinks: $going", sunk >= 0 && going.drop(sunk).none { it })
+        assertTrue("slides, not gone at the first frame: $going", going.first())
+    }
+
+    @Test fun underReducedMotionTheOwnFaceIsThereAndGoneAtOnce() {
+        val (coming, going) = risingFace(reducedMotion = true)
+        assertTrue("at once: $coming", coming.indexOf(true) in 0..3 && coming.drop(coming.indexOf(true)).all { it })
+        assertTrue("gone at once: $going", going.indexOf(false) in 0..3)
     }
 
     private fun srgb(c: Color) = c.convert(ColorSpaces.Srgb)
