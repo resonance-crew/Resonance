@@ -217,11 +217,13 @@ export function closeState(content: number, cap: number): 'foot' | 'float' {
   return content + BAND_SWING + DIALOG_CLOSE.gap + DIALOG_CLOSE.h + DIALOG_CLOSE.edge > cap + 0.5 ? 'float' : 'foot';
 }
 
-/** The region's content height (its padding left out: the state sets that) and its cap, as laid out now. */
+/**
+ * The region's content height — the family's 24 above it included, the bottom padding left out (the state sets that,
+ * so it never flips itself back) — and its cap, as laid out now.
+ */
 function measureRegion(body: HTMLElement): { content: number; cap: number } {
   const css = getComputedStyle(body);
-  const pad = (parseFloat(css.paddingTop) || 0) + (parseFloat(css.paddingBottom) || 0);
-  return { content: body.scrollHeight - pad, cap: parseFloat(css.maxHeight) };
+  return { content: body.scrollHeight - (parseFloat(css.paddingBottom) || 0), cap: parseFloat(css.maxHeight) };
 }
 
 /**
@@ -230,7 +232,9 @@ function measureRegion(body: HTMLElement): { content: number; cap: number } {
  * paper's pen line, never a straight cut short of it. The body reaches past the dialog's box on both sides for that
  * (`--bell-bleed`); the drawn bar stays in the content's gutter, over the bands.
  *
- * In a `closeButton="float"` Modal (the tap lists' family, the passages' 略過; round 34) the way out — the small tonal
+ * In a `closeButton="float"` Modal (the tap lists' family, the passages' 略過; round 34) the region runs from the
+ * paper's top border (the family's 24 is its own top padding, so its top fade reaches the border and the content
+ * slides under it into the pen line), and the way out — the small tonal
  * pill, its right edge on the content's end, its bottom 24 above the paper's — takes one of two states, decided in
  * the first layout pass (before the first paint: a layout effect, from the content's measured height against the
  * cap, {@link closeState}) and again only as the content grows (顯示更多, a late page):

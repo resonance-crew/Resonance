@@ -129,7 +129,7 @@ describe('the tap dialogs’ family (round 33)', () => {
       await open(1);
       const dialog = await screen.findByRole('dialog');
       await within(dialog).findAllByRole('link');
-      expect(dialog.style.padding).toBe('24px 24px 0px');
+      expect(dialog.style.padding).toBe('0px 24px');
       const close = within(dialog).getByRole('button', { name: '關閉' });
       expect(close).toHaveAttribute('data-variant', 'tonal');
       const area = close.closest('[data-float-close]')!;
@@ -137,6 +137,13 @@ describe('the tap dialogs’ family (round 33)', () => {
       const body = area.querySelector('[class*="scrollBody"]')!;
       expect(body.contains(close)).toBe(false);
       expect(body.querySelectorAll('a')).toHaveLength(1);
+      // Round 34 §5: the region reaches the paper's top border, its first child the list's head (its title, when it
+      // has one), and holds the family's 24 above it as its own padding (the dialog has none above).
+      const head = dialog.querySelector('h3');
+      if (head) expect(body.contains(head)).toBe(true);
+      expect(read('src/components/sections/AppHeader/NotificationBell.module.css')).toMatch(
+        /\.scrollArea\[data-float-close\] > \.scrollBody \{\s*padding-top: var\(--close-edge\);/,
+      );
       // Nothing after the region: no footer (the old ModalCloseRow), no hidden second close.
       expect(dialog.querySelector('[class*="closeRow"]')).toBeNull();
       expect(within(dialog).getAllByRole('button', { name: '關閉' })).toHaveLength(1);
@@ -149,7 +156,7 @@ describe('the tap dialogs’ family (round 33)', () => {
       messages: zhMessages,
     });
     const dialog = await screen.findByRole('dialog');
-    expect(dialog.style.padding).toBe('24px 24px 0px');
+    expect(dialog.style.padding).toBe('0px 24px');
     const skip = within(dialog).getByRole('button', { name: '略過' });
     expect(skip).toHaveAttribute('data-variant', 'tonal');
     expect(skip.parentElement).toHaveAttribute('data-float-close-button');
@@ -165,7 +172,7 @@ describe('the tap dialogs’ family (round 33)', () => {
   });
 
   it('pins the measures (§Q2; round 34): 24 a side, no row indent, the pill 44 tall 24 over the paper’s edge on the words’ end in both states', () => {
-    expect(TAP_DIALOG_PADDING).toBe('24px 24px 0');
+    expect(TAP_DIALOG_PADDING).toBe('0 24px');
     for (const [f, sel] of [
       ['TapFaces', '.list'],
       ['AuthorTaps', '.dialog'],
@@ -276,7 +283,7 @@ describe('the way out: the foot while nothing scrolls, floating once it does (ro
     expect(body.contains(skip)).toBe(false);
     expect(body.nextElementSibling?.contains(skip) || body.parentElement?.lastElementChild?.contains(skip)).toBe(true);
     expect(body).not.toHaveAttribute('data-edge-fade-bottom');
-    expect(dialog.style.padding).toBe('24px 24px 0px');
+    expect(dialog.style.padding).toBe('0px 24px');
   });
 
   it('more than the cap: the pill floats over the region, which fades to the border and keeps room at the list’s end', () => {
