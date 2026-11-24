@@ -12,7 +12,7 @@ import { PICKED_HOLD_MS, PickedPeople, pickedRowsKnown } from './PickedPeople';
 /**
  * Round 29 §S4: who resonated with one sentence of the author's story — a centred dialog in the who-resonated
  * dialog's shell and widths: its title, the sentence once, then that sentence's people newest first (a face 36, the
- * pen name, the note's first lines), no quote under each name, 顯示更多 for the next page, 關閉 at its foot.
+ * pen name; no note's excerpt since round 34 §10), no quote under each name, 顯示更多 for the next page, 關閉 at its foot.
  */
 
 vi.mock('@/i18n/navigation', () => ({
@@ -73,7 +73,8 @@ describe('PickedPeople', () => {
     // The sentence once, in full, as the passages' quote — and never again under a name.
     expect(within(dialog).getAllByText(`「${SENTENCE}」`)).toHaveLength(1);
     const rows = await within(dialog).findAllByRole('link');
-    expect(rows.map((r) => r.textContent)).toEqual(['GUgus', 'BObob讀到這裡停了很久。']);
+    // Face and name only (round 34 §10: no note's excerpt either).
+    expect(rows.map((r) => r.textContent)).toEqual(['GUgus', 'BObob']);
     expect(dialog.querySelector('[data-tap-quote]')).toBeNull();
     // A row leads where the same person's row of the author's list leads: their note's conversation, else their page.
     expect(rows.map((r) => r.getAttribute('href'))).toEqual(['/u/gus', '/messages/bob?u=bob']);

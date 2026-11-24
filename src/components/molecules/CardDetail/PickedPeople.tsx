@@ -44,7 +44,7 @@ export interface PickedPeopleProps {
  * 「最新共振的在前面」): a centred dialog in the who-resonated dialog's shell and widths — a phone's 400 or the column less
  * 16 a side, 480 on a tablet, the Mac and the desktop; never a sheet, never a popover. Its title, the sentence once
  * (in the story's type at 16, muted, in full), then the people who picked it, newest first, as the author's list
- * draws a row — a face 36, the pen name, the note's first lines when they left one — with no quote under each name
+ * draws a row — a face 36 and the pen name (round 34 §10: no note's excerpt) — with no quote under each name
  * (the sentence heads it); 顯示更多 when there is another page; the small 關閉 floating at the foot's end (round 33 §Q3). A row leads where
  * the same person's row in the author's list leads. The author's list itself is unchanged (「保留原本查看的这个这个框」).
  */
@@ -127,7 +127,7 @@ function PickedList({ head, list, rows, onPick }: { head: ReactNode; list: Retur
   return (
     <DialogScroll>
       {head}
-      <TapPeople people={people} onPick={onPick} quotes={false} endKey={next ? 'picked:more' : undefined} />
+      <TapPeople people={people} onPick={onPick} quotes={false} />
       {next && (
         <div className={styles.more}>
           <OrganicButton variant="tonal" size="sm" loading={loadingMore} onClick={() => void setSize(size + 1)}>

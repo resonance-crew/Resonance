@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SWRConfig } from 'swr';
@@ -86,7 +88,7 @@ describe('TapFaces', () => {
   it.each([
     ['a phone', true, 'min(400px, calc(100vw - 32px))'],
     ['a wide screen', false, '480px'],
-  ])('opens a centred dialog with no title on %s: banded rows of face and name, each to their page, 關閉 at its foot', async (_, onPhone, width) => {
+  ])('opens a centred dialog with no title on %s: rows of face and name, each to their page, 關閉 at its foot', async (_, onPhone, width) => {
     phone(onPhone);
     listTaps.mockResolvedValueOnce({ people: [person('dora'), person('eli')], nextPageToken: null });
     renderFaces({ mine: false, faces: [face('dora'), face('eli')], more: false, mayNote: true });
@@ -105,7 +107,8 @@ describe('TapFaces', () => {
     expect(rows.map((r) => r.textContent)).toEqual(['DOdora', 'ELeli']);
     expect(rows.map((r) => r.getAttribute('href'))).toEqual(['/u/dora', '/u/eli']);
     expect(listTaps).toHaveBeenCalledWith('c1');
-    expect(dialog.querySelectorAll('[data-band]')).toHaveLength(2);
+    // Round 34 §11: no ink band on a row (no wash under a pointer, a press or a hold).
+    expect(dialog.querySelectorAll('[data-band]')).toHaveLength(0);
     // Each row's face 36, whatever the screen (the popover's 28 went with it).
     for (const row of rows) expect(row.querySelector('svg')?.getAttribute('width')).toBe('36');
     await user().click(within(dialog).getByRole('button', { name: 'Close' }));
@@ -197,4 +200,48 @@ describe('TapFaces: the reader’s own row on a card with passages (round 27 §U
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.getByRole('img', { name: 'You resonated' })).toBeInTheDocument();
   });
+});
+
+// Round 34 §11: the faces over 共振 are a button with no hover or press look of their own — only a keyboard's ring.
+it('gives the faces’ button no hover or press look (round 34 §11)', () => {
+  const css = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/TapFaces.module.css'), 'utf8');
+  const avatars = readFileSync(join(process.cwd(), 'src/components/atoms/AvatarGroup/AvatarGroup.module.css'), 'utf8');
+  for (const sheet of [css, avatars]) expect(sheet).not.toMatch(/:hover|:active/);
+  expect(css).toMatch(/\.faces \{[^}]*background: none;[^}]*-webkit-tap-highlight-color: transparent;/);
+  expect(css).toMatch(/\.faces:focus-visible \{[^}]*outline: 2px solid var\(--color-terracotta\);/);
+});
+
+
+// Round 34 §12 (found on the Mac app; the web checked for a twin): the whole group over 共振 opens the list — a press
+// on any face, the overlaps included, and on the viewer's own while it is still cut for its rise (§9) — and nothing
+// in it takes the pointer away (no pointer-events anywhere in it), the button 44 at least each way.
+it('opens the list from a press on any face, the rising one included; nothing in the group takes the pointer', async () => {
+  listTaps.mockResolvedValue({ people: [person('alice'), person('dora'), person('eli')], nextPageToken: null });
+  renderWithIntl(
+    <SWRConfig value={{ provider: () => new Map() }}>
+      <TapFaces cardId="c1" tap={{ mine: true, faces: [face('alice'), face('dora'), face('eli')], more: true, mayNote: true }} viewerId="alice" arriving="alice" />
+    </SWRConfig>,
+  );
+  const button = screen.getByRole('button', { name: /Resonated with this card/ });
+  const faces = [...button.querySelectorAll<HTMLElement>('[data-face]')];
+  expect(faces.map((f) => f.getAttribute('data-face'))).toEqual(['alice', 'dora', 'eli']);
+  expect(faces[0]).toHaveAttribute('data-arriving');
+  for (const id of ['alice', 'dora', 'eli']) {
+    // The face's own drawing — the innermost thing a finger lands on — is inside the one button.
+    const drawing = button.querySelector<HTMLElement>(`[data-face="${id}"] svg`)!;
+    expect(drawing.closest('button')).toBe(button);
+    await user().click(drawing);
+    const dialog = await screen.findByRole('dialog');
+    await user().click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  }
+  for (const f of ['src/components/molecules/CardDetail/TapFaces.module.css', 'src/components/atoms/AvatarGroup/AvatarGroup.module.css']) {
+    expect(readFileSync(join(process.cwd(), f), 'utf8'), f).not.toMatch(/pointer-events/);
+  }
+  const css = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/TapFaces.module.css'), 'utf8');
+  expect(css).toMatch(/\.faces \{[^}]*min-height: 44px;[^}]*min-width: 44px;/);
+  // The cut for the rise never reaches into a face: it lies a face and 8 below its top at the least.
+  expect(readFileSync(join(process.cwd(), 'src/components/atoms/AvatarGroup/AvatarGroup.module.css'), 'utf8')).toMatch(
+    /--rise: var\(--avatar-rise, calc\(var\(--avatar-size\) \+ 8px\)\);/,
+  );
 });
