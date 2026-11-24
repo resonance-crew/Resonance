@@ -191,7 +191,8 @@ import Testing
             .appendingPathComponent("../Resonance/Features/Card/PickedPeople.swift").standardized
         let source = try String(contentsOf: url, encoding: .utf8)
         // The list stands from the first frame — not only once the read has begun.
-        #expect(source.contains("TapListState(people: list, loadingRows: Self.loadingRows(passage, cap: cap))"))
+        // Round 33: the family's region draws them (``TapListBody`` → ``TapListState``), from the list or the loading rows.
+        #expect(source.contains("TapListBody(people: list, loadingRows: Self.loadingRows(passage, cap: cap)"))
         // The page asks at the press and waits at most 300 ms (the web's): read by then, the dialog's first layout has them.
         #expect(PickedPeople.firstPageWait == .milliseconds(300))
         #expect(source.contains("private var list: TapPeople? { people ?? preloaded }"))

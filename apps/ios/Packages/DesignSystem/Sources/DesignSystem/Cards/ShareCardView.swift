@@ -169,7 +169,8 @@ struct ShareCover: View {
         let bleed = (min(width, height) * 0.05 + 6 + 4).rounded(.up)
         ZStack {
             // The share picture cuts its 0.5 box from the cover's frame (round 25 §G1).
-            FramedCover(Image(uiImage: image), pictureSize: image.size)
+            // On the visible box, as the card's own cover (round 33 §Q4).
+            FramedCover(Image(uiImage: image), pictureSize: image.size, bleed: bleed)
             GrainLayer(shape: Rectangle(), mode: .tile, opacity: ShareCardRecipe.coverGrain * 2, tile: "grain-overlay")
         }
         .frame(width: width + bleed * 2, height: height + bleed * 2)

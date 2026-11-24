@@ -49,11 +49,12 @@ struct PickedPeople: View {
     /// person open a row too tall and shrink, one of three grow. As many as the faces the marks draw (three at most),
     /// with more behind them too — the web's and Android's count (post-merge review); never none.
     static func loadingRows(_ passage: Passage, cap: CGFloat) -> Int {
-        max(1, min(passage.people, FaceStack.maxFaces))
+        TapDialog.loadingRows(knownFaces: passage.people)
     }
 
-    /// How long a press waits for the first page before the dialog opens without it (the web's 300 ms).
-    static let firstPageWait: Duration = .milliseconds(300)
+    /// How long a press waits for the first page before the dialog opens without it (the web's 300 ms): the family's
+    /// (``TapDialog/firstPageWait``, round 33 §Q1).
+    static let firstPageWait: Duration = TapDialog.firstPageWait
 
     /// The list's cap: at most 420, and half the window.
     static func listCap(window: CGFloat) -> CGFloat { min(420, window * 0.5) }
@@ -94,34 +95,16 @@ struct PickedPeople: View {
                 .padding(.bottom, 12)
                 .accessibilityIdentifier("tap-picked-passage")
             // The list from the first frame (§P3): while the people are read — before the read has even begun — the rows
-            // the marks promise stand in their place, so nothing appears later that changes the dialog's height.
+            // the marks promise stand in their place, so nothing appears later that changes the dialog's height. Round 33:
+            // the family's region (``TapListBody``) — rows edge to edge, down to the paper's bottom under 關閉.
             let cap = Self.listCap(window: window.height)
-            ScrollView {
-                if let people = list {
-                    TapRows(people: people.people, line: Self.line(for:)) { person in
-                        onClose()
-                        openRoute(Self.route(for: person))
-                    }
-                }
-                TapListState(people: list, loadingRows: Self.loadingRows(passage, cap: cap))
-                if let people = list, people.next != nil {
-                    OrganicButton(L10n.Home.moreBtn, variant: .tonal, size: .sm) { Task { await people.more() } }
-                        .loading(people.loadingMore)
-                        .fixedSize()
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 12)
-                }
+            TapListBody(people: list, loadingRows: Self.loadingRows(passage, cap: cap), cap: cap, line: Self.line(for:)) { person in
+                onClose()
+                openRoute(Self.route(for: person))
             }
-            .scrollIndicators(.hidden)
-            .scrollBounceBehavior(.basedOnSize)
-            .scrollEdgeFades()
-            .frame(maxHeight: cap)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, -12)
-            ModalCloseButton(L10n.Native.close, action: onClose)
-                // The flows' way out (maestro/flows/tap-picked.yaml): the backdrop is named 關閉 too.
-                .accessibilityIdentifier("tap-picked-close")
         }
+        // 關閉 floating (round 33 §Q3); the flows' way out (maestro/flows/tap-picked.yaml): the backdrop is named 關閉 too.
+        .floatingExit(L10n.Native.close, id: "tap-picked-close", action: onClose)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tap-picked")
         .task(id: passage.id) {

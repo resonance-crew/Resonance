@@ -5,7 +5,8 @@ import SwiftUI
 /// After 共振, which part stayed with the reader (round 27 §U1; the owner: 「在点击共振之后呢，还可以出现一个可能一个 pop
 /// ups，然后里面可以让使用者去选择…他文章里面哪一个部分有共鸣」): a centred dialog (``View/organicModal``, never a sheet) —
 /// the title 「悄悄告訴作者，哪一段讓你有共鳴」, the card's passages (the author's own sentences, word for word) as banded
-/// rows in the story's type, wrapped in full, then 略過 at the foot's end. A press on a row holds its ink and a check,
+/// rows in the story's type, wrapped in full, then 略過 floating at the foot's end (round 33 §Q3: the family's tonal small
+/// pill over the region's bottom fade, ``View/floatingExit(_:id:action:)``). A press on a row holds its ink and a check,
 /// and the dialog closes 300 ms later; the picked row, reopened, rests in that ink and a press on it clears the pick.
 /// Only the author learns it. The web's `TapPassages.tsx`, Android's `TapPassages.kt`.
 struct TapPassages: View {
@@ -21,18 +22,21 @@ struct TapPassages: View {
     @Environment(\.modalPaperClips) private var paperClips
     /// What the modal's stage leaves the dialog (``EnvironmentValues/modalRoom``): its scroll is capped so it always fits.
     @Environment(\.modalRoom) private var room
+    /// The paper's inset (the family's 24, round 33 §Q2).
+    @Environment(\.modalPaperInset) private var inset
+    /// The floating 略過's room under the last row (round 33 §Q3).
+    @Environment(\.dialogExitRoom) private var exitRoom
     @AccessibilityFocusState private var focused: String?
-    /// The foot's height (18 above 略過's 44, more at large text sizes), as laid out.
-    @State private var foot: CGFloat = TapPassageRules.footGap + ModalMetrics.minButtonHeight
 
     var body: some View {
         let ids = passages.map { "passage:\($0.id)" }
         let below = ListBands.below(ids, after: ListBands.endKey)
-        let reach = TapPassageRules.reach(clipped: paperClips)
+        let reach = TapPassageRules.reach(clipped: paperClips, inset: inset)
         let shown = Array(passages.prefix(TapPassageRules.most).enumerated())
         VStack(alignment: .leading, spacing: 0) {
             // One scroll region (round 32 §P1, the owner: 「把标题放进同一个滚动容器内」): the title is its first child and
-            // scrolls away with the rows; the foot stands outside it, at the dialog's bottom, never moving.
+            // scrolls away with the rows; it reaches the paper's bottom and ends in 略過's room, and 略過 floats over its
+            // bottom fade, never moving (round 33 §Q3).
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     ModalTitle(L10n.Card.Tap.passageTitle)
@@ -46,23 +50,19 @@ struct TapPassages: View {
                             }
                     }
                 }
+                .exitRoomBelow()
             }
             .scrollIndicators(.hidden)
             .scrollBounceBehavior(.basedOnSize)
             .scrollEdgeFades()
-            .frame(maxHeight: TapPassageRules.regionHeight(window: window.height, room: room, foot: foot))
+            .frame(maxHeight: TapPassageRules.regionHeight(window: window.height, room: room, exitRoom: exitRoom))
             .fixedSize(horizontal: false, vertical: true)
-            // Out to the paper's edges and past them by the wobble's swing (``TapPassageRules/reach(clipped:)``): the
+            // Out to the paper's edges and past them by the wobble's swing (``TapDialog/reach(clipped:inset:)``): the
             // rows' bands run edge to edge, clipped to the paper; their words keep the dialog's own inset.
             .padding(.horizontal, -reach)
-            // 略過, quiet (§P1, the owner: 「去掉背景底色、去掉阴影」): its words alone at the foot's end — the link
-            // dialog's 移除連結 (``QuietTextButton``), a finger's 44 tall — 18 under the last row.
-            QuietTextButton(L10n.Card.Tap.passageSkip, hang: .trailing, minHeight: ModalMetrics.minButtonHeight, action: onSkip)
-                .accessibilityIdentifier("tap-passage-skip")
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.top, TapPassageRules.footGap)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { foot = $0 }
         }
+        // 略過 (round 33 §Q3, replacing round 32's words alone): the family's tonal small pill, floating.
+        .floatingExit(L10n.Card.Tap.passageSkip, id: "tap-passage-skip", action: onSkip)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tap-passages")
         .onAppear { focused = picked ?? passages.first?.id }
@@ -96,7 +96,7 @@ struct TapPassages: View {
             .padding(.horizontal, reach)
             .padding(.vertical, ListBands.rowPad)
             // Pressed on the paper only: what reaches past its frame is clipped from sight, and is the backdrop's.
-            .contentShape(SidesIn(by: TapPassageRules.overhang(reach: reach)))
+            .contentShape(SidesIn(by: TapPassageRules.overhang(reach: reach, inset: inset)))
         }
         .buttonStyle(BandWashStyle(top: top, bottom: bottom, cut: TapPassageRules.bandCut(clipped: paperClips),
                                    held: chosen))
@@ -108,7 +108,7 @@ struct TapPassages: View {
 }
 
 /// A row's frame less `by` on the left and the right: the part of it on the paper.
-private nonisolated struct SidesIn: Shape {
+nonisolated struct SidesIn: Shape {
     let by: CGFloat
     func path(in rect: CGRect) -> Path { Path(rect.insetBy(dx: min(by, rect.width / 2), dy: 0)) }
 }
@@ -158,32 +158,35 @@ nonisolated enum TapPassageRules {
     static func delay(_ delay: Duration, reduceMotion: Bool) -> Duration { reduceMotion ? .zero : delay }
 
     /// How far a row reaches past the dialog's content on each side. In a dialog clipped to its paper (round 27, the
-    /// owner: 「这个选中的区块是延伸到这个 pop up 这个卡片的最左边和最右边的」): the paper's frame (``ModalPaper/inset``)
-    /// and the wobble's swing past it (``ModalPaper/bleed``) — the band edge to edge, as the web's. Anywhere else the
-    /// first captures' 12, its band cut and rounded inside the paper.
-    static func reach(clipped: Bool) -> CGFloat { clipped ? ModalPaper.inset + ModalPaper.bleed : 12 }
+    /// owner: 「这个选中的区块是延伸到这个 pop up 这个卡片的最左边和最右边的」): the paper's inset (the family's
+    /// ``ModalPaper/listInset`` since round 33) and the wobble's swing past it (``ModalPaper/bleed``) — the band edge to
+    /// edge, as the web's. Anywhere else the first captures' 12, its band cut and rounded inside the paper. The family's
+    /// rule (``TapDialog/reach(clipped:inset:)``).
+    static func reach(clipped: Bool, inset: CGFloat = ModalPaper.listInset) -> CGFloat { TapDialog.reach(clipped: clipped, inset: inset) }
     /// A row's band is cut at its frame's sides only where it cannot reach the paper's edges.
     static func bandCut(clipped: Bool) -> Bool { !clipped }
     /// What of a row stands past the paper's frame, a side (none when it stays inside).
-    static func overhang(reach: CGFloat) -> CGFloat { max(0, reach - ModalPaper.inset) }
+    static func overhang(reach: CGFloat, inset: CGFloat = ModalPaper.listInset) -> CGFloat {
+        TapDialog.overhang(reach: reach, inset: inset)
+    }
 
     /// The list scrolls inside at most min(560, 70 % of the window's height) (Wave 2 #3a: passages of 2–3 whole
     /// sentences, ~100 characters each, wrapped in full — the web's cap too).
     static func listHeight(window: CGFloat) -> CGFloat { min(560, window * 0.7) }
 
-    /// The one scroll region's cap (round 32 §P1): the title and the rows scroll inside at most ``listHeight(window:)``,
-    /// and never more than what the modal's stage leaves the dialog (`room`) less its foot — so the whole dialog always
-    /// fits and the backdrop never scrolls it, 略過 included. Outside a modal (`room` nil), the window's cap alone.
-    static func regionHeight(window: CGFloat, room: CGFloat?, foot: CGFloat) -> CGFloat {
-        let cap = listHeight(window: window)
+    /// The one scroll region's cap (round 32 §P1; round 33 §Q3): the title and the rows scroll inside at most
+    /// ``listHeight(window:)`` and the floating 略過's room under them (`exitRoom`); the region reaches into the paper's
+    /// bottom inset, so it is never more than what the modal's stage leaves the dialog (`room`) and that inset — the
+    /// whole dialog always fits and the backdrop never scrolls it, 略過 included. Outside a modal (`room` nil), the
+    /// window's cap alone.
+    static func regionHeight(window: CGFloat, room: CGFloat?, exitRoom: CGFloat) -> CGFloat {
+        let cap = listHeight(window: window) + exitRoom
         guard let room else { return cap }
-        return max(0, min(cap, room - foot))
+        return max(0, min(cap, room + ModalPaper.insetV))
     }
 
     /// Under the title, before the first row.
     static let titleGap: CGFloat = 10
-    /// Between the last row and 略過 (a dialog's foot gap, ``ModalCloseButton``'s).
-    static let footGap: CGFloat = 18
     /// Whether the row at `index` has a rule above it (§P2): between two rows, never above the first.
     static func ruled(index: Int) -> Bool { index > 0 }
     /// The rule's box (``WavyDivider``'s), centred on the seam between two rows.

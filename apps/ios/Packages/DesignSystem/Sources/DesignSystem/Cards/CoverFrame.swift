@@ -84,34 +84,54 @@ extension View {
 /// A picture laid into a `size` box as its cover frame says: the crop (``CoverFraming/coverCrop(ar:frame:boxRatio:)``)
 /// stretched to the box, the rest outside it (the caller clips). `pictureSize` is the picture's own when known —
 /// its real proportions — else the frame's `ar` stands for them.
+///
+/// `bleed` (round 33 §Q4): the box handed over is the visible box grown by this much on every side — an
+/// ``OrganicImage``'s, whose wobbly clip swings past its box. The crop is the **visible** box's (the box less the
+/// bleed), so what the card shows is exactly what the 調整封面 frame showed; the picture only carries on past it into
+/// the bleed, as far as it has pixels. (Until round 33 the crop was the bled box's: the visible part was its middle
+/// ~88 %, in another shape, tighter than the frame and drifting further as the zoom grew.)
 public nonisolated enum CoverLayout {
-    /// The picture's drawn size and its top-left corner within the box.
-    public static func placement(box: CGSize, pictureSize: CGSize?, frame: CoverFraming?) -> CGRect {
-        guard box.width > 0, box.height > 0 else { return .zero }
+    /// The picture's drawn size and its top-left corner within the box (the bled box, when `bleed` > 0).
+    public static func placement(box: CGSize, pictureSize: CGSize?, frame: CoverFraming?, bleed: CGFloat = 0) -> CGRect {
+        let visible = CGSize(width: box.width - 2 * bleed, height: box.height - 2 * bleed)
+        guard visible.width > 0, visible.height > 0 else { return .zero }
         let ar: Double
         if let p = pictureSize, p.width > 0, p.height > 0 { ar = Double(p.width / p.height) } else { ar = frame?.ar ?? 1 }
-        let crop = CoverFraming.coverCrop(ar: ar, frame: frame, boxRatio: Double(box.height / box.width))
-        let w = box.width / crop.width, h = box.height / crop.height
-        return CGRect(x: -crop.minX * w, y: -crop.minY * h, width: w, height: h)
+        let crop = CoverFraming.coverCrop(ar: ar, frame: frame, boxRatio: Double(visible.height / visible.width))
+        let w = visible.width / crop.width, h = visible.height / crop.height
+        return CGRect(x: bleed - crop.minX * w, y: bleed - crop.minY * h, width: w, height: h)
+    }
+
+    /// What of the bled box the picture covers (its placement within the box): where it has no pixels past the
+    /// visible box — a crop at the picture's edge — the bleed stays empty rather than showing a picture moved off its
+    /// frame.
+    public static func coverage(box: CGSize, pictureSize: CGSize?, frame: CoverFraming?, bleed: CGFloat = 0) -> CGRect {
+        placement(box: box, pictureSize: pictureSize, frame: frame, bleed: bleed)
+            .intersection(CGRect(origin: .zero, size: box))
     }
 }
 
 /// `image` filling a box on its cover frame (the environment's ``EnvironmentValues/coverFraming``), or centred
-/// and cropped to fill without one — what `resizable().scaledToFill()` drew before round 25.
+/// and cropped to fill without one — what `resizable().scaledToFill()` drew before round 25. `bleed`: the box is the
+/// visible one grown by it on every side, and the frame's crop is the visible box's (``CoverLayout``) — a cover with no
+/// frame too, as the centred frame at zoom 1 (round 33 §Q4, the lead: it must match 調整封面 after 重設, which it was
+/// ≈1.1× tighter than while it filled the bled box). With no bleed and no frame it fills its box, centred, as always.
 public struct FramedCover: View {
     let image: Image
     let pictureSize: CGSize?
+    let bleed: CGFloat
     @Environment(\.coverFraming) private var frame
 
-    public init(_ image: Image, pictureSize: CGSize? = nil) {
+    public init(_ image: Image, pictureSize: CGSize? = nil, bleed: CGFloat = 0) {
         self.image = image
         self.pictureSize = pictureSize
+        self.bleed = bleed
     }
 
     public var body: some View {
-        if let frame {
+        if frame != nil || bleed > 0 {
             GeometryReader { geo in
-                let place = CoverLayout.placement(box: geo.size, pictureSize: pictureSize, frame: frame)
+                let place = CoverLayout.placement(box: geo.size, pictureSize: pictureSize, frame: frame, bleed: bleed)
                 image.resizable()
                     .frame(width: place.width, height: place.height)
                     .offset(x: place.minX, y: place.minY)
@@ -120,6 +140,29 @@ public struct FramedCover: View {
             .clipped()
         } else {
             image.resizable().scaledToFill()
+        }
+    }
+}
+
+/// The mask of what a ``FramedCover`` with a bleed covers (``CoverLayout/coverage(box:pictureSize:frame:bleed:)``): laid
+/// over the cover and what stands under it (a placeholder), so no placeholder shows in a bleed the picture can't reach.
+/// Without a frame, the centred frame's (as ``FramedCover`` draws it); with no bleed either, the whole box.
+public struct FramedCoverMask: View {
+    let pictureSize: CGSize?
+    let bleed: CGFloat
+    @Environment(\.coverFraming) private var frame
+
+    public init(pictureSize: CGSize?, bleed: CGFloat) {
+        self.pictureSize = pictureSize
+        self.bleed = bleed
+    }
+
+    public var body: some View {
+        GeometryReader { geo in
+            let rect = frame == nil && bleed == 0 ? CGRect(origin: .zero, size: geo.size)
+                : CoverLayout.coverage(box: geo.size, pictureSize: pictureSize, frame: frame, bleed: bleed)
+            Rectangle().frame(width: rect.width, height: rect.height).offset(x: rect.minX, y: rect.minY)
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
         }
     }
 }
