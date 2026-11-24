@@ -89,7 +89,9 @@ describe('what a run costs, by part', () => {
     const samples = readFileSync(join(runDir, '_resources.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l) as Sample);
     expect(new Set(samples.map((s) => s.phase))).toEqual(new Set(['stack', 'web+mac']));
     expect(samples[0].groups.harness.rssMb).toBeGreaterThan(10);
-    expect(samples[0].swapMb).not.toBeNull();
+    // The machine's swap is read with macOS's sysctl (the harness's Macs); elsewhere — CI's Linux runner — none: null.
+    if (process.platform === 'darwin') expect(samples[0].swapMb).not.toBeNull();
+    else expect(samples[0].swapMb).toBeNull();
     expect(existsSync(join(runDir, '_resources.json'))).toBe(true);
     expect(summary.map((s) => s.phase)).toEqual(['stack', 'web+mac', 'all']);
     expect(lines[0]).toMatch(/^Resources \(stack, /);
