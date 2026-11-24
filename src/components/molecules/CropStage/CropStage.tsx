@@ -118,6 +118,13 @@ export function CropStage({ picture, ratio, max, inset, zoomMax, outline, view, 
   // The axes a drag has pushed while the picture had no room in them (§Q5's hint), until the picture changes.
   const [pushed, setPushed] = useState({ x: false, y: false });
   useEffect(() => setPushed({ x: false, y: false }), [picture]);
+  // Once a zoom gives a pushed axis room, it is forgotten (as iOS and Android): back at zoom 1 the line waits for
+  // another drag to meet no room, rather than coming back by itself.
+  const roomX = img ? frameRoom(img, ratio, view.z).x > ROOM_EPS : false;
+  const roomY = img ? frameRoom(img, ratio, view.z).y > ROOM_EPS : false;
+  useEffect(() => {
+    if (roomX || roomY) setPushed((p) => (p.x && roomX) || (p.y && roomY) ? { x: p.x && !roomX, y: p.y && !roomY } : p);
+  }, [roomX, roomY]);
   const stretched = useRef(false);
   stretched.current = !!(rubber.x || rubber.y);
   const release = () => {

@@ -98,6 +98,23 @@ describe('調整封面: a drag with no room answers (round 33 §Q5)', () => {
     expect(noRoom()).not.toHaveAttribute('data-shown');
   });
 
+  // Post-merge review: the line came back by itself when the zoom returned to 1 (the push was kept until the picture
+  // changed); a zoom that gives the axis room forgets it, as iOS and Android.
+  it('forgets the push once a zoom gives room: back at zoom 1 the line waits for another drag', () => {
+    reduceMotion(false);
+    const { stage } = open();
+    drag(stage, 120, 0);
+    expect(noRoom()).toHaveAttribute('data-shown');
+    fireEvent.keyDown(stage, { key: '+' });
+    fireEvent.keyDown(stage, { key: '+' });
+    fireEvent.keyDown(stage, { key: '+' });
+    expect(noRoom()).not.toHaveAttribute('data-shown');
+    for (let i = 0; i < 6; i++) fireEvent.keyDown(stage, { key: '-' });
+    expect(noRoom()).not.toHaveAttribute('data-shown');
+    drag(stage, 120, 0);
+    expect(noRoom()).toHaveAttribute('data-shown');
+  });
+
   it('a drag back takes up the stretch first, then the picture moves where it has room', () => {
     reduceMotion(false);
     // a portrait photo at zoom 1: room up and down, none across
