@@ -12,6 +12,7 @@ import { PickedPeople } from './PickedPeople';
 import { TapFaces } from './TapFaces';
 import { TapPassages } from './TapPassages';
 import { TAP_DIALOG_PADDING, TAP_LIST_HOLD_MS, tapRowsKnown } from './tapList';
+import { DIALOG_CLOSE, closeState } from '@/components/sections/AppHeader/BellList';
 
 /**
  * Round 33 — the tap dialogs' family (who resonated, the reader's and the author's; who picked one sentence; the
@@ -163,7 +164,7 @@ describe('the tap dialogs’ family (round 33)', () => {
     expect(tapRowsKnown({ people: null, more: false })).toBe(1);
   });
 
-  it('pins the measures (§Q2, §Q3): 24 a side, no row indent, the pill 44 tall 16 over the paper’s edge on the words’ end, its room and the fade under it', () => {
+  it('pins the measures (§Q2; round 34): 24 a side, no row indent, the pill 44 tall 24 over the paper’s edge on the words’ end in both states', () => {
     expect(TAP_DIALOG_PADDING).toBe('24px 24px 0');
     for (const [f, sel] of [
       ['TapFaces', '.list'],
@@ -179,12 +180,140 @@ describe('the tap dialogs’ family (round 33)', () => {
     const bell = read('src/components/sections/AppHeader/NotificationBell.module.css');
     // The rows' indent past the paper's padding: 8 for the bell (unchanged), 0 in the family.
     expect(bell).toMatch(/--bell-inset: calc\(var\(--bell-bleed\) \+ var\(--dialog-row-indent, 8px\)\);/);
-    expect(bell).toMatch(/\.scrollArea\[data-float-close\] \{[^}]*--float-close-h: 44px;[^}]*--float-close-room: calc\(var\(--float-close-h\) \+ 16px\);/);
-    expect(bell).toMatch(/\.scrollArea\[data-float-close\] > \.scrollBody \{[^}]*padding-bottom: var\(--float-close-room\);[^}]*--edge-fade-clear: 16px;[^}]*--edge-fade-len: calc\(var\(--float-close-room\) \+ 16px\);/);
-    expect(bell).toMatch(/\.floatClose \{[^}]*position: absolute;[^}]*right: calc\(var\(--bell-inset-end\) - var\(--bell-bleed\)\);[^}]*bottom: 16px;/);
-    expect(bell).toMatch(/\.floatClose > button \{[^}]*min-height: var\(--float-close-h\);/);
+    // Round 34: one corner for the pill in both states — 24 above the paper's bottom edge (the dialog has no bottom
+    // padding: TAP_DIALOG_PADDING), its right edge on the content's end — set by the same two lengths in each.
+    expect(bell).toMatch(/\.scrollArea\[data-float-close\] \{[^}]*--close-h: 44px;[^}]*--close-edge: 24px;[^}]*--close-gap: 18px;/);
+    expect(bell).toMatch(/\.floatClose > button \{[^}]*min-height: var\(--close-h\);/);
+    const END = 'right: calc\\(var\\(--bell-inset-end\\) - var\\(--bell-bleed\\)\\);';
+    const foot = bell.match(/\.scrollArea\[data-close-state='foot'\] > \.floatClose \{([^}]*)\}/)?.[1] ?? '';
+    expect(foot).toMatch(/margin-top: var\(--close-gap\);/);
+    expect(foot).toMatch(/padding-bottom: var\(--close-edge\);/);
+    expect(foot).toMatch(new RegExp(`padding-${END}`));
+    expect(foot).not.toMatch(/position/);
+    const float = bell.match(/\.scrollArea\[data-close-state='float'\] > \.floatClose \{([^}]*)\}/)?.[1] ?? '';
+    expect(float).toMatch(/position: absolute;/);
+    expect(float).toMatch(/bottom: var\(--close-edge\);/);
+    expect(float).toMatch(new RegExp(`(^|[^-])${END}`));
+    // Floating, the region keeps 24 + 44 + 18 under its last row, and its fade reaches the border (nothing clear
+    // under it), whole again 16 over the pill's top.
+    expect(bell).toMatch(
+      /\.scrollArea\[data-close-state='float'\] > \.scrollBody \{[^}]*padding-bottom: calc\(var\(--close-edge\) \+ var\(--close-h\) \+ var\(--close-gap\)\);[^}]*--edge-fade-clear: 0px;[^}]*--edge-fade-len: calc\(var\(--close-edge\) \+ var\(--close-h\) \+ 16px\);/,
+    );
+    expect(DIALOG_CLOSE).toEqual({ h: 44, edge: 24, gap: 18 });
     // The fade's passage reads the list's own lengths (16 elsewhere, as before).
     const globals = read('src/styles/globals.css');
     expect(globals).toMatch(/\[data-edge-fade-bottom\] \{[^}]*linear-gradient\(to top, transparent var\(--edge-fade-clear, 0px\), #000 var\(--edge-fade-len, 16px\)\)/);
+  });
+});
+
+/**
+ * Round 34 — the way out's two states (the owner: 「不需要滚动时恢复原本实色 footer…需要滚动时用浮动 tonal 药丸 + 贴边渐变；
+ * 判定首次渲染就稳定…两种状态按钮相对纸张右下角的位置完全一致」). jsdom lays nothing out, so the region's content height and
+ * its cap are given here, as the browser would measure them.
+ */
+describe('the way out: the foot while nothing scrolls, floating once it does (round 34)', () => {
+  const CAP = 400;
+  let content = 0;
+  const isBody = (el: Element) => String((el as HTMLElement).className).includes('scrollBody');
+  const realStyle = window.getComputedStyle.bind(window);
+  beforeEach(() => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get(this: HTMLElement) {
+        return isBody(this) ? content : 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get(this: HTMLElement) {
+        return isBody(this) ? Math.min(content, CAP) : 0;
+      },
+    });
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el: Element, pseudo?: string | null) => {
+      const style = realStyle(el, pseudo);
+      if (!isBody(el)) return style;
+      return new Proxy(style, {
+        get: (t, k) => (k === 'maxHeight' ? `${CAP}px` : typeof Reflect.get(t, k) === 'function' ? Reflect.get(t, k).bind(t) : Reflect.get(t, k)),
+      });
+    });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+    delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
+  });
+
+  const passages = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, text: `第 ${i + 1} 句。` }));
+  /** The passages' dialog (no answer to wait for), drawn in one go; what each change of its state was. */
+  function openPassages() {
+    const changes: (string | null)[] = [];
+    const mo = new MutationObserver((records) => {
+      for (const r of records) if (r.attributeName === 'data-close-state') changes.push(r.oldValue);
+    });
+    mo.observe(document.body, { subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['data-close-state'] });
+    const view = renderWithIntl(<TapPassages passages={passages(3)} picked={null} onPick={vi.fn()} onClose={vi.fn()} />, { locale: 'zh-TW', messages: zhMessages });
+    const dialog = screen.getByRole('dialog');
+    const skip = within(dialog).getByRole('button', { name: '略過' });
+    const area = skip.closest<HTMLElement>('[data-close-state]')!;
+    return { view, dialog, skip, area, body: area.querySelector<HTMLElement>('[class*="scrollBody"]')!, changes: () => (mo.takeRecords(), mo.disconnect(), changes) };
+  }
+
+  it('decides from the content against the cap: the foot only while the foot itself fits under it', () => {
+    expect(closeState(100, CAP)).toBe('foot');
+    // The content, the band's swing, 18, the pill and the paper's 24: exactly the cap still stands as the foot…
+    expect(closeState(CAP - 4 - 18 - 44 - 24, CAP)).toBe('foot');
+    // …a pixel more floats (the floating dialog stops at the cap: the foot never makes it taller than that).
+    expect(closeState(CAP - 4 - 18 - 44 - 24 + 1, CAP)).toBe('float');
+    expect(closeState(900, CAP)).toBe('float');
+    expect(closeState(900, Number.NaN)).toBe('foot');
+  });
+
+  it('nothing to scroll: the classic foot — the pill under the content, no fade, nothing over it', () => {
+    content = 120;
+    const { area, body, skip, dialog } = openPassages();
+    expect(area).toHaveAttribute('data-close-state', 'foot');
+    // The pill stands after the region, in the flow (the foot's CSS: no position), not inside what scrolls.
+    expect(body.contains(skip)).toBe(false);
+    expect(body.nextElementSibling?.contains(skip) || body.parentElement?.lastElementChild?.contains(skip)).toBe(true);
+    expect(body).not.toHaveAttribute('data-edge-fade-bottom');
+    expect(dialog.style.padding).toBe('24px 24px 0px');
+  });
+
+  it('more than the cap: the pill floats over the region, which fades to the border and keeps room at the list’s end', () => {
+    content = 900;
+    const { area, body, skip } = openPassages();
+    expect(area).toHaveAttribute('data-close-state', 'float');
+    expect(body.contains(skip)).toBe(false);
+    expect(body).toHaveAttribute('data-edge-fade-bottom');
+    // The room and the fade to the border are the float state's CSS (pinned with the measures above).
+    const bell = read('src/components/sections/AppHeader/NotificationBell.module.css');
+    expect(bell).toMatch(/\.scrollArea\[data-close-state='float'\] > \.scrollBody \{[^}]*--edge-fade-clear: 0px;/);
+  });
+
+  it.each([
+    ['foot', 120],
+    ['float', 900],
+  ] as const)('is %s from the first layout pass: decided before anything paints, never changed after', async (state, h) => {
+    content = h;
+    // No await between drawing and looking: the state is set by the commit itself (a layout effect), not a later frame.
+    const { area, changes } = openPassages();
+    expect(area).toHaveAttribute('data-close-state', state);
+    await act(async () => {
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(area).toHaveAttribute('data-close-state', state);
+    // At most the one change inside that first commit (foot → float, before the paint); none after it.
+    const seen = changes();
+    expect(seen.length).toBeLessThanOrEqual(state === 'float' ? 1 : 0);
+  });
+
+  it('switches foot → float when the content grows past it (顯示更多, a late page), never back', () => {
+    content = 120;
+    const { area, view } = openPassages();
+    expect(area).toHaveAttribute('data-close-state', 'foot');
+    content = 900;
+    view.rerender(<TapPassages passages={passages(4)} picked={null} onPick={vi.fn()} onClose={vi.fn()} />);
+    expect(area).toHaveAttribute('data-close-state', 'float');
   });
 });

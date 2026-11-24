@@ -196,15 +196,47 @@ export function BellList({ bell, onPicked, variant }: BellListProps) {
 }
 
 /**
+ * The way out's measures in a `closeButton="float"` Modal (round 34, the owner: 「两种状态按钮相对纸张右下角的位置完全一致」):
+ * the small tonal pill 44 tall, its bottom 24 above the paper's bottom edge — the family's 24, as above and at the
+ * sides — 18 under what it closes. NotificationBell.module.css's `--close-*` are these.
+ */
+export const DIALOG_CLOSE = { h: 44, edge: 24, gap: 18 } as const;
+
+/** The room under the last band for its curve's swing (`.scrollBody`'s own padding). */
+const BAND_SWING = 4;
+
+/**
+ * Whether the way out floats over the region's foot (`'float'`) or stands under the content as the classic foot
+ * (`'foot'`), from the region's content height and its cap (round 34 §2). The foot takes the swing, 18, the pill and
+ * the paper's 24 under the content; it floats as soon as that would stand taller than the cap — the height the
+ * floating dialog stops at — so the dialog is never taller than its region's cap allows (the passages' cap is what
+ * keeps the whole dialog inside the window), and the switch, when more rows come, never makes it jump.
+ */
+export function closeState(content: number, cap: number): 'foot' | 'float' {
+  if (!Number.isFinite(cap)) return 'foot';
+  return content + BAND_SWING + DIALOG_CLOSE.gap + DIALOG_CLOSE.h + DIALOG_CLOSE.edge > cap + 0.5 ? 'float' : 'foot';
+}
+
+/** The region's content height (its padding left out: the state sets that) and its cap, as laid out now. */
+function measureRegion(body: HTMLElement): { content: number; cap: number } {
+  const css = getComputedStyle(body);
+  const pad = (parseFloat(css.paddingTop) || 0) + (parseFloat(css.paddingBottom) || 0);
+  return { content: body.scrollHeight - pad, cap: parseFloat(css.maxHeight) };
+}
+
+/**
  * The dialog's scrolling body: capped, its native bar hidden for the drawn one, its edges fading where more is —
  * and clipped to the dialog's own wobble (its outline moved into the body's coordinates), so a band ends on the
  * paper's pen line, never a straight cut short of it. The body reaches past the dialog's box on both sides for that
  * (`--bell-bleed`); the drawn bar stays in the content's gutter, over the bands.
  *
- * In a `closeButton="float"` Modal (round 33 §Q3: the tap lists' family, the passages' 略過) the region reaches the
- * paper's bottom and the way out floats over its foot — the small tonal pill, its right edge on the words' end, 16
- * above the paper's edge, never moving with the content — over the bottom fade, which runs under it; the region keeps
- * the pill's height and 16 more as room under its last row, so the last row scrolls clear of it.
+ * In a `closeButton="float"` Modal (the tap lists' family, the passages' 略過; round 34) the way out — the small tonal
+ * pill, its right edge on the content's end, its bottom 24 above the paper's — takes one of two states, decided in
+ * the first layout pass (before the first paint: a layout effect, from the content's measured height against the
+ * cap, {@link closeState}) and again only as the content grows (顯示更多, a late page):
+ * - `foot`: nothing to scroll — the content, 18, the pill, the paper's 24. No fade, nothing over the content.
+ * - `float`: the region runs to the paper's bottom (clipped by its wobble), its bottom fade reaching that edge, the
+ *   pill floating over it at the same corner, and the list's end keeps 24 + 44 + 18 so its last row scrolls clear.
  */
 export function DialogScroll({ children }: { children: ReactNode }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -212,6 +244,7 @@ export function DialogScroll({ children }: { children: ReactNode }) {
   const paper = useModalPaper();
   const close = useModalClose();
   const [clip, setClip] = useState<string | undefined>(undefined);
+  const [state, setState] = useState<'foot' | 'float'>('foot');
   useLayoutEffect(() => {
     const body = scrollRef.current;
     const dialog = paper?.dialog.current;
@@ -228,8 +261,26 @@ export function DialogScroll({ children }: { children: ReactNode }) {
     const next = el === dialog ? `path('${translatePath(paper.outline, -x, -y)}')` : undefined;
     setClip((now) => (now === next ? now : next));
   }, [paper]);
+  // Every render (the content is the children) and on any change of the rows' size: the state from the content's
+  // height, before the browser paints — the padding the state sets is left out of the measure, so it never flips back.
+  const floats = !!close;
+  useLayoutEffect(() => {
+    const body = scrollRef.current;
+    if (!floats || !body) return;
+    const decide = () => {
+      const { content, cap } = measureRegion(body);
+      const next = closeState(content, cap);
+      setState((now) => (now === next ? now : next));
+    };
+    decide();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(decide);
+    ro.observe(body);
+    for (const child of Array.from(body.children)) ro.observe(child);
+    return () => ro.disconnect();
+  });
   return (
-    <div className={styles.scrollArea} data-float-close={close ? '' : undefined}>
+    <div className={styles.scrollArea} data-float-close={close ? '' : undefined} data-close-state={close ? state : undefined}>
       <div ref={scrollEdges} className={`${styles.scrollBody} ${organicScrollTarget}`} style={clip ? { clipPath: clip } : undefined}>
         {children}
       </div>

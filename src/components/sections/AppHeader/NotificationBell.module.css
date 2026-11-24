@@ -36,34 +36,47 @@
   }
 }
 
-/* The way out floating over the region's foot (round 33 §Q3, Modal closeButton="float"): the region reaches the
-   paper's bottom (the dialog's own bottom padding is 0) and keeps, under its last row, the pill's height and 16 —
-   room the last row scrolls clear into; with nothing to scroll the dialog is its content and that room. The bottom
-   fade runs under the pill: clear for the 16 under it, whole again 16 over its top, so the words fade out before it. */
+/* The way out in a closeButton="float" Modal (round 34; BellList DIALOG_CLOSE): the small tonal pill (OrganicButton
+   tonal sm: its fill, its wobble, no pen line, no shadow), 44 to any pointer, its right edge on the content's end
+   (the rows' --bell-inset-end) and its bottom 24 above the paper's bottom edge (the dialog's own bottom padding is 0)
+   — the same corner in both states, which DialogScroll decides before the first paint. */
 .scrollArea[data-float-close] {
-  --float-close-h: 44px;
-  --float-close-room: calc(var(--float-close-h) + 16px);
+  --close-h: 44px;
+  --close-edge: 24px;
+  --close-gap: 18px;
 }
 
-.scrollArea[data-float-close] > .scrollBody {
-  padding-bottom: var(--float-close-room);
-  --edge-fade-clear: 16px;
-  --edge-fade-len: calc(var(--float-close-room) + 16px);
-}
-
-/* The small tonal pill (OrganicButton tonal sm: its fill, its wobble, no pen line, no shadow), 44 to any pointer, its
-   right edge on the words' end (the rows' --bell-inset-end, the drawn bar's gutter included while it is there), 16
-   above the paper's bottom edge. It stands in the region's box, so it never scrolls. */
 .floatClose {
-  position: absolute;
-  z-index: 1;
-  right: calc(var(--bell-inset-end) - var(--bell-bleed));
-  bottom: 16px;
   display: flex;
+  justify-content: flex-end;
 }
 
 .floatClose > button {
-  min-height: var(--float-close-h);
+  min-height: var(--close-h);
+}
+
+/* foot — nothing to scroll: the classic foot under the content, 18 under it (past the last band's swing), the
+   paper's 24 under the pill. No fade, nothing over the content. */
+.scrollArea[data-close-state='foot'] > .floatClose {
+  margin-top: var(--close-gap);
+  padding-right: calc(var(--bell-inset-end) - var(--bell-bleed));
+  padding-bottom: var(--close-edge);
+}
+
+/* float — the content passes the cap: the region runs to the paper's bottom edge (its wobble clips it) and its bottom
+   fade reaches that edge — wholly faded at the border, whole again 16 over the pill's top — and the list's end keeps
+   24 + 44 + 18, so its last row scrolls clear above the pill, which floats in the region's box (it never scrolls). */
+.scrollArea[data-close-state='float'] > .scrollBody {
+  padding-bottom: calc(var(--close-edge) + var(--close-h) + var(--close-gap));
+  --edge-fade-clear: 0px;
+  --edge-fade-len: calc(var(--close-edge) + var(--close-h) + 16px);
+}
+
+.scrollArea[data-close-state='float'] > .floatClose {
+  position: absolute;
+  z-index: 1;
+  right: calc(var(--bell-inset-end) - var(--bell-bleed));
+  bottom: var(--close-edge);
 }
 
 /* The gutter is the drawn bar's, and only while the bar is there: with nothing to scroll, or on a phone or touch
