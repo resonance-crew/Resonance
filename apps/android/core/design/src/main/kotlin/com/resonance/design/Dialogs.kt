@@ -189,6 +189,10 @@ fun OrganicModal(
     maxWidth: Dp = 460.dp,
     clipToPaper: Boolean = false,
     scrollsItself: Boolean = false,
+    /** The paper's side padding ([ModalPaperInset]; round 33 §Q2: the tap lists' 24). */
+    sideInset: Dp = ModalPaperInset,
+    /** The paper's bottom padding (32; round 33 §Q3: 0 under a scroll region that reaches the paper's foot). */
+    bottomInset: Dp = 32.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     // The screens under it are softened while it is up (review F8): the root listens.
@@ -267,7 +271,7 @@ fun OrganicModal(
                         // A card taller than the room scrolls, its words fading where there is more — unless its
                         // content keeps a scroll region of its own ([scrollsItself]).
                         .then(if (scrollsItself) Modifier else Modifier.scrollFade(scroll, ModalScrollFade).verticalScroll(scroll))
-                        .padding(horizontal = ModalPaperInset, vertical = 32.dp),
+                        .padding(start = sideInset, end = sideInset, top = 32.dp, bottom = bottomInset),
                     verticalArrangement = Arrangement.spacedBy(ModalGap),
                     content = content,
                 )
@@ -281,12 +285,12 @@ fun OrganicModal(
 val ModalPaperInset = 28.dp
 
 /**
- * A modal's child widened by [ModalPaperInset] on each side, to the paper's own edges (its siblings keep the inset):
+ * A modal's child widened by [inset] (the paper's side padding, [ModalPaperInset] unless it asked for another) on each side, to the paper's own edges (its siblings keep the inset):
  * for a wash that runs edge to edge, inside an [OrganicModal] with `clipToPaper`. Its content keeps its place only if
  * it pads itself the inset back.
  */
-fun Modifier.toModalPaperEdges(): Modifier = layout { measurable, constraints ->
-    val bleed = ModalPaperInset.roundToPx()
+fun Modifier.toModalPaperEdges(inset: Dp = ModalPaperInset): Modifier = layout { measurable, constraints ->
+    val bleed = inset.roundToPx()
     val wide = if (constraints.hasBoundedWidth) constraints.maxWidth + bleed * 2 else constraints.maxWidth
     val placeable = measurable.measure(constraints.copy(minWidth = constraints.minWidth, maxWidth = wide))
     val width = (placeable.width - bleed * 2).coerceAtLeast(0)

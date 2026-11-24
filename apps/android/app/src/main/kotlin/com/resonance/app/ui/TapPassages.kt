@@ -1,31 +1,20 @@
 package com.resonance.app.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.offset
 import com.resonance.design.DividerInk
-import com.resonance.design.ModalActionsTop
-import com.resonance.design.ModalScrollFade
-import com.resonance.design.QuietButton
-import com.resonance.design.QuietButtonPadX
-import com.resonance.design.scrollFade
 import com.resonance.design.wavyRuleAbove
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -40,15 +29,12 @@ import androidx.compose.ui.unit.em
 import com.resonance.api.models.TapPassage
 import com.resonance.design.AppFonts
 import com.resonance.design.LocalWindowLayout
-import com.resonance.design.ModalPaperInset
-import com.resonance.design.ModalTitle
 import com.resonance.design.OrganicIcon
 import com.resonance.design.OrganicModal
 import com.resonance.design.StoryType
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.plainClickable
-import com.resonance.design.toModalPaperEdges
 import com.resonance.kit.api.ApiFailure
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.story.StoryScript
@@ -171,15 +157,16 @@ internal class PassagePick(
 
 /**
  * A row's band in the dialog (the owner, 2026-11-21: 「这个选中的区块是延伸到这个 pop up 这个卡片的最左边和最右边的」):
- * the web's — uncut, the list widened to the paper's edges ([toModalPaperEdges]) and the paper clipping it to its wobble,
- * the pen line over it; the words stay where they were, the paper's inset and the dialog rows' own 12 in.
+ * the web's — uncut, the list widened to the paper's edges ([TapListModal]) and the paper clipping it to its wobble,
+ * the pen line over it. Round 33 §Q2: the words [TapListInset] in — the title's edge, and 略過's at the other side, as
+ * every row of the family.
  */
 internal object PassageBand {
     /** Never the tablet's rounded cut: the band runs to the paper's edges. */
     const val cut = false
 
-    /** From the paper's edge to a row's words (and from its check to the other edge): 28 + 12, as before. */
-    val wordsInset: Dp = ModalPaperInset + TapRowMeasure.Dialog.inset
+    /** From the paper's edge to a row's words (and from its check to the other edge): the family's 24 (28 + 12 before). */
+    val wordsInset: Dp = TapListInset
 }
 
 /** Whether row [i] has a rule over it (§P2): between two rows — never above the first (nor under the last). */
@@ -188,8 +175,8 @@ internal fun passageRuleAbove(i: Int): Boolean = i > 0
 /** The title to the first row (§P1: 10, as the spec measures it). */
 internal val PassageTitleGap = 10.dp
 
-/** 略過's touch target: 44 at least (§P1). */
-internal val PassageSkipHeight = 44.dp
+/** 略過's touch target: the floating pill's (round 33 §Q3: 44 at least). */
+internal val PassageSkipHeight = FloatingExitHeight
 
 /** The list's tallest before it scrolls inside: min(560, 70 % of the window's height) — Wave 2 #3a: three passages of about 100 characters each (the web's too). */
 internal fun passagesListMax(windowHeight: Dp): Dp = min(560f, windowHeight.value * 0.7f).dp
@@ -198,8 +185,8 @@ internal fun passagesListMax(windowHeight: Dp): Dp = min(560f, windowHeight.valu
  * The dialog (§U1.3): a centred [OrganicModal] — never a bottom sheet, never a popover — [readerListWidth] wide (400 on a
  * phone, 480 wider), titled 悄悄告訴作者，哪一段讓你有共鳴; the [passages] as banded rows from the paper's edge to its
  * edge ([PassageBand]), each a button with its words
- * in the story's type ([script]) at 16 with the story's leading, **wrapped in full** — never cut; 略過 at the foot's end,
- * no ✕. [picked] (reopened from the reader's own row, §U1.7) rests in the press ink with its check, selected.
+ * in the story's type ([script]) at 16 with the story's leading, **wrapped in full** — never cut; 略過 floating at the
+ * foot's end, the family's tonal pill ([TapListModal], round 33 §Q3), no ✕. [picked] (reopened from the reader's own row, §U1.7) rests in the press ink with its check, selected.
  *
  * A press on a row ([nextPick]) holds its ink and check at once, hands the pick to [onPick], and closes 300 later (at once
  * under [reducedMotion]). The backdrop, back and 略過 close it ([onDismiss]) with no pick. [hold]: the screenshots'
@@ -227,73 +214,52 @@ internal fun TapPassages(
     // Focus lands on the first row, or the picked one (S10).
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
 
-    OrganicModal(
-        onDismiss, L10n.Card.Tap.passageTitle, seed = 47.0, closeLabel = L10n.Card.Tap.passageSkip,
-        maxWidth = readerListWidth(layout.cls), clipToPaper = true, scrollsItself = true,
+    val keys = passages.map { "passage:" + it.id }
+    val below = bandsBelow(keys, ListBands.EndKey)
+    val press = Tokens.TowardInk.copy(alpha = ListBands.PressAlpha)
+    val rule = DividerInk
+    // Round 32 §P1: one scroll region — the title, then the rows — at most [cap]; round 33 §Q3: 略過 floats over its
+    // foot, never moving (the tap-passage flow presses it by its id).
+    TapListModal(
+        onDismiss, L10n.Card.Tap.passageTitle, seed = 47.0, exit = L10n.Card.Tap.passageSkip,
+        maxWidth = readerListWidth(layout.cls), cap = cap,
+        exitModifier = Modifier.flowTag("tap-passage-skip"),
+        regionModifier = Modifier.flowTag("tap-passages"),
     ) {
-        val keys = passages.map { "passage:" + it.id }
-        val below = bandsBelow(keys, ListBands.EndKey)
-        val press = Tokens.TowardInk.copy(alpha = ListBands.PressAlpha)
-        val rule = DividerInk
-        val scroll = rememberScrollState()
-        // Round 32 §P1: one scroll region — the title, then the rows — and 略過 under it, outside it, never moving. The
-        // card itself never scrolls (scrollsItself): the region takes what the window leaves, at most [cap].
-        Column(
-            Modifier
-                // The bands reach the paper's edges, clipped to its wobble (the modal's clipToPaper).
-                .toModalPaperEdges()
-                .fillMaxWidth()
-                .flowTag("tap-passages")
-                .weight(1f, fill = false)
-                .heightIn(max = cap)
-                .scrollFade(scroll, ModalScrollFade)
-                .verticalScroll(scroll),
-        ) {
-            Box(Modifier.padding(horizontal = ModalPaperInset).padding(bottom = PassageTitleGap)) { ModalTitle(L10n.Card.Tap.passageTitle) }
-            passages.forEachIndexed { i, p ->
-                val source = remember(p.id) { MutableInteractionSource() }
-                val isChosen = chosen == p.id
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .then(if (i == focused) Modifier.focusRequester(first) else Modifier)
-                        // §P2: a rule between two rows (never above the first), the words' start to their end; the
-                        // row's own band washes over it.
-                        .then(if (passageRuleAbove(i)) Modifier.wavyRuleAbove(PassageBand.wordsInset, rule, seed = 47.0 + i) else Modifier)
-                        .listBand(keys[i], below[i], source, { false }, rest = if (isChosen) press else null, cut = PassageBand.cut)
-                        .flowTag("tap-passage-$i")
-                        .plainClickable(role = Role.Button) {
-                            if (closing) return@plainClickable
-                            val next = nextPick(chosen, p.id)
-                            chosen = next
-                            onPick(next)
-                            if (!hold) {
-                                closing = true
-                                scope.launch {
-                                    delay(TapPassagesTiming.closeDelay(reducedMotion))
-                                    onDismiss()
-                                }
+        TapListTitle(L10n.Card.Tap.passageTitle)
+        passages.forEachIndexed { i, p ->
+            val source = remember(p.id) { MutableInteractionSource() }
+            val isChosen = chosen == p.id
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (i == focused) Modifier.focusRequester(first) else Modifier)
+                    // §P2: a rule between two rows (never above the first), the words' start to their end; the
+                    // row's own band washes over it.
+                    .then(if (passageRuleAbove(i)) Modifier.wavyRuleAbove(PassageBand.wordsInset, rule, seed = 47.0 + i) else Modifier)
+                    .listBand(keys[i], below[i], source, { false }, rest = if (isChosen) press else null, cut = PassageBand.cut)
+                    .flowTag("tap-passage-$i")
+                    .plainClickable(role = Role.Button) {
+                        if (closing) return@plainClickable
+                        val next = nextPick(chosen, p.id)
+                        chosen = next
+                        onPick(next)
+                        if (!hold) {
+                            closing = true
+                            scope.launch {
+                                delay(TapPassagesTiming.closeDelay(reducedMotion))
+                                onDismiss()
                             }
                         }
-                        .semantics { selected = isChosen }
-                        .padding(horizontal = PassageBand.wordsInset, vertical = ListBands.RowPad),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    BasicText(p.text, Modifier.weight(1f), style = words)
-                    if (isChosen) OrganicIcon(IconName.Check, size = 16.dp, color = Tokens.Text)
-                }
+                    }
+                    .semantics { selected = isChosen }
+                    .padding(horizontal = PassageBand.wordsInset, vertical = ListBands.RowPad),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                BasicText(p.text, Modifier.weight(1f), style = words)
+                if (isChosen) OrganicIcon(IconName.Check, size = 16.dp, color = Tokens.Text)
             }
-        }
-        // 略過: the one way out, at the foot's end and pinned there (§P1) — its words alone, no face, no pen (the link
-        // dialog's 移除連結's QuietButton), its words' end on the column's.
-        Box(Modifier.fillMaxWidth().padding(top = ModalActionsTop), contentAlignment = Alignment.CenterEnd) {
-            QuietButton(
-                L10n.Card.Tap.passageSkip,
-                Modifier.offset(x = QuietButtonPadX).flowTag("tap-passage-skip"),
-                minHeight = PassageSkipHeight,
-                onClick = onDismiss,
-            )
         }
     }
 }

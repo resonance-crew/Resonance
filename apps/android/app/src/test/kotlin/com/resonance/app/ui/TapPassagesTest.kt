@@ -13,7 +13,6 @@ import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
-import com.resonance.design.QuietButtonPadX
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.isDialog
@@ -276,7 +275,8 @@ class TapPassagesTest {
     @Test fun eachRowsBandRunsFromThePapersLeftEdgeToItsRightTheWordsWhereTheyWere() {
         // The owner, 2026-11-21: the chosen band reaches the dialog card's left and right edges, as the web's.
         assertFalse("never the tablet's rounded cut", PassageBand.cut)
-        assertEquals(40f, PassageBand.wordsInset.value)
+        // Round 33 §Q2: the words the family's 24 in (28 + 12 before), on the title's edge.
+        assertEquals(24f, PassageBand.wordsInset.value)
         show(picked = "8b3a1c4d")
         compose.waitForIdle()
         val paper = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.PaneTitle), useUnmergedTree = true).getBoundsInRoot()
@@ -285,12 +285,12 @@ class TapPassagesTest {
             assertEquals(paper.left.value, row.left.value, 0.5f)
             assertEquals(paper.right.value, row.right.value, 0.5f)
         }
-        // The words keep their 28 + 12 from the paper's edge; the title its 28.
+        // The words 24 from the paper's edge, and the title on the same edge (round 33 §Q2).
         // (Their left by position: a clipped bounds box reads zero for text under a merged button.)
         val words = compose.onNodeWithText(passages[2].text, useUnmergedTree = true).fetchSemanticsNode().positionInRoot.x / compose.density.density
-        assertEquals(paper.left.value + 40f, words, 0.5f)
+        assertEquals(paper.left.value + 24f, words, 0.5f)
         val title = compose.onNodeWithText(L10n.Card.Tap.passageTitle, useUnmergedTree = true).fetchSemanticsNode().positionInRoot.x / compose.density.density
-        assertEquals(paper.left.value + 28f, title, 0.5f)
+        assertEquals(paper.left.value + 24f, title, 0.5f)
         compose.onNodeWithTag("tap-passage-1", useUnmergedTree = true).assertIsSelected()
     }
 
@@ -375,11 +375,12 @@ class TapPassagesTest {
         assertEquals(420f, passagesListMax(600.dp).value, 0.01f)
     }
 
-    // Round 32 §P1–§P2: one scroll region (the title and the rows), 略過 pinned under it, rules between the rows
+    // Round 32 §P1–§P2: one scroll region (the title and the rows), rules between the rows; round 33 §Q3: 略過 floats
+    // over the region's foot, the family's tonal pill
 
     private val paperMatcher = SemanticsMatcher.keyIsDefined(SemanticsProperties.PaneTitle)
 
-    @Test fun theTitleScrollsWithTheRowsAndSkipStaysPinnedUnderThem() {
+    @Test fun theTitleScrollsWithTheRowsAndSkipFloatsOverTheRegionsFoot() {
         show()
         compose.waitForIdle()
         val region = compose.onNodeWithTag("tap-passages", useUnmergedTree = true).getBoundsInRoot()
@@ -390,21 +391,34 @@ class TapPassagesTest {
         // The title is the region's first child: 10 over the first row, inside the region.
         assertTrue("the title inside the scroll region", title.top >= region.top - 0.5.dp && title.bottom <= region.bottom)
         assertEquals(10f, (first.top - title.bottom).value, 0.5f)
-        // 略過 outside it, under it, 18 under the last row (the shell's 14 and the foot's 4), at the foot's end.
-        assertTrue("略過 under the region", skip.top >= region.bottom - 0.5.dp)
-        assertEquals(18f, (skip.top - last.bottom).value, 1f)
+        // Round 33 §Q3: the region reaches the paper's foot and 略過 floats over it — no footer under the region — its right
+        // edge on the content's (the paper's less 24), 16 over the paper's edge; the list's end keeps the button's
+        // height + 16 so the last row clears it; short content: the dialog as tall as the rows and that room.
         val paper = compose.onNode(paperMatcher, useUnmergedTree = true).getBoundsInRoot()
-        assertEquals("略過's words end on the column's end", (paper.right - 28.dp).value, (skip.right - QuietButtonPadX).value, 1f)
+        assertEquals("the region down to the paper's foot", paper.bottom.value, region.bottom.value, 1f)
+        assertTrue("略過 over the region", skip.top >= region.top && skip.bottom <= region.bottom + 0.5.dp)
+        assertEquals("略過's right edge on the content's", (paper.right - 24.dp).value, skip.right.value, 1f)
+        assertEquals(16f, (paper.bottom - skip.bottom).value, 1f)
         assertTrue("a finger's 44 at least", (skip.bottom - skip.top).value >= 44f - 0.5f)
-        // Short content: the dialog as short as it is — 32 of paper under 略過, nothing more.
-        assertEquals(32f, (paper.bottom - skip.bottom).value, 1f)
+        // Scrolled to the end, the last row stands clear of it: the list's end keeps the button's height + 16.
+        repeat(3) { compose.onNodeWithTag("tap-passages", useUnmergedTree = true).performTouchInput { swipeUp() } }
+        compose.waitForIdle()
+        val end = compose.onNodeWithTag("tap-passage-2", useUnmergedTree = true).getBoundsInRoot()
+        val skipThen = compose.onNodeWithTag("tap-passage-skip", useUnmergedTree = true).getBoundsInRoot()
+        assertEquals("略過 never moved", skip.top.value, skipThen.top.value, 0.5f)
+        assertTrue("the last row (${end.bottom}) clear of 略過 (${skip.top})", end.bottom <= skip.top + 0.5.dp)
+        assertEquals((FloatingExitHeight + FloatingExitBottom).value, (region.bottom - end.bottom).value, 1f)
     }
 
-    @Test fun skipIsWordsAloneNoPillNoPenLine() {
-        // A quiet action (Components.kt's QuietButton): the twin of the link dialog's 移除連結 — never ModalCloseButton's pill.
+    @Test fun skipIsTheFamilysFloatingTonalPill() {
+        // Round 33 §Q3 (the owner: 用有颜色的浮动按钮): 略過 is the family's floating exit — the tonal small pill, as 關閉 —
+        // never round 32's quiet words, never a footer of its own.
         val source = File("src/main/kotlin/com/resonance/app/ui/TapPassages.kt").readText()
-        assertTrue(source.contains("QuietButton("))
-        assertFalse("no tonal pill in the passages' dialog", source.contains("ModalCloseButton("))
+        assertTrue(source.contains("TapListModal("))
+        assertFalse("no quiet 略過 any more", source.contains("QuietButton("))
+        assertFalse("no footer pill of its own", source.contains("ModalCloseButton("))
+        val shell = File("src/main/kotlin/com/resonance/app/ui/TapListModal.kt").readText()
+        assertTrue(shell.contains("variant = ButtonVariant.Tonal, small = true"))
         show()
         compose.waitForIdle()
         compose.onNodeWithTag("tap-passage-skip", useUnmergedTree = true).assertHasClickAction()
@@ -442,8 +456,8 @@ class TapPassagesTest {
         assertFalse(passageRuleAbove(0))
         assertTrue(passageRuleAbove(1))
         assertTrue(passageRuleAbove(2))
-        // From the paper's edge to the words: the rule's inset is the words', not the paper's edges.
-        assertEquals(40f, PassageBand.wordsInset.value)
+        // From the paper's edge to the words: the rule's inset is the words', not the paper's edges (24 since round 33).
+        assertEquals(24f, PassageBand.wordsInset.value)
         // The house hairline and the Divider's ink: the source names no width or colour of its own.
         val source = File("src/main/kotlin/com/resonance/app/ui/TapPassages.kt").readText()
         assertTrue(source.contains("wavyRuleAbove(PassageBand.wordsInset, rule"))

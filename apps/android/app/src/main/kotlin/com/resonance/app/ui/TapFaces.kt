@@ -1,6 +1,7 @@
 package com.resonance.app.ui
 
-import androidx.compose.foundation.background
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,23 +14,18 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -44,12 +40,10 @@ import com.resonance.design.GroupFace
 import com.resonance.design.HandDrawnAvatar
 import com.resonance.design.LayoutClass
 import com.resonance.design.LocalWindowLayout
-import com.resonance.design.Mixes
-import com.resonance.design.ModalCloseButton
+import com.resonance.design.ModalGap
 import com.resonance.design.ModalTitle
 import com.resonance.design.OrganicButton
 import com.resonance.design.OrganicIcon
-import com.resonance.design.OrganicModal
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.plainClickable
@@ -231,11 +225,14 @@ internal fun ReaderTapList(
     onOwnRow: () -> Unit = {},
     /** The reader's pick as the page holds it (a pick just made shows at once, before the list knows it). */
     pagePick: PagePick? = null,
+    /** The faces over the capsule (at most 3): the rows while the first page is read past the wait (round 33 §Q1). */
+    expected: List<Author> = emptyList(),
 ) {
     val list = remember(cardId) { TapPeople { token -> session.taps.taps(cardId, token) } }
-    LaunchedEffect(list) { list.first() }
+    // Round 33 §Q1: drawn once its first page has answered, or after the family's wait with the faces as its rows.
+    if (!rememberFirstPageReady(list)) return
     val viewerId = session.uid
-    ReaderTapDialog(list, onDismiss, lines = { tapRowLines(it, anonymous = true, author = false, viewerId, offersPassages, pagePick) }) { p ->
+    ReaderTapDialog(list, onDismiss, lines = { tapRowLines(it, anonymous = true, author = false, viewerId, offersPassages, pagePick) }, expected = expected) { p ->
         onDismiss()
         if (readerRowPicks(p, viewerId, offersPassages)) onOwnRow() else open(Route.Author(p.author.handle))
     }
@@ -247,20 +244,21 @@ internal fun readerRowPicks(person: TapPerson, viewerId: String?, offersPassages
 
 /**
  * The reader's list as it is drawn: a centred dialog [readerListWidth] wide — **no visible title** (the reader sees only
- * connections; a title would claim all) — the banded rows of 60 with a face of 36 and the pen name, each [onRow] (to the
- * profile), and 關閉 at the foot's end, as every one-exit dialog.
+ * connections; a title would claim all) — the rows of 60 with a face of 36 and the pen name, each [onRow] (to the
+ * profile), their bands from the paper's edge to its edge, and 關閉 floating at the foot's end ([TapListModal]).
  */
 @Composable
 internal fun ReaderTapDialog(
     list: TapPeople,
     onDismiss: () -> Unit,
     lines: (TapPerson) -> TapRowLines = { TapRowLines.NONE },
+    /** Who the first page will hold (the faces over the capsule): its rows while it is read. */
+    expected: List<Author>? = null,
     onRow: (TapPerson) -> Unit,
 ) {
     val width = readerListWidth(LocalWindowLayout.current.cls)
-    OrganicModal(onDismiss, L10n.Card.Tap.label, seed = 41.0, closeLabel = L10n.Native.close, maxWidth = width) {
-        TapRows(list, TapRowMeasure.Dialog, lines = lines, onRow = onRow)
-        ModalCloseButton(L10n.Native.close, onDismiss)
+    TapListModal(onDismiss, L10n.Card.Tap.label, seed = 41.0, exit = L10n.Native.close, maxWidth = width) {
+        TapRows(list, TapRowMeasure.Dialog, lines = lines, expected = expected, onRow = onRow)
     }
 }
 
@@ -280,7 +278,7 @@ internal fun AuthorTaps(session: Session, cardId: String, faces: TapFaces, anony
     if (faces.isEmpty) return
     var showing by remember(cardId) { mutableStateOf(launchOpen) }
     TapFacesButton(faces, session.uid, author = true, onOpen = { showing = true }, modifier = modifier)
-    if (showing) AuthorTapList(session, cardId, anonymous, onDismiss = { showing = false }, open = open)
+    if (showing) AuthorTapList(session, cardId, anonymous, onDismiss = { showing = false }, open = open, expected = faces.shown)
 }
 
 /**
@@ -290,22 +288,57 @@ internal fun AuthorTaps(session: Session, cardId: String, faces: TapFaces, anony
  * tapped, to their profile. An anonymous card: faces and names only.
  */
 @Composable
-internal fun AuthorTapList(session: Session, cardId: String, anonymous: Boolean, onDismiss: () -> Unit, open: (Route) -> Unit) {
+internal fun AuthorTapList(
+    session: Session,
+    cardId: String,
+    anonymous: Boolean,
+    onDismiss: () -> Unit,
+    open: (Route) -> Unit,
+    /** The author's line's faces: the rows while the first page is read past the wait (round 33 §Q1). */
+    expected: List<Author> = emptyList(),
+) {
     val list = remember(cardId) { TapPeople { token -> session.taps.taps(cardId, token) } }
+    if (!rememberFirstPageReady(list)) return
+    AuthorTapDialog(list, anonymous, onDismiss, expected) { p ->
+        onDismiss()
+        open(tapRowRoute(p, anonymous))
+    }
+}
+
+/**
+ * The author's list as it is drawn (§U3.2; round 33 §Q2–§Q3): titled, the rows from the paper's edge to its edge, 顯示更多
+ * for the next page at the list's end, 關閉 floating at the foot's end ([TapListModal]).
+ */
+@Composable
+internal fun AuthorTapDialog(
+    list: TapPeople,
+    anonymous: Boolean,
+    onDismiss: () -> Unit,
+    expected: List<Author>? = null,
+    onRow: (TapPerson) -> Unit,
+) {
     val scope = rememberCoroutineScope()
-    LaunchedEffect(list) { list.first() }
-    OrganicModal(onDismiss, L10n.Card.ResonatorsModal.title, seed = 43.0, closeLabel = L10n.Native.close, maxWidth = 480.dp) {
-        ModalTitle(L10n.Card.ResonatorsModal.title)
-        TapRows(list, TapRowMeasure.Dialog, lines = { tapRowLines(it, anonymous, author = true, viewerId = null, offersPassages = false) }) { p ->
-            onDismiss()
-            open(tapRowRoute(p, anonymous))
-        }
-        if (showsMore(list)) {
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                OrganicButton(L10n.Home.moreBtn, variant = ButtonVariant.Tonal, small = true) { scope.launch { list.more() } }
-            }
-        }
-        ModalCloseButton(L10n.Native.close, onDismiss)
+    TapListModal(onDismiss, L10n.Card.ResonatorsModal.title, seed = 43.0, exit = L10n.Native.close, maxWidth = 480.dp) {
+        TapListTitle(L10n.Card.ResonatorsModal.title)
+        TapRows(list, TapRowMeasure.Dialog, lines = { tapRowLines(it, anonymous, author = true, viewerId = null, offersPassages = false) }, expected = expected, onRow = onRow)
+        if (showsMore(list)) TapListMore { scope.launch { list.more() } }
+    }
+}
+
+/** A family dialog's title in its scroll region, on the rows' faces' edge ([TapListInset]), 10 over what follows. */
+@Composable
+internal fun TapListTitle(title: String) {
+    Box(Modifier.fillMaxWidth().padding(horizontal = TapListInset).padding(bottom = TapListTitleGap)) { ModalTitle(title) }
+}
+
+/** The title to the first row (round 29 §S12, round 32 §P1: 10). */
+internal val TapListTitleGap = 10.dp
+
+/** 顯示更多 at a list's end, centred, the modal's 14 over it. */
+@Composable
+internal fun TapListMore(onClick: () -> Unit) {
+    Box(Modifier.fillMaxWidth().padding(top = ModalGap), contentAlignment = Alignment.Center) {
+        OrganicButton(L10n.Home.moreBtn, variant = ButtonVariant.Tonal, small = true, onClick = onClick)
     }
 }
 
@@ -315,27 +348,28 @@ internal fun AuthorTapList(session: Session, cardId: String, anonymous: Boolean,
  */
 internal data class TapRowMeasure(val height: Dp, val face: Dp, val inset: Dp, val gap: Dp, val handle: Float) {
     companion object {
-        /** A dialog's (the reader's and the author's, on every device): 60, a face of 36, its bands' own 12 in. */
-        val Dialog = TapRowMeasure(60.dp, 36.dp, 12.dp, 12.dp, 15f)
+        /**
+         * A dialog's (the reader's and the author's, on every device): 60, a face of 36 — its band from the paper's edge
+         * to its edge, the face and the words [TapListInset] in (round 33 §Q2: the title's edge and the button's).
+         */
+        val Dialog = TapRowMeasure(60.dp, 36.dp, TapListInset, 12.dp, 15f)
     }
 }
 
-/** The list's rows: banded, each the face, the pen name and the excerpt; the rows' shapes while read. */
+/** The list's rows: banded, each the face, the pen name and the excerpt; while read, the known faces' rows. */
 @Composable
 internal fun TapRows(
     list: TapPeople,
     measure: TapRowMeasure,
     lines: (TapPerson) -> TapRowLines,
     /**
-     * Who the first page will hold, when the page already knows (round 32 §P3: a picked sentence's faces): while it is
-     * read, those rows as they will stand — the face, the pen name — not three shapes of another height, so the dialog
-     * opens at its height. Null: the three shapes.
+     * Who the first page will hold, as the page already knows (round 32 §P3, round 33 §Q1: a picked sentence's faces,
+     * the faces over the capsule, the author's line's): while it is read, those rows as they will stand — the face, the
+     * pen name — as many as the faces known, never a default count. Null or none: nothing yet.
      */
     expected: List<Author>? = null,
     onRow: (TapPerson) -> Unit,
 ) {
-    val rowHeight = measure.height
-    val face = measure.face
     val people = list.people
     when {
         !list.loaded && list.failed -> {
@@ -345,21 +379,13 @@ internal fun TapRows(
                 OrganicButton(L10n.Native.retry, variant = ButtonVariant.Tonal, small = true) { scope.launch { list.first() } }
             }
         }
-        !list.loaded && !expected.isNullOrEmpty() -> Column(Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = L10n.Home.moreLoading }) {
-            val keys = expected.map { "tap:" + it.id }
+        !list.loaded -> Column(Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = L10n.Home.moreLoading }) {
+            val known = expected.orEmpty()
+            val keys = known.map { "tap:" + it.id }
             val below = bandsBelow(keys, ListBands.EndKey)
-            expected.forEachIndexed { i, a ->
+            known.forEachIndexed { i, a ->
                 val source = remember(a.id) { MutableInteractionSource() }
                 TapRow(TapPerson(a, null), TapRowLines.NONE, measure, keys[i], below[i], source, onClick = null)
-            }
-        }
-        !list.loaded -> Column(Modifier.clearAndSetSemantics { contentDescription = L10n.Home.moreLoading }) {
-            repeat(3) {
-                Row(Modifier.fillMaxWidth().height(rowHeight).padding(horizontal = measure.inset), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(face).background(Mixes.SkeletonBase, RoundedCornerShape(face * 0.35f)))
-                    Spacer(Modifier.width(measure.gap))
-                    Box(Modifier.width(96.dp).height(12.dp).background(Mixes.SkeletonBase, RoundedCornerShape(6.dp)))
-                }
             }
         }
         else -> Column(Modifier.fillMaxWidth()) {
@@ -393,7 +419,9 @@ private fun TapRow(
         Modifier
             .fillMaxWidth()
             .heightIn(min = measure.height)
-            .listBand(topKey, bottomKey, source, { false }, cut = true)
+            // Round 33 §Q2: the band from the paper's edge to its edge (the dialog's region reaches them, the paper's
+            // wobble clipping it under its pen line), never the rounded inset card of round 26.
+            .listBand(topKey, bottomKey, source, { false }, cut = false)
             .then(if (onClick != null) Modifier.plainClickable(role = Role.Button, onClick = onClick) else Modifier)
             .padding(horizontal = measure.inset, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

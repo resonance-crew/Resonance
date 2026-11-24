@@ -388,21 +388,37 @@ private fun TocLink(heading: TocHeading, reading: Boolean, modifier: Modifier, o
  * viewport), over [edge] — the fade growing in over the first [edge] of scroll, so it never pops.
  * Put it outside the scroll modifier, so the mask stays on the viewport.
  */
-fun Modifier.scrollFade(scroll: ScrollState, edge: Dp): Modifier =
+fun Modifier.scrollFade(scroll: ScrollState, edge: Dp): Modifier = scrollFadeUnder(scroll, edge, 0.dp)
+
+/**
+ * [scrollFade] over a region with something floating over its foot (round 33 §Q3: a dialog's one way out over its
+ * list): at the top as [scrollFade]; at the foot, while there is more below, the fade runs under the button — from
+ * [edge] above the [clear] it stands in down to the middle of it, the words gone below — so they fade out as they reach
+ * the button, never read through it. At the list's end there is no fade: the region's own room is under the button.
+ */
+fun Modifier.scrollFadeUnder(scroll: ScrollState, edge: Dp, clear: Dp): Modifier =
     graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
         drawContent()
         val max = scroll.maxValue
         if (max <= 0 || max == Int.MAX_VALUE) return@drawWithContent
         val e = min(edge.toPx(), size.height / 2)
         if (e <= 0f) return@drawWithContent
+        val c = min(clear.toPx(), size.height / 2)
         val above = (scroll.value / e).coerceIn(0f, 1f)
         val below = ((max - scroll.value) / e).coerceIn(0f, 1f)
         if (above > 0f) drawRect(
             Brush.verticalGradient(listOf(Color.Black.copy(alpha = above), Color.Transparent), startY = 0f, endY = e),
             size = Size(size.width, e), blendMode = BlendMode.DstOut,
         )
-        if (below > 0f) drawRect(
-            Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = below)), startY = size.height - e, endY = size.height),
-            topLeft = Offset(0f, size.height - e), size = Size(size.width, e), blendMode = BlendMode.DstOut,
-        )
+        if (below > 0f) {
+            // With nothing floating there ([clear] 0): [scrollFade]'s own, over [edge] down to the bottom.
+            val start = (size.height - c - e).coerceAtLeast(0f)
+            val gone = size.height - c / 2
+            val mask = Color.Black.copy(alpha = below)
+            drawRect(
+                Brush.verticalGradient(listOf(Color.Transparent, mask), startY = start, endY = gone),
+                topLeft = Offset(0f, start), size = Size(size.width, gone - start), blendMode = BlendMode.DstOut,
+            )
+            if (gone < size.height) drawRect(mask, topLeft = Offset(0f, gone), size = Size(size.width, size.height - gone), blendMode = BlendMode.DstOut)
+        }
     }
