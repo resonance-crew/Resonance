@@ -218,7 +218,7 @@ public struct ModalActions<Cancel: View, Verb: View>: View {
     }
 }
 
-public enum ModalMetrics {
+public nonisolated enum ModalMetrics {
     /// A dialog's buttons are never shorter than a finger needs (the small pills are about 38pt).
     public static let minButtonHeight: CGFloat = 44
     /// A button that can't be pressed yet (the way out while the verb works): the disabled fade.

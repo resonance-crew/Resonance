@@ -103,8 +103,8 @@ struct PickedPeople: View {
                 openRoute(Self.route(for: person))
             }
         }
-        // 關閉 floating (round 33 §Q3); the flows' way out (maestro/flows/tap-picked.yaml): the backdrop is named 關閉 too.
-        .floatingExit(L10n.Native.close, id: "tap-picked-close", action: onClose)
+        // 關閉 (round 34: the footer, or floating once the rows scroll); the flows' way out (maestro/flows/tap-picked.yaml): the backdrop is named 關閉 too.
+        .dialogExit(L10n.Native.close, id: "tap-picked-close", action: onClose)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tap-picked")
         .task(id: passage.id) {

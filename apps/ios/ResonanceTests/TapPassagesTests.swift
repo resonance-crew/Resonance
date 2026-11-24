@@ -192,21 +192,20 @@ import Testing
 
     /// §P1 — 「略过固定不动」, 「标题与段落文字合一滚动」: one scroll region (the title its first child, then the rows); since
     /// round 33 §Q3 略過 floats over the region's bottom fade as the family's tonal small pill (it was round 32's words
-    /// alone in a foot under the region — this test pinned that and now pins the float).
+    /// alone in a foot under the region — this test pinned that, then the float; since round 34 the family's region draws the
+    /// pill: the footer while the title and rows fit, floating once they scroll).
     @Test func theTitleScrollsWithTheRowsAndSkipFloatsOverTheFade() throws {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appendingPathComponent("../Resonance/Features/Card/TapPassages.swift").standardized
         let source = try String(contentsOf: url, encoding: .utf8)
         let body = try #require(source.range(of: "var body: some View {")).upperBound
         let view = String(source[body...])
-        let scroll = try #require(view.range(of: "ScrollView {"))
-        let title = try #require(view.range(of: "ModalTitle(L10n.Card.Tap.passageTitle)"))
-        let skip = try #require(view.range(of: ".floatingExit(L10n.Card.Tap.passageSkip, id: \"tap-passage-skip\""))
+        let scroll = try #require(view.range(of: "TapDialogRegion(cap: TapPassageRules.regionCap("))
+        let title = try #require(view.range(of: "ModalTitle(L10n.Card.Tap.passageTitle"))
+        let skip = try #require(view.range(of: ".dialogExit(L10n.Card.Tap.passageSkip, id: \"tap-passage-skip\""))
         #expect(scroll.lowerBound < title.lowerBound && title.lowerBound < skip.lowerBound)
-        // It floats over the whole dialog, after the region closes (its frame cap), never inside the scroll.
-        let cap = try #require(view.range(of: ".frame(maxHeight: TapPassageRules.regionHeight("))
-        #expect(cap.lowerBound < skip.lowerBound)
-        #expect(view.contains(".exitRoomBelow()"))
+        // One region: no scroll of its own here (the region's).
+        #expect(!view.contains("ScrollView {"))
         #expect(!view.contains("ModalCloseButton(") && !view.contains("QuietTextButton("))
         #expect(TapPassageRules.titleGap == 10)
     }
@@ -215,15 +214,17 @@ import Testing
     /// 略過's room under the rows (round 33 §Q3), and never more than what the stage leaves it with the paper's bottom
     /// inset it reaches into; so the backdrop never scrolls it and 略過 never moves.
     @Test func theDialogAlwaysFitsWhatTheStageLeavesIt() {
-        #expect(TapPassageRules.regionHeight(window: 2000, room: nil, exitRoom: 60) == 620)
-        #expect(TapPassageRules.regionHeight(window: 2000, room: 3000, exitRoom: 60) == 620)
-        #expect(TapPassageRules.regionHeight(window: 600, room: 500, exitRoom: 60) == 480)
-        // An iPhone turned (402 tall less the margins and the paper's air): the stage, not the 70 %, holds it.
+        // Round 34: the region's cap, to the paper's bottom edge (the foot of 18 + 44 + 24 inside it).
+        #expect(TapDialog.budget(cap: 560, exit: true) == 560 - ModalPaper.insetV)
+        #expect(TapPassageRules.regionCap(window: 2000, room: nil) == 560)
+        #expect(TapPassageRules.regionCap(window: 2000, room: 3000) == 560)
+        #expect(TapPassageRules.regionCap(window: 600, room: 500) == 420)
+        // A short stage (380, less the margins and the paper's air) in a taller window: the stage, not the 70 %, holds it.
         let room = ModalPaper.room(stage: 380)
         #expect(abs(room - CGFloat(380 - 2 * 12 - 2 * 32)) < 0.001)
-        #expect(TapPassageRules.regionHeight(window: 402, room: room, exitRoom: 60) == room + ModalPaper.insetV)
-        // Laid out: long passages in a short room take exactly the room (the region reaching the paper's bottom inset,
-        // which the dialog gives back) — never more.
+        #expect(TapPassageRules.regionCap(window: 600, room: room) == room + ModalPaper.insetV)
+        // Laid out: long passages in a short room take exactly the room (they scroll in a region down to the paper's edge, its
+        // bottom inset given back) — never more.
         for room in [220.0, 300, 480] {
             let size = dialogSize(dialog(Self.long, room: room), width: 344)
             #expect(size.height <= room + 0.5, "room \(room): \(size.height)")

@@ -116,36 +116,123 @@ import Testing
         #expect(modal.contains(".padding(.horizontal, inset)"))
     }
 
-    // MARK: §Q3 — the way out floats, coloured, over the fade
+    // MARK: §Q3, final (round 34) — the footer while it fits, floating once it scrolls, one place for the pill
 
-    /// 略過 and 關閉 are the family's tonal small pill floating over the region's bottom fade — no foot under the list.
-    @Test func theWayOutFloatsAsTheTonalSmallPill() throws {
+    /// 略過 and 關閉 are the family's tonal small pill, handed to the region; no dialog draws a foot of its own.
+    @Test func theWayOutIsTheTonalSmallPillTheRegionDraws() throws {
         let dialog = try source("TapDialog.swift")
-        #expect(dialog.contains("OrganicButton(label, variant: .tonal, size: .sm, action: action)"))
-        #expect(dialog.contains(".overlay(alignment: .bottomTrailing)"))
-        #expect(dialog.contains(".padding(.bottom, -ModalPaper.insetV)"))
-        #expect(TapDialog.exitGap == 16)
-        #expect(TapDialog.exitRoom(button: 44) == 60)
+        #expect(dialog.contains("OrganicButton(exit.label, variant: .tonal, size: .sm, action: exit.action)"))
+        #expect(dialog.contains("ViewThatFits(in: .vertical)"))
+        #expect(dialog.contains("TapDialogFoot(budget:"))
+        // Decided in the layout, never by a measure taken after it.
+        #expect(!dialog.contains("onGeometryChange"))
+        #expect(TapDialog.exitInset == 24 && TapDialog.exitAbove == 18 && TapDialog.exitButton == 44)
+        #expect(TapDialog.exitDrop == 24 - ModalPaper.insetV)
+        #expect(TapDialog.footer() == 54)
+        #expect(TapDialog.exitRoom() == CGFloat(24 + 44 + 18))
+        #expect(TapDialog.below(clipped: true) == ModalPaper.bleed && TapDialog.below(clipped: false) == 0)
         for (file, id) in [("TapPassages.swift", "tap-passage-skip"), ("PickedPeople.swift", "tap-picked-close"),
                            ("TapFaces.swift", "tap-list-close"), ("TapFaces.swift", "author-taps-close")] {
             let text = try source(file)
             #expect(text.contains("id: \"\(id)\""), "\(file): \(id)")
+            #expect(text.contains(".dialogExit("), "\(file)")
             #expect(!text.contains("ModalCloseButton(") && !text.contains("QuietTextButton("), "\(file)")
         }
     }
 
-    /// A short list: the dialog is as short as its rows and the pill's room — the region's room under the last row is
-    /// the pill's height and 16, the paper's bottom inset given back (so the paper's foot is the room itself).
-    @Test func aShortListIsItsRowsAndThePillsRoom() async {
-        let list = await loaded(["gus", "bob"])
-        let body = VStack(spacing: 0) {
-            TapListBody(people: list, loadingRows: 2, cap: 420, line: { _ in nil }, press: { _ in })
+    private static let width: CGFloat = 400
+    private static let cap: CGFloat = 300
+
+    /// The family's paper as ``OrganicModalCard`` lays it out (24 at the top and the sides, ``ModalPaper/insetV`` under,
+    /// clipped), at the window's top left: its frame is (0, 0, 400, its height).
+    private func paper(_ ids: [String]) async -> some View {
+        let list = await loaded(ids)
+        return VStack(alignment: .leading, spacing: 0) {
+            TapListBody(people: list, loadingRows: 1, cap: Self.cap, line: { _ in nil }, press: { _ in })
         }
-        .floatingExit("關閉", id: "close", action: {})
-        let size = dialogSize(body, width: 400)
-        let rows = 2 * TapListMetrics.dialogRow
-        // Laid out: the rows, the room (≥ 44 + 16), less the paper's bottom inset the region reaches into.
-        #expect(size.height >= rows + 60 - ModalPaper.insetV - 0.5, "\(size.height)")
-        #expect(size.height <= rows + 80 - ModalPaper.insetV, "\(size.height)")
+        .dialogExit("OUT", id: "close", action: {})
+        .environment(\.modalPaperClips, true)
+        .environment(\.modalPaperInset, ModalPaper.listInset)
+        .padding(.horizontal, ModalPaper.listInset)
+        .padding(.top, ModalPaper.top(inset: ModalPaper.listInset))
+        .padding(.bottom, ModalPaper.insetV)
+        .frame(width: Self.width)
     }
+
+    /// The paper shown in a window: its height measured once, fresh (the first layout), and the pill's frame and the
+    /// scroll views once VoiceOver's tree (the pill's frame there is its wobbly outline's, a point or so past the button's
+    /// 44 above and below, so its centre is what the tests hold: 22 above its bottom) is up and the run loop has turned (any later layout has happened by then).
+    private func shown(_ ids: [String]) async throws -> (first: CGFloat, settled: CGFloat, pill: CGRect, scrolls: [UIScrollView]) {
+        let view = await paper(ids)
+        let first = dialogSize(view, width: Self.width).height
+        let ax = AccessibilityOn()
+        defer { ax.restore() }
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 1200)
+        let host = UIHostingController(rootView: VStack(alignment: .leading, spacing: 0) { view; Spacer(minLength: 0) }
+            .frame(maxWidth: .infinity, alignment: .leading).ignoresSafeArea())
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        host.view.layoutIfNeeded()
+        var pill: CGRect?
+        _ = await eventually {
+            pill = AccessibilityOn.elements(in: window).first { $0.accessibilityLabel == "OUT" }?.accessibilityFrame
+            return pill != nil
+        }
+        try? await Task.sleep(for: .milliseconds(200))
+        let settled = dialogSize(view, width: Self.width).height
+        var scrolls: [UIScrollView] = []
+        func walk(_ v: UIView) {
+            if let s = v as? UIScrollView, s !== host.view { scrolls.append(s) }
+            v.subviews.forEach(walk)
+        }
+        walk(host.view)
+        return (first, settled, try #require(pill), scrolls)
+    }
+
+    /// Two people and the foot fit the cap (2 × 60 + 86 ≤ 300): the classic footer — the rows, 18, the pill, the paper's 24 — with no scroll region and
+    /// no fade; the pill's right edge 24 in from the paper's, its bottom 24 above the paper's.
+    @Test func rowsThatFitEndInTheFooter() async throws {
+        let got = try await shown(["gus", "bob"])
+        let rows = 2 * TapListMetrics.dialogRow
+        let paper = 24 + rows + TapDialog.footer() + ModalPaper.insetV
+        #expect(abs(got.first - paper) < 0.5, "\(got.first) vs \(paper)")
+        #expect(got.first == got.settled)
+        #expect(got.scrolls.isEmpty, "no scroll region: \(got.scrolls)")
+        #expect(abs(Self.width - got.pill.maxX - 24) < 0.5, "\(got.pill)")
+        #expect(abs(got.first - got.pill.midY - 24 - 22) < 0.5, "\(got.pill) in \(got.first)")
+        #expect(abs(got.pill.midY - (24 + rows + 18 + 22)) < 0.5, "the pill under the rows: \(got.pill)")
+    }
+
+    /// Twelve people pass the cap: one scroll region, the cap tall, down to the paper's bottom edge and the wobble's 16 past it (the
+    /// fade's clear end there), ending in 24 + 44 + 18 and that 16; the pill floats at the very same place.
+    @Test func rowsThatScrollFloatThePillAtTheSamePlace() async throws {
+        let ids = (0..<12).map { "p\($0)" }
+        let got = try await shown(ids)
+        let paper = 24 + Self.cap
+        #expect(abs(got.first - paper) < 0.5, "\(got.first) vs \(paper)")
+        #expect(got.first == got.settled)
+        let scroll = try #require(got.scrolls.first)
+        let rows = CGFloat(ids.count) * TapListMetrics.dialogRow
+        #expect(abs(scroll.contentSize.height - (rows + TapDialog.exitRoom() + ModalPaper.bleed)) < 1, "\(scroll.contentSize)")
+        #expect(abs(Self.width - got.pill.maxX - 24) < 0.5, "\(got.pill)")
+        #expect(abs(got.first - got.pill.midY - 24 - 22) < 0.5, "\(got.pill) in \(got.first)")
+        #expect(TapDialog.bottomFade(below: ModalPaper.bleed) == ScrollEdgeFades.length + ModalPaper.bleed)
+    }
+
+    /// The switch is the web's: the footer while content + 18 + 44 + 24 ≤ the cap, floating past it — one row short
+    /// of the line keeps the footer, one row past floats, and neither is ever taller than the cap.
+    @Test func theSwitchIsTheContentAndItsFootAgainstTheCap() async throws {
+        // 300 − 86 = 214: three rows (180) fit, four (240) don't.
+        let three = try await shown(["a", "b", "c"])
+        #expect(three.scrolls.isEmpty)
+        #expect(three.first - 24 <= Self.cap)
+        let four = try await shown(["a", "b", "c", "d"])
+        #expect(!four.scrolls.isEmpty)
+        #expect(abs(four.first - 24 - Self.cap) < 0.5)
+        #expect(abs(three.first - three.pill.midY - (four.first - four.pill.midY)) < 0.5)
+    }
+
 }

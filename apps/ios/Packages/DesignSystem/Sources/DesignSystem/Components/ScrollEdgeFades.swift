@@ -4,7 +4,7 @@ import SwiftUI
 /// list, the thought map's tray) fades a little on the side it can still scroll toward — a hint that
 /// more is there, never a frame: the web's useEdgeFades, 16 at either end. The card page's table of
 /// contents fades its list the same way over a longer passage.
-public enum ScrollEdgeFades {
+public nonisolated enum ScrollEdgeFades {
     /// The fade's length at an edge the list can still scroll toward.
     public static let length: CGFloat = 16
 
@@ -18,14 +18,16 @@ public enum ScrollEdgeFades {
 
 extension View {
     /// Fades this scroll view's ends while it can still scroll toward them (``ScrollEdgeFades``).
-    /// Apply it to the scroll view itself.
-    public func scrollEdgeFades(_ length: CGFloat = ScrollEdgeFades.length) -> some View {
-        modifier(ScrollEdgeFadesModifier(length: length))
+    /// Apply it to the scroll view itself. `bottom`: the foot's own length, when it differs (a region that runs
+    /// past its paper's frame into the wobble fades over that reach too, round 34).
+    public func scrollEdgeFades(_ length: CGFloat = ScrollEdgeFades.length, bottom: CGFloat? = nil) -> some View {
+        modifier(ScrollEdgeFadesModifier(length: length, bottomLength: bottom ?? length))
     }
 }
 
 private struct ScrollEdgeFadesModifier: ViewModifier {
     let length: CGFloat
+    let bottomLength: CGFloat
     @State private var above = false
     @State private var below = false
 
@@ -52,7 +54,7 @@ private struct ScrollEdgeFadesModifier: ViewModifier {
                         .frame(height: above ? length : 0)
                     Color.black
                     LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                        .frame(height: below ? length : 0)
+                        .frame(height: below ? bottomLength : 0)
                 }
                 .animation(.easeOut(duration: 0.15), value: above)
                 .animation(.easeOut(duration: 0.15), value: below)
