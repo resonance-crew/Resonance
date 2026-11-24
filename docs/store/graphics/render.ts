@@ -177,8 +177,8 @@ const SLIDES: Slide[] = [
   {
     key: 'resonance', accent: 'lavender', side: -1, seed: 41, cropBottom: { ios: 0.0377 },
     copy: {
-      'zh-TW': { headline: '不按讚，而是共振', em: '共振', subline: '兩張卡片連在一起，你們也是' },
-      en: { headline: 'Don’t just like — resonate', em: 'resonate', subline: 'Two cards linked, and so are the two of you' },
+      'zh-TW': { headline: '不按讚，而是共振', em: '共振', subline: '共振、寫小紙條，或用卡片回應' },
+      en: { headline: 'Don’t just like — resonate', em: 'resonate', subline: 'Resonate, leave a note, or answer with a card' },
     },
   },
   {

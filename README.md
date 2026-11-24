@@ -40,8 +40,9 @@
 
 Resonance (共振, *gòngzhèn*) is a social writing platform built around **story cards**. You write a
 piece of your life on a card: a title, a story, perhaps a photo. When someone else's card moves you,
-you don't tap a heart. You **resonate** with it, by writing a card of your own that answers it. The
-two cards are linked from then on, and so are the two of you.
+you don't tap a heart. You can **resonate**, a quiet signal to its author that is never a public
+count, and pick the sentence that stayed with you. You can leave the author a **note**. Or you can
+answer with a card of your own: the two cards are linked from then on, and so are the two of you.
 
 It runs on the web at [resonance.channel](https://resonance.channel) and as native apps for iPhone
 and Android, in Traditional Chinese and English. Anyone can read public cards without an account.
@@ -55,11 +56,11 @@ response that costs something, which is writing.
 - **Resonance, not likes.** The one public way to answer a card is to write another card. There are
   no like counts and no public comment threads, so nobody performs for an audience under someone
   else's story.
-- **Three ways to respond, each to someone.** Bookmark a card (for yourself: private, never
-  counted). Leave its author a **note** (for them alone: a letter nobody else reads). Or resonate
-  (for everyone: a card of your own).
+- **Three ways to respond, each to someone.** Resonate (for the author: a quiet signal, with the
+  sentence that stayed with you, never counted in public). Leave the author a **note** (for them
+  alone: a letter nobody else reads). Or answer with a card of your own (for everyone).
 - **Messages are earned through a story.** There is no open inbox. Two people become connected
-  when one resonates publicly with the other's card, or when an author answers a note, and only
+  when one answers the other's card with a public, named card, or when an author answers a note, and only
   connections can message each other. Every conversation starts from a story, never from "hi". It
   is deliberately not a dating app.
 - **Anonymity per card.** The account is real, but any single card can go out anonymously: no name,
@@ -99,7 +100,8 @@ The full reasoning, in Chinese, is in
 | | |
 | --- | --- |
 | **Write cards** | A warm paper editor for a title, a story (headings, quotes, pictures, links, other cards) and a cover photo, or a doodle illustration drawn from your story. Each card is for everyone, for your connections, or for you alone. Drafts save themselves. |
-| **Resonate** | Answer a card with a card. A card's page shows the cards that answer it. |
+| **Resonate** | A quiet signal to a card's author, with the sentence that stayed with you. Never a public count, and it connects no one. |
+| **Answer with a card** | A card of your own, linked to the one it answers. A card's page shows the cards that answer it. |
 | **Notes** | A private letter to a card's author. It connects you only if they write back. |
 | **Connections and messages** | One-to-one conversations between people who met through a story, with replies, shared cards and link previews. |
 | **Thought map** | Lay your own cards out on dotted paper: group them into regions, draw arrows and label how they relate. |

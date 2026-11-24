@@ -119,13 +119,13 @@
 
   > Resonance（共振）是一個用故事卡片彼此交流的地方
   >
-  > 在這裡，回應不是按讚，而是另一段故事。讀到觸動你的卡片時，你可以寫下自己的經歷來「共振」它；兩張卡片從此連在一起，你們也成為彼此的連結。
+  > 在這裡，回應不是按讚，而是另一段故事。讀到觸動你的卡片，可以寫一張自己的卡片回應它，兩張卡片從此連在一起，你們也成為彼此的連結。
   >
   > 【寫卡片】
   > 用溫暖的手繪紙張寫下一段經歷：標題、故事、照片。每張卡片都能決定給誰看——公開、匿名公開，或只留給自己的私人卡。
   >
   > 【用故事回應故事】
-  > 共振一張卡片，就是寫一張回應它的卡片。也可以給作者留一張紙條，不必公開。
+  > 讀完一篇故事，有三種回應方式。按一下「共振」，讓作者知道這篇故事打動了你，不會變成公開的數字，還能選出最有感覺的那一句。寫一張小紙條，只有作者看得到。或是用一張自己的卡片回應，兩張卡片會公開連在一起。
   >
   > 【連結與私訊】
   > 因為故事而相遇的人，可以在私訊裡繼續聊
@@ -152,13 +152,13 @@
 
   > Resonance is a place to share life stories as cards.
   >
-  > Here a reply isn't a like — it's another story. When a card moves you, write your own experience to resonate with it; the two cards are linked, and so are the two of you.
+  > Here a reply isn't a like — it's another story. When a card moves you, answer it with a card of your own; the two cards are linked, and so are the two of you.
   >
   > WRITE CARDS
   > On warm, hand-drawn paper: a title, a story, a photo. Choose who reads each card — everyone, everyone without your name, or only you as a private card.
   >
   > ANSWER STORIES WITH STORIES
-  > Resonating with a card means writing a card in response. Or leave the author a private note.
+  > There are three ways to answer a story. Tap Resonate to let the author know it reached you — never as a public count — and pick the sentence that stayed with you. Leave the author a note only they can read. Or answer with a card of your own, and the two are linked for everyone to see.
   >
   > CONNECTIONS AND MESSAGES
   > People who meet through their stories can keep talking in private messages.
