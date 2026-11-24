@@ -256,13 +256,17 @@ open class FrameCrop(val iw: Double, val ih: Double, val fw: Double, val fh: Dou
         /** The farthest a pull past the limit shows (round 33 §Q5: at most ~24). */
         const val RUBBER_REACH = 24.0
 
-        /** How far a pull of [over] past the limit draws the picture: with it at first, then less and less, never [reach]. */
-        fun rubber(over: Double, reach: Double = RUBBER_REACH): Double = reach * over / (kotlin.math.abs(over) + reach)
+        /**
+         * How far a pull of [over] past the limit draws the picture: reach × (1 − e^(−|over| / 2 reach)), with it at first,
+         * then less and less, never [reach] — the web's and iOS's curve.
+         */
+        fun rubber(over: Double, reach: Double = RUBBER_REACH): Double =
+            kotlin.math.sign(over) * reach * (1 - kotlin.math.exp(-kotlin.math.abs(over) / (2 * reach)))
 
         /** The pull that draws [shown] ([rubber]'s inverse): a drag caught while the picture springs back goes on from there. */
         fun pullOf(shown: Double, reach: Double = RUBBER_REACH): Double {
-            val b = shown.coerceIn(-reach * 0.999, reach * 0.999)
-            return reach * b / (reach - kotlin.math.abs(b))
+            val b = kotlin.math.abs(shown).coerceAtMost(reach * 0.999)
+            return kotlin.math.sign(shown) * -2 * reach * kotlin.math.ln(1 - b / reach)
         }
     }
 }
