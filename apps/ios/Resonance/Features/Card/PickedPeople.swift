@@ -62,11 +62,10 @@ struct PickedPeople: View {
     /// The dialog's width: a phone's 400, a tablet's and the Mac's 480 (the reader's list's, ``TapListMetrics``).
     static func width(compact: Bool) -> CGFloat { TapListMetrics.readerWidth(compact: compact) }
 
-    /// The sentence's face (§S12): the story's body face for `script` at 16 × the reading text scale, as the round 27
-    /// passages dialog sets its rows.
+    /// The sentence's face (§S12): the story's body face for `script` at 16 (18 on a tablet and the Mac) on the
+    /// interface's text scale since round 34 (no Mac reading boost), as the passages dialog sets its rows.
     static func sentenceFont(script: StoryScript, wide: Bool = false) -> UIFont {
-        AppFonts.storyUIFont(StoryTypography(script: script, compact: true).bodyFamily,
-                             size: TapListMetrics.sentenceSize(wide: wide), relativeTo: .body)
+        TapListMetrics.storyFont(StoryTypography(script: script, compact: true).bodyFamily, size: TapListMetrics.sentenceSize(wide: wide))
     }
 
     /// The sentence's leading: the story's compact one (1.8 for a CJK story, 1.6 for a Latin one), at every width.

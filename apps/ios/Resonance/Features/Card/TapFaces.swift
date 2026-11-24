@@ -131,6 +131,13 @@ nonisolated enum TapListMetrics {
     static func nameSize(wide: Bool) -> CGFloat { wide ? 17 : 15 }
     static func lineSize(wide: Bool) -> CGFloat { wide ? 15 : 13 }
     static func sentenceSize(wide: Bool) -> CGFloat { wide ? 18 : 16 }
+    /// A story's own words inside the family — the passages, the picked sentence (round 34, the owner's Mac shot: the
+    /// passages stood far larger than the title and 略過): the story's face, sized as the dialog's type — on the
+    /// interface's curve (``AppFonts/scaledUIFont(_:size:weight:oblique:relativeTo:)``: Dynamic Type up to 1.25×, the
+    /// Mac's 77 % as every other word of the dialog), never the reading curve's Mac boost.
+    @MainActor static func storyFont(_ family: AppFonts.Family, size: CGFloat) -> UIFont {
+        AppFonts.scaledUIFont(family, size: size, relativeTo: .body)
+    }
 }
 
 /// One person of a list: their face and pen name, banded (the curves show as a press's wash), leading to their page —
@@ -187,10 +194,7 @@ struct TapPersonRow: View {
             // Pressed on the paper only: what reaches past its frame is clipped from sight, and is the backdrop's.
             .contentShape(SidesIn(by: TapDialog.overhang(reach: reach, inset: inset)))
         }
-        // Round 34 §11 (the owner: no ink band on the people's rows): pressed, hovered or not, a row draws nothing — it
-        // still opens its page. Its band keys (`top`, `bottom`) stay for the list's order; the passages keep their wash.
-        .buttonStyle(QuietPressStyle())
-        .hoverEffectDisabled()
+        .buttonStyle(BandWashStyle(top: top, bottom: bottom, cut: !clips))
         .accessibilityElement(children: .combine)
     }
 
@@ -202,7 +206,7 @@ struct TapPersonRow: View {
     }
 }
 
-/// A button that shows nothing of a press (round 34 §11): its label as it is — no wash, no dimming.
+/// A button that shows nothing of a press (round 34 §11: the faces' buttons — a reader's over 共振, the author's line): its label as it is — no wash, no dimming.
 struct QuietPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View { configuration.label }
 }
@@ -393,7 +397,9 @@ struct AuthorTaps: View {
             .frame(minHeight: TapFaces.rowHeight)
             .contentShape(Rectangle())
         }
-        .buttonStyle(OrganicPressStyle(inset: 2))
+        // Round 34 §11 (the owner): no press or hover wash on the author's faces' line either.
+        .buttonStyle(QuietPressStyle())
+        .hoverEffectDisabled()
         .accessibilityLabel(TapState.spokenForAuthor(shown, more: more || faces.count > FaceStack.maxFaces))
         .accessibilityIdentifier("author-taps")
         .organicModal(isPresented: $open, seed: 31, maxWidth: TapListMetrics.dialogWidth, closeLabel: L10n.Native.close,

@@ -81,7 +81,7 @@ struct TapPassages: View {
         return Button { onChoose(TapPassageRules.choice(pressing: passage.id, current: picked)) } label: {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 CSSText(passage.text,
-                        font: AppFonts.storyUIFont(story.bodyFamily, size: TapPassageRules.textSize(wide: TapListMetrics.wide(window)), relativeTo: .body),
+                        font: TapListMetrics.storyFont(story.bodyFamily, size: TapPassageRules.textSize(wide: TapListMetrics.wide(window))),
                         lineHeight: story.bodyLeading, color: Tokens.UI.text)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
