@@ -355,8 +355,9 @@ class TapPassagesTest {
         }
         compose.waitForIdle()
         val list = compose.onNodeWithTag("tap-passages", useUnmergedTree = true).getBoundsInRoot()
-        // The list stops at 70 % of the window and scrolls inside; nothing runs past the window's sides.
-        assertTrue((list.bottom - list.top).value <= 568f * 0.7f + 0.5f)
+        // The list stops at 70 % of the window (under the region's own top 24, round 34) and scrolls inside; nothing runs
+        // past the window's sides.
+        assertTrue((list.bottom - list.top).value <= 568f * 0.7f + TapListInset.value + 0.5f)
         assertTrue(list.left.value >= -0.5f && list.right.value <= 320f + 0.5f)
         // Each sentence in full (never 「…」), on several lines, within its row.
         long.forEachIndexed { i, p ->
