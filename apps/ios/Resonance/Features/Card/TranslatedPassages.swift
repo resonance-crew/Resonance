@@ -36,6 +36,19 @@ nonisolated enum TranslatedPassages {
         TapPassageRules.offers(rows(card, words: words))
     }
 
+    /// A pick's words as the page shows them, keyed by the author's own (round 35, the owner: 「我点击自己的头像，看有谁
+    /// resonant……我 resonant 的这一句话变回了中文，而不是翻译的英文。如果我已经翻译成英文，是不是应该这边就都一直显示英文呢？」):
+    /// the who-resonated list answers each pick in the author's words (no id), so a row finds the translation's by those
+    /// words among the card's passages. Empty on the original: rows quote as kept.
+    static func quotes(_ card: [TapPassage], words: [TapPassage]?) -> [String: String] {
+        guard let words else { return [:] }
+        var map: [String: String] = [:]
+        for passage in card {
+            if let piece = words.first(where: { $0.id == passage.id }), piece.text != passage.text { map[passage.text] = piece.text }
+        }
+        return map
+    }
+
     /// The picked sentences the story marks (§R2): on the original as they are; in a translation each picked id the
     /// translation has, with its piece's words (the same people), and none it lacks.
     static func picked(_ picked: [TapPicked], words: [TapPassage]?) -> [TapPicked] {

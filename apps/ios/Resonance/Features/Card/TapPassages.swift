@@ -218,8 +218,9 @@ nonisolated enum TapRowLine: Equatable {
     /// The author's list: each person's pick. A reader's list (Wave 2 #3b: everyone who resonated): every other row
     /// the pick the server sent for it, the reader's own as the page holds it.
     static func of(_ person: TapPerson, authorList: Bool, viewer: String?, offersPassages: Bool,
-                   pagePick: PagePick? = nil) -> TapRowLine? {
-        let listed = person.passage?.value1.text
+                   pagePick: PagePick? = nil, words: [String: String] = [:]) -> TapRowLine? {
+        // In translation (round 35) each pick in the translation's words (``TranslatedPassages/quotes(_:words:)``).
+        let listed = (person.passage?.value1.text).map { words[$0] ?? $0 }
         if authorList { return listed.map(TapRowLine.quote) }
         guard let viewer, person.author.id == viewer else { return listed.flatMap { $0.isEmpty ? nil : .quote($0) } }
         // On a card offering passages the page knows the reader's pick before the list does (the list may have been

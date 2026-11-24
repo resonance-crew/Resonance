@@ -35,6 +35,26 @@ import Testing
         #expect(TapRowLine.of(person("gus", passage: ""), authorList: false, viewer: "dora", offersPassages: true) == nil)
     }
 
+    /// Round 35 (the owner: 「我 resonant 的这一句话变回了中文，而不是翻译的英文。如果我已经翻译成英文，是不是应该这边就都
+    /// 一直显示英文呢？」): in translation every row quotes its pick in the translation's words, found by the author's own.
+    @Test func inTranslationEveryRowQuotesThePickInTheTranslationsWords() {
+        let card = [TapPassage(id: "p1", text: "第一段"), TapPassage(id: "p2", text: "第二段")]
+        let words = [TapPassage(id: "p1", text: "The first part."), TapPassage(id: "p2", text: "The second part.")]
+        let quotes = TranslatedPassages.quotes(card, words: words)
+        #expect(quotes == ["第一段": "The first part.", "第二段": "The second part."])
+        #expect(TranslatedPassages.quotes(card, words: nil).isEmpty)
+        #expect(TapRowLine.of(person("gus", passage: "第一段"), authorList: false, viewer: "dora", offersPassages: true,
+                              words: quotes) == .quote("The first part."))
+        // The reader's own row, as the page holds the pick in translation.
+        #expect(TapRowLine.of(person("dora", passage: "第二段"), authorList: false, viewer: "dora", offersPassages: true,
+                              pagePick: .init(text: "The second part."), words: quotes) == .quote("The second part."))
+        #expect(TapRowLine.of(person("dora", passage: "第二段"), authorList: false, viewer: "dora", offersPassages: false,
+                              words: quotes) == .quote("The second part."))
+        // A pick the translation doesn't say keeps the words it was picked in.
+        #expect(TapRowLine.of(person("hana", passage: "舊的一段"), authorList: false, viewer: "dora", offersPassages: true,
+                              words: quotes) == .quote("舊的一段"))
+    }
+
     /// A pick just made is on the page before the list knows it (the list read while the request was on its way — the
     /// tap-passage flow met it on the iPhone): the own row says the page's pick, and 選一段 once the page has none.
     @Test func theReadersOwnRowSaysThePagesPickBeforeTheListKnowsIt() {

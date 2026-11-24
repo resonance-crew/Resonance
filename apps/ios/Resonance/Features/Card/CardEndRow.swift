@@ -154,7 +154,10 @@ struct CardEndRow: View {
         .organicModal(isPresented: $listOpen, seed: 29, maxWidth: TapListMetrics.readerWidth(compact: compact), closeLabel: L10n.Native.close,
                       clipsToPaper: true, paperInset: ModalPaper.listInset) {
             ReaderTapList(cardId: cardId, offersPassages: offersPassages,
-                          pagePick: .init(text: tap.passages.first { $0.id == tap.passage }?.text),
+                          // In translation (round 35) the pick in the translation's words, as the dialog offered it.
+                          pagePick: .init(text: (TranslatedPassages.rows(tap.passages, words: passageWords).first { $0.id == tap.passage }
+                                                 ?? tap.passages.first { $0.id == tap.passage })?.text),
+                          words: TranslatedPassages.quotes(tap.passages, words: passageWords),
                           preloaded: listPeople, knownFaces: tap.shownFaces.count,
                           onPick: openPassagesFromList) { listOpen = false }
                 .withSession(session)

@@ -319,6 +319,8 @@ struct ReaderTapList: View {
     var offersPassages = false
     /// The reader's pick as the page holds it (a pick just made shows at once, before the list knows it).
     var pagePick: TapRowLine.PagePick?
+    /// In translation, each pick's words as the translation says them, keyed by the author's own (round 35).
+    var words: [String: String] = [:]
     /// The people as the page asked for them at the press (round 33 §Q1: read, or still on their way after
     /// ``TapDialog/firstPageWait``): taken as they are, never asked for twice.
     var preloaded: TapPeople?
@@ -340,7 +342,7 @@ struct ReaderTapList: View {
         VStack(alignment: .leading, spacing: 0) {
             TapListBody(people: list, loadingRows: TapDialog.loadingRows(knownFaces: knownFaces),
                         cap: Self.listCap(window: window.height)) { person in
-                TapRowLine.of(person, authorList: false, viewer: session.uid, offersPassages: offersPassages, pagePick: pagePick)
+                TapRowLine.of(person, authorList: false, viewer: session.uid, offersPassages: offersPassages, pagePick: pagePick, words: words)
             } press: { person in
                 onClose()
                 if offersPassages, person.author.id == session.uid { return onPick() }
