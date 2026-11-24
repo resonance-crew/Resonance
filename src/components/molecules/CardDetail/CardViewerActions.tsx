@@ -185,7 +185,8 @@ export function CardViewerActions({ cardId, referenceCardId, author, tap, traili
       setTapCentre(Number.isFinite(centre) && s.width > 0 ? centre : null);
       // The faces stand centred in their line: a face's top is half a face over the line's middle.
       const rise = Math.round((s.top - (l.top + l.height / 2) + TAP_FACE_SIZE / 2) * 10) / 10;
-      setTapRise(Number.isFinite(rise) && s.height > 0 && rise > 0 ? rise : null);
+      // Never a cut inside a face (round 34 §12: it would cut its press too): the edge at least a face below its top.
+      setTapRise(Number.isFinite(rise) && s.height > 0 && rise >= TAP_FACE_SIZE ? rise : null);
     };
     measure();
     if (typeof ResizeObserver === 'undefined') return;

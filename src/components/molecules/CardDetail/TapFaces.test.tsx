@@ -211,3 +211,37 @@ it('gives the faces’ button no hover or press look (round 34 §11)', () => {
   expect(css).toMatch(/\.faces:focus-visible \{[^}]*outline: 2px solid var\(--color-terracotta\);/);
 });
 
+
+// Round 34 §12 (found on the Mac app; the web checked for a twin): the whole group over 共振 opens the list — a press
+// on any face, the overlaps included, and on the viewer's own while it is still cut for its rise (§9) — and nothing
+// in it takes the pointer away (no pointer-events anywhere in it), the button 44 at least each way.
+it('opens the list from a press on any face, the rising one included; nothing in the group takes the pointer', async () => {
+  listTaps.mockResolvedValue({ people: [person('alice'), person('dora'), person('eli')], nextPageToken: null });
+  renderWithIntl(
+    <SWRConfig value={{ provider: () => new Map() }}>
+      <TapFaces cardId="c1" tap={{ mine: true, faces: [face('alice'), face('dora'), face('eli')], more: true, mayNote: true }} viewerId="alice" arriving="alice" />
+    </SWRConfig>,
+  );
+  const button = screen.getByRole('button', { name: /Resonated with this card/ });
+  const faces = [...button.querySelectorAll<HTMLElement>('[data-face]')];
+  expect(faces.map((f) => f.getAttribute('data-face'))).toEqual(['alice', 'dora', 'eli']);
+  expect(faces[0]).toHaveAttribute('data-arriving');
+  for (const id of ['alice', 'dora', 'eli']) {
+    // The face's own drawing — the innermost thing a finger lands on — is inside the one button.
+    const drawing = button.querySelector<HTMLElement>(`[data-face="${id}"] svg`)!;
+    expect(drawing.closest('button')).toBe(button);
+    await user().click(drawing);
+    const dialog = await screen.findByRole('dialog');
+    await user().click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  }
+  for (const f of ['src/components/molecules/CardDetail/TapFaces.module.css', 'src/components/atoms/AvatarGroup/AvatarGroup.module.css']) {
+    expect(readFileSync(join(process.cwd(), f), 'utf8'), f).not.toMatch(/pointer-events/);
+  }
+  const css = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/TapFaces.module.css'), 'utf8');
+  expect(css).toMatch(/\.faces \{[^}]*min-height: 44px;[^}]*min-width: 44px;/);
+  // The cut for the rise never reaches into a face: it lies a face and 8 below its top at the least.
+  expect(readFileSync(join(process.cwd(), 'src/components/atoms/AvatarGroup/AvatarGroup.module.css'), 'utf8')).toMatch(
+    /--rise: var\(--avatar-rise, calc\(var\(--avatar-size\) \+ 8px\)\);/,
+  );
+});
