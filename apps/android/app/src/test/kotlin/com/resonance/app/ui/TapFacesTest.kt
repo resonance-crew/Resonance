@@ -199,7 +199,8 @@ class TapFacesTest {
     @Test fun theFacesDrawNoPressInkThePeopleRowsKeepTheirBand() {
         val source = File("src/main/kotlin/com/resonance/app/ui/TapFaces.kt").readText()
         val row = source.substringAfter("private fun TapRow(").substringBefore("\n}\n")
-        assertTrue("a people row's band, edge to edge", row.contains(".listBand(topKey, bottomKey, source, { false }, cut = false)"))
+        // Round 35 (3): drawn past the paper's box, for the paper to cut on its pen line.
+        assertTrue("a people row's band, edge to edge", row.contains(".listBand(topKey, bottomKey, source, { false }, cut = false, bleed = TapListBandBleed)"))
         assertTrue("opens its person", row.contains("plainClickable(role = Role.Button, onClick = onClick)"))
         val button = source.substringAfter("internal fun TapFacesButton(").substringBefore("\n}\n")
         assertFalse(button.contains("indication = ") || button.contains("listBand(") || button.contains("collectIsPressedAsState"))

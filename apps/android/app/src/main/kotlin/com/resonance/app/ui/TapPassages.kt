@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.resonance.design.DividerInk
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,7 +15,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalConfiguration
@@ -29,10 +27,8 @@ import androidx.compose.ui.unit.em
 import com.resonance.api.models.TapPassage
 import com.resonance.design.AppFonts
 import com.resonance.design.LocalWindowLayout
-import com.resonance.design.OrganicIcon
 import com.resonance.design.OrganicModal
 import com.resonance.design.StoryType
-import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.plainClickable
 import com.resonance.kit.api.ApiFailure
@@ -56,7 +52,7 @@ internal object TapPassagesTiming {
     /** From the press that turned 共振 on to the dialog: the segment has filled and the face slid in (150–160). */
     const val OPEN_MS = 240L
 
-    /** From a row pressed (its ink and check shown) to the dialog closing. */
+    /** From a row pressed (its ink shown) to the dialog closing. */
     const val CLOSE_MS = 300L
 
     fun openDelay(reduced: Boolean): Long = if (reduced) 0L else OPEN_MS
@@ -165,7 +161,10 @@ internal object PassageBand {
     /** Never the tablet's rounded cut: the band runs to the paper's edges. */
     const val cut = false
 
-    /** From the paper's edge to a row's words (and from its check to the other edge): the family's 24 (28 + 12 before). */
+    /** Round 35 (3): drawn past the paper's box, the paper's wobble cutting it on the pen line at both sides. */
+    val bleed: Dp = TapListBandBleed
+
+    /** From the paper's edge to a row's words, at both sides (round 35 (2): no check between them and the edge): the family's 24. */
     val wordsInset: Dp = TapListInset
 }
 
@@ -186,9 +185,9 @@ internal fun passagesListMax(windowHeight: Dp): Dp = min(560f, windowHeight.valu
  * phone, 480 wider), titled 悄悄告訴作者，哪一段讓你有共鳴; the [passages] as banded rows from the paper's edge to its
  * edge ([PassageBand]), each a button with its words
  * in the story's type ([script]) at 16 with the story's leading, **wrapped in full** — never cut; 略過 floating at the
- * foot's end, the family's tonal pill ([TapListModal], round 33 §Q3), no ✕. [picked] (reopened from the reader's own row, §U1.7) rests in the press ink with its check, selected.
+ * foot's end, the family's tonal pill ([TapListModal], round 33 §Q3), no ✕. [picked] (reopened from the reader's own row, §U1.7) rests in the press ink, selected — no check (round 35 (2)).
  *
- * A press on a row ([nextPick]) holds its ink and check at once, hands the pick to [onPick], and closes 300 later (at once
+ * A press on a row ([nextPick]) holds its ink at once, hands the pick to [onPick], and closes 300 later (at once
  * under [reducedMotion]). The backdrop, back and 略過 close it ([onDismiss]) with no pick. [hold]: the screenshots'
  * `passage-picked` — the dialog stays open on the row pressed.
  */
@@ -237,7 +236,7 @@ internal fun TapPassages(
                     // §P2: a rule between two rows (never above the first), the words' start to their end; the
                     // row's own band washes over it.
                     .then(if (passageRuleAbove(i)) Modifier.bandRuleAbove(keys[i], PassageBand.wordsInset, rule) else Modifier)
-                    .listBand(keys[i], below[i], source, { false }, rest = if (isChosen) press else null, cut = PassageBand.cut)
+                    .listBand(keys[i], below[i], source, { false }, rest = if (isChosen) press else null, cut = PassageBand.cut, bleed = PassageBand.bleed)
                     .flowTag("tap-passage-$i")
                     .plainClickable(role = Role.Button) {
                         if (closing) return@plainClickable
@@ -255,12 +254,10 @@ internal fun TapPassages(
                     .semantics { selected = isChosen }
                     .padding(horizontal = PassageBand.wordsInset, vertical = ListBands.RowPad),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                // Round 35 (2) (the owner: 把这个 dialog 里面的勾勾拿掉…选中的就是现在的这个变色的效果就好了): no check and no
+                // slot for one — the words run the row's whole width between the family's insets; the pick is its band.
                 BasicText(p.text, Modifier.weight(1f), style = words)
-                // Round 34 (7): the check's slot (16 + the row's 12) kept on every row, unseen until picked — the words'
-                // width, and so their lines, never change when it shows.
-                OrganicIcon(IconName.Check, size = 16.dp, color = Tokens.Text, modifier = Modifier.alpha(if (isChosen) 1f else 0f).flowTag("tap-passage-check-$i"))
             }
         }
     }

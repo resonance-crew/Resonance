@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -56,7 +57,6 @@ import com.resonance.design.plainClickable
 import com.resonance.design.prefersReducedMotion
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -118,23 +118,12 @@ fun CardViewerActions(
     val haptic = LocalHapticFeedback.current
     val reduced = LocalContext.current.prefersReducedMotion()
 
-    // Your card answering this one (draft or published): null while looking, NONE when there is none.
-    var mine by remember(cardId) { mutableStateOf<DraftService.Resonance?>(null) }
-    var looking by remember(cardId) { mutableStateOf(true) }
+    // Your card answering this one (draft or published), read in the background (round 35 (4)): the segment is live
+    // meanwhile, and a press before the answer asks then ([ReplyLookup]).
+    val lookup = remember(cardId) { ReplyLookup(find = { session.drafts?.myResonance(cardId) }) }
     var picking by remember(cardId) { mutableStateOf(false) }
     val changes by session.cardChanges.collectAsStateWithLifecycle()
-    LaunchedEffect(cardId, changes) {
-        // A failed lookup stays inert, as on the web — better than risking a second reply card.
-        val drafts = session.drafts
-        mine = if (drafts == null) NONE else try {
-            drafts.myResonance(cardId) ?: NONE
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            null
-        }
-        looking = false
-    }
+    LaunchedEffect(cardId, changes) { lookup.look() }
 
     // The tap: the server's faces, and the viewer's own drawn at once.
     val served = TapFaces.of(detail.tap)
@@ -266,8 +255,9 @@ fun CardViewerActions(
         fun width(text: String) = with(density) { measurer.measure(text, style, softWrap = false, maxLines = 1).size.width.toDp().value }
         val tapWords = width(tapLabel)
         val noteWords = width(L10n.Card.Note.short)
-        val replyFull = ReplyAction.of(mine.asMine(), short = false).label
-        val replyShort = ReplyAction.of(mine.asMine(), short = true).label
+        val mine = lookup.mine
+        val replyFull = ReplyAction.of(mine, short = false).label
+        val replyShort = ReplyAction.of(mine, short = true).label
         val form = EndRowLayout.choose(
             listOf(tapWords, noteWords, width(replyFull)),
             listOf(tapWords, noteWords, width(replyShort)),
@@ -275,7 +265,7 @@ fun CardViewerActions(
             english = Strings.language == Strings.Language.En,
             largeText = density.fontScale > EndRowLayout.LARGE_TEXT,
         )
-        val reply = ReplyAction.of(mine.asMine(), short = form != EndRowForm.Full)
+        val reply = ReplyAction.of(mine, short = form != EndRowForm.Full)
         val capsule = EndRowLayout.capsuleWidth(listOf(tapWords, noteWords, width(reply.label)), column, form)
 
         val tap = Segment(
@@ -308,16 +298,21 @@ fun CardViewerActions(
             fill = if (note.open) OrganicIndication.Wash.compositeOver(Tokens.ButtonTonal) else null,
             expanded = note.open,
         ) { note.segment(mayNote) }
-        // While your reply card is looked for, its segment waits (a second reply card is never started by accident).
-        val replySegment = Segment("reply", reply.label, reply.icon, loading = mine == null && looking) {
-            val answered = mine
+        // What a press does once it is known whether you have a reply card (a second one is never begun without knowing).
+        fun openReply(answered: DraftService.Resonance?) {
             when {
-                answered == null -> Unit
-                answered == NONE -> picking = true
+                answered == null -> picking = true
                 // A published reply card is done: the segment says so and opens it.
                 answered.published -> onOpenMine(answered.routeKey)
                 // A draft is still being written: 修改 takes it back to the writer.
                 else -> onModify(answered.id)
+            }
+        }
+        // Live from the first frame (round 35 (4)): inked only while a press before the background answer asks (6 s at most).
+        val replySegment = Segment("reply", reply.label, reply.icon, loading = lookup.asking) {
+            when (val known = lookup.state) {
+                is ReplyLookup.State.Found -> openReply(known.mine)
+                else -> scope.launch { lookup.ask()?.let { openReply(it.mine) } }
             }
         }
         val twoLines = form == EndRowForm.TwoLines
@@ -341,6 +336,12 @@ fun CardViewerActions(
             // 寄小紙條 · 寫卡片 on the second line.
             secondLine = if (twoLines) ({ SegmentedActionBar(listOf(noteSegment, replySegment), Modifier.width(capsule.dp), seed = 73.0) }) else null,
         ) {
+            // A press that couldn't learn whether you have a reply card: a quiet line, the segment pressable again (§4).
+            if (lookup.tapFailed) BasicText(
+                L10n.Native.loadError,
+                style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.TextMuted),
+                modifier = Modifier.padding(top = 8.dp).flowTag("reply-lookup-failed"),
+            )
             // The note's field, 12 under the capsule (its second line when it takes two), across the column (§S2, §S3).
             NoteInPlace(
                 note, mayNote = mayNote, reducedMotion = reduced,
@@ -507,14 +508,4 @@ internal fun BookmarkButton(saved: Boolean, glyphEnd: androidx.compose.ui.unit.D
             strokeWidth = Tokens.Ink.value,
         )
     }
-}
-
-/** No reply card of yours answers the card (looked, and found none). */
-private val NONE = DraftService.Resonance("", "", published = false)
-
-/** What the lookup found, as [ReplyAction] reads it (null while looking). */
-private fun DraftService.Resonance?.asMine(): ReplyAction.Mine? = when {
-    this == null -> null
-    this === NONE || id.isEmpty() -> ReplyAction.Mine.None
-    else -> ReplyAction.Mine.Found(published)
 }
