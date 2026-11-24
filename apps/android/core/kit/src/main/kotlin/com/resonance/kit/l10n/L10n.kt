@@ -1505,6 +1505,8 @@ object L10n {
             val title: String get() = Strings.string("write.coverFrame.title")
             /** Drag to move, pinch or slide to zoom */
             val hintTouch: String get() = Strings.string("write.coverFrame.hintTouch")
+            /** Zoom in to move it */
+            val zoomToMove: String get() = Strings.string("write.coverFrame.zoomToMove")
             /** Drag to move, scroll or slide to zoom */
             val hintPointer: String get() = Strings.string("write.coverFrame.hintPointer")
             /** Cover framing area */

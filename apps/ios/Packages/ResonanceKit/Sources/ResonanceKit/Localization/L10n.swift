@@ -1503,6 +1503,8 @@ public enum L10n {
             public static var title: String { Strings.shared.string("write.coverFrame.title") }
             /// Drag to move, pinch or slide to zoom
             public static var hintTouch: String { Strings.shared.string("write.coverFrame.hintTouch") }
+            /// Zoom in to move it
+            public static var zoomToMove: String { Strings.shared.string("write.coverFrame.zoomToMove") }
             /// Drag to move, scroll or slide to zoom
             public static var hintPointer: String { Strings.shared.string("write.coverFrame.hintPointer") }
             /// Cover framing area
