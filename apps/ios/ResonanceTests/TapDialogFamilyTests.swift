@@ -103,7 +103,8 @@ import Testing
         #expect(opens.components(separatedBy: "clipsToPaper: true, paperInset: ModalPaper.listInset").count - 1 == 4)
         let faces = try source("TapFaces.swift")
         // The rows: no inset card — the band uncut where the paper clips, the words at the dialog's inset.
-        #expect(faces.contains(".buttonStyle(BandWashStyle(top: top, bottom: bottom, cut: !clips))"))
+        // Round 34 §11: the rows draw no band at all now (the passages keep theirs).
+        #expect(!faces.contains("BandWashStyle("))
         #expect(faces.contains(".padding(.horizontal, reach)"))
         #expect(!faces.contains(".padding(.horizontal, -12)"))
     }
@@ -323,11 +324,80 @@ import Testing
         let faces = try source("TapFaces.swift"), row = try source("CardEndRow.swift")
         #expect(faces.contains("FaceStack(faces: faces.map(Self.face), transition: Self.riseTransition)"))
         #expect(faces.contains(".asymmetric(insertion: .offset(y: rise()), removal: .offset(y: rise()))"))
-        // Cut at the line's foot only.
-        #expect(row.contains(".padding(.top, -TapFaces.rowHeight)"))
+        // Cut at the line's foot only (the faces' drawing, round 34 §12).
+        #expect(TapFaces.riseMask.bottom == -8 && TapFaces.riseMask.top == -TapFaces.rowHeight)
         #expect(row.contains("withAnimation(reduceMotion ? nil : TapFaces.slide) { tap.flip(viewer: viewer) }"))
         // The line keeps its 44 whatever comes and goes.
         let empty = dialogSize(EndRowTwo(facesCentre: 100, faceCount: 0) { EmptyView() }, width: 400)
         #expect(empty.height == TapFaces.rowHeight)
+    }
+
+    // MARK: Round 34 §10 — no note's excerpt in the rows
+
+    /// A row is its face, its pen name and (in the who-resonated lists) the quote: a note the answer still carries is
+    /// not drawn — a row with a note and no quote is the 60 of a name alone — and it still leads to that conversation.
+    @Test func aRowDrawsNoNote() async throws {
+        let withNote = TapPerson(author: Fixture.author("carol"), note: .init(value1: .init(excerpt: String(repeating: "謝謝你寫下這段，", count: 8))))
+        let list = TapPeople { _ in TapList(people: [withNote], nextPageToken: nil) }
+        await list.load()
+        let size = dialogSize(TapRows(people: list.people, line: { _ in nil }, press: { _ in }), width: 400)
+        #expect(abs(size.height - TapListMetrics.dialogRow) < 0.5, "\(size.height)")
+        #expect(TapPersonRow.route(for: withNote) == .thread(handle: "carol", uid: "carol", note: nil))
+        #expect(!(try source("TapFaces.swift")).contains("person.note?.value1.excerpt"))
+    }
+
+    // MARK: Round 34 §11 — no ink on the people's rows or the faces
+
+    /// The people's rows and the faces over 共振 show nothing of a press or a pointer; they still open what they open.
+    /// The passages' rows keep their band.
+    @Test func thePeoplesRowsAndTheFacesDrawNoWash() throws {
+        let faces = try source("TapFaces.swift")
+        #expect(!faces.contains("BandWashStyle("))
+        #expect(faces.components(separatedBy: ".buttonStyle(QuietPressStyle())\n").count - 1 >= 2)
+        #expect(faces.components(separatedBy: ".hoverEffectDisabled()").count - 1 >= 2)
+        #expect(try source("TapPassages.swift").contains(".buttonStyle(BandWashStyle("))
+        #expect(try source("PickedPeople.swift").contains("TapListBody("))
+    }
+
+    // MARK: Round 34 §12 — the whole group of faces takes the press
+
+    /// 「头像群组只有某一小块可以点击」: the faces' button is the whole group — every face, the overlaps and its pads,
+    /// a finger's 44 at the least — with no mask or clip around it (the rise's cut is on the drawing alone), and the
+    /// line stands over the capsule's row in the hit order.
+    @Test func theWholeGroupOfFacesTakesThePress() async throws {
+        let faces = ["gus", "bob", "hana"].map { Fixture.author($0) }
+        let ax = AccessibilityOn()
+        defer { ax.restore() }
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 400)
+        let row = EndRowTwo(facesCentre: 120, faceCount: 3) {
+            TapFaces(faces: faces, spoken: "FACES", isButton: true) {}
+        }
+        window.rootViewController = UIHostingController(rootView: VStack(spacing: 0) { row.frame(width: 360); Spacer() }
+            .frame(maxWidth: .infinity, alignment: .leading).ignoresSafeArea())
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        var button: CGRect?
+        _ = await eventually {
+            button = AccessibilityOn.elements(in: window).first { $0.accessibilityLabel == "FACES" }?.accessibilityFrame
+            return button != nil
+        }
+        let frame = try #require(button)
+        let lead = RowTwo.facesLead(centre: 120, count: 3)
+        let group = CGRect(x: lead + TapFaces.buttonPad, y: (TapFaces.rowHeight - FaceStack.size) / 2,
+                           width: FaceStack.width(count: 3, size: FaceStack.size), height: FaceStack.size)
+        // Every face inside the button, and the button a finger's at the least.
+        #expect(frame.insetBy(dx: -0.5, dy: -0.5).contains(group), "\(frame) vs \(group)")
+        #expect(frame.width >= TapFaces.rowHeight && frame.height >= TapFaces.rowHeight, "\(frame)")
+        #expect(abs(frame.width - (group.width + 2 * TapFaces.buttonPad)) < 0.5, "\(frame)")
+        // Nothing masks or clips the button: the cut is on the faces' drawing, inside the label, before the hit shape.
+        let tapFaces = try source("TapFaces.swift"), endRow = try source("CardEndRow.swift")
+        let cut = try #require(tapFaces.range(of: ".mask { Rectangle().padding(Self.riseMask) }"))
+        let shape = try #require(tapFaces.range(of: ".contentShape(Rectangle())"))
+        #expect(cut.lowerBound < shape.lowerBound)
+        let lineBody = try #require(endRow.range(of: "struct EndRowTwo<Faces: View>: View {")).upperBound
+        #expect(!String(endRow[lineBody...].prefix(1200)).contains(".mask"))
+        #expect(endRow.contains("if facesLine { faces.zIndex(1) }"))
     }
 }

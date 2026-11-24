@@ -21,6 +21,10 @@ struct TapFaces: View {
     /// the faces' line — the capsule's top edge, which cuts it (``EndRowTwo``) — and goes back down into it. The
     /// distance: from the face's top in the 44 line (centred) to the line's foot, so it starts wholly inside the segment.
     static func rise(size: CGFloat = FaceStack.size) -> CGFloat { rowHeight - (rowHeight - size) / 2 }
+    /// The rise's cut, from the faces' own box: far out above and at the sides, down to the line's foot below (the
+    /// faces stand centred in the 44 line).
+    static let riseMask = EdgeInsets(top: -rowHeight, leading: -rowHeight, bottom: -(rowHeight - FaceStack.size) / 2,
+                                     trailing: -rowHeight)
     static var riseTransition: AnyTransition {
         .asymmetric(insertion: .offset(y: rise()), removal: .offset(y: rise()))
     }
@@ -30,13 +34,19 @@ struct TapFaces: View {
 
     var body: some View {
         let stack = FaceStack(faces: faces.map(Self.face), transition: Self.riseTransition)
+            // Cut at the line's foot — the capsule's top edge (round 34 §9): a face rising in comes up out of the 共振
+            // segment. Only the drawing is cut (round 34 §12): no mask or clip wraps the button's hit area.
+            .mask { Rectangle().padding(Self.riseMask) }
             .padding(.horizontal, Self.buttonPad)
             // A finger's 44 at the least, the faces at its start (the web's `min-width: 44px`).
             .frame(minWidth: Self.rowHeight, minHeight: Self.rowHeight, alignment: .leading)
+            // The whole group takes the press — every face, the overlaps, the pads (round 34 §12).
             .contentShape(Rectangle())
         if isButton {
+            // Round 34 §11: no press or hover wash on the faces (the Mac's pointer and an iPad's trackpad included).
             Button(action: onOpen) { stack }
-                .buttonStyle(OrganicPressStyle(inset: 2))
+                .buttonStyle(QuietPressStyle())
+                .hoverEffectDisabled()
                 .accessibilityLabel(spoken)
                 // The name the interaction flows find it by (maestro/flows/tap.yaml).
                 .accessibilityIdentifier("tap-faces")
@@ -106,7 +116,7 @@ nonisolated enum TapListMetrics {
     static func readerWidth(compact: Bool) -> CGFloat { compact ? 400 : dialogWidth }
     static let dialogRow: CGFloat = 60
     static let dialogFace: CGFloat = 36
-    /// A row's quote and its note's excerpt: two lines each at most, on every platform (round 27 §U2, S9).
+    /// A row's quote: two lines at most, on every platform (round 27 §U2, S9).
     static let lineLimit = 2
     /// Above and below a row's content: within 60 for a name and one line.
     static let rowPad: CGFloat = 8
@@ -126,8 +136,9 @@ nonisolated enum TapListMetrics {
 /// One person of a list: their face and pen name, banded (the curves show as a press's wash), leading to their page —
 /// or, on the author's list when they left a note on the card, to that conversation (an unconnected reader's is the
 /// letter; replying connects, as today). Under the name (round 27 §U2, §U3): the passage they picked, quoted (``TapRowLine``),
-/// muted, two lines at most, or 選一段 on a reader's own row; then the note's excerpt, muted, two lines at most (as
-/// Android's). A row with neither is 60 tall, as before.
+/// muted, two lines at most, or 選一段 on a reader's own row — and nothing more: round 34 §10 (the owner: the note
+/// arrives as a message, read it there) took the note's excerpt away, though the answer still carries it and a row
+/// with a note still opens that conversation. A row with no quote is 60 tall.
 ///
 /// Round 33 §Q2 (the owner: 「高亮区块应延伸到左右边缘…不要有弹窗里又包了一张缩进去的小卡片的感觉」): in a dialog clipped to
 /// its paper the row stands ``TapDialog/reach(clipped:inset:)`` out on each side and pads as much back in, so its press
@@ -145,7 +156,6 @@ struct TapPersonRow: View {
 
     var body: some View {
         let author = person.author
-        let note = person.note?.value1.excerpt
         let wide = TapListMetrics.wide(window)
         let reach = TapDialog.reach(clipped: clips, inset: inset)
         Button(action: action) {
@@ -165,27 +175,22 @@ struct TapPersonRow: View {
                             .truncationMode(.tail)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    if let note {
-                        Text(note)
-                            .font(AppFonts.body(TapListMetrics.lineSize(wide: wide)))
-                            .foregroundStyle(Tokens.textMuted)
-                            .lineLimit(TapListMetrics.lineLimit)
-                            .truncationMode(.tail)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             // `reach` a side, which the list (-reach) takes back: the face at the dialog's inset, the band to the paper's
-            // edges. 8 above and below: a row of a name and one line stays 60, and one with a quote and a note grows past
-            // it with air at both ends.
+            // edges. 8 above and below: a row of a name and one line stays 60, and one with a two-line quote grows past
+            // it with air at both ends. No note's excerpt (round 34 §10: the note arrives as a message, read there).
             .padding(.horizontal, reach)
             .padding(.vertical, TapListMetrics.rowPad)
             .frame(minHeight: TapListMetrics.dialogRow)
             // Pressed on the paper only: what reaches past its frame is clipped from sight, and is the backdrop's.
             .contentShape(SidesIn(by: TapDialog.overhang(reach: reach, inset: inset)))
         }
-        .buttonStyle(BandWashStyle(top: top, bottom: bottom, cut: !clips))
+        // Round 34 §11 (the owner: no ink band on the people's rows): pressed, hovered or not, a row draws nothing — it
+        // still opens its page. Its band keys (`top`, `bottom`) stay for the list's order; the passages keep their wash.
+        .buttonStyle(QuietPressStyle())
+        .hoverEffectDisabled()
         .accessibilityElement(children: .combine)
     }
 
@@ -195,6 +200,11 @@ struct TapPersonRow: View {
         let author = person.author
         return person.note == nil ? .author(author.handle) : .thread(handle: author.handle, uid: author.id, note: nil)
     }
+}
+
+/// A button that shows nothing of a press (round 34 §11): its label as it is — no wash, no dimming.
+struct QuietPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { configuration.label }
 }
 
 /// The rows of a list, banded, each curve keyed by the row under it (``ListBands``); `line` gives each its second line.
