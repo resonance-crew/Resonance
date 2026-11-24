@@ -21,6 +21,10 @@ struct TapFaces: View {
     /// the faces' line — the capsule's top edge, which cuts it (``EndRowTwo``) — and goes back down into it. The
     /// distance: from the face's top in the 44 line (centred) to the line's foot, so it starts wholly inside the segment.
     static func rise(size: CGFloat = FaceStack.size) -> CGFloat { rowHeight - (rowHeight - size) / 2 }
+    /// The rise's cut, from the faces' own box: far out above and at the sides, down to the line's foot below (the
+    /// faces stand centred in the 44 line).
+    static let riseMask = EdgeInsets(top: -rowHeight, leading: -rowHeight, bottom: -(rowHeight - FaceStack.size) / 2,
+                                     trailing: -rowHeight)
     static var riseTransition: AnyTransition {
         .asymmetric(insertion: .offset(y: rise()), removal: .offset(y: rise()))
     }
@@ -30,9 +34,13 @@ struct TapFaces: View {
 
     var body: some View {
         let stack = FaceStack(faces: faces.map(Self.face), transition: Self.riseTransition)
+            // Cut at the line's foot — the capsule's top edge (round 34 §9): a face rising in comes up out of the 共振
+            // segment. Only the drawing is cut (round 34 §12): no mask or clip wraps the button's hit area.
+            .mask { Rectangle().padding(Self.riseMask) }
             .padding(.horizontal, Self.buttonPad)
             // A finger's 44 at the least, the faces at its start (the web's `min-width: 44px`).
             .frame(minWidth: Self.rowHeight, minHeight: Self.rowHeight, alignment: .leading)
+            // The whole group takes the press — every face, the overlaps, the pads (round 34 §12).
             .contentShape(Rectangle())
         if isButton {
             // Round 34 §11: no press or hover wash on the faces (the Mac's pointer and an iPad's trackpad included).
