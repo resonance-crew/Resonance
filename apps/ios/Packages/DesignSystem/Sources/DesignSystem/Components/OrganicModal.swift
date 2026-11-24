@@ -414,7 +414,8 @@ struct OrganicModalCard<Content: View>: View {
         let card = VStack(alignment: .leading, spacing: 0) { content() }
             .environment(\.modalPaperInset, inset)
             .padding(.horizontal, inset)
-            .padding(.vertical, ModalPaper.insetV)
+            .padding(.top, ModalPaper.top(inset: inset))
+            .padding(.bottom, ModalPaper.insetV)
             .frame(maxWidth: maxWidth, alignment: .leading)
         if clipsToPaper {
             // The clip's own frame stands ``ModalPaper/bleed`` past the paper's on every side, the paper drawn inside it and
@@ -462,6 +463,9 @@ public nonisolated enum ModalPaper {
     public static let bleed: CGFloat = 16
     /// The content's inset from the paper's frame, above and below.
     public static let insetV: CGFloat = 32
+    /// Above the content: ``insetV``, or a dialog of another side inset's own (the tap lists' family: 24 at the top and
+    /// the sides, round 33).
+    public static func top(inset: CGFloat) -> CGFloat { inset == ModalPaper.inset ? insetV : inset }
     /// The backdrop's margin round the paper, a side.
     public static let margin: CGFloat = 12
     /// The height a dialog's content may take on a stage `stage` tall (the backdrop's margins and the paper's own air

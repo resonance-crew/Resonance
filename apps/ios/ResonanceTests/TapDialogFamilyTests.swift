@@ -91,6 +91,8 @@ import Testing
 
     @Test func theFamilyStandsTwentyFourInAndItsRowsReachThePapersEdges() throws {
         #expect(ModalPaper.listInset == 24 && ModalPaper.inset == 28)
+        // The family's paper: 24 at the top and the sides, none at the bottom (the floating pill's room is its foot).
+        #expect(ModalPaper.top(inset: ModalPaper.listInset) == 24 && ModalPaper.top(inset: ModalPaper.inset) == ModalPaper.insetV)
         // A row stands the inset and the wobble's swing out on each side, clipped by the paper, its band uncut.
         #expect(TapDialog.reach(clipped: true) == ModalPaper.listInset + ModalPaper.bleed)
         #expect(TapDialog.overhang(reach: TapDialog.reach(clipped: true)) == ModalPaper.bleed)
