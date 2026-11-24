@@ -118,8 +118,8 @@ class PickedPeopleTest {
         // The sentence heads it, once: never again under a name.
         compose.onAllNodesWithText("「$sentence」").assertCountEquals(1)
         compose.onNodeWithTag("tap-picked", useUnmergedTree = true).assertExists()
-        // The note's first line under bob's name.
-        compose.onNodeWithText("讀到搬家那段，好像看見自己。").assertExists()
+        // Round 34 (10): no note under bob's name (it arrives as a message).
+        compose.onAllNodesWithText("讀到搬家那段，好像看見自己。").assertCountEquals(0)
         // No next page: no 顯示更多.
         compose.onAllNodesWithText(L10n.Home.moreBtn).assertCountEquals(0)
         compose.onNodeWithText("bob").performClick()
@@ -189,7 +189,8 @@ class PickedPeopleTest {
 
     @Test fun aRowSaysTheNoteNeverThePickAndLeadsWhereTheAuthorsListLeads() {
         val bob = row("bob", note = "謝謝")
-        assertEquals(TapRowLines(excerpt = "謝謝"), pickedRowLines(bob, anonymous = false))
+        // Round 34 (10): never the note — the face and the pen name only.
+        assertEquals(TapRowLines.NONE, pickedRowLines(bob, anonymous = false))
         assertNull(pickedRowLines(bob, anonymous = false).quote)
         // An anonymous card: faces and names only.
         assertEquals(TapRowLines.NONE, pickedRowLines(bob, anonymous = true))
