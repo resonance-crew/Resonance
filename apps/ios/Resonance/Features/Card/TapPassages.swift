@@ -85,10 +85,12 @@ struct TapPassages: View {
                         lineHeight: story.bodyLeading, color: Tokens.UI.text)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if chosen {
-                    OrganicIcon(.check, size: TapPassageRules.checkSize, color: Tokens.text, strokeWidth: Tokens.ink)
-                        .transition(.opacity)
-                }
+                // Round 34 §7: the check's slot stands on every row; unpicked it is unseen (never taken out), so the
+                // words keep their width and never wrap again when a row is picked.
+                OrganicIcon(.check, size: TapPassageRules.checkSize, color: Tokens.text, strokeWidth: Tokens.ink)
+                    .opacity(chosen ? 1 : 0)
+                    .animation(.easeOut(duration: 0.15), value: chosen)
+                    .accessibilityHidden(true)
             }
             .padding(.horizontal, reach)
             .padding(.vertical, ListBands.rowPad)

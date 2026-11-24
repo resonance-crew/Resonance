@@ -271,6 +271,24 @@ import Testing
         #expect(BandEdge(key: ids[1]).path(in: rect).boundingRect.width > 0)
     }
 
+    /// §7 — the check's slot is kept on every row: picking a row never rewraps its words, so the dialog keeps its height.
+    @Test func pickingARowNeverRewrapsItsWords() throws {
+        let passages = [
+            TapPassage(id: "a", text: String(repeating: "箱子堆滿了客廳，我坐在地上，第一次覺得安靜是屬於自己的。", count: 3)),
+            TapPassage(id: "b", text: "你不是失去了一個家，你是多了一個可以回去的地方。"),
+        ]
+        for width in [300.0, 344, 400] {
+            let free = dialogSize(TapPassages(passages: passages, picked: nil, script: .cjk, onChoose: { _ in }, onSkip: {}), width: width)
+            let picked = dialogSize(TapPassages(passages: passages, picked: "a", script: .cjk, onChoose: { _ in }, onSkip: {}), width: width)
+            #expect(free.height == picked.height, "\(width): \(free.height) vs \(picked.height)")
+        }
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Resonance/Features/Card/TapPassages.swift").standardized
+        let source = try String(contentsOf: url, encoding: .utf8)
+        #expect(source.contains(".opacity(chosen ? 1 : 0)"))
+        #expect(!source.contains("if chosen {"))
+    }
+
     /// §P3 — the passages' dialog has no flash: its rows are known when it opens, so its first layout is its last —
     /// measured twice at the same width it answers the same height (nothing measured later grows or shrinks it).
     @Test func thePassagesDialogsFirstLayoutIsItsLast() {
