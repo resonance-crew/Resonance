@@ -29,6 +29,7 @@ import com.resonance.design.OrganicButton
 import com.resonance.design.OrganicModal
 import com.resonance.design.scrollFadeUnder
 import com.resonance.design.toModalPaperEdges
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -147,9 +148,15 @@ internal suspend fun awaitFirstPage(list: TapPeople, wait: Long = TAP_LIST_OPEN_
 internal fun rememberFirstPageReady(list: TapPeople): Boolean {
     var ready by remember(list) { mutableStateOf(false) }
     LaunchedEffect(list) {
-        launch { list.first() }
+        // A list read ahead (round 34 (8): the reader's, while the faces stand) is not read again: its rows are drawn.
+        if (!list.loaded && !list.loading) launch(start = CoroutineStart.UNDISPATCHED) { list.first() }
         awaitFirstPage(list)
         ready = true
     }
     return ready
+}
+
+/** Reads [list]'s first page ahead of a press (round 34 (8)), once: not while it is being read, not once it answered. */
+internal suspend fun prefetchFirstPage(list: TapPeople) {
+    if (!list.loaded && !list.loading) list.first()
 }

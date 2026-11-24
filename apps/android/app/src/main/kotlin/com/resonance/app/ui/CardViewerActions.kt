@@ -361,10 +361,17 @@ fun CardViewerActions(
             )
         }
     }
+    // Round 34 (8) (the owner: 名单先出头像和名字，约 1 秒后每行的句子才出现): the list's first page is read while the faces
+    // stand, not from the press — a press after it answered opens the dialog complete (faces, names, each quote) on its
+    // first frame; the 300 ms wait was shorter than the page's round trip, so it opened on the faces alone. Read again
+    // whenever the server's copy of the faces changes (a tap that answered, a pick written back).
+    val mayList = !faces.isEmpty && (offers || !faces.selfOnly(session.uid))
+    val readerList = remember(cardId, served) { TapPeople { token -> session.taps.taps(cardId, token) } }
+    LaunchedEffect(readerList, mayList) { if (mayList) prefetchFirstPage(readerList) }
     // Who resonated, behind the faces: the phone's dialog on every device (the owner's look, 2026-11-19).
-    if (openList && !faces.isEmpty && (offers || !faces.selfOnly(session.uid))) {
+    if (openList && mayList) {
         ReaderTapList(
-            session, cardId, onDismiss = { openList = false }, open = open,
+            session, cardId, onDismiss = { openList = false }, open = open, list = readerList,
             offersPassages = offers,
             // The faces over the capsule: the rows while the first page is read past the wait (round 33 §Q1).
             expected = faces.shown,

@@ -226,8 +226,11 @@ internal fun ReaderTapList(
     pagePick: PagePick? = null,
     /** The faces over the capsule (at most 3): the rows while the first page is read past the wait (round 33 §Q1). */
     expected: List<Author> = emptyList(),
+    /** The page's list, its first page read while the faces stand (round 34 (8)); none: read from the press. */
+    list: TapPeople? = null,
 ) {
-    val list = remember(cardId) { TapPeople { token -> session.taps.taps(cardId, token) } }
+    val own = remember(cardId) { TapPeople { token -> session.taps.taps(cardId, token) } }
+    val list = list ?: own
     // Round 33 §Q1: drawn once its first page has answered, or after the family's wait with the faces as its rows.
     if (!rememberFirstPageReady(list)) return
     val viewerId = session.uid

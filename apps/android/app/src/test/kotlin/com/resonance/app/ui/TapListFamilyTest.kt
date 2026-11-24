@@ -208,4 +208,43 @@ class TapListFamilyTest {
     @Test fun slowerThanTheWaitTwoKnownFacesAreTwoRows() = slower(2)
 
     @Test fun slowerThanTheWaitThreeKnownFacesAreThreeRows() = slower(3)
+
+    // Round 34 (8) (the owner: 名单先出头像和名字，约 1 秒后每行的句子才出现): the page's round trip was longer than the
+    // 300 ms wait, so the press opened the faces alone and the quotes came after. The reader's list is read while the
+    // faces stand: a press after it answered opens complete.
+
+    @Test fun aListReadAheadOpensWithEveryQuoteOnItsFirstFrame() {
+        val people = listOf("gus", "bob", "ann").map(::person)
+        var reads = 0
+        val list = TapPeople { reads++; delay(1_000); TapList(people, nextPageToken = null) }
+        val opened = androidx.compose.runtime.mutableStateOf(false)
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            CompositionLocalProvider(LocalWindowLayout provides WindowLayout(390.dp)) {
+                // As CardViewerActions: read while the faces stand…
+                androidx.compose.runtime.LaunchedEffect(list) { prefetchFirstPage(list) }
+                // …and opened by a press later.
+                if (opened.value) Opened(Kind.Reader, list, people.map { it.author })
+            }
+        }
+        frames(1_200)
+        assertTrue(list.loaded)
+        compose.runOnIdle { opened.value = true }
+        var firstQuotes = -1
+        val seen = mutableListOf<Float>()
+        repeat(40) {
+            compose.mainClock.advanceTimeByFrame()
+            paperHeight()?.let { h ->
+                if (firstQuotes < 0) firstQuotes = compose.onAllNodesWithText(L10n.Card.Tap.passageQuote("清晨六點的城市還沒醒"), useUnmergedTree = true).fetchSemanticsNodes().size
+                if (seen.lastOrNull() != h) seen += h
+            }
+        }
+        assertEquals("every row's quote on the dialog's first frame", 3, firstQuotes)
+        assertEquals("one height ($seen)", 1, seen.size)
+        assertEquals("read once, ahead — not again at the press", 1, reads)
+        // The page reads it ahead and hands it to the dialog.
+        val page = File("src/main/kotlin/com/resonance/app/ui/CardViewerActions.kt").readText()
+        assertTrue(page.contains("prefetchFirstPage(readerList)"))
+        assertTrue(page.contains("list = readerList"))
+    }
 }
