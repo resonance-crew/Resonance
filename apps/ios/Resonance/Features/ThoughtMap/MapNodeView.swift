@@ -179,14 +179,18 @@ struct MapNodeView: View, Equatable {
         }
     }
 
-    /// NodeThumb: 56×56 in a wobbly clip, the picture overscanned 4px each side.
+    /// NodeThumb: 56×56 in a wobbly clip, the picture overscanned 4px each side — its crop the 56's (round 33 §Q4).
+    static let thumbSide: CGFloat = 56
+    static let thumbBleed: CGFloat = 4
+
     private func thumbnail(_ url: URL) -> some View {
         let clip = WobRectShape(radius: 12, seed: seed + 3, mag: 1.8, options: WobRectOptions(
             curve: 1.3, cornerJitter: 1.4, segmentsH: .count(2), segmentsV: .count(2)))
         return ZStack {
             RemoteImage(url: url, fallback: url == card.mediaURL ? card.mediaFallbackURL : nil, pixelSize: CGSize(width: 64 * 6, height: 64 * 6),
-                        reveal: .viewer) // a fade, never a blur: the map's world is scaled and moved (the web's map the same)
-                .frame(width: 64, height: 64)
+                        reveal: .viewer, // a fade, never a blur: the map's world is scaled and moved (the web's map the same)
+                        bleed: Self.thumbBleed)
+                .frame(width: Self.thumbSide + 2 * Self.thumbBleed, height: Self.thumbSide + 2 * Self.thumbBleed)
                 .frame(width: 56, height: 56)
                 .clipShape(clip)
             clip.stroke(Palette.hue(.pen, hue, alpha: 0.55), style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))

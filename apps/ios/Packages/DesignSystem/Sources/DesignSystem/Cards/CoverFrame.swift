@@ -93,13 +93,18 @@ extension View {
 public nonisolated enum CoverLayout {
     /// The picture's drawn size and its top-left corner within the box (the bled box, when `bleed` > 0).
     public static func placement(box: CGSize, pictureSize: CGSize?, frame: CoverFraming?, bleed: CGFloat = 0) -> CGRect {
-        let visible = CGSize(width: box.width - 2 * bleed, height: box.height - 2 * bleed)
+        placement(box: box, pictureSize: pictureSize, frame: frame, bleedX: bleed, bleedY: bleed)
+    }
+
+    /// The same with a bleed of its own on each axis (a chat bubble's cover reaches past its sides only).
+    public static func placement(box: CGSize, pictureSize: CGSize?, frame: CoverFraming?, bleedX: CGFloat, bleedY: CGFloat) -> CGRect {
+        let visible = CGSize(width: box.width - 2 * bleedX, height: box.height - 2 * bleedY)
         guard visible.width > 0, visible.height > 0 else { return .zero }
         let ar: Double
         if let p = pictureSize, p.width > 0, p.height > 0 { ar = Double(p.width / p.height) } else { ar = frame?.ar ?? 1 }
         let crop = CoverFraming.coverCrop(ar: ar, frame: frame, boxRatio: Double(visible.height / visible.width))
         let w = visible.width / crop.width, h = visible.height / crop.height
-        return CGRect(x: bleed - crop.minX * w, y: bleed - crop.minY * h, width: w, height: h)
+        return CGRect(x: bleedX - crop.minX * w, y: bleedY - crop.minY * h, width: w, height: h)
     }
 
     /// What of the bled box the picture covers (its placement within the box): where it has no pixels past the
@@ -119,19 +124,26 @@ public nonisolated enum CoverLayout {
 public struct FramedCover: View {
     let image: Image
     let pictureSize: CGSize?
-    let bleed: CGFloat
+    let bleedX: CGFloat
+    let bleedY: CGFloat
     @Environment(\.coverFraming) private var frame
 
     public init(_ image: Image, pictureSize: CGSize? = nil, bleed: CGFloat = 0) {
+        self.init(image, pictureSize: pictureSize, bleedX: bleed, bleedY: bleed)
+    }
+
+    /// A bleed of its own on each axis: a chat bubble's cover reaches past its sides, not above or below.
+    public init(_ image: Image, pictureSize: CGSize? = nil, bleedX: CGFloat, bleedY: CGFloat) {
         self.image = image
         self.pictureSize = pictureSize
-        self.bleed = bleed
+        self.bleedX = bleedX
+        self.bleedY = bleedY
     }
 
     public var body: some View {
-        if frame != nil || bleed > 0 {
+        if frame != nil || bleedX > 0 || bleedY > 0 {
             GeometryReader { geo in
-                let place = CoverLayout.placement(box: geo.size, pictureSize: pictureSize, frame: frame, bleed: bleed)
+                let place = CoverLayout.placement(box: geo.size, pictureSize: pictureSize, frame: frame, bleedX: bleedX, bleedY: bleedY)
                 image.resizable()
                     .frame(width: place.width, height: place.height)
                     .offset(x: place.minX, y: place.minY)

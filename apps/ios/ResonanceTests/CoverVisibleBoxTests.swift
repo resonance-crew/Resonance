@@ -190,4 +190,52 @@ import UIKit
             #expect(left.x < 0.02 && right.x > 0.98, "\(left) \(right)")
         }
     }
+
+    /// Post-merge review (round 33): the thought map's thumb draws a 64 box (56 seen + 4 a side) and its crop is the
+    /// 56's — a square, on the inner 56 — for a landscape and a portrait cover, framed or not.
+    @Test func theMapsThumbIsCutForItsSeen56() throws {
+        #expect(MapNodeView.thumbSide + 2 * MapNodeView.thumbBleed == 64)
+        let box = CGSize(width: 64, height: 64)
+        for picture in [CGSize(width: 1536, height: 1024), CGSize(width: 1024, height: 1536)] {
+            for frame in [nil, CoverFraming(cx: 0.4, cy: 0.6, zoom: 1.5, ar: Double(picture.width / picture.height))] {
+                let place = CoverLayout.placement(box: box, pictureSize: picture, frame: frame, bleed: 4)
+                let crop = CoverFraming.coverCrop(ar: Double(picture.width / picture.height), frame: frame, boxRatio: 1)
+                // The crop's corners land on the inner 56's.
+                #expect(abs(place.minX + crop.minX * place.width - 4) < 0.001)
+                #expect(abs(place.minY + crop.minY * place.height - 4) < 0.001)
+                #expect(abs(crop.width * place.width - 56) < 0.001 && abs(crop.height * place.height - 56) < 0.001)
+            }
+        }
+        let source = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Resonance/Features/ThoughtMap/MapNodeView.swift").standardized, encoding: .utf8)
+        #expect(source.contains("bleed: Self.thumbBleed)"))
+        let image = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Packages/DesignSystem/Sources/DesignSystem/Components/OrganicImage.swift").standardized, encoding: .utf8)
+        #expect(image.contains("if let image { FramedCover(image, pictureSize: pictureSize, bleed: bleed) }"))
+    }
+
+    /// Post-merge review (round 33): a chat card's cover is drawn 4 past the bubble's sides only; its crop is the seen
+    /// width's (the box less 4 a side, its full height), framed or not — a link's picture still fills the whole box.
+    @Test func aBubblesCoverIsCutForItsSeenWidth() throws {
+        let seen = CGSize(width: 260, height: 268 / 1.91)
+        let box = CGSize(width: seen.width + 8, height: seen.height)
+        for picture in [CGSize(width: 1536, height: 1024), CGSize(width: 1024, height: 1536)] {
+            for frame in [nil, CoverFraming(cx: 0.3, cy: 0.7, zoom: 1.4, ar: Double(picture.width / picture.height))] {
+                let ar = Double(picture.width / picture.height)
+                let place = CoverLayout.placement(box: box, pictureSize: picture, frame: frame, bleedX: 4, bleedY: 0)
+                let crop = CoverFraming.coverCrop(ar: ar, frame: frame, boxRatio: Double(seen.height / seen.width))
+                #expect(abs(place.minX + crop.minX * place.width - 4) < 0.001)
+                #expect(abs(place.minY + crop.minY * place.height) < 0.001)
+                #expect(abs(crop.width * place.width - seen.width) < 0.001 && abs(crop.height * place.height - seen.height) < 0.001)
+            }
+        }
+        // The one-bleed form is the same with both axes.
+        let even = CoverLayout.placement(box: CGSize(width: 64, height: 64), pictureSize: CGSize(width: 3, height: 2), frame: nil, bleed: 4)
+        #expect(even == CoverLayout.placement(box: CGSize(width: 64, height: 64), pictureSize: CGSize(width: 3, height: 2), frame: nil, bleedX: 4, bleedY: 4))
+        let source = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Packages/DesignSystem/Sources/DesignSystem/Components/Messages.swift").standardized, encoding: .utf8)
+        #expect(source.contains("FramedCover(image, pictureSize: pictureSize, bleedX: cover ? pictureBleed : 0, bleedY: 0)"))
+        #expect(source.contains("BubblePicture(url: imageURL, fallback: imageFallbackURL, cover: true)"))
+        #expect(source.contains("BubblePicture(url: imageURL) { pictureFailed = true }"))
+    }
 }
