@@ -56,8 +56,6 @@ describe('TapPassages (§U1)', () => {
     expect(latin).toMatch(/--passage-face:\s*var\(--font-body\)/);
     expect(latin).toMatch(/--story-leading-latin\)/);
     expect(latin).toMatch(/--story-leading-latin-compact\)/);
-    // The chosen row's check in the text ink, as the apps draw it.
-    expect(css).toMatch(/\.check\s*\{[^}]*color:\s*var\(--color-text\)/);
   });
 
   it('a story in CJK (the default) keeps the CJK face and leading', async () => {
@@ -97,9 +95,8 @@ describe('TapPassages (§U1)', () => {
     const [a, b] = rows(dialog);
     expect(b).toHaveAttribute('aria-pressed', 'true');
     expect(b.hasAttribute('data-band-pressed')).toBe(true);
-    expect(b.querySelector('[data-check]')).toHaveAttribute('data-check', 'on');
     expect(a).toHaveAttribute('aria-pressed', 'false');
-    expect(a.querySelector('[data-check]')).toHaveAttribute('data-check', 'off');
+    expect(a.hasAttribute('data-band-pressed')).toBe(false);
   });
 
   it('held open for a screenshot (no press came before), it puts focus on no row: no keyboard ring in the capture', async () => {
@@ -113,7 +110,7 @@ describe('TapPassages (§U1)', () => {
     expect(document.activeElement?.hasAttribute('data-passage')).toBe(false);
   });
 
-  it('a press holds the row’s ink and its check, sends the pick, then closes a moment later', async () => {
+  it('a press holds the row’s ink, sends the pick, then closes a moment later', async () => {
     const { onPick, onClose } = renderDialog();
     const dialog = await screen.findByRole('dialog');
     const b = rows(dialog)[1];
@@ -250,27 +247,21 @@ describe('TapPassages (§U1)', () => {
     expect(css).toMatch(/\.rule > \.svg \{\s*top: 4px;/);
   });
 
-  // Round 34 §7 (the owner: the ✓ appears in place, the words never re-wrap): the check's slot — 16 and the row's 12
-  // gap — is on every row at all times, unseen until chosen. jsdom lays nothing out, so the row's laid-out parts are
-  // compared: chosen or not, the words have the same box beside the same slot; only the slot's opacity differs.
-  it('keeps the check’s slot on every row, unseen until chosen: the words’ width and wrapping never change', async () => {
-    const view = renderDialog();
+  // Round 35 (the owner: 「把这个 dialog 里面的勾勾拿掉……选中的就是现在的这个变色的效果就好了」): no check anywhere, and
+  // no slot kept for one — the words are a row's only part, the whole width; the chosen row is its resting ink alone.
+  it('draws no check: the chosen row is its ink alone, the words the row’s only part', async () => {
+    renderDialog('8b3a1c4d');
     const dialog = await screen.findByRole('dialog');
-    const before = rows(dialog).map((r) => r.querySelector('[class*="rowInner"]')!.outerHTML);
-    for (const r of rows(dialog)) expect(r.querySelector('[data-check]')).toHaveAttribute('data-check', 'off');
-    await user().click(rows(dialog)[1]);
-    const after = rows(dialog);
-    expect(after[1].querySelector('[data-check]')).toHaveAttribute('data-check', 'on');
-    // The same parts in the same order on every row: only the chosen slot's state changed.
-    expect(after.map((r) => r.querySelector('[class*="rowInner"]')!.outerHTML.replace('data-check="on"', 'data-check="off"'))).toEqual(before);
-    view.unmount();
+    expect(dialog.querySelector('[data-check]')).toBeNull();
+    for (const r of rows(dialog)) {
+      const inner = r.querySelector('[class*="rowInner"]')!;
+      expect(inner.children).toHaveLength(1);
+      expect(inner.firstElementChild!.className).toMatch(/text/);
+    }
+    const chosen = rows(dialog)[1];
+    expect(chosen).toHaveAttribute('aria-pressed', 'true');
+    expect(chosen.hasAttribute('data-band-pressed')).toBe(true);
     const css = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/TapPassages.module.css'), 'utf8');
-    const slot = css.match(/\.check \{([^}]*)\}/)?.[1] ?? '';
-    expect(slot).toMatch(/flex: none;/);
-    expect(slot).toMatch(/width: 16px;/);
-    expect(slot).toMatch(/opacity: 0;/);
-    expect(slot).not.toMatch(/display: none|visibility/);
-    expect(css).toMatch(/\.check\[data-check='on'\] \{\s*opacity: 1;\s*\}/);
-    expect(css).toMatch(/\.rowInner \{[^}]*gap: 12px;/);
+    expect(css).not.toMatch(/\.check\b/);
   });
 });

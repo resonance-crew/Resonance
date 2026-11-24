@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { BandRule, BandWash, bandHost, useBandPress } from '@/components/atoms/BandWash/BandWash';
-import { Icon } from '@/components/atoms/Icon';
 import { Modal } from '@/components/molecules/Modal/Modal';
 import { DialogScroll } from '@/components/sections/AppHeader/BellList';
 import type { TapPassageBody } from '@/lib/api/v1/schemas';
@@ -20,7 +19,7 @@ export { PASSAGE_CHOSEN_MS, reducedMotion };
 export interface TapPassagesProps {
   /** The card's passages (`CardDetail.tap.passages`): two or three of the author's own sentences. */
   passages: TapPassageBody[];
-  /** The reader's pick now (`CardDetail.tap.passage`): its row rests in the press ink with its check. */
+  /** The reader's pick now (`CardDetail.tap.passage`): its row rests in the press ink (no check, round 35). */
   picked: string | null;
   /** The story's script: the rows are set in its type and leading, as story.css sets the story (§U1.3). CJK by default. */
   script?: StoryScript;
@@ -41,14 +40,14 @@ export interface TapPassagesProps {
  * one scroll region holding the title and then the author's own sentences as banded rows (the who-resonated list's
  * bands), each in the story's type and wrapped in full, never cut, a quiet rule between two rows (round 32 §P1, §P2);
  * 略過 alone at the foot's end, the family's small tonal pill floating over the region's bottom fade, never moving
- * with the rows (round 33 §Q3; the region reaches the paper's bottom). A press holds the row's ink and draws its check, then
+ * with the rows (round 33 §Q3; the region reaches the paper's bottom). A press holds the row's ink, then
  * the dialog closes; the picked row, reopened from the reader's own row, rests chosen and a press on it clears the
  * pick. The tap never waits on it: skipping leaves the tap on with no passage. Never a bottom sheet, never a popover.
  */
 export function TapPassages({ passages, picked, script = 'cjk', onPick, onClose, focusRow = true }: TapPassagesProps) {
   const t = useTranslations('card.tap');
   const onPhone = useMediaQuery(TAP_LIST_PHONE_QUERY) !== false;
-  // The row just pressed, holding its ink (and its check, unless it cleared the pick) until the dialog closes.
+  // The row just pressed, holding its ink (unless it cleared the pick) until the dialog closes.
   const [chosen, setChosen] = useState<{ id: string; on: boolean } | null>(null);
   const timer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(timer.current), []);
@@ -166,12 +165,10 @@ function PassageRow({
       {...(inked ? { 'data-band-pressed': '' } : {})}
     >
       <BandWash topKey={band.top} bottomKey={band.bottom} />
+      {/* No check (round 35, the owner: 「把这个 dialog 里面的勾勾拿掉……选中的就是现在的这个变色的效果就好了」): the
+          chosen row is its resting ink alone, and the words have the row's whole width. */}
       <span className={styles.rowInner}>
         <span className={styles.text}>{text}</span>
-        {/* The check's slot is every row's (round 34 §7): there but unseen until chosen, so the words never re-wrap. */}
-        <span className={styles.check} data-check={selected ? 'on' : 'off'} aria-hidden>
-          <Icon name="check" size={16} />
-        </span>
       </span>
     </button>
   );

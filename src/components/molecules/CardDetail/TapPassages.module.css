@@ -115,17 +115,3 @@
   overflow-wrap: anywhere;
 }
 
-/* The check's slot, on every row at all times (round 34 §7): 16 and the row's 12 gap, unseen (opacity 0, never
-   removed) until the row is chosen, when it shows in place — the words' width and wrapping never change. */
-.check {
-  display: inline-flex;
-  flex: none;
-  width: 16px;
-  opacity: 0;
-  /* The text ink, as the apps draw it (iOS Tokens.text, Android Tokens.Text). */
-  color: var(--color-text);
-}
-
-.check[data-check='on'] {
-  opacity: 1;
-}
