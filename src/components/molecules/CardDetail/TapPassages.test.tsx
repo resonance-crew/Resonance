@@ -97,8 +97,9 @@ describe('TapPassages (§U1)', () => {
     const [a, b] = rows(dialog);
     expect(b).toHaveAttribute('aria-pressed', 'true');
     expect(b.hasAttribute('data-band-pressed')).toBe(true);
-    expect(b.querySelector('svg')).not.toBeNull();
+    expect(b.querySelector('[data-check]')).toHaveAttribute('data-check', 'on');
     expect(a).toHaveAttribute('aria-pressed', 'false');
+    expect(a.querySelector('[data-check]')).toHaveAttribute('data-check', 'off');
   });
 
   it('held open for a screenshot (no press came before), it puts focus on no row: no keyboard ring in the capture', async () => {
@@ -247,5 +248,29 @@ describe('TapPassages (§U1)', () => {
     const css = readFileSync(join(process.cwd(), 'src/components/atoms/BandWash/BandWash.module.css'), 'utf8');
     expect(css).toMatch(/\.rule \{[^}]*position: absolute;[^}]*left: 0;[^}]*right: 0;[^}]*top: -4px;[^}]*height: 8px;/);
     expect(css).toMatch(/\.rule > \.svg \{\s*top: 4px;/);
+  });
+
+  // Round 34 §7 (the owner: the ✓ appears in place, the words never re-wrap): the check's slot — 16 and the row's 12
+  // gap — is on every row at all times, unseen until chosen. jsdom lays nothing out, so the row's laid-out parts are
+  // compared: chosen or not, the words have the same box beside the same slot; only the slot's opacity differs.
+  it('keeps the check’s slot on every row, unseen until chosen: the words’ width and wrapping never change', async () => {
+    const view = renderDialog();
+    const dialog = await screen.findByRole('dialog');
+    const before = rows(dialog).map((r) => r.querySelector('[class*="rowInner"]')!.outerHTML);
+    for (const r of rows(dialog)) expect(r.querySelector('[data-check]')).toHaveAttribute('data-check', 'off');
+    await user().click(rows(dialog)[1]);
+    const after = rows(dialog);
+    expect(after[1].querySelector('[data-check]')).toHaveAttribute('data-check', 'on');
+    // The same parts in the same order on every row: only the chosen slot's state changed.
+    expect(after.map((r) => r.querySelector('[class*="rowInner"]')!.outerHTML.replace('data-check="on"', 'data-check="off"'))).toEqual(before);
+    view.unmount();
+    const css = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/TapPassages.module.css'), 'utf8');
+    const slot = css.match(/\.check \{([^}]*)\}/)?.[1] ?? '';
+    expect(slot).toMatch(/flex: none;/);
+    expect(slot).toMatch(/width: 16px;/);
+    expect(slot).toMatch(/opacity: 0;/);
+    expect(slot).not.toMatch(/display: none|visibility/);
+    expect(css).toMatch(/\.check\[data-check='on'\] \{\s*opacity: 1;\s*\}/);
+    expect(css).toMatch(/\.rowInner \{[^}]*gap: 12px;/);
   });
 });

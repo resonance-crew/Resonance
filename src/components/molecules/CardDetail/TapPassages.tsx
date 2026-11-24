@@ -168,11 +168,10 @@ function PassageRow({
       <BandWash topKey={band.top} bottomKey={band.bottom} />
       <span className={styles.rowInner}>
         <span className={styles.text}>{text}</span>
-        {selected && (
-          <span className={styles.check} aria-hidden>
-            <Icon name="check" size={16} />
-          </span>
-        )}
+        {/* The check's slot is every row's (round 34 §7): there but unseen until chosen, so the words never re-wrap. */}
+        <span className={styles.check} data-check={selected ? 'on' : 'off'} aria-hidden>
+          <Icon name="check" size={16} />
+        </span>
       </span>
     </button>
   );
