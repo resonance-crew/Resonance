@@ -192,4 +192,55 @@ describe('a card shared in a thread cuts its frame for the box that is seen (rou
     const aspect = (pct(img.style.width) * W) / (pct(img.style.height) * H);
     expect(Math.abs(aspect / 1.5 - 1)).toBeLessThan(0.001);
   });
+
+  // Post-merge review: an unframed chat-card cover covered the bled span; it covers the seen box now (the centred
+  // zoom-1 crop of what is seen), the same element in the same box as a framed one.
+  it('covers the container’s width with no frame — the centred crop of the seen box', () => {
+    const W = 300;
+    const BLEED = 4;
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(W + 2 * BLEED);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(Math.round((W + 2 * BLEED) / 1.91));
+    const real = window.getComputedStyle;
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el, p) => {
+      const cs = real(el, p);
+      return (el as HTMLElement).dataset?.coverSeen == null && (el as HTMLElement).className?.toString().includes('cover')
+        ? ({ ...cs, marginLeft: `-${BLEED}px` } as CSSStyleDeclaration)
+        : cs;
+    });
+    const { container } = renderWithIntl(<SharedCardContent card={{ ...card, media: { type: 'image', url: card.media!.url } }} author={null} />);
+    const img = container.querySelector('img')!;
+    expect(img).not.toHaveAttribute('data-frame');
+    const seen = img.parentElement!;
+    expect(seen).toHaveAttribute('data-cover-seen');
+    expect([seen.style.left, seen.style.right]).toEqual([`${BLEED}px`, `${BLEED}px`]);
+  });
+});
+
+// Post-merge review (round 33): the unframed cover's <img> was unmounted right after its load — the shape read put
+// it in a new frame box — so its blur-to-sharp reveal was lost and it popped ≈11 % smaller.
+describe('an unframed cover as its shape arrives', () => {
+  it('is the same element in the same box, at the same scale, before and after its load', () => {
+    const W = 360;
+    const H = Math.round(W * COVER_FRAME_RATIO);
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(W);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(H);
+    const { container } = render(<OrganicImage src="https://img.example.com/image/ai.avif" ratio={COVER_FRAME_RATIO} />);
+    const before = container.querySelector('img')!;
+    const box = before.parentElement!;
+    expect(box).toHaveAttribute('data-frame-box');
+    // Before the shape: covering the seen box (the centred zoom-1 crop of it).
+    expect([before.style.width, before.style.height, before.style.objectFit]).toEqual(['100%', '100%', 'cover']);
+    Object.defineProperty(before, 'naturalWidth', { value: 1536 });
+    Object.defineProperty(before, 'naturalHeight', { value: 1024 });
+    act(() => {
+      fireEvent.load(before);
+    });
+    const after = container.querySelector('img')!;
+    expect(after).toBe(before); // never remounted: its reveal runs on
+    expect(after.parentElement).toBe(box);
+    expect(after).toHaveAttribute('data-frame');
+    // A 3 : 2 picture covering the 0.62 box is as wide as the box: the placed one is too — no change of scale.
+    expect(after.style.width).toBe('100%');
+    expect(Number.parseFloat(after.style.height)).toBeCloseTo((100 * (1 / 1.5)) / COVER_FRAME_RATIO, 2);
+  });
 });

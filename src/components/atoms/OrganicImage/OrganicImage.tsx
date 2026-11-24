@@ -88,13 +88,15 @@ export function OrganicImage({
   sizes = LIST_SIZES,
 }: OrganicImageProps) {
   // A cover with no frame is the centred frame at zoom 1 (round 33 §Q4, the lead: as the 調整封面 window shows it at
-  // its start, 重設 included) — cut for the box that is seen, once the picture's shape is known from its load; until
-  // then, as ever, covering the box and its bleed.
+  // its start, 重設 included), cut for the box that is seen: until its shape is known from its load, the picture
+  // covering that box (object-fit: cover — the same crop), then placed by coverImageBox — the same element in the same
+  // frame box either way, so its reveal runs on and nothing changes scale. The shape is read on every load, so a
+  // framed cover turned unframed (重設) has it at hand.
   const [shape, setShape] = useState<{ src: string; ar: number } | null>(null);
   const centred = !coverFrameOf(frame) && src && shape?.src === src ? { ...CENTRED, ar: shape.ar } : null;
   const framed = coverImageBox(centred ?? frame, ratio);
   const readShape = (img: HTMLImageElement, of: string) => {
-    if (coverFrameOf(frame) || !img.naturalWidth || !img.naturalHeight) return;
+    if (!img.naturalWidth || !img.naturalHeight) return;
     const ar = Math.min(COVER_FRAME_LIMITS.ar.max, Math.max(COVER_FRAME_LIMITS.ar.min, img.naturalWidth / img.naturalHeight));
     setShape((now) => (now?.src === of && Math.abs(now.ar - ar) < 1e-6 ? now : { src: of, ar }));
   };
@@ -216,14 +218,13 @@ export function OrganicImage({
           land on image pixels rather than on empty space. */}
       <div style={{ position: 'absolute', inset: clip ? -bleed : 0 }}>
         {shimmering && <Skeleton radius={0} height="100%" style={{ position: 'absolute', inset: 0 }} />}
-        {picture && framed ? (
-          // A framed cover's percentages are of the ratio box itself (coverImageBox), not of this bled wrapper —
-          // W + 2b by H + 2b would draw it out of shape and off its crop — so it sits in the box, back in by `bleed`.
+        {picture && (
+          // The picture sits in the box itself, back in by `bleed` — always, so it is one element from its first frame
+          // to its last: a frame's percentages are of the ratio box (coverImageBox), not of this bled wrapper (W + 2b by
+          // H + 2b would draw it out of shape and off its crop), and an unframed one covers that box.
           <div data-frame-box="" style={{ position: 'absolute', inset: clip ? bleed : 0 }}>
             {picture}
           </div>
-        ) : (
-          picture
         )}
         {children}
         {!shimmering && grain}

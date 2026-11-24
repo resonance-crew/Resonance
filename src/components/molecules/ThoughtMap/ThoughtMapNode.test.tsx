@@ -173,8 +173,10 @@ describe('a node’s thumb', () => {
   };
   const media = { type: 'image' as const, url: 'https://img.example.com/wide.webp' };
 
-  it('without a frame: the centred slice', () => {
-    expect(thumb({ ...base, media })).toEqual(['-4', '-4', '64', '64', 'xMidYMid slice', null]);
+  // Round 33 post-merge review: the centred zoom-1 crop of the 56 square that is seen (this case pinned the bled
+  // 64 square's, from -4, -4).
+  it('without a frame: the centred slice of the square that is seen', () => {
+    expect(thumb({ ...base, media })).toEqual(['0', '0', '56', '56', 'xMidYMid slice', null]);
   });
 
   // Round 33 §Q4: the crop fills the 56 square that is seen, not the bled 64 one (this case pinned -4, -4, 128, 64:

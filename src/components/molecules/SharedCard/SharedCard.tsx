@@ -83,7 +83,7 @@ export function SharedCardContent({ card, author, titleId }: SharedCardContentPr
   // The cover cut from its frame (round 25 §G1) for the box that is seen (round 33 §Q4): the cover reaches
   // --shared-card-bleed past its container's sides, whose own wobbly edge ends it, so the frame's crop is cut for
   // the container's width, not the bled one — until measured, for the 1.91 : 1 box as a whole.
-  const seen = useSeenCoverBox(!!cover && !!card.media?.frame);
+  const seen = useSeenCoverBox(!!cover);
   const framed = cover ? coverImageBox(card.media?.frame, seen.box ? seen.box.ratio : 1 / 1.91) : null;
   // A summary's story is its plain excerpt and brings the whole story's read time along; a card read in full
   // (its summary didn't come) has its Markdown, to be read as words.
@@ -116,29 +116,20 @@ export function SharedCardContent({ card, author, titleId }: SharedCardContentPr
       </span>
       {cover ? (
         <span className={styles.cover} ref={seen.ref}>
-          {framed ? (
-            // The seen box (the container's width), the bleed on either side of it: the crop's percentages are of
-            // it, and the picture runs on past it into the bleed.
-            <span className={styles.coverSeen} data-cover-seen="" style={seen.box ? { left: seen.box.bleed, right: seen.box.bleed } : undefined}>
-              <RevealImg reveal="thumb"
-                src={cover}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                onError={() => setCoverFailed(true)}
-                data-frame=""
-                style={{ ...framed, right: 'auto', bottom: 'auto', maxWidth: 'none' }}
-              />
-            </span>
-          ) : (
+          {/* The seen box (the container's width), the bleed on either side of it — always, so the picture is one
+              element: framed, placed by its frame's crop of it and running on into the bleed; unframed, covering it
+              (the centred zoom-1 crop of what is seen, round 33 post-merge review). */}
+          <span className={styles.coverSeen} data-cover-seen="" style={seen.box ? { left: seen.box.bleed, right: seen.box.bleed } : undefined}>
             <RevealImg reveal="thumb"
               src={cover}
               alt=""
               loading="lazy"
               decoding="async"
               onError={() => setCoverFailed(true)}
+              data-frame={framed ? '' : undefined}
+              style={framed ? { ...framed, right: 'auto', bottom: 'auto', maxWidth: 'none' } : undefined}
             />
-          )}
+          </span>
         </span>
       ) : (
         <span
