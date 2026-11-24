@@ -257,7 +257,7 @@ function ReaderTapsDialog({
         <DialogScroll>
           {data ? (
             <>
-              <TapPeople people={people} own={own} onPick={() => onClose(false)} />
+              <TapPeople people={people} own={own} onPick={() => onClose(false)} endKey={next ? 'taps:more' : undefined} />
               {next && (
                 <div className={styles.more}>
                   <OrganicButton variant="tonal" size="sm" loading={!!more?.loading} onClick={() => void loadMore()}>

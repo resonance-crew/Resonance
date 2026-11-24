@@ -1,10 +1,12 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { BandWash, bandHost, useBandPress } from '@/components/atoms/BandWash/BandWash';
 import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
 import { Skeleton } from '@/components/atoms/Skeleton/Skeleton';
 import { Link } from '@/i18n/navigation';
 import type { TapPersonBody } from '@/lib/api/v1/schemas';
+import { BAND_END_KEY, bandsBelow } from '@/lib/design/listBands';
 import styles from './TapPeople.module.css';
 
 /** Where a person's row in a tap list leads: their note's conversation (the author's list, a named card), else their page. */
@@ -39,6 +41,8 @@ export interface TapPeopleProps {
   own?: TapOwnRow;
   /** A row was opened (its dialog closes). */
   onPick?: () => void;
+  /** The key the last band ends on (a "show more" under it, or the list's end). */
+  endKey?: string;
   /**
    * The author's list quotes each person's pick under their name (round 27 §U2); false for one sentence's people
    * (round 29 §S4.2: the sentence heads the dialog, so no row says it again).
@@ -47,18 +51,20 @@ export interface TapPeopleProps {
 }
 
 /**
- * Who resonated (round 26 §U2.5, §U3.2): one row per person — no ink under a pointer, a press or a hold (round 34
- * §11, the owner: no wash on these rows; a keyboard's focus ring stays) — their face and pen name, and in the who-resonated lists the quote
+ * Who resonated (round 26 §U2.5, §U3.2): one band per person — the list's width between hand-drawn curves seen only
+ * under a pointer or a press, as the bell's rows — their face and pen name, and in the who-resonated lists the quote
  * of their pick (round 34 §10: never the note's excerpt). A row opens the note's conversation when they left one, or
  * else their page: a tap alone gives no way to write to anyone.
  */
-export function TapPeople({ people, own, onPick, quotes = true }: TapPeopleProps) {
+export function TapPeople({ people, own, onPick, endKey = BAND_END_KEY, quotes = true }: TapPeopleProps) {
+  const below = bandsBelow(people.map((p) => p.author.id), endKey);
   return (
     <ul className={styles.list}>
-      {people.map((p) => (
+      {people.map((p, i) => (
         <li key={p.author.id}>
           <PersonRow
             person={p}
+            band={{ top: p.author.id, bottom: below[i] }}
             onPick={onPick}
             own={own ? (p.author.id === own.id ? own : null) : undefined}
             quotes={quotes}
@@ -82,21 +88,25 @@ function rowQuote(person: TapPersonBody, own: TapOwnRow | null | undefined, quot
 
 function PersonRow({
   person,
+  band,
   onPick,
   own,
   quotes,
 }: {
   person: TapPersonBody;
+  band: { top: string; bottom: string };
   onPick?: () => void;
   quotes?: boolean;
   /** Undefined in the author's list; in a reader's, their own row's (§U3) or null on everyone else's. */
   own?: TapOwnRow | null;
 }) {
   const t = useTranslations('card.tap');
+  const press = useBandPress();
   const a = person.author;
   const second = rowQuote(person, own, quotes);
   const inner = (
     <>
+      <BandWash topKey={band.top} bottomKey={band.bottom} />
       <span className={styles.rowInner}>
         <HandDrawnAvatar
           src={a.avatarUrl ?? undefined}
@@ -127,27 +137,28 @@ function PersonRow({
     return (
       <button
         type="button"
-        className={`${styles.row} ${styles.button}`}
+        className={`${styles.row} ${styles.button} ${bandHost}`}
         data-tap-own=""
         aria-haspopup="dialog"
         onClick={() => {
           onPick?.();
           go();
         }}
+        {...press}
       >
         {inner}
       </button>
     );
   }
   return (
-    <Link href={tapPersonHref(person)} className={styles.row} onClick={onPick}>
+    <Link href={tapPersonHref(person)} className={`${styles.row} ${bandHost}`} onClick={onPick} {...press}>
       {inner}
     </Link>
   );
 }
 
 /**
- * The list's rows on their way: a face and a name's line each, touching as the rows do — exactly as many as will
+ * The list's rows on their way: a face and a name's line each, touching as the bands do — exactly as many as will
  * come (round 33 §Q1: the faces already on the page, `tapRowsKnown`; never a default count).
  */
 export function TapPeopleSkeleton({ rows }: { rows: number }) {

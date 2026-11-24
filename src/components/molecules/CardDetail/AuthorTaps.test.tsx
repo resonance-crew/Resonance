@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SWRConfig } from 'swr';
@@ -103,4 +105,19 @@ describe('AuthorTaps', () => {
     expect(hana.textContent).toBe('HAhana');
     expect(carol.getAttribute('href')).toBe('/messages/carol?u=carol');
   });
+});
+
+// Round 34 §11 (the owner: no hover or press look on the faces that open who resonated — the reader's over 共振 and
+// the author's own line): the author's line is a bare button, its keyboard ring kept; the list's rows keep their ink.
+it('gives the author’s faces line no hover or press look, only a keyboard’s ring', () => {
+  for (const f of ['src/components/molecules/CardDetail/AuthorTaps.module.css', 'src/components/atoms/AvatarGroup/AvatarGroup.module.css']) {
+    expect(readFileSync(join(process.cwd(), f), 'utf8'), f).not.toMatch(/:hover|:active/);
+  }
+  const css = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/AuthorTaps.module.css'), 'utf8');
+  expect(css).toMatch(/\.button \{[^}]*background: none;[^}]*-webkit-tap-highlight-color: transparent;/);
+  expect(css).toMatch(/\.button:focus-visible \{[^}]*outline: 2px solid var\(--color-terracotta\);/);
+  // The rows of the list it opens keep their edge-to-edge ink (BandWash's host).
+  const people = readFileSync(join(process.cwd(), 'src/components/molecules/CardDetail/TapPeople.tsx'), 'utf8');
+  expect(people).toMatch(/<BandWash topKey=\{band\.top\} bottomKey=\{band\.bottom\} \/>/);
+  expect(people).toMatch(/\$\{bandHost\}/);
 });
