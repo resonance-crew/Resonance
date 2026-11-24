@@ -158,10 +158,14 @@ class CoverFrameTest {
         assertEquals(ry - (15.0 - (20.0 - ry)), back.state.oy, 1e-9)
         // The rubber band: with the finger at first, never 24, and the pull back from what shows.
         assertEquals(0.0, FrameCrop.rubber(0.0), 1e-9)
-        assertTrue(FrameCrop.rubber(4.0) > 3.0)
+        assertTrue(FrameCrop.rubber(4.0) > 1.8)
         assertTrue(FrameCrop.rubber(1000.0) < FrameCrop.RUBBER_REACH)
         assertTrue(FrameCrop.rubber(-1000.0) > -FrameCrop.RUBBER_REACH)
         assertTrue(FrameCrop.rubber(80.0) - FrameCrop.rubber(40.0) < FrameCrop.rubber(40.0))
         assertEquals(37.0, FrameCrop.pullOf(FrameCrop.rubber(37.0)), 1e-6)
+        // The web's and iOS's curve: 24 × (1 − e^(−p / 48)); a pull of 24 draws ≈ 9.44.
+        assertEquals(9.443, FrameCrop.rubber(24.0), 1e-3)
+        assertEquals(-9.443, FrameCrop.rubber(-24.0), 1e-3)
+        assertEquals(-37.0, FrameCrop.pullOf(FrameCrop.rubber(-37.0)), 1e-6)
     }
 }

@@ -645,10 +645,11 @@ private fun Modifier.bleedSides(by: Dp): Modifier = layout { measurable, constra
 
 /** A picture edge to edge across a bubble at 1.91:1 (the share-image ratio); [onError] when it won't load. */
 @Composable
-private fun BubblePicture(url: String, bleed: Dp = PictureBleed, frame: CoverFraming? = null, onError: () -> Unit) {
-    // The picture's crop is the bubble's seen width; the sides past it carry the same picture on (round 33 §Q4).
+private fun BubblePicture(url: String, bleed: Dp = PictureBleed, frame: CoverFraming? = null, cover: Boolean = false, onError: () -> Unit) {
+    // A shared card's cover ([cover]): its crop is the bubble's seen width, the sides past it carrying the same picture
+    // on (round 33 §Q4). Any other picture (a link's preview) covers the bled box, as before.
     val px = with(LocalDensity.current) { bleed.roundToPx().toFloat() }
-    val inset = remember(px) { CoverInset(px, 0f) }
+    val inset = remember(px, cover) { if (cover) CoverInset(px, 0f) else null }
     Box(
         Modifier
             .fillMaxWidth()
@@ -838,7 +839,7 @@ fun ColumnScope.SharedCardSection(
             }
         }
         if (imageUrl != null && !FailedPictures.shared.has(imageUrl)) {
-            BubblePicture(imageUrl, pictureBleed, imageFrame) { FailedPictures.shared.note(imageUrl) }
+            BubblePicture(imageUrl, pictureBleed, imageFrame, cover = true) { FailedPictures.shared.note(imageUrl) }
         } else {
             val palette = CardPalette(accentHue, 0)
             Box(
