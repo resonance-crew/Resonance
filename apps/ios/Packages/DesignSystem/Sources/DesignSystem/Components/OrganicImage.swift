@@ -47,9 +47,11 @@ public struct OrganicImage<Placeholder: View>: View {
                         if let image {
                             ZStack {
                                 placeholder
-                                // On the cover's frame when it has one (round 25 §G1), centred otherwise.
-                                FramedCover(image, pictureSize: pictureSize)
+                                // On the cover's frame when it has one (round 25 §G1), centred otherwise — the frame's
+                                // crop the visible box's, the picture carried on into the bleed (round 33 §Q4).
+                                FramedCover(image, pictureSize: pictureSize, bleed: bleed)
                             }
+                            .mask { FramedCoverMask(pictureSize: pictureSize, bleed: bleed) }
                         } else if failed {
                             placeholder
                         } else {
