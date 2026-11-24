@@ -178,4 +178,12 @@ class TapFacesTest {
         // What is said still says there are more.
         assertTrue(facesLabel(faces, "alice", author = false).endsWith("還有其他人"))
     }
+
+    @Test fun theReadersOwnFaceRisesOutOf共振FromUnderTheLinesFoot() {
+        // Round 34 (9): from centred in the 48 line to its top on the line's foot (共振's top edge), which clips it.
+        assertEquals(38f, OwnFaceRise.value, 0f)
+        val source = java.io.File("src/main/kotlin/com/resonance/app/ui/TapFaces.kt").readText()
+        assertTrue(source.contains("rise = if (author) null else viewerId, riseBy = OwnFaceRise"))
+        assertTrue(source.contains("if (author) Modifier else Modifier.clipToBounds()"))
+    }
 }

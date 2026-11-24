@@ -1,6 +1,7 @@
 package com.resonance.design
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -61,6 +62,14 @@ fun AvatarGroup(
     modifier: Modifier = Modifier,
     size: Dp = 28.dp,
     reducedMotion: Boolean = false,
+    /**
+     * The face that comes and goes by rising (round 34 (9): the reader's own face on 共振): it slides up [riseBy] from
+     * below — out of what stands under the group, which clips it — and back down into it on going, over
+     * [AvatarGroup.MOVE_MILLIS] on the house's short ease, never fading or sliding sideways (at once under
+     * [reducedMotion]). The others move along as ever.
+     */
+    rise: String? = null,
+    riseBy: Dp = 0.dp,
 ) {
     val step = AvatarGroup.step(size)
     val spec = if (reducedMotion) snap<Dp>() else tween(AvatarGroup.MOVE_MILLIS)
@@ -86,29 +95,48 @@ fun AvatarGroup(
             key(face.key) {
                 val x by animateDpAsState(step * i, spec, label = "face")
                 val arriving = remember { Animatable(if (settled && !reducedMotion) 0f else 1f) }
-                LaunchedEffect(Unit) { if (arriving.value < 1f) arriving.animateTo(1f, tween(AvatarGroup.MOVE_MILLIS)) }
+                val rises = face.key == rise
+                LaunchedEffect(Unit) {
+                    if (arriving.value < 1f) arriving.animateTo(1f, if (rises) tween(AvatarGroup.MOVE_MILLIS, easing = AvatarGroup.RiseEasing) else tween(AvatarGroup.MOVE_MILLIS))
+                }
                 Box(
                     Modifier
                         .offset(x = x)
                         .graphicsLayer {
-                            alpha = arriving.value
-                            translationX = -step.toPx() * 0.5f * (1f - arriving.value)
-                            compositingStrategy = CompositingStrategy.ModulateAlpha
+                            if (rises) {
+                                translationY = AvatarGroup.riseOffset(arriving.value, riseBy.toPx())
+                            } else {
+                                alpha = arriving.value
+                                translationX = -step.toPx() * 0.5f * (1f - arriving.value)
+                                compositingStrategy = CompositingStrategy.ModulateAlpha
+                            }
                         },
                 ) { GroupFaceAvatar(face, size) }
             }
         }
-        for ((face, at) in leaving) {
+        // A face gone this very frame is drawn going at once (round 34 (9)): the effect that keeps it runs after this
+        // composition, and a frame without it read as a blink before it slid out.
+        val goneNow = if (reducedMotion) emptyList() else before.withIndex()
+            .filter { (_, f) -> faces.none { it.key == f.key } && leaving.none { it.first.key == f.key } }
+            .map { it.value to it.index }
+        for ((face, at) in leaving + goneNow) {
             key("leaving:" + face.key) {
                 val going = remember { Animatable(1f) }
-                LaunchedEffect(Unit) { launch { going.animateTo(0f, tween(AvatarGroup.MOVE_MILLIS)) } }
+                val sinks = face.key == rise
+                LaunchedEffect(Unit) {
+                    launch { going.animateTo(0f, if (sinks) tween(AvatarGroup.MOVE_MILLIS, easing = AvatarGroup.RiseEasing) else tween(AvatarGroup.MOVE_MILLIS)) }
+                }
                 Box(
                     Modifier
                         .offset(x = step * at)
                         .graphicsLayer {
-                            alpha = going.value
-                            translationX = -step.toPx() * 0.5f * (1f - going.value)
-                            compositingStrategy = CompositingStrategy.ModulateAlpha
+                            if (sinks) {
+                                translationY = AvatarGroup.riseOffset(going.value, riseBy.toPx())
+                            } else {
+                                alpha = going.value
+                                translationX = -step.toPx() * 0.5f * (1f - going.value)
+                                compositingStrategy = CompositingStrategy.ModulateAlpha
+                            }
                         },
                 ) { GroupFaceAvatar(face, size) }
             }
@@ -122,6 +150,12 @@ object AvatarGroup {
 
     /** A face coming or going. */
     const val MOVE_MILLIS = 150
+
+    /** A rising face's ease (round 34 (9)): the house's short ease out, the dialogs' and the knob's. */
+    val RiseEasing = CubicBezierEasing(0.2f, 0.8f, 0.3f, 1f)
+
+    /** A rising face's drop at [progress] (0 below, out of sight; 1 in its place), [riseBy] px at the start. */
+    fun riseOffset(progress: Float, riseBy: Float): Float = riseBy * (1f - progress.coerceIn(0f, 1f))
 
     /** From one face's start to the next one's. */
     fun step(size: Dp): Dp = size * (1f - OVERLAP)
