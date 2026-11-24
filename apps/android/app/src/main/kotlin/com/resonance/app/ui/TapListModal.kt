@@ -41,11 +41,21 @@ import kotlinx.coroutines.withTimeoutOrNull
  * - §Q2: the paper's inset is [TapListInset] (24 top and sides, the house's 32 / 28 elsewhere; 0 at the foot); one scroll region from the paper's left
  *   edge to its right ([toModalPaperEdges]), clipped to its wobble under its pen line (`clipToPaper`), so a row's band
  *   reaches both edges — the rows pad themselves the inset back, their faces and words on the title's edge.
- * - §Q3: the region reaches the paper's foot; the one way out ([exit]) floats over it at the foot's end, its right edge
- *   on the content's, [FloatingExitBottom] above the paper's edge — the design system's tonal small pill
- *   ([OrganicButton] `Tonal`, `small`), never moving with the content. The list's end keeps [FloatingExitRoom] (the
- *   button's height + 16) so the last row scrolls clear of it; a short list is as tall as it is plus that room. The
- *   region's foot fades under the button while there is more below ([scrollFadeUnder]).
+ * - §Q3, round 34 (the owner: 不需要滚动时恢复原本实色 footer … 需要滚动时用浮动 tonal 药丸 + 贴边渐变 … 两种状态按钮相对纸张右下角
+ *   位置完全一致): the region reaches the paper's foot (the paper's bottom padding 0, its wobble cutting it) and the one
+ *   way out ([exit]) — the design system's tonal small pill ([OrganicButton] `Tonal`, `small`), [FloatingExitHeight]
+ *   tall — stands at one place in both states: its right edge on the content's (24 in), its bottom
+ *   [FloatingExitBottom] (24) above the paper's. The list's end keeps [FloatingExitRoom] (24 + 44 + 18) under its last
+ *   row, the pill standing in it. So:
+ *   - content that fits the region's cap (with that room): the classic footer — the content, 18, the pill, 24 — no
+ *     fade, nothing over the content (the region can't scroll: [scrollFadeUnder] draws nothing);
+ *   - content taller: the region is the cap, scrolls, and fades at its foot down to the paper's border
+ *     ([scrollFadeBelowSpan]), the pill floating over the fade at the same coordinates; the last row scrolls clear of it.
+ *
+ *   Which of the two is decided in the region's one measure pass — the scroll's viewport against its content
+ *   ([verticalScroll] sets its `maxValue` there) — and read only when drawing: there is no state that changes the
+ *   height after the first frame, and the geometry is the same in both, so nothing moves when content that grows
+ *   (顯示更多, a late page) crosses the cap: the dialog only grows, then scrolls.
  *
  * [cap]: the region's tallest (the passages' min(560, 70 %)); otherwise the window less the modal's margins.
  */
@@ -73,7 +83,7 @@ internal fun TapListModal(
                     .fillMaxWidth()
                     .then(regionModifier)
                     .then(if (cap != null) Modifier.heightIn(max = cap) else Modifier)
-                    .scrollFadeUnder(scroll, ModalScrollFade, FloatingExitRoom)
+                    .scrollFadeUnder(scroll, ModalScrollFade, FloatingExitBottom + FloatingExitHeight)
                     .verticalScroll(scroll)
                     .padding(bottom = FloatingExitRoom),
                 content = content,
@@ -97,11 +107,17 @@ internal val TapListInset: Dp = 24.dp
 /** The floating way out's height (§Q3: 44, a finger's, as the web's and iOS's). */
 internal val FloatingExitHeight: Dp = 44.dp
 
-/** From the paper's bottom edge to the floating button's (§Q3: ~16). */
-internal val FloatingExitBottom: Dp = 16.dp
+/** From the paper's bottom edge to the way out's (round 34: the family's 24, as the top and sides — in both states). */
+internal val FloatingExitBottom: Dp = 24.dp
 
-/** The room the list's end keeps under its last row (§Q3: the button's height + 16), the button standing in it. */
-internal val FloatingExitRoom: Dp = FloatingExitHeight + FloatingExitBottom
+/** From the content's end to the way out's top (round 34: the classic footer's 18). */
+internal val FloatingExitGap: Dp = 18.dp
+
+/**
+ * The room the list's end keeps under its last row (round 34: 24 + 44 + 18), the way out standing in it: the footer
+ * when the content fits, the room the last row scrolls into above the floating pill when it doesn't.
+ */
+internal val FloatingExitRoom: Dp = FloatingExitBottom + FloatingExitHeight + FloatingExitGap
 
 /**
  * How long a press that opens a list of the family waits for its first page before the dialog opens without it (round

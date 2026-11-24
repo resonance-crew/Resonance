@@ -157,13 +157,14 @@ class PickedPeopleTest {
         val line = 16f * 1.8f
         val lines = kotlin.math.round(height / line)
         assertTrue("$height tall: not ${lines.toInt()} lines of $line", lines >= 1 && kotlin.math.abs(height - lines * line) < 0.75f)
-        // Round 33 §Q3: 關閉 floats over the region's foot, 16 over the paper's edge, its right edge on the content's
-        // (24 in); the last row clear of it, the list's end keeping its height + 16.
+        // Round 34: 關閉 24 over the paper's edge, its right edge on the content's (24 in); the last row clear of it, the
+        // list's end keeping 24 + 44 + 18 (two rows: the footer, 18 under the last row).
         val paper = compose.onNode(this.paper, useUnmergedTree = true).getBoundsInRoot()
-        assertEquals(16f, (paper.bottom - close.bottom).value, 1f)
+        assertEquals(24f, (paper.bottom - close.bottom).value, 1f)
         assertEquals((paper.right - 24.dp).value, close.right.value, 1f)
         assertTrue("the last row clear of 關閉", last.bottom <= close.top + 0.5.dp)
-        assertEquals((FloatingExitHeight + FloatingExitBottom).value, (paper.bottom - last.bottom).value, 1.5f)
+        assertEquals(FloatingExitRoom.value, (paper.bottom - last.bottom).value, 1.5f)
+        assertEquals(FloatingExitGap.value, (close.top - last.bottom).value, 1.5f)
         // §Q2: the faces on the title's edge, 24 in; the rows' bands from the paper's edge to its edge.
         assertEquals((paper.left + 24.dp).value, title.left.value, 0.5f)
         assertEquals(paper.left.value, first.left.value, 0.5f)

@@ -393,8 +393,9 @@ fun Modifier.scrollFade(scroll: ScrollState, edge: Dp): Modifier = scrollFadeUnd
 /**
  * [scrollFade] over a region with something floating over its foot (round 33 §Q3: a dialog's one way out over its
  * list): at the top as [scrollFade]; at the foot, while there is more below, the fade runs under the button — from
- * [edge] above the [clear] it stands in down to the middle of it, the words gone below — so they fade out as they reach
- * the button, never read through it. At the list's end there is no fade: the region's own room is under the button.
+ * [edge] above the [clear] it stands in down to the region's bottom edge ([scrollFadeBelowSpan]; round 34: its opaque
+ * end on the paper's border, no band of bare paper above it). At the list's end there is no fade: the region's own room
+ * is under the button. A region that doesn't scroll draws no fade at all.
  */
 fun Modifier.scrollFadeUnder(scroll: ScrollState, edge: Dp, clear: Dp): Modifier =
     graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
@@ -412,13 +413,18 @@ fun Modifier.scrollFadeUnder(scroll: ScrollState, edge: Dp, clear: Dp): Modifier
         )
         if (below > 0f) {
             // With nothing floating there ([clear] 0): [scrollFade]'s own, over [edge] down to the bottom.
-            val start = (size.height - c - e).coerceAtLeast(0f)
-            val gone = size.height - c / 2
+            val (start, gone) = scrollFadeBelowSpan(size.height, e, c)
             val mask = Color.Black.copy(alpha = below)
             drawRect(
                 Brush.verticalGradient(listOf(Color.Transparent, mask), startY = start, endY = gone),
                 topLeft = Offset(0f, start), size = Size(size.width, gone - start), blendMode = BlendMode.DstOut,
             )
-            if (gone < size.height) drawRect(mask, topLeft = Offset(0f, gone), size = Size(size.width, size.height - gone), blendMode = BlendMode.DstOut)
         }
     }
+
+/**
+ * Where [scrollFadeUnder]'s foot fade runs in a region [height] tall (px): from [edge] above the [clear] floating over
+ * its foot down to the region's bottom edge, where it is opaque (round 34, the owner: 底部渐变贴齐纸张 border 边缘).
+ */
+fun scrollFadeBelowSpan(height: Float, edge: Float, clear: Float): Pair<Float, Float> =
+    (height - clear - edge).coerceAtLeast(0f) to height
