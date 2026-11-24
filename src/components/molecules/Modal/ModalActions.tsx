@@ -33,11 +33,6 @@ export function ModalActions({ children, busy = false }: ModalActionsProps) {
 export interface ModalCloseRowProps {
   label: string;
   onClose: () => void;
-  /**
-   * Its words alone — no fill, no pill face — in the dialog's text ink, 44 to the touch (`OrganicButton variant="quiet"`):
-   * the passages' 略過 (round 32 §P1), a way out so light it may stand under a long list without weighing on it.
-   */
-  quiet?: boolean;
 }
 
 /**
@@ -46,10 +41,10 @@ export interface ModalCloseRowProps {
  * bottom right, where a choice's actions stand — what `Modal closeButton`
  * draws, for content that ends inside the modal.
  */
-export function ModalCloseRow({ label, onClose, quiet = false }: ModalCloseRowProps) {
+export function ModalCloseRow({ label, onClose }: ModalCloseRowProps) {
   return (
-    <div className={styles.closeRow} data-quiet={quiet || undefined}>
-      <OrganicButton variant={quiet ? 'quiet' : 'tonal'} size="sm" onClick={onClose}>
+    <div className={styles.closeRow}>
+      <OrganicButton variant="tonal" size="sm" onClick={onClose}>
         {label}
       </OrganicButton>
     </div>

@@ -35,3 +35,10 @@ span.faces {
   justify-content: center;
   margin-top: 14px;
 }
+
+/* The dialog's content (round 33 §Q2): the family's paper sides 24, which the rows' bands follow to the paper's edges
+   (DialogScroll reads --dialog-pad-x), the faces on the content's edge (no row indent of their own). */
+.list {
+  --dialog-pad-x: 24px;
+  --dialog-row-indent: 0px;
+}

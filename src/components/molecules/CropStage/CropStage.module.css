@@ -42,6 +42,17 @@
   pointer-events: none;
 }
 
+/* A drag past the picture's edge (round 33 §Q5): the stretch follows the finger at once; on the lift it springs back. */
+.holder[data-spring] {
+  transition: transform 280ms cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .holder[data-spring] {
+    transition: none;
+  }
+}
+
 .picture {
   display: block;
   width: 100%;
@@ -74,6 +85,39 @@
 .stage:focus-visible .keys {
   clip-path: none;
   opacity: 1;
+}
+
+/* 放大後才能移動 (round 33 §Q5): where the keyboard's hint stands — under the frame, on the dimmed picture — fading in
+   once a drag met an axis with no room; the keyboard's own hint takes the place while the stage has its focus. */
+.noRoom {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--color-cream) 92%, transparent);
+  color: var(--color-text);
+  font-size: 12.5px;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+.noRoom:empty {
+  visibility: hidden;
+}
+.noRoom[data-shown] {
+  opacity: 1;
+}
+.stage:focus-visible .noRoom {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .noRoom {
+    transition: none;
+  }
 }
 
 /* 36 high whether or not 重設 shows: nothing below it jumps when it appears. */

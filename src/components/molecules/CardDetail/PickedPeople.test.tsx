@@ -82,20 +82,23 @@ describe('PickedPeople', () => {
     expect(listTaps).toHaveBeenCalledWith('rich-story', null, 'a1b2c3d4');
   });
 
-  it('stands on the apps’ measures (§S12): paper 32 · 28, the rows’ bands to its edges, the sentence at the story’s compact leading', async () => {
+  // Round 33 §Q2 (「左右 padding 稍微再收窄（28→24）」): the family's 24 a side, none below (the region runs to the
+  // paper's bottom, §Q3) — this case pinned round 29's 32 · 28.
+  it('stands on the family’s measures (round 33 §Q2): paper 24 · 24 · 0, the rows’ bands to its edges, the sentence at the story’s compact leading', async () => {
     phone(true);
     listTaps.mockResolvedValueOnce({ people: [person('gus')], nextPageToken: null });
     open();
     const dialog = await screen.findByRole('dialog');
     await within(dialog).findAllByRole('link');
-    // The paper's padding is the Modal's (the apps' ModalPaper): 32 above and below, 28 at each side.
     const padded = [dialog, ...dialog.querySelectorAll<HTMLElement>('*')].find((el) => el.style.padding);
-    expect(padded?.style.padding).toBe('32px 28px');
+    expect(padded?.style.padding).toBe('24px 24px 0px');
     const read = (f: string) => readFileSync(join(process.cwd(), f), 'utf8');
     const css = read('src/components/molecules/CardDetail/PickedPeople.module.css');
     // The rows' bands bleed by the dialog's own side padding, so they still end on the paper's pen line.
-    expect(css).toMatch(/\.picked \{[^}]*--dialog-pad-x: 28px;/);
-    expect(read('src/components/sections/AppHeader/NotificationBell.module.css')).toMatch(/--bell-pad: var\(--dialog-pad-x, 22px\);/);
+    expect(css).toMatch(/\.picked \{[^}]*--dialog-pad-x: 24px;[^}]*--dialog-row-indent: 0px;/);
+    const bell = read('src/components/sections/AppHeader/NotificationBell.module.css');
+    expect(bell).toMatch(/--bell-pad: var\(--dialog-pad-x, 22px\);/);
+    expect(bell).toMatch(/--bell-inset: calc\(var\(--bell-bleed\) \+ var\(--dialog-row-indent, 8px\)\);/);
     // The sentence: 16, 1.8 for a CJK story and 1.6 for a Latin one (the story's compact leadings), 12 to the rows;
     // the title 10 above it.
     expect(css).toMatch(/\.sentence \{[^}]*margin: 0 0 12px;[^}]*font-size: 16px;[^}]*line-height: var\(--story-leading-compact\);/);

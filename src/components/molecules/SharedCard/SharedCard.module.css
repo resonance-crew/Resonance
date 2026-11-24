@@ -75,6 +75,13 @@
   object-fit: cover;
 }
 
+/* A framed cover's seen box (round 33 §Q4): the container's width — the cover less its bleed either side, set once
+   measured — the whole cover's height. The picture is placed in it by its frame's crop and runs on into the bleed. */
+.coverSeen {
+  position: absolute;
+  inset: 0;
+}
+
 /* A card with no cover: a band of its own colour, the wave faint on it. */
 .band {
   position: relative;

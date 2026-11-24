@@ -10,7 +10,7 @@ import { PASSAGE_CHOSEN_MS, TapPassages } from './TapPassages';
 
 /**
  * Round 27 §U1: which part stayed with the reader — a small centred dialog (never a sheet, never a popover): the
- * title naming it, the author's own sentences as banded rows wrapped in full, 略過 alone at the foot. A press holds
+ * title naming it, the author's own sentences as banded rows wrapped in full, 略過 alone at the foot (floating over it since round 33 §Q3). A press holds
  * the row's ink and its check, then closes; the picked row, reopened, rests chosen and a press on it clears the pick.
  */
 
@@ -155,9 +155,10 @@ describe('TapPassages (§U1)', () => {
     expect(esc.onPick).not.toHaveBeenCalled();
   });
 
-  // Round 32 §P1 (the owner: 「把标题放进同一个滚动容器内…整个弹窗只有一个统一滚动区，标题随文字滚走，底部「略过」固定」;
-  // 「去掉背景底色、去掉阴影」).
-  it('scrolls the title with the rows in one region, 略過 outside it at the foot, its words alone', async () => {
+  // Round 32 §P1 (the owner: 「把标题放进同一个滚动容器内…整个弹窗只有一个统一滚动区，标题随文字滚走，底部「略过」固定」);
+  // round 33 §Q3 (「按钮固定浮在滚动区底部渐变之上…用有颜色的浮动按钮」): 略過 is the family's small tonal pill now,
+  // floating over the region's foot — not round 32's quiet words in a footer under it (this case pinned those).
+  it('scrolls the title with the rows in one region, 略過 the tonal pill floating over its foot', async () => {
     renderDialog();
     const dialog = await screen.findByRole('dialog');
     const title = within(dialog).getByRole('heading', { name: '哪一段讓你有共鳴' });
@@ -166,20 +167,17 @@ describe('TapPassages (§U1)', () => {
     expect(region.firstElementChild).toBe(title);
     for (const row of rows(dialog)) expect(region.contains(row)).toBe(true);
     expect(region.querySelectorAll('[data-passage]')).toHaveLength(3);
-    // 略過: outside the region, after it, the quiet face (no fill, no pen line), 44 to the touch.
+    // 略過: outside what scrolls, beside it in the region's own box — so it never moves with the rows; tonal.
     const skip = within(dialog).getByRole('button', { name: '略過' });
     expect(region.contains(skip)).toBe(false);
-    expect(region.compareDocumentPosition(skip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(skip).toHaveAttribute('data-variant', 'quiet');
-    expect(skip.parentElement).toHaveAttribute('data-quiet');
+    expect(skip.closest('[data-float-close]')).toBe(region.parentElement);
+    expect(skip).toHaveAttribute('data-variant', 'tonal');
+    expect(dialog.querySelector('[data-quiet]')).toBeNull();
     const read = (f: string) => readFileSync(join(process.cwd(), f), 'utf8');
-    // Its words end on the column's end (the apps' quiet word): hung out by the small button's own 18 of padding.
-    expect(read('src/components/molecules/Modal/Modal.module.css')).toMatch(/\.closeRow\[data-quiet\] > button \{[^}]*min-height: 44px;[^}]*margin-inline-end: -18px;/);
-    expect(read('src/components/atoms/OrganicButton/OrganicButton.module.css')).toMatch(/\.sm \{[^}]*padding: 9px 18px;/);
-    // The region's cap: the apps' min(560, 70 %) and never more than the window leaves — the backdrop's margin, the
-    // paper's 24 + 22, the foot's 18 + 44 — so the whole dialog fits and its foot never scrolls with the backdrop.
+    // The region's cap: the apps' min(560, 70 %) and never more than the window leaves — the backdrop's margin and
+    // the paper's 24 above (no foot under the region any more) — so the whole dialog fits.
     const css = read('src/components/molecules/CardDetail/TapPassages.module.css');
-    expect(css).toMatch(/--passages-room: calc\(2 \* clamp\(12px, 3vw, 32px\) \+ 24px \+ 22px \+ 18px \+ 44px \+ 6px\);/);
+    expect(css).toMatch(/--passages-room: calc\(2 \* clamp\(12px, 3vw, 32px\) \+ 24px \+ 6px\);/);
     expect(css).toMatch(/--dialog-scroll-max: min\(560px, 70vh, calc\(100dvh - var\(--passages-room\)\)\);/);
     expect(read('src/components/molecules/Modal/Modal.module.css')).toMatch(/\.backdrop \{[^}]*padding: clamp\(12px, 3vw, 32px\);/);
   });
@@ -194,7 +192,7 @@ describe('TapPassages (§U1)', () => {
     );
     const close = within(await screen.findByRole('dialog')).getByRole('button', { name: '關閉' });
     expect(close).toHaveAttribute('data-variant', 'tonal');
-    expect(close.parentElement).not.toHaveAttribute('data-quiet');
+    expect(close.closest('[data-float-close]')).toBeNull();
   });
 
   // Round 32 §P2 (the owner: 「区段与区段之间加上分隔线…左右与文字内容齐平、适当内缩」).

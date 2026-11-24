@@ -1,8 +1,9 @@
-/* Round 29 §S4.2: the who-resonated dialog's title, then the sentence once, then its people — on the apps' measures
-   (§S12): the paper's sides 28 (PickedPeople's padding), which the rows' bands follow to the paper's edges
-   (DialogScroll reads --dialog-pad-x). */
+/* Round 29 §S4.2: the who-resonated dialog's title, then the sentence once, then its people — on the family's
+   measures (round 33 §Q2): the paper's sides 24 (PickedPeople's padding), which the rows' bands follow to the
+   paper's edges (DialogScroll reads --dialog-pad-x), the faces on the title's edge (no row indent of their own). */
 .picked {
-  --dialog-pad-x: 28px;
+  --dialog-pad-x: 24px;
+  --dialog-row-indent: 0px;
 }
 
 .title {

@@ -832,6 +832,7 @@
     "coverFrame": {
       "title": "Frame the cover",
       "hintTouch": "Drag to move, pinch or slide to zoom",
+      "zoomToMove": "Zoom in to move it",
       "hintPointer": "Drag to move, scroll or slide to zoom",
       "stage": "Cover framing area",
       "done": "Done",

@@ -51,6 +51,13 @@
   }
 }
 
+/* The dialog's content (round 33 §Q2): the family's paper sides 24, which the rows' bands follow to the paper's edges
+   (DialogScroll reads --dialog-pad-x), the faces on the title's edge (no row indent of their own). */
+.dialog {
+  --dialog-pad-x: 24px;
+  --dialog-row-indent: 0px;
+}
+
 .title {
   font-family: var(--font-heading);
   font-size: 20px;
