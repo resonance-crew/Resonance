@@ -193,3 +193,32 @@ describe('a card shared in a thread cuts its frame for the box that is seen (rou
     expect(Math.abs(aspect / 1.5 - 1)).toBeLessThan(0.001);
   });
 });
+
+// Post-merge review (round 33): the unframed cover's <img> was unmounted right after its load — the shape read put
+// it in a new frame box — so its blur-to-sharp reveal was lost and it popped ≈11 % smaller.
+describe('an unframed cover as its shape arrives', () => {
+  it('is the same element in the same box, at the same scale, before and after its load', () => {
+    const W = 360;
+    const H = Math.round(W * COVER_FRAME_RATIO);
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(W);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(H);
+    const { container } = render(<OrganicImage src="https://img.example.com/image/ai.avif" ratio={COVER_FRAME_RATIO} />);
+    const before = container.querySelector('img')!;
+    const box = before.parentElement!;
+    expect(box).toHaveAttribute('data-frame-box');
+    // Before the shape: covering the seen box (the centred zoom-1 crop of it).
+    expect([before.style.width, before.style.height, before.style.objectFit]).toEqual(['100%', '100%', 'cover']);
+    Object.defineProperty(before, 'naturalWidth', { value: 1536 });
+    Object.defineProperty(before, 'naturalHeight', { value: 1024 });
+    act(() => {
+      fireEvent.load(before);
+    });
+    const after = container.querySelector('img')!;
+    expect(after).toBe(before); // never remounted: its reveal runs on
+    expect(after.parentElement).toBe(box);
+    expect(after).toHaveAttribute('data-frame');
+    // A 3 : 2 picture covering the 0.62 box is as wide as the box: the placed one is too — no change of scale.
+    expect(after.style.width).toBe('100%');
+    expect(Number.parseFloat(after.style.height)).toBeCloseTo((100 * (1 / 1.5)) / COVER_FRAME_RATIO, 2);
+  });
+});
