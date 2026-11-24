@@ -227,7 +227,19 @@ export function checkVisual(args: {
 
 // --- Accept log vs baseline meta -------------------------------------------------------------
 
-export type BaselineMeta = { platform: string; commit: string; run: string; acceptedAt: string; reason?: string };
+export type BaselineMeta = {
+  platform: string;
+  commit: string;
+  run: string;
+  acceptedAt: string;
+  reason?: string;
+  /**
+   * Each picture's own provenance (scripts/visual/baselineMeta): `commit` above is the OLDEST of them (where the review
+   * starts reading trailers), so after an accept that moved only some pictures it is an older accept's commit, while
+   * `run` is the latest's. The latest run's own commit is read from these.
+   */
+  captures?: Record<string, { commit: string; run: string; acceptedAt?: string }>;
+};
 export type AcceptRow = { acceptedAt: string; run: string; commit: string; platforms: string[]; only: string; captures: string; reason: string };
 
 /** The rows of docs/visual-accept-log.md's table (the header and its rule left out). */
@@ -264,7 +276,10 @@ export function checkAcceptLog(metas: BaselineMeta[], rows: AcceptRow[], logSinc
   const missing: string[] = [];
   const before: string[] = [];
   for (const m of metas) {
-    const row = rows.find((r) => r.run === m.run && r.platforms.includes(m.platform) && m.commit.startsWith(r.commit));
+    // The row of the latest accept: its run, and the commit that run's pictures were taken at (meta's own `commit` is
+    // the oldest picture's — another accept's — once an accept moved only some of them, 2026-11-25).
+    const runCommits = new Set([m.commit, ...Object.values(m.captures ?? {}).filter((p) => p.run === m.run).map((p) => p.commit)]);
+    const row = rows.find((r) => r.run === m.run && r.platforms.includes(m.platform) && [...runCommits].some((c) => c.startsWith(r.commit)));
     if (row) continue;
     if (logSince && m.acceptedAt < logSince) before.push(`${m.platform} (${m.run}, ${m.acceptedAt.slice(0, 10)})`);
     else missing.push(`${m.platform} (${m.run})`);

@@ -181,6 +181,13 @@ describe('accept log', () => {
   it('fails on a baseline the log never saw', () => {
     expect(checkAcceptLog([meta('web'), meta('mac')], rows, '2026-11-13T00:00:00.000Z')).toMatchObject({ status: 'FAIL', detail: expect.stringContaining('mac (20261114-010000)') });
     expect(checkAcceptLog([meta('web', { commit: OLD })], rows, null).status).toBe('FAIL');
+    // An accept that moved only some pictures (2026-11-25, 20261124-191032): meta's commit is the oldest picture's (an
+    // older accept's), its run the latest's — the row is found by that run's pictures' commit.
+    const partial = meta('web', { commit: OLD, captures: { 'web/phone/card@light-zh-TW.png': { commit: OLD, run: 'older' }, 'web/phone/feed@light-zh-TW.png': { commit: meta('web').commit, run: meta('web').run } } });
+    expect(checkAcceptLog([partial], rows, null).status).toBe('PASS');
+    // …but never by a picture of another run.
+    const elsewhere = meta('web', { commit: OLD, captures: { 'web/phone/card@light-zh-TW.png': { commit: meta('web').commit, run: 'older' } } });
+    expect(checkAcceptLog([elsewhere], rows, null).status).toBe('FAIL');
   });
 
   it('only warns for a baseline older than the log', () => {
