@@ -241,11 +241,34 @@ import Testing
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appendingPathComponent("../Resonance/Features/Card/TapPassages.swift").standardized
         let source = try String(contentsOf: url, encoding: .utf8)
-        // The house's divider (its ink and light pen), inset to the words' start and end — the rows' own inset.
-        let rule = try #require(source.range(of: "private func rule(reach: CGFloat)")).upperBound
-        let body = String(source[rule...].prefix(300))
-        #expect(body.contains("WavyDivider("))
+        // Round 34 §6: the rule is the row's band edge (its own key's curve across the row), masked to the words' span.
+        let rule = try #require(source.range(of: "private func rule(key: String, reach: CGFloat)")).upperBound
+        let body = String(source[rule...].prefix(400))
+        #expect(body.contains("BandEdge(key: key)"))
         #expect(body.contains(".padding(.horizontal, reach)"))
+        #expect(!source.contains("WavyDivider("))
+        #expect(source.contains("rule(key: ids[i], reach: reach)"))
+    }
+
+    /// §6 — one source: a rule's curve is exactly where the band of the row under it begins and the band of the row
+    /// over it ends (the same key, the same width, the same y).
+    @Test func aRuleIsTheBandsOwnEdge() {
+        let ids = ["passage:a", "passage:b", "passage:c"]
+        let below = ListBands.below(ids, after: ListBands.endKey)
+        let w = 432.0, h = 88.0
+        for i in 1..<ids.count {
+            let rule = dividerPath(ListBands.curve(y: 0, w: w, key: ids[i]))
+            // The row under it: its band's top edge.
+            let under = ListBands.region(w: w, h: h, top: ids[i], bottom: below[i])
+            #expect(Array(under.prefix(rule.count)) == rule, "row \(i)'s top")
+            // The row over it: its band's bottom edge, at its foot (the same curve, h lower in its own frame).
+            #expect(below[i - 1] == ids[i])
+            let over = ListBands.curve(y: h, w: w, key: below[i - 1]).flatMap { [$0.x, $0.y - h] }
+            let edge = ListBands.curve(y: 0, w: w, key: ids[i]).flatMap { [$0.x, $0.y] }
+            #expect(zip(over, edge).allSatisfy { abs($0 - $1) < 1e-9 } && over.count == edge.count, "row \(i - 1)'s bottom")
+        }
+        let rect = CGRect(x: 0, y: 0, width: w, height: h)
+        #expect(BandEdge(key: ids[1]).path(in: rect).boundingRect.width > 0)
     }
 
     /// §P3 — the passages' dialog has no flash: its rows are known when it opens, so its first layout is its last —

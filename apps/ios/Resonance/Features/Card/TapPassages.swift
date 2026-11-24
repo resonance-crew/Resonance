@@ -42,9 +42,11 @@ struct TapPassages: View {
                         .padding(.horizontal, reach)
                     ForEach(shown, id: \.element.id) { i, passage in
                         row(passage, index: i, top: ids[i], bottom: below[i], reach: reach)
-                            // §P2: a rule between two rows (never above the first), from the words' start to their end.
-                            .background(alignment: .top) {
-                                if TapPassageRules.ruled(index: i) { rule(reach: reach) }
+                            // §P2: a rule between two rows (never above the first), from the words' start to their end;
+                            // round 34 §6: it is the row's own band edge (its key's curve at its top), so a press fills
+                            // exactly between two rules.
+                            .background {
+                                if TapPassageRules.ruled(index: i) { rule(key: ids[i], reach: reach) }
                             }
                     }
                 }
@@ -57,12 +59,18 @@ struct TapPassages: View {
         .onAppear { focused = picked ?? passages.first?.id }
     }
 
-    /// The rule between two rows (§P2): the house's divider (``WavyDivider``: the divider ink, the light pen), inset to
-    /// the words, centred on the seam; under a pressed or held row's wash, which is see-through, it stays drawn.
-    private func rule(reach: CGFloat) -> some View {
-        WavyDivider(seed: 71)
-            .padding(.horizontal, reach)
-            .offset(y: -TapPassageRules.ruleHeight / 2)
+    /// The rule between two rows (§P2): the divider ink in the light pen, shown from the words' start to their end;
+    /// under a pressed or held row's wash, which is see-through, it stays drawn. Round 34 §6: its path is the band's
+    /// edge (``BandEdge``, the row's own key across the row's whole width — the same curve the row's band and the one
+    /// above it end on), only masked to the words' span, so the ink fills exactly between two rules.
+    private func rule(key: String, reach: CGFloat) -> some View {
+        BandEdge(key: key)
+            .stroke(Tokens.dividerInk, style: StrokeStyle(lineWidth: Tokens.inkLight, lineCap: .round))
+            .mask {
+                Rectangle()
+                    .padding(.horizontal, reach)
+                    .padding(.vertical, -TapPassageRules.ruleHeight)
+            }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
@@ -180,7 +188,7 @@ nonisolated enum TapPassageRules {
     static let titleGap: CGFloat = 10
     /// Whether the row at `index` has a rule above it (§P2): between two rows, never above the first.
     static func ruled(index: Int) -> Bool { index > 0 }
-    /// The rule's box (``WavyDivider``'s), centred on the seam between two rows.
+    /// How far the rule's mask reaches above and below the seam: past the band curve's swing and the pen.
     static let ruleHeight: CGFloat = 6
 
     /// A pick's request refused: the options changed or the tap went (400, 409) → the dialog closes quietly and the card

@@ -129,6 +129,20 @@ nonisolated struct BandShape: Shape {
     }
 }
 
+/// A band's edge alone (round 34 §6, the owner: 「按下的区块上下边缘就是分隔线的那条曲线」): the very curve
+/// ``BandShape`` draws along a row's top — `key`'s, at the row's top edge and across its width — so a rule stroked with
+/// it stands exactly where the pressed or held band of the row under it begins and the one over it ends. One source:
+/// ``ListBands/curve(y:w:key:)``.
+nonisolated struct BandEdge: Shape {
+    let key: String
+
+    func path(in rect: CGRect) -> Path {
+        guard rect.width > 0 else { return Path() }
+        return dividerPath(ListBands.curve(y: 0, w: Double(rect.width), key: key))
+            .path(offsetX: Double(rect.minX), offsetY: Double(rect.minY))
+    }
+}
+
 /// A row of a banded list: nothing at rest, the band between its curves washed while pressed or under a pointer.
 /// `cut`: the row stands in a wide window's reading column, its band cut at the column's sides (``BandShape``).
 /// `held`: the row is the one chosen (round 27's picked passage), its band resting in the press's wash.
