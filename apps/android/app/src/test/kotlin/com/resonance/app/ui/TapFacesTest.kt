@@ -222,12 +222,22 @@ class TapFacesTest {
         val b = compose.onNodeWithTag("tap-faces", useUnmergedTree = true).getBoundsInRoot()
         val step = AvatarGroup.step(TapFaceSize)
         val mid = (b.top + b.bottom) / 2
+        // The faces centred in the button (48 wide at least), the button centred on 共振's centre (60 in).
+        val groupWidth = AvatarGroup.width(people.size, TapFaceSize)
+        val left = b.left + ((b.right - b.left) - groupWidth) / 2
+        assertEquals("the faces centred on 共振", 60f, (left + groupWidth / 2).value, 0.6f)
+        assertTrue("48 wide at least", (b.right - b.left).value >= 48f - 0.5f)
         val points = buildList {
-            for (i in people.indices) add(b.left + step * i + TapFaceSize / 2)
+            for (i in people.indices) add(left + step * i + TapFaceSize / 2)
             // Where two overlap, and at the group's two ends.
-            for (i in 1 until people.size) add(b.left + step * i + 2.dp)
-            add(b.left + 2.dp)
-            add(b.right - 2.dp)
+            for (i in 1 until people.size) add(left + step * i + 2.dp)
+            add(left + 2.dp)
+            add(left + groupWidth - 2.dp)
+            // 10 outside the faces' edges, inside the 48: one face (28) leaves 10 of touch room on each side.
+            if (people.size == 1) {
+                add(left - 9.5.dp)
+                add(left + groupWidth + 9.5.dp)
+            }
         }
         with(compose.density) {
             for (x in points) compose.onRoot().performTouchInput { click(androidx.compose.ui.geometry.Offset(x.toPx(), mid.toPx())) }
