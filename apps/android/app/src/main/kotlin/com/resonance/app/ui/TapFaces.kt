@@ -2,6 +2,7 @@ package com.resonance.app.ui
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -416,10 +417,21 @@ internal fun TapRows(
             }
         }
         !list.loaded -> Column(Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = L10n.Home.moreLoading }) {
-            expected.orEmpty().forEach { a -> TapRow(TapPerson(a, null), TapRowLines.NONE, measure, onClick = null) }
+            val known = expected.orEmpty()
+            val keys = known.map { "tap:" + it.id }
+            val below = bandsBelow(keys, ListBands.EndKey)
+            known.forEachIndexed { i, a ->
+                val source = remember(a.id) { MutableInteractionSource() }
+                TapRow(TapPerson(a, null), TapRowLines.NONE, measure, keys[i], below[i], source, onClick = null)
+            }
         }
         else -> Column(Modifier.fillMaxWidth()) {
-            people.forEach { p -> TapRow(p, lines(p), measure) { onRow(p) } }
+            val keys = people.map { "tap:" + it.author.id }
+            val below = bandsBelow(keys, ListBands.EndKey)
+            people.forEachIndexed { i, p ->
+                val source = remember(p.author.id) { MutableInteractionSource() }
+                TapRow(p, lines(p), measure, keys[i], below[i], source) { onRow(p) }
+            }
             if (list.failed) BasicText(
                 L10n.Native.loadError,
                 style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.TextMuted),
@@ -435,14 +447,18 @@ private fun TapRow(
     p: TapPerson,
     said: TapRowLines,
     measure: TapRowMeasure,
+    topKey: String,
+    bottomKey: String,
+    source: MutableInteractionSource,
     onClick: (() -> Unit)?,
 ) {
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = measure.height)
-            // Round 34 (11) (the owner): no press, hover or held ink — the row still opens its person, plainly (no
-            // ripple); the row spans the paper's edges (round 33 §Q2), its face and words [TapRowMeasure.inset] in.
+            // Round 33 §Q2: the band from the paper's edge to its edge (the dialog's region reaches them, the paper's
+            // wobble clipping it under its pen line), never the rounded inset card of round 26.
+            .listBand(topKey, bottomKey, source, { false }, cut = false)
             .then(if (onClick != null) Modifier.plainClickable(role = Role.Button, onClick = onClick) else Modifier)
             .padding(horizontal = measure.inset, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

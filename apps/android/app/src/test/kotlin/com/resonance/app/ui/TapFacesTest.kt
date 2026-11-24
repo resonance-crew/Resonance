@@ -6,6 +6,8 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.onRoot
@@ -191,13 +193,14 @@ class TapFacesTest {
         assertTrue(source.contains("if (author) Modifier else Modifier.clipToBounds()"))
     }
 
-    // Round 34 (11): no press, hover or held ink on the people rows; the faces over 共振 have none either.
+    // Round 34 (11), as the owner corrected it: only the faces over 共振 have no press effect; the people rows keep
+    // round 33's edge-to-edge press and held ink.
 
-    @Test fun thePeopleRowsAndTheFacesDrawNoPressInk() {
+    @Test fun theFacesDrawNoPressInkThePeopleRowsKeepTheirBand() {
         val source = File("src/main/kotlin/com/resonance/app/ui/TapFaces.kt").readText()
         val row = source.substringAfter("private fun TapRow(").substringBefore("\n}\n")
-        assertFalse("no band on a people row", row.contains("listBand("))
-        assertTrue("still opens its person, plainly", row.contains("plainClickable(role = Role.Button, onClick = onClick)"))
+        assertTrue("a people row's band, edge to edge", row.contains(".listBand(topKey, bottomKey, source, { false }, cut = false)"))
+        assertTrue("opens its person", row.contains("plainClickable(role = Role.Button, onClick = onClick)"))
         val button = source.substringAfter("internal fun TapFacesButton(").substringBefore("\n}\n")
         assertFalse(button.contains("indication = ") || button.contains("listBand(") || button.contains("collectIsPressedAsState"))
         assertTrue(button.contains(".plainClickable(role = Role.Button, onClick = onOpen)"))
@@ -252,4 +255,46 @@ class TapFacesTest {
     @Test fun twoFacesOpenTheListAtEachFaceAndTheOverlap() = opensAtEveryFace(2)
 
     @Test fun threeFacesOpenTheListAtEachFaceAndTheOverlaps() = opensAtEveryFace(3)
+
+    /** The faces button for [author] (the author's line on their own story, or a reader's over 共振), as drawn at rest and held down. */
+    private fun restAndHeld(author: Boolean): Pair<androidx.compose.ui.graphics.ImageBitmap, androidx.compose.ui.graphics.ImageBitmap> {
+        compose.setContent {
+            Box(Modifier.testTag("line").width(200.dp)) {
+                TapFacesButton(TapFaces(false, listOf(dora, eli), more = false), viewerId = "alice", author = author, onOpen = {})
+            }
+        }
+        compose.waitForIdle()
+        val rest = compose.onNodeWithTag("line").captureToImage()
+        compose.onNodeWithTag(if (author) "author-taps" else "tap-faces", useUnmergedTree = true).performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        val held = compose.onNodeWithTag("line").captureToImage()
+        compose.onNodeWithTag(if (author) "author-taps" else "tap-faces", useUnmergedTree = true).performTouchInput { up() }
+        return rest to held
+    }
+
+    private fun assertSame(rest: androidx.compose.ui.graphics.ImageBitmap, held: androidx.compose.ui.graphics.ImageBitmap, what: String) {
+        val a = rest.toPixelMap()
+        val b = held.toPixelMap()
+        assertEquals(a.width, b.width)
+        var differ = 0
+        for (y in 0 until a.height) for (x in 0 until a.width) if (a[x, y] != b[x, y]) differ++
+        assertEquals("$what: pixels changed by a press", 0, differ)
+    }
+
+    // Round 34 (11), the owner pinned it down: the author's faces line on their own story has no press, hover or ripple
+    // either — as the reader's faces over 共振. Drawn at rest and held, pixel for pixel the same.
+
+    @Test fun theAuthorsFacesLineShowsNoPress() {
+        val (rest, held) = restAndHeld(author = true)
+        assertSame(rest, held, "the author's line")
+        // Its call site adds nothing that reacts (no clickable or indication of its own).
+        val page = File("src/main/kotlin/com/resonance/app/ui/CardScreen.kt").readText()
+        assertTrue(page.contains("Modifier.onGloballyPositioned { endRowCoords = it }.padding(bottom = 40.dp)"))
+    }
+
+    @Test fun theReadersFacesOverResonanceShowNoPress() {
+        val (rest, held) = restAndHeld(author = false)
+        assertSame(rest, held, "the reader's faces")
+    }
 }
