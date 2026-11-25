@@ -52,12 +52,14 @@ rollout with no staged option; countries: select all in the track's 國家/地�
   fills it. Keep it on file before any release whose build reads the gallery.
 - **Child safety standards** (a social app): an attestation form the classifier won't fill; the
   owner does.
-- **AI-generated assets**: a listing save asks whether screenshots carry AI-made pictures. The
+- **AI-generated assets**: the classifier refuses this declaration's choice even with the owner's word
+  to fill the forms (2.6.0) — the owner does that dialog. A listing save asks whether screenshots carry AI-made pictures. The
   label is the review step's 「為 AI 生成的素材加上標籤」 dialog, not 管理標記. The owner chose to
   label the screenshots with demo illustrations, not the icon or feature graphics.
 
-**Listing screenshot slots.** Uploading from a slot adds the files in the order they finish, which
-is wrong. Clear the slot, upload to the panel, remove what it auto-added, then click each library
+**Listing screenshot slots.** Uploading one file at a time from the slot's 新增資產 panel (its hidden
+`input[type=file]`), waiting for each to land, adds them in order (2.6.0: 36 shots, zh/en × phone, 7", 10").
+Uploading several at once adds them in the order they finish, which is wrong. Clear the slot, upload to the panel, remove what it auto-added, then click each library
 row's 「選取」 in 01 → 06 order about a second apart and press 新增. The library list is
 virtualised: scroll its container to find a row.
 
@@ -107,7 +109,8 @@ items by script, since coordinate clicks hit the wrong language. The en-US name 
 **While a version waits for review** its screenshots are locked; removing it from review
 (「將此版本從審查中移除」) was refused by the classifier — the owner clicks it.
 
-**Submitting** is a review submission per platform; the state to read back is
+**Submitting** is a review submission per platform (2.6.0, from the page: POST `reviewSubmissions`
+{platform}, POST `reviewSubmissionItems` with the appStoreVersion, PATCH `submitted: true`); the state to read back is
 `WAITING_FOR_REVIEW`. The result arrives by e-mail to the account holder; nothing polls it yet
 ([../ops/daily-check.md](../ops/daily-check.md)).
 
